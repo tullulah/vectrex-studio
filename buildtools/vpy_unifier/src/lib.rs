@@ -30,6 +30,7 @@ pub mod error;
 pub mod graph;
 pub mod resolver;
 pub mod scope;
+pub mod type_tracker;
 pub mod types;
 pub mod visitor;
 
@@ -37,6 +38,7 @@ pub use error::{UnifierError, UnifierResult};
 pub use graph::ModuleGraph;
 pub use resolver::SymbolResolver;
 pub use scope::Scope;
+pub use type_tracker::TypeTracker;
 pub use types::VarType;
 pub use visitor::AstVisitor;
 pub use vpy_parser::ast::{Module, Item, ImportDecl};
