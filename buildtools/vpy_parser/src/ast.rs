@@ -27,11 +27,13 @@ pub enum Item {
     Function(Function),
     Const {
         name: String,
+        type_annotation: Option<String>,
         value: Expr,
         source_line: usize,
     },
     GlobalLet {
         name: String,
+        type_annotation: Option<String>,
         value: Expr,
         source_line: usize,
     },
@@ -143,6 +145,7 @@ pub enum Stmt {
     },
     Let {
         name: String,
+        type_annotation: Option<String>,
         value: Expr,
         source_line: usize,
     },
