@@ -28,8 +28,22 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         
         Expr::Ident(id) => {
             // Variable references use uppercase labels
-            out.push_str(&format!("    LDD VAR_{}\n", id.name.to_uppercase()));
-            out.push_str("    STD RESULT\n");
+            // Check variable size: use LDB + sign/zero-extend for 8-bit, LDD for 16-bit
+            let size = context::get_var_size(&id.name);
+            if size.bytes == 1 {
+                // 8-bit load: LDB then extend to 16-bit in D
+                out.push_str(&format!("    LDB VAR_{}\n", id.name.to_uppercase()));
+                if size.signed {
+                    out.push_str("    SEX             ; Sign-extend B -> D\n");
+                } else {
+                    out.push_str("    CLRA            ; Zero-extend: A=0, B=value\n");
+                }
+                out.push_str("    STD RESULT\n");
+            } else {
+                // 16-bit load: standard LDD
+                out.push_str(&format!("    LDD VAR_{}\n", id.name.to_uppercase()));
+                out.push_str("    STD RESULT\n");
+            }
         }
         
         Expr::Call(call) => {
@@ -269,6 +283,13 @@ fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]
     // Mutable arrays (GlobalLet): VAR_{NAME}_DATA (in RAM)
     // Const arrays: ARRAY_{NAME}_DATA (in ROM)
     // Use context::is_mutable_array() to check which type
+
+    let element_size = if let Expr::Ident(id) = array {
+        context::get_var_size(&id.name).bytes  // Get element size for stride calculation
+    } else {
+        2  // Default to 16-bit if not a simple identifier
+    };
+
     if let Expr::Ident(id) = array {
         let name_upper = id.name.to_uppercase();
         let label = if context::is_mutable_array(&id.name) {
@@ -284,16 +305,31 @@ fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]
         out.push_str("    LDX RESULT  ; Array base address\n");
         out.push_str("    PSHS X\n");
     }
-    
+
     // Evaluate index
     emit_simple_expr(index, out, assets);
     out.push_str("    LDD RESULT  ; Index\n");
-    out.push_str("    ASLB        ; Multiply by 2 (16-bit elements)\n");
-    out.push_str("    ROLA\n");
-    
+
+    // Stride multiply: only if element_size == 2 (8-bit arrays have stride 1, no multiply needed)
+    if element_size == 2 {
+        out.push_str("    ASLB        ; Multiply by 2 (16-bit elements)\n");
+        out.push_str("    ROLA\n");
+    }
+    // For 8-bit elements, stride is 1, so no multiply needed
+
     // Calculate address
     out.push_str("    PULS X      ; Array base\n");
-    out.push_str("    LEAX D,X    ; X = base + (index * 2)\n");
-    out.push_str("    LDD ,X      ; Load value\n");
-    out.push_str("    STD RESULT\n");
+    out.push_str("    LEAX D,X    ; X = base + (index * element_size)\n");
+
+    // Load element: use correct load instruction based on element type
+    if element_size == 1 {
+        // 8-bit element: LDB then zero-extend (arrays are typically unsigned)
+        out.push_str("    LDB ,X      ; Load 8-bit value\n");
+        out.push_str("    CLRA        ; Zero-extend to 16-bit (arrays are typically unsigned)\n");
+        out.push_str("    STD RESULT\n");
+    } else {
+        // 16-bit element: standard LDD
+        out.push_str("    LDD ,X      ; Load 16-bit value\n");
+        out.push_str("    STD RESULT\n");
+    }
 }

@@ -8,6 +8,7 @@
 
 use vpy_parser::{Module, Function, Stmt, Expr};
 use super::expressions;
+use super::context;
 use super::joystick;
 use crate::AssetInfo;
 use std::collections::HashMap;
@@ -210,10 +211,18 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     // Simple variable assignment: var = value
                     // 1. Evaluate expression
                     expressions::emit_simple_expr(value, asm, assets);
-                    
-                    // 2. Store to variable (uppercase for consistency)
-                    asm.push_str("    LDD RESULT\n");
-                    asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+
+                    // 2. Store to variable with correct width dispatch
+                    let size = context::get_var_size(name);
+                    if size.bytes == 1 {
+                        // 8-bit store: take low byte from RESULT and store with STB
+                        asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                        asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+                    } else {
+                        // 16-bit store: standard STD
+                        asm.push_str("    LDD RESULT\n");
+                        asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                    }
                 }
                 
                 vpy_parser::AssignTarget::Index { target: array_expr, index, .. } => {
@@ -224,37 +233,53 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     } else {
                         return Err("Complex array expressions not yet supported in assignment".to_string());
                     };
-                    
+
+                    // Get element size for stride calculation
+                    let element_size = context::get_var_size(array_name).bytes;
+
                     // 1. Evaluate index first
                     expressions::emit_simple_expr(index, asm, assets);
                     asm.push_str("    LDD RESULT\n");
-                    asm.push_str("    ASLB            ; Multiply index by 2 (16-bit elements)\n");
-                    asm.push_str("    ROLA\n");
+
+                    // Stride multiply: only if element_size == 2
+                    if element_size == 2 {
+                        asm.push_str("    ASLB            ; Multiply index by 2 (16-bit elements)\n");
+                        asm.push_str("    ROLA\n");
+                    }
+                    // For 8-bit elements, stride is 1, no multiply needed
+
                     asm.push_str("    STD TMPPTR      ; Save offset temporarily\n");
-                    
+
                     // 2. Load array base address (RAM for mutable, ROM for const)
                     // Use context to determine which label to use
                     let name_upper = array_name.to_uppercase();
-                    let label = if super::context::is_mutable_array(array_name) {
+                    let label = if context::is_mutable_array(array_name) {
                         format!("VAR_{}_DATA", name_upper)  // RAM
                     } else {
                         format!("ARRAY_{}_DATA", name_upper)  // ROM
                     };
                     asm.push_str(&format!("    LDD #{}  ; Array data address\n", label));
-                    
+
                     // 3. Add offset to base pointer
                     asm.push_str("    TFR D,X         ; X = array base pointer\n");
                     asm.push_str("    LDD TMPPTR      ; D = offset\n");
                     asm.push_str("    LEAX D,X        ; X = base + offset\n");
                     asm.push_str("    STX TMPPTR2     ; Save computed address\n");
-                    
+
                     // 4. Evaluate value to assign
                     expressions::emit_simple_expr(value, asm, assets);
-                    
-                    // 5. Store value at computed address
+
+                    // 5. Store value at computed address with correct width dispatch
                     asm.push_str("    LDX TMPPTR2     ; Load computed address\n");
-                    asm.push_str("    LDD RESULT      ; Load value\n");
-                    asm.push_str("    STD ,X          ; Store value\n");
+                    if element_size == 1 {
+                        // 8-bit store: take low byte and use STB
+                        asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                        asm.push_str("    STB ,X          ; Store 8-bit value\n");
+                    } else {
+                        // 16-bit store: standard STD
+                        asm.push_str("    LDD RESULT      ; Load value\n");
+                        asm.push_str("    STD ,X          ; Store 16-bit value\n");
+                    }
                 }
                 
                 _ => {
@@ -289,10 +314,28 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             }
         }
         
+        Stmt::Let { name, value, .. } => {
+            // Local variable assignment: let var = value
+            // 1. Evaluate expression
+            expressions::emit_simple_expr(value, asm, assets);
+
+            // 2. Store to variable with correct width dispatch
+            let size = context::get_var_size(name);
+            if size.bytes == 1 {
+                // 8-bit store: take low byte from RESULT and store with STB
+                asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+            } else {
+                // 16-bit store: standard STD
+                asm.push_str("    LDD RESULT\n");
+                asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+            }
+        }
+
         Stmt::Expr(expr, ..) => {
             expressions::emit_simple_expr(expr, asm, assets);
         }
-        
+
         Stmt::If { cond, body, elifs, else_body, .. } => {
             // Copied from core/src/backend/m6809/statements.rs
             let end = fresh_label("IF_END");

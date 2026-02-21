@@ -69,72 +69,72 @@ PSG_DELAY_FRAMES     EQU $C880+$3C   ; PSG frame delay counter (1 bytes)
 PSG_MUSIC_BANK       EQU $C880+$3D   ; PSG music bank ID (for multibank) (1 bytes)
 SFX_PTR              EQU $C880+$3E   ; SFX data pointer (2 bytes)
 SFX_ACTIVE           EQU $C880+$40   ; SFX active flag (1 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$41   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$43   ; User variable: HOOK_GUN_Y (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$45   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_END_X            EQU $C880+$9D   ; User variable: END_X (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$49   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$4B   ; User variable: JOYSTICK1_STATE (2 bytes)
-VAR_STATE_TITLE      EQU $C880+$4D   ; User variable: STATE_TITLE (2 bytes)
-VAR_LEVEL_ENEMY_COUNT EQU $C880+$4F   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$51   ; User variable: PLAYER_FACING (2 bytes)
-VAR_GRAVITY          EQU $C880+$53   ; User variable: GRAVITY (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$55   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_END_Y            EQU $C880+$7D   ; User variable: end_y (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$59   ; User variable: MIRROR_MODE (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$5B   ; User variable: HOOK_INIT_Y (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$5D   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$5F   ; User variable: ENEMY_SIZE (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$61   ; User variable: LOCATION_NAMES (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$63   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
-VAR_JOY_X            EQU $C880+$65   ; User variable: JOY_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$67   ; User variable: PLAYER_Y (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$69   ; User variable: CURRENT_LOCATION (2 bytes)
-VAR_STATE_MAP        EQU $C880+$6B   ; User variable: STATE_MAP (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$6D   ; User variable: NUM_LOCATIONS (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$6F   ; User variable: CURRENT_MUSIC (2 bytes)
-VAR_LOC_Y            EQU $C880+$71   ; User variable: LOC_Y (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$73   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$75   ; User variable: TITLE_STATE (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$77   ; User variable: HOOK_GUN_X (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$79   ; User variable: LOCATION_Y_COORDS (2 bytes)
-VAR_START_X          EQU $C880+$A1   ; User variable: START_X (2 bytes)
-VAR_END_Y            EQU $C880+$7D   ; User variable: END_Y (2 bytes)
-VAR_ABS_JOY          EQU $C880+$7F   ; User variable: ABS_JOY (2 bytes)
-VAR_SCREEN           EQU $C880+$81   ; User variable: SCREEN (2 bytes)
-VAR_JOY_Y            EQU $C880+$83   ; User variable: JOY_Y (2 bytes)
-VAR_SPEED            EQU $C880+$85   ; User variable: SPEED (2 bytes)
-VAR_PLAYER_X         EQU $C880+$87   ; User variable: PLAYER_X (2 bytes)
-VAR_STATE_GAME       EQU $C880+$89   ; User variable: STATE_GAME (2 bytes)
-VAR_GROUND_Y         EQU $C880+$8B   ; User variable: GROUND_Y (2 bytes)
-VAR_ACTIVE_COUNT     EQU $C880+$8D   ; User variable: ACTIVE_COUNT (2 bytes)
-VAR_I                EQU $C880+$8F   ; User variable: I (2 bytes)
-VAR_HOOK_X           EQU $C880+$91   ; User variable: HOOK_X (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$93   ; User variable: ANIM_THRESHOLD (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$95   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
-VAR_LOC_X            EQU $C880+$97   ; User variable: LOC_X (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$99   ; User variable: ENEMY_ACTIVE (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$9B   ; User variable: LOCATION_X_COORDS (2 bytes)
-VAR_END_X            EQU $C880+$9D   ; User variable: end_x (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$41   ; User variable: HOOK_GUN_Y (2 bytes)
+VAR_END_X            EQU $C880+$47   ; User variable: END_X (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$45   ; User variable: ANIM_THRESHOLD (2 bytes)
+VAR_END_X            EQU $C880+$47   ; User variable: end_x (2 bytes)
+VAR_JOY_X            EQU $C880+$49   ; User variable: JOY_X (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$4B   ; User variable: CURRENT_MUSIC (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$4D   ; User variable: MIRROR_MODE (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$4F   ; User variable: LOCATION_NAMES (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$51   ; User variable: CURRENT_LOCATION (2 bytes)
+VAR_LOC_Y            EQU $C880+$53   ; User variable: LOC_Y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$55   ; User variable: HOOK_MAX_Y (2 bytes)
+VAR_START_Y          EQU $C880+$95   ; User variable: START_Y (2 bytes)
+VAR_SCREEN           EQU $C880+$59   ; User variable: SCREEN (2 bytes)
+VAR_STATE_TITLE      EQU $C880+$5B   ; User variable: STATE_TITLE (2 bytes)
+VAR_ENEMY_X          EQU $C880+$5D   ; User variable: ENEMY_X (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$5F   ; User variable: COUNTDOWN_TIMER (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$61   ; User variable: NUM_LOCATIONS (2 bytes)
+VAR_SPEED            EQU $C880+$63   ; User variable: SPEED (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$65   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$67   ; User variable: ENEMY_Y (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$69   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$6B   ; User variable: MAX_ENEMIES (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$6D   ; User variable: ENEMY_VX (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$6F   ; User variable: TITLE_STATE (2 bytes)
+VAR_JOY_Y            EQU $C880+$71   ; User variable: JOY_Y (2 bytes)
+VAR_HOOK_Y           EQU $C880+$73   ; User variable: HOOK_Y (2 bytes)
+VAR_START_X          EQU $C880+$C3   ; User variable: START_X (2 bytes)
+VAR_GROUND_Y         EQU $C880+$77   ; User variable: GROUND_Y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$79   ; User variable: MOVE_SPEED (2 bytes)
+VAR_STATE_GAME       EQU $C880+$7B   ; User variable: STATE_GAME (2 bytes)
+VAR_GRAVITY          EQU $C880+$7D   ; User variable: GRAVITY (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$7F   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$81   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
+VAR_PLAYER_X         EQU $C880+$83   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$85   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$87   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$89   ; User variable: TITLE_INTENSITY (2 bytes)
+VAR_ABS_JOY          EQU $C880+$8B   ; User variable: ABS_JOY (2 bytes)
+VAR_END_Y            EQU $C880+$8F   ; User variable: end_y (2 bytes)
+VAR_END_Y            EQU $C880+$8F   ; User variable: END_Y (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$91   ; User variable: JOYSTICK1_STATE (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$93   ; User variable: ENEMY_SIZE (2 bytes)
+VAR_START_Y          EQU $C880+$95   ; User variable: start_y (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$97   ; User variable: ENEMY_ACTIVE (2 bytes)
+VAR_HOOK_X           EQU $C880+$99   ; User variable: HOOK_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$9B   ; User variable: PLAYER_Y (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$9D   ; User variable: LOCATION_X_COORDS (2 bytes)
 VAR_HOOK_ACTIVE      EQU $C880+$9F   ; User variable: HOOK_ACTIVE (2 bytes)
-VAR_START_X          EQU $C880+$A1   ; User variable: start_x (2 bytes)
-VAR_COUNT            EQU $C880+$A3   ; User variable: COUNT (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$A5   ; User variable: COUNTDOWN_TIMER (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$A7   ; User variable: ENEMY_VX (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$A9   ; User variable: ENEMY_VY (2 bytes)
-VAR_LEVEL_ENEMY_SPEED EQU $C880+$AB   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$AD   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
-VAR_ENEMY_X          EQU $C880+$AF   ; User variable: ENEMY_X (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$B1   ; User variable: PREV_JOY_Y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$B3   ; User variable: HOOK_MAX_Y (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$B5   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_START_Y          EQU $C880+$BF   ; User variable: start_y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$B9   ; User variable: MOVE_SPEED (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$BB   ; User variable: TITLE_INTENSITY (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$BD   ; User variable: ENEMY_Y (2 bytes)
-VAR_START_Y          EQU $C880+$BF   ; User variable: START_Y (2 bytes)
-VAR_HOOK_Y           EQU $C880+$C1   ; User variable: HOOK_Y (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$C3   ; User variable: PREV_JOY_X (2 bytes)
+VAR_COUNT            EQU $C880+$A1   ; User variable: COUNT (2 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$A3   ; User variable: BOUNCE_DAMPING (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$A5   ; User variable: MIN_BOUNCE_VY (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$A7   ; User variable: HOOK_INIT_Y (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$A9   ; User variable: PREV_JOY_Y (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$AB   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
+VAR_LOC_X            EQU $C880+$AD   ; User variable: LOC_X (2 bytes)
+VAR_STATE_MAP        EQU $C880+$AF   ; User variable: STATE_MAP (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$B1   ; User variable: LOCATION_Y_COORDS (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$B3   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$B5   ; User variable: ENEMY_VY (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$B7   ; User variable: PREV_JOY_X (2 bytes)
+VAR_ACTIVE_COUNT     EQU $C880+$B9   ; User variable: ACTIVE_COUNT (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$BB   ; User variable: HOOK_GUN_X (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$BD   ; User variable: PLAYER_FACING (2 bytes)
+VAR_I                EQU $C880+$BF   ; User variable: I (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$C1   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
+VAR_START_X          EQU $C880+$C3   ; User variable: start_x (2 bytes)
 VAR_JOYSTICK1_STATE_DATA EQU $C880+$C5   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
 VAR_ENEMY_ACTIVE_DATA EQU $C880+$D1   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
 VAR_ENEMY_X_DATA     EQU $C880+$E1   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
@@ -12231,6 +12231,78 @@ _PANG_THEME_MUSIC:
     FCB     38              ; Delay 38 frames before loop
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _PANG_THEME_MUSIC       ; Jump to start (absolute address)
+
+; ==== Level: FUJI_LEVEL1_V2 ====
+; Author: 
+; Difficulty: medium
+
+_FUJI_LEVEL1_V2_LEVEL:
+    FDB -96  ; World bounds: xMin (16-bit signed)
+    FDB 95  ; xMax (16-bit signed)
+    FDB -128  ; yMin (16-bit signed)
+    FDB 127  ; yMax (16-bit signed)
+    FDB 0  ; Time limit (seconds)
+    FDB 0  ; Target score
+    FCB 1  ; Background object count
+    FCB 2  ; Gameplay object count
+    FCB 0  ; Foreground object count
+    FDB _FUJI_LEVEL1_V2_BG_OBJECTS
+    FDB _FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS
+    FDB _FUJI_LEVEL1_V2_FG_OBJECTS
+
+_FUJI_LEVEL1_V2_BG_OBJECTS:
+; Object: obj_1767470884207 (enemy)
+    FCB 1  ; type
+    FDB 0  ; x
+    FDB 0  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _FUJI_BG_VECTORS  ; vector_ptr
+    FDB 0  ; properties_ptr (reserved)
+
+
+_FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS:
+; Object: enemy_1 (enemy)
+    FCB 1  ; type
+    FDB -40  ; x
+    FDB 60  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 127  ; intensity (0=use vec, >0=override)
+    FCB 255  ; velocity_x
+    FCB 255  ; velocity_y
+    FCB 3  ; physics_flags
+    FCB 7  ; collision_flags
+    FCB 20  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _BUBBLE_LARGE_VECTORS  ; vector_ptr
+    FDB 0  ; properties_ptr (reserved)
+
+; Object: enemy_2 (enemy)
+    FCB 1  ; type
+    FDB 40  ; x
+    FDB 60  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 127  ; intensity (0=use vec, >0=override)
+    FCB 1  ; velocity_x
+    FCB 255  ; velocity_y
+    FCB 3  ; physics_flags
+    FCB 7  ; collision_flags
+    FCB 20  ; collision_size
+    FDB 60  ; spawn_delay
+    FDB _BUBBLE_LARGE_VECTORS  ; vector_ptr
+    FDB 0  ; properties_ptr (reserved)
+
+
+_FUJI_LEVEL1_V2_FG_OBJECTS:
 
 _HIT_SFX:
     ; SFX: hit (hit)
