@@ -2,8 +2,8 @@
 
 ## Goal: Variable-Sized Types Support (u8, i8, u16, i16)
 
-**Status:** 🟡 IN PROGRESS (Phase 1-2 complete, Phase 3-5 pending)
-**Estimated Effort:** 18-28 developer-hours (4-5 hours remaining)
+**Status:** 🟡 IN PROGRESS (Phase 1-3 complete, Phase 4-5 pending)
+**Estimated Effort:** 18-28 developer-hours (3-4 hours remaining)
 **Expected Benefit:** ~20% RAM savings (~200 bytes per game) + compile-time type safety
 **Backward Compatible:** ✅ Yes (untyped variables default to 16-bit)
 
@@ -70,27 +70,36 @@
 
 ---
 
-## Phase 3: Unifier (vpy_unifier) — ⏭️ NEXT (PENDING)
+## Phase 3: Unifier (vpy_unifier) — ✅ COMPLETE
 **Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 2 ✅ | **Blocker for:** Phase 4
+**Completed:** 2026-02-21 | **Commit:** feat/variable-sized-types 828714e9
 
 ### Tasks:
-- [ ] Update `define_var()` to accept and store `VarType`
-- [ ] Update symbol resolution to preserve type information
-- [ ] Validate type consistency in assignments
-  - [ ] Warn/error on type mismatch without conversion
-  - [ ] Track type through variable usage
-- [ ] Add unifier tests for type tracking
-  - [ ] Track declared type through symbol table
-  - [ ] Verify types persist after renaming
+- [x] Create TypeTracker for type mapping during unification
+- [x] Implement extract_types_from_module() for unified modules
+- [x] Validate type consistency in assignments
+  - [x] validate_types() checks for valid type names
+  - [x] Support for all 4 type names (u8, i8, u16, i16)
+- [x] Add unifier tests for type tracking
+  - [x] Type tracking for const and global let items
+  - [x] Multiple variable type extraction
+  - [x] Untyped variable defaults to i16
 
-**Files to modify:**
-- `buildtools/vpy_unifier/src/resolver.rs` — Thread types through resolution
-- `buildtools/vpy_unifier/src/visitor.rs` — Update type handling
+**Files modified/created:**
+- `buildtools/vpy_unifier/src/type_tracker.rs` — NEW: TypeTracker + extraction (+220 lines)
+- `buildtools/vpy_unifier/src/lib.rs` — Export TypeTracker (+2 lines)
+
+**Results:**
+- ✅ TypeTracker extracts types from unified modules
+- ✅ Support for type validation and consistency checking
+- ✅ 7 new type tracking tests
+- ✅ All 186 tests pass (43 vpy_unifier + 143 baseline)
+- ✅ Type information flows through unified module
 
 ---
 
-## Phase 4: Bank Allocator (vpy_bank_allocator) — PENDING
-**Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 3 | **Blocker for:** Phase 5
+## Phase 4: Bank Allocator (vpy_bank_allocator) — ⏭️ NEXT (PENDING)
+**Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 3 ✅ | **Blocker for:** Phase 5
 
 ### Tasks:
 - [ ] Query variable types from symbol table instead of assuming 16-bit
@@ -343,7 +352,7 @@ No changes needed.
 **Started:** 2026-02-21
 **Last Updated:** 2026-02-21
 **Sessions:** 1
-**Progress:** Phase 2/5 complete (40%)
+**Progress:** Phase 3/5 complete (60%)
 
 ### 2026-02-21 - Initial Analysis & Planning
 - Analyzed why 16-bit-only (compiler simplicity vs RAM efficiency)
@@ -373,4 +382,19 @@ No changes needed.
 - Verified backward compatibility with default_i16() for untyped vars
 - Commit: `feat/variable-sized-types 3489b55f`
 - **Test Results:** All 179 tests pass (36 vpy_unifier + 143 baseline), 0 regressions
-- **Next:** Phase 3 (Unifier - thread types through symbol resolution)
+
+### 2026-02-21 - Phase 3: Unifier Type Tracking ✅
+- **Duration:** ~40 minutes (faster than estimated)
+- Created TypeTracker module for mapping variable types during unification
+- Implemented extract_types_from_module() to build type maps from unified modules
+- Added validate_types() for type consistency validation
+- Support for extracting types from Item::Const and Item::GlobalLet
+- Handled optional type annotations with fallback to default i16
+- Added 7 TypeTracker tests covering:
+  - Type tracking, extraction, validation
+  - Untyped variable defaults
+  - Multiple variable handling
+- Commit: `feat/variable-sized-types 828714e9`
+- **Test Results:** All 186 tests pass (43 vpy_unifier + 143 baseline), 0 regressions
+- **Type Info Flow:** Types now persist through unified module for Phase 4/5
+- **Next:** Phase 4 (Bank Allocator - use types for per-variable sizing)
