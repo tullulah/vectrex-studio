@@ -2,8 +2,8 @@
 
 ## Goal: Variable-Sized Types Support (u8, i8, u16, i16)
 
-**Status:** 🟡 IN PROGRESS (Phase 1 complete, Phase 2-5 pending)
-**Estimated Effort:** 18-28 developer-hours (5-7 hours remaining)
+**Status:** 🟡 IN PROGRESS (Phase 1-2 complete, Phase 3-5 pending)
+**Estimated Effort:** 18-28 developer-hours (4-5 hours remaining)
 **Expected Benefit:** ~20% RAM savings (~200 bytes per game) + compile-time type safety
 **Backward Compatible:** ✅ Yes (untyped variables default to 16-bit)
 
@@ -39,33 +39,39 @@
 
 ---
 
-## Phase 2: Type System Infrastructure — ⏭️ NEXT (PENDING)
+## Phase 2: Type System Infrastructure — ✅ COMPLETE
 **Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 1 ✅ | **Blocker for:** Phase 3
+**Completed:** 2026-02-21 | **Commit:** feat/variable-sized-types 3489b55f
 
 ### Tasks:
-- [ ] Create `VarType` struct in `vpy_unifier/src/types.rs` (new file)
-  ```rust
-  pub struct VarType {
-      pub name: String,        // "u8", "i8", "u16", "i16"
-      pub size_bytes: usize,
-      pub signed: bool,
-  }
-  ```
-- [ ] Create type registry/lookup functions
-  - [ ] `get_type_info(name: &str) -> Option<VarType>`
-  - [ ] Validate type names at parse time
-- [ ] Add type tracking to symbol table
-  - [ ] Extend `Symbol` struct to include `type_info: VarType`
-  - [ ] Default type for untyped vars: `VarType { name: "i16", size: 2, signed: true }`
+- [x] Create `VarType` struct in `vpy_unifier/src/types.rs` (new file)
+  - [x] Implement `from_str()` parser for type names
+  - [x] Implement `default_i16()` for backward compatibility
+  - [x] Implement `from_optional()` for AST integration
+- [x] Create type registry/lookup functions
+  - [x] `is_valid_type_name()` validation
+  - [x] Support u8, i8, u16, i16 with correct metadata
+- [x] Add type tracking to symbol table
+  - [x] Update `Scope::variables` to use `HashMap<String, VarType>`
+  - [x] Add `lookup_var()` method for type queries
+  - [x] Default type for untyped vars: `VarType::default_i16()`
 
-**Files to modify/create:**
-- `buildtools/vpy_unifier/src/types.rs` — New file with VarType
-- `buildtools/vpy_unifier/src/scope.rs` — Update symbol table to track types
+**Files modified/created:**
+- `buildtools/vpy_unifier/src/types.rs` — NEW: VarType struct + registry (+148 lines)
+- `buildtools/vpy_unifier/src/scope.rs` — Updated symbol table (+66 lines)
+- `buildtools/vpy_unifier/src/lib.rs` — Export VarType (+2 lines)
+
+**Results:**
+- ✅ VarType struct with complete type metadata
+- ✅ Type registry with from_str() parser
+- ✅ Symbol table now tracks types per variable
+- ✅ 16 new type system tests (8 VarType + 8 Scope)
+- ✅ All 179 tests pass (36 vpy_unifier + 143 baseline)
 
 ---
 
-## Phase 3: Unifier (vpy_unifier) — PENDING
-**Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 2 | **Blocker for:** Phase 4
+## Phase 3: Unifier (vpy_unifier) — ⏭️ NEXT (PENDING)
+**Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 2 ✅ | **Blocker for:** Phase 4
 
 ### Tasks:
 - [ ] Update `define_var()` to accept and store `VarType`
@@ -337,7 +343,7 @@ No changes needed.
 **Started:** 2026-02-21
 **Last Updated:** 2026-02-21
 **Sessions:** 1
-**Progress:** Phase 1/5 complete (20%)
+**Progress:** Phase 2/5 complete (40%)
 
 ### 2026-02-21 - Initial Analysis & Planning
 - Analyzed why 16-bit-only (compiler simplicity vs RAM efficiency)
@@ -356,4 +362,15 @@ No changes needed.
 - Verified backward compatibility (untyped variables unaffected)
 - Commit: `feat/variable-sized-types 2239fcb5`
 - **Test Results:** All 143 tests pass (0 failures, 0 regressions)
-- **Next:** Phase 2 (Type System Infrastructure)
+
+### 2026-02-21 - Phase 2: Type System Infrastructure ✅
+- **Duration:** ~45 minutes (faster than estimated)
+- Created VarType struct with size_bytes + signed metadata
+- Implemented type registry with from_str() parser (u8, i8, u16, i16)
+- Updated Scope to use HashMap<String, VarType> for symbol table
+- Added lookup_var() method for type queries
+- Added 16 new type system tests (8 VarType + 8 Scope coverage)
+- Verified backward compatibility with default_i16() for untyped vars
+- Commit: `feat/variable-sized-types 3489b55f`
+- **Test Results:** All 179 tests pass (36 vpy_unifier + 143 baseline), 0 regressions
+- **Next:** Phase 3 (Unifier - thread types through symbol resolution)
