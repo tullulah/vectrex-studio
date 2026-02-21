@@ -17,6 +17,7 @@ VPy is a Python-inspired language that compiles to MC6809 assembly for the Vectr
 9. [Built-in Functions](#9-built-in-functions)
 10. [VectorList DSL](#10-vectorlist-dsl)
 11. [Language Rules and Gotchas](#11-language-rules-and-gotchas)
+12. [Known Limitations](#12-known-limitations)
 
 ---
 
@@ -327,7 +328,6 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 | Function | Description |
 |----------|-------------|
 | `SET_INTENSITY(val)` | Set beam intensity (0–127) |
-| `SET_SCALE(val)` | Set drawing scale |
 
 > **Note:** `WAIT_RECAL` is **automatically injected** by the compiler at the start of every `loop()` call. Do not call it manually — it must never appear in VPy source code.
 
@@ -336,58 +336,93 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 | Function | Description |
 |----------|-------------|
 | `MOVE(x, y)` | Move beam to position without drawing |
-| `DRAW_TO(x, y)` | Draw a line from the current beam position to (x, y) |
 | `DRAW_LINE(x0, y0, x1, y1, intensity)` | Draw a line segment |
 | `DRAW_CIRCLE(cx, cy, diam, intensity)` | Draw a circle (16 segments) |
 | `DRAW_CIRCLE_SEG(segs, cx, cy, diam, intensity)` | Draw a circle with custom segment count |
 | `DRAW_POLYGON(x0, y0, x1, y1, ..., intensity)` | Draw a polygon |
 | `DRAW_VECTOR("name", x, y)` | Draw a `.vec` vector asset at position (x, y) |
 | `DRAW_VECTOR_EX("name", x, y, mirror, intensity)` | Draw a `.vec` asset with mirror and intensity override |
-
-`mirror` values for `DRAW_VECTOR_EX`: `0`=none, `1`=flip X, `2`=flip Y, `3`=flip both.
-
-**Buildtools-only** (not available when using the Core compiler):
-
-| Function | Description |
-|----------|-------------|
-| `DRAW_RECT(x, y, w, h, intensity)` | Draw a rectangle |
+| `DRAW_RECT(x, y, w, h, intensity)` | Draw a rectangle outline |
 | `DRAW_FILLED_RECT(x, y, w, h, intensity)` | Draw a filled rectangle |
 | `DRAW_ARC(segs, cx, cy, r, start_deg, sweep_deg, intensity)` | Draw an arc |
 | `DRAW_ELLIPSE(cx, cy, rx, ry, intensity)` | Draw an ellipse |
 
-### Text
+**Parameters:**
+- `mirror` values for `DRAW_VECTOR_EX`: `0`=none, `1`=flip X, `2`=flip Y, `3`=flip both
+- All coordinates are 8-bit signed (-128..127), clamped at compile time
+- Intensity values: 0 (off) to 127 (maximum brightness)
+
+### Text & Debug
 
 | Function | Description |
 |----------|-------------|
 | `PRINT_TEXT(x, y, "text")` | Print a string at screen position |
 | `PRINT_TEXT(x, y, var)` | Print a string variable |
+| `PRINT_NUMBER(x, y, number)` | Print a 16-bit integer value |
+| `DEBUG_PRINT(value)` | Debug output to console (editor only) |
+| `DEBUG_PRINT_LABELED("label", value)` | Debug output with label |
+| `DEBUG_PRINT_STR("text")` | Debug string output |
 
 ### Input — Joystick 1
 
 | Function | Description |
 |----------|-------------|
+| `J1_X()` | Return X-axis value (-128..127) |
+| `J1_Y()` | Return Y-axis value (-128..127) |
 | `J1_BUTTON_1()` | Returns 1 on press (rising edge), 0 otherwise |
 | `J1_BUTTON_2()` | Same for button 2 |
 | `J1_BUTTON_3()` | Same for button 3 |
 | `J1_BUTTON_4()` | Same for button 4 |
 
-Joystick analog values are typically read via an array: `joystick1_state = [0,0,0,0,0,0]` (X, Y, BTN1–4).
+### Input — Joystick 2
+
+| Function | Description |
+|----------|-------------|
+| `J2_X()` | Return X-axis value (-128..127) |
+| `J2_Y()` | Return Y-axis value (-128..127) |
+| `J2_BUTTON_1()` | Returns 1 on press (rising edge), 0 otherwise |
+| `J2_BUTTON_2()` | Same for button 2 |
+| `J2_BUTTON_3()` | Same for button 3 |
+| `J2_BUTTON_4()` | Same for button 4 |
+| `J2_ANALOG_X()` | Raw analog X value |
+| `J2_ANALOG_Y()` | Raw analog Y value |
+| `J2_DIGITAL_X()` | Digital X direction (-1, 0, +1) |
+| `J2_DIGITAL_Y()` | Digital Y direction (-1, 0, +1) |
+| `J2_BUTTON_UP()` | Returns 1 if up button pressed |
+| `J2_BUTTON_DOWN()` | Returns 1 if down button pressed |
+| `J2_BUTTON_LEFT()` | Returns 1 if left button pressed |
+| `J2_BUTTON_RIGHT()` | Returns 1 if right button pressed |
+
+### Input — Button Updates
+
+| Function | Description |
+|----------|-------------|
+| `UPDATE_BUTTONS()` | Poll and update all button states (edge detection) |
 
 ### Audio
 
 | Function | Description |
 |----------|-------------|
 | `PLAY_MUSIC("name")` | Play a `.vmus` music file |
-| `PLAY_SFX("name")` | Play a `.vsfx` sound effect |
 | `STOP_MUSIC()` | Stop current music |
+| `PLAY_SFX("name")` | Play a `.vsfx` sound effect |
+| `AUDIO_UPDATE()` | Update audio engine state (called automatically in loop) |
+| `MUSIC_UPDATE()` | Update music playback (called automatically in loop) |
 
-### Level / Assets
+### Level System
 
 | Function | Description |
 |----------|-------------|
-| `LOAD_LEVEL("name")` | Load a `.vplay` level file |
+| `LOAD_LEVEL("name")` | Load a `.vplay` level file into memory |
+| `SHOW_LEVEL()` | Render the currently loaded level to screen |
+| `UPDATE_LEVEL()` | Update level state (tile animations, etc.) |
+| `GET_LEVEL_WIDTH()` | Return width of current level in tiles |
+| `GET_LEVEL_HEIGHT()` | Return height of current level in tiles |
+| `GET_LEVEL_TILE(x, y)` | Return tile value at position (x, y) |
 
 ### Math
+
+#### Basic Functions
 
 | Function | Description |
 |----------|-------------|
@@ -395,8 +430,50 @@ Joystick analog values are typically read via an array: `joystick1_state = [0,0,
 | `min(a, b)` | Minimum of two values |
 | `max(a, b)` | Maximum of two values |
 | `clamp(v, lo, hi)` | Clamp value between lo and hi |
+
+#### Trigonometry (Buildtools only)
+
+| Function | Description |
+|----------|-------------|
 | `sin(a)` | Sine — argument 0..127 covers full circle, result -127..127 |
-| `cos(a)` | Cosine — same range |
+| `cos(a)` | Cosine — same range as sin |
+| `tan(a)` | Tangent — argument 0..127, result varies |
+| `atan2(y, x)` | Two-argument arctangent (returns angle 0..127) |
+
+#### Power & Roots (Buildtools only)
+
+| Function | Description |
+|----------|-------------|
+| `sqrt(x)` | Integer square root |
+| `pow(x, y)` | Integer power: x raised to the y-th power |
+
+#### Random Numbers (Buildtools only)
+
+| Function | Description |
+|----------|-------------|
+| `rand()` | Return random value 0..65535 |
+| `rand_range(min, max)` | Return random value in range [min, max) |
+
+**Note:** All trigonometric functions use 128-entry lookup tables for performance. Angles wrap at 128 (360 degrees).
+
+### Utilities (Buildtools only)
+
+| Function | Description |
+|----------|-------------|
+| `wait(frames)` | Wait (pause) for N frame cycles |
+| `beep()` | Emit a beep sound |
+| `fade_in()` | Fade display from black to full intensity |
+| `fade_out()` | Fade display from full intensity to black |
+| `peek(addr)` | Read 16-bit value from memory address (constant only) |
+| `poke(addr, value)` | Write 16-bit value to memory address (constant only) |
+
+**Note:** `peek()` and `poke()` only support constant addresses known at compile time.
+
+### Advanced (Buildtools only)
+
+| Function | Description |
+|----------|-------------|
+| `asm("code")` | Inline raw MC6809 assembly code |
 
 ---
 
@@ -499,3 +576,24 @@ Exactly 4 spaces per block level. Tabs are not allowed.
 ### Parser error reporting
 
 The parser currently reports only the first error per file. Fix errors one at a time.
+
+---
+
+## 12. Known Limitations
+
+### Features NOT YET IMPLEMENTED
+
+These features are recognized by the parser but do not generate working code:
+
+- **Structs**: Parser accepts `struct` definitions, but codegen does not emit field access (`obj.field`). Use parallel arrays instead.
+- **Enums**: Not supported. Use named constants instead.
+- **`len()`**: Always returns 0. Track array lengths in separate variables.
+- **Recursive functions**: Allowed but unsafe. No stack overflow protection.
+
+### Removed Built-ins
+
+The following built-ins were documented in previous versions but are no longer supported:
+
+- **`DRAW_TO(x, y)`**: Removed. Use `MOVE(x, y)` followed by `DRAW_LINE(current_x, current_y, x, y, intensity)` instead.
+- **`SET_SCALE(val)`**: Not implemented.
+- **`GET_TIME()`**: Placeholder only; unreliable.
