@@ -37,10 +37,12 @@
 pub mod allocator;
 pub mod error;
 pub mod graph;
+pub mod variable_sizer;
 
 pub use error::{BankAllocatorError, BankAllocatorResult};
 pub use allocator::{BankAllocator, BankConfig, BankStats};
 pub use graph::{CallGraph, FunctionNode, CallEdge};
+pub use variable_sizer::VariableSizer;
 
 use std::collections::HashMap;
 
