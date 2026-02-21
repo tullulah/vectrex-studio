@@ -114,7 +114,7 @@ const QuickActions: React.FC = () => {
       const st = (useEditorStore as any).getState();
       let idx = 1; let uri: string;
       while (true) { uri = `inmemory://untitled-${idx}.vpy`; if (!st.documents.some((d:any)=>d.uri===uri)) break; idx++; }
-      st.openDocument({ uri, language:'vpy', content:'# New VPy file\n\ndef main():\n    # Initialization\n    Set_Intensity(127)\n\ndef loop():\n    # Game loop\n    Wait_Recal()\n', dirty:true, diagnostics:[], lastSavedContent:'' });
+      st.openDocument({ uri, language:'vpy', content:'META MUSIC = music1\n\n# New VPy file\n\ndef main():\n    # Initialization\n    Set_Intensity(127)\n\ndef loop():\n    # Game loop\n    Wait_Recal()\n', dirty:true, diagnostics:[], lastSavedContent:'' });
     } catch {}
   };
 

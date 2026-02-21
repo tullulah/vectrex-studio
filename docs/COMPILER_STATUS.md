@@ -104,6 +104,7 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 - PDB debug symbol generation (Phase 9)
 - ORG directive and two-pass assembly in `vpy_assembler`
 - Bank allocation with call graph analysis
+- ⚠️ **Experimental:** Variable-sized types (`u8`, `i8`, `u16`, `i16`) with type hints — saves ~20% RAM but not all edge cases tested (Phase 5 complete, use with caution)
 
 ### Known issues
 
