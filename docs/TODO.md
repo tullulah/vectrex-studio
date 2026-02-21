@@ -2,36 +2,45 @@
 
 ## Goal: Variable-Sized Types Support (u8, i8, u16, i16)
 
-**Status:** 🟡 PLANNED (Documentation complete, implementation pending)
-**Estimated Effort:** 18-28 developer-hours
+**Status:** 🟡 IN PROGRESS (Phase 1 complete, Phase 2-5 pending)
+**Estimated Effort:** 18-28 developer-hours (5-7 hours remaining)
 **Expected Benefit:** ~20% RAM savings (~200 bytes per game) + compile-time type safety
 **Backward Compatible:** ✅ Yes (untyped variables default to 16-bit)
 
 ---
 
-## Phase 1: Parser (vpy_parser) — PENDING
+## Phase 1: Parser (vpy_parser) — ✅ COMPLETE
 **Effort:** 1-2 hours | **Risk:** Low | **Blocker for:** Phase 2
+**Completed:** 2026-02-21 | **Commit:** feat/variable-sized-types
 
 ### Tasks:
-- [ ] Add `type_annotation: Option<String>` field to `Item::GlobalLet` in `ast.rs`
-- [ ] Add `type_annotation: Option<String>` field to `Item::Const` in `ast.rs`
-- [ ] Update parser in `parser.rs` to parse type hints after variable names
-  - [ ] Handle syntax: `x: u8 = 10`
-  - [ ] Handle syntax: `const LIMIT: u16 = 1000`
-  - [ ] Support type names: `u8`, `i8`, `u16`, `i16`
-- [ ] Add parser tests for type hint syntax
-  - [ ] Test valid type hints: `x: u8`, `y: i16`, `score: u16`
-  - [ ] Test without type hints (backward compat): `x = 10`
-  - [ ] Test error cases: invalid type names, malformed syntax
+- [x] Add `type_annotation: Option<String>` field to `Item::GlobalLet` in `ast.rs`
+- [x] Add `type_annotation: Option<String>` field to `Item::Const` in `ast.rs`
+- [x] Add `type_annotation: Option<String>` field to `Stmt::Let` in `ast.rs`
+- [x] Update parser in `parser.rs` to parse type hints after variable names
+  - [x] Handle syntax: `x: u8 = 10`
+  - [x] Handle syntax: `const LIMIT: u16 = 1000`
+  - [x] Support type names: `u8`, `i8`, `u16`, `i16`
+- [x] Add parser tests for type hint syntax
+  - [x] Test valid type hints: `x: u8`, `y: i16`, `score: u16`
+  - [x] Test without type hints (backward compat): `x = 10`
+  - [x] Test error cases: invalid type names, malformed syntax
 
-**Files to modify:**
-- `buildtools/vpy_parser/src/ast.rs` — Add type_annotation field
-- `buildtools/vpy_parser/src/parser.rs` — Implement type hint parsing
+**Files modified:**
+- `buildtools/vpy_parser/src/ast.rs` — Added type_annotation field (+3 lines)
+- `buildtools/vpy_parser/src/parser.rs` — Implemented type hint parsing (+188 lines, 10 tests)
+- `buildtools/vpy_unifier/src/lib.rs` — Updated pattern matches (+15 lines)
+
+**Results:**
+- ✅ Type annotations parse correctly for all 4 types
+- ✅ Parser handles both typed and untyped variables (backward compatible)
+- ✅ Invalid type names rejected with clear error messages
+- ✅ All 143 compiler tests pass (52 parser + 91 other phases)
 
 ---
 
-## Phase 2: Type System Infrastructure — PENDING
-**Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 1 | **Blocker for:** Phase 3
+## Phase 2: Type System Infrastructure — ⏭️ NEXT (PENDING)
+**Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 1 ✅ | **Blocker for:** Phase 3
 
 ### Tasks:
 - [ ] Create `VarType` struct in `vpy_unifier/src/types.rs` (new file)
@@ -328,6 +337,7 @@ No changes needed.
 **Started:** 2026-02-21
 **Last Updated:** 2026-02-21
 **Sessions:** 1
+**Progress:** Phase 1/5 complete (20%)
 
 ### 2026-02-21 - Initial Analysis & Planning
 - Analyzed why 16-bit-only (compiler simplicity vs RAM efficiency)
@@ -336,3 +346,14 @@ No changes needed.
 - Created phase-by-phase breakdown
 - Documented codegen complexity (Phase 5 is critical path)
 - Created this TODO.md for tracking progress
+
+### 2026-02-21 - Phase 1: Parser Implementation ✅
+- **Duration:** ~1 hour (faster than estimated)
+- Created `feat/variable-sized-types` branch
+- Added type_annotation fields to AST (Item::Const, Item::GlobalLet, Stmt::Let)
+- Implemented type hint parsing with validation (u8, i8, u16, i16)
+- Added 10 parser unit tests covering all type cases
+- Verified backward compatibility (untyped variables unaffected)
+- Commit: `feat/variable-sized-types 2239fcb5`
+- **Test Results:** All 143 tests pass (0 failures, 0 regressions)
+- **Next:** Phase 2 (Type System Infrastructure)
