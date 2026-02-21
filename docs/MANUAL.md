@@ -111,9 +111,33 @@ VPy has a single type: **16-bit integer**.
 
 ### Why 16-bit only?
 
-VPy uses a unified 16-bit type for simplicity — the compiler doesn't need to handle multiple types or conversions. However, this is a notable limitation: **the Vectrex hardware is fundamentally 8-bit** (joystick values, display coordinates, and intensity are all 8-bit), so VPy wastes approximately **20% of available RAM** by storing everything as 16-bit. A typical game loses ~200 bytes of the 970 bytes available.
+VPy currently uses a unified 16-bit type for simplicity — the compiler doesn't need to handle multiple types or conversions. However, this is a notable limitation: **the Vectrex hardware is fundamentally 8-bit** (joystick values, display coordinates, and intensity are all 8-bit), so VPy wastes approximately **20% of available RAM** by storing everything as 16-bit. A typical game loses ~200 bytes of the 970 bytes available.
 
-This trade-off prioritizes compiler simplicity over memory efficiency. For resource-constrained retro development, 8-bit types would be preferable.
+### Planned: Variable-Sized Types with Type Hints
+
+Future versions of VPy will support explicit type declarations using Python's standard type hint syntax:
+
+```python
+x: u8 = 10           # 8-bit unsigned (0–255)
+y: i8 = -5           # 8-bit signed (-128 to 127)
+score: u16 = 1000    # 16-bit unsigned (0–65535)
+pos: i16 = -100      # 16-bit signed (-32768 to 32767)
+```
+
+**Type names:**
+- `u8`, `i8` — 8-bit unsigned/signed
+- `u16`, `i16` — 16-bit unsigned/signed (default for untyped variables)
+
+**Backward compatibility:** Variables without type hints default to 16-bit, so existing code continues working unchanged.
+
+**Implicit widening:** Mixed-type operations automatically promote to the wider type:
+```python
+a: u8 = 5
+b: u16 = 1000
+result: u16 = a + b  # a is implicitly widened to u16 for the operation
+```
+
+This design saves ~20% RAM (~200 bytes per game) while maintaining Python-like syntax and full backward compatibility.
 
 ### Integer literals
 
