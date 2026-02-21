@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "name": "test",
+  "objects": [
+    {
+      "id": "obj_1767467690748",
+      "type": "enemy",
+      "vectorName": "arc",
+      "x": -19,
+      "y": 44,
+      "rotation": 0,
+      "scale": 1,
+      "velocity": {
+        "x": 0,
+        "y": 0
+      },
+      "physicsEnabled": false,
+      "collidable": true,
+      "gravity": 1,
+      "bounceDamping": 0.85,
+      "physicsType": "gravity"
+    }
+  ]
+}

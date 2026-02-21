@@ -85,6 +85,7 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "SPIRAL" => Some(AritySpec::Exact(2)),                  // r, turns
         "POLYGON" => Some(AritySpec::Variable(3)),              // n, x1, y1, ... (minimum 3: count + at least one point)
         "PRINT_TEXT" => Some(AritySpec::Variable(3)),        // x, y, text [, height, width] - min 3, accepts up to 5
+        "PRINT_NUMBER" => Some(AritySpec::Exact(3)),         // x, y, number
         "DEBUG_PRINT" => Some(AritySpec::Exact(1)),             // value - debug output to console
         "DEBUG_PRINT_LABELED" => Some(AritySpec::Exact(2)),     // label, value - debug output with label
         
@@ -139,7 +140,7 @@ pub fn is_builtin_function(name: &str) -> bool {
     
     // Funciones unificadas (global + vectorlist)
     if matches!(upper.as_str(),
-        "MOVE"|"SET_INTENSITY"|"DRAW_TO"|"DRAW_LINE"|"SET_ORIGIN"|"PRINT_TEXT"
+        "MOVE"|"SET_INTENSITY"|"DRAW_TO"|"DRAW_LINE"|"SET_ORIGIN"|"PRINT_TEXT"|"PRINT_NUMBER"
     ) {
         return true;
     }
@@ -885,7 +886,7 @@ fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
     // Phase 1: Collect declarations from top-level items
     for item in &module.items {
         match item {
-            Item::GlobalLet { name, value, source_line } => {
+            Item::GlobalLet { name, value, source_line, .. } => {
                 let mut usage = VariableUsage {
                     declared: true,
                     initialized: value != &Expr::Number(0), // Simplified check
@@ -894,11 +895,11 @@ fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
                     ..Default::default()
                 };
                 analysis.variables.insert(name.clone(), usage);
-                
+
                 // Analyze reads in initialization expression
                 analyze_expr(value, &mut analysis);
             },
-            Item::Const { name, value, source_line } => {
+            Item::Const { name, value, source_line, .. } => {
                 let usage = VariableUsage {
                     declared: true,
                     initialized: true,
@@ -1282,16 +1283,50 @@ impl LanguageServer for Backend {
             let _ = self.client.publish_diagnostics(uri, diags, None).await;
         }
     }
-    async fn completion(&self, params: CompletionParams) -> LspResult<Option<CompletionResponse>> { 
+    async fn completion(&self, params: CompletionParams) -> LspResult<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
         let docs = self.docs.lock().unwrap();
         let text = docs.get(&uri).cloned().unwrap_or_default();
         drop(docs);
-        
+
+        let mut items = Vec::new();
+
+        // Check if we're completing a type annotation (after ':')
+        let line = text.lines().nth(pos.line as usize).unwrap_or("");
+        let col = pos.character as usize;
+
+        // Look backwards from cursor to find if there's a ':' on this line
+        if col > 0 && col <= line.len() {
+            let before_cursor = &line[..col.min(line.len())];
+            // Check if the character before cursor (or nearby) is a colon
+            if before_cursor.trim_end().ends_with(':') ||
+               (col > 0 && line.chars().nth(col - 1).map_or(false, |c| c == ':')) {
+                // We're likely typing a type annotation
+                let type_keywords = ["u8", "i8", "u16", "i16"];
+                for &type_name in &type_keywords {
+                    items.push(CompletionItem {
+                        label: type_name.to_string(),
+                        kind: Some(CompletionItemKind::KEYWORD),
+                        insert_text: Some(type_name.to_string()),
+                        detail: Some(match type_name {
+                            "u8" => "Unsigned 8-bit integer (0-255)",
+                            "i8" => "Signed 8-bit integer (-128 to 127)",
+                            "u16" => "Unsigned 16-bit integer (0-65535)",
+                            "i16" => "Signed 16-bit integer (-32768 to 32767)",
+                            _ => "",
+                        }.to_string()),
+                        ..Default::default()
+                    });
+                }
+                return Ok(Some(CompletionResponse::Array(items)));
+            }
+        }
+
         // Funciones unificadas (global + vectorlist) y palabras clave VPy
-        let unified_items = [ 
+        let unified_items = [
             // Funciones unificadas (funcionan en ambos contextos)
-            "MOVE","SET_INTENSITY","DRAW_TO","DRAW_LINE","SET_ORIGIN","PRINT_TEXT",
+            "MOVE","SET_INTENSITY","DRAW_TO","DRAW_LINE","SET_ORIGIN","PRINT_TEXT","PRINT_NUMBER",
             // Funciones específicas de dibujo directo
             "DRAW_POLYGON","DRAW_CIRCLE","DRAW_CIRCLE_SEG","DRAW_ARC","DRAW_SPIRAL",
             "RECT","POLYGON","CIRCLE","ARC","SPIRAL","DRAW_VECTORLIST",
@@ -1308,9 +1343,7 @@ impl LanguageServer for Backend {
             "FRAME_BEGIN","VECTOR_PHASE_BEGIN","WAIT_RECAL","PLAY_MUSIC1",
             "DBG_STATIC_VL","DRAW_VL"
         ];
-        
-        let mut items = Vec::new();
-        
+
         // Añadir funciones unificadas como Keywords
         for &name in &unified_items {
             items.push(CompletionItem { 

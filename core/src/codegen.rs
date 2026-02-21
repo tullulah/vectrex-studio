@@ -308,7 +308,7 @@ fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
     // Phase 1: Collect declarations from top-level items
     for item in &module.items {
         match item {
-            Item::GlobalLet { name, value, source_line } => {
+            Item::GlobalLet { name, value, source_line, .. } => {
                 let usage = VariableUsage {
                     declared: true,
                     initialized: !matches!(value, Expr::Number(0)),
@@ -320,7 +320,7 @@ fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
                 analysis.variables.insert(name.clone(), usage);
                 analyze_expr(value, &mut analysis); // Check for reads in initialization
             },
-            Item::Const { name, value, source_line } => {
+            Item::Const { name, value, source_line, .. } => {
                 let usage = VariableUsage {
                     declared: true,
                     initialized: true,
@@ -1306,16 +1306,16 @@ fn validate_expr_collect(
     }
 }
 
-fn opt_item(it: &Item) -> Item { 
-    match it { 
-        Item::Function(f) => Item::Function(opt_function(f)), 
-        Item::Const { name, value, source_line } => Item::Const { name: name.clone(), value: opt_expr(value), source_line: *source_line }, 
-        Item::GlobalLet { name, value, source_line } => Item::GlobalLet { name: name.clone(), value: opt_expr(value), source_line: *source_line }, 
+fn opt_item(it: &Item) -> Item {
+    match it {
+        Item::Function(f) => Item::Function(opt_function(f)),
+        Item::Const { name, value, source_line, type_annotation } => Item::Const { name: name.clone(), value: opt_expr(value), type_annotation: type_annotation.clone(), source_line: *source_line },
+        Item::GlobalLet { name, value, source_line, type_annotation } => Item::GlobalLet { name: name.clone(), value: opt_expr(value), type_annotation: type_annotation.clone(), source_line: *source_line },
         Item::VectorList { name, entries } => Item::VectorList { name: name.clone(), entries: entries.clone() },
         Item::ExprStatement(expr) => Item::ExprStatement(opt_expr(expr)),
         Item::Export(e) => Item::Export(e.clone()),
         Item::StructDef(s) => Item::StructDef(s.clone()), // Structs don't need optimization
-    } 
+    }
 }
 
 fn opt_function(f: &Function) -> Function {
@@ -1543,16 +1543,16 @@ fn opt_expr(e: &Expr) -> Expr {
 
 // dead_code_elim: prune unreachable branches / empty loops.
 fn dead_code_elim(m: &Module) -> Module {
-    Module { 
-        items: m.items.iter().map(|it| match it { 
-            Item::Function(f) => Item::Function(dce_function(f)), 
-            Item::Const { name, value, source_line } => Item::Const { name: name.clone(), value: value.clone(), source_line: *source_line }, 
-            Item::GlobalLet { name, value, source_line } => Item::GlobalLet { name: name.clone(), value: value.clone(), source_line: *source_line }, 
+    Module {
+        items: m.items.iter().map(|it| match it {
+            Item::Function(f) => Item::Function(dce_function(f)),
+            Item::Const { name, value, source_line, type_annotation } => Item::Const { name: name.clone(), value: value.clone(), type_annotation: type_annotation.clone(), source_line: *source_line },
+            Item::GlobalLet { name, value, source_line, type_annotation } => Item::GlobalLet { name: name.clone(), value: value.clone(), type_annotation: type_annotation.clone(), source_line: *source_line },
             Item::VectorList { name, entries } => Item::VectorList { name: name.clone(), entries: entries.clone() },
             Item::ExprStatement(expr) => Item::ExprStatement(expr.clone()),
             Item::Export(e) => Item::Export(e.clone()),
             Item::StructDef(s) => Item::StructDef(s.clone()),
-        }).collect(), 
+        }).collect(),
         meta: m.meta.clone(),
         imports: m.imports.clone()
     }
@@ -1844,16 +1844,16 @@ fn propagate_constants(m: &Module) -> Module {
             globals.insert(name.clone(), *n);
         }
     }
-    Module { 
-        items: m.items.iter().map(|it| match it { 
-            Item::Function(f) => Item::Function(cp_function_with_globals(f, &globals)), 
-            Item::Const { name, value, source_line } => Item::Const { name: name.clone(), value: value.clone(), source_line: *source_line }, 
-            Item::GlobalLet { name, value, source_line } => Item::GlobalLet { name: name.clone(), value: value.clone(), source_line: *source_line }, 
+    Module {
+        items: m.items.iter().map(|it| match it {
+            Item::Function(f) => Item::Function(cp_function_with_globals(f, &globals)),
+            Item::Const { name, value, source_line, type_annotation } => Item::Const { name: name.clone(), value: value.clone(), type_annotation: type_annotation.clone(), source_line: *source_line },
+            Item::GlobalLet { name, value, source_line, type_annotation } => Item::GlobalLet { name: name.clone(), value: value.clone(), type_annotation: type_annotation.clone(), source_line: *source_line },
             Item::VectorList { name, entries } => Item::VectorList { name: name.clone(), entries: entries.clone() },
             Item::ExprStatement(expr) => Item::ExprStatement(expr.clone()),
             Item::Export(e) => Item::Export(e.clone()),
             Item::StructDef(s) => Item::StructDef(s.clone()),
-        }).collect(), 
+        }).collect(),
         meta: m.meta.clone(),
         imports: m.imports.clone()
     }
@@ -2037,16 +2037,16 @@ fn cp_expr(e: &Expr, env: &HashMap<String, i32>) -> Expr {
 // fold_const_switches: if a switch expression is a constant number and all case values are constant numbers,
 // select the matching case (or default) and inline its body, removing the switch. Conservatively keeps semantics.
 fn fold_const_switches(m: &Module) -> Module {
-    Module { 
-        items: m.items.iter().map(|it| match it { 
-            Item::Function(f) => Item::Function(fold_const_switches_function(f)), 
-            Item::Const { name, value, source_line } => Item::Const { name: name.clone(), value: value.clone(), source_line: *source_line }, 
-            Item::GlobalLet { name, value, source_line } => Item::GlobalLet { name: name.clone(), value: value.clone(), source_line: *source_line }, 
+    Module {
+        items: m.items.iter().map(|it| match it {
+            Item::Function(f) => Item::Function(fold_const_switches_function(f)),
+            Item::Const { name, value, source_line, type_annotation } => Item::Const { name: name.clone(), value: value.clone(), type_annotation: type_annotation.clone(), source_line: *source_line },
+            Item::GlobalLet { name, value, source_line, type_annotation } => Item::GlobalLet { name: name.clone(), value: value.clone(), type_annotation: type_annotation.clone(), source_line: *source_line },
             Item::VectorList { name, entries } => Item::VectorList { name: name.clone(), entries: entries.clone() },
             Item::ExprStatement(expr) => Item::ExprStatement(expr.clone()),
             Item::Export(e) => Item::Export(e.clone()),
             Item::StructDef(s) => Item::StructDef(s.clone()),
-        }).collect(), 
+        }).collect(),
         meta: m.meta.clone(),
         imports: m.imports.clone()
     }

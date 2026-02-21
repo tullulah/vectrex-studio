@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "name": "location",
+  "canvas": {"width": 256, "height": 256, "origin": "center"},
+  "layers": [{
+    "name": "default",
+    "visible": true,
+    "paths": [{
+      "name": "triangle",
+      "intensity": 127,
+      "closed": true,
+      "points": [
+        {"x": 0, "y": 10},
+        {"x": -8, "y": -5},
+        {"x": 8, "y": -5}
+      ]
+    }]
+  }]
+}

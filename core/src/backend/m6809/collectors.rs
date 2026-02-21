@@ -66,7 +66,7 @@ pub fn collect_global_vars(module: &Module) -> Vec<(String, Expr)> {
 pub fn collect_global_vars_with_line(module: &Module) -> Vec<(String, Expr, usize)> {
     let mut vars = Vec::new();
     for item in &module.items {
-        if let Item::GlobalLet { name, value, source_line } = item {
+        if let Item::GlobalLet { name, value, source_line, .. } = item {
             vars.push((name.clone(), value.clone(), *source_line));
         }
     }
@@ -89,7 +89,7 @@ pub fn collect_const_vars(module: &Module) -> Vec<(String, Expr)> {
 pub fn collect_const_vars_with_line(module: &Module) -> Vec<(String, Expr, usize)> {
     let mut consts = Vec::new();
     for item in &module.items {
-        if let Item::Const { name, value, source_line } = item {
+        if let Item::Const { name, value, source_line, .. } = item {
             consts.push((name.clone(), value.clone(), *source_line));
         }
     }

@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "name": "bonus_collected",
+  "category": "custom",
+  "duration_ms": 460,
+  "oscillator": {
+    "frequency": 5,
+    "channel": 0,
+    "duty": 50
+  },
+  "envelope": {
+    "attack": 0,
+    "decay": 200,
+    "sustain": 12,
+    "release": 0,
+    "peak": 14
+  },
+  "pitch": {
+    "enabled": true,
+    "start_mult": 1.0,
+    "end_mult": 1.83,
+    "curve": 0
+  },
+  "noise": {
+    "enabled": true,
+    "period": 0,
+    "volume": 14,
+    "decay_ms": 0
+  },
+  "modulation": {
+    "arpeggio": false,
+    "arpeggio_notes": [],
+    "arpeggio_speed": 100,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 0
+  }
+}

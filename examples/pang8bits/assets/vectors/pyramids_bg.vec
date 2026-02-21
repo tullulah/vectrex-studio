@@ -1,0 +1,87 @@
+{
+  "version": "1.0",
+  "name": "pyramids_bg",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "pyramids",
+      "visible": true,
+      "paths": [
+        {
+          "name": "main_pyramid",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -90,
+              "y": -45
+            },
+            {
+              "x": -10,
+              "y": 45
+            },
+            {
+              "x": 70,
+              "y": -45
+            }
+          ]
+        },
+        {
+          "name": "left_edge",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -90,
+              "y": -45
+            },
+            {
+              "x": -10,
+              "y": 45
+            }
+          ]
+        },
+        {
+          "name": "right_edge",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {
+              "x": -10,
+              "y": 45
+            },
+            {
+              "x": 70,
+              "y": -45
+            }
+          ]
+        },
+        {
+          "name": "small_pyramid",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {
+              "x": 30,
+              "y": -45
+            },
+            {
+              "x": 60,
+              "y": 0
+            },
+            {
+              "x": 90,
+              "y": -45
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

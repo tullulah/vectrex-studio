@@ -55,10 +55,10 @@ pub struct ExportDecl {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Item { 
-    Function(Function), 
-    Const { name: String, value: Expr, source_line: usize }, 
-    GlobalLet { name: String, value: Expr, source_line: usize }, 
+pub enum Item {
+    Function(Function),
+    Const { name: String, type_annotation: Option<String>, value: Expr, source_line: usize },
+    GlobalLet { name: String, type_annotation: Option<String>, value: Expr, source_line: usize },
     VectorList { name: String, entries: Vec<VlEntry> },
     ExprStatement(Expr),  // Para permitir expresiones ejecutables en top-level
     /// Declaración de export explícita

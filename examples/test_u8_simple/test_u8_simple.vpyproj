@@ -1,0 +1,19 @@
+[project]
+name = "test_u8_simple"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/test_u8_simple.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/*.vec"]
+animations = ["assets/animations/*.anim"]
+music = ["assets/music/*.mus"]
+sfx = ["assets/sfx/*.sfx"]
+voices = ["assets/voices/*.vox"]

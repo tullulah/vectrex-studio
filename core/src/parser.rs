@@ -157,22 +157,34 @@ impl<'a> Parser<'a> {
             if self.match_kind(&TokenKind::Const) || self.match_ident_case("CONST") {
                 let const_line = self.current_line();
                 let name = self.identifier()?;
+                // Check for optional type annotation: type
+                let type_annotation = if self.match_kind(&TokenKind::Colon) {
+                    Some(self.identifier()?)
+                } else {
+                    None
+                };
                 self.consume(TokenKind::Equal)?;
                 let value = self.expression()?;
                 self.consume(TokenKind::Newline)?;
                 if name.eq_ignore_ascii_case("TITLE") { if let Expr::StringLit(s)=&value { meta.title_override = Some(s.clone()); } }
-                items.push(Item::Const { name, value, source_line: const_line });
+                items.push(Item::Const { name, type_annotation, value, source_line: const_line });
                 continue;
             }
-            // Global variable declaration: identifier = expression (Python-style, no keyword)
+            // Global variable declaration: identifier [: type] = expression (Python-style, no keyword)
             if self.check_identifier() {
                 let checkpoint = self.pos;
                 if let Ok(name) = self.identifier() {
+                    // Check for optional type annotation: type
+                    let type_annotation = if self.match_kind(&TokenKind::Colon) {
+                        Some(self.identifier()?)
+                    } else {
+                        None
+                    };
                     if self.match_kind(&TokenKind::Equal) {
                         let global_line = self.current_line();
                         let value = self.expression()?;
                         self.consume(TokenKind::Newline)?;
-                        items.push(Item::GlobalLet { name, value, source_line: global_line });
+                        items.push(Item::GlobalLet { name, type_annotation, value, source_line: global_line });
                         continue;
                     }
                 }

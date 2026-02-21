@@ -1,0 +1,155 @@
+{
+  "version": "1.0",
+  "name": "easter_bg",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "moai",
+      "visible": true,
+      "paths": [
+        {
+          "name": "head",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -25,
+              "y": 20,
+              "z": 0
+            },
+            {
+              "x": -25,
+              "y": 50,
+              "z": 0
+            },
+            {
+              "x": -20,
+              "y": 60,
+              "z": 0
+            },
+            {
+              "x": 20,
+              "y": 60,
+              "z": 0
+            },
+            {
+              "x": 25,
+              "y": 50,
+              "z": 0
+            },
+            {
+              "x": 25,
+              "y": 20,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "nose",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {
+              "x": 0,
+              "y": 40,
+              "z": 0
+            },
+            {
+              "x": 10,
+              "y": 35,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "eye",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -8,
+              "y": 45,
+              "z": 0
+            },
+            {
+              "x": -8,
+              "y": 50,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 50,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 45,
+              "z": 0
+            },
+            {
+              "x": -8,
+              "y": 45,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {
+              "x": -30,
+              "y": 20,
+              "z": 0
+            },
+            {
+              "x": -30,
+              "y": -30,
+              "z": 0
+            },
+            {
+              "x": 30,
+              "y": -30,
+              "z": 0
+            },
+            {
+              "x": 30,
+              "y": 20,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "base",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {
+              "x": -35,
+              "y": -30,
+              "z": 0
+            },
+            {
+              "x": 35,
+              "y": -30,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "hitbox": null,
+    "origin": null,
+    "tags": [],
+    "ordering": "greedy"
+  },
+  "center_x": 0,
+  "center_y": 15
+}

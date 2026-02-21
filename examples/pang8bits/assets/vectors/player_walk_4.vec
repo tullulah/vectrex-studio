@@ -1,0 +1,192 @@
+{
+  "version": "1.0",
+  "name": "player_walk_4",
+  "canvas": {"width": 256, "height": 256, "origin": "center"},
+  "layers": [{
+    "name": "default",
+    "visible": true,
+    "paths": [
+      {
+        "name": "head",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -4, "y": 12},
+          {"x": 4, "y": 12},
+          {"x": 4, "y": 8},
+          {"x": -4, "y": 8}
+        ]
+      },
+      {
+        "name": "cap_visor",
+        "intensity": 127,
+        "closed": false,
+        "points": [
+          {"x": -6, "y": 12},
+          {"x": 6, "y": 12}
+        ]
+      },
+      {
+        "name": "cap_top",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -4, "y": 12},
+          {"x": 4, "y": 12},
+          {"x": 4, "y": 14},
+          {"x": -4, "y": 14}
+        ]
+      },
+      {
+        "name": "torso",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -5, "y": 8},
+          {"x": 5, "y": 8},
+          {"x": 5, "y": -2},
+          {"x": -5, "y": -2}
+        ]
+      },
+      {
+        "name": "left_shoulder",
+        "intensity": 127,
+        "closed": false,
+        "points": [
+          {"x": -5, "y": 7},
+          {"x": -6, "y": 6}
+        ]
+      },
+      {
+        "name": "left_arm",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -6, "y": 6},
+          {"x": -8, "y": 6},
+          {"x": -8, "y": 0},
+          {"x": -6, "y": 0}
+        ]
+      },
+      {
+        "name": "left_hand",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -6, "y": 0},
+          {"x": -8, "y": 0},
+          {"x": -8, "y": -2},
+          {"x": -6, "y": -2}
+        ]
+      },
+      {
+        "name": "right_shoulder",
+        "intensity": 127,
+        "closed": false,
+        "points": [
+          {"x": 5, "y": 7},
+          {"x": 7, "y": 6}
+        ]
+      },
+      {
+        "name": "right_arm",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 7, "y": 6},
+          {"x": 9, "y": 6},
+          {"x": 9, "y": 2},
+          {"x": 7, "y": 2}
+        ]
+      },
+      {
+        "name": "gun",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 7, "y": 4},
+          {"x": 11, "y": 4},
+          {"x": 11, "y": 3},
+          {"x": 7, "y": 3}
+        ]
+      },
+      {
+        "name": "gun_handle",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 8, "y": 3},
+          {"x": 9, "y": 3},
+          {"x": 9, "y": 1},
+          {"x": 8, "y": 1}
+        ]
+      },
+      {
+        "name": "left_leg_upper",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -5, "y": -2},
+          {"x": -3, "y": -2},
+          {"x": -2, "y": -9},
+          {"x": -4, "y": -9}
+        ]
+      },
+      {
+        "name": "left_leg_lower",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": -2, "y": -9},
+          {"x": 0, "y": -9},
+          {"x": 0, "y": -16},
+          {"x": -2, "y": -16}
+        ]
+      },
+      {
+        "name": "left_foot",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 0, "y": -16},
+          {"x": 3, "y": -16},
+          {"x": 3, "y": -17},
+          {"x": 0, "y": -17}
+        ]
+      },
+      {
+        "name": "right_leg_upper",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 2, "y": -2},
+          {"x": 4, "y": -2},
+          {"x": 4, "y": -8},
+          {"x": 2, "y": -8}
+        ]
+      },
+      {
+        "name": "right_leg_lower",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 2, "y": -8},
+          {"x": 4, "y": -8},
+          {"x": 3, "y": -14},
+          {"x": 1, "y": -14}
+        ]
+      },
+      {
+        "name": "right_foot",
+        "intensity": 127,
+        "closed": true,
+        "points": [
+          {"x": 1, "y": -14},
+          {"x": 3, "y": -14},
+          {"x": 3, "y": -15},
+          {"x": 1, "y": -15}
+        ]
+      }
+    ]
+  }]
+}

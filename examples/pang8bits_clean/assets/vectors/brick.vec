@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "name": "brick",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "path_1767177582682",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -41,
+              "y": 41,
+              "z": 0
+            },
+            {
+              "x": 53,
+              "y": 31,
+              "z": 0
+            },
+            {
+              "x": -45,
+              "y": 7,
+              "z": 0
+            },
+            {
+              "x": -41,
+              "y": 41,
+              "z": 0
+            },
+            {
+              "x": -41,
+              "y": 41,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 4,
+  "center_y": 24
+}
