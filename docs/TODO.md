@@ -2,8 +2,8 @@
 
 ## Goal: Variable-Sized Types Support (u8, i8, u16, i16)
 
-**Status:** 🟡 IN PROGRESS (Phase 1-3 complete, Phase 4-5 pending)
-**Estimated Effort:** 18-28 developer-hours (3-4 hours remaining)
+**Status:** 🟡 IN PROGRESS (Phase 1-4 complete, Phase 5 pending)
+**Estimated Effort:** 18-28 developer-hours (12-20 hours for Phase 5)
 **Expected Benefit:** ~20% RAM savings (~200 bytes per game) + compile-time type safety
 **Backward Compatible:** ✅ Yes (untyped variables default to 16-bit)
 
@@ -98,27 +98,37 @@
 
 ---
 
-## Phase 4: Bank Allocator (vpy_bank_allocator) — ⏭️ NEXT (PENDING)
+## Phase 4: Bank Allocator (vpy_bank_allocator) — ✅ COMPLETE
 **Effort:** 1-2 hours | **Risk:** Low | **Depends on:** Phase 3 ✅ | **Blocker for:** Phase 5
+**Completed:** 2026-02-21 | **Commit:** feat/variable-sized-types ac205609
 
 ### Tasks:
-- [ ] Query variable types from symbol table instead of assuming 16-bit
-- [ ] Calculate per-variable allocation sizes:
-  - [ ] u8, i8 → 1 byte
-  - [ ] u16, i16 → 2 bytes
-- [ ] Update bank size calculations to account for mixed sizes
-- [ ] Add allocator tests for mixed-size variables
-  - [ ] Array of u8 takes correct amount of space
-  - [ ] Array of u16 takes correct amount of space
-  - [ ] Mixed arrays allocate correctly
+- [x] Query variable types from TypeTracker instead of assuming 16-bit
+- [x] Calculate per-variable allocation sizes:
+  - [x] u8, i8 → 1 byte
+  - [x] u16, i16 → 2 bytes
+- [x] Implement bank space calculation functions
+  - [x] remaining_space() for capacity checking
+  - [x] fits_in_bank() for validation
+- [x] Add allocator tests for mixed-size variables
+  - [x] Individual variable sizing (u8, u16, i8, i16)
+  - [x] Mixed variable sizing
+  - [x] Bank space calculations
 
-**Files to modify:**
-- `buildtools/vpy_bank_allocator/src/lib.rs` — Use variable types for sizing
+**Files modified/created:**
+- `buildtools/vpy_bank_allocator/src/variable_sizer.rs` — NEW: VariableSizer module (+138 lines)
+- `buildtools/vpy_bank_allocator/src/lib.rs` — Export VariableSizer (+2 lines)
+
+**Results:**
+- ✅ VariableSizer calculates correct memory usage per type
+- ✅ Support for capacity planning and validation
+- ✅ 6 new variable sizing tests
+- ✅ All 193 tests pass (23 vpy_bank_allocator + 170 baseline)
 
 ---
 
-## Phase 5: Codegen (vpy_codegen) — PENDING ⚠️ CRITICAL
-**Effort:** 12-20 hours | **Risk:** Medium | **Depends on:** Phase 4 | **Blocker for:** Phase 6
+## Phase 5: Codegen (vpy_codegen) — ⏭️ NEXT (PENDING) ⚠️ CRITICAL
+**Effort:** 12-20 hours | **Risk:** Medium | **Depends on:** Phase 4 ✅ | **Blocker for:** Phase 6
 
 ### Core Infrastructure:
 - [ ] Create width dispatch helpers in `expressions.rs`
@@ -352,7 +362,7 @@ No changes needed.
 **Started:** 2026-02-21
 **Last Updated:** 2026-02-21
 **Sessions:** 1
-**Progress:** Phase 3/5 complete (60%)
+**Progress:** Phase 4/5 complete (80%)
 
 ### 2026-02-21 - Initial Analysis & Planning
 - Analyzed why 16-bit-only (compiler simplicity vs RAM efficiency)
@@ -397,4 +407,18 @@ No changes needed.
 - Commit: `feat/variable-sized-types 828714e9`
 - **Test Results:** All 186 tests pass (43 vpy_unifier + 143 baseline), 0 regressions
 - **Type Info Flow:** Types now persist through unified module for Phase 4/5
-- **Next:** Phase 4 (Bank Allocator - use types for per-variable sizing)
+
+### 2026-02-21 - Phase 4: Bank Allocator Variable Sizing ✅
+- **Duration:** ~35 minutes (faster than estimated)
+- Created VariableSizer module for calculating memory usage
+- Implemented variable size mapping from TypeTracker
+- Added remaining_space() and fits_in_bank() for capacity checking
+- Support for per-variable sizing based on type (u8=1byte, u16=2bytes)
+- Added 6 VariableSizer tests covering:
+  - Individual variable sizing for all 4 types
+  - Mixed variable sizing
+  - Bank capacity calculations and validation
+- Commit: `feat/variable-sized-types ac205609`
+- **Test Results:** All 193 tests pass (23 vpy_bank_allocator + 170 baseline), 0 regressions
+- **Memory Calculation:** Variables now sized correctly instead of assuming 16-bit
+- **Next:** Phase 5 (Codegen - CRITICAL PATH, 12-20 hours)
