@@ -109,6 +109,12 @@ VPy has a single type: **16-bit integer**.
 - No floating point.
 - No booleans (`True`/`False`) — use `1` and `0` instead.
 
+### Why 16-bit only?
+
+VPy uses a unified 16-bit type for simplicity — the compiler doesn't need to handle multiple types or conversions. However, this is a notable limitation: **the Vectrex hardware is fundamentally 8-bit** (joystick values, display coordinates, and intensity are all 8-bit), so VPy wastes approximately **20% of available RAM** by storing everything as 16-bit. A typical game loses ~200 bytes of the 970 bytes available.
+
+This trade-off prioritizes compiler simplicity over memory efficiency. For resource-constrained retro development, 8-bit types would be preferable.
+
 ### Integer literals
 
 ```python
