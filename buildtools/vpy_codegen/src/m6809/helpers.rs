@@ -57,6 +57,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("DRAW_CIRCLE_YC", 1, "Circle center Y");
         ram.allocate("DRAW_CIRCLE_DIAM", 1, "Circle diameter");
         ram.allocate("DRAW_CIRCLE_INTENSITY", 1, "Circle intensity");
+        ram.allocate("DRAW_CIRCLE_RADIUS", 1, "Circle radius (diam/2) - used in segment drawing");
         ram.allocate("DRAW_CIRCLE_TEMP", 6, "Circle temporary buffer");
     }
     
