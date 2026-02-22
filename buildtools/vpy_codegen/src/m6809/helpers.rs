@@ -107,20 +107,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("FRAME_COUNTER", 2, "Frame counter for fade effects");
         ram.allocate("CURRENT_INTENSITY", 2, "Current intensity for fade");
     }
-    
-    // Audio system variables (auto-detected)
-    use crate::m6809::functions::has_audio_calls;
-    if has_audio_calls(module) {
-        ram.allocate("PSG_MUSIC_PTR", 2, "PSG music data pointer");
-        ram.allocate("PSG_MUSIC_START", 2, "PSG music start pointer (for loops)");
-        ram.allocate("PSG_MUSIC_ACTIVE", 1, "PSG music active flag");
-        ram.allocate("PSG_IS_PLAYING", 1, "PSG playing flag");
-        ram.allocate("PSG_DELAY_FRAMES", 1, "PSG frame delay counter");
-        ram.allocate("PSG_MUSIC_BANK", 1, "PSG music bank ID (for multibank)");
-        ram.allocate("SFX_PTR", 2, "SFX data pointer");
-        ram.allocate("SFX_ACTIVE", 1, "SFX active flag");
-    }
-    
+
     // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address $CFE0
     // These need to be at a fixed location for cross-bank compatibility
     ram.allocate_fixed("VAR_ARG0", 0xCFE0, 2, "Function argument 0 (16-bit)");
@@ -133,7 +120,21 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     // Required for cross-bank function calls and bank switching wrappers
     // Must be at fixed address for all banks to access
     ram.allocate_fixed("CURRENT_ROM_BANK", 0xCFEA, 1, "Current ROM bank ID (multibank tracking)");
-    
+
+    // Audio system variables at FIXED addresses (don't corrupt user RAM)
+    // These are allocated AFTER VAR_ARG0-4 at 0xCFEB onwards (high end of RAM)
+    use crate::m6809::functions::has_audio_calls;
+    if has_audio_calls(module) {
+        ram.allocate_fixed("PSG_MUSIC_PTR", 0xCFEB, 2, "PSG music data pointer");
+        ram.allocate_fixed("PSG_MUSIC_START", 0xCFED, 2, "PSG music start pointer (for loops)");
+        ram.allocate_fixed("PSG_MUSIC_ACTIVE", 0xCFEF, 1, "PSG music active flag");
+        ram.allocate_fixed("PSG_IS_PLAYING", 0xCFF0, 1, "PSG playing flag");
+        ram.allocate_fixed("PSG_DELAY_FRAMES", 0xCFF1, 1, "PSG frame delay counter");
+        ram.allocate_fixed("PSG_MUSIC_BANK", 0xCFF2, 1, "PSG music bank ID (for multibank)");
+        ram.allocate_fixed("SFX_PTR", 0xCFF3, 2, "SFX data pointer");
+        ram.allocate_fixed("SFX_ACTIVE", 0xCFF5, 1, "SFX active flag");
+    }
+
     // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
     // =========================================================================
@@ -214,11 +215,13 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 needed.insert("PRINT_NUMBER".to_string());
             }
             
-            // Drawing helpers: Need runtime if args contain non-constants
-            if name_upper == "DRAW_CIRCLE" && has_variable_args(args) {
+            // Drawing helpers: Always needed when called (even with constant args)
+            if name_upper == "DRAW_CIRCLE" {
+                needed.insert("DRAW_CIRCLE".to_string());
                 needed.insert("DRAW_CIRCLE_RUNTIME".to_string());
             }
-            if name_upper == "DRAW_RECT" && has_variable_args(args) {
+            if name_upper == "DRAW_RECT" {
+                needed.insert("DRAW_RECT".to_string());
                 needed.insert("DRAW_RECT_RUNTIME".to_string());
             }
             if name_upper == "DRAW_LINE" {
