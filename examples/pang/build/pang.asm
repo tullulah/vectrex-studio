@@ -72,80 +72,77 @@ SFX_ACTIVE           EQU $C880+$40   ; SFX active flag (1 bytes)
 VAR_STATE_TITLE      EQU $C880+$41   ; User variable: STATE_TITLE (2 bytes)
 VAR_STATE_MAP        EQU $C880+$43   ; User variable: STATE_MAP (2 bytes)
 VAR_STATE_GAME       EQU $C880+$45   ; User variable: STATE_GAME (2 bytes)
-VAR_SCREEN           EQU $C880+$47   ; User variable: SCREEN (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$49   ; User variable: TITLE_INTENSITY (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$4B   ; User variable: TITLE_STATE (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$4D   ; User variable: CURRENT_MUSIC (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$4F   ; User variable: LOCATION_X_COORDS (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$51   ; User variable: LOCATION_Y_COORDS (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$53   ; User variable: LOCATION_NAMES (2 bytes)
-VAR_LEVEL_BACKGROUNDS EQU $C880+$55   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
-VAR_LEVEL_ENEMY_COUNT EQU $C880+$57   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
-VAR_LEVEL_ENEMY_SPEED EQU $C880+$59   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$5B   ; User variable: PREV_BTN1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$5D   ; User variable: PREV_BTN2 (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$5F   ; User variable: PREV_BTN3 (2 bytes)
-VAR_PREV_BTN4        EQU $C880+$61   ; User variable: PREV_BTN4 (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$63   ; User variable: NUM_LOCATIONS (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$65   ; User variable: CURRENT_LOCATION (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$67   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$69   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
-VAR_JOY_X            EQU $C880+$6B   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$6D   ; User variable: JOY_Y (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$6F   ; User variable: PREV_JOY_X (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$71   ; User variable: PREV_JOY_Y (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$73   ; User variable: COUNTDOWN_TIMER (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$75   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$77   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$79   ; User variable: HOOK_ACTIVE (2 bytes)
-VAR_HOOK_X           EQU $C880+$7B   ; User variable: HOOK_X (2 bytes)
-VAR_HOOK_Y           EQU $C880+$7D   ; User variable: HOOK_Y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$7F   ; User variable: HOOK_MAX_Y (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$81   ; User variable: HOOK_GUN_X (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$83   ; User variable: HOOK_GUN_Y (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$85   ; User variable: HOOK_INIT_Y (2 bytes)
-VAR_PLAYER_X         EQU $C880+$87   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$89   ; User variable: PLAYER_Y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$8B   ; User variable: MOVE_SPEED (2 bytes)
-VAR_ABS_JOY          EQU $C880+$8D   ; User variable: ABS_JOY (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$8F   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$91   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$93   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$95   ; User variable: PLAYER_FACING (2 bytes)
+VAR_SCREEN           EQU $C880+$47   ; User variable: screen (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$49   ; User variable: title_intensity (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$4B   ; User variable: title_state (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$4D   ; User variable: current_music (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$4F   ; User variable: location_x_coords (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$51   ; User variable: location_y_coords (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$53   ; User variable: location_names (2 bytes)
+VAR_LEVEL_BACKGROUNDS EQU $C880+$55   ; User variable: level_backgrounds (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$57   ; User variable: level_enemy_count (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$59   ; User variable: level_enemy_speed (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$5B   ; User variable: prev_btn1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$5D   ; User variable: prev_btn2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$5F   ; User variable: prev_btn3 (2 bytes)
+VAR_PREV_BTN4        EQU $C880+$61   ; User variable: prev_btn4 (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$63   ; User variable: num_locations (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$65   ; User variable: current_location (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$67   ; User variable: location_glow_intensity (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$69   ; User variable: location_glow_direction (2 bytes)
+VAR_JOY_X            EQU $C880+$6B   ; User variable: joy_x (2 bytes)
+VAR_JOY_Y            EQU $C880+$6D   ; User variable: joy_y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$6F   ; User variable: prev_joy_x (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$71   ; User variable: prev_joy_y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$73   ; User variable: countdown_timer (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$75   ; User variable: countdown_active (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$77   ; User variable: joystick_poll_counter (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$79   ; User variable: hook_active (2 bytes)
+VAR_HOOK_X           EQU $C880+$7B   ; User variable: hook_x (2 bytes)
+VAR_HOOK_Y           EQU $C880+$7D   ; User variable: hook_y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$7F   ; User variable: hook_max_y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$81   ; User variable: hook_gun_x (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$83   ; User variable: hook_gun_y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$85   ; User variable: hook_init_y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$87   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$89   ; User variable: player_y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$8B   ; User variable: move_speed (2 bytes)
+VAR_ABS_JOY          EQU $C880+$8D   ; User variable: abs_joy (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$8F   ; User variable: player_anim_frame (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$91   ; User variable: player_anim_counter (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$93   ; User variable: player_anim_speed (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$95   ; User variable: player_facing (2 bytes)
 VAR_MAX_ENEMIES      EQU $C880+$97   ; User variable: MAX_ENEMIES (2 bytes)
 VAR_GRAVITY          EQU $C880+$99   ; User variable: GRAVITY (2 bytes)
 VAR_BOUNCE_DAMPING   EQU $C880+$9B   ; User variable: BOUNCE_DAMPING (2 bytes)
 VAR_MIN_BOUNCE_VY    EQU $C880+$9D   ; User variable: MIN_BOUNCE_VY (2 bytes)
 VAR_GROUND_Y         EQU $C880+$9F   ; User variable: GROUND_Y (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$A1   ; User variable: JOYSTICK1_STATE (2 bytes)
-VAR_LOC_X            EQU $C880+$A3   ; User variable: LOC_X (2 bytes)
-VAR_LOC_Y            EQU $C880+$A5   ; User variable: LOC_Y (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$A7   ; User variable: ANIM_THRESHOLD (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$A9   ; User variable: MIRROR_MODE (2 bytes)
-VAR_COUNT            EQU $C880+$AB   ; User variable: COUNT (2 bytes)
-VAR_SPEED            EQU $C880+$AD   ; User variable: SPEED (2 bytes)
-VAR_I                EQU $C880+$AF   ; User variable: I (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$B1   ; User variable: ENEMY_ACTIVE (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$B3   ; User variable: ENEMY_SIZE (2 bytes)
-VAR_ENEMY_X          EQU $C880+$B5   ; User variable: ENEMY_X (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$B7   ; User variable: ENEMY_Y (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$B9   ; User variable: ENEMY_VX (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$BB   ; User variable: ENEMY_VY (2 bytes)
-VAR_START_X          EQU $C880+$C5   ; User variable: start_x (2 bytes)
-VAR_START_Y          EQU $C880+$C7   ; User variable: start_y (2 bytes)
-VAR_END_X            EQU $C880+$C9   ; User variable: end_x (2 bytes)
-VAR_END_Y            EQU $C880+$CB   ; User variable: end_y (2 bytes)
-VAR_START_X          EQU $C880+$C5   ; User variable: START_X (2 bytes)
-VAR_START_Y          EQU $C880+$C7   ; User variable: START_Y (2 bytes)
-VAR_END_X            EQU $C880+$C9   ; User variable: END_X (2 bytes)
-VAR_END_Y            EQU $C880+$CB   ; User variable: END_Y (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$CD   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$D9   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$E9   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$F9   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$109   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$119   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$129   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$A1   ; User variable: joystick1_state (2 bytes)
+VAR_LOC_X            EQU $C880+$A3   ; User variable: loc_x (2 bytes)
+VAR_LOC_Y            EQU $C880+$A5   ; User variable: loc_y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$A7   ; User variable: anim_threshold (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$A9   ; User variable: mirror_mode (2 bytes)
+VAR_ACTIVE_COUNT     EQU $C880+$AB   ; User variable: active_count (2 bytes)
+VAR_I                EQU $C880+$AD   ; User variable: i (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$AF   ; User variable: enemy_active (2 bytes)
+VAR_COUNT            EQU $C880+$B1   ; User variable: count (2 bytes)
+VAR_SPEED            EQU $C880+$B3   ; User variable: speed (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$B5   ; User variable: enemy_size (2 bytes)
+VAR_ENEMY_X          EQU $C880+$B7   ; User variable: enemy_x (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$B9   ; User variable: enemy_y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$BB   ; User variable: enemy_vx (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$BD   ; User variable: enemy_vy (2 bytes)
+VAR_START_X          EQU $C880+$BF   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$C1   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$C3   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$C5   ; User variable: end_y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$C7   ; Mutable array 'joystick1_state' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$D3   ; Mutable array 'enemy_active' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$E3   ; Mutable array 'enemy_x' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$F3   ; Mutable array 'enemy_y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$103   ; Mutable array 'enemy_vx' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$113   ; Mutable array 'enemy_vy' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$123   ; Mutable array 'enemy_size' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -159,7 +156,7 @@ CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 b
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'LOCATION_X_COORDS' (17 elements, 2 bytes each)
+; Array literal for variable 'location_x_coords' (17 elements, 2 bytes each)
 ARRAY_LOCATION_X_COORDS_DATA:
     FDB 40   ; Element 0
     FDB 40   ; Element 1
@@ -179,7 +176,7 @@ ARRAY_LOCATION_X_COORDS_DATA:
     FDB 0   ; Element 15
     FDB 45   ; Element 16
 
-; Array literal for variable 'LOCATION_Y_COORDS' (17 elements, 2 bytes each)
+; Array literal for variable 'location_y_coords' (17 elements, 2 bytes each)
 ARRAY_LOCATION_Y_COORDS_DATA:
     FDB 110   ; Element 0
     FDB 79   ; Element 1
@@ -199,7 +196,7 @@ ARRAY_LOCATION_Y_COORDS_DATA:
     FDB -60   ; Element 15
     FDB -30   ; Element 16
 
-; String array literal for variable 'LOCATION_NAMES' (17 elements)
+; String array literal for variable 'location_names' (17 elements)
 ARRAY_LOCATION_NAMES_DATA_STR_0:
     FCC "MOUNT FUJI (JP)"
     FCB $80   ; String terminator (high bit)
@@ -252,7 +249,7 @@ ARRAY_LOCATION_NAMES_DATA_STR_16:
     FCC "EASTER ISLAND (CL)"
     FCB $80   ; String terminator (high bit)
 
-ARRAY_LOCATION_NAMES_DATA:  ; Pointer table for LOCATION_NAMES
+ARRAY_LOCATION_NAMES_DATA:  ; Pointer table for location_names
     FDB ARRAY_LOCATION_NAMES_DATA_STR_0  ; Pointer to string
     FDB ARRAY_LOCATION_NAMES_DATA_STR_1  ; Pointer to string
     FDB ARRAY_LOCATION_NAMES_DATA_STR_2  ; Pointer to string
@@ -271,7 +268,7 @@ ARRAY_LOCATION_NAMES_DATA:  ; Pointer table for LOCATION_NAMES
     FDB ARRAY_LOCATION_NAMES_DATA_STR_15  ; Pointer to string
     FDB ARRAY_LOCATION_NAMES_DATA_STR_16  ; Pointer to string
 
-; String array literal for variable 'LEVEL_BACKGROUNDS' (17 elements)
+; String array literal for variable 'level_backgrounds' (17 elements)
 ARRAY_LEVEL_BACKGROUNDS_DATA_STR_0:
     FCC "FUJI_BG"
     FCB $80   ; String terminator (high bit)
@@ -324,7 +321,7 @@ ARRAY_LEVEL_BACKGROUNDS_DATA_STR_16:
     FCC "EASTER_BG"
     FCB $80   ; String terminator (high bit)
 
-ARRAY_LEVEL_BACKGROUNDS_DATA:  ; Pointer table for LEVEL_BACKGROUNDS
+ARRAY_LEVEL_BACKGROUNDS_DATA:  ; Pointer table for level_backgrounds
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_0  ; Pointer to string
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_1  ; Pointer to string
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_2  ; Pointer to string
@@ -343,7 +340,7 @@ ARRAY_LEVEL_BACKGROUNDS_DATA:  ; Pointer table for LEVEL_BACKGROUNDS
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_15  ; Pointer to string
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_16  ; Pointer to string
 
-; Array literal for variable 'LEVEL_ENEMY_COUNT' (17 elements, 2 bytes each)
+; Array literal for variable 'level_enemy_count' (17 elements, 2 bytes each)
 ARRAY_LEVEL_ENEMY_COUNT_DATA:
     FDB 1   ; Element 0
     FDB 1   ; Element 1
@@ -363,7 +360,7 @@ ARRAY_LEVEL_ENEMY_COUNT_DATA:
     FDB 6   ; Element 15
     FDB 7   ; Element 16
 
-; Array literal for variable 'LEVEL_ENEMY_SPEED' (17 elements, 2 bytes each)
+; Array literal for variable 'level_enemy_speed' (17 elements, 2 bytes each)
 ARRAY_LEVEL_ENEMY_SPEED_DATA:
     FDB 1   ; Element 0
     FDB 1   ; Element 1
@@ -383,7 +380,7 @@ ARRAY_LEVEL_ENEMY_SPEED_DATA:
     FDB 5   ; Element 15
     FDB 5   ; Element 16
 
-; Array literal for variable 'JOYSTICK1_STATE' (6 elements, 2 bytes each)
+; Array literal for variable 'joystick1_state' (6 elements, 2 bytes each)
 ARRAY_JOYSTICK1_STATE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -392,7 +389,7 @@ ARRAY_JOYSTICK1_STATE_DATA:
     FDB 0   ; Element 4
     FDB 0   ; Element 5
 
-; Array literal for variable 'ENEMY_ACTIVE' (8 elements, 2 bytes each)
+; Array literal for variable 'enemy_active' (8 elements, 2 bytes each)
 ARRAY_ENEMY_ACTIVE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -403,7 +400,7 @@ ARRAY_ENEMY_ACTIVE_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_X' (8 elements, 2 bytes each)
+; Array literal for variable 'enemy_x' (8 elements, 2 bytes each)
 ARRAY_ENEMY_X_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -414,7 +411,7 @@ ARRAY_ENEMY_X_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_Y' (8 elements, 2 bytes each)
+; Array literal for variable 'enemy_y' (8 elements, 2 bytes each)
 ARRAY_ENEMY_Y_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -425,7 +422,7 @@ ARRAY_ENEMY_Y_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_VX' (8 elements, 2 bytes each)
+; Array literal for variable 'enemy_vx' (8 elements, 2 bytes each)
 ARRAY_ENEMY_VX_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -436,7 +433,7 @@ ARRAY_ENEMY_VX_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_VY' (8 elements, 2 bytes each)
+; Array literal for variable 'enemy_vy' (8 elements, 2 bytes each)
 ARRAY_ENEMY_VY_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -447,7 +444,7 @@ ARRAY_ENEMY_VY_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_SIZE' (8 elements, 2 bytes each)
+; Array literal for variable 'enemy_size' (8 elements, 2 bytes each)
 ARRAY_ENEMY_SIZE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -471,7 +468,7 @@ MAIN:
     STD VAR_TITLE_STATE
     LDD #-1
     STD VAR_CURRENT_MUSIC
-    ; Copy array 'JOYSTICK1_STATE' from ROM to RAM (6 elements)
+    ; Copy array 'joystick1_state' from ROM to RAM (6 elements)
     LDX #ARRAY_JOYSTICK1_STATE_DATA       ; Source: ROM array data
     LDU #VAR_JOYSTICK1_STATE_DATA       ; Dest: RAM array space
     LDD #6        ; Number of elements
@@ -534,7 +531,7 @@ MAIN:
     STD VAR_PLAYER_ANIM_COUNTER
     LDD #1
     STD VAR_PLAYER_FACING
-    ; Copy array 'ENEMY_ACTIVE' from ROM to RAM (8 elements)
+    ; Copy array 'enemy_active' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_ACTIVE_DATA       ; Source: ROM array data
     LDU #VAR_ENEMY_ACTIVE_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -545,7 +542,7 @@ MAIN:
     LBNE .COPY_LOOP_1 ; Loop until done (LBNE for long branch)
     LDX #VAR_ENEMY_ACTIVE_DATA    ; Array now in RAM
     STX VAR_ENEMY_ACTIVE
-    ; Copy array 'ENEMY_X' from ROM to RAM (8 elements)
+    ; Copy array 'enemy_x' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_X_DATA       ; Source: ROM array data
     LDU #VAR_ENEMY_X_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -556,7 +553,7 @@ MAIN:
     LBNE .COPY_LOOP_2 ; Loop until done (LBNE for long branch)
     LDX #VAR_ENEMY_X_DATA    ; Array now in RAM
     STX VAR_ENEMY_X
-    ; Copy array 'ENEMY_Y' from ROM to RAM (8 elements)
+    ; Copy array 'enemy_y' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_Y_DATA       ; Source: ROM array data
     LDU #VAR_ENEMY_Y_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -567,7 +564,7 @@ MAIN:
     LBNE .COPY_LOOP_3 ; Loop until done (LBNE for long branch)
     LDX #VAR_ENEMY_Y_DATA    ; Array now in RAM
     STX VAR_ENEMY_Y
-    ; Copy array 'ENEMY_VX' from ROM to RAM (8 elements)
+    ; Copy array 'enemy_vx' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_VX_DATA       ; Source: ROM array data
     LDU #VAR_ENEMY_VX_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -578,7 +575,7 @@ MAIN:
     LBNE .COPY_LOOP_4 ; Loop until done (LBNE for long branch)
     LDX #VAR_ENEMY_VX_DATA    ; Array now in RAM
     STX VAR_ENEMY_VX
-    ; Copy array 'ENEMY_VY' from ROM to RAM (8 elements)
+    ; Copy array 'enemy_vy' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_VY_DATA       ; Source: ROM array data
     LDU #VAR_ENEMY_VY_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -589,7 +586,7 @@ MAIN:
     LBNE .COPY_LOOP_5 ; Loop until done (LBNE for long branch)
     LDX #VAR_ENEMY_VY_DATA    ; Array now in RAM
     STX VAR_ENEMY_VY
-    ; Copy array 'ENEMY_SIZE' from ROM to RAM (8 elements)
+    ; Copy array 'enemy_size' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_SIZE_DATA       ; Source: ROM array data
     LDU #VAR_ENEMY_SIZE_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -690,7 +687,7 @@ LOOP_BODY:
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    JSR READ_JOYSTICK1_STATE
+    JSR read_joystick1_state
     LDD VAR_STATE_TITLE
     STD RESULT
     LDD RESULT
@@ -737,7 +734,7 @@ LOOP_BODY:
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
-    JSR DRAW_TITLE_SCREEN
+    JSR draw_title_screen
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1030,7 +1027,7 @@ IF_NEXT_1:
     LBRA IF_END_9
 IF_NEXT_10:
 IF_END_9:
-    LDD VAR_JOYSTICK_POLL_COUNTER
+    LDD VAR_joystick_poll_counter
     PSHS D
     LDD #1
     STD RESULT
@@ -1703,7 +1700,7 @@ IF_NEXT_28:
     STD VAR_COUNTDOWN_TIMER
     LBRA IF_END_25
 IF_END_25:
-    JSR DRAW_MAP_SCREEN
+    JSR draw_map_screen
     LBRA IF_END_0
 IF_NEXT_8:
     LDD VAR_STATE_GAME
@@ -1740,7 +1737,7 @@ IF_NEXT_8:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_30
-    JSR DRAW_LEVEL_BACKGROUND
+    JSR draw_level_background
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     STD RESULT
@@ -1828,7 +1825,7 @@ IF_NEXT_8:
     STD RESULT
     LDD RESULT
     STD VAR_COUNTDOWN_ACTIVE
-    JSR SPAWN_ENEMIES
+    JSR spawn_enemies
     LBRA IF_END_31
 IF_NEXT_32:
 IF_END_31:
@@ -2119,7 +2116,7 @@ IF_END_41:
     LBRA IF_END_39
 IF_NEXT_40:
 IF_END_39:
-    JSR DRAW_GAME_LEVEL
+    JSR draw_game_level
 IF_END_29:
     LBRA IF_END_0
 IF_END_0:
@@ -2178,8 +2175,8 @@ IF_END_0:
     JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
     RTS
 
-; Function: DRAW_MAP_SCREEN
-DRAW_MAP_SCREEN:
+; Function: draw_map_screen
+draw_map_screen:
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     STD RESULT
@@ -2448,8 +2445,8 @@ IF_END_43:
     STD RESULT
     RTS
 
-; Function: DRAW_TITLE_SCREEN
-DRAW_TITLE_SCREEN:
+; Function: draw_title_screen
+draw_title_screen:
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     STD RESULT
@@ -2544,7 +2541,7 @@ DRAW_TITLE_SCREEN:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_50
-    LDD VAR_TITLE_INTENSITY
+    LDD VAR_title_intensity
     PSHS D
     LDD #1
     STD RESULT
@@ -2571,7 +2568,7 @@ IF_END_49:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_52
-    LDD VAR_TITLE_INTENSITY
+    LDD VAR_title_intensity
     PSHS D
     LDD #1
     STD RESULT
@@ -2631,8 +2628,8 @@ IF_NEXT_56:
 IF_END_55:
     RTS
 
-; Function: DRAW_LEVEL_BACKGROUND
-DRAW_LEVEL_BACKGROUND:
+; Function: draw_level_background
+draw_level_background:
     ; SET_INTENSITY: Set drawing intensity
     LDD #60
     STD RESULT
@@ -4074,9 +4071,9 @@ IF_NEXT_73:
 IF_END_57:
     RTS
 
-; Function: DRAW_GAME_LEVEL
-DRAW_GAME_LEVEL:
-    JSR DRAW_LEVEL_BACKGROUND
+; Function: draw_game_level
+draw_game_level:
+    JSR draw_level_background
     LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
     PSHS X
     LDD #0
@@ -4988,8 +4985,6 @@ IF_NEXT_102:
     LDD #0
     STD RESULT
 IF_END_98:
-    JSR UPDATE_ENEMIES
-    JSR DRAW_ENEMIES
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5023,7 +5018,7 @@ IF_END_98:
     STD RESULT
     LDD RESULT
     STD VAR_ARG3
-    JSR DRAW_HOOK_ROPE
+    JSR draw_hook_rope
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     STD RESULT
@@ -5078,10 +5073,89 @@ IF_END_98:
     LBRA IF_END_103
 IF_NEXT_104:
 IF_END_103:
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ACTIVE_COUNT
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_I
+WH_105: ; while start
+    LDD VAR_MAX_ENEMIES
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLT .CMP_104_TRUE
+    LDD #0
+    LBRA .CMP_104_END
+.CMP_104_TRUE:
+    LDD #1
+.CMP_104_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ WH_END_106
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_105_TRUE
+    LDD #0
+    LBRA .CMP_105_END
+.CMP_105_TRUE:
+    LDD #1
+.CMP_105_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_108
+    LDD VAR_ACTIVE_COUNT
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    ADDD ,S++
+    STD RESULT
+    LDD RESULT
+    STD VAR_ACTIVE_COUNT
+    LBRA IF_END_107
+IF_NEXT_108:
+IF_END_107:
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    ADDD ,S++
+    STD RESULT
+    LDD RESULT
+    STD VAR_I
+    LBRA WH_105
+WH_END_106: ; while end
     RTS
 
-; Function: SPAWN_ENEMIES
-SPAWN_ENEMIES:
+; Function: spawn_enemies
+spawn_enemies:
     LDX #ARRAY_LEVEL_ENEMY_COUNT_DATA  ; Array data
     PSHS X
     LDD VAR_CURRENT_LOCATION
@@ -5116,22 +5190,22 @@ SPAWN_ENEMIES:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_104_TRUE
+    LBLT .CMP_106_TRUE
     LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
+    LBRA .CMP_106_END
+.CMP_106_TRUE:
     LDD #1
-.CMP_104_END:
+.CMP_106_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_106
+    LBEQ IF_NEXT_110
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_COUNT
-    LBRA IF_END_105
-IF_NEXT_106:
-IF_END_105:
+    LBRA IF_END_109
+IF_NEXT_110:
+IF_END_109:
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -5140,36 +5214,7 @@ IF_END_105:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_105_TRUE
-    LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
-    LDD #1
-.CMP_105_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_108
-    LDD VAR_MAX_ENEMIES
-    STD RESULT
-    LDD RESULT
-    STD VAR_COUNT
-    LBRA IF_END_107
-IF_NEXT_108:
-IF_END_107:
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_I
-WH_109: ; while start
-    LDD VAR_COUNT
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_107_TRUE
+    LBGT .CMP_107_TRUE
     LDD #0
     LBRA .CMP_107_END
 .CMP_107_TRUE:
@@ -5177,7 +5222,36 @@ WH_109: ; while start
 .CMP_107_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_106_FALSE
+    LBEQ IF_NEXT_112
+    LDD VAR_MAX_ENEMIES
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNT
+    LBRA IF_END_111
+IF_NEXT_112:
+IF_END_111:
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_I
+WH_113: ; while start
+    LDD VAR_COUNT
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLT .CMP_109_TRUE
+    LDD #0
+    LBRA .CMP_109_END
+.CMP_109_TRUE:
+    LDD #1
+.CMP_109_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_108_FALSE
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -5186,23 +5260,23 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_108_TRUE
+    LBLT .CMP_110_TRUE
     LDD #0
-    LBRA .CMP_108_END
-.CMP_108_TRUE:
+    LBRA .CMP_110_END
+.CMP_110_TRUE:
     LDD #1
-.CMP_108_END:
+.CMP_110_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_106_FALSE
+    LBEQ .LOGIC_108_FALSE
     LDD #1
-    LBRA .LOGIC_106_END
-.LOGIC_106_FALSE:
+    LBRA .LOGIC_108_END
+.LOGIC_108_FALSE:
     LDD #0
-.LOGIC_106_END:
+.LOGIC_108_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_110
+    LBEQ WH_END_114
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5314,15 +5388,15 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_109_TRUE
+    LBEQ .CMP_111_TRUE
     LDD #0
-    LBRA .CMP_109_END
-.CMP_109_TRUE:
+    LBRA .CMP_111_END
+.CMP_111_TRUE:
     LDD #1
-.CMP_109_END:
+.CMP_111_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_112
+    LBEQ IF_NEXT_116
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5347,9 +5421,9 @@ WH_109: ; while start
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LBRA IF_END_111
-IF_NEXT_112:
-IF_END_111:
+    LBRA IF_END_115
+IF_NEXT_116:
+IF_END_115:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5377,17 +5451,17 @@ IF_END_111:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_109
-WH_END_110: ; while end
+    LBRA WH_113
+WH_END_114: ; while end
     RTS
 
-; Function: UPDATE_ENEMIES
-UPDATE_ENEMIES:
+; Function: update_enemies
+update_enemies:
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_113: ; while start
+WH_117: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -5396,15 +5470,15 @@ WH_113: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_110_TRUE
+    LBLT .CMP_112_TRUE
     LDD #0
-    LBRA .CMP_110_END
-.CMP_110_TRUE:
+    LBRA .CMP_112_END
+.CMP_112_TRUE:
     LDD #1
-.CMP_110_END:
+.CMP_112_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_114
+    LBEQ WH_END_118
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5422,15 +5496,15 @@ WH_113: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_111_TRUE
+    LBEQ .CMP_113_TRUE
     LDD #0
-    LBRA .CMP_111_END
-.CMP_111_TRUE:
+    LBRA .CMP_113_END
+.CMP_113_TRUE:
     LDD #1
-.CMP_111_END:
+.CMP_113_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_116
+    LBEQ IF_NEXT_120
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5564,15 +5638,15 @@ WH_113: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_112_TRUE
+    LBLE .CMP_114_TRUE
     LDD #0
-    LBRA .CMP_112_END
-.CMP_112_TRUE:
+    LBRA .CMP_114_END
+.CMP_114_TRUE:
     LDD #1
-.CMP_112_END:
+.CMP_114_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_118
+    LBEQ IF_NEXT_122
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5680,15 +5754,15 @@ WH_113: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_113_TRUE
+    LBLT .CMP_115_TRUE
     LDD #0
-    LBRA .CMP_113_END
-.CMP_113_TRUE:
+    LBRA .CMP_115_END
+.CMP_115_TRUE:
     LDD #1
-.CMP_113_END:
+.CMP_115_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_120
+    LBEQ IF_NEXT_124
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5705,171 +5779,171 @@ WH_113: ; while start
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LBRA IF_END_119
-IF_NEXT_120:
-IF_END_119:
-    LBRA IF_END_117
-IF_NEXT_118:
-IF_END_117:
-    LDD #-85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLE .CMP_114_TRUE
-    LDD #0
-    LBRA .CMP_114_END
-.CMP_114_TRUE:
-    LDD #1
-.CMP_114_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_122
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_121
-IF_NEXT_122:
-IF_END_121:
-    LDD #85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBGE .CMP_115_TRUE
-    LDD #0
-    LBRA .CMP_115_END
-.CMP_115_TRUE:
-    LDD #1
-.CMP_115_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_124
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
     LBRA IF_END_123
 IF_NEXT_124:
 IF_END_123:
-    LBRA IF_END_115
-IF_NEXT_116:
-IF_END_115:
+    LBRA IF_END_121
+IF_NEXT_122:
+IF_END_121:
+    LDD #-85
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_X_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLE .CMP_116_TRUE
+    LDD #0
+    LBRA .CMP_116_END
+.CMP_116_TRUE:
+    LDD #1
+.CMP_116_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_126
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-85
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_VX_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    PULS X      ; Get left into X
+    JSR MUL16   ; D = X * D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_125
+IF_NEXT_126:
+IF_END_125:
+    LDD #85
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_X_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBGE .CMP_117_TRUE
+    LDD #0
+    LBRA .CMP_117_END
+.CMP_117_TRUE:
+    LDD #1
+.CMP_117_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_128
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #85
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_VX_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    PULS X      ; Get left into X
+    JSR MUL16   ; D = X * D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_127
+IF_NEXT_128:
+IF_END_127:
+    LBRA IF_END_119
+IF_NEXT_120:
+IF_END_119:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5881,17 +5955,17 @@ IF_END_115:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_113
-WH_END_114: ; while end
+    LBRA WH_117
+WH_END_118: ; while end
     RTS
 
-; Function: DRAW_ENEMIES
-DRAW_ENEMIES:
+; Function: draw_enemies
+draw_enemies:
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_125: ; while start
+WH_129: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -5900,15 +5974,15 @@ WH_125: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_116_TRUE
+    LBLT .CMP_118_TRUE
     LDD #0
-    LBRA .CMP_116_END
-.CMP_116_TRUE:
+    LBRA .CMP_118_END
+.CMP_118_TRUE:
     LDD #1
-.CMP_116_END:
+.CMP_118_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_126
+    LBEQ WH_END_130
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5926,15 +6000,15 @@ WH_125: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_117_TRUE
+    LBEQ .CMP_119_TRUE
     LDD #0
-    LBRA .CMP_117_END
-.CMP_117_TRUE:
+    LBRA .CMP_119_END
+.CMP_119_TRUE:
     LDD #1
-.CMP_117_END:
+.CMP_119_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_128
+    LBEQ IF_NEXT_132
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     STD RESULT
@@ -5959,15 +6033,15 @@ WH_125: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_118_TRUE
+    LBEQ .CMP_120_TRUE
     LDD #0
-    LBRA .CMP_118_END
-.CMP_118_TRUE:
+    LBRA .CMP_120_END
+.CMP_120_TRUE:
     LDD #1
-.CMP_118_END:
+.CMP_120_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_130
+    LBEQ IF_NEXT_134
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_huge (index=5, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -6009,8 +6083,8 @@ WH_125: ; while start
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_129
-IF_NEXT_130:
+    LBRA IF_END_133
+IF_NEXT_134:
     LDD #3
     STD RESULT
     LDD RESULT
@@ -6028,15 +6102,15 @@ IF_NEXT_130:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_119_TRUE
+    LBEQ .CMP_121_TRUE
     LDD #0
-    LBRA .CMP_119_END
-.CMP_119_TRUE:
+    LBRA .CMP_121_END
+.CMP_121_TRUE:
     LDD #1
-.CMP_119_END:
+.CMP_121_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_131
+    LBEQ IF_NEXT_135
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_large (index=6, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -6078,8 +6152,8 @@ IF_NEXT_130:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_129
-IF_NEXT_131:
+    LBRA IF_END_133
+IF_NEXT_135:
     LDD #2
     STD RESULT
     LDD RESULT
@@ -6097,15 +6171,15 @@ IF_NEXT_131:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_120_TRUE
+    LBEQ .CMP_122_TRUE
     LDD #0
-    LBRA .CMP_120_END
-.CMP_120_TRUE:
+    LBRA .CMP_122_END
+.CMP_122_TRUE:
     LDD #1
-.CMP_120_END:
+.CMP_122_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_132
+    LBEQ IF_NEXT_136
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_medium (index=7, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -6147,8 +6221,8 @@ IF_NEXT_131:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_129
-IF_NEXT_132:
+    LBRA IF_END_133
+IF_NEXT_136:
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_small (index=8, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -6190,10 +6264,10 @@ IF_NEXT_132:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-IF_END_129:
-    LBRA IF_END_127
-IF_NEXT_128:
-IF_END_127:
+IF_END_133:
+    LBRA IF_END_131
+IF_NEXT_132:
+IF_END_131:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -6205,12 +6279,12 @@ IF_END_127:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_125
-WH_END_126: ; while end
+    LBRA WH_129
+WH_END_130: ; while end
     RTS
 
-; Function: DRAW_HOOK_ROPE
-DRAW_HOOK_ROPE:
+; Function: draw_hook_rope
+draw_hook_rope:
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD VAR_START_X
     STD RESULT
@@ -6237,8 +6311,8 @@ DRAW_HOOK_ROPE:
     STD RESULT
     RTS
 
-; Function: READ_JOYSTICK1_STATE
-READ_JOYSTICK1_STATE:
+; Function: read_joystick1_state
+read_joystick1_state:
     LDD #0
     STD RESULT
     LDD RESULT

@@ -112,6 +112,15 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 - Inter-bank symbol resolution has edge cases
 - Not all addressing modes are fully tested in `vpy_assembler`
 
+### Recently Fixed Issues
+
+**Stack Validator False Positives (Phase 5, Fixed 2026-02-22)**
+- **Issue:** Stack validator reported "stack imbalance" in functions like `UPDATE_ENEMIES` and `DRAW_ENEMIES` with claims of "+9 unmatched pushes"
+- **Root cause:** The validator's `count_registers()` function was parsing comments as register names. For example, `PULS X      ; Array base` was counted as 3 registers (X, Array, base) instead of 1.
+- **Result:** The generated code was always correct; only the validator gave false positives
+- **Fix:** Modified `count_registers()` to stop parsing at semicolons (comments are now ignored), and improved function detection to skip internal control flow labels (IF_*, WH_*, CMP_*)
+- **Verification:** UPDATE_ENEMIES and DRAW_ENEMIES now validate correctly; all codegen tests pass
+
 ### Project format
 
 Buildtools requires a `.vpyproj` file (TOML):
