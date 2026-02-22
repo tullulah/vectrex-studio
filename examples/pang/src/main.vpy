@@ -418,9 +418,9 @@ def draw_game_level():
     else:
         DRAW_VECTOR_EX("player_walk_5", player_x, player_y, mirror_mode, 80)
     
-    # # Update and draw enemies
-    #update_enemies()
-    #draw_enemies()
+    # Update and draw enemies
+    # update_enemies()
+    # draw_enemies()
 
     # Draw hook rope and hook if active
     if hook_active == 1:
@@ -432,13 +432,13 @@ def draw_game_level():
 
         DRAW_VECTOR_EX("hook", hook_x, hook_y, 0, 100)
 
-    # DEBUG: Show enemy count
-    active_count = 0
-    i = 0
-    while i < MAX_ENEMIES:
-        if enemy_active[i] == 1:
-            active_count = active_count + 1
-        i = i + 1
+    # # DEBUG: Show enemy count
+    # active_count = 0
+    # i = 0
+    # while i < MAX_ENEMIES:
+    #     if enemy_active[i] == 1:
+    #         active_count = active_count + 1
+    #     i = i + 1
 
 # ===== ENEMY SYSTEM - Simple and Clear =====
 

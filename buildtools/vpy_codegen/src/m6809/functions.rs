@@ -96,7 +96,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
                 let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
                 let ram_label = format!("VAR_{}_DATA", name.to_uppercase());
                 let array_len = elements.len();
-                
+
                 asm.push_str(&format!("    ; Copy array '{}' from ROM to RAM ({} elements)\n", name, array_len));
                 asm.push_str(&format!("    LDX #{}       ; Source: ROM array data\n", rom_label));
                 asm.push_str(&format!("    LDU #{}       ; Dest: RAM array space\n", ram_label));
@@ -106,11 +106,11 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
                 asm.push_str("    STY ,U++        ; Store word to RAM, increment dest\n");
                 asm.push_str("    SUBD #1         ; Decrement counter\n");
                 asm.push_str(&format!("    LBNE .COPY_LOOP_{} ; Loop until done (LBNE for long branch)\n", array_copy_counter));
-                
+
                 // Set VAR_{NAME} pointer to RAM array (not ROM)
                 asm.push_str(&format!("    LDX #{}    ; Array now in RAM\n", ram_label));
                 asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
-                
+
                 array_copy_counter += 1;
             } else {
                 // Non-array initialization
@@ -118,6 +118,20 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
                     asm.push_str(&format!("    LDD #{}\n", n));
                     asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
                 }
+            }
+        }
+    }
+
+    // Initialize const arrays - set pointer variables to ROM data addresses
+    // BUG FIX (2026-02-22): Const arrays were not being initialized, causing array access
+    // to read from address $0000 (cartridge header) instead of the actual array data
+    for item in &module.items {
+        if let vpy_parser::Item::Const { name, value, .. } = item {
+            if let vpy_parser::Expr::List(_elements) = value {
+                // Const array: set VAR_{NAME} pointer to point to ARRAY_{NAME}_DATA in ROM
+                let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
+                asm.push_str(&format!("    LDX #{}  ; Const array pointer -> ROM\n", rom_label));
+                asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
             }
         }
     }
@@ -293,8 +307,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             // Load current value, save to TMPVAL, evaluate right side, perform op
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
-                    // IMPORTANT: Name already comes uppercase from unifier
-                    asm.push_str(&format!("    LDD VAR_{}\n", name));
+                    // IMPORTANT: Convert name to uppercase for consistency with variable allocation
+                    asm.push_str(&format!("    LDD VAR_{}\n", name.to_uppercase()));
                     asm.push_str("    STD TMPVAL          ; Save left operand\n");
 
                     // Evaluate right side
