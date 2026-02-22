@@ -36,6 +36,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     
     // Core scratch variables (always needed)
     ram.allocate("RESULT", 2, "Main result temporary");
+    // NOTE: TMPVAL is an alias for RESULT - both use the same memory location for efficiency
+    ram.allocate("TMPVAL", 2, "Temporary value storage (alias for RESULT)");
     ram.allocate("TMPPTR", 2, "Temporary pointer");
     ram.allocate("TMPPTR2", 2, "Temporary pointer 2");
     ram.allocate("TEMP_YX", 2, "Temporary Y/X coordinate storage");
