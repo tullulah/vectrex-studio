@@ -511,7 +511,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("    ; Segment 1: NE to N (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)\n");
         out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    PSHS B              ; Save radius\n");
+        out.push_str("    PSHS B,CC           ; Save radius (aligned to 16-bit)\n");
         out.push_str("    LSRB                ; B = r/2\n");
         out.push_str("    NEGB                ; B = -r/2 (dx)\n");
         out.push_str("    LDA ,S              ; A = radius\n");
@@ -574,7 +574,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    NEGB                ; -r/2 (dx)\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
-        out.push_str("    LEAS 1,S            ; Clean up stack (remove saved radius)\n");
+        out.push_str("    LEAS 2,S            ; Clean up stack (remove saved radius + CC)\n");
         out.push_str("    \n");
         out.push_str("    ; Restore DP to $C8\n");
         out.push_str("    LDA #$C8\n");
