@@ -19,6 +19,7 @@ All documentation lives in `docs/`. The only exception is `README.md` at the pro
 |------|-------------|
 | [COMPILER_STATUS.md](COMPILER_STATUS.md) | Both backends (Core and Buildtools), phase table, known issues |
 | [TODO.md](TODO.md) | Variable-sized types implementation roadmap (9-phase breakdown with effort estimates) |
+| [STACK_VALIDATOR.md](STACK_VALIDATOR.md) | Stack balance validation — catches PSHS/PULS imbalances at compile time |
 
 ---
 
