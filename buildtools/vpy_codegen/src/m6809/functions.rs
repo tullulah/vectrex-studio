@@ -342,6 +342,9 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             let mut next = fresh_label("IF_NEXT");
             let simple_if = elifs.is_empty() && else_body.is_none();
             expressions::emit_simple_expr(cond, asm, assets);
+            // NOTE: emit_simple_expr must return with balanced stack. The LDD below loads
+            // the condition result from RESULT. Before branching, ensure any temporary values
+            // left on the stack by complex expressions (like array indexing) are cleaned.
             asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", next));
             for s in body { generate_statement(s, asm, assets)?; }
             asm.push_str(&format!("    LBRA {}\n", end));
@@ -349,6 +352,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                 asm.push_str(&format!("{}:\n", next));
                 let new_next = if i == elifs.len() - 1 && else_body.is_none() { end.clone() } else { fresh_label("IF_NEXT") };
                 expressions::emit_simple_expr(c, asm, assets);
+                // Stack balance check: emit_simple_expr must return with balanced stack before branch
                 asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", new_next));
                 for s in b { generate_statement(s, asm, assets)?; }
                 asm.push_str(&format!("    LBRA {}\n", end));
@@ -371,6 +375,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             let le = fresh_label("WH_END");
             asm.push_str(&format!("{}: ; while start\n", ls));
             expressions::emit_simple_expr(cond, asm, assets);
+            // Stack balance check: emit_simple_expr must return with balanced stack before branch
             asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", le));
             for s in body { generate_statement(s, asm, assets)?; }
             asm.push_str(&format!("    LBRA {}\n{}: ; while end\n", ls, le));

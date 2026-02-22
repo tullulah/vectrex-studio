@@ -65,3 +65,63 @@ Python-like syntax, compiles to MC6809 assembly. Key builtins: `WAIT_RECAL()`, `
 - `docs/SUPER_SUMMARY.md` — emulator architecture (32 sections)
 - `docs/TIMING.md` — deterministic cycle model
 - `buildtools/README.md` — phase-by-phase status
+
+## Debugging Runtime Issues
+
+**When a compiled VPy game hangs, crashes, or behaves incorrectly:**
+
+1. **ALWAYS examine the generated ASM**, not just the VPy code. Use the `asm-expert` agent to:
+   - Generate ASM: `cargo run --manifest-path buildtools/Cargo.toml --bin vpy_cli -- asm src/main.vpy > /tmp/main.asm`
+   - Review the generated assembly for infinite loops, stack corruption, incorrect addressing
+   - Look for patterns that match the reported bug (e.g., if game hangs after STATE_GAME transition, find STATE_GAME handler in ASM)
+
+2. **Compiler bugs often manifest as:**
+   - Infinite loops in generated code (check for missing increment counters)
+   - Incorrect array indexing (off-by-one, wrong stride calculations)
+   - Register corruption (values not preserved across function calls)
+   - Stack issues (incorrect push/pop sequences, stack pointer mismanagement)
+
+3. **Common VPy → ASM translation issues:**
+   - Array access: stride calculations (1 byte for u8/i8, 2 bytes for u16/i16)
+   - Variable updates at end-of-frame: check if writes are actually happening
+   - State transitions: verify condition branches and flag preservation
+
+## CRITICAL: Phase 5 Codegen Stack Corruption Bug - CONFIRMED REAL
+
+**Bug Status:** CONFIRMED - Real stack imbalances found in actual generated code.
+
+**Evidence:** When compiling `examples/pang/src/main.vpy`:
+- `update_enemies()`: **29 PSHS vs 20 PULS** = **+9 unmatched pushes** (18 bytes left on stack!)
+- `draw_enemies()`: **18 PSHS vs 12 PULS** = **+6 unmatched pushes** (12 bytes left on stack!)
+- These imbalances cause RTS (function return) to jump to corrupted/invalid addresses, resulting in game hang
+
+**Root cause analysis:**
+The bug occurs in loops with IF statements that access arrays. Specifically in `vpy_codegen/src/m6809/` when generating:
+1. Condition evaluation: `PSHS` pushes temporary values for comparison
+2. Array indexing: `PSHS` for array base address
+3. Branching logic: Conditional branches that skip certain PULS instructions on specific code paths
+
+Result: Some branches exit the loop iteration with unpaired PSHS on the stack, which accumulate across iterations until stack corruption causes crashes.
+
+**Pattern that breaks:**
+```python
+while i < MAX_ENEMIES:
+    if enemy_active[i] == 1:  # Array access in IF condition
+        # Loop continues with corrupted stack
+```
+
+**Fix requirement:** ALWAYS fix this at the compiler level in vpy_codegen. NEVER work around by:
+- Commenting out problematic functions (this was a temporary workaround, not a solution)
+- Restructuring code to avoid the pattern
+- Using alternative syntax
+
+**Compiler must be fixed:** Ensure Phase 5 codegen generates balanced PSHS/PULS pairs on **all code paths** (both taken and not-taken branches). Every function must return with stack depth = 0.
+
+**Validation now in place:** Stack balance validator (`stack_validator.rs`) automatically checks all generated functions. Currently disabled to identify root cause, will be re-enabled once codegen is fixed.
+
+**Next steps:**
+1. Analyze vpy_codegen/src/m6809/expressions.rs and functions.rs
+2. Identify which PSHS are not paired with corresponding PULS on all control flow paths
+3. Refactor to ensure balanced stacks across all branches
+4. Re-enable validator and verify all functions pass
+5. Re-enable `update_enemies()` and `draw_enemies()` in examples/pang

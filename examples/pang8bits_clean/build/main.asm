@@ -69,74 +69,76 @@ PSG_DELAY_FRAMES     EQU $C880+$3C   ; PSG frame delay counter (1 bytes)
 PSG_MUSIC_BANK       EQU $C880+$3D   ; PSG music bank ID (for multibank) (1 bytes)
 SFX_PTR              EQU $C880+$3E   ; SFX data pointer (2 bytes)
 SFX_ACTIVE           EQU $C880+$40   ; SFX active flag (1 bytes)
-VAR_SPEED            EQU $C880+$41   ; User variable: speed (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$43   ; User variable: current_location (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$45   ; User variable: enemy_vy (2 bytes)
-VAR_ACTIVE_COUNT     EQU $C880+$47   ; User variable: active_count (2 bytes)
-VAR_STATE_MAP        EQU $C880+$49   ; User variable: STATE_MAP (2 bytes)
-VAR_STATE_GAME       EQU $C880+$4B   ; User variable: STATE_GAME (2 bytes)
-VAR_START_Y          EQU $C880+$4D   ; User variable: start_y (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$4F   ; User variable: location_glow_direction (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$51   ; User variable: player_anim_frame (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$53   ; User variable: player_facing (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$55   ; User variable: hook_active (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$57   ; User variable: enemy_y (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$59   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$5B   ; User variable: enemy_vx (2 bytes)
-VAR_HOOK_X           EQU $C880+$5D   ; User variable: hook_x (2 bytes)
-VAR_GROUND_Y         EQU $C880+$5F   ; User variable: GROUND_Y (2 bytes)
-VAR_STATE_TITLE      EQU $C880+$61   ; User variable: STATE_TITLE (2 bytes)
-VAR_ENEMY_X          EQU $C880+$63   ; User variable: enemy_x (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$65   ; User variable: location_x_coords (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$67   ; User variable: countdown_active (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$69   ; User variable: joystick1_state (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$6B   ; User variable: hook_init_y (2 bytes)
-VAR_GRAVITY          EQU $C880+$6D   ; User variable: GRAVITY (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$6F   ; User variable: mirror_mode (2 bytes)
-VAR_I                EQU $C880+$71   ; User variable: i (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$73   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_ABS_JOY          EQU $C880+$75   ; User variable: abs_joy (2 bytes)
-VAR_LOC_Y            EQU $C880+$77   ; User variable: loc_y (2 bytes)
-VAR_LOC_X            EQU $C880+$79   ; User variable: loc_x (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$7B   ; User variable: location_names (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$7D   ; User variable: title_intensity (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$7F   ; User variable: joystick_poll_counter (2 bytes)
-VAR_CURRENT_LEVEL_PTR EQU $C880+$81   ; User variable: current_level_ptr (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$83   ; User variable: player_anim_counter (2 bytes)
-VAR_COUNT            EQU $C880+$85   ; User variable: count (2 bytes)
-VAR_JOY_Y            EQU $C880+$87   ; User variable: joy_y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$89   ; User variable: hook_max_y (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$8B   ; User variable: hook_gun_x (2 bytes)
-VAR_END_X            EQU $C880+$8D   ; User variable: end_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$8F   ; User variable: player_y (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$91   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$93   ; User variable: num_locations (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$95   ; User variable: move_speed (2 bytes)
-VAR_END_Y            EQU $C880+$97   ; User variable: end_y (2 bytes)
-VAR_PLAYER_X         EQU $C880+$99   ; User variable: player_x (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$9B   ; User variable: countdown_timer (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$9D   ; User variable: enemy_size (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$9F   ; User variable: prev_joy_x (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$A1   ; User variable: prev_joy_y (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$A3   ; User variable: enemy_active (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$A5   ; User variable: player_anim_speed (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$A7   ; User variable: hook_gun_y (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$A9   ; User variable: location_y_coords (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$AB   ; User variable: current_music (2 bytes)
-VAR_SCREEN           EQU $C880+$AD   ; User variable: screen (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$AF   ; User variable: title_state (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$B1   ; User variable: location_glow_intensity (2 bytes)
-VAR_HOOK_Y           EQU $C880+$B3   ; User variable: hook_y (2 bytes)
-VAR_JOY_X            EQU $C880+$B5   ; User variable: joy_x (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$B7   ; User variable: anim_threshold (2 bytes)
-VAR_START_X          EQU $C880+$B9   ; User variable: start_x (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$BB   ; Mutable array 'joystick1_state' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$C7   ; Mutable array 'enemy_active' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$D7   ; Mutable array 'enemy_x' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$E7   ; Mutable array 'enemy_y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$F7   ; Mutable array 'enemy_vx' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$107   ; Mutable array 'enemy_vy' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$117   ; Mutable array 'enemy_size' data (8 elements x 2 bytes) (16 bytes)
+VAR_STATE_TITLE      EQU $C880+$41   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_MAP        EQU $C880+$43   ; User variable: STATE_MAP (2 bytes)
+VAR_STATE_GAME       EQU $C880+$45   ; User variable: STATE_GAME (2 bytes)
+VAR_SCREEN           EQU $C880+$47   ; User variable: screen (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$49   ; User variable: title_intensity (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$4B   ; User variable: title_state (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$4D   ; User variable: current_music (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$4F   ; User variable: location_x_coords (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$51   ; User variable: location_y_coords (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$53   ; User variable: location_names (2 bytes)
+VAR_LEVEL_BACKGROUNDS EQU $C880+$55   ; User variable: level_backgrounds (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$57   ; User variable: level_enemy_count (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$59   ; User variable: level_enemy_speed (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$5B   ; User variable: num_locations (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$5D   ; User variable: current_location (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$5F   ; User variable: location_glow_intensity (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$61   ; User variable: location_glow_direction (2 bytes)
+VAR_JOY_X            EQU $C880+$63   ; User variable: joy_x (2 bytes)
+VAR_JOY_Y            EQU $C880+$65   ; User variable: joy_y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$67   ; User variable: prev_joy_x (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$69   ; User variable: prev_joy_y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$6B   ; User variable: countdown_timer (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$6D   ; User variable: countdown_active (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$6F   ; User variable: joystick_poll_counter (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$71   ; User variable: hook_active (2 bytes)
+VAR_HOOK_X           EQU $C880+$73   ; User variable: hook_x (2 bytes)
+VAR_HOOK_Y           EQU $C880+$75   ; User variable: hook_y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$77   ; User variable: hook_max_y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$79   ; User variable: hook_gun_x (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$7B   ; User variable: hook_gun_y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$7D   ; User variable: hook_init_y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$7F   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$81   ; User variable: player_y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$83   ; User variable: move_speed (2 bytes)
+VAR_ABS_JOY          EQU $C880+$85   ; User variable: abs_joy (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$87   ; User variable: player_anim_frame (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$89   ; User variable: player_anim_counter (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$8B   ; User variable: player_anim_speed (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$8D   ; User variable: player_facing (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$8F   ; User variable: MAX_ENEMIES (2 bytes)
+VAR_GRAVITY          EQU $C880+$91   ; User variable: GRAVITY (2 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$93   ; User variable: BOUNCE_DAMPING (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$95   ; User variable: MIN_BOUNCE_VY (2 bytes)
+VAR_GROUND_Y         EQU $C880+$97   ; User variable: GROUND_Y (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$99   ; User variable: joystick1_state (2 bytes)
+VAR_LOC_X            EQU $C880+$9B   ; User variable: loc_x (2 bytes)
+VAR_LOC_Y            EQU $C880+$9D   ; User variable: loc_y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$9F   ; User variable: anim_threshold (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$A1   ; User variable: mirror_mode (2 bytes)
+VAR_ACTIVE_COUNT     EQU $C880+$A3   ; User variable: active_count (2 bytes)
+VAR_I                EQU $C880+$A5   ; User variable: i (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$A7   ; User variable: enemy_active (2 bytes)
+VAR_COUNT            EQU $C880+$A9   ; User variable: count (2 bytes)
+VAR_SPEED            EQU $C880+$AB   ; User variable: speed (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$AD   ; User variable: enemy_size (2 bytes)
+VAR_ENEMY_X          EQU $C880+$AF   ; User variable: enemy_x (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$B1   ; User variable: enemy_y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$B3   ; User variable: enemy_vx (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$B5   ; User variable: enemy_vy (2 bytes)
+VAR_START_X          EQU $C880+$B7   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$B9   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$BB   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$BD   ; User variable: end_y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$BF   ; Mutable array 'joystick1_state' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$CB   ; Mutable array 'enemy_active' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$DB   ; Mutable array 'enemy_x' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$EB   ; Mutable array 'enemy_y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$FB   ; Mutable array 'enemy_vx' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$10B   ; Mutable array 'enemy_vy' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$11B   ; Mutable array 'enemy_size' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -150,7 +152,7 @@ CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 b
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'location_x_coords' (17 elements)
+; Array literal for variable 'location_x_coords' (17 elements, 2 bytes each)
 ARRAY_LOCATION_X_COORDS_DATA:
     FDB 40   ; Element 0
     FDB 40   ; Element 1
@@ -170,7 +172,7 @@ ARRAY_LOCATION_X_COORDS_DATA:
     FDB 0   ; Element 15
     FDB 45   ; Element 16
 
-; Array literal for variable 'location_y_coords' (17 elements)
+; Array literal for variable 'location_y_coords' (17 elements, 2 bytes each)
 ARRAY_LOCATION_Y_COORDS_DATA:
     FDB 110   ; Element 0
     FDB 79   ; Element 1
@@ -262,79 +264,119 @@ ARRAY_LOCATION_NAMES_DATA:  ; Pointer table for location_names
     FDB ARRAY_LOCATION_NAMES_DATA_STR_15  ; Pointer to string
     FDB ARRAY_LOCATION_NAMES_DATA_STR_16  ; Pointer to string
 
-; String array literal for variable 'level_files' (17 elements)
-ARRAY_LEVEL_FILES_DATA_STR_0:
-    FCC "01_MOUNT_FUJI"
+; String array literal for variable 'level_backgrounds' (17 elements)
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_0:
+    FCC "FUJI_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_1:
-    FCC "02_MOUNT_KEIRIN"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_1:
+    FCC "KEIRIN_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_2:
-    FCC "03_EMERALD_BUDDHA"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_2:
+    FCC "BUDDHA_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_3:
-    FCC "04_ANGKOR_WAT"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_3:
+    FCC "ANGKOR_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_4:
-    FCC "05_AYERS_ROCK"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_4:
+    FCC "AYERS_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_5:
-    FCC "06_TAJ_MAHAL"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_5:
+    FCC "TAJ_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_6:
-    FCC "07_LENINGRAD"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_6:
+    FCC "LENINGRAD_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_7:
-    FCC "08_PARIS"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_7:
+    FCC "PARIS_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_8:
-    FCC "09_LONDON"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_8:
+    FCC "LONDON_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_9:
-    FCC "10_BARCELONA"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_9:
+    FCC "BARCELONA_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_10:
-    FCC "11_ATHENS"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_10:
+    FCC "ATHENS_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_11:
-    FCC "12_PYRAMIDS"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_11:
+    FCC "PYRAMIDS_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_12:
-    FCC "13_KILIMANJARO"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_12:
+    FCC "KILIMANJARO_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_13:
-    FCC "14_NEW_YORK"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_13:
+    FCC "NEWYORK_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_14:
-    FCC "15_MAYAN_RUINS"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_14:
+    FCC "MAYAN_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_15:
-    FCC "16_ANTARCTICA"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_15:
+    FCC "ANTARCTICA_BG"
     FCB $80   ; String terminator (high bit)
-ARRAY_LEVEL_FILES_DATA_STR_16:
-    FCC "17_EASTER_ISLAND"
+ARRAY_LEVEL_BACKGROUNDS_DATA_STR_16:
+    FCC "EASTER_BG"
     FCB $80   ; String terminator (high bit)
 
-ARRAY_LEVEL_FILES_DATA:  ; Pointer table for level_files
-    FDB ARRAY_LEVEL_FILES_DATA_STR_0  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_1  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_2  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_3  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_4  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_5  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_6  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_7  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_8  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_9  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_10  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_11  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_12  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_13  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_14  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_15  ; Pointer to string
-    FDB ARRAY_LEVEL_FILES_DATA_STR_16  ; Pointer to string
+ARRAY_LEVEL_BACKGROUNDS_DATA:  ; Pointer table for level_backgrounds
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_0  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_1  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_2  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_3  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_4  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_5  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_6  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_7  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_8  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_9  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_10  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_11  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_12  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_13  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_14  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_15  ; Pointer to string
+    FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_16  ; Pointer to string
 
-; Array literal for variable 'joystick1_state' (6 elements)
+; Array literal for variable 'level_enemy_count' (17 elements, 2 bytes each)
+ARRAY_LEVEL_ENEMY_COUNT_DATA:
+    FDB 1   ; Element 0
+    FDB 1   ; Element 1
+    FDB 2   ; Element 2
+    FDB 2   ; Element 3
+    FDB 2   ; Element 4
+    FDB 3   ; Element 5
+    FDB 3   ; Element 6
+    FDB 3   ; Element 7
+    FDB 4   ; Element 8
+    FDB 4   ; Element 9
+    FDB 4   ; Element 10
+    FDB 5   ; Element 11
+    FDB 5   ; Element 12
+    FDB 5   ; Element 13
+    FDB 6   ; Element 14
+    FDB 6   ; Element 15
+    FDB 7   ; Element 16
+
+; Array literal for variable 'level_enemy_speed' (17 elements, 2 bytes each)
+ARRAY_LEVEL_ENEMY_SPEED_DATA:
+    FDB 1   ; Element 0
+    FDB 1   ; Element 1
+    FDB 1   ; Element 2
+    FDB 2   ; Element 3
+    FDB 2   ; Element 4
+    FDB 2   ; Element 5
+    FDB 2   ; Element 6
+    FDB 3   ; Element 7
+    FDB 3   ; Element 8
+    FDB 3   ; Element 9
+    FDB 3   ; Element 10
+    FDB 4   ; Element 11
+    FDB 4   ; Element 12
+    FDB 4   ; Element 13
+    FDB 4   ; Element 14
+    FDB 5   ; Element 15
+    FDB 5   ; Element 16
+
+; Array literal for variable 'joystick1_state' (6 elements, 2 bytes each)
 ARRAY_JOYSTICK1_STATE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -343,7 +385,7 @@ ARRAY_JOYSTICK1_STATE_DATA:
     FDB 0   ; Element 4
     FDB 0   ; Element 5
 
-; Array literal for variable 'enemy_active' (8 elements)
+; Array literal for variable 'enemy_active' (8 elements, 2 bytes each)
 ARRAY_ENEMY_ACTIVE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -354,7 +396,7 @@ ARRAY_ENEMY_ACTIVE_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'enemy_x' (8 elements)
+; Array literal for variable 'enemy_x' (8 elements, 2 bytes each)
 ARRAY_ENEMY_X_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -365,7 +407,7 @@ ARRAY_ENEMY_X_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'enemy_y' (8 elements)
+; Array literal for variable 'enemy_y' (8 elements, 2 bytes each)
 ARRAY_ENEMY_Y_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -376,7 +418,7 @@ ARRAY_ENEMY_Y_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'enemy_vx' (8 elements)
+; Array literal for variable 'enemy_vx' (8 elements, 2 bytes each)
 ARRAY_ENEMY_VX_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -387,7 +429,7 @@ ARRAY_ENEMY_VX_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'enemy_vy' (8 elements)
+; Array literal for variable 'enemy_vy' (8 elements, 2 bytes each)
 ARRAY_ENEMY_VY_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -398,7 +440,7 @@ ARRAY_ENEMY_VY_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'enemy_size' (8 elements)
+; Array literal for variable 'enemy_size' (8 elements, 2 bytes each)
 ARRAY_ENEMY_SIZE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -422,8 +464,6 @@ MAIN:
     STD VAR_TITLE_STATE
     LDD #-1
     STD VAR_CURRENT_MUSIC
-    LDD #0
-    STD VAR_CURRENT_LEVEL_PTR
     ; Copy array 'joystick1_state' from ROM to RAM (6 elements)
     LDX #ARRAY_JOYSTICK1_STATE_DATA       ; Source: ROM array data
     LDU #VAR_JOYSTICK1_STATE_DATA       ; Dest: RAM array space
@@ -675,8 +715,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -701,8 +741,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -735,8 +775,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -769,8 +809,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -890,8 +930,8 @@ IF_END_7:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_X
@@ -903,8 +943,8 @@ IF_END_7:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_Y
@@ -985,6 +1025,16 @@ IF_END_9:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'fuji_level1_v2'
+    LDX #_FUJI_LEVEL1_V2_LEVEL
+    STX LEVEL_PTR          ; Store level data pointer
+    LDA ,X+                ; Load width (byte)
+    STA LEVEL_WIDTH
+    LDA ,X+                ; Load height (byte)
+    STA LEVEL_HEIGHT
+    LDD #1                 ; Return success
+    STD RESULT
     LBRA IF_END_13
 IF_NEXT_14:
 IF_END_13:
@@ -1269,8 +1319,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1295,8 +1345,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1329,8 +1379,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1363,8 +1413,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1389,515 +1439,6 @@ IF_END_11:
     JSR PLAY_SFX_RUNTIME
     LDD #0
     STD RESULT
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_35_TRUE
-    LDD #0
-    LBRA .CMP_35_END
-.CMP_35_TRUE:
-    LDD #1
-.CMP_35_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_26
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '01_mount_fuji'
-    LDX #_01_MOUNT_FUJI_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_26:
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_36_TRUE
-    LDD #0
-    LBRA .CMP_36_END
-.CMP_36_TRUE:
-    LDD #1
-.CMP_36_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_27
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '02_mount_keirin'
-    LDX #_02_MOUNT_KEIRIN_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_27:
-    LDD #2
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_37_TRUE
-    LDD #0
-    LBRA .CMP_37_END
-.CMP_37_TRUE:
-    LDD #1
-.CMP_37_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_28
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '03_emerald_buddha'
-    LDX #_03_EMERALD_BUDDHA_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_28:
-    LDD #3
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_38_TRUE
-    LDD #0
-    LBRA .CMP_38_END
-.CMP_38_TRUE:
-    LDD #1
-.CMP_38_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_29
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '04_angkor_wat'
-    LDX #_04_ANGKOR_WAT_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_29:
-    LDD #4
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_39_TRUE
-    LDD #0
-    LBRA .CMP_39_END
-.CMP_39_TRUE:
-    LDD #1
-.CMP_39_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_30
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '05_ayers_rock'
-    LDX #_05_AYERS_ROCK_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_30:
-    LDD #5
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_40_TRUE
-    LDD #0
-    LBRA .CMP_40_END
-.CMP_40_TRUE:
-    LDD #1
-.CMP_40_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_31
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '06_taj_mahal'
-    LDX #_06_TAJ_MAHAL_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_31:
-    LDD #6
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_41_TRUE
-    LDD #0
-    LBRA .CMP_41_END
-.CMP_41_TRUE:
-    LDD #1
-.CMP_41_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_32
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '07_leningrad'
-    LDX #_07_LENINGRAD_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_32:
-    LDD #7
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_42_TRUE
-    LDD #0
-    LBRA .CMP_42_END
-.CMP_42_TRUE:
-    LDD #1
-.CMP_42_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_33
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '08_paris'
-    LDX #_08_PARIS_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_33:
-    LDD #8
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_43_TRUE
-    LDD #0
-    LBRA .CMP_43_END
-.CMP_43_TRUE:
-    LDD #1
-.CMP_43_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_34
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '09_london'
-    LDX #_09_LONDON_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_34:
-    LDD #9
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_44_TRUE
-    LDD #0
-    LBRA .CMP_44_END
-.CMP_44_TRUE:
-    LDD #1
-.CMP_44_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_35
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '10_barcelona'
-    LDX #_10_BARCELONA_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_35:
-    LDD #10
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_45_TRUE
-    LDD #0
-    LBRA .CMP_45_END
-.CMP_45_TRUE:
-    LDD #1
-.CMP_45_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_36
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '11_athens'
-    LDX #_11_ATHENS_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_36:
-    LDD #11
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_46_TRUE
-    LDD #0
-    LBRA .CMP_46_END
-.CMP_46_TRUE:
-    LDD #1
-.CMP_46_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_37
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '12_pyramids'
-    LDX #_12_PYRAMIDS_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_37:
-    LDD #12
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_47_TRUE
-    LDD #0
-    LBRA .CMP_47_END
-.CMP_47_TRUE:
-    LDD #1
-.CMP_47_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_38
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '13_kilimanjaro'
-    LDX #_13_KILIMANJARO_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_38:
-    LDD #13
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_48_TRUE
-    LDD #0
-    LBRA .CMP_48_END
-.CMP_48_TRUE:
-    LDD #1
-.CMP_48_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_39
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '14_new_york'
-    LDX #_14_NEW_YORK_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_39:
-    LDD #14
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_49_TRUE
-    LDD #0
-    LBRA .CMP_49_END
-.CMP_49_TRUE:
-    LDD #1
-.CMP_49_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_40
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '15_mayan_ruins'
-    LDX #_15_MAYAN_RUINS_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_40:
-    LDD #15
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LOCATION
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_50_TRUE
-    LDD #0
-    LBRA .CMP_50_END
-.CMP_50_TRUE:
-    LDD #1
-.CMP_50_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_41
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '16_antarctica'
-    LDX #_16_ANTARCTICA_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-    LBRA IF_END_25
-IF_NEXT_41:
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: '17_easter_island'
-    LDX #_17_EASTER_ISLAND_LEVEL
-    STX LEVEL_PTR          ; Store level data pointer
-    LDA ,X+                ; Load width (byte)
-    STA LEVEL_WIDTH
-    LDA ,X+                ; Load height (byte)
-    STA LEVEL_HEIGHT
-    LDD #1                 ; Return success
-    STD RESULT
-    LDD RESULT
-    STD VAR_CURRENT_LEVEL_PTR
-IF_END_25:
     LDD VAR_STATE_GAME
     STD RESULT
     LDD RESULT
@@ -1924,12 +1465,12 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_51_TRUE
+    LBEQ .CMP_35_TRUE
     LDD #0
-    LBRA .CMP_51_END
-.CMP_51_TRUE:
+    LBRA .CMP_35_END
+.CMP_35_TRUE:
     LDD #1
-.CMP_51_END:
+.CMP_35_END:
     STD RESULT
     LDD RESULT
     LBEQ IF_END_0
@@ -1941,15 +1482,15 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_52_TRUE
+    LBEQ .CMP_36_TRUE
     LDD #0
-    LBRA .CMP_52_END
-.CMP_52_TRUE:
+    LBRA .CMP_36_END
+.CMP_36_TRUE:
     LDD #1
-.CMP_52_END:
+.CMP_36_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_43
+    LBEQ IF_NEXT_26
     JSR draw_level_background
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
@@ -1973,7 +1514,7 @@ IF_NEXT_6:
     LDD #0
     STD RESULT
     ; SET_INTENSITY: Set drawing intensity
-    LDD #127
+    LDD #100
     STD RESULT
     LDA RESULT+1    ; Load intensity (8-bit)
     JSR Intensity_a
@@ -1984,7 +1525,7 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #120
+    LDD #-20
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -1996,8 +1537,8 @@ IF_NEXT_6:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_ARG2
@@ -2025,25 +1566,25 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_53_TRUE
+    LBLE .CMP_37_TRUE
     LDD #0
-    LBRA .CMP_53_END
-.CMP_53_TRUE:
+    LBRA .CMP_37_END
+.CMP_37_TRUE:
     LDD #1
-.CMP_53_END:
+.CMP_37_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_45
+    LBEQ IF_NEXT_28
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_COUNTDOWN_ACTIVE
     JSR spawn_enemies
-    LBRA IF_END_44
-IF_NEXT_45:
-IF_END_44:
-    LBRA IF_END_42
-IF_NEXT_43:
+    LBRA IF_END_27
+IF_NEXT_28:
+IF_END_27:
+    LBRA IF_END_25
+IF_NEXT_26:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -2052,15 +1593,15 @@ IF_NEXT_43:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_54_TRUE
+    LBEQ .CMP_38_TRUE
     LDD #0
-    LBRA .CMP_54_END
-.CMP_54_TRUE:
+    LBRA .CMP_38_END
+.CMP_38_TRUE:
     LDD #1
-.CMP_54_END:
+.CMP_38_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_47
+    LBEQ IF_NEXT_30
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2073,20 +1614,20 @@ IF_NEXT_43:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_58_TRUE
+    LBEQ .CMP_42_TRUE
     LDD #0
-    LBRA .CMP_58_END
-.CMP_58_TRUE:
+    LBRA .CMP_42_END
+.CMP_42_TRUE:
     LDD #1
-.CMP_58_END:
+.CMP_42_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_57_TRUE
+    LBNE .LOGIC_41_TRUE
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2099,28 +1640,28 @@ IF_NEXT_43:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_59_TRUE
+    LBEQ .CMP_43_TRUE
     LDD #0
-    LBRA .CMP_59_END
-.CMP_59_TRUE:
+    LBRA .CMP_43_END
+.CMP_43_TRUE:
     LDD #1
-.CMP_59_END:
+.CMP_43_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_57_TRUE
+    LBNE .LOGIC_41_TRUE
     LDD #0
-    LBRA .LOGIC_57_END
-.LOGIC_57_TRUE:
+    LBRA .LOGIC_41_END
+.LOGIC_41_TRUE:
     LDD #1
-.LOGIC_57_END:
+.LOGIC_41_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_56_TRUE
+    LBNE .LOGIC_40_TRUE
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2133,28 +1674,28 @@ IF_NEXT_43:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_60_TRUE
+    LBEQ .CMP_44_TRUE
     LDD #0
-    LBRA .CMP_60_END
-.CMP_60_TRUE:
+    LBRA .CMP_44_END
+.CMP_44_TRUE:
     LDD #1
-.CMP_60_END:
+.CMP_44_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_56_TRUE
+    LBNE .LOGIC_40_TRUE
     LDD #0
-    LBRA .LOGIC_56_END
-.LOGIC_56_TRUE:
+    LBRA .LOGIC_40_END
+.LOGIC_40_TRUE:
     LDD #1
-.LOGIC_56_END:
+.LOGIC_40_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_55_TRUE
+    LBNE .LOGIC_39_TRUE
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2167,28 +1708,28 @@ IF_NEXT_43:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_61_TRUE
+    LBEQ .CMP_45_TRUE
     LDD #0
-    LBRA .CMP_61_END
-.CMP_61_TRUE:
+    LBRA .CMP_45_END
+.CMP_45_TRUE:
     LDD #1
-.CMP_61_END:
+.CMP_45_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_55_TRUE
+    LBNE .LOGIC_39_TRUE
     LDD #0
-    LBRA .LOGIC_55_END
-.LOGIC_55_TRUE:
+    LBRA .LOGIC_39_END
+.LOGIC_39_TRUE:
     LDD #1
-.LOGIC_55_END:
+.LOGIC_39_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_49
+    LBEQ IF_NEXT_32
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2213,15 +1754,15 @@ IF_NEXT_43:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_62_TRUE
+    LBEQ .CMP_46_TRUE
     LDD #0
-    LBRA .CMP_62_END
-.CMP_62_TRUE:
+    LBRA .CMP_46_END
+.CMP_46_TRUE:
     LDD #1
-.CMP_62_END:
+.CMP_46_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_51
+    LBEQ IF_NEXT_34
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -2233,8 +1774,8 @@ IF_NEXT_43:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_GUN_X
-    LBRA IF_END_50
-IF_NEXT_51:
+    LBRA IF_END_33
+IF_NEXT_34:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -2248,7 +1789,7 @@ IF_NEXT_51:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_GUN_X
-IF_END_50:
+IF_END_33:
     LDD VAR_PLAYER_Y
     STD RESULT
     LDD RESULT
@@ -2268,12 +1809,12 @@ IF_END_50:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_X
-    LBRA IF_END_48
-IF_NEXT_49:
-IF_END_48:
-    LBRA IF_END_46
-IF_NEXT_47:
-IF_END_46:
+    LBRA IF_END_31
+IF_NEXT_32:
+IF_END_31:
+    LBRA IF_END_29
+IF_NEXT_30:
+IF_END_29:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2282,15 +1823,15 @@ IF_END_46:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_63_TRUE
+    LBEQ .CMP_47_TRUE
     LDD #0
-    LBRA .CMP_63_END
-.CMP_63_TRUE:
+    LBRA .CMP_47_END
+.CMP_47_TRUE:
     LDD #1
-.CMP_63_END:
+.CMP_47_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_53
+    LBEQ IF_NEXT_36
     LDD VAR_HOOK_Y
     STD RESULT
     LDD RESULT
@@ -2310,15 +1851,15 @@ IF_END_46:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_64_TRUE
+    LBGE .CMP_48_TRUE
     LDD #0
-    LBRA .CMP_64_END
-.CMP_64_TRUE:
+    LBRA .CMP_48_END
+.CMP_48_TRUE:
     LDD #1
-.CMP_64_END:
+.CMP_48_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_55
+    LBEQ IF_NEXT_38
     LDD #0
     STD RESULT
     LDD RESULT
@@ -2327,14 +1868,14 @@ IF_END_46:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_Y
-    LBRA IF_END_54
-IF_NEXT_55:
-IF_END_54:
-    LBRA IF_END_52
-IF_NEXT_53:
-IF_END_52:
+    LBRA IF_END_37
+IF_NEXT_38:
+IF_END_37:
+    LBRA IF_END_35
+IF_NEXT_36:
+IF_END_35:
     JSR draw_game_level
-IF_END_42:
+IF_END_25:
     LBRA IF_END_0
 IF_END_0:
     JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
@@ -2429,15 +1970,15 @@ draw_map_screen:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_65_TRUE
+    LBEQ .CMP_49_TRUE
     LDD #0
-    LBRA .CMP_65_END
-.CMP_65_TRUE:
+    LBRA .CMP_49_END
+.CMP_49_TRUE:
     LDD #1
-.CMP_65_END:
+.CMP_49_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_57
+    LBEQ IF_NEXT_40
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
@@ -2457,24 +1998,24 @@ draw_map_screen:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_66_TRUE
+    LBGE .CMP_50_TRUE
     LDD #0
-    LBRA .CMP_66_END
-.CMP_66_TRUE:
+    LBRA .CMP_50_END
+.CMP_50_TRUE:
     LDD #1
-.CMP_66_END:
+.CMP_50_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_59
+    LBEQ IF_NEXT_42
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_LOCATION_GLOW_DIRECTION
-    LBRA IF_END_58
-IF_NEXT_59:
-IF_END_58:
-    LBRA IF_END_56
-IF_NEXT_57:
+    LBRA IF_END_41
+IF_NEXT_42:
+IF_END_41:
+    LBRA IF_END_39
+IF_NEXT_40:
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
@@ -2496,29 +2037,29 @@ IF_NEXT_57:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_67_TRUE
+    LBLE .CMP_51_TRUE
     LDD #0
-    LBRA .CMP_67_END
-.CMP_67_TRUE:
+    LBRA .CMP_51_END
+.CMP_51_TRUE:
     LDD #1
-.CMP_67_END:
+.CMP_51_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_61
+    LBEQ IF_NEXT_44
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_LOCATION_GLOW_DIRECTION
-    LBRA IF_END_60
-IF_NEXT_61:
-IF_END_60:
-IF_END_56:
+    LBRA IF_END_43
+IF_NEXT_44:
+IF_END_43:
+IF_END_39:
     ; PRINT_TEXT: Print text at position
     LDD #-120
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #120
+    LDD #-80
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -2530,8 +2071,8 @@ IF_END_56:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_ARG2
@@ -2546,8 +2087,8 @@ IF_END_56:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_LOC_X
@@ -2559,8 +2100,8 @@ IF_END_56:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_LOC_Y
@@ -2620,7 +2161,7 @@ draw_title_screen:
     LDD #0
     STD RESULT
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: logo (index=6, 7 paths)
+    ; Asset: logo (index=17, 7 paths)
     LDD #0
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
@@ -2697,6 +2238,1291 @@ draw_title_screen:
     STD RESULT
     LDD RESULT
     CMPD ,S++
+    LBEQ .CMP_52_TRUE
+    LDD #0
+    LBRA .CMP_52_END
+.CMP_52_TRUE:
+    LDD #1
+.CMP_52_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_46
+    LDD VAR_title_intensity
+    PSHS D
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    ADDD ,S++
+    STD VAR_TITLE_INTENSITY
+    LBRA IF_END_45
+IF_NEXT_46:
+IF_END_45:
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_TITLE_STATE
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_53_TRUE
+    LDD #0
+    LBRA .CMP_53_END
+.CMP_53_TRUE:
+    LDD #1
+.CMP_53_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_48
+    LDD VAR_title_intensity
+    PSHS D
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    SUBD ,S++
+    STD VAR_TITLE_INTENSITY
+    LBRA IF_END_47
+IF_NEXT_48:
+IF_END_47:
+    LDD #80
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_TITLE_INTENSITY
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_54_TRUE
+    LDD #0
+    LBRA .CMP_54_END
+.CMP_54_TRUE:
+    LDD #1
+.CMP_54_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_50
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD VAR_TITLE_STATE
+    LBRA IF_END_49
+IF_NEXT_50:
+IF_END_49:
+    LDD #30
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_TITLE_INTENSITY
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_55_TRUE
+    LDD #0
+    LBRA .CMP_55_END
+.CMP_55_TRUE:
+    LDD #1
+.CMP_55_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_52
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_TITLE_STATE
+    LBRA IF_END_51
+IF_NEXT_52:
+IF_END_51:
+    RTS
+
+; Function: draw_level_background
+draw_level_background:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #60
+    STD RESULT
+    LDA RESULT+1    ; Load intensity (8-bit)
+    JSR Intensity_a
+    LDD #0
+    STD RESULT
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_56_TRUE
+    LDD #0
+    LBRA .CMP_56_END
+.CMP_56_TRUE:
+    LDD #1
+.CMP_56_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_54
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: fuji_bg (index=11, 6 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_FUJI_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_FUJI_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_FUJI_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_FUJI_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_FUJI_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_FUJI_BG_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_54:
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_57_TRUE
+    LDD #0
+    LBRA .CMP_57_END
+.CMP_57_TRUE:
+    LDD #1
+.CMP_57_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_55
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: keirin_bg (index=13, 3 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_KEIRIN_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_KEIRIN_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_KEIRIN_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_55:
+    LDD #2
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_58_TRUE
+    LDD #0
+    LBRA .CMP_58_END
+.CMP_58_TRUE:
+    LDD #1
+.CMP_58_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_56
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: buddha_bg (index=9, 4 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_BUDDHA_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BUDDHA_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BUDDHA_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BUDDHA_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_56:
+    LDD #3
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_59_TRUE
+    LDD #0
+    LBRA .CMP_59_END
+.CMP_59_TRUE:
+    LDD #1
+.CMP_59_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_57
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: angkor_bg (index=0, 192 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_ANGKOR_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH9  ; Load path 9
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH10  ; Load path 10
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH11  ; Load path 11
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH12  ; Load path 12
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH13  ; Load path 13
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH14  ; Load path 14
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH15  ; Load path 15
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH16  ; Load path 16
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH17  ; Load path 17
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH18  ; Load path 18
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH19  ; Load path 19
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH20  ; Load path 20
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH21  ; Load path 21
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH22  ; Load path 22
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH23  ; Load path 23
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH24  ; Load path 24
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH25  ; Load path 25
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH26  ; Load path 26
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH27  ; Load path 27
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH28  ; Load path 28
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH29  ; Load path 29
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH30  ; Load path 30
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH31  ; Load path 31
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH32  ; Load path 32
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH33  ; Load path 33
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH34  ; Load path 34
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH35  ; Load path 35
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH36  ; Load path 36
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH37  ; Load path 37
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH38  ; Load path 38
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH39  ; Load path 39
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH40  ; Load path 40
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH41  ; Load path 41
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH42  ; Load path 42
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH43  ; Load path 43
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH44  ; Load path 44
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH45  ; Load path 45
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH46  ; Load path 46
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH47  ; Load path 47
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH48  ; Load path 48
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH49  ; Load path 49
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH50  ; Load path 50
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH51  ; Load path 51
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH52  ; Load path 52
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH53  ; Load path 53
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH54  ; Load path 54
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH55  ; Load path 55
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH56  ; Load path 56
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH57  ; Load path 57
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH58  ; Load path 58
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH59  ; Load path 59
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH60  ; Load path 60
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH61  ; Load path 61
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH62  ; Load path 62
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH63  ; Load path 63
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH64  ; Load path 64
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH65  ; Load path 65
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH66  ; Load path 66
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH67  ; Load path 67
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH68  ; Load path 68
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH69  ; Load path 69
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH70  ; Load path 70
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH71  ; Load path 71
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH72  ; Load path 72
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH73  ; Load path 73
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH74  ; Load path 74
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH75  ; Load path 75
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH76  ; Load path 76
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH77  ; Load path 77
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH78  ; Load path 78
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH79  ; Load path 79
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH80  ; Load path 80
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH81  ; Load path 81
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH82  ; Load path 82
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH83  ; Load path 83
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH84  ; Load path 84
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH85  ; Load path 85
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH86  ; Load path 86
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH87  ; Load path 87
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH88  ; Load path 88
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH89  ; Load path 89
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH90  ; Load path 90
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH91  ; Load path 91
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH92  ; Load path 92
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH93  ; Load path 93
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH94  ; Load path 94
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH95  ; Load path 95
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH96  ; Load path 96
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH97  ; Load path 97
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH98  ; Load path 98
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH99  ; Load path 99
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH100  ; Load path 100
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH101  ; Load path 101
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH102  ; Load path 102
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH103  ; Load path 103
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH104  ; Load path 104
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH105  ; Load path 105
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH106  ; Load path 106
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH107  ; Load path 107
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH108  ; Load path 108
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH109  ; Load path 109
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH110  ; Load path 110
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH111  ; Load path 111
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH112  ; Load path 112
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH113  ; Load path 113
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH114  ; Load path 114
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH115  ; Load path 115
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH116  ; Load path 116
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH117  ; Load path 117
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH118  ; Load path 118
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH119  ; Load path 119
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH120  ; Load path 120
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH121  ; Load path 121
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH122  ; Load path 122
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH123  ; Load path 123
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH124  ; Load path 124
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH125  ; Load path 125
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH126  ; Load path 126
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH127  ; Load path 127
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH128  ; Load path 128
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH129  ; Load path 129
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH130  ; Load path 130
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH131  ; Load path 131
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH132  ; Load path 132
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH133  ; Load path 133
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH134  ; Load path 134
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH135  ; Load path 135
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH136  ; Load path 136
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH137  ; Load path 137
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH138  ; Load path 138
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH139  ; Load path 139
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH140  ; Load path 140
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH141  ; Load path 141
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH142  ; Load path 142
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH143  ; Load path 143
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH144  ; Load path 144
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH145  ; Load path 145
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH146  ; Load path 146
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH147  ; Load path 147
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH148  ; Load path 148
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH149  ; Load path 149
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH150  ; Load path 150
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH151  ; Load path 151
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH152  ; Load path 152
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH153  ; Load path 153
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH154  ; Load path 154
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH155  ; Load path 155
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH156  ; Load path 156
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH157  ; Load path 157
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH158  ; Load path 158
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH159  ; Load path 159
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH160  ; Load path 160
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH161  ; Load path 161
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH162  ; Load path 162
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH163  ; Load path 163
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH164  ; Load path 164
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH165  ; Load path 165
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH166  ; Load path 166
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH167  ; Load path 167
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH168  ; Load path 168
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH169  ; Load path 169
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH170  ; Load path 170
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH171  ; Load path 171
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH172  ; Load path 172
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH173  ; Load path 173
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH174  ; Load path 174
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH175  ; Load path 175
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH176  ; Load path 176
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH177  ; Load path 177
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH178  ; Load path 178
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH179  ; Load path 179
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH180  ; Load path 180
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH181  ; Load path 181
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH182  ; Load path 182
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH183  ; Load path 183
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH184  ; Load path 184
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH185  ; Load path 185
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH186  ; Load path 186
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH187  ; Load path 187
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH188  ; Load path 188
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH189  ; Load path 189
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH190  ; Load path 190
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANGKOR_BG_PATH191  ; Load path 191
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_57:
+    LDD #4
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_60_TRUE
+    LDD #0
+    LBRA .CMP_60_END
+.CMP_60_TRUE:
+    LDD #1
+.CMP_60_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_58
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: ayers_bg (index=3, 18 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_AYERS_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH9  ; Load path 9
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH10  ; Load path 10
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH11  ; Load path 11
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH12  ; Load path 12
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH13  ; Load path 13
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH14  ; Load path 14
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH15  ; Load path 15
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH16  ; Load path 16
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_AYERS_BG_PATH17  ; Load path 17
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_58:
+    LDD #5
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_61_TRUE
+    LDD #0
+    LBRA .CMP_61_END
+.CMP_61_TRUE:
+    LDD #1
+.CMP_61_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_59
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: taj_bg (index=29, 4 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_TAJ_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TAJ_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TAJ_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TAJ_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_59:
+    LDD #6
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_62_TRUE
+    LDD #0
+    LBRA .CMP_62_END
+.CMP_62_TRUE:
+    LDD #1
+.CMP_62_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_60
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: leningrad_bg (index=15, 5 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_LENINGRAD_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LENINGRAD_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LENINGRAD_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LENINGRAD_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LENINGRAD_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_60:
+    LDD #7
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_63_TRUE
+    LDD #0
+    LBRA .CMP_63_END
+.CMP_63_TRUE:
+    LDD #1
+.CMP_63_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_61
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: paris_bg (index=22, 5 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_PARIS_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PARIS_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PARIS_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PARIS_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PARIS_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_61:
+    LDD #8
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_64_TRUE
+    LDD #0
+    LBRA .CMP_64_END
+.CMP_64_TRUE:
+    LDD #1
+.CMP_64_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_62
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: london_bg (index=18, 4 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_LONDON_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LONDON_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LONDON_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_LONDON_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_62:
+    LDD #9
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_65_TRUE
+    LDD #0
+    LBRA .CMP_65_END
+.CMP_65_TRUE:
+    LDD #1
+.CMP_65_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_63
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: barcelona_bg (index=4, 60 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_BARCELONA_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH9  ; Load path 9
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH10  ; Load path 10
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH11  ; Load path 11
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH12  ; Load path 12
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH13  ; Load path 13
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH14  ; Load path 14
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH15  ; Load path 15
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH16  ; Load path 16
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH17  ; Load path 17
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH18  ; Load path 18
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH19  ; Load path 19
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH20  ; Load path 20
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH21  ; Load path 21
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH22  ; Load path 22
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH23  ; Load path 23
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH24  ; Load path 24
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH25  ; Load path 25
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH26  ; Load path 26
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH27  ; Load path 27
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH28  ; Load path 28
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH29  ; Load path 29
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH30  ; Load path 30
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH31  ; Load path 31
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH32  ; Load path 32
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH33  ; Load path 33
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH34  ; Load path 34
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH35  ; Load path 35
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH36  ; Load path 36
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH37  ; Load path 37
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH38  ; Load path 38
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH39  ; Load path 39
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH40  ; Load path 40
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH41  ; Load path 41
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH42  ; Load path 42
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH43  ; Load path 43
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH44  ; Load path 44
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH45  ; Load path 45
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH46  ; Load path 46
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH47  ; Load path 47
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH48  ; Load path 48
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH49  ; Load path 49
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH50  ; Load path 50
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH51  ; Load path 51
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH52  ; Load path 52
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH53  ; Load path 53
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH54  ; Load path 54
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH55  ; Load path 55
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH56  ; Load path 56
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH57  ; Load path 57
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH58  ; Load path 58
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_BARCELONA_BG_PATH59  ; Load path 59
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_63:
+    LDD #10
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_66_TRUE
+    LDD #0
+    LBRA .CMP_66_END
+.CMP_66_TRUE:
+    LDD #1
+.CMP_66_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_64
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: athens_bg (index=2, 41 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_ATHENS_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH9  ; Load path 9
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH10  ; Load path 10
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH11  ; Load path 11
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH12  ; Load path 12
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH13  ; Load path 13
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH14  ; Load path 14
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH15  ; Load path 15
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH16  ; Load path 16
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH17  ; Load path 17
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH18  ; Load path 18
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH19  ; Load path 19
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH20  ; Load path 20
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH21  ; Load path 21
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH22  ; Load path 22
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH23  ; Load path 23
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH24  ; Load path 24
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH25  ; Load path 25
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH26  ; Load path 26
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH27  ; Load path 27
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH28  ; Load path 28
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH29  ; Load path 29
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH30  ; Load path 30
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH31  ; Load path 31
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH32  ; Load path 32
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH33  ; Load path 33
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH34  ; Load path 34
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH35  ; Load path 35
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH36  ; Load path 36
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH37  ; Load path 37
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH38  ; Load path 38
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH39  ; Load path 39
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ATHENS_BG_PATH40  ; Load path 40
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_64:
+    LDD #11
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_67_TRUE
+    LDD #0
+    LBRA .CMP_67_END
+.CMP_67_TRUE:
+    LDD #1
+.CMP_67_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_65
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: pyramids_bg (index=28, 4 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_PYRAMIDS_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PYRAMIDS_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PYRAMIDS_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_PYRAMIDS_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_65:
+    LDD #12
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
     LBEQ .CMP_68_TRUE
     LDD #0
     LBRA .CMP_68_END
@@ -2705,22 +3531,43 @@ draw_title_screen:
 .CMP_68_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_63
-    LDD VAR_title_intensity
-    PSHS D
-    LDD #1
+    LBEQ IF_NEXT_66
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: kilimanjaro_bg (index=14, 4 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_KILIMANJARO_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_KILIMANJARO_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_KILIMANJARO_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_KILIMANJARO_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_66:
+    LDD #13
     STD RESULT
     LDD RESULT
-    ADDD ,S++
-    STD VAR_TITLE_INTENSITY
-    LBRA IF_END_62
-IF_NEXT_63:
-IF_END_62:
-    LDD #1
-    STD RESULT
-    LDD RESULT
     PSHS D
-    LDD VAR_TITLE_STATE
+    LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -2732,22 +3579,45 @@ IF_END_62:
 .CMP_69_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_65
-    LDD VAR_title_intensity
-    PSHS D
-    LDD #1
+    LBEQ IF_NEXT_67
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: newyork_bg (index=21, 5 paths)
+    LDD #0
+    STD RESULT
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_NEWYORK_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_NEWYORK_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_NEWYORK_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_NEWYORK_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_NEWYORK_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_67:
+    LDD #14
     STD RESULT
     LDD RESULT
-    SUBD ,S++
-    STD VAR_TITLE_INTENSITY
-    LBRA IF_END_64
-IF_NEXT_65:
-IF_END_64:
-    LDD #80
-    STD RESULT
-    LDD RESULT
     PSHS D
-    LDD VAR_TITLE_INTENSITY
+    LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -2759,19 +3629,45 @@ IF_END_64:
 .CMP_70_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_67
-    LDD #1
+    LBEQ IF_NEXT_68
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: mayan_bg (index=20, 5 paths)
+    LDD #0
     STD RESULT
-    LDD RESULT
-    STD VAR_TITLE_STATE
-    LBRA IF_END_66
-IF_NEXT_67:
-IF_END_66:
-    LDD #30
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_MAYAN_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MAYAN_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MAYAN_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MAYAN_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MAYAN_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
+IF_NEXT_68:
+    LDD #15
     STD RESULT
     LDD RESULT
     PSHS D
-    LDD VAR_TITLE_INTENSITY
+    LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -2784,41 +3680,101 @@ IF_END_66:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_69
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: antarctica_bg (index=1, 20 paths)
     LDD #0
     STD RESULT
-    LDD RESULT
-    STD VAR_TITLE_STATE
-    LBRA IF_END_68
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
+    STD RESULT
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_ANTARCTICA_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH9  ; Load path 9
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH10  ; Load path 10
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH11  ; Load path 11
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH12  ; Load path 12
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH13  ; Load path 13
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH14  ; Load path 14
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH15  ; Load path 15
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH16  ; Load path 16
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH17  ; Load path 17
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH18  ; Load path 18
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_ANTARCTICA_BG_PATH19  ; Load path 19
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    LDD #0
+    STD RESULT
+    LBRA IF_END_53
 IF_NEXT_69:
-IF_END_68:
-    RTS
-
-; Function: draw_level_background
-draw_level_background:
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: easter_bg (index=10, 5 paths)
     LDD #0
     STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_CURRENT_LEVEL_PTR
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #50
     STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBNE .CMP_72_TRUE
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_EASTER_BG_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_EASTER_BG_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_EASTER_BG_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_EASTER_BG_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_EASTER_BG_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
-    LBRA .CMP_72_END
-.CMP_72_TRUE:
-    LDD #1
-.CMP_72_END:
     STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_71
-    ; ===== SHOW_LEVEL builtin =====
-    JSR SHOW_LEVEL_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_70
-IF_NEXT_71:
-IF_END_70:
+IF_END_53:
     RTS
 
 ; Function: draw_game_level
@@ -2832,8 +3788,8 @@ draw_game_level:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_X
@@ -2845,15 +3801,15 @@ draw_game_level:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_74_TRUE
+    LBLT .CMP_73_TRUE
     LDD #0
-    LBRA .CMP_74_END
-.CMP_74_TRUE:
+    LBRA .CMP_73_END
+.CMP_73_TRUE:
     LDD #1
-.CMP_74_END:
+.CMP_73_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_73_TRUE
+    LBNE .LOGIC_72_TRUE
     LDD #20
     STD RESULT
     LDD RESULT
@@ -2862,7 +3818,36 @@ draw_game_level:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_75_TRUE
+    LBGT .CMP_74_TRUE
+    LDD #0
+    LBRA .CMP_74_END
+.CMP_74_TRUE:
+    LDD #1
+.CMP_74_END:
+    STD RESULT
+    LDD RESULT
+    LBNE .LOGIC_72_TRUE
+    LDD #0
+    LBRA .LOGIC_72_END
+.LOGIC_72_TRUE:
+    LDD #1
+.LOGIC_72_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_71
+    LDD VAR_JOY_X
+    STD RESULT
+    LDD RESULT
+    STD VAR_ABS_JOY
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_ABS_JOY
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLT .CMP_75_TRUE
     LDD #0
     LBRA .CMP_75_END
 .CMP_75_TRUE:
@@ -2870,20 +3855,23 @@ draw_game_level:
 .CMP_75_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_73_TRUE
-    LDD #0
-    LBRA .LOGIC_73_END
-.LOGIC_73_TRUE:
-    LDD #1
-.LOGIC_73_END:
+    LBEQ IF_NEXT_73
+    LDD #-1
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_73
-    LDD VAR_JOY_X
+    PSHS D
+    LDD VAR_ABS_JOY
+    STD RESULT
+    LDD RESULT
+    PULS X      ; Get left into X
+    JSR MUL16   ; D = X * D
     STD RESULT
     LDD RESULT
     STD VAR_ABS_JOY
-    LDD #0
+    LBRA IF_END_72
+IF_NEXT_73:
+IF_END_72:
+    LDD #40
     STD RESULT
     LDD RESULT
     PSHS D
@@ -2900,22 +3888,13 @@ draw_game_level:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_75
-    LDD #-1
+    LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDD VAR_ABS_JOY
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDD RESULT
-    STD VAR_ABS_JOY
+    STD VAR_MOVE_SPEED
     LBRA IF_END_74
 IF_NEXT_75:
-IF_END_74:
-    LDD #40
+    LDD #70
     STD RESULT
     LDD RESULT
     PSHS D
@@ -2931,14 +3910,14 @@ IF_END_74:
 .CMP_77_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_77
-    LDD #1
+    LBEQ IF_NEXT_76
+    LDD #2
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_76
-IF_NEXT_77:
-    LDD #70
+    LBRA IF_END_74
+IF_NEXT_76:
+    LDD #100
     STD RESULT
     LDD RESULT
     PSHS D
@@ -2954,18 +3933,23 @@ IF_NEXT_77:
 .CMP_78_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_78
-    LDD #2
+    LBEQ IF_NEXT_77
+    LDD #3
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_76
-IF_NEXT_78:
-    LDD #100
+    LBRA IF_END_74
+IF_NEXT_77:
+    LDD #4
+    STD RESULT
+    LDD RESULT
+    STD VAR_MOVE_SPEED
+IF_END_74:
+    LDD #0
     STD RESULT
     LDD RESULT
     PSHS D
-    LDD VAR_ABS_JOY
+    LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -2978,34 +3962,6 @@ IF_NEXT_78:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_79
-    LDD #3
-    STD RESULT
-    LDD RESULT
-    STD VAR_MOVE_SPEED
-    LBRA IF_END_76
-IF_NEXT_79:
-    LDD #4
-    STD RESULT
-    LDD RESULT
-    STD VAR_MOVE_SPEED
-IF_END_76:
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_JOY_X
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_80_TRUE
-    LDD #0
-    LBRA .CMP_80_END
-.CMP_80_TRUE:
-    LDD #1
-.CMP_80_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_81
     LDD #-1
     STD RESULT
     LDD RESULT
@@ -3018,9 +3974,9 @@ IF_END_76:
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_80
-IF_NEXT_81:
-IF_END_80:
+    LBRA IF_END_78
+IF_NEXT_79:
+IF_END_78:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -3040,22 +3996,22 @@ IF_END_80:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_81_TRUE
+    LBLT .CMP_80_TRUE
     LDD #0
-    LBRA .CMP_81_END
-.CMP_81_TRUE:
+    LBRA .CMP_80_END
+.CMP_80_TRUE:
     LDD #1
-.CMP_81_END:
+.CMP_80_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_83
+    LBEQ IF_NEXT_81
     LDD #-110
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_X
-    LBRA IF_END_82
-IF_NEXT_83:
-IF_END_82:
+    LBRA IF_END_80
+IF_NEXT_81:
+IF_END_80:
     LDD #110
     STD RESULT
     LDD RESULT
@@ -3064,22 +4020,22 @@ IF_END_82:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_82_TRUE
+    LBGT .CMP_81_TRUE
     LDD #0
-    LBRA .CMP_82_END
-.CMP_82_TRUE:
+    LBRA .CMP_81_END
+.CMP_81_TRUE:
     LDD #1
-.CMP_82_END:
+.CMP_81_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_85
+    LBEQ IF_NEXT_83
     LDD #110
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_X
-    LBRA IF_END_84
-IF_NEXT_85:
-IF_END_84:
+    LBRA IF_END_82
+IF_NEXT_83:
+IF_END_82:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -3088,26 +4044,26 @@ IF_END_84:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_83_TRUE
+    LBLT .CMP_82_TRUE
     LDD #0
-    LBRA .CMP_83_END
-.CMP_83_TRUE:
+    LBRA .CMP_82_END
+.CMP_82_TRUE:
     LDD #1
-.CMP_83_END:
+.CMP_82_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_87
+    LBEQ IF_NEXT_85
     LDD #-1
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_FACING
-    LBRA IF_END_86
-IF_NEXT_87:
+    LBRA IF_END_84
+IF_NEXT_85:
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_FACING
-IF_END_86:
+IF_END_84:
     LDD VAR_PLAYER_ANIM_COUNTER
     STD RESULT
     LDD RESULT
@@ -3131,15 +4087,15 @@ IF_END_86:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_85_TRUE
+    LBLT .CMP_84_TRUE
     LDD #0
-    LBRA .CMP_85_END
-.CMP_85_TRUE:
+    LBRA .CMP_84_END
+.CMP_84_TRUE:
     LDD #1
-.CMP_85_END:
+.CMP_84_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_84_TRUE
+    LBNE .LOGIC_83_TRUE
     LDD #80
     STD RESULT
     LDD RESULT
@@ -3148,23 +4104,23 @@ IF_END_86:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_86_TRUE
+    LBGT .CMP_85_TRUE
     LDD #0
-    LBRA .CMP_86_END
-.CMP_86_TRUE:
+    LBRA .CMP_85_END
+.CMP_85_TRUE:
     LDD #1
-.CMP_86_END:
+.CMP_85_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_84_TRUE
+    LBNE .LOGIC_83_TRUE
     LDD #0
-    LBRA .LOGIC_84_END
-.LOGIC_84_TRUE:
+    LBRA .LOGIC_83_END
+.LOGIC_83_TRUE:
     LDD #1
-.LOGIC_84_END:
+.LOGIC_83_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_89
+    LBEQ IF_NEXT_87
     LDD VAR_PLAYER_ANIM_SPEED
     STD RESULT
     LDD RESULT
@@ -3177,9 +4133,9 @@ IF_END_86:
     STD RESULT
     LDD RESULT
     STD VAR_ANIM_THRESHOLD
-    LBRA IF_END_88
-IF_NEXT_89:
-IF_END_88:
+    LBRA IF_END_86
+IF_NEXT_87:
+IF_END_86:
     LDD VAR_ANIM_THRESHOLD
     STD RESULT
     LDD RESULT
@@ -3188,15 +4144,15 @@ IF_END_88:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_87_TRUE
+    LBGE .CMP_86_TRUE
     LDD #0
-    LBRA .CMP_87_END
-.CMP_87_TRUE:
+    LBRA .CMP_86_END
+.CMP_86_TRUE:
     LDD #1
-.CMP_87_END:
+.CMP_86_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_91
+    LBEQ IF_NEXT_89
     LDD #0
     STD RESULT
     LDD RESULT
@@ -3220,27 +4176,27 @@ IF_END_88:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_88_TRUE
+    LBGT .CMP_87_TRUE
     LDD #0
-    LBRA .CMP_88_END
-.CMP_88_TRUE:
+    LBRA .CMP_87_END
+.CMP_87_TRUE:
     LDD #1
-.CMP_88_END:
+.CMP_87_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_93
+    LBEQ IF_NEXT_91
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_FRAME
-    LBRA IF_END_92
-IF_NEXT_93:
-IF_END_92:
     LBRA IF_END_90
 IF_NEXT_91:
 IF_END_90:
-    LBRA IF_END_72
-IF_NEXT_73:
+    LBRA IF_END_88
+IF_NEXT_89:
+IF_END_88:
+    LBRA IF_END_70
+IF_NEXT_71:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -3249,7 +4205,7 @@ IF_NEXT_73:
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_COUNTER
-IF_END_72:
+IF_END_70:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -3262,6 +4218,30 @@ IF_END_72:
     STD RESULT
     LDD RESULT
     CMPD ,S++
+    LBEQ .CMP_88_TRUE
+    LDD #0
+    LBRA .CMP_88_END
+.CMP_88_TRUE:
+    LDD #1
+.CMP_88_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_93
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD VAR_MIRROR_MODE
+    LBRA IF_END_92
+IF_NEXT_93:
+IF_END_92:
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_PLAYER_ANIM_FRAME
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
     LBEQ .CMP_89_TRUE
     LDD #0
     LBRA .CMP_89_END
@@ -3271,30 +4251,6 @@ IF_END_72:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_95
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD VAR_MIRROR_MODE
-    LBRA IF_END_94
-IF_NEXT_95:
-IF_END_94:
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_PLAYER_ANIM_FRAME
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_90_TRUE
-    LDD #0
-    LBRA .CMP_90_END
-.CMP_90_TRUE:
-    LDD #1
-.CMP_90_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_97
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_1 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -3371,8 +4327,8 @@ IF_END_94:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_96
-IF_NEXT_97:
+    LBRA IF_END_94
+IF_NEXT_95:
     LDD #2
     STD RESULT
     LDD RESULT
@@ -3381,15 +4337,15 @@ IF_NEXT_97:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_91_TRUE
+    LBEQ .CMP_90_TRUE
     LDD #0
-    LBRA .CMP_91_END
-.CMP_91_TRUE:
+    LBRA .CMP_90_END
+.CMP_90_TRUE:
     LDD #1
-.CMP_91_END:
+.CMP_90_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_98
+    LBEQ IF_NEXT_96
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_2 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -3466,8 +4422,8 @@ IF_NEXT_97:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_96
-IF_NEXT_98:
+    LBRA IF_END_94
+IF_NEXT_96:
     LDD #3
     STD RESULT
     LDD RESULT
@@ -3476,15 +4432,15 @@ IF_NEXT_98:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_92_TRUE
+    LBEQ .CMP_91_TRUE
     LDD #0
-    LBRA .CMP_92_END
-.CMP_92_TRUE:
+    LBRA .CMP_91_END
+.CMP_91_TRUE:
     LDD #1
-.CMP_92_END:
+.CMP_91_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_99
+    LBEQ IF_NEXT_97
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_3 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -3561,8 +4517,8 @@ IF_NEXT_98:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_96
-IF_NEXT_99:
+    LBRA IF_END_94
+IF_NEXT_97:
     LDD #4
     STD RESULT
     LDD RESULT
@@ -3571,15 +4527,15 @@ IF_NEXT_99:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_93_TRUE
+    LBEQ .CMP_92_TRUE
     LDD #0
-    LBRA .CMP_93_END
-.CMP_93_TRUE:
+    LBRA .CMP_92_END
+.CMP_92_TRUE:
     LDD #1
-.CMP_93_END:
+.CMP_92_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_100
+    LBEQ IF_NEXT_98
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_4 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -3656,8 +4612,8 @@ IF_NEXT_99:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_96
-IF_NEXT_100:
+    LBRA IF_END_94
+IF_NEXT_98:
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_5 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -3734,7 +4690,7 @@ IF_NEXT_100:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-IF_END_96:
+IF_END_94:
     JSR update_enemies
     JSR draw_enemies
     LDD #1
@@ -3745,15 +4701,15 @@ IF_END_96:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_94_TRUE
+    LBEQ .CMP_93_TRUE
     LDD #0
-    LBRA .CMP_94_END
-.CMP_94_TRUE:
+    LBRA .CMP_93_END
+.CMP_93_TRUE:
     LDD #1
-.CMP_94_END:
+.CMP_93_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_102
+    LBEQ IF_NEXT_100
     LDD VAR_HOOK_GUN_X
     STD RESULT
     LDD RESULT
@@ -3822,9 +4778,9 @@ IF_END_96:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_101
-IF_NEXT_102:
-IF_END_101:
+    LBRA IF_END_99
+IF_NEXT_100:
+IF_END_99:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -3833,7 +4789,7 @@ IF_END_101:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_103: ; while start
+WH_101: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -3842,15 +4798,15 @@ WH_103: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_95_TRUE
+    LBLT .CMP_94_TRUE
     LDD #0
-    LBRA .CMP_95_END
-.CMP_95_TRUE:
+    LBRA .CMP_94_END
+.CMP_94_TRUE:
     LDD #1
-.CMP_95_END:
+.CMP_94_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_104
+    LBEQ WH_END_102
     LDD #1
     STD RESULT
     LDD RESULT
@@ -3863,20 +4819,20 @@ WH_103: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_96_TRUE
+    LBEQ .CMP_95_TRUE
     LDD #0
-    LBRA .CMP_96_END
-.CMP_96_TRUE:
+    LBRA .CMP_95_END
+.CMP_95_TRUE:
     LDD #1
-.CMP_96_END:
+.CMP_95_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_106
+    LBEQ IF_NEXT_104
     LDD VAR_ACTIVE_COUNT
     STD RESULT
     LDD RESULT
@@ -3888,9 +4844,9 @@ WH_103: ; while start
     STD RESULT
     LDD RESULT
     STD VAR_ACTIVE_COUNT
-    LBRA IF_END_105
-IF_NEXT_106:
-IF_END_105:
+    LBRA IF_END_103
+IF_NEXT_104:
+IF_END_103:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -3902,17 +4858,35 @@ IF_END_105:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_103
-WH_END_104: ; while end
+    LBRA WH_101
+WH_END_102: ; while end
     RTS
 
 ; Function: spawn_enemies
 spawn_enemies:
-    LDD #1
+    LDX #ARRAY_LEVEL_ENEMY_COUNT_DATA  ; Array data
+    PSHS X
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_COUNT
-    LDD #1
+    LDX #ARRAY_LEVEL_ENEMY_SPEED_DATA  ; Array data
+    PSHS X
+    LDD VAR_CURRENT_LOCATION
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_SPEED
@@ -3920,7 +4894,7 @@ spawn_enemies:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_107: ; while start
+WH_105: ; while start
     LDD VAR_COUNT
     STD RESULT
     LDD RESULT
@@ -3929,15 +4903,15 @@ WH_107: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_97_TRUE
+    LBLT .CMP_96_TRUE
     LDD #0
-    LBRA .CMP_97_END
-.CMP_97_TRUE:
+    LBRA .CMP_96_END
+.CMP_96_TRUE:
     LDD #1
-.CMP_97_END:
+.CMP_96_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_108
+    LBEQ WH_END_106
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -3953,7 +4927,7 @@ WH_107: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -3969,7 +4943,7 @@ WH_107: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4000,7 +4974,7 @@ WH_107: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4016,7 +4990,7 @@ WH_107: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4032,7 +5006,7 @@ WH_107: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #1
     STD RESULT
     LDD RESULT
@@ -4049,15 +5023,15 @@ WH_107: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_98_TRUE
+    LBEQ .CMP_97_TRUE
     LDD #0
-    LBRA .CMP_98_END
-.CMP_98_TRUE:
+    LBRA .CMP_97_END
+.CMP_97_TRUE:
     LDD #1
-.CMP_98_END:
+.CMP_97_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_110
+    LBEQ IF_NEXT_108
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4081,10 +5055,10 @@ WH_107: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
-    LBRA IF_END_109
-IF_NEXT_110:
-IF_END_109:
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_107
+IF_NEXT_108:
+IF_END_107:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4100,7 +5074,7 @@ IF_END_109:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4112,8 +5086,8 @@ IF_END_109:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_107
-WH_END_108: ; while end
+    LBRA WH_105
+WH_END_106: ; while end
     RTS
 
 ; Function: update_enemies
@@ -4122,7 +5096,7 @@ update_enemies:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_111: ; while start
+WH_109: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -4131,15 +5105,15 @@ WH_111: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_99_TRUE
+    LBLT .CMP_98_TRUE
     LDD #0
-    LBRA .CMP_99_END
-.CMP_99_TRUE:
+    LBRA .CMP_98_END
+.CMP_98_TRUE:
     LDD #1
-.CMP_99_END:
+.CMP_98_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_112
+    LBEQ WH_END_110
     LDD #1
     STD RESULT
     LDD RESULT
@@ -4152,20 +5126,20 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_100_TRUE
+    LBEQ .CMP_99_TRUE
     LDD #0
-    LBRA .CMP_100_END
-.CMP_100_TRUE:
+    LBRA .CMP_99_END
+.CMP_99_TRUE:
     LDD #1
-.CMP_100_END:
+.CMP_99_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_114
+    LBEQ IF_NEXT_112
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4185,8 +5159,8 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -4199,7 +5173,7 @@ WH_111: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4219,8 +5193,8 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -4232,15 +5206,15 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     ADDD ,S++
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4260,8 +5234,8 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -4273,15 +5247,15 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     ADDD ,S++
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_GROUND_Y
     STD RESULT
     LDD RESULT
@@ -4294,20 +5268,20 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_101_TRUE
+    LBLE .CMP_100_TRUE
     LDD #0
-    LBRA .CMP_101_END
-.CMP_101_TRUE:
+    LBRA .CMP_100_END
+.CMP_100_TRUE:
     LDD #1
-.CMP_101_END:
+.CMP_100_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_116
+    LBEQ IF_NEXT_114
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4323,7 +5297,7 @@ WH_111: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4347,8 +5321,8 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PULS X      ; Get left into X
@@ -4356,7 +5330,7 @@ WH_111: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4376,8 +5350,8 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -4397,7 +5371,7 @@ WH_111: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_MIN_BOUNCE_VY
     STD RESULT
     LDD RESULT
@@ -4410,20 +5384,20 @@ WH_111: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_102_TRUE
+    LBLT .CMP_101_TRUE
     LDD #0
-    LBRA .CMP_102_END
-.CMP_102_TRUE:
+    LBRA .CMP_101_END
+.CMP_101_TRUE:
     LDD #1
-.CMP_102_END:
+.CMP_101_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_118
+    LBEQ IF_NEXT_116
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4439,13 +5413,13 @@ WH_111: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
-    LBRA IF_END_117
-IF_NEXT_118:
-IF_END_117:
+    STD ,X          ; Store 16-bit value
     LBRA IF_END_115
 IF_NEXT_116:
 IF_END_115:
+    LBRA IF_END_113
+IF_NEXT_114:
+IF_END_113:
     LDD #-85
     STD RESULT
     LDD RESULT
@@ -4458,12 +5432,90 @@ IF_END_115:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_103_TRUE
+    LBLE .CMP_102_TRUE
+    LDD #0
+    LBRA .CMP_102_END
+.CMP_102_TRUE:
+    LDD #1
+.CMP_102_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_118
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-85
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_VX_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    PULS X      ; Get left into X
+    JSR MUL16   ; D = X * D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_117
+IF_NEXT_118:
+IF_END_117:
+    LDD #85
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_X_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBGE .CMP_103_TRUE
     LDD #0
     LBRA .CMP_103_END
 .CMP_103_TRUE:
@@ -4483,11 +5535,11 @@ IF_END_115:
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
-    LDD #-85
+    LDD #85
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4511,8 +5563,8 @@ IF_END_115:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PULS X      ; Get left into X
@@ -4520,91 +5572,13 @@ IF_END_115:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LBRA IF_END_119
 IF_NEXT_120:
 IF_END_119:
-    LDD #85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBGE .CMP_104_TRUE
-    LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
-    LDD #1
-.CMP_104_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_122
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store value
-    LBRA IF_END_121
-IF_NEXT_122:
-IF_END_121:
-    LBRA IF_END_113
-IF_NEXT_114:
-IF_END_113:
+    LBRA IF_END_111
+IF_NEXT_112:
+IF_END_111:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4616,8 +5590,8 @@ IF_END_113:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_111
-WH_END_112: ; while end
+    LBRA WH_109
+WH_END_110: ; while end
     RTS
 
 ; Function: draw_enemies
@@ -4626,7 +5600,7 @@ draw_enemies:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_123: ; while start
+WH_121: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -4635,15 +5609,15 @@ WH_123: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_105_TRUE
+    LBLT .CMP_104_TRUE
     LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
+    LBRA .CMP_104_END
+.CMP_104_TRUE:
     LDD #1
-.CMP_105_END:
+.CMP_104_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_124
+    LBEQ WH_END_122
     LDD #1
     STD RESULT
     LDD RESULT
@@ -4656,20 +5630,20 @@ WH_123: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_106_TRUE
+    LBEQ .CMP_105_TRUE
     LDD #0
-    LBRA .CMP_106_END
-.CMP_106_TRUE:
+    LBRA .CMP_105_END
+.CMP_105_TRUE:
     LDD #1
-.CMP_106_END:
+.CMP_105_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_126
+    LBEQ IF_NEXT_124
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     STD RESULT
@@ -4689,22 +5663,22 @@ WH_123: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_107_TRUE
+    LBEQ .CMP_106_TRUE
     LDD #0
-    LBRA .CMP_107_END
-.CMP_107_TRUE:
+    LBRA .CMP_106_END
+.CMP_106_TRUE:
     LDD #1
-.CMP_107_END:
+.CMP_106_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_128
+    LBEQ IF_NEXT_126
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: bubble_huge (index=0, 1 paths)
+    ; Asset: bubble_huge (index=5, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
     PSHS X
     LDD VAR_I
@@ -4713,8 +5687,8 @@ WH_123: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -4726,8 +5700,8 @@ WH_123: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -4744,8 +5718,8 @@ WH_123: ; while start
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_127
-IF_NEXT_128:
+    LBRA IF_END_125
+IF_NEXT_126:
     LDD #3
     STD RESULT
     LDD RESULT
@@ -4758,22 +5732,22 @@ IF_NEXT_128:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_108_TRUE
+    LBEQ .CMP_107_TRUE
     LDD #0
-    LBRA .CMP_108_END
-.CMP_108_TRUE:
+    LBRA .CMP_107_END
+.CMP_107_TRUE:
     LDD #1
-.CMP_108_END:
+.CMP_107_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_129
+    LBEQ IF_NEXT_127
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: bubble_large (index=1, 1 paths)
+    ; Asset: bubble_large (index=6, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
     PSHS X
     LDD VAR_I
@@ -4782,8 +5756,8 @@ IF_NEXT_128:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -4795,8 +5769,8 @@ IF_NEXT_128:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -4813,8 +5787,8 @@ IF_NEXT_128:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_127
-IF_NEXT_129:
+    LBRA IF_END_125
+IF_NEXT_127:
     LDD #2
     STD RESULT
     LDD RESULT
@@ -4827,22 +5801,22 @@ IF_NEXT_129:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_109_TRUE
+    LBEQ .CMP_108_TRUE
     LDD #0
-    LBRA .CMP_109_END
-.CMP_109_TRUE:
+    LBRA .CMP_108_END
+.CMP_108_TRUE:
     LDD #1
-.CMP_109_END:
+.CMP_108_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_130
+    LBEQ IF_NEXT_128
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: bubble_medium (index=2, 1 paths)
+    ; Asset: bubble_medium (index=7, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
     PSHS X
     LDD VAR_I
@@ -4851,8 +5825,8 @@ IF_NEXT_129:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -4864,8 +5838,8 @@ IF_NEXT_129:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -4882,10 +5856,10 @@ IF_NEXT_129:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_127
-IF_NEXT_130:
+    LBRA IF_END_125
+IF_NEXT_128:
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: bubble_small (index=3, 1 paths)
+    ; Asset: bubble_small (index=8, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
     PSHS X
     LDD VAR_I
@@ -4894,8 +5868,8 @@ IF_NEXT_130:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -4907,8 +5881,8 @@ IF_NEXT_130:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -4925,10 +5899,10 @@ IF_NEXT_130:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-IF_END_127:
-    LBRA IF_END_125
-IF_NEXT_126:
 IF_END_125:
+    LBRA IF_END_123
+IF_NEXT_124:
+IF_END_123:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4940,8 +5914,8 @@ IF_END_125:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_123
-WH_END_124: ; while end
+    LBRA WH_121
+WH_END_122: ; while end
     RTS
 
 ; Function: draw_hook_rope
@@ -4989,7 +5963,7 @@ read_joystick1_state:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5005,7 +5979,7 @@ read_joystick1_state:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #2
     STD RESULT
     LDD RESULT
@@ -5028,7 +6002,7 @@ read_joystick1_state:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #3
     STD RESULT
     LDD RESULT
@@ -5051,7 +6025,7 @@ read_joystick1_state:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #4
     STD RESULT
     LDD RESULT
@@ -5074,7 +6048,7 @@ read_joystick1_state:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #5
     STD RESULT
     LDD RESULT
@@ -5097,13 +6071,2912 @@ read_joystick1_state:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     RTS
 
 ;***************************************************************************
 ; EMBEDDED ASSETS (vectors, music, levels, SFX)
 ;***************************************************************************
 
+; Generated from angkor_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 192, points: 648
+; X bounds: min=-96, max=96, width=192
+; Center: (0, 8)
+
+_ANGKOR_BG_WIDTH EQU 192
+_ANGKOR_BG_CENTER_X EQU 0
+_ANGKOR_BG_CENTER_Y EQU 8
+
+_ANGKOR_BG_VECTORS:  ; Main entry (header + 192 path(s))
+    FCB 192               ; path_count (runtime metadata)
+    FDB _ANGKOR_BG_PATH0        ; pointer to path 0
+    FDB _ANGKOR_BG_PATH1        ; pointer to path 1
+    FDB _ANGKOR_BG_PATH2        ; pointer to path 2
+    FDB _ANGKOR_BG_PATH3        ; pointer to path 3
+    FDB _ANGKOR_BG_PATH4        ; pointer to path 4
+    FDB _ANGKOR_BG_PATH5        ; pointer to path 5
+    FDB _ANGKOR_BG_PATH6        ; pointer to path 6
+    FDB _ANGKOR_BG_PATH7        ; pointer to path 7
+    FDB _ANGKOR_BG_PATH8        ; pointer to path 8
+    FDB _ANGKOR_BG_PATH9        ; pointer to path 9
+    FDB _ANGKOR_BG_PATH10        ; pointer to path 10
+    FDB _ANGKOR_BG_PATH11        ; pointer to path 11
+    FDB _ANGKOR_BG_PATH12        ; pointer to path 12
+    FDB _ANGKOR_BG_PATH13        ; pointer to path 13
+    FDB _ANGKOR_BG_PATH14        ; pointer to path 14
+    FDB _ANGKOR_BG_PATH15        ; pointer to path 15
+    FDB _ANGKOR_BG_PATH16        ; pointer to path 16
+    FDB _ANGKOR_BG_PATH17        ; pointer to path 17
+    FDB _ANGKOR_BG_PATH18        ; pointer to path 18
+    FDB _ANGKOR_BG_PATH19        ; pointer to path 19
+    FDB _ANGKOR_BG_PATH20        ; pointer to path 20
+    FDB _ANGKOR_BG_PATH21        ; pointer to path 21
+    FDB _ANGKOR_BG_PATH22        ; pointer to path 22
+    FDB _ANGKOR_BG_PATH23        ; pointer to path 23
+    FDB _ANGKOR_BG_PATH24        ; pointer to path 24
+    FDB _ANGKOR_BG_PATH25        ; pointer to path 25
+    FDB _ANGKOR_BG_PATH26        ; pointer to path 26
+    FDB _ANGKOR_BG_PATH27        ; pointer to path 27
+    FDB _ANGKOR_BG_PATH28        ; pointer to path 28
+    FDB _ANGKOR_BG_PATH29        ; pointer to path 29
+    FDB _ANGKOR_BG_PATH30        ; pointer to path 30
+    FDB _ANGKOR_BG_PATH31        ; pointer to path 31
+    FDB _ANGKOR_BG_PATH32        ; pointer to path 32
+    FDB _ANGKOR_BG_PATH33        ; pointer to path 33
+    FDB _ANGKOR_BG_PATH34        ; pointer to path 34
+    FDB _ANGKOR_BG_PATH35        ; pointer to path 35
+    FDB _ANGKOR_BG_PATH36        ; pointer to path 36
+    FDB _ANGKOR_BG_PATH37        ; pointer to path 37
+    FDB _ANGKOR_BG_PATH38        ; pointer to path 38
+    FDB _ANGKOR_BG_PATH39        ; pointer to path 39
+    FDB _ANGKOR_BG_PATH40        ; pointer to path 40
+    FDB _ANGKOR_BG_PATH41        ; pointer to path 41
+    FDB _ANGKOR_BG_PATH42        ; pointer to path 42
+    FDB _ANGKOR_BG_PATH43        ; pointer to path 43
+    FDB _ANGKOR_BG_PATH44        ; pointer to path 44
+    FDB _ANGKOR_BG_PATH45        ; pointer to path 45
+    FDB _ANGKOR_BG_PATH46        ; pointer to path 46
+    FDB _ANGKOR_BG_PATH47        ; pointer to path 47
+    FDB _ANGKOR_BG_PATH48        ; pointer to path 48
+    FDB _ANGKOR_BG_PATH49        ; pointer to path 49
+    FDB _ANGKOR_BG_PATH50        ; pointer to path 50
+    FDB _ANGKOR_BG_PATH51        ; pointer to path 51
+    FDB _ANGKOR_BG_PATH52        ; pointer to path 52
+    FDB _ANGKOR_BG_PATH53        ; pointer to path 53
+    FDB _ANGKOR_BG_PATH54        ; pointer to path 54
+    FDB _ANGKOR_BG_PATH55        ; pointer to path 55
+    FDB _ANGKOR_BG_PATH56        ; pointer to path 56
+    FDB _ANGKOR_BG_PATH57        ; pointer to path 57
+    FDB _ANGKOR_BG_PATH58        ; pointer to path 58
+    FDB _ANGKOR_BG_PATH59        ; pointer to path 59
+    FDB _ANGKOR_BG_PATH60        ; pointer to path 60
+    FDB _ANGKOR_BG_PATH61        ; pointer to path 61
+    FDB _ANGKOR_BG_PATH62        ; pointer to path 62
+    FDB _ANGKOR_BG_PATH63        ; pointer to path 63
+    FDB _ANGKOR_BG_PATH64        ; pointer to path 64
+    FDB _ANGKOR_BG_PATH65        ; pointer to path 65
+    FDB _ANGKOR_BG_PATH66        ; pointer to path 66
+    FDB _ANGKOR_BG_PATH67        ; pointer to path 67
+    FDB _ANGKOR_BG_PATH68        ; pointer to path 68
+    FDB _ANGKOR_BG_PATH69        ; pointer to path 69
+    FDB _ANGKOR_BG_PATH70        ; pointer to path 70
+    FDB _ANGKOR_BG_PATH71        ; pointer to path 71
+    FDB _ANGKOR_BG_PATH72        ; pointer to path 72
+    FDB _ANGKOR_BG_PATH73        ; pointer to path 73
+    FDB _ANGKOR_BG_PATH74        ; pointer to path 74
+    FDB _ANGKOR_BG_PATH75        ; pointer to path 75
+    FDB _ANGKOR_BG_PATH76        ; pointer to path 76
+    FDB _ANGKOR_BG_PATH77        ; pointer to path 77
+    FDB _ANGKOR_BG_PATH78        ; pointer to path 78
+    FDB _ANGKOR_BG_PATH79        ; pointer to path 79
+    FDB _ANGKOR_BG_PATH80        ; pointer to path 80
+    FDB _ANGKOR_BG_PATH81        ; pointer to path 81
+    FDB _ANGKOR_BG_PATH82        ; pointer to path 82
+    FDB _ANGKOR_BG_PATH83        ; pointer to path 83
+    FDB _ANGKOR_BG_PATH84        ; pointer to path 84
+    FDB _ANGKOR_BG_PATH85        ; pointer to path 85
+    FDB _ANGKOR_BG_PATH86        ; pointer to path 86
+    FDB _ANGKOR_BG_PATH87        ; pointer to path 87
+    FDB _ANGKOR_BG_PATH88        ; pointer to path 88
+    FDB _ANGKOR_BG_PATH89        ; pointer to path 89
+    FDB _ANGKOR_BG_PATH90        ; pointer to path 90
+    FDB _ANGKOR_BG_PATH91        ; pointer to path 91
+    FDB _ANGKOR_BG_PATH92        ; pointer to path 92
+    FDB _ANGKOR_BG_PATH93        ; pointer to path 93
+    FDB _ANGKOR_BG_PATH94        ; pointer to path 94
+    FDB _ANGKOR_BG_PATH95        ; pointer to path 95
+    FDB _ANGKOR_BG_PATH96        ; pointer to path 96
+    FDB _ANGKOR_BG_PATH97        ; pointer to path 97
+    FDB _ANGKOR_BG_PATH98        ; pointer to path 98
+    FDB _ANGKOR_BG_PATH99        ; pointer to path 99
+    FDB _ANGKOR_BG_PATH100        ; pointer to path 100
+    FDB _ANGKOR_BG_PATH101        ; pointer to path 101
+    FDB _ANGKOR_BG_PATH102        ; pointer to path 102
+    FDB _ANGKOR_BG_PATH103        ; pointer to path 103
+    FDB _ANGKOR_BG_PATH104        ; pointer to path 104
+    FDB _ANGKOR_BG_PATH105        ; pointer to path 105
+    FDB _ANGKOR_BG_PATH106        ; pointer to path 106
+    FDB _ANGKOR_BG_PATH107        ; pointer to path 107
+    FDB _ANGKOR_BG_PATH108        ; pointer to path 108
+    FDB _ANGKOR_BG_PATH109        ; pointer to path 109
+    FDB _ANGKOR_BG_PATH110        ; pointer to path 110
+    FDB _ANGKOR_BG_PATH111        ; pointer to path 111
+    FDB _ANGKOR_BG_PATH112        ; pointer to path 112
+    FDB _ANGKOR_BG_PATH113        ; pointer to path 113
+    FDB _ANGKOR_BG_PATH114        ; pointer to path 114
+    FDB _ANGKOR_BG_PATH115        ; pointer to path 115
+    FDB _ANGKOR_BG_PATH116        ; pointer to path 116
+    FDB _ANGKOR_BG_PATH117        ; pointer to path 117
+    FDB _ANGKOR_BG_PATH118        ; pointer to path 118
+    FDB _ANGKOR_BG_PATH119        ; pointer to path 119
+    FDB _ANGKOR_BG_PATH120        ; pointer to path 120
+    FDB _ANGKOR_BG_PATH121        ; pointer to path 121
+    FDB _ANGKOR_BG_PATH122        ; pointer to path 122
+    FDB _ANGKOR_BG_PATH123        ; pointer to path 123
+    FDB _ANGKOR_BG_PATH124        ; pointer to path 124
+    FDB _ANGKOR_BG_PATH125        ; pointer to path 125
+    FDB _ANGKOR_BG_PATH126        ; pointer to path 126
+    FDB _ANGKOR_BG_PATH127        ; pointer to path 127
+    FDB _ANGKOR_BG_PATH128        ; pointer to path 128
+    FDB _ANGKOR_BG_PATH129        ; pointer to path 129
+    FDB _ANGKOR_BG_PATH130        ; pointer to path 130
+    FDB _ANGKOR_BG_PATH131        ; pointer to path 131
+    FDB _ANGKOR_BG_PATH132        ; pointer to path 132
+    FDB _ANGKOR_BG_PATH133        ; pointer to path 133
+    FDB _ANGKOR_BG_PATH134        ; pointer to path 134
+    FDB _ANGKOR_BG_PATH135        ; pointer to path 135
+    FDB _ANGKOR_BG_PATH136        ; pointer to path 136
+    FDB _ANGKOR_BG_PATH137        ; pointer to path 137
+    FDB _ANGKOR_BG_PATH138        ; pointer to path 138
+    FDB _ANGKOR_BG_PATH139        ; pointer to path 139
+    FDB _ANGKOR_BG_PATH140        ; pointer to path 140
+    FDB _ANGKOR_BG_PATH141        ; pointer to path 141
+    FDB _ANGKOR_BG_PATH142        ; pointer to path 142
+    FDB _ANGKOR_BG_PATH143        ; pointer to path 143
+    FDB _ANGKOR_BG_PATH144        ; pointer to path 144
+    FDB _ANGKOR_BG_PATH145        ; pointer to path 145
+    FDB _ANGKOR_BG_PATH146        ; pointer to path 146
+    FDB _ANGKOR_BG_PATH147        ; pointer to path 147
+    FDB _ANGKOR_BG_PATH148        ; pointer to path 148
+    FDB _ANGKOR_BG_PATH149        ; pointer to path 149
+    FDB _ANGKOR_BG_PATH150        ; pointer to path 150
+    FDB _ANGKOR_BG_PATH151        ; pointer to path 151
+    FDB _ANGKOR_BG_PATH152        ; pointer to path 152
+    FDB _ANGKOR_BG_PATH153        ; pointer to path 153
+    FDB _ANGKOR_BG_PATH154        ; pointer to path 154
+    FDB _ANGKOR_BG_PATH155        ; pointer to path 155
+    FDB _ANGKOR_BG_PATH156        ; pointer to path 156
+    FDB _ANGKOR_BG_PATH157        ; pointer to path 157
+    FDB _ANGKOR_BG_PATH158        ; pointer to path 158
+    FDB _ANGKOR_BG_PATH159        ; pointer to path 159
+    FDB _ANGKOR_BG_PATH160        ; pointer to path 160
+    FDB _ANGKOR_BG_PATH161        ; pointer to path 161
+    FDB _ANGKOR_BG_PATH162        ; pointer to path 162
+    FDB _ANGKOR_BG_PATH163        ; pointer to path 163
+    FDB _ANGKOR_BG_PATH164        ; pointer to path 164
+    FDB _ANGKOR_BG_PATH165        ; pointer to path 165
+    FDB _ANGKOR_BG_PATH166        ; pointer to path 166
+    FDB _ANGKOR_BG_PATH167        ; pointer to path 167
+    FDB _ANGKOR_BG_PATH168        ; pointer to path 168
+    FDB _ANGKOR_BG_PATH169        ; pointer to path 169
+    FDB _ANGKOR_BG_PATH170        ; pointer to path 170
+    FDB _ANGKOR_BG_PATH171        ; pointer to path 171
+    FDB _ANGKOR_BG_PATH172        ; pointer to path 172
+    FDB _ANGKOR_BG_PATH173        ; pointer to path 173
+    FDB _ANGKOR_BG_PATH174        ; pointer to path 174
+    FDB _ANGKOR_BG_PATH175        ; pointer to path 175
+    FDB _ANGKOR_BG_PATH176        ; pointer to path 176
+    FDB _ANGKOR_BG_PATH177        ; pointer to path 177
+    FDB _ANGKOR_BG_PATH178        ; pointer to path 178
+    FDB _ANGKOR_BG_PATH179        ; pointer to path 179
+    FDB _ANGKOR_BG_PATH180        ; pointer to path 180
+    FDB _ANGKOR_BG_PATH181        ; pointer to path 181
+    FDB _ANGKOR_BG_PATH182        ; pointer to path 182
+    FDB _ANGKOR_BG_PATH183        ; pointer to path 183
+    FDB _ANGKOR_BG_PATH184        ; pointer to path 184
+    FDB _ANGKOR_BG_PATH185        ; pointer to path 185
+    FDB _ANGKOR_BG_PATH186        ; pointer to path 186
+    FDB _ANGKOR_BG_PATH187        ; pointer to path 187
+    FDB _ANGKOR_BG_PATH188        ; pointer to path 188
+    FDB _ANGKOR_BG_PATH189        ; pointer to path 189
+    FDB _ANGKOR_BG_PATH190        ; pointer to path 190
+    FDB _ANGKOR_BG_PATH191        ; pointer to path 191
+
+_ANGKOR_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $CA,$A0,0,0        ; path0: header (y=-54, x=-96, relative to center)
+    FCB $FF,$0D,$00          ; line 0: flag=-1, dy=13, dx=0
+    FCB $FF,$00,$4C          ; line 1: flag=-1, dy=0, dx=76
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $D2,$A0,0,0        ; path1: header (y=-46, x=-96, relative to center)
+    FCB $FF,$00,$4C          ; line 0: flag=-1, dy=0, dx=76
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $D8,$EC,0,0        ; path2: header (y=-40, x=-20, relative to center)
+    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$07          ; line 1: flag=-1, dy=0, dx=7
+    FCB $FF,$FF,$02          ; line 2: flag=-1, dy=-1, dx=2
+    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$F7          ; line 4: flag=-1, dy=0, dx=-9
+    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $D8,$EE,0,0        ; path3: header (y=-40, x=-18, relative to center)
+    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $E3,$EE,0,0        ; path4: header (y=-29, x=-18, relative to center)
+    FCB $FF,$00,$B6          ; line 0: flag=-1, dy=0, dx=-74
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $E3,$A4,0,0        ; path5: header (y=-29, x=-92, relative to center)
+    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $E9,$A4,0,0        ; path6: header (y=-23, x=-92, relative to center)
+    FCB $FF,$00,$49          ; line 0: flag=-1, dy=0, dx=73
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $E7,$F5,0,0        ; path7: header (y=-25, x=-11, relative to center)
+    FCB $FF,$00,$F8          ; line 0: flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
+    FCB $FF,$01,$02          ; line 2: flag=-1, dy=1, dx=2
+    FCB $FF,$01,$03          ; line 3: flag=-1, dy=1, dx=3
+    FCB $FF,$02,$FF          ; line 4: flag=-1, dy=2, dx=-1
+    FCB $FF,$02,$01          ; line 5: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$03          ; line 6: flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 8: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH8:    ; Path 8
+    FCB 127              ; path8: intensity
+    FCB $FC,$00,0,0        ; path8: header (y=-4, x=0, relative to center)
+    FCB $FF,$F5,$F5          ; line 0: flag=-1, dy=-11, dx=-11
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH9:    ; Path 9
+    FCB 127              ; path9: intensity
+    FCB $E3,$A5,0,0        ; path9: header (y=-29, x=-91, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH10:    ; Path 10
+    FCB 127              ; path10: intensity
+    FCB $E3,$B1,0,0        ; path10: header (y=-29, x=-79, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH11:    ; Path 11
+    FCB 127              ; path11: intensity
+    FCB $E3,$BE,0,0        ; path11: header (y=-29, x=-66, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH12:    ; Path 12
+    FCB 127              ; path12: intensity
+    FCB $E3,$CA,0,0        ; path12: header (y=-29, x=-54, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH13:    ; Path 13
+    FCB 127              ; path13: intensity
+    FCB $E3,$D8,0,0        ; path13: header (y=-29, x=-40, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $E9,$A9,0,0        ; path14: header (y=-23, x=-87, relative to center)
+    FCB $FF,$0E,$00          ; line 0: flag=-1, dy=14, dx=0
+    FCB $FF,$00,$31          ; line 1: flag=-1, dy=0, dx=49
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH15:    ; Path 15
+    FCB 127              ; path15: intensity
+    FCB $F7,$BB,0,0        ; path15: header (y=-9, x=-69, relative to center)
+    FCB $FF,$F2,$00          ; line 0: flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH16:    ; Path 16
+    FCB 127              ; path16: intensity
+    FCB $F0,$A9,0,0        ; path16: header (y=-16, x=-87, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH17:    ; Path 17
+    FCB 127              ; path17: intensity
+    FCB $F0,$BB,0,0        ; path17: header (y=-16, x=-69, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH18:    ; Path 18
+    FCB 127              ; path18: intensity
+    FCB $FD,$DA,0,0        ; path18: header (y=-3, x=-38, relative to center)
+    FCB $FF,$EC,$00          ; line 0: flag=-1, dy=-20, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH19:    ; Path 19
+    FCB 127              ; path19: intensity
+    FCB $F7,$B3,0,0        ; path19: header (y=-9, x=-77, relative to center)
+    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
+    FCB $FF,$00,$1B          ; line 1: flag=-1, dy=0, dx=27
+    FCB $FF,$F0,$00          ; line 2: flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH20:    ; Path 20
+    FCB 127              ; path20: intensity
+    FCB $07,$B4,0,0        ; path20: header (y=7, x=-76, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$02,$FD          ; line 1: flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH21:    ; Path 21
+    FCB 127              ; path21: intensity
+    FCB $07,$B8,0,0        ; path21: header (y=7, x=-72, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH22:    ; Path 22
+    FCB 127              ; path22: intensity
+    FCB $07,$C7,0,0        ; path22: header (y=7, x=-57, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH23:    ; Path 23
+    FCB 127              ; path23: intensity
+    FCB $07,$CB,0,0        ; path23: header (y=7, x=-53, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$02,$03          ; line 1: flag=-1, dy=2, dx=3
+    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH24:    ; Path 24
+    FCB 127              ; path24: intensity
+    FCB $0C,$B1,0,0        ; path24: header (y=12, x=-79, relative to center)
+    FCB $FF,$02,$05          ; line 0: flag=-1, dy=2, dx=5
+    FCB $FF,$00,$10          ; line 1: flag=-1, dy=0, dx=16
+    FCB $FF,$00,$03          ; line 2: flag=-1, dy=0, dx=3
+    FCB $FF,$FE,$05          ; line 3: flag=-1, dy=-2, dx=5
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH25:    ; Path 25
+    FCB 127              ; path25: intensity
+    FCB $0E,$B9,0,0        ; path25: header (y=14, x=-71, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$0E          ; line 2: flag=-1, dy=0, dx=14
+    FCB $FF,$FE,$05          ; line 3: flag=-1, dy=-2, dx=5
+    FCB $FF,$05,$00          ; line 4: flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH26:    ; Path 26
+    FCB 127              ; path26: intensity
+    FCB $16,$C6,0,0        ; path26: header (y=22, x=-58, relative to center)
+    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH27:    ; Path 27
+    FCB 127              ; path27: intensity
+    FCB $16,$B9,0,0        ; path27: header (y=22, x=-71, relative to center)
+    FCB $FF,$00,$FF          ; line 0: flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$FB          ; line 1: flag=-1, dy=-2, dx=-5
+    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH28:    ; Path 28
+    FCB 127              ; path28: intensity
+    FCB $14,$CC,0,0        ; path28: header (y=20, x=-52, relative to center)
+    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH29:    ; Path 29
+    FCB 127              ; path29: intensity
+    FCB $14,$B3,0,0        ; path29: header (y=20, x=-77, relative to center)
+    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH30:    ; Path 30
+    FCB 127              ; path30: intensity
+    FCB $16,$BA,0,0        ; path30: header (y=22, x=-70, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$0B          ; line 1: flag=-1, dy=0, dx=11
+    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH31:    ; Path 31
+    FCB 127              ; path31: intensity
+    FCB $1E,$BA,0,0        ; path31: header (y=30, x=-70, relative to center)
+    FCB $FF,$FE,$FA          ; line 0: flag=-1, dy=-2, dx=-6
+    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH32:    ; Path 32
+    FCB 127              ; path32: intensity
+    FCB $1C,$B4,0,0        ; path32: header (y=28, x=-76, relative to center)
+    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH33:    ; Path 33
+    FCB 127              ; path33: intensity
+    FCB $1E,$C5,0,0        ; path33: header (y=30, x=-59, relative to center)
+    FCB $FF,$FE,$06          ; line 0: flag=-1, dy=-2, dx=6
+    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH34:    ; Path 34
+    FCB 127              ; path34: intensity
+    FCB $1C,$CB,0,0        ; path34: header (y=28, x=-53, relative to center)
+    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH35:    ; Path 35
+    FCB 127              ; path35: intensity
+    FCB $1E,$B9,0,0        ; path35: header (y=30, x=-71, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$01,$FE          ; line 1: flag=-1, dy=1, dx=-2
+    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH36:    ; Path 36
+    FCB 127              ; path36: intensity
+    FCB $23,$B7,0,0        ; path36: header (y=35, x=-73, relative to center)
+    FCB $FF,$01,$04          ; line 0: flag=-1, dy=1, dx=4
+    FCB $FF,$00,$09          ; line 1: flag=-1, dy=0, dx=9
+    FCB $FF,$FF,$04          ; line 2: flag=-1, dy=-1, dx=4
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH37:    ; Path 37
+    FCB 127              ; path37: intensity
+    FCB $1E,$C6,0,0        ; path37: header (y=30, x=-58, relative to center)
+    FCB $FF,$02,$00          ; line 0: flag=-1, dy=2, dx=0
+    FCB $FF,$03,$02          ; line 1: flag=-1, dy=3, dx=2
+    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH38:    ; Path 38
+    FCB 127              ; path38: intensity
+    FCB $24,$BC,0,0        ; path38: header (y=36, x=-68, relative to center)
+    FCB $FF,$FA,$00          ; line 0: flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH39:    ; Path 39
+    FCB 127              ; path39: intensity
+    FCB $1E,$C3,0,0        ; path39: header (y=30, x=-61, relative to center)
+    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH40:    ; Path 40
+    FCB 127              ; path40: intensity
+    FCB $24,$B9,0,0        ; path40: header (y=36, x=-71, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$0D          ; line 1: flag=-1, dy=0, dx=13
+    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH41:    ; Path 41
+    FCB 127              ; path41: intensity
+    FCB $29,$BA,0,0        ; path41: header (y=41, x=-70, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$0B          ; line 1: flag=-1, dy=0, dx=11
+    FCB $FF,$FC,$00          ; line 2: flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH42:    ; Path 42
+    FCB 127              ; path42: intensity
+    FCB $2D,$BC,0,0        ; path42: header (y=45, x=-68, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$07          ; line 1: flag=-1, dy=0, dx=7
+    FCB $FF,$FD,$00          ; line 2: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH43:    ; Path 43
+    FCB 127              ; path43: intensity
+    FCB $30,$BD,0,0        ; path43: header (y=48, x=-67, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH44:    ; Path 44
+    FCB 127              ; path44: intensity
+    FCB $30,$C2,0,0        ; path44: header (y=48, x=-62, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH45:    ; Path 45
+    FCB 127              ; path45: intensity
+    FCB $33,$B7,0,0        ; path45: header (y=51, x=-73, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH46:    ; Path 46
+    FCB 127              ; path46: intensity
+    FCB $33,$C2,0,0        ; path46: header (y=51, x=-62, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH47:    ; Path 47
+    FCB 127              ; path47: intensity
+    FCB $30,$BD,0,0        ; path47: header (y=48, x=-67, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH48:    ; Path 48
+    FCB 127              ; path48: intensity
+    FCB $30,$C2,0,0        ; path48: header (y=48, x=-62, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH49:    ; Path 49
+    FCB 127              ; path49: intensity
+    FCB $07,$B9,0,0        ; path49: header (y=7, x=-71, relative to center)
+    FCB $FF,$F0,$00          ; line 0: flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH50:    ; Path 50
+    FCB 127              ; path50: intensity
+    FCB $F7,$C6,0,0        ; path50: header (y=-9, x=-58, relative to center)
+    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH51:    ; Path 51
+    FCB 127              ; path51: intensity
+    FCB $04,$BC,0,0        ; path51: header (y=4, x=-68, relative to center)
+    FCB $FF,$00,$07          ; line 0: flag=-1, dy=0, dx=7
+    FCB $FF,$F7,$00          ; line 1: flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$F9          ; line 2: flag=-1, dy=0, dx=-7
+    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH52:    ; Path 52
+    FCB 127              ; path52: intensity
+    FCB $07,$BC,0,0        ; path52: header (y=7, x=-68, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$02,$03          ; line 1: flag=-1, dy=2, dx=3
+    FCB $FF,$FE,$03          ; line 2: flag=-1, dy=-2, dx=3
+    FCB $FF,$FC,$00          ; line 3: flag=-1, dy=-4, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH53:    ; Path 53
+    FCB 127              ; path53: intensity
+    FCB $E3,$E5,0,0        ; path53: header (y=-29, x=-27, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH54:    ; Path 54
+    FCB 127              ; path54: intensity
+    FCB $EC,$F5,0,0        ; path54: header (y=-20, x=-11, relative to center)
+    FCB $FF,$EE,$00          ; line 0: flag=-1, dy=-18, dx=0
+    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
+    FCB $FF,$09,$00          ; line 2: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$05          ; line 3: flag=-1, dy=0, dx=5
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH55:    ; Path 55
+    FCB 127              ; path55: intensity
+    FCB $F3,$FC,0,0        ; path55: header (y=-13, x=-4, relative to center)
+    FCB $FF,$FC,$FD          ; line 0: flag=-1, dy=-4, dx=-3
+    FCB $FF,$E9,$00          ; line 1: flag=-1, dy=-23, dx=0
+    FCB $FF,$00,$07          ; line 2: flag=-1, dy=0, dx=7
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH56:    ; Path 56
+    FCB 127              ; path56: intensity
+    FCB $F3,$FC,0,0        ; path56: header (y=-13, x=-4, relative to center)
+    FCB $FF,$01,$04          ; line 0: flag=-1, dy=1, dx=4
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH57:    ; Path 57
+    FCB 127              ; path57: intensity
+    FCB $F2,$A9,0,0        ; path57: header (y=-14, x=-87, relative to center)
+    FCB $FF,$00,$4A          ; line 0: flag=-1, dy=0, dx=74
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH58:    ; Path 58
+    FCB 127              ; path58: intensity
+    FCB $D0,$EC,0,0        ; path58: header (y=-48, x=-20, relative to center)
+    FCB $FF,$00,$FA          ; line 0: flag=-1, dy=0, dx=-6
+    FCB $FF,$F2,$00          ; line 1: flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$0B          ; line 2: flag=-1, dy=0, dx=11
+    FCB $FF,$0E,$00          ; line 3: flag=-1, dy=14, dx=0
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH59:    ; Path 59
+    FCB 127              ; path59: intensity
+    FCB $D4,$F7,0,0        ; path59: header (y=-44, x=-9, relative to center)
+    FCB $FF,$00,$09          ; line 0: flag=-1, dy=0, dx=9
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH60:    ; Path 60
+    FCB 127              ; path60: intensity
+    FCB $D1,$00,0,0        ; path60: header (y=-47, x=0, relative to center)
+    FCB $FF,$00,$F6          ; line 0: flag=-1, dy=0, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH61:    ; Path 61
+    FCB 127              ; path61: intensity
+    FCB $CC,$F4,0,0        ; path61: header (y=-52, x=-12, relative to center)
+    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH62:    ; Path 62
+    FCB 127              ; path62: intensity
+    FCB $C7,$00,0,0        ; path62: header (y=-57, x=0, relative to center)
+    FCB $FF,$00,$F3          ; line 0: flag=-1, dy=0, dx=-13
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH63:    ; Path 63
+    FCB 127              ; path63: intensity
+    FCB $C0,$F2,0,0        ; path63: header (y=-64, x=-14, relative to center)
+    FCB $FF,$00,$0E          ; line 0: flag=-1, dy=0, dx=14
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH64:    ; Path 64
+    FCB 127              ; path64: intensity
+    FCB $FD,$F5,0,0        ; path64: header (y=-3, x=-11, relative to center)
+    FCB $FF,$00,$E3          ; line 0: flag=-1, dy=0, dx=-29
+    FCB $FF,$09,$00          ; line 1: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$1D          ; line 2: flag=-1, dy=0, dx=29
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH65:    ; Path 65
+    FCB 127              ; path65: intensity
+    FCB $FD,$F5,0,0        ; path65: header (y=-3, x=-11, relative to center)
+    FCB $FF,$09,$00          ; line 0: flag=-1, dy=9, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH66:    ; Path 66
+    FCB 127              ; path66: intensity
+    FCB $07,$CE,0,0        ; path66: header (y=7, x=-50, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$2D          ; line 1: flag=-1, dy=0, dx=45
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH67:    ; Path 67
+    FCB 127              ; path67: intensity
+    FCB $F4,$00,0,0        ; path67: header (y=-12, x=0, relative to center)
+    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH68:    ; Path 68
+    FCB 127              ; path68: intensity
+    FCB $FC,$00,0,0        ; path68: header (y=-4, x=0, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH69:    ; Path 69
+    FCB 127              ; path69: intensity
+    FCB $D0,$0E,0,0        ; path69: header (y=-48, x=14, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH70:    ; Path 70
+    FCB 127              ; path70: intensity
+    FCB $C1,$0F,0,0        ; path70: header (y=-63, x=15, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH71:    ; Path 71
+    FCB 127              ; path71: intensity
+    FCB $01,$F5,0,0        ; path71: header (y=1, x=-11, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH72:    ; Path 72
+    FCB 127              ; path72: intensity
+    FCB $06,$F0,0,0        ; path72: header (y=6, x=-16, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH73:    ; Path 73
+    FCB 127              ; path73: intensity
+    FCB $0C,$FA,0,0        ; path73: header (y=12, x=-6, relative to center)
+    FCB $FF,$00,$06          ; line 0: flag=-1, dy=0, dx=6
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH74:    ; Path 74
+    FCB 127              ; path74: intensity
+    FCB $12,$FA,0,0        ; path74: header (y=18, x=-6, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH75:    ; Path 75
+    FCB 127              ; path75: intensity
+    FCB $0C,$FA,0,0        ; path75: header (y=12, x=-6, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$02          ; line 1: flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$01          ; line 2: flag=-1, dy=-1, dx=1
+    FCB $FF,$00,$03          ; line 3: flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH76:    ; Path 76
+    FCB 127              ; path76: intensity
+    FCB $10,$F5,0,0        ; path76: header (y=16, x=-11, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$03,$FD          ; line 1: flag=-1, dy=3, dx=-3
+    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH77:    ; Path 77
+    FCB 127              ; path77: intensity
+    FCB $10,$F8,0,0        ; path77: header (y=16, x=-8, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH78:    ; Path 78
+    FCB 127              ; path78: intensity
+    FCB $18,$F2,0,0        ; path78: header (y=24, x=-14, relative to center)
+    FCB $FF,$02,$05          ; line 0: flag=-1, dy=2, dx=5
+    FCB $FF,$00,$09          ; line 1: flag=-1, dy=0, dx=9
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH79:    ; Path 79
+    FCB 127              ; path79: intensity
+    FCB $1A,$F9,0,0        ; path79: header (y=26, x=-7, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$FF,$FA          ; line 1: flag=-1, dy=-1, dx=-6
+    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH80:    ; Path 80
+    FCB 127              ; path80: intensity
+    FCB $21,$F3,0,0        ; path80: header (y=33, x=-13, relative to center)
+    FCB $FF,$FC,$03          ; line 0: flag=-1, dy=-4, dx=3
+    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH81:    ; Path 81
+    FCB 127              ; path81: intensity
+    FCB $22,$F9,0,0        ; path81: header (y=34, x=-7, relative to center)
+    FCB $FF,$00,$07          ; line 0: flag=-1, dy=0, dx=7
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH82:    ; Path 82
+    FCB 127              ; path82: intensity
+    FCB $22,$FB,0,0        ; path82: header (y=34, x=-5, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH83:    ; Path 83
+    FCB 127              ; path83: intensity
+    FCB $2A,$FC,0,0        ; path83: header (y=42, x=-4, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$00,$04          ; line 1: flag=-1, dy=0, dx=4
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH84:    ; Path 84
+    FCB 127              ; path84: intensity
+    FCB $31,$FC,0,0        ; path84: header (y=49, x=-4, relative to center)
+    FCB $FF,$FF,$FC          ; line 0: flag=-1, dy=-1, dx=-4
+    FCB $FF,$03,$00          ; line 1: flag=-1, dy=3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH85:    ; Path 85
+    FCB 127              ; path85: intensity
+    FCB $30,$F8,0,0        ; path85: header (y=48, x=-8, relative to center)
+    FCB $FF,$FD,$02          ; line 0: flag=-1, dy=-3, dx=2
+    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH86:    ; Path 86
+    FCB 127              ; path86: intensity
+    FCB $2A,$FB,0,0        ; path86: header (y=42, x=-5, relative to center)
+    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$FC          ; line 1: flag=-1, dy=-2, dx=-4
+    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH87:    ; Path 87
+    FCB 127              ; path87: intensity
+    FCB $28,$F5,0,0        ; path87: header (y=40, x=-11, relative to center)
+    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
+    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH88:    ; Path 88
+    FCB 127              ; path88: intensity
+    FCB $31,$FA,0,0        ; path88: header (y=49, x=-6, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$06          ; line 1: flag=-1, dy=0, dx=6
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH89:    ; Path 89
+    FCB 127              ; path89: intensity
+    FCB $36,$FB,0,0        ; path89: header (y=54, x=-5, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH90:    ; Path 90
+    FCB 127              ; path90: intensity
+    FCB $3A,$FD,0,0        ; path90: header (y=58, x=-3, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$03          ; line 1: flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH91:    ; Path 91
+    FCB 127              ; path91: intensity
+    FCB $3D,$FE,0,0        ; path91: header (y=61, x=-2, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; line 1: flag=-1, dy=0, dx=2
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH92:    ; Path 92
+    FCB 127              ; path92: intensity
+    FCB $11,$FD,0,0        ; path92: header (y=17, x=-3, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$03          ; line 1: flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH93:    ; Path 93
+    FCB 127              ; path93: intensity
+    FCB $06,$F5,0,0        ; path93: header (y=6, x=-11, relative to center)
+    FCB $FF,$01,$01          ; line 0: flag=-1, dy=1, dx=1
+    FCB $FF,$00,$03          ; line 1: flag=-1, dy=0, dx=3
+    FCB $FF,$02,$02          ; line 2: flag=-1, dy=2, dx=2
+    FCB $FF,$03,$01          ; line 3: flag=-1, dy=3, dx=1
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH94:    ; Path 94
+    FCB 127              ; path94: intensity
+    FCB $01,$F5,0,0        ; path94: header (y=1, x=-11, relative to center)
+    FCB $FF,$00,$0B          ; line 0: flag=-1, dy=0, dx=11
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH95:    ; Path 95
+    FCB 127              ; path95: intensity
+    FCB $F2,$F6,0,0        ; path95: header (y=-14, x=-10, relative to center)
+    FCB $FF,$02,$FD          ; line 0: flag=-1, dy=2, dx=-3
+    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB $FF,$02,$02          ; line 2: flag=-1, dy=2, dx=2
+    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
+    FCB $FF,$03,$01          ; line 4: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$04          ; line 5: flag=-1, dy=0, dx=4
+    FCB $FF,$03,$04          ; line 6: flag=-1, dy=3, dx=4
+    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH96:    ; Path 96
+    FCB 127              ; path96: intensity
+    FCB $CA,$60,0,0        ; path96: header (y=-54, x=96, relative to center)
+    FCB $FF,$0D,$00          ; line 0: flag=-1, dy=13, dx=0
+    FCB $FF,$00,$B4          ; line 1: flag=-1, dy=0, dx=-76
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH97:    ; Path 97
+    FCB 127              ; path97: intensity
+    FCB $D2,$60,0,0        ; path97: header (y=-46, x=96, relative to center)
+    FCB $FF,$00,$B4          ; line 0: flag=-1, dy=0, dx=-76
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH98:    ; Path 98
+    FCB 127              ; path98: intensity
+    FCB $D8,$14,0,0        ; path98: header (y=-40, x=20, relative to center)
+    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$F9          ; line 1: flag=-1, dy=0, dx=-7
+    FCB $FF,$FF,$FE          ; line 2: flag=-1, dy=-1, dx=-2
+    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$09          ; line 4: flag=-1, dy=0, dx=9
+    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH99:    ; Path 99
+    FCB 127              ; path99: intensity
+    FCB $D8,$12,0,0        ; path99: header (y=-40, x=18, relative to center)
+    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH100:    ; Path 100
+    FCB 127              ; path100: intensity
+    FCB $E3,$12,0,0        ; path100: header (y=-29, x=18, relative to center)
+    FCB $FF,$00,$4A          ; line 0: flag=-1, dy=0, dx=74
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH101:    ; Path 101
+    FCB 127              ; path101: intensity
+    FCB $E3,$5C,0,0        ; path101: header (y=-29, x=92, relative to center)
+    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH102:    ; Path 102
+    FCB 127              ; path102: intensity
+    FCB $E9,$5C,0,0        ; path102: header (y=-23, x=92, relative to center)
+    FCB $FF,$00,$B7          ; line 0: flag=-1, dy=0, dx=-73
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH103:    ; Path 103
+    FCB 127              ; path103: intensity
+    FCB $E7,$0B,0,0        ; path103: header (y=-25, x=11, relative to center)
+    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
+    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
+    FCB $FF,$01,$FE          ; line 2: flag=-1, dy=1, dx=-2
+    FCB $FF,$01,$FD          ; line 3: flag=-1, dy=1, dx=-3
+    FCB $FF,$02,$01          ; line 4: flag=-1, dy=2, dx=1
+    FCB $FF,$02,$FF          ; line 5: flag=-1, dy=2, dx=-1
+    FCB $FF,$00,$FD          ; line 6: flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 8: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH104:    ; Path 104
+    FCB 127              ; path104: intensity
+    FCB $FC,$00,0,0        ; path104: header (y=-4, x=0, relative to center)
+    FCB $FF,$F5,$0B          ; line 0: flag=-1, dy=-11, dx=11
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH105:    ; Path 105
+    FCB 127              ; path105: intensity
+    FCB $E3,$5B,0,0        ; path105: header (y=-29, x=91, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH106:    ; Path 106
+    FCB 127              ; path106: intensity
+    FCB $E3,$4F,0,0        ; path106: header (y=-29, x=79, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH107:    ; Path 107
+    FCB 127              ; path107: intensity
+    FCB $E3,$42,0,0        ; path107: header (y=-29, x=66, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH108:    ; Path 108
+    FCB 127              ; path108: intensity
+    FCB $E3,$36,0,0        ; path108: header (y=-29, x=54, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH109:    ; Path 109
+    FCB 127              ; path109: intensity
+    FCB $E3,$28,0,0        ; path109: header (y=-29, x=40, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH110:    ; Path 110
+    FCB 127              ; path110: intensity
+    FCB $E9,$57,0,0        ; path110: header (y=-23, x=87, relative to center)
+    FCB $FF,$0E,$00          ; line 0: flag=-1, dy=14, dx=0
+    FCB $FF,$00,$CF          ; line 1: flag=-1, dy=0, dx=-49
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH111:    ; Path 111
+    FCB 127              ; path111: intensity
+    FCB $F7,$45,0,0        ; path111: header (y=-9, x=69, relative to center)
+    FCB $FF,$F2,$00          ; line 0: flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH112:    ; Path 112
+    FCB 127              ; path112: intensity
+    FCB $EC,$57,0,0        ; path112: header (y=-20, x=87, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH113:    ; Path 113
+    FCB 127              ; path113: intensity
+    FCB $F0,$26,0,0        ; path113: header (y=-16, x=38, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH114:    ; Path 114
+    FCB 127              ; path114: intensity
+    FCB $FD,$26,0,0        ; path114: header (y=-3, x=38, relative to center)
+    FCB $FF,$EC,$00          ; line 0: flag=-1, dy=-20, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH115:    ; Path 115
+    FCB 127              ; path115: intensity
+    FCB $F7,$4D,0,0        ; path115: header (y=-9, x=77, relative to center)
+    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
+    FCB $FF,$00,$E5          ; line 1: flag=-1, dy=0, dx=-27
+    FCB $FF,$F0,$00          ; line 2: flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH116:    ; Path 116
+    FCB 127              ; path116: intensity
+    FCB $07,$4C,0,0        ; path116: header (y=7, x=76, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$02,$03          ; line 1: flag=-1, dy=2, dx=3
+    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH117:    ; Path 117
+    FCB 127              ; path117: intensity
+    FCB $07,$48,0,0        ; path117: header (y=7, x=72, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH118:    ; Path 118
+    FCB 127              ; path118: intensity
+    FCB $07,$39,0,0        ; path118: header (y=7, x=57, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH119:    ; Path 119
+    FCB 127              ; path119: intensity
+    FCB $07,$35,0,0        ; path119: header (y=7, x=53, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$02,$FD          ; line 1: flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH120:    ; Path 120
+    FCB 127              ; path120: intensity
+    FCB $0C,$4F,0,0        ; path120: header (y=12, x=79, relative to center)
+    FCB $FF,$02,$FB          ; line 0: flag=-1, dy=2, dx=-5
+    FCB $FF,$00,$F0          ; line 1: flag=-1, dy=0, dx=-16
+    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
+    FCB $FF,$FE,$FB          ; line 3: flag=-1, dy=-2, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH121:    ; Path 121
+    FCB 127              ; path121: intensity
+    FCB $0E,$47,0,0        ; path121: header (y=14, x=71, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$F2          ; line 2: flag=-1, dy=0, dx=-14
+    FCB $FF,$FE,$FB          ; line 3: flag=-1, dy=-2, dx=-5
+    FCB $FF,$05,$00          ; line 4: flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH122:    ; Path 122
+    FCB 127              ; path122: intensity
+    FCB $16,$3A,0,0        ; path122: header (y=22, x=58, relative to center)
+    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH123:    ; Path 123
+    FCB 127              ; path123: intensity
+    FCB $16,$47,0,0        ; path123: header (y=22, x=71, relative to center)
+    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$05          ; line 1: flag=-1, dy=-2, dx=5
+    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH124:    ; Path 124
+    FCB 127              ; path124: intensity
+    FCB $14,$34,0,0        ; path124: header (y=20, x=52, relative to center)
+    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH125:    ; Path 125
+    FCB 127              ; path125: intensity
+    FCB $14,$4D,0,0        ; path125: header (y=20, x=77, relative to center)
+    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH126:    ; Path 126
+    FCB 127              ; path126: intensity
+    FCB $16,$46,0,0        ; path126: header (y=22, x=70, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$F5          ; line 1: flag=-1, dy=0, dx=-11
+    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH127:    ; Path 127
+    FCB 127              ; path127: intensity
+    FCB $1E,$46,0,0        ; path127: header (y=30, x=70, relative to center)
+    FCB $FF,$FE,$06          ; line 0: flag=-1, dy=-2, dx=6
+    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH128:    ; Path 128
+    FCB 127              ; path128: intensity
+    FCB $1C,$4C,0,0        ; path128: header (y=28, x=76, relative to center)
+    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH129:    ; Path 129
+    FCB 127              ; path129: intensity
+    FCB $1E,$3B,0,0        ; path129: header (y=30, x=59, relative to center)
+    FCB $FF,$FE,$FA          ; line 0: flag=-1, dy=-2, dx=-6
+    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH130:    ; Path 130
+    FCB 127              ; path130: intensity
+    FCB $1C,$35,0,0        ; path130: header (y=28, x=53, relative to center)
+    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH131:    ; Path 131
+    FCB 127              ; path131: intensity
+    FCB $1E,$47,0,0        ; path131: header (y=30, x=71, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$01,$02          ; line 1: flag=-1, dy=1, dx=2
+    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH132:    ; Path 132
+    FCB 127              ; path132: intensity
+    FCB $23,$49,0,0        ; path132: header (y=35, x=73, relative to center)
+    FCB $FF,$01,$FC          ; line 0: flag=-1, dy=1, dx=-4
+    FCB $FF,$00,$F7          ; line 1: flag=-1, dy=0, dx=-9
+    FCB $FF,$FF,$FC          ; line 2: flag=-1, dy=-1, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH133:    ; Path 133
+    FCB 127              ; path133: intensity
+    FCB $1E,$3A,0,0        ; path133: header (y=30, x=58, relative to center)
+    FCB $FF,$02,$00          ; line 0: flag=-1, dy=2, dx=0
+    FCB $FF,$03,$FE          ; line 1: flag=-1, dy=3, dx=-2
+    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH134:    ; Path 134
+    FCB 127              ; path134: intensity
+    FCB $24,$44,0,0        ; path134: header (y=36, x=68, relative to center)
+    FCB $FF,$FA,$00          ; line 0: flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH135:    ; Path 135
+    FCB 127              ; path135: intensity
+    FCB $1E,$3D,0,0        ; path135: header (y=30, x=61, relative to center)
+    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH136:    ; Path 136
+    FCB 127              ; path136: intensity
+    FCB $24,$47,0,0        ; path136: header (y=36, x=71, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$F3          ; line 1: flag=-1, dy=0, dx=-13
+    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH137:    ; Path 137
+    FCB 127              ; path137: intensity
+    FCB $29,$46,0,0        ; path137: header (y=41, x=70, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$F5          ; line 1: flag=-1, dy=0, dx=-11
+    FCB $FF,$FC,$00          ; line 2: flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH138:    ; Path 138
+    FCB 127              ; path138: intensity
+    FCB $2D,$44,0,0        ; path138: header (y=45, x=68, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$F9          ; line 1: flag=-1, dy=0, dx=-7
+    FCB $FF,$FD,$00          ; line 2: flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH139:    ; Path 139
+    FCB 127              ; path139: intensity
+    FCB $30,$43,0,0        ; path139: header (y=48, x=67, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH140:    ; Path 140
+    FCB 127              ; path140: intensity
+    FCB $30,$3E,0,0        ; path140: header (y=48, x=62, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH141:    ; Path 141
+    FCB 127              ; path141: intensity
+    FCB $33,$49,0,0        ; path141: header (y=51, x=73, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH142:    ; Path 142
+    FCB 127              ; path142: intensity
+    FCB $33,$3E,0,0        ; path142: header (y=51, x=62, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH143:    ; Path 143
+    FCB 127              ; path143: intensity
+    FCB $30,$43,0,0        ; path143: header (y=48, x=67, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH144:    ; Path 144
+    FCB 127              ; path144: intensity
+    FCB $30,$3E,0,0        ; path144: header (y=48, x=62, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH145:    ; Path 145
+    FCB 127              ; path145: intensity
+    FCB $07,$47,0,0        ; path145: header (y=7, x=71, relative to center)
+    FCB $FF,$F0,$00          ; line 0: flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH146:    ; Path 146
+    FCB 127              ; path146: intensity
+    FCB $F7,$3A,0,0        ; path146: header (y=-9, x=58, relative to center)
+    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH147:    ; Path 147
+    FCB 127              ; path147: intensity
+    FCB $04,$44,0,0        ; path147: header (y=4, x=68, relative to center)
+    FCB $FF,$00,$F9          ; line 0: flag=-1, dy=0, dx=-7
+    FCB $FF,$F7,$00          ; line 1: flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$07          ; line 2: flag=-1, dy=0, dx=7
+    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH148:    ; Path 148
+    FCB 127              ; path148: intensity
+    FCB $07,$44,0,0        ; path148: header (y=7, x=68, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$02,$FD          ; line 1: flag=-1, dy=2, dx=-3
+    FCB $FF,$FE,$FD          ; line 2: flag=-1, dy=-2, dx=-3
+    FCB $FF,$FC,$00          ; line 3: flag=-1, dy=-4, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH149:    ; Path 149
+    FCB 127              ; path149: intensity
+    FCB $E3,$1B,0,0        ; path149: header (y=-29, x=27, relative to center)
+    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH150:    ; Path 150
+    FCB 127              ; path150: intensity
+    FCB $EC,$0B,0,0        ; path150: header (y=-20, x=11, relative to center)
+    FCB $FF,$EE,$00          ; line 0: flag=-1, dy=-18, dx=0
+    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
+    FCB $FF,$09,$00          ; line 2: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$FB          ; line 3: flag=-1, dy=0, dx=-5
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH151:    ; Path 151
+    FCB 127              ; path151: intensity
+    FCB $F3,$04,0,0        ; path151: header (y=-13, x=4, relative to center)
+    FCB $FF,$FC,$03          ; line 0: flag=-1, dy=-4, dx=3
+    FCB $FF,$E9,$00          ; line 1: flag=-1, dy=-23, dx=0
+    FCB $FF,$00,$F9          ; line 2: flag=-1, dy=0, dx=-7
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH152:    ; Path 152
+    FCB 127              ; path152: intensity
+    FCB $F3,$04,0,0        ; path152: header (y=-13, x=4, relative to center)
+    FCB $FF,$01,$FC          ; line 0: flag=-1, dy=1, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH153:    ; Path 153
+    FCB 127              ; path153: intensity
+    FCB $F2,$57,0,0        ; path153: header (y=-14, x=87, relative to center)
+    FCB $FF,$00,$B6          ; line 0: flag=-1, dy=0, dx=-74
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH154:    ; Path 154
+    FCB 127              ; path154: intensity
+    FCB $D0,$14,0,0        ; path154: header (y=-48, x=20, relative to center)
+    FCB $FF,$00,$06          ; line 0: flag=-1, dy=0, dx=6
+    FCB $FF,$F2,$00          ; line 1: flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$F5          ; line 2: flag=-1, dy=0, dx=-11
+    FCB $FF,$0E,$00          ; line 3: flag=-1, dy=14, dx=0
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH155:    ; Path 155
+    FCB 127              ; path155: intensity
+    FCB $D4,$09,0,0        ; path155: header (y=-44, x=9, relative to center)
+    FCB $FF,$00,$F7          ; line 0: flag=-1, dy=0, dx=-9
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH156:    ; Path 156
+    FCB 127              ; path156: intensity
+    FCB $D1,$00,0,0        ; path156: header (y=-47, x=0, relative to center)
+    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH157:    ; Path 157
+    FCB 127              ; path157: intensity
+    FCB $CC,$0C,0,0        ; path157: header (y=-52, x=12, relative to center)
+    FCB $FF,$00,$F4          ; line 0: flag=-1, dy=0, dx=-12
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH158:    ; Path 158
+    FCB 127              ; path158: intensity
+    FCB $C7,$00,0,0        ; path158: header (y=-57, x=0, relative to center)
+    FCB $FF,$00,$0D          ; line 0: flag=-1, dy=0, dx=13
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH159:    ; Path 159
+    FCB 127              ; path159: intensity
+    FCB $C0,$0E,0,0        ; path159: header (y=-64, x=14, relative to center)
+    FCB $FF,$00,$F2          ; line 0: flag=-1, dy=0, dx=-14
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH160:    ; Path 160
+    FCB 127              ; path160: intensity
+    FCB $FD,$0B,0,0        ; path160: header (y=-3, x=11, relative to center)
+    FCB $FF,$00,$1D          ; line 0: flag=-1, dy=0, dx=29
+    FCB $FF,$09,$00          ; line 1: flag=-1, dy=9, dx=0
+    FCB $FF,$00,$E3          ; line 2: flag=-1, dy=0, dx=-29
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH161:    ; Path 161
+    FCB 127              ; path161: intensity
+    FCB $FD,$0B,0,0        ; path161: header (y=-3, x=11, relative to center)
+    FCB $FF,$09,$00          ; line 0: flag=-1, dy=9, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH162:    ; Path 162
+    FCB 127              ; path162: intensity
+    FCB $07,$32,0,0        ; path162: header (y=7, x=50, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$D3          ; line 1: flag=-1, dy=0, dx=-45
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH163:    ; Path 163
+    FCB 127              ; path163: intensity
+    FCB $F4,$00,0,0        ; path163: header (y=-12, x=0, relative to center)
+    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH164:    ; Path 164
+    FCB 127              ; path164: intensity
+    FCB $FC,$00,0,0        ; path164: header (y=-4, x=0, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH165:    ; Path 165
+    FCB 127              ; path165: intensity
+    FCB $D0,$F2,0,0        ; path165: header (y=-48, x=-14, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH166:    ; Path 166
+    FCB 127              ; path166: intensity
+    FCB $C1,$F1,0,0        ; path166: header (y=-63, x=-15, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH167:    ; Path 167
+    FCB 127              ; path167: intensity
+    FCB $01,$0B,0,0        ; path167: header (y=1, x=11, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH168:    ; Path 168
+    FCB 127              ; path168: intensity
+    FCB $06,$10,0,0        ; path168: header (y=6, x=16, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$F6          ; line 1: flag=-1, dy=0, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH169:    ; Path 169
+    FCB 127              ; path169: intensity
+    FCB $0C,$06,0,0        ; path169: header (y=12, x=6, relative to center)
+    FCB $FF,$00,$FA          ; line 0: flag=-1, dy=0, dx=-6
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH170:    ; Path 170
+    FCB 127              ; path170: intensity
+    FCB $12,$06,0,0        ; path170: header (y=18, x=6, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH171:    ; Path 171
+    FCB 127              ; path171: intensity
+    FCB $0C,$06,0,0        ; path171: header (y=12, x=6, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FE          ; line 1: flag=-1, dy=0, dx=-2
+    FCB $FF,$FF,$FF          ; line 2: flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FD          ; line 3: flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH172:    ; Path 172
+    FCB 127              ; path172: intensity
+    FCB $10,$0B,0,0        ; path172: header (y=16, x=11, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$03,$03          ; line 1: flag=-1, dy=3, dx=3
+    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH173:    ; Path 173
+    FCB 127              ; path173: intensity
+    FCB $10,$08,0,0        ; path173: header (y=16, x=8, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH174:    ; Path 174
+    FCB 127              ; path174: intensity
+    FCB $18,$0E,0,0        ; path174: header (y=24, x=14, relative to center)
+    FCB $FF,$02,$FB          ; line 0: flag=-1, dy=2, dx=-5
+    FCB $FF,$00,$F7          ; line 1: flag=-1, dy=0, dx=-9
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH175:    ; Path 175
+    FCB 127              ; path175: intensity
+    FCB $1A,$07,0,0        ; path175: header (y=26, x=7, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$FF,$06          ; line 1: flag=-1, dy=-1, dx=6
+    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH176:    ; Path 176
+    FCB 127              ; path176: intensity
+    FCB $21,$0D,0,0        ; path176: header (y=33, x=13, relative to center)
+    FCB $FF,$FC,$FD          ; line 0: flag=-1, dy=-4, dx=-3
+    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH177:    ; Path 177
+    FCB 127              ; path177: intensity
+    FCB $22,$07,0,0        ; path177: header (y=34, x=7, relative to center)
+    FCB $FF,$00,$F9          ; line 0: flag=-1, dy=0, dx=-7
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH178:    ; Path 178
+    FCB 127              ; path178: intensity
+    FCB $22,$05,0,0        ; path178: header (y=34, x=5, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH179:    ; Path 179
+    FCB 127              ; path179: intensity
+    FCB $2A,$04,0,0        ; path179: header (y=42, x=4, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$00,$FC          ; line 1: flag=-1, dy=0, dx=-4
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH180:    ; Path 180
+    FCB 127              ; path180: intensity
+    FCB $31,$04,0,0        ; path180: header (y=49, x=4, relative to center)
+    FCB $FF,$FF,$04          ; line 0: flag=-1, dy=-1, dx=4
+    FCB $FF,$03,$00          ; line 1: flag=-1, dy=3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH181:    ; Path 181
+    FCB 127              ; path181: intensity
+    FCB $30,$08,0,0        ; path181: header (y=48, x=8, relative to center)
+    FCB $FF,$FD,$FE          ; line 0: flag=-1, dy=-3, dx=-2
+    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH182:    ; Path 182
+    FCB 127              ; path182: intensity
+    FCB $2A,$05,0,0        ; path182: header (y=42, x=5, relative to center)
+    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
+    FCB $FF,$FE,$04          ; line 1: flag=-1, dy=-2, dx=4
+    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH183:    ; Path 183
+    FCB 127              ; path183: intensity
+    FCB $28,$0B,0,0        ; path183: header (y=40, x=11, relative to center)
+    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
+    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH184:    ; Path 184
+    FCB 127              ; path184: intensity
+    FCB $31,$06,0,0        ; path184: header (y=49, x=6, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FA          ; line 1: flag=-1, dy=0, dx=-6
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH185:    ; Path 185
+    FCB 127              ; path185: intensity
+    FCB $36,$05,0,0        ; path185: header (y=54, x=5, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH186:    ; Path 186
+    FCB 127              ; path186: intensity
+    FCB $3A,$03,0,0        ; path186: header (y=58, x=3, relative to center)
+    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH187:    ; Path 187
+    FCB 127              ; path187: intensity
+    FCB $3D,$02,0,0        ; path187: header (y=61, x=2, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$FE          ; line 1: flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH188:    ; Path 188
+    FCB 127              ; path188: intensity
+    FCB $11,$03,0,0        ; path188: header (y=17, x=3, relative to center)
+    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH189:    ; Path 189
+    FCB 127              ; path189: intensity
+    FCB $06,$0B,0,0        ; path189: header (y=6, x=11, relative to center)
+    FCB $FF,$01,$FF          ; line 0: flag=-1, dy=1, dx=-1
+    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
+    FCB $FF,$02,$FE          ; line 2: flag=-1, dy=2, dx=-2
+    FCB $FF,$03,$FF          ; line 3: flag=-1, dy=3, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH190:    ; Path 190
+    FCB 127              ; path190: intensity
+    FCB $01,$0B,0,0        ; path190: header (y=1, x=11, relative to center)
+    FCB $FF,$00,$F5          ; line 0: flag=-1, dy=0, dx=-11
+    FCB 2                ; End marker (path complete)
+
+_ANGKOR_BG_PATH191:    ; Path 191
+    FCB 127              ; path191: intensity
+    FCB $F2,$0A,0,0        ; path191: header (y=-14, x=10, relative to center)
+    FCB $FF,$02,$03          ; line 0: flag=-1, dy=2, dx=3
+    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB $FF,$02,$FE          ; line 2: flag=-1, dy=2, dx=-2
+    FCB $FF,$00,$FE          ; line 3: flag=-1, dy=0, dx=-2
+    FCB $FF,$03,$FF          ; line 4: flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FC          ; line 5: flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$FC          ; line 6: flag=-1, dy=3, dx=-4
+    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+; Generated from antarctica_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 20, points: 91
+; X bounds: min=-119, max=104, width=223
+; Center: (-7, 46)
+
+_ANTARCTICA_BG_WIDTH EQU 223
+_ANTARCTICA_BG_CENTER_X EQU -7
+_ANTARCTICA_BG_CENTER_Y EQU 46
+
+_ANTARCTICA_BG_VECTORS:  ; Main entry (header + 20 path(s))
+    FCB 20               ; path_count (runtime metadata)
+    FDB _ANTARCTICA_BG_PATH0        ; pointer to path 0
+    FDB _ANTARCTICA_BG_PATH1        ; pointer to path 1
+    FDB _ANTARCTICA_BG_PATH2        ; pointer to path 2
+    FDB _ANTARCTICA_BG_PATH3        ; pointer to path 3
+    FDB _ANTARCTICA_BG_PATH4        ; pointer to path 4
+    FDB _ANTARCTICA_BG_PATH5        ; pointer to path 5
+    FDB _ANTARCTICA_BG_PATH6        ; pointer to path 6
+    FDB _ANTARCTICA_BG_PATH7        ; pointer to path 7
+    FDB _ANTARCTICA_BG_PATH8        ; pointer to path 8
+    FDB _ANTARCTICA_BG_PATH9        ; pointer to path 9
+    FDB _ANTARCTICA_BG_PATH10        ; pointer to path 10
+    FDB _ANTARCTICA_BG_PATH11        ; pointer to path 11
+    FDB _ANTARCTICA_BG_PATH12        ; pointer to path 12
+    FDB _ANTARCTICA_BG_PATH13        ; pointer to path 13
+    FDB _ANTARCTICA_BG_PATH14        ; pointer to path 14
+    FDB _ANTARCTICA_BG_PATH15        ; pointer to path 15
+    FDB _ANTARCTICA_BG_PATH16        ; pointer to path 16
+    FDB _ANTARCTICA_BG_PATH17        ; pointer to path 17
+    FDB _ANTARCTICA_BG_PATH18        ; pointer to path 18
+    FDB _ANTARCTICA_BG_PATH19        ; pointer to path 19
+
+_ANTARCTICA_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $D3,$90,0,0        ; path0: header (y=-45, x=-112, relative to center)
+    FCB $FF,$00,$7F          ; line 0: flag=-1, dy=0, dx=127
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $D3,$29,0,0        ; path1: header (y=-45, x=41, relative to center)
+    FCB $FF,$41,$D5          ; line 0: flag=-1, dy=65, dx=-43
+    FCB $FF,$FA,$F9          ; line 1: flag=-1, dy=-6, dx=-7
+    FCB $FF,$21,$E4          ; line 2: flag=-1, dy=33, dx=-28
+    FCB $FF,$DF,$E7          ; line 3: flag=-1, dy=-33, dx=-25
+    FCB $FF,$07,$F7          ; line 4: flag=-1, dy=7, dx=-9
+    FCB $FF,$BE,$D7          ; line 5: flag=-1, dy=-66, dx=-41
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $E6,$9C,0,0        ; path2: header (y=-26, x=-100, relative to center)
+    FCB $FF,$03,$21          ; line 0: flag=-1, dy=3, dx=33
+    FCB $FF,$17,$22          ; line 1: flag=-1, dy=23, dx=34
+    FCB $FF,$F6,$16          ; line 2: flag=-1, dy=-10, dx=22
+    FCB $FF,$F9,$08          ; line 3: flag=-1, dy=-7, dx=8
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $D3,$D6,0,0        ; path3: header (y=-45, x=-42, relative to center)
+    FCB $FF,$0F,$05          ; line 0: flag=-1, dy=15, dx=5
+    FCB $FF,$10,$2A          ; line 1: flag=-1, dy=16, dx=42
+    FCB $FF,$F7,$15          ; line 2: flag=-1, dy=-9, dx=21
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $F7,$F3,0,0        ; path4: header (y=-9, x=-13, relative to center)
+    FCB $FF,$13,$FB          ; line 0: flag=-1, dy=19, dx=-5
+    FCB $FF,$00,$F7          ; line 1: flag=-1, dy=0, dx=-9
+    FCB $FF,$0F,$F8          ; line 2: flag=-1, dy=15, dx=-8
+    FCB $FF,$02,$EF          ; line 3: flag=-1, dy=2, dx=-17
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $D9,$33,0,0        ; path5: header (y=-39, x=51, relative to center)
+    FCB $FF,$09,$06          ; line 0: flag=-1, dy=9, dx=6
+    FCB $FF,$02,$05          ; line 1: flag=-1, dy=2, dx=5
+    FCB $FF,$FA,$06          ; line 2: flag=-1, dy=-6, dx=6
+    FCB $FF,$F4,$01          ; line 3: flag=-1, dy=-12, dx=1
+    FCB $FF,$02,$FD          ; line 4: flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$FF          ; line 5: flag=-1, dy=6, dx=-1
+    FCB $FF,$06,$FD          ; line 6: flag=-1, dy=6, dx=-3
+    FCB $FF,$FE,$FB          ; line 7: flag=-1, dy=-2, dx=-5
+    FCB $FF,$FA,$FC          ; line 8: flag=-1, dy=-6, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $D9,$33,0,0        ; path6: header (y=-39, x=51, relative to center)
+    FCB $FF,$F9,$12          ; line 0: flag=-1, dy=-7, dx=18
+    FCB $FF,$04,$07          ; line 1: flag=-1, dy=4, dx=7
+    FCB $FF,$00,$04          ; line 2: flag=-1, dy=0, dx=4
+    FCB $FF,$00,$0D          ; line 3: flag=-1, dy=0, dx=13
+    FCB $FF,$01,$0A          ; line 4: flag=-1, dy=1, dx=10
+    FCB $FF,$03,$08          ; line 5: flag=-1, dy=3, dx=8
+    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $DA,$6F,0,0        ; path7: header (y=-38, x=111, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$0A,$FB          ; line 1: flag=-1, dy=10, dx=-5
+    FCB $FF,$06,$FC          ; line 2: flag=-1, dy=6, dx=-4
+    FCB $FF,$04,$F8          ; line 3: flag=-1, dy=4, dx=-8
+    FCB $FF,$01,$F9          ; line 4: flag=-1, dy=1, dx=-7
+    FCB $FF,$FF,$F5          ; line 5: flag=-1, dy=-1, dx=-11
+    FCB $FF,$FB,$F9          ; line 6: flag=-1, dy=-5, dx=-7
+    FCB $FF,$FB,$FB          ; line 7: flag=-1, dy=-5, dx=-5
+    FCB $FF,$FA,$FC          ; line 8: flag=-1, dy=-6, dx=-4
+    FCB $FF,$FA,$FD          ; line 9: flag=-1, dy=-6, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH8:    ; Path 8
+    FCB 127              ; path8: intensity
+    FCB $D6,$4C,0,0        ; path8: header (y=-42, x=76, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$06,$FE          ; line 1: flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$FD          ; line 2: flag=-1, dy=3, dx=-3
+    FCB $FF,$FE,$F7          ; line 3: flag=-1, dy=-2, dx=-9
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH9:    ; Path 9
+    FCB 127              ; path9: intensity
+    FCB $EC,$3F,0,0        ; path9: header (y=-20, x=63, relative to center)
+    FCB $FF,$FF,$08          ; line 0: flag=-1, dy=-1, dx=8
+    FCB $FF,$00,$0D          ; line 1: flag=-1, dy=0, dx=13
+    FCB $FF,$02,$0B          ; line 2: flag=-1, dy=2, dx=11
+    FCB $FF,$02,$0A          ; line 3: flag=-1, dy=2, dx=10
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH10:    ; Path 10
+    FCB 127              ; path10: intensity
+    FCB $F6,$49,0,0        ; path10: header (y=-10, x=73, relative to center)
+    FCB $FF,$FF,$09          ; line 0: flag=-1, dy=-1, dx=9
+    FCB $FF,$01,$08          ; line 1: flag=-1, dy=1, dx=8
+    FCB $FF,$01,$06          ; line 2: flag=-1, dy=1, dx=6
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH11:    ; Path 11
+    FCB 127              ; path11: intensity
+    FCB $E0,$4B,0,0        ; path11: header (y=-32, x=75, relative to center)
+    FCB $FF,$01,$0B          ; line 0: flag=-1, dy=1, dx=11
+    FCB $FF,$02,$15          ; line 1: flag=-1, dy=2, dx=21
+    FCB $FF,$01,$04          ; line 2: flag=-1, dy=1, dx=4
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH12:    ; Path 12
+    FCB 127              ; path12: intensity
+    FCB $F5,$52,0,0        ; path12: header (y=-11, x=82, relative to center)
+    FCB $FF,$F6,$FF          ; line 0: flag=-1, dy=-10, dx=-1
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH13:    ; Path 13
+    FCB 127              ; path13: intensity
+    FCB $F6,$5B,0,0        ; path13: header (y=-10, x=91, relative to center)
+    FCB $FF,$F8,$07          ; line 0: flag=-1, dy=-8, dx=7
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $EC,$59,0,0        ; path14: header (y=-20, x=89, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH15:    ; Path 15
+    FCB 127              ; path15: intensity
+    FCB $E2,$60,0,0        ; path15: header (y=-30, x=96, relative to center)
+    FCB $FF,$F5,$05          ; line 0: flag=-1, dy=-11, dx=5
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH16:    ; Path 16
+    FCB 127              ; path16: intensity
+    FCB $E1,$53,0,0        ; path16: header (y=-31, x=83, relative to center)
+    FCB $FF,$F5,$FE          ; line 0: flag=-1, dy=-11, dx=-2
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH17:    ; Path 17
+    FCB 127              ; path17: intensity
+    FCB $EB,$49,0,0        ; path17: header (y=-21, x=73, relative to center)
+    FCB $FF,$FB,$FE          ; line 0: flag=-1, dy=-5, dx=-2
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH18:    ; Path 18
+    FCB 127              ; path18: intensity
+    FCB $EE,$65,0,0        ; path18: header (y=-18, x=101, relative to center)
+    FCB $FF,$F5,$06          ; line 0: flag=-1, dy=-11, dx=6
+    FCB 2                ; End marker (path complete)
+
+_ANTARCTICA_BG_PATH19:    ; Path 19
+    FCB 127              ; path19: intensity
+    FCB $E1,$58,0,0        ; path19: header (y=-31, x=88, relative to center)
+    FCB $FF,$0B,$01          ; line 0: flag=-1, dy=11, dx=1
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+; Generated from athens_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 41, points: 147
+; X bounds: min=-80, max=80, width=160
+; Center: (0, 0)
+
+_ATHENS_BG_WIDTH EQU 160
+_ATHENS_BG_CENTER_X EQU 0
+_ATHENS_BG_CENTER_Y EQU 0
+
+_ATHENS_BG_VECTORS:  ; Main entry (header + 41 path(s))
+    FCB 41               ; path_count (runtime metadata)
+    FDB _ATHENS_BG_PATH0        ; pointer to path 0
+    FDB _ATHENS_BG_PATH1        ; pointer to path 1
+    FDB _ATHENS_BG_PATH2        ; pointer to path 2
+    FDB _ATHENS_BG_PATH3        ; pointer to path 3
+    FDB _ATHENS_BG_PATH4        ; pointer to path 4
+    FDB _ATHENS_BG_PATH5        ; pointer to path 5
+    FDB _ATHENS_BG_PATH6        ; pointer to path 6
+    FDB _ATHENS_BG_PATH7        ; pointer to path 7
+    FDB _ATHENS_BG_PATH8        ; pointer to path 8
+    FDB _ATHENS_BG_PATH9        ; pointer to path 9
+    FDB _ATHENS_BG_PATH10        ; pointer to path 10
+    FDB _ATHENS_BG_PATH11        ; pointer to path 11
+    FDB _ATHENS_BG_PATH12        ; pointer to path 12
+    FDB _ATHENS_BG_PATH13        ; pointer to path 13
+    FDB _ATHENS_BG_PATH14        ; pointer to path 14
+    FDB _ATHENS_BG_PATH15        ; pointer to path 15
+    FDB _ATHENS_BG_PATH16        ; pointer to path 16
+    FDB _ATHENS_BG_PATH17        ; pointer to path 17
+    FDB _ATHENS_BG_PATH18        ; pointer to path 18
+    FDB _ATHENS_BG_PATH19        ; pointer to path 19
+    FDB _ATHENS_BG_PATH20        ; pointer to path 20
+    FDB _ATHENS_BG_PATH21        ; pointer to path 21
+    FDB _ATHENS_BG_PATH22        ; pointer to path 22
+    FDB _ATHENS_BG_PATH23        ; pointer to path 23
+    FDB _ATHENS_BG_PATH24        ; pointer to path 24
+    FDB _ATHENS_BG_PATH25        ; pointer to path 25
+    FDB _ATHENS_BG_PATH26        ; pointer to path 26
+    FDB _ATHENS_BG_PATH27        ; pointer to path 27
+    FDB _ATHENS_BG_PATH28        ; pointer to path 28
+    FDB _ATHENS_BG_PATH29        ; pointer to path 29
+    FDB _ATHENS_BG_PATH30        ; pointer to path 30
+    FDB _ATHENS_BG_PATH31        ; pointer to path 31
+    FDB _ATHENS_BG_PATH32        ; pointer to path 32
+    FDB _ATHENS_BG_PATH33        ; pointer to path 33
+    FDB _ATHENS_BG_PATH34        ; pointer to path 34
+    FDB _ATHENS_BG_PATH35        ; pointer to path 35
+    FDB _ATHENS_BG_PATH36        ; pointer to path 36
+    FDB _ATHENS_BG_PATH37        ; pointer to path 37
+    FDB _ATHENS_BG_PATH38        ; pointer to path 38
+    FDB _ATHENS_BG_PATH39        ; pointer to path 39
+    FDB _ATHENS_BG_PATH40        ; pointer to path 40
+
+_ATHENS_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $26,$C1,0,0        ; path0: header (y=38, x=-63, relative to center)
+    FCB $FF,$25,$3E          ; line 0: flag=-1, dy=37, dx=62
+    FCB $FF,$DB,$3F          ; line 1: flag=-1, dy=-37, dx=63
+    FCB $FF,$00,$83          ; line 2: flag=-1, dy=0, dx=-125
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $29,$D2,0,0        ; path1: header (y=41, x=-46, relative to center)
+    FCB $FF,$1C,$2D          ; line 0: flag=-1, dy=28, dx=45
+    FCB $FF,$E4,$2F          ; line 1: flag=-1, dy=-28, dx=47
+    FCB $FF,$00,$A4          ; line 2: flag=-1, dy=0, dx=-92
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $26,$38,0,0        ; path2: header (y=38, x=56, relative to center)
+    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $26,$3B,0,0        ; path3: header (y=38, x=59, relative to center)
+    FCB $FF,$F9,$00          ; line 0: flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$88          ; line 1: flag=-1, dy=0, dx=-120
+    FCB $FF,$07,$00          ; line 2: flag=-1, dy=7, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $1F,$C6,0,0        ; path4: header (y=31, x=-58, relative to center)
+    FCB $FF,$F5,$00          ; line 0: flag=-1, dy=-11, dx=0
+    FCB $FF,$00,$72          ; line 1: flag=-1, dy=0, dx=114
+    FCB $FF,$0B,$00          ; line 2: flag=-1, dy=11, dx=0
+    FCB $FF,$00,$01          ; line 3: flag=-1, dy=0, dx=1
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $14,$C6,0,0        ; path5: header (y=20, x=-58, relative to center)
+    FCB $FF,$00,$FC          ; line 0: flag=-1, dy=0, dx=-4
+    FCB $FF,$FB,$00          ; line 1: flag=-1, dy=-5, dx=0
+    FCB $FF,$00,$7A          ; line 2: flag=-1, dy=0, dx=122
+    FCB $FF,$05,$00          ; line 3: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FC          ; line 4: flag=-1, dy=0, dx=-4
+    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $0F,$C8,0,0        ; path6: header (y=15, x=-56, relative to center)
+    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $0C,$CA,0,0        ; path7: header (y=12, x=-54, relative to center)
+    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH8:    ; Path 8
+    FCB 127              ; path8: intensity
+    FCB $0A,$CB,0,0        ; path8: header (y=10, x=-53, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH9:    ; Path 9
+    FCB 127              ; path9: intensity
+    FCB $0A,$D5,0,0        ; path9: header (y=10, x=-43, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH10:    ; Path 10
+    FCB 127              ; path10: intensity
+    FCB $CA,$C8,0,0        ; path10: header (y=-54, x=-56, relative to center)
+    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH11:    ; Path 11
+    FCB 127              ; path11: intensity
+    FCB $CD,$CA,0,0        ; path11: header (y=-51, x=-54, relative to center)
+    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH12:    ; Path 12
+    FCB 127              ; path12: intensity
+    FCB $CF,$CB,0,0        ; path12: header (y=-49, x=-53, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH13:    ; Path 13
+    FCB 127              ; path13: intensity
+    FCB $CF,$D5,0,0        ; path13: header (y=-49, x=-43, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $0F,$E0,0,0        ; path14: header (y=15, x=-32, relative to center)
+    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH15:    ; Path 15
+    FCB 127              ; path15: intensity
+    FCB $0C,$E2,0,0        ; path15: header (y=12, x=-30, relative to center)
+    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH16:    ; Path 16
+    FCB 127              ; path16: intensity
+    FCB $0A,$E3,0,0        ; path16: header (y=10, x=-29, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH17:    ; Path 17
+    FCB 127              ; path17: intensity
+    FCB $0A,$ED,0,0        ; path17: header (y=10, x=-19, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH18:    ; Path 18
+    FCB 127              ; path18: intensity
+    FCB $CA,$E0,0,0        ; path18: header (y=-54, x=-32, relative to center)
+    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH19:    ; Path 19
+    FCB 127              ; path19: intensity
+    FCB $CD,$E2,0,0        ; path19: header (y=-51, x=-30, relative to center)
+    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH20:    ; Path 20
+    FCB 127              ; path20: intensity
+    FCB $CF,$E3,0,0        ; path20: header (y=-49, x=-29, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH21:    ; Path 21
+    FCB 127              ; path21: intensity
+    FCB $CF,$ED,0,0        ; path21: header (y=-49, x=-19, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH22:    ; Path 22
+    FCB 127              ; path22: intensity
+    FCB $0F,$12,0,0        ; path22: header (y=15, x=18, relative to center)
+    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH23:    ; Path 23
+    FCB 127              ; path23: intensity
+    FCB $0C,$14,0,0        ; path23: header (y=12, x=20, relative to center)
+    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH24:    ; Path 24
+    FCB 127              ; path24: intensity
+    FCB $0A,$15,0,0        ; path24: header (y=10, x=21, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH25:    ; Path 25
+    FCB 127              ; path25: intensity
+    FCB $0A,$1F,0,0        ; path25: header (y=10, x=31, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH26:    ; Path 26
+    FCB 127              ; path26: intensity
+    FCB $CA,$12,0,0        ; path26: header (y=-54, x=18, relative to center)
+    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH27:    ; Path 27
+    FCB 127              ; path27: intensity
+    FCB $CD,$14,0,0        ; path27: header (y=-51, x=20, relative to center)
+    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH28:    ; Path 28
+    FCB 127              ; path28: intensity
+    FCB $CF,$15,0,0        ; path28: header (y=-49, x=21, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH29:    ; Path 29
+    FCB 127              ; path29: intensity
+    FCB $CF,$1F,0,0        ; path29: header (y=-49, x=31, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH30:    ; Path 30
+    FCB 127              ; path30: intensity
+    FCB $0F,$26,0,0        ; path30: header (y=15, x=38, relative to center)
+    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH31:    ; Path 31
+    FCB 127              ; path31: intensity
+    FCB $0C,$28,0,0        ; path31: header (y=12, x=40, relative to center)
+    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH32:    ; Path 32
+    FCB 127              ; path32: intensity
+    FCB $0A,$29,0,0        ; path32: header (y=10, x=41, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH33:    ; Path 33
+    FCB 127              ; path33: intensity
+    FCB $0A,$33,0,0        ; path33: header (y=10, x=51, relative to center)
+    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH34:    ; Path 34
+    FCB 127              ; path34: intensity
+    FCB $CA,$26,0,0        ; path34: header (y=-54, x=38, relative to center)
+    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH35:    ; Path 35
+    FCB 127              ; path35: intensity
+    FCB $CD,$28,0,0        ; path35: header (y=-51, x=40, relative to center)
+    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH36:    ; Path 36
+    FCB 127              ; path36: intensity
+    FCB $CF,$29,0,0        ; path36: header (y=-49, x=41, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH37:    ; Path 37
+    FCB 127              ; path37: intensity
+    FCB $CF,$33,0,0        ; path37: header (y=-49, x=51, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH38:    ; Path 38
+    FCB 127              ; path38: intensity
+    FCB $B5,$B0,0,0        ; path38: header (y=-75, x=-80, relative to center)
+    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$00,$7F          ; line 1: flag=-1, dy=0, dx=127
+    FCB $FF,$F9,$00          ; line 2: flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$81          ; line 3: flag=-1, dy=0, dx=-127
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH39:    ; Path 39
+    FCB 127              ; path39: intensity
+    FCB $BC,$B7,0,0        ; path39: header (y=-68, x=-73, relative to center)
+    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
+    FCB $FF,$00,$7F          ; line 1: flag=-1, dy=0, dx=127
+    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_ATHENS_BG_PATH40:    ; Path 40
+    FCB 127              ; path40: intensity
+    FCB $C4,$44,0,0        ; path40: header (y=-60, x=68, relative to center)
+    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$81          ; line 1: flag=-1, dy=0, dx=-127
+    FCB $FF,$FA,$00          ; line 2: flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+; Generated from ayers_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 18, points: 106
+; X bounds: min=-96, max=102, width=198
+; Center: (3, 10)
+
+_AYERS_BG_WIDTH EQU 198
+_AYERS_BG_CENTER_X EQU 3
+_AYERS_BG_CENTER_Y EQU 10
+
+_AYERS_BG_VECTORS:  ; Main entry (header + 18 path(s))
+    FCB 18               ; path_count (runtime metadata)
+    FDB _AYERS_BG_PATH0        ; pointer to path 0
+    FDB _AYERS_BG_PATH1        ; pointer to path 1
+    FDB _AYERS_BG_PATH2        ; pointer to path 2
+    FDB _AYERS_BG_PATH3        ; pointer to path 3
+    FDB _AYERS_BG_PATH4        ; pointer to path 4
+    FDB _AYERS_BG_PATH5        ; pointer to path 5
+    FDB _AYERS_BG_PATH6        ; pointer to path 6
+    FDB _AYERS_BG_PATH7        ; pointer to path 7
+    FDB _AYERS_BG_PATH8        ; pointer to path 8
+    FDB _AYERS_BG_PATH9        ; pointer to path 9
+    FDB _AYERS_BG_PATH10        ; pointer to path 10
+    FDB _AYERS_BG_PATH11        ; pointer to path 11
+    FDB _AYERS_BG_PATH12        ; pointer to path 12
+    FDB _AYERS_BG_PATH13        ; pointer to path 13
+    FDB _AYERS_BG_PATH14        ; pointer to path 14
+    FDB _AYERS_BG_PATH15        ; pointer to path 15
+    FDB _AYERS_BG_PATH16        ; pointer to path 16
+    FDB _AYERS_BG_PATH17        ; pointer to path 17
+
+_AYERS_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $E2,$9D,0,0        ; path0: header (y=-30, x=-99, relative to center)
+    FCB $FF,$2A,$0C          ; line 0: flag=-1, dy=42, dx=12
+    FCB $FF,$05,$0D          ; line 1: flag=-1, dy=5, dx=13
+    FCB $FF,$04,$0F          ; line 2: flag=-1, dy=4, dx=15
+    FCB $FF,$03,$0F          ; line 3: flag=-1, dy=3, dx=15
+    FCB $FF,$05,$09          ; line 4: flag=-1, dy=5, dx=9
+    FCB $FF,$FC,$0C          ; line 5: flag=-1, dy=-4, dx=12
+    FCB $FF,$02,$0E          ; line 6: flag=-1, dy=2, dx=14
+    FCB $FF,$05,$0C          ; line 7: flag=-1, dy=5, dx=12
+    FCB $FF,$FF,$0C          ; line 8: flag=-1, dy=-1, dx=12
+    FCB $FF,$FA,$0D          ; line 9: flag=-1, dy=-6, dx=13
+    FCB $FF,$01,$10          ; line 10: flag=-1, dy=1, dx=16
+    FCB $FF,$FB,$0E          ; line 11: flag=-1, dy=-5, dx=14
+    FCB $FF,$F5,$10          ; line 12: flag=-1, dy=-11, dx=16
+    FCB $FF,$F2,$0B          ; line 13: flag=-1, dy=-14, dx=11
+    FCB $FF,$EE,$0B          ; line 14: flag=-1, dy=-18, dx=11
+    FCB $FF,$F7,$03          ; line 15: flag=-1, dy=-9, dx=3
+    FCB $FF,$01,$81          ; line 16: flag=-1, dy=1, dx=-127
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $11,$B6,0,0        ; path1: header (y=17, x=-74, relative to center)
+    FCB $FF,$EA,$F9          ; line 0: flag=-1, dy=-22, dx=-7
+    FCB $FF,$E7,$F8          ; line 1: flag=-1, dy=-25, dx=-8
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $E2,$BB,0,0        ; path2: header (y=-30, x=-69, relative to center)
+    FCB $FF,$1C,$02          ; line 0: flag=-1, dy=28, dx=2
+    FCB $FF,$08,$06          ; line 1: flag=-1, dy=8, dx=6
+    FCB $FF,$F5,$FF          ; line 2: flag=-1, dy=-11, dx=-1
+    FCB $FF,$E7,$FC          ; line 3: flag=-1, dy=-25, dx=-4
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $19,$E9,0,0        ; path3: header (y=25, x=-23, relative to center)
+    FCB $FF,$EF,$FD          ; line 0: flag=-1, dy=-17, dx=-3
+    FCB $FF,$F2,$03          ; line 1: flag=-1, dy=-14, dx=3
+    FCB $FF,$F5,$00          ; line 2: flag=-1, dy=-11, dx=0
+    FCB $FF,$09,$05          ; line 3: flag=-1, dy=9, dx=5
+    FCB $FF,$0C,$06          ; line 4: flag=-1, dy=12, dx=6
+    FCB $FF,$18,$06          ; line 5: flag=-1, dy=24, dx=6
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $1A,$F0,0,0        ; path4: header (y=26, x=-16, relative to center)
+    FCB $FF,$EF,$FA          ; line 0: flag=-1, dy=-17, dx=-6
+    FCB $FF,$F6,$03          ; line 1: flag=-1, dy=-10, dx=3
+    FCB $FF,$09,$04          ; line 2: flag=-1, dy=9, dx=4
+    FCB $FF,$13,$06          ; line 3: flag=-1, dy=19, dx=6
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $E2,$C4,0,0        ; path5: header (y=-30, x=-60, relative to center)
+    FCB $FF,$16,$08          ; line 0: flag=-1, dy=22, dx=8
+    FCB $FF,$20,$07          ; line 1: flag=-1, dy=32, dx=7
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $19,$D6,0,0        ; path6: header (y=25, x=-42, relative to center)
+    FCB $FF,$E9,$FB          ; line 0: flag=-1, dy=-23, dx=-5
+    FCB $FF,$EE,$FD          ; line 1: flag=-1, dy=-18, dx=-3
+    FCB $FF,$F2,$01          ; line 2: flag=-1, dy=-14, dx=1
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $20,$07,0,0        ; path7: header (y=32, x=7, relative to center)
+    FCB $FF,$F0,$02          ; line 0: flag=-1, dy=-16, dx=2
+    FCB $FF,$F2,$FA          ; line 1: flag=-1, dy=-14, dx=-6
+    FCB $FF,$EF,$01          ; line 2: flag=-1, dy=-17, dx=1
+    FCB $FF,$0B,$03          ; line 3: flag=-1, dy=11, dx=3
+    FCB $FF,$0E,$04          ; line 4: flag=-1, dy=14, dx=4
+    FCB $FF,$13,$07          ; line 5: flag=-1, dy=19, dx=7
+    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH8:    ; Path 8
+    FCB 127              ; path8: intensity
+    FCB $19,$1F,0,0        ; path8: header (y=25, x=31, relative to center)
+    FCB $FF,$EB,$0A          ; line 0: flag=-1, dy=-21, dx=10
+    FCB $FF,$E6,$01          ; line 1: flag=-1, dy=-26, dx=1
+    FCB $FF,$F7,$FF          ; line 2: flag=-1, dy=-9, dx=-1
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH9:    ; Path 9
+    FCB 127              ; path9: intensity
+    FCB $E1,$25,0,0        ; path9: header (y=-31, x=37, relative to center)
+    FCB $FF,$08,$F9          ; line 0: flag=-1, dy=8, dx=-7
+    FCB $FF,$1A,$FC          ; line 1: flag=-1, dy=26, dx=-4
+    FCB $FF,$E6,$FE          ; line 2: flag=-1, dy=-26, dx=-2
+    FCB $FF,$F9,$F9          ; line 3: flag=-1, dy=-7, dx=-7
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH10:    ; Path 10
+    FCB 127              ; path10: intensity
+    FCB $E2,$0A,0,0        ; path10: header (y=-30, x=10, relative to center)
+    FCB $FF,$12,$01          ; line 0: flag=-1, dy=18, dx=1
+    FCB $FF,$13,$06          ; line 1: flag=-1, dy=19, dx=6
+    FCB $FF,$F1,$FF          ; line 2: flag=-1, dy=-15, dx=-1
+    FCB $FF,$EA,$00          ; line 3: flag=-1, dy=-22, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH11:    ; Path 11
+    FCB 127              ; path11: intensity
+    FCB $E1,$07,0,0        ; path11: header (y=-31, x=7, relative to center)
+    FCB $FF,$06,$F8          ; line 0: flag=-1, dy=6, dx=-8
+    FCB $FF,$01,$FD          ; line 1: flag=-1, dy=1, dx=-3
+    FCB $FF,$13,$FC          ; line 2: flag=-1, dy=19, dx=-4
+    FCB $FF,$F6,$FE          ; line 3: flag=-1, dy=-10, dx=-2
+    FCB $FF,$F6,$01          ; line 4: flag=-1, dy=-10, dx=1
+    FCB $FF,$00,$F3          ; line 5: flag=-1, dy=0, dx=-13
+    FCB $FF,$03,$FD          ; line 6: flag=-1, dy=3, dx=-3
+    FCB $FF,$FA,$FC          ; line 7: flag=-1, dy=-6, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH12:    ; Path 12
+    FCB 127              ; path12: intensity
+    FCB $E4,$E3,0,0        ; path12: header (y=-28, x=-29, relative to center)
+    FCB $FF,$04,$F5          ; line 0: flag=-1, dy=4, dx=-11
+    FCB $FF,$20,$05          ; line 1: flag=-1, dy=32, dx=5
+    FCB $FF,$F9,$FA          ; line 2: flag=-1, dy=-7, dx=-6
+    FCB $FF,$EF,$FE          ; line 3: flag=-1, dy=-17, dx=-2
+    FCB $FF,$F8,$00          ; line 4: flag=-1, dy=-8, dx=0
+    FCB $FF,$FD,$FA          ; line 5: flag=-1, dy=-3, dx=-6
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH13:    ; Path 13
+    FCB 127              ; path13: intensity
+    FCB $07,$2C,0,0        ; path13: header (y=7, x=44, relative to center)
+    FCB $FF,$DB,$03          ; line 0: flag=-1, dy=-37, dx=3
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $E1,$3C,0,0        ; path14: header (y=-31, x=60, relative to center)
+    FCB $FF,$1A,$FE          ; line 0: flag=-1, dy=26, dx=-2
+    FCB $FF,$1B,$FE          ; line 1: flag=-1, dy=27, dx=-2
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH15:    ; Path 15
+    FCB 127              ; path15: intensity
+    FCB $E1,$4C,0,0        ; path15: header (y=-31, x=76, relative to center)
+    FCB $FF,$15,$FC          ; line 0: flag=-1, dy=21, dx=-4
+    FCB $FF,$03,$FD          ; line 1: flag=-1, dy=3, dx=-3
+    FCB $FF,$10,$FE          ; line 2: flag=-1, dy=16, dx=-2
+    FCB $FF,$EE,$FE          ; line 3: flag=-1, dy=-18, dx=-2
+    FCB $FF,$1F,$F7          ; line 4: flag=-1, dy=31, dx=-9
+    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH16:    ; Path 16
+    FCB 127              ; path16: intensity
+    FCB $E1,$53,0,0        ; path16: header (y=-31, x=83, relative to center)
+    FCB $FF,$23,$F7          ; line 0: flag=-1, dy=35, dx=-9
+    FCB $FF,$E2,$0D          ; line 1: flag=-1, dy=-30, dx=13
+    FCB $FF,$1A,$FB          ; line 2: flag=-1, dy=26, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_AYERS_BG_PATH17:    ; Path 17
+    FCB 127              ; path17: intensity
+    FCB $06,$2C,0,0        ; path17: header (y=6, x=44, relative to center)
+    FCB $FF,$13,$F7          ; line 0: flag=-1, dy=19, dx=-9
+    FCB 2                ; End marker (path complete)
+; Generated from barcelona_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 60, points: 193
+; X bounds: min=-47, max=69, width=116
+; Center: (11, 13)
+
+_BARCELONA_BG_WIDTH EQU 116
+_BARCELONA_BG_CENTER_X EQU 11
+_BARCELONA_BG_CENTER_Y EQU 13
+
+_BARCELONA_BG_VECTORS:  ; Main entry (header + 60 path(s))
+    FCB 60               ; path_count (runtime metadata)
+    FDB _BARCELONA_BG_PATH0        ; pointer to path 0
+    FDB _BARCELONA_BG_PATH1        ; pointer to path 1
+    FDB _BARCELONA_BG_PATH2        ; pointer to path 2
+    FDB _BARCELONA_BG_PATH3        ; pointer to path 3
+    FDB _BARCELONA_BG_PATH4        ; pointer to path 4
+    FDB _BARCELONA_BG_PATH5        ; pointer to path 5
+    FDB _BARCELONA_BG_PATH6        ; pointer to path 6
+    FDB _BARCELONA_BG_PATH7        ; pointer to path 7
+    FDB _BARCELONA_BG_PATH8        ; pointer to path 8
+    FDB _BARCELONA_BG_PATH9        ; pointer to path 9
+    FDB _BARCELONA_BG_PATH10        ; pointer to path 10
+    FDB _BARCELONA_BG_PATH11        ; pointer to path 11
+    FDB _BARCELONA_BG_PATH12        ; pointer to path 12
+    FDB _BARCELONA_BG_PATH13        ; pointer to path 13
+    FDB _BARCELONA_BG_PATH14        ; pointer to path 14
+    FDB _BARCELONA_BG_PATH15        ; pointer to path 15
+    FDB _BARCELONA_BG_PATH16        ; pointer to path 16
+    FDB _BARCELONA_BG_PATH17        ; pointer to path 17
+    FDB _BARCELONA_BG_PATH18        ; pointer to path 18
+    FDB _BARCELONA_BG_PATH19        ; pointer to path 19
+    FDB _BARCELONA_BG_PATH20        ; pointer to path 20
+    FDB _BARCELONA_BG_PATH21        ; pointer to path 21
+    FDB _BARCELONA_BG_PATH22        ; pointer to path 22
+    FDB _BARCELONA_BG_PATH23        ; pointer to path 23
+    FDB _BARCELONA_BG_PATH24        ; pointer to path 24
+    FDB _BARCELONA_BG_PATH25        ; pointer to path 25
+    FDB _BARCELONA_BG_PATH26        ; pointer to path 26
+    FDB _BARCELONA_BG_PATH27        ; pointer to path 27
+    FDB _BARCELONA_BG_PATH28        ; pointer to path 28
+    FDB _BARCELONA_BG_PATH29        ; pointer to path 29
+    FDB _BARCELONA_BG_PATH30        ; pointer to path 30
+    FDB _BARCELONA_BG_PATH31        ; pointer to path 31
+    FDB _BARCELONA_BG_PATH32        ; pointer to path 32
+    FDB _BARCELONA_BG_PATH33        ; pointer to path 33
+    FDB _BARCELONA_BG_PATH34        ; pointer to path 34
+    FDB _BARCELONA_BG_PATH35        ; pointer to path 35
+    FDB _BARCELONA_BG_PATH36        ; pointer to path 36
+    FDB _BARCELONA_BG_PATH37        ; pointer to path 37
+    FDB _BARCELONA_BG_PATH38        ; pointer to path 38
+    FDB _BARCELONA_BG_PATH39        ; pointer to path 39
+    FDB _BARCELONA_BG_PATH40        ; pointer to path 40
+    FDB _BARCELONA_BG_PATH41        ; pointer to path 41
+    FDB _BARCELONA_BG_PATH42        ; pointer to path 42
+    FDB _BARCELONA_BG_PATH43        ; pointer to path 43
+    FDB _BARCELONA_BG_PATH44        ; pointer to path 44
+    FDB _BARCELONA_BG_PATH45        ; pointer to path 45
+    FDB _BARCELONA_BG_PATH46        ; pointer to path 46
+    FDB _BARCELONA_BG_PATH47        ; pointer to path 47
+    FDB _BARCELONA_BG_PATH48        ; pointer to path 48
+    FDB _BARCELONA_BG_PATH49        ; pointer to path 49
+    FDB _BARCELONA_BG_PATH50        ; pointer to path 50
+    FDB _BARCELONA_BG_PATH51        ; pointer to path 51
+    FDB _BARCELONA_BG_PATH52        ; pointer to path 52
+    FDB _BARCELONA_BG_PATH53        ; pointer to path 53
+    FDB _BARCELONA_BG_PATH54        ; pointer to path 54
+    FDB _BARCELONA_BG_PATH55        ; pointer to path 55
+    FDB _BARCELONA_BG_PATH56        ; pointer to path 56
+    FDB _BARCELONA_BG_PATH57        ; pointer to path 57
+    FDB _BARCELONA_BG_PATH58        ; pointer to path 58
+    FDB _BARCELONA_BG_PATH59        ; pointer to path 59
+
+_BARCELONA_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $C0,$C6,0,0        ; path0: header (y=-64, x=-58, relative to center)
+    FCB $FF,$0D,$05          ; line 0: flag=-1, dy=13, dx=5
+    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB $FF,$14,$2A          ; line 2: flag=-1, dy=20, dx=42
+    FCB $FF,$EB,$2B          ; line 3: flag=-1, dy=-21, dx=43
+    FCB $FF,$FD,$FD          ; line 4: flag=-1, dy=-3, dx=-3
+    FCB $FF,$F3,$06          ; line 5: flag=-1, dy=-13, dx=6
+    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $C0,$CA,0,0        ; path1: header (y=-64, x=-54, relative to center)
+    FCB $FF,$14,$07          ; line 0: flag=-1, dy=20, dx=7
+    FCB $FF,$00,$06          ; line 1: flag=-1, dy=0, dx=6
+    FCB $FF,$EC,$FA          ; line 2: flag=-1, dy=-20, dx=-6
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $C0,$D4,0,0        ; path2: header (y=-64, x=-44, relative to center)
+    FCB $FF,$18,$08          ; line 0: flag=-1, dy=24, dx=8
+    FCB $FF,$01,$09          ; line 1: flag=-1, dy=1, dx=9
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $C1,$05,0,0        ; path3: header (y=-63, x=5, relative to center)
+    FCB $FF,$18,$F9          ; line 0: flag=-1, dy=24, dx=-7
+    FCB $FF,$0A,$F7          ; line 1: flag=-1, dy=10, dx=-9
+    FCB $FF,$F6,$F5          ; line 2: flag=-1, dy=-10, dx=-11
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $C0,$F0,0,0        ; path4: header (y=-64, x=-16, relative to center)
+    FCB $FF,$0C,$01          ; line 0: flag=-1, dy=12, dx=1
+    FCB $FF,$01,$04          ; line 1: flag=-1, dy=1, dx=4
+    FCB $FF,$FF,$04          ; line 2: flag=-1, dy=-1, dx=4
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $CC,$F9,0,0        ; path5: header (y=-52, x=-7, relative to center)
+    FCB $FF,$F5,$01          ; line 0: flag=-1, dy=-11, dx=1
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $D9,$EA,0,0        ; path6: header (y=-39, x=-22, relative to center)
+    FCB $FF,$E7,$F9          ; line 0: flag=-1, dy=-25, dx=-7
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $D9,$E5,0,0        ; path7: header (y=-39, x=-27, relative to center)
+    FCB $FF,$E7,$FC          ; line 0: flag=-1, dy=-25, dx=-4
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH8:    ; Path 8
+    FCB 127              ; path8: intensity
+    FCB $C1,$3A,0,0        ; path8: header (y=-63, x=58, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH9:    ; Path 9
+    FCB 127              ; path9: intensity
+    FCB $C1,$09,0,0        ; path9: header (y=-63, x=9, relative to center)
+    FCB $FF,$11,$FC          ; line 0: flag=-1, dy=17, dx=-4
+    FCB $FF,$08,$FF          ; line 1: flag=-1, dy=8, dx=-1
+    FCB $FF,$FF,$09          ; line 2: flag=-1, dy=-1, dx=9
+    FCB $FF,$E8,$07          ; line 3: flag=-1, dy=-24, dx=7
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH10:    ; Path 10
+    FCB 127              ; path10: intensity
+    FCB $C1,$16,0,0        ; path10: header (y=-63, x=22, relative to center)
+    FCB $FF,$13,$FD          ; line 0: flag=-1, dy=19, dx=-3
+    FCB $FF,$00,$04          ; line 1: flag=-1, dy=0, dx=4
+    FCB $FF,$ED,$0A          ; line 2: flag=-1, dy=-19, dx=10
+    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH11:    ; Path 11
+    FCB 127              ; path11: intensity
+    FCB $D5,$CD,0,0        ; path11: header (y=-43, x=-51, relative to center)
+    FCB $FF,$16,$28          ; line 0: flag=-1, dy=22, dx=40
+    FCB $FF,$EA,$27          ; line 1: flag=-1, dy=-22, dx=39
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH12:    ; Path 12
+    FCB 127              ; path12: intensity
+    FCB $EB,$F5,0,0        ; path12: header (y=-21, x=-11, relative to center)
+    FCB $FF,$FB,$00          ; line 0: flag=-1, dy=-5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH13:    ; Path 13
+    FCB 127              ; path13: intensity
+    FCB $D8,$CF,0,0        ; path13: header (y=-40, x=-49, relative to center)
+    FCB $FF,$0B,$02          ; line 0: flag=-1, dy=11, dx=2
+    FCB $FF,$12,$24          ; line 1: flag=-1, dy=18, dx=36
+    FCB $FF,$EE,$24          ; line 2: flag=-1, dy=-18, dx=36
+    FCB $FF,$F4,$01          ; line 3: flag=-1, dy=-12, dx=1
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $E4,$D3,0,0        ; path14: header (y=-28, x=-45, relative to center)
+    FCB $FF,$3A,$08          ; line 0: flag=-1, dy=58, dx=8
+    FCB $FF,$00,$FF          ; line 1: flag=-1, dy=0, dx=-1
+    FCB $FF,$0F,$03          ; line 2: flag=-1, dy=15, dx=3
+    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
+    FCB $FF,$F2,$02          ; line 4: flag=-1, dy=-14, dx=2
+    FCB $FF,$00,$FF          ; line 5: flag=-1, dy=0, dx=-1
+    FCB $FF,$CB,$00          ; line 6: flag=-1, dy=-53, dx=0
+    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH15:    ; Path 15
+    FCB 127              ; path15: intensity
+    FCB $EA,$E0,0,0        ; path15: header (y=-22, x=-32, relative to center)
+    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB $FF,$40,$06          ; line 1: flag=-1, dy=64, dx=6
+    FCB $FF,$01,$FF          ; line 2: flag=-1, dy=1, dx=-1
+    FCB $FF,$0F,$03          ; line 3: flag=-1, dy=15, dx=3
+    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
+    FCB $FF,$F3,$03          ; line 5: flag=-1, dy=-13, dx=3
+    FCB $FF,$FF,$FF          ; line 6: flag=-1, dy=-1, dx=-1
+    FCB $FF,$C5,$01          ; line 7: flag=-1, dy=-59, dx=1
+    FCB $FF,$00,$00          ; line 8: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH16:    ; Path 16
+    FCB 127              ; path16: intensity
+    FCB $F2,$FC,0,0        ; path16: header (y=-14, x=-4, relative to center)
+    FCB $FF,$39,$01          ; line 0: flag=-1, dy=57, dx=1
+    FCB $FF,$01,$FF          ; line 1: flag=-1, dy=1, dx=-1
+    FCB $FF,$0D,$03          ; line 2: flag=-1, dy=13, dx=3
+    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
+    FCB $FF,$F1,$02          ; line 4: flag=-1, dy=-15, dx=2
+    FCB $FF,$00,$FF          ; line 5: flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH17:    ; Path 17
+    FCB 127              ; path17: intensity
+    FCB $EA,$0B,0,0        ; path17: header (y=-22, x=11, relative to center)
+    FCB $FF,$34,$FE          ; line 0: flag=-1, dy=52, dx=-2
+    FCB $FF,$00,$FF          ; line 1: flag=-1, dy=0, dx=-1
+    FCB $FF,$0E,$02          ; line 2: flag=-1, dy=14, dx=2
+    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
+    FCB $FF,$F1,$04          ; line 4: flag=-1, dy=-15, dx=4
+    FCB $FF,$00,$FF          ; line 5: flag=-1, dy=0, dx=-1
+    FCB $FF,$C7,$08          ; line 6: flag=-1, dy=-57, dx=8
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH18:    ; Path 18
+    FCB 127              ; path18: intensity
+    FCB $12,$ED,0,0        ; path18: header (y=18, x=-19, relative to center)
+    FCB $FF,$03,$07          ; line 0: flag=-1, dy=3, dx=7
+    FCB $FF,$FE,$08          ; line 1: flag=-1, dy=-2, dx=8
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH19:    ; Path 19
+    FCB 127              ; path19: intensity
+    FCB $0B,$ED,0,0        ; path19: header (y=11, x=-19, relative to center)
+    FCB $FF,$05,$07          ; line 0: flag=-1, dy=5, dx=7
+    FCB $FF,$FC,$08          ; line 1: flag=-1, dy=-4, dx=8
+    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH20:    ; Path 20
+    FCB 127              ; path20: intensity
+    FCB $F3,$F1,0,0        ; path20: header (y=-13, x=-15, relative to center)
+    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
+    FCB $FF,$08,$03          ; line 1: flag=-1, dy=8, dx=3
+    FCB $FF,$F7,$04          ; line 2: flag=-1, dy=-9, dx=4
+    FCB $FF,$F2,$01          ; line 3: flag=-1, dy=-14, dx=1
+    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH21:    ; Path 21
+    FCB 127              ; path21: intensity
+    FCB $2A,$02,0,0        ; path21: header (y=42, x=2, relative to center)
+    FCB $FF,$C0,$09          ; line 0: flag=-1, dy=-64, dx=9
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH22:    ; Path 22
+    FCB 127              ; path22: intensity
+    FCB $2A,$E6,0,0        ; path22: header (y=42, x=-26, relative to center)
+    FCB $FF,$01,$06          ; line 0: flag=-1, dy=1, dx=6
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH23:    ; Path 23
+    FCB 127              ; path23: intensity
+    FCB $1D,$DB,0,0        ; path23: header (y=29, x=-37, relative to center)
+    FCB $FF,$01,$05          ; line 0: flag=-1, dy=1, dx=5
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH24:    ; Path 24
+    FCB 127              ; path24: intensity
+    FCB $2A,$FD,0,0        ; path24: header (y=42, x=-3, relative to center)
+    FCB $FF,$FF,$05          ; line 0: flag=-1, dy=-1, dx=5
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH25:    ; Path 25
+    FCB 127              ; path25: intensity
+    FCB $1D,$09,0,0        ; path25: header (y=29, x=9, relative to center)
+    FCB $FF,$FF,$06          ; line 0: flag=-1, dy=-1, dx=6
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH26:    ; Path 26
+    FCB 127              ; path26: intensity
+    FCB $28,$FE,0,0        ; path26: header (y=40, x=-2, relative to center)
+    FCB $FF,$E6,$00          ; line 0: flag=-1, dy=-26, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH27:    ; Path 27
+    FCB 127              ; path27: intensity
+    FCB $1A,$0B,0,0        ; path27: header (y=26, x=11, relative to center)
+    FCB $FF,$E9,$01          ; line 0: flag=-1, dy=-23, dx=1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH28:    ; Path 28
+    FCB 127              ; path28: intensity
+    FCB $28,$E8,0,0        ; path28: header (y=40, x=-24, relative to center)
+    FCB $FF,$E5,$FD          ; line 0: flag=-1, dy=-27, dx=-3
+    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH29:    ; Path 29
+    FCB 127              ; path29: intensity
+    FCB $28,$EB,0,0        ; path29: header (y=40, x=-21, relative to center)
+    FCB $FF,$E6,$00          ; line 0: flag=-1, dy=-26, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH30:    ; Path 30
+    FCB 127              ; path30: intensity
+    FCB $0E,$E9,0,0        ; path30: header (y=14, x=-23, relative to center)
+    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH31:    ; Path 31
+    FCB 127              ; path31: intensity
+    FCB $28,$01,0,0        ; path31: header (y=40, x=1, relative to center)
+    FCB $FF,$E5,$03          ; line 0: flag=-1, dy=-27, dx=3
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH32:    ; Path 32
+    FCB 127              ; path32: intensity
+    FCB $19,$0E,0,0        ; path32: header (y=25, x=14, relative to center)
+    FCB $FF,$E9,$03          ; line 0: flag=-1, dy=-23, dx=3
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH33:    ; Path 33
+    FCB 127              ; path33: intensity
+    FCB $07,$E5,0,0        ; path33: header (y=7, x=-27, relative to center)
+    FCB $FF,$F0,$FF          ; line 0: flag=-1, dy=-16, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH34:    ; Path 34
+    FCB 127              ; path34: intensity
+    FCB $07,$E8,0,0        ; path34: header (y=7, x=-24, relative to center)
+    FCB $FF,$F2,$FF          ; line 0: flag=-1, dy=-14, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH35:    ; Path 35
+    FCB 127              ; path35: intensity
+    FCB $07,$EB,0,0        ; path35: header (y=7, x=-21, relative to center)
+    FCB $FF,$F4,$FF          ; line 0: flag=-1, dy=-12, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH36:    ; Path 36
+    FCB 127              ; path36: intensity
+    FCB $F5,$00,0,0        ; path36: header (y=-11, x=0, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH37:    ; Path 37
+    FCB 127              ; path37: intensity
+    FCB $F3,$05,0,0        ; path37: header (y=-13, x=5, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH38:    ; Path 38
+    FCB 127              ; path38: intensity
+    FCB $F0,$08,0,0        ; path38: header (y=-16, x=8, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH39:    ; Path 39
+    FCB 127              ; path39: intensity
+    FCB $1B,$DC,0,0        ; path39: header (y=27, x=-36, relative to center)
+    FCB $FF,$EB,$FE          ; line 0: flag=-1, dy=-21, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH40:    ; Path 40
+    FCB 127              ; path40: intensity
+    FCB $1B,$DE,0,0        ; path40: header (y=27, x=-34, relative to center)
+    FCB $FF,$EB,$00          ; line 0: flag=-1, dy=-21, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH41:    ; Path 41
+    FCB 127              ; path41: intensity
+    FCB $00,$D9,0,0        ; path41: header (y=0, x=-39, relative to center)
+    FCB $FF,$F0,$FE          ; line 0: flag=-1, dy=-16, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH42:    ; Path 42
+    FCB 127              ; path42: intensity
+    FCB $00,$DB,0,0        ; path42: header (y=0, x=-37, relative to center)
+    FCB $FF,$F1,$FF          ; line 0: flag=-1, dy=-15, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH43:    ; Path 43
+    FCB 127              ; path43: intensity
+    FCB $00,$DE,0,0        ; path43: header (y=0, x=-34, relative to center)
+    FCB $FF,$F3,$FF          ; line 0: flag=-1, dy=-13, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH44:    ; Path 44
+    FCB 127              ; path44: intensity
+    FCB $3D,$EC,0,0        ; path44: header (y=61, x=-20, relative to center)
+    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
+    FCB $FF,$FD,$FF          ; line 2: flag=-1, dy=-3, dx=-1
+    FCB $FF,$FD,$01          ; line 3: flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
+    FCB $FF,$03,$02          ; closing line: flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH45:    ; Path 45
+    FCB 127              ; path45: intensity
+    FCB $30,$E1,0,0        ; path45: header (y=48, x=-31, relative to center)
+    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
+    FCB $FF,$FD,$FE          ; line 2: flag=-1, dy=-3, dx=-2
+    FCB $FF,$FD,$02          ; line 3: flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
+    FCB $FF,$03,$02          ; closing line: flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH46:    ; Path 46
+    FCB 127              ; path46: intensity
+    FCB $3C,$03,0,0        ; path46: header (y=60, x=3, relative to center)
+    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FC          ; line 1: flag=-1, dy=0, dx=-4
+    FCB $FF,$FD,$FF          ; line 2: flag=-1, dy=-3, dx=-1
+    FCB $FF,$FD,$02          ; line 3: flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
+    FCB $FF,$03,$02          ; closing line: flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH47:    ; Path 47
+    FCB 127              ; path47: intensity
+    FCB $2E,$0E,0,0        ; path47: header (y=46, x=14, relative to center)
+    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FC          ; line 1: flag=-1, dy=0, dx=-4
+    FCB $FF,$FD,$FF          ; line 2: flag=-1, dy=-3, dx=-1
+    FCB $FF,$FE,$02          ; line 3: flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
+    FCB $FF,$02,$02          ; closing line: flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH48:    ; Path 48
+    FCB 127              ; path48: intensity
+    FCB $F2,$0D,0,0        ; path48: header (y=-14, x=13, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH49:    ; Path 49
+    FCB 127              ; path49: intensity
+    FCB $F0,$10,0,0        ; path49: header (y=-16, x=16, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH50:    ; Path 50
+    FCB 127              ; path50: intensity
+    FCB $EE,$13,0,0        ; path50: header (y=-18, x=19, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH51:    ; Path 51
+    FCB 127              ; path51: intensity
+    FCB $01,$EE,0,0        ; path51: header (y=1, x=-18, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH52:    ; Path 52
+    FCB 127              ; path52: intensity
+    FCB $03,$F1,0,0        ; path52: header (y=3, x=-15, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH53:    ; Path 53
+    FCB 127              ; path53: intensity
+    FCB $05,$F4,0,0        ; path53: header (y=5, x=-12, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH54:    ; Path 54
+    FCB 127              ; path54: intensity
+    FCB $07,$05,0,0        ; path54: header (y=7, x=5, relative to center)
+    FCB $FF,$F0,$01          ; line 0: flag=-1, dy=-16, dx=1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH55:    ; Path 55
+    FCB 127              ; path55: intensity
+    FCB $07,$02,0,0        ; path55: header (y=7, x=2, relative to center)
+    FCB $FF,$F2,$01          ; line 0: flag=-1, dy=-14, dx=1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH56:    ; Path 56
+    FCB 127              ; path56: intensity
+    FCB $07,$FF,0,0        ; path56: header (y=7, x=-1, relative to center)
+    FCB $FF,$F4,$01          ; line 0: flag=-1, dy=-12, dx=1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH57:    ; Path 57
+    FCB 127              ; path57: intensity
+    FCB $00,$11,0,0        ; path57: header (y=0, x=17, relative to center)
+    FCB $FF,$F0,$02          ; line 0: flag=-1, dy=-16, dx=2
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH58:    ; Path 58
+    FCB 127              ; path58: intensity
+    FCB $00,$0F,0,0        ; path58: header (y=0, x=15, relative to center)
+    FCB $FF,$F1,$01          ; line 0: flag=-1, dy=-15, dx=1
+    FCB 2                ; End marker (path complete)
+
+_BARCELONA_BG_PATH59:    ; Path 59
+    FCB 127              ; path59: intensity
+    FCB $00,$0C,0,0        ; path59: header (y=0, x=12, relative to center)
+    FCB $FF,$F3,$01          ; line 0: flag=-1, dy=-13, dx=1
+    FCB 2                ; End marker (path complete)
 ; Generated from bubble_huge.vec (Malban Draw_Sync_List format)
 ; Total paths: 1, points: 8
 ; X bounds: min=-25, max=27, width=52
@@ -5252,6 +9125,208 @@ _BUBBLE_SMALL_PATH0:    ; Path 0
     FCB $FF,$02,$00          ; line 22: flag=-1, dy=2, dx=0
     FCB $FF,$03,$01          ; closing line: flag=-1, dy=3, dx=1
     FCB 2                ; End marker (path complete)
+; Generated from buddha_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 4, points: 10
+; X bounds: min=-80, max=80, width=160
+; Center: (0, 20)
+
+_BUDDHA_BG_WIDTH EQU 160
+_BUDDHA_BG_CENTER_X EQU 0
+_BUDDHA_BG_CENTER_Y EQU 20
+
+_BUDDHA_BG_VECTORS:  ; Main entry (header + 4 path(s))
+    FCB 4               ; path_count (runtime metadata)
+    FDB _BUDDHA_BG_PATH0        ; pointer to path 0
+    FDB _BUDDHA_BG_PATH1        ; pointer to path 1
+    FDB _BUDDHA_BG_PATH2        ; pointer to path 2
+    FDB _BUDDHA_BG_PATH3        ; pointer to path 3
+
+_BUDDHA_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $14,$B0,0,0        ; path0: header (y=20, x=-80, relative to center)
+    FCB $FF,$14,$14          ; line 0: flag=-1, dy=20, dx=20
+    FCB $FF,$00,$78          ; line 1: flag=-1, dy=0, dx=120
+    FCB $FF,$EC,$14          ; line 2: flag=-1, dy=-20, dx=20
+    FCB 2                ; End marker (path complete)
+
+_BUDDHA_BG_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $14,$CE,0,0        ; path1: header (y=20, x=-50, relative to center)
+    FCB $FF,$C4,$00          ; line 0: flag=-1, dy=-60, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BUDDHA_BG_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $14,$32,0,0        ; path2: header (y=20, x=50, relative to center)
+    FCB $FF,$C4,$00          ; line 0: flag=-1, dy=-60, dx=0
+    FCB 2                ; End marker (path complete)
+
+_BUDDHA_BG_PATH3:    ; Path 3
+    FCB 100              ; path3: intensity
+    FCB $D8,$BA,0,0        ; path3: header (y=-40, x=-70, relative to center)
+    FCB $FF,$00,$7F          ; line 0: flag=-1, dy=0, dx=127
+    FCB 2                ; End marker (path complete)
+; Generated from easter_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 19
+; X bounds: min=-35, max=35, width=70
+; Center: (0, 15)
+
+_EASTER_BG_WIDTH EQU 70
+_EASTER_BG_CENTER_X EQU 0
+_EASTER_BG_CENTER_Y EQU 15
+
+_EASTER_BG_VECTORS:  ; Main entry (header + 5 path(s))
+    FCB 5               ; path_count (runtime metadata)
+    FDB _EASTER_BG_PATH0        ; pointer to path 0
+    FDB _EASTER_BG_PATH1        ; pointer to path 1
+    FDB _EASTER_BG_PATH2        ; pointer to path 2
+    FDB _EASTER_BG_PATH3        ; pointer to path 3
+    FDB _EASTER_BG_PATH4        ; pointer to path 4
+
+_EASTER_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $05,$E7,0,0        ; path0: header (y=5, x=-25, relative to center)
+    FCB $FF,$1E,$00          ; line 0: flag=-1, dy=30, dx=0
+    FCB $FF,$0A,$05          ; line 1: flag=-1, dy=10, dx=5
+    FCB $FF,$00,$28          ; line 2: flag=-1, dy=0, dx=40
+    FCB $FF,$F6,$05          ; line 3: flag=-1, dy=-10, dx=5
+    FCB $FF,$E2,$00          ; line 4: flag=-1, dy=-30, dx=0
+    FCB 2                ; End marker (path complete)
+
+_EASTER_BG_PATH1:    ; Path 1
+    FCB 110              ; path1: intensity
+    FCB $19,$00,0,0        ; path1: header (y=25, x=0, relative to center)
+    FCB $FF,$FB,$0A          ; line 0: flag=-1, dy=-5, dx=10
+    FCB 2                ; End marker (path complete)
+
+_EASTER_BG_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $1E,$F8,0,0        ; path2: header (y=30, x=-8, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
+    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB $FF,$00,$FB          ; line 3: flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_EASTER_BG_PATH3:    ; Path 3
+    FCB 110              ; path3: intensity
+    FCB $05,$E2,0,0        ; path3: header (y=5, x=-30, relative to center)
+    FCB $FF,$CE,$00          ; line 0: flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$3C          ; line 1: flag=-1, dy=0, dx=60
+    FCB $FF,$32,$00          ; line 2: flag=-1, dy=50, dx=0
+    FCB 2                ; End marker (path complete)
+
+_EASTER_BG_PATH4:    ; Path 4
+    FCB 90              ; path4: intensity
+    FCB $D3,$DD,0,0        ; path4: header (y=-45, x=-35, relative to center)
+    FCB $FF,$00,$46          ; line 0: flag=-1, dy=0, dx=70
+    FCB 2                ; End marker (path complete)
+; Generated from fuji_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 6, points: 65
+; X bounds: min=-125, max=125, width=250
+; Center: (0, 0)
+
+_FUJI_BG_WIDTH EQU 250
+_FUJI_BG_CENTER_X EQU 0
+_FUJI_BG_CENTER_Y EQU 0
+
+_FUJI_BG_VECTORS:  ; Main entry (header + 6 path(s))
+    FCB 6               ; path_count (runtime metadata)
+    FDB _FUJI_BG_PATH0        ; pointer to path 0
+    FDB _FUJI_BG_PATH1        ; pointer to path 1
+    FDB _FUJI_BG_PATH2        ; pointer to path 2
+    FDB _FUJI_BG_PATH3        ; pointer to path 3
+    FDB _FUJI_BG_PATH4        ; pointer to path 4
+    FDB _FUJI_BG_PATH5        ; pointer to path 5
+
+_FUJI_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $CF,$83,0,0        ; path0: header (y=-49, x=-125, relative to center)
+    FCB 2                ; End marker (path complete)
+
+_FUJI_BG_PATH1:    ; Path 1
+    FCB 80              ; path1: intensity
+    FCB $E8,$84,0,0        ; path1: header (y=-24, x=-124, relative to center)
+    FCB $FF,$0A,$1E          ; line 0: flag=-1, dy=10, dx=30
+    FCB $FF,$0E,$1E          ; line 1: flag=-1, dy=14, dx=30
+    FCB $FF,$0F,$15          ; line 2: flag=-1, dy=15, dx=21
+    FCB $FF,$11,$17          ; line 3: flag=-1, dy=17, dx=23
+    FCB $FF,$0E,$0E          ; line 4: flag=-1, dy=14, dx=14
+    FCB $FF,$FE,$03          ; line 5: flag=-1, dy=-2, dx=3
+    FCB $FF,$03,$04          ; line 6: flag=-1, dy=3, dx=4
+    FCB $FF,$FE,$04          ; line 7: flag=-1, dy=-2, dx=4
+    FCB $FF,$01,$07          ; line 8: flag=-1, dy=1, dx=7
+    FCB $FF,$02,$04          ; line 9: flag=-1, dy=2, dx=4
+    FCB $FF,$FD,$06          ; line 10: flag=-1, dy=-3, dx=6
+    FCB $FF,$03,$03          ; line 11: flag=-1, dy=3, dx=3
+    FCB $FF,$EB,$11          ; line 12: flag=-1, dy=-21, dx=17
+    FCB $FF,$F4,$11          ; line 13: flag=-1, dy=-12, dx=17
+    FCB $FF,$F0,$16          ; line 14: flag=-1, dy=-16, dx=22
+    FCB $FF,$F6,$14          ; line 15: flag=-1, dy=-10, dx=20
+    FCB $FF,$F6,$18          ; line 16: flag=-1, dy=-10, dx=24
+    FCB $FF,$00,$00          ; line 17: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_FUJI_BG_PATH2:    ; Path 2
+    FCB 95              ; path2: intensity
+    FCB $1A,$F1,0,0        ; path2: header (y=26, x=-15, relative to center)
+    FCB $FF,$06,$03          ; line 0: flag=-1, dy=6, dx=3
+    FCB $FF,$04,$03          ; line 1: flag=-1, dy=4, dx=3
+    FCB $FF,$FD,$04          ; line 2: flag=-1, dy=-3, dx=4
+    FCB $FF,$FC,$FC          ; line 3: flag=-1, dy=-4, dx=-4
+    FCB $FF,$FD,$FA          ; line 4: flag=-1, dy=-3, dx=-6
+    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_FUJI_BG_PATH3:    ; Path 3
+    FCB 95              ; path3: intensity
+    FCB $1F,$07,0,0        ; path3: header (y=31, x=7, relative to center)
+    FCB $FF,$F9,$FD          ; line 0: flag=-1, dy=-7, dx=-3
+    FCB $FF,$FA,$02          ; line 1: flag=-1, dy=-6, dx=2
+    FCB $FF,$F9,$FD          ; line 2: flag=-1, dy=-7, dx=-3
+    FCB $FF,$FD,$04          ; line 3: flag=-1, dy=-3, dx=4
+    FCB $FF,$08,$03          ; line 4: flag=-1, dy=8, dx=3
+    FCB $FF,$07,$FE          ; line 5: flag=-1, dy=7, dx=-2
+    FCB $FF,$06,$01          ; line 6: flag=-1, dy=6, dx=1
+    FCB $FF,$02,$FE          ; line 7: flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_FUJI_BG_PATH4:    ; Path 4
+    FCB 95              ; path4: intensity
+    FCB $21,$18,0,0        ; path4: header (y=33, x=24, relative to center)
+    FCB $FF,$F7,$05          ; line 0: flag=-1, dy=-9, dx=5
+    FCB $FF,$F7,$0C          ; line 1: flag=-1, dy=-9, dx=12
+    FCB $FF,$0B,$FA          ; line 2: flag=-1, dy=11, dx=-6
+    FCB $FF,$07,$F5          ; line 3: flag=-1, dy=7, dx=-11
+    FCB 2                ; End marker (path complete)
+
+_FUJI_BG_PATH5:    ; Path 5
+    FCB 100              ; path5: intensity
+    FCB $05,$C7,0,0        ; path5: header (y=5, x=-57, relative to center)
+    FCB $FF,$09,$1A          ; line 0: flag=-1, dy=9, dx=26
+    FCB $FF,$EF,$F2          ; line 1: flag=-1, dy=-17, dx=-14
+    FCB $FF,$1B,$22          ; line 2: flag=-1, dy=27, dx=34
+    FCB $FF,$F2,$FB          ; line 3: flag=-1, dy=-14, dx=-5
+    FCB $FF,$00,$03          ; line 4: flag=-1, dy=0, dx=3
+    FCB $FF,$F7,$FB          ; line 5: flag=-1, dy=-9, dx=-5
+    FCB $FF,$FA,$01          ; line 6: flag=-1, dy=-6, dx=1
+    FCB $FF,$0E,$0E          ; line 7: flag=-1, dy=14, dx=14
+    FCB $FF,$F1,$00          ; line 8: flag=-1, dy=-15, dx=0
+    FCB $FF,$0A,$05          ; line 9: flag=-1, dy=10, dx=5
+    FCB $FF,$EA,$06          ; line 10: flag=-1, dy=-22, dx=6
+    FCB $FF,$1C,$05          ; line 11: flag=-1, dy=28, dx=5
+    FCB $FF,$EF,$06          ; line 12: flag=-1, dy=-17, dx=6
+    FCB $FF,$03,$01          ; line 13: flag=-1, dy=3, dx=1
+    FCB $FF,$FD,$04          ; line 14: flag=-1, dy=-3, dx=4
+    FCB $FF,$0B,$03          ; line 15: flag=-1, dy=11, dx=3
+    FCB $FF,$F5,$05          ; line 16: flag=-1, dy=-11, dx=5
+    FCB $FF,$10,$FF          ; line 17: flag=-1, dy=16, dx=-1
+    FCB $FF,$EE,$13          ; line 18: flag=-1, dy=-18, dx=19
+    FCB $FF,$12,$F7          ; line 19: flag=-1, dy=18, dx=-9
+    FCB $FF,$F9,$0E          ; line 20: flag=-1, dy=-7, dx=14
+    FCB $FF,$04,$02          ; line 21: flag=-1, dy=4, dx=2
+    FCB $FF,$FC,$14          ; line 22: flag=-1, dy=-4, dx=20
+    FCB 2                ; End marker (path complete)
 ; Generated from hook.vec (Malban Draw_Sync_List format)
 ; Total paths: 1, points: 10
 ; X bounds: min=-6, max=6, width=12
@@ -5277,6 +9352,144 @@ _HOOK_PATH0:    ; Path 0
     FCB $FF,$08,$00          ; line 6: flag=-1, dy=8, dx=0
     FCB $FF,$FC,$FC          ; line 7: flag=-1, dy=-4, dx=-4
     FCB $FF,$00,$FF          ; line 8: flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+; Generated from keirin_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 3, points: 11
+; X bounds: min=-100, max=100, width=200
+; Center: (0, 10)
+
+_KEIRIN_BG_WIDTH EQU 200
+_KEIRIN_BG_CENTER_X EQU 0
+_KEIRIN_BG_CENTER_Y EQU 10
+
+_KEIRIN_BG_VECTORS:  ; Main entry (header + 3 path(s))
+    FCB 3               ; path_count (runtime metadata)
+    FDB _KEIRIN_BG_PATH0        ; pointer to path 0
+    FDB _KEIRIN_BG_PATH1        ; pointer to path 1
+    FDB _KEIRIN_BG_PATH2        ; pointer to path 2
+
+_KEIRIN_BG_PATH0:    ; Path 0
+    FCB 100              ; path0: intensity
+    FCB $D8,$9C,0,0        ; path0: header (y=-40, x=-100, relative to center)
+    FCB $FF,$46,$32          ; line 0: flag=-1, dy=70, dx=50
+    FCB $FF,$0A,$32          ; line 1: flag=-1, dy=10, dx=50
+    FCB $FF,$F6,$32          ; line 2: flag=-1, dy=-10, dx=50
+    FCB $FF,$BA,$32          ; line 3: flag=-1, dy=-70, dx=50
+    FCB 2                ; End marker (path complete)
+
+_KEIRIN_BG_PATH1:    ; Path 1
+    FCB 80              ; path1: intensity
+    FCB $EC,$BA,0,0        ; path1: header (y=-20, x=-70, relative to center)
+    FCB $FF,$1E,$1E          ; line 0: flag=-1, dy=30, dx=30
+    FCB $FF,$0A,$1E          ; line 1: flag=-1, dy=10, dx=30
+    FCB 2                ; End marker (path complete)
+
+_KEIRIN_BG_PATH2:    ; Path 2
+    FCB 80              ; path2: intensity
+    FCB $14,$0A,0,0        ; path2: header (y=20, x=10, relative to center)
+    FCB $FF,$F6,$1E          ; line 0: flag=-1, dy=-10, dx=30
+    FCB $FF,$E2,$1E          ; line 1: flag=-1, dy=-30, dx=30
+    FCB 2                ; End marker (path complete)
+; Generated from kilimanjaro_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 4, points: 13
+; X bounds: min=-100, max=100, width=200
+; Center: (0, 12)
+
+_KILIMANJARO_BG_WIDTH EQU 200
+_KILIMANJARO_BG_CENTER_X EQU 0
+_KILIMANJARO_BG_CENTER_Y EQU 12
+
+_KILIMANJARO_BG_VECTORS:  ; Main entry (header + 4 path(s))
+    FCB 4               ; path_count (runtime metadata)
+    FDB _KILIMANJARO_BG_PATH0        ; pointer to path 0
+    FDB _KILIMANJARO_BG_PATH1        ; pointer to path 1
+    FDB _KILIMANJARO_BG_PATH2        ; pointer to path 2
+    FDB _KILIMANJARO_BG_PATH3        ; pointer to path 3
+
+_KILIMANJARO_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $D6,$9C,0,0        ; path0: header (y=-42, x=-100, relative to center)
+    FCB $FF,$3C,$32          ; line 0: flag=-1, dy=60, dx=50
+    FCB $FF,$19,$32          ; line 1: flag=-1, dy=25, dx=50
+    FCB $FF,$E7,$32          ; line 2: flag=-1, dy=-25, dx=50
+    FCB $FF,$C4,$32          ; line 3: flag=-1, dy=-60, dx=50
+    FCB 2                ; End marker (path complete)
+
+_KILIMANJARO_BG_PATH1:    ; Path 1
+    FCB 110              ; path1: intensity
+    FCB $1C,$E2,0,0        ; path1: header (y=28, x=-30, relative to center)
+    FCB $FF,$0F,$1E          ; line 0: flag=-1, dy=15, dx=30
+    FCB $FF,$F1,$00          ; line 1: flag=-1, dy=-15, dx=0
+    FCB 2                ; End marker (path complete)
+
+_KILIMANJARO_BG_PATH2:    ; Path 2
+    FCB 110              ; path2: intensity
+    FCB $1C,$00,0,0        ; path2: header (y=28, x=0, relative to center)
+    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
+    FCB $FF,$F1,$1E          ; line 1: flag=-1, dy=-15, dx=30
+    FCB 2                ; End marker (path complete)
+
+_KILIMANJARO_BG_PATH3:    ; Path 3
+    FCB 90              ; path3: intensity
+    FCB $F4,$BA,0,0        ; path3: header (y=-12, x=-70, relative to center)
+    FCB $FF,$14,$1E          ; line 0: flag=-1, dy=20, dx=30
+    FCB 2                ; End marker (path complete)
+; Generated from leningrad_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 21
+; X bounds: min=-30, max=30, width=60
+; Center: (0, 30)
+
+_LENINGRAD_BG_WIDTH EQU 60
+_LENINGRAD_BG_CENTER_X EQU 0
+_LENINGRAD_BG_CENTER_Y EQU 30
+
+_LENINGRAD_BG_VECTORS:  ; Main entry (header + 5 path(s))
+    FCB 5               ; path_count (runtime metadata)
+    FDB _LENINGRAD_BG_PATH0        ; pointer to path 0
+    FDB _LENINGRAD_BG_PATH1        ; pointer to path 1
+    FDB _LENINGRAD_BG_PATH2        ; pointer to path 2
+    FDB _LENINGRAD_BG_PATH3        ; pointer to path 3
+    FDB _LENINGRAD_BG_PATH4        ; pointer to path 4
+
+_LENINGRAD_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $05,$E7,0,0        ; path0: header (y=5, x=-25, relative to center)
+    FCB $FF,$14,$0A          ; line 0: flag=-1, dy=20, dx=10
+    FCB $FF,$05,$0F          ; line 1: flag=-1, dy=5, dx=15
+    FCB $FF,$FB,$0F          ; line 2: flag=-1, dy=-5, dx=15
+    FCB $FF,$EC,$0A          ; line 3: flag=-1, dy=-20, dx=10
+    FCB 2                ; End marker (path complete)
+
+_LENINGRAD_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $1E,$00,0,0        ; path1: header (y=30, x=0, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_LENINGRAD_BG_PATH2:    ; Path 2
+    FCB 110              ; path2: intensity
+    FCB $05,$E2,0,0        ; path2: header (y=5, x=-30, relative to center)
+    FCB $FF,$D3,$00          ; line 0: flag=-1, dy=-45, dx=0
+    FCB $FF,$00,$3C          ; line 1: flag=-1, dy=0, dx=60
+    FCB $FF,$2D,$00          ; line 2: flag=-1, dy=45, dx=0
+    FCB 2                ; End marker (path complete)
+
+_LENINGRAD_BG_PATH3:    ; Path 3
+    FCB 90              ; path3: intensity
+    FCB $EC,$EC,0,0        ; path3: header (y=-20, x=-20, relative to center)
+    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$F1,$00          ; line 2: flag=-1, dy=-15, dx=0
+    FCB $FF,$00,$F6          ; line 3: flag=-1, dy=0, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_LENINGRAD_BG_PATH4:    ; Path 4
+    FCB 90              ; path4: intensity
+    FCB $EC,$0A,0,0        ; path4: header (y=-20, x=10, relative to center)
+    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$F1,$00          ; line 2: flag=-1, dy=-15, dx=0
+    FCB $FF,$00,$F6          ; line 3: flag=-1, dy=0, dx=-10
     FCB 2                ; End marker (path complete)
 ; Generated from location_marker.vec (Malban Draw_Sync_List format)
 ; Total paths: 1, points: 10
@@ -5415,6 +9628,53 @@ _LOGO_PATH6:    ; Path 6
     FCB $FF,$0C,$F8          ; line 1: flag=-1, dy=12, dx=-8
     FCB $FF,$03,$F0          ; line 2: flag=-1, dy=3, dx=-16
     FCB $FF,$FB,$FC          ; line 3: flag=-1, dy=-5, dx=-4
+    FCB 2                ; End marker (path complete)
+; Generated from london_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 4, points: 16
+; X bounds: min=-20, max=20, width=40
+; Center: (0, 15)
+
+_LONDON_BG_WIDTH EQU 40
+_LONDON_BG_CENTER_X EQU 0
+_LONDON_BG_CENTER_Y EQU 15
+
+_LONDON_BG_VECTORS:  ; Main entry (header + 4 path(s))
+    FCB 4               ; path_count (runtime metadata)
+    FDB _LONDON_BG_PATH0        ; pointer to path 0
+    FDB _LONDON_BG_PATH1        ; pointer to path 1
+    FDB _LONDON_BG_PATH2        ; pointer to path 2
+    FDB _LONDON_BG_PATH3        ; pointer to path 3
+
+_LONDON_BG_PATH0:    ; Path 0
+    FCB 110              ; path0: intensity
+    FCB $D3,$EC,0,0        ; path0: header (y=-45, x=-20, relative to center)
+    FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
+    FCB $FF,$00,$28          ; line 1: flag=-1, dy=0, dx=40
+    FCB $FF,$BA,$00          ; line 2: flag=-1, dy=-70, dx=0
+    FCB 2                ; End marker (path complete)
+
+_LONDON_BG_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $23,$F1,0,0        ; path1: header (y=35, x=-15, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
+    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$E2          ; line 3: flag=-1, dy=0, dx=-30
+    FCB 2                ; End marker (path complete)
+
+_LONDON_BG_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $28,$00,0,0        ; path2: header (y=40, x=0, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$FB,$08          ; line 1: flag=-1, dy=-5, dx=8
+    FCB 2                ; End marker (path complete)
+
+_LONDON_BG_PATH3:    ; Path 3
+    FCB 120              ; path3: intensity
+    FCB $19,$EC,0,0        ; path3: header (y=25, x=-20, relative to center)
+    FCB $FF,$0A,$05          ; line 0: flag=-1, dy=10, dx=5
+    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
+    FCB $FF,$F6,$05          ; line 2: flag=-1, dy=-10, dx=5
     FCB 2                ; End marker (path complete)
 ; Generated from map.vec (Malban Draw_Sync_List format)
 ; Total paths: 15, points: 165
@@ -5666,6 +9926,171 @@ _MAP_PATH14:    ; Path 14
     FCB $FF,$08,$FC          ; line 4: flag=-1, dy=8, dx=-4
     FCB $FF,$00,$FE          ; line 5: flag=-1, dy=0, dx=-2
     FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+; Generated from mayan_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 20
+; X bounds: min=-80, max=80, width=160
+; Center: (0, 10)
+
+_MAYAN_BG_WIDTH EQU 160
+_MAYAN_BG_CENTER_X EQU 0
+_MAYAN_BG_CENTER_Y EQU 10
+
+_MAYAN_BG_VECTORS:  ; Main entry (header + 5 path(s))
+    FCB 5               ; path_count (runtime metadata)
+    FDB _MAYAN_BG_PATH0        ; pointer to path 0
+    FDB _MAYAN_BG_PATH1        ; pointer to path 1
+    FDB _MAYAN_BG_PATH2        ; pointer to path 2
+    FDB _MAYAN_BG_PATH3        ; pointer to path 3
+    FDB _MAYAN_BG_PATH4        ; pointer to path 4
+
+_MAYAN_BG_PATH0:    ; Path 0
+    FCB 100              ; path0: intensity
+    FCB $D8,$B0,0,0        ; path0: header (y=-40, x=-80, relative to center)
+    FCB $FF,$00,$7F          ; line 0: flag=-1, dy=0, dx=127
+    FCB 2                ; End marker (path complete)
+
+_MAYAN_BG_PATH1:    ; Path 1
+    FCB 110              ; path1: intensity
+    FCB $D8,$BA,0,0        ; path1: header (y=-40, x=-70, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$7F          ; line 1: flag=-1, dy=0, dx=127
+    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_MAYAN_BG_PATH2:    ; Path 2
+    FCB 110              ; path2: intensity
+    FCB $E2,$C4,0,0        ; path2: header (y=-30, x=-60, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$78          ; line 1: flag=-1, dy=0, dx=120
+    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_MAYAN_BG_PATH3:    ; Path 3
+    FCB 120              ; path3: intensity
+    FCB $EC,$CE,0,0        ; path3: header (y=-20, x=-50, relative to center)
+    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$64          ; line 1: flag=-1, dy=0, dx=100
+    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_MAYAN_BG_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $F6,$D8,0,0        ; path4: header (y=-10, x=-40, relative to center)
+    FCB $FF,$28,$00          ; line 0: flag=-1, dy=40, dx=0
+    FCB $FF,$0A,$0A          ; line 1: flag=-1, dy=10, dx=10
+    FCB $FF,$00,$3C          ; line 2: flag=-1, dy=0, dx=60
+    FCB $FF,$F6,$0A          ; line 3: flag=-1, dy=-10, dx=10
+    FCB $FF,$D8,$00          ; line 4: flag=-1, dy=-40, dx=0
+    FCB 2                ; End marker (path complete)
+; Generated from newyork_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 22
+; X bounds: min=-25, max=25, width=50
+; Center: (0, 27)
+
+_NEWYORK_BG_WIDTH EQU 50
+_NEWYORK_BG_CENTER_X EQU 0
+_NEWYORK_BG_CENTER_Y EQU 27
+
+_NEWYORK_BG_VECTORS:  ; Main entry (header + 5 path(s))
+    FCB 5               ; path_count (runtime metadata)
+    FDB _NEWYORK_BG_PATH0        ; pointer to path 0
+    FDB _NEWYORK_BG_PATH1        ; pointer to path 1
+    FDB _NEWYORK_BG_PATH2        ; pointer to path 2
+    FDB _NEWYORK_BG_PATH3        ; pointer to path 3
+    FDB _NEWYORK_BG_PATH4        ; pointer to path 4
+
+_NEWYORK_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $21,$FB,0,0        ; path0: header (y=33, x=-5, relative to center)
+    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_NEWYORK_BG_PATH1:    ; Path 1
+    FCB 110              ; path1: intensity
+    FCB $0D,$00,0,0        ; path1: header (y=13, x=0, relative to center)
+    FCB $FF,$0F,$0A          ; line 0: flag=-1, dy=15, dx=10
+    FCB $FF,$05,$F6          ; line 1: flag=-1, dy=5, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_NEWYORK_BG_PATH2:    ; Path 2
+    FCB 110              ; path2: intensity
+    FCB $0D,$F1,0,0        ; path2: header (y=13, x=-15, relative to center)
+    FCB $FF,$CE,$00          ; line 0: flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
+    FCB $FF,$32,$00          ; line 2: flag=-1, dy=50, dx=0
+    FCB 2                ; End marker (path complete)
+
+_NEWYORK_BG_PATH3:    ; Path 3
+    FCB 120              ; path3: intensity
+    FCB $0D,$EC,0,0        ; path3: header (y=13, x=-20, relative to center)
+    FCB $FF,$0A,$05          ; line 0: flag=-1, dy=10, dx=5
+    FCB $FF,$FB,$05          ; line 1: flag=-1, dy=-5, dx=5
+    FCB $FF,$07,$05          ; line 2: flag=-1, dy=7, dx=5
+    FCB $FF,$F9,$05          ; line 3: flag=-1, dy=-7, dx=5
+    FCB $FF,$07,$05          ; line 4: flag=-1, dy=7, dx=5
+    FCB $FF,$F9,$05          ; line 5: flag=-1, dy=-7, dx=5
+    FCB $FF,$05,$05          ; line 6: flag=-1, dy=5, dx=5
+    FCB $FF,$F6,$05          ; line 7: flag=-1, dy=-10, dx=5
+    FCB 2                ; End marker (path complete)
+
+_NEWYORK_BG_PATH4:    ; Path 4
+    FCB 100              ; path4: intensity
+    FCB $DB,$E7,0,0        ; path4: header (y=-37, x=-25, relative to center)
+    FCB $FF,$00,$32          ; line 0: flag=-1, dy=0, dx=50
+    FCB 2                ; End marker (path complete)
+; Generated from paris_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 15
+; X bounds: min=-50, max=50, width=100
+; Center: (0, 17)
+
+_PARIS_BG_WIDTH EQU 100
+_PARIS_BG_CENTER_X EQU 0
+_PARIS_BG_CENTER_Y EQU 17
+
+_PARIS_BG_VECTORS:  ; Main entry (header + 5 path(s))
+    FCB 5               ; path_count (runtime metadata)
+    FDB _PARIS_BG_PATH0        ; pointer to path 0
+    FDB _PARIS_BG_PATH1        ; pointer to path 1
+    FDB _PARIS_BG_PATH2        ; pointer to path 2
+    FDB _PARIS_BG_PATH3        ; pointer to path 3
+    FDB _PARIS_BG_PATH4        ; pointer to path 4
+
+_PARIS_BG_PATH0:    ; Path 0
+    FCB 100              ; path0: intensity
+    FCB $D1,$CE,0,0        ; path0: header (y=-47, x=-50, relative to center)
+    FCB $FF,$1E,$1E          ; line 0: flag=-1, dy=30, dx=30
+    FCB $FF,$1E,$0A          ; line 1: flag=-1, dy=30, dx=10
+    FCB 2                ; End marker (path complete)
+
+_PARIS_BG_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $D1,$32,0,0        ; path1: header (y=-47, x=50, relative to center)
+    FCB $FF,$1E,$E2          ; line 0: flag=-1, dy=30, dx=-30
+    FCB $FF,$1E,$F6          ; line 1: flag=-1, dy=30, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_PARIS_BG_PATH2:    ; Path 2
+    FCB 110              ; path2: intensity
+    FCB $0D,$F6,0,0        ; path2: header (y=13, x=-10, relative to center)
+    FCB $FF,$14,$05          ; line 0: flag=-1, dy=20, dx=5
+    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$EC,$05          ; line 2: flag=-1, dy=-20, dx=5
+    FCB 2                ; End marker (path complete)
+
+_PARIS_BG_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $21,$FB,0,0        ; path3: header (y=33, x=-5, relative to center)
+    FCB $FF,$0F,$05          ; line 0: flag=-1, dy=15, dx=5
+    FCB $FF,$F1,$05          ; line 1: flag=-1, dy=-15, dx=5
+    FCB 2                ; End marker (path complete)
+
+_PARIS_BG_PATH4:    ; Path 4
+    FCB 90              ; path4: intensity
+    FCB $EF,$EC,0,0        ; path4: header (y=-17, x=-20, relative to center)
+    FCB $FF,$00,$28          ; line 0: flag=-1, dy=0, dx=40
     FCB 2                ; End marker (path complete)
 ; Generated from player_walk_1.vec (Malban Draw_Sync_List format)
 ; Total paths: 17, points: 62
@@ -6526,6 +10951,91 @@ _PLAYER_WALK_5_PATH16:    ; Path 16
     FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
     FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
     FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB 2                ; End marker (path complete)
+; Generated from pyramids_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 4, points: 10
+; X bounds: min=-90, max=90, width=180
+; Center: (0, 0)
+
+_PYRAMIDS_BG_WIDTH EQU 180
+_PYRAMIDS_BG_CENTER_X EQU 0
+_PYRAMIDS_BG_CENTER_Y EQU 0
+
+_PYRAMIDS_BG_VECTORS:  ; Main entry (header + 4 path(s))
+    FCB 4               ; path_count (runtime metadata)
+    FDB _PYRAMIDS_BG_PATH0        ; pointer to path 0
+    FDB _PYRAMIDS_BG_PATH1        ; pointer to path 1
+    FDB _PYRAMIDS_BG_PATH2        ; pointer to path 2
+    FDB _PYRAMIDS_BG_PATH3        ; pointer to path 3
+
+_PYRAMIDS_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $D3,$A6,0,0        ; path0: header (y=-45, x=-90, relative to center)
+    FCB $FF,$5A,$50          ; line 0: flag=-1, dy=90, dx=80
+    FCB $FF,$A6,$50          ; line 1: flag=-1, dy=-90, dx=80
+    FCB 2                ; End marker (path complete)
+
+_PYRAMIDS_BG_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $D3,$A6,0,0        ; path1: header (y=-45, x=-90, relative to center)
+    FCB $FF,$5A,$50          ; line 0: flag=-1, dy=90, dx=80
+    FCB 2                ; End marker (path complete)
+
+_PYRAMIDS_BG_PATH2:    ; Path 2
+    FCB 80              ; path2: intensity
+    FCB $2D,$F6,0,0        ; path2: header (y=45, x=-10, relative to center)
+    FCB $FF,$A6,$50          ; line 0: flag=-1, dy=-90, dx=80
+    FCB 2                ; End marker (path complete)
+
+_PYRAMIDS_BG_PATH3:    ; Path 3
+    FCB 90              ; path3: intensity
+    FCB $D3,$1E,0,0        ; path3: header (y=-45, x=30, relative to center)
+    FCB $FF,$2D,$1E          ; line 0: flag=-1, dy=45, dx=30
+    FCB $FF,$D3,$1E          ; line 1: flag=-1, dy=-45, dx=30
+    FCB 2                ; End marker (path complete)
+; Generated from taj_bg.vec (Malban Draw_Sync_List format)
+; Total paths: 4, points: 13
+; X bounds: min=-70, max=70, width=140
+; Center: (0, 22)
+
+_TAJ_BG_WIDTH EQU 140
+_TAJ_BG_CENTER_X EQU 0
+_TAJ_BG_CENTER_Y EQU 22
+
+_TAJ_BG_VECTORS:  ; Main entry (header + 4 path(s))
+    FCB 4               ; path_count (runtime metadata)
+    FDB _TAJ_BG_PATH0        ; pointer to path 0
+    FDB _TAJ_BG_PATH1        ; pointer to path 1
+    FDB _TAJ_BG_PATH2        ; pointer to path 2
+    FDB _TAJ_BG_PATH3        ; pointer to path 3
+
+_TAJ_BG_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $12,$E2,0,0        ; path0: header (y=18, x=-30, relative to center)
+    FCB $FF,$14,$0A          ; line 0: flag=-1, dy=20, dx=10
+    FCB $FF,$05,$14          ; line 1: flag=-1, dy=5, dx=20
+    FCB $FF,$FB,$14          ; line 2: flag=-1, dy=-5, dx=20
+    FCB $FF,$EC,$0A          ; line 3: flag=-1, dy=-20, dx=10
+    FCB 2                ; End marker (path complete)
+
+_TAJ_BG_PATH1:    ; Path 1
+    FCB 110              ; path1: intensity
+    FCB $12,$D8,0,0        ; path1: header (y=18, x=-40, relative to center)
+    FCB $FF,$CE,$00          ; line 0: flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$50          ; line 1: flag=-1, dy=0, dx=80
+    FCB $FF,$32,$00          ; line 2: flag=-1, dy=50, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TAJ_BG_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $D6,$BA,0,0        ; path2: header (y=-42, x=-70, relative to center)
+    FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TAJ_BG_PATH3:    ; Path 3
+    FCB 100              ; path3: intensity
+    FCB $D6,$46,0,0        ; path3: header (y=-42, x=70, relative to center)
+    FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from map_theme.vmus (internal name: Space Groove)
 ; Tempo: 140 BPM, Total events: 36 (PSG Direct format)
@@ -7719,11 +12229,11 @@ _PANG_THEME_MUSIC:
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _PANG_THEME_MUSIC       ; Jump to start (absolute address)
 
-; ==== Level: 01_MOUNT_FUJI ====
+; ==== Level: FUJI_LEVEL1_V2 ====
 ; Author: 
 ; Difficulty: medium
 
-_01_MOUNT_FUJI_LEVEL:
+_FUJI_LEVEL1_V2_LEVEL:
     FDB -96  ; World bounds: xMin (16-bit signed)
     FDB 95  ; xMax (16-bit signed)
     FDB -128  ; yMin (16-bit signed)
@@ -7733,11 +12243,11 @@ _01_MOUNT_FUJI_LEVEL:
     FCB 1  ; Background object count
     FCB 2  ; Gameplay object count
     FCB 0  ; Foreground object count
-    FDB _01_MOUNT_FUJI_BG_OBJECTS
-    FDB _01_MOUNT_FUJI_GAMEPLAY_OBJECTS
-    FDB _01_MOUNT_FUJI_FG_OBJECTS
+    FDB _FUJI_LEVEL1_V2_BG_OBJECTS
+    FDB _FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS
+    FDB _FUJI_LEVEL1_V2_FG_OBJECTS
 
-_01_MOUNT_FUJI_BG_OBJECTS:
+_FUJI_LEVEL1_V2_BG_OBJECTS:
 ; Object: obj_1767470884207 (enemy)
     FCB 1  ; type
     FDB 0  ; x
@@ -7755,7 +12265,7 @@ _01_MOUNT_FUJI_BG_OBJECTS:
     FDB 0  ; properties_ptr (reserved)
 
 
-_01_MOUNT_FUJI_GAMEPLAY_OBJECTS:
+_FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS:
 ; Object: enemy_1 (enemy)
     FCB 1  ; type
     FDB -40  ; x
@@ -7789,647 +12299,7 @@ _01_MOUNT_FUJI_GAMEPLAY_OBJECTS:
     FDB 0  ; properties_ptr (reserved)
 
 
-_01_MOUNT_FUJI_FG_OBJECTS:
-
-; ==== Level: 02_MOUNT_KEIRIN ====
-; Author: Pang Team
-; Difficulty: easy
-
-_02_MOUNT_KEIRIN_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _02_MOUNT_KEIRIN_BG_OBJECTS
-    FDB _02_MOUNT_KEIRIN_GAMEPLAY_OBJECTS
-    FDB _02_MOUNT_KEIRIN_FG_OBJECTS
-
-_02_MOUNT_KEIRIN_BG_OBJECTS:
-; Object: keirin_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _KEIRIN_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_02_MOUNT_KEIRIN_GAMEPLAY_OBJECTS:
-
-_02_MOUNT_KEIRIN_FG_OBJECTS:
-
-; ==== Level: 03_EMERALD_BUDDHA ====
-; Author: Pang Team
-; Difficulty: easy
-
-_03_EMERALD_BUDDHA_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _03_EMERALD_BUDDHA_BG_OBJECTS
-    FDB _03_EMERALD_BUDDHA_GAMEPLAY_OBJECTS
-    FDB _03_EMERALD_BUDDHA_FG_OBJECTS
-
-_03_EMERALD_BUDDHA_BG_OBJECTS:
-; Object: buddha_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _BUDDHA_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_03_EMERALD_BUDDHA_GAMEPLAY_OBJECTS:
-
-_03_EMERALD_BUDDHA_FG_OBJECTS:
-
-; ==== Level: 04_ANGKOR_WAT ====
-; Author: Pang Team
-; Difficulty: medium
-
-_04_ANGKOR_WAT_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _04_ANGKOR_WAT_BG_OBJECTS
-    FDB _04_ANGKOR_WAT_GAMEPLAY_OBJECTS
-    FDB _04_ANGKOR_WAT_FG_OBJECTS
-
-_04_ANGKOR_WAT_BG_OBJECTS:
-; Object: angkor_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _ANGKOR_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_04_ANGKOR_WAT_GAMEPLAY_OBJECTS:
-
-_04_ANGKOR_WAT_FG_OBJECTS:
-
-; ==== Level: 05_AYERS_ROCK ====
-; Author: Pang Team
-; Difficulty: medium
-
-_05_AYERS_ROCK_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _05_AYERS_ROCK_BG_OBJECTS
-    FDB _05_AYERS_ROCK_GAMEPLAY_OBJECTS
-    FDB _05_AYERS_ROCK_FG_OBJECTS
-
-_05_AYERS_ROCK_BG_OBJECTS:
-; Object: ayers_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _AYERS_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_05_AYERS_ROCK_GAMEPLAY_OBJECTS:
-
-_05_AYERS_ROCK_FG_OBJECTS:
-
-; ==== Level: 06_TAJ_MAHAL ====
-; Author: Pang Team
-; Difficulty: medium
-
-_06_TAJ_MAHAL_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _06_TAJ_MAHAL_BG_OBJECTS
-    FDB _06_TAJ_MAHAL_GAMEPLAY_OBJECTS
-    FDB _06_TAJ_MAHAL_FG_OBJECTS
-
-_06_TAJ_MAHAL_BG_OBJECTS:
-; Object: taj_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _TAJ_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_06_TAJ_MAHAL_GAMEPLAY_OBJECTS:
-
-_06_TAJ_MAHAL_FG_OBJECTS:
-
-; ==== Level: 07_LENINGRAD ====
-; Author: Pang Team
-; Difficulty: medium
-
-_07_LENINGRAD_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _07_LENINGRAD_BG_OBJECTS
-    FDB _07_LENINGRAD_GAMEPLAY_OBJECTS
-    FDB _07_LENINGRAD_FG_OBJECTS
-
-_07_LENINGRAD_BG_OBJECTS:
-; Object: leningrad_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _LENINGRAD_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_07_LENINGRAD_GAMEPLAY_OBJECTS:
-
-_07_LENINGRAD_FG_OBJECTS:
-
-; ==== Level: 08_PARIS ====
-; Author: Pang Team
-; Difficulty: medium
-
-_08_PARIS_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _08_PARIS_BG_OBJECTS
-    FDB _08_PARIS_GAMEPLAY_OBJECTS
-    FDB _08_PARIS_FG_OBJECTS
-
-_08_PARIS_BG_OBJECTS:
-; Object: paris_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PARIS_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_08_PARIS_GAMEPLAY_OBJECTS:
-
-_08_PARIS_FG_OBJECTS:
-
-; ==== Level: 09_LONDON ====
-; Author: Pang Team
-; Difficulty: hard
-
-_09_LONDON_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _09_LONDON_BG_OBJECTS
-    FDB _09_LONDON_GAMEPLAY_OBJECTS
-    FDB _09_LONDON_FG_OBJECTS
-
-_09_LONDON_BG_OBJECTS:
-; Object: london_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _LONDON_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_09_LONDON_GAMEPLAY_OBJECTS:
-
-_09_LONDON_FG_OBJECTS:
-
-; ==== Level: 10_BARCELONA ====
-; Author: Pang Team
-; Difficulty: hard
-
-_10_BARCELONA_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _10_BARCELONA_BG_OBJECTS
-    FDB _10_BARCELONA_GAMEPLAY_OBJECTS
-    FDB _10_BARCELONA_FG_OBJECTS
-
-_10_BARCELONA_BG_OBJECTS:
-; Object: barcelona_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _BARCELONA_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_10_BARCELONA_GAMEPLAY_OBJECTS:
-
-_10_BARCELONA_FG_OBJECTS:
-
-; ==== Level: 11_ATHENS ====
-; Author: Pang Team
-; Difficulty: hard
-
-_11_ATHENS_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _11_ATHENS_BG_OBJECTS
-    FDB _11_ATHENS_GAMEPLAY_OBJECTS
-    FDB _11_ATHENS_FG_OBJECTS
-
-_11_ATHENS_BG_OBJECTS:
-; Object: athens_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _ATHENS_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_11_ATHENS_GAMEPLAY_OBJECTS:
-
-_11_ATHENS_FG_OBJECTS:
-
-; ==== Level: 12_PYRAMIDS ====
-; Author: Pang Team
-; Difficulty: hard
-
-_12_PYRAMIDS_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _12_PYRAMIDS_BG_OBJECTS
-    FDB _12_PYRAMIDS_GAMEPLAY_OBJECTS
-    FDB _12_PYRAMIDS_FG_OBJECTS
-
-_12_PYRAMIDS_BG_OBJECTS:
-; Object: pyramids_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PYRAMIDS_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_12_PYRAMIDS_GAMEPLAY_OBJECTS:
-
-_12_PYRAMIDS_FG_OBJECTS:
-
-; ==== Level: 13_KILIMANJARO ====
-; Author: Pang Team
-; Difficulty: very_hard
-
-_13_KILIMANJARO_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _13_KILIMANJARO_BG_OBJECTS
-    FDB _13_KILIMANJARO_GAMEPLAY_OBJECTS
-    FDB _13_KILIMANJARO_FG_OBJECTS
-
-_13_KILIMANJARO_BG_OBJECTS:
-; Object: kilimanjaro_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _KILIMANJARO_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_13_KILIMANJARO_GAMEPLAY_OBJECTS:
-
-_13_KILIMANJARO_FG_OBJECTS:
-
-; ==== Level: 14_NEW_YORK ====
-; Author: Pang Team
-; Difficulty: very_hard
-
-_14_NEW_YORK_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _14_NEW_YORK_BG_OBJECTS
-    FDB _14_NEW_YORK_GAMEPLAY_OBJECTS
-    FDB _14_NEW_YORK_FG_OBJECTS
-
-_14_NEW_YORK_BG_OBJECTS:
-; Object: newyork_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _NEWYORK_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_14_NEW_YORK_GAMEPLAY_OBJECTS:
-
-_14_NEW_YORK_FG_OBJECTS:
-
-; ==== Level: 15_MAYAN_RUINS ====
-; Author: Pang Team
-; Difficulty: very_hard
-
-_15_MAYAN_RUINS_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _15_MAYAN_RUINS_BG_OBJECTS
-    FDB _15_MAYAN_RUINS_GAMEPLAY_OBJECTS
-    FDB _15_MAYAN_RUINS_FG_OBJECTS
-
-_15_MAYAN_RUINS_BG_OBJECTS:
-; Object: mayan_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _MAYAN_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_15_MAYAN_RUINS_GAMEPLAY_OBJECTS:
-
-_15_MAYAN_RUINS_FG_OBJECTS:
-
-; ==== Level: 16_ANTARCTICA ====
-; Author: Pang Team
-; Difficulty: extreme
-
-_16_ANTARCTICA_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _16_ANTARCTICA_BG_OBJECTS
-    FDB _16_ANTARCTICA_GAMEPLAY_OBJECTS
-    FDB _16_ANTARCTICA_FG_OBJECTS
-
-_16_ANTARCTICA_BG_OBJECTS:
-; Object: antarctica_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _ANTARCTICA_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_16_ANTARCTICA_GAMEPLAY_OBJECTS:
-
-_16_ANTARCTICA_FG_OBJECTS:
-
-; ==== Level: 17_EASTER_ISLAND ====
-; Author: Pang Team
-; Difficulty: extreme
-
-_17_EASTER_ISLAND_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 1  ; Background object count
-    FCB 0  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _17_EASTER_ISLAND_BG_OBJECTS
-    FDB _17_EASTER_ISLAND_GAMEPLAY_OBJECTS
-    FDB _17_EASTER_ISLAND_FG_OBJECTS
-
-_17_EASTER_ISLAND_BG_OBJECTS:
-; Object: easter_bg_bg (background)
-    FCB 4  ; type
-    FDB 0  ; x
-    FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _EASTER_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
-
-
-_17_EASTER_ISLAND_GAMEPLAY_OBJECTS:
-
-_17_EASTER_ISLAND_FG_OBJECTS:
+_FUJI_LEVEL1_V2_FG_OBJECTS:
 
 _HIT_SFX:
     ; SFX: hit (hit)
@@ -8925,103 +12795,6 @@ CLR VIA_shift_reg
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
-; === SHOW_LEVEL_RUNTIME - Draw entire level ===
-SHOW_LEVEL_RUNTIME:
-    ; Input: LEVEL_PTR (pointer to level data)
-    ;        LEVEL_WIDTH, LEVEL_HEIGHT (dimensions)
-    ; Renders 8x8 tiles as rectangles
-    
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    
-    ; Outer loop: Y (rows)
-    CLR LEVEL_Y_IDX
-.SL_Y_LOOP:
-    LDA LEVEL_Y_IDX
-    CMPA LEVEL_HEIGHT
-    BHS .SL_DONE         ; If Y >= height, done
-    
-    ; Inner loop: X (columns)
-    CLR LEVEL_X_IDX
-.SL_X_LOOP:
-    LDA LEVEL_X_IDX
-    CMPA LEVEL_WIDTH
-    BHS .SL_NEXT_Y       ; If X >= width, next row
-    
-    ; Calculate tile offset: (Y * width) + X
-    LDA LEVEL_Y_IDX
-    LDB LEVEL_WIDTH
-    MUL                  ; D = Y * width
-    ADDB LEVEL_X_IDX     ; D += X
-    ADCA #0
-    
-    ; Add to level pointer (skip 2-byte header)
-    ADDD #2              ; Skip width, height bytes
-    ADDD LEVEL_PTR
-    TFR D,X              ; X = address of tile
-    LDA ,X               ; Load tile value
-    
-    ; If tile is 0 (empty), skip drawing
-    CMPA #0
-    BEQ .SL_SKIP_TILE
-    
-    ; Draw tile as 8x8 rectangle
-    ; Calculate screen position
-    LDA LEVEL_X_IDX
-    LDB #8
-    MUL                  ; B = X * 8 (pixel X)
-    SUBB #128            ; Center horizontally
-    STB LEVEL_TEMP       ; Save pixel X
-    
-    LDA LEVEL_Y_IDX
-    LDB #8
-    MUL                  ; B = Y * 8 (pixel Y)
-    SUBB #128            ; Center vertically
-    NEGB                 ; Flip Y (screen coords)
-    TFR B,A              ; Y to A
-    LDB LEVEL_TEMP       ; X to B
-    
-    ; Move to tile position
-    JSR Moveto_d_7F
-    
-    ; Draw 8x8 rectangle
-    LDA #$7F
-    JSR Intensity_a
-    
-    CLR Vec_Misc_Count
-    LDA #0
-    LDB #8
-    JSR Draw_Line_d      ; Right
-    
-    CLR Vec_Misc_Count
-    LDA #-8
-    LDB #0
-    JSR Draw_Line_d      ; Down
-    
-    CLR Vec_Misc_Count
-    LDA #0
-    LDB #-8
-    JSR Draw_Line_d      ; Left
-    
-    CLR Vec_Misc_Count
-    LDA #8
-    LDB #0
-    JSR Draw_Line_d      ; Up
-    
-.SL_SKIP_TILE:
-    ; Next column
-    INC LEVEL_X_IDX
-    BRA .SL_X_LOOP
-    
-.SL_NEXT_Y:
-    ; Next row
-    INC LEVEL_Y_IDX
-    BRA .SL_Y_LOOP
-    
-.SL_DONE:
-    RTS
-
 ; ============================================================================
 ; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
 ; ============================================================================
@@ -9403,72 +13176,80 @@ PRINT_TEXT_STR_102743755:
     FCC "laser"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_1373131889812:
-    FCC "08_paris"
+PRINT_TEXT_STR_3413815335:
+    FCC "taj_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_93976101846:
+    FCC "fuji_bg"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_2382167728733:
     FCC "TO START"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_42594499486990:
-    FCC "09_london"
+PRINT_TEXT_STR_2779111860214:
+    FCC "ayers_bg"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_43226979130676:
-    FCC "11_athens"
+PRINT_TEXT_STR_3088519875410:
+    FCC "mayan_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_3170864850809:
+    FCC "paris_bg"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_62529178322969:
     FCC "GET READY"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_85851400383728:
+    FCC "angkor_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_86017190903439:
+    FCC "athens_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_86894009833752:
+    FCC "buddha_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_88916199021370:
+    FCC "easter_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94134666982268:
+    FCC "keirin_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_95266726412236:
+    FCC "london_bg"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_95736077158694:
     FCC "map_theme"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2997885107879189:
+    FCC "newyork_bg"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_3047088743154868:
     FCC "pang_theme"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_41567983976031617:
-    FCC "12_pyramids"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_41620790586713514:
-    FCC "14_new_york"
-    FCB $80          ; Vectrex string terminator
-
 PRINT_TEXT_STR_83503386307659390:
     FCC "bubble_huge"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_519952817208270443:
-    FCC "02_mount_keirin"
+PRINT_TEXT_STR_95097560564962529:
+    FCC "pyramids_bg"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_1266480283612386916:
-    FCC "06_taj_mahal"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_1267293202658942736:
-    FCC "07_leningrad"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_1286955645955725707:
-    FCC "10_barcelona"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2240185439352093618:
-    FCC "01_mount_fuji"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2316092353719428282:
-    FCC "04_angkor_wat"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2341510163702070608:
-    FCC "05_ayers_rock"
+PRINT_TEXT_STR_2572636110730664281:
+    FCC "barcelona_bg"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_2588604975540550088:
@@ -9479,32 +13260,28 @@ PRINT_TEXT_STR_2588604975547356052:
     FCC "bubble_small"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_3154572440162381176:
-    FCC "16_antarctica"
+PRINT_TEXT_STR_2829898994950197404:
+    FCC "leningrad_bg"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_3203094402351737782:
-    FCC "13_kilimanjaro"
+PRINT_TEXT_STR_2984064007298942493:
+    FCC "fuji_level1_v2"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_4779858577842362115:
-    FCC "15_mayan_ruins"
+PRINT_TEXT_STR_4990555610362249649:
+    FCC "kilimanjaro_bg"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_5508987775272975622:
+    FCC "antarctica_bg"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_6459777946950754952:
     FCC "bubble_medium"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_8210837716250674307:
-    FCC "03_emerald_buddha"
-    FCB $80          ; Vectrex string terminator
-
 PRINT_TEXT_STR_9120385685437879118:
     FCC "PRESS A BUTTON"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_13600694566264742961:
-    FCC "17_easter_island"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_17258163498655081049:

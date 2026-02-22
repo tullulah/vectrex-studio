@@ -82,67 +82,70 @@ VAR_LOCATION_NAMES   EQU $C880+$53   ; User variable: LOCATION_NAMES (2 bytes)
 VAR_LEVEL_BACKGROUNDS EQU $C880+$55   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
 VAR_LEVEL_ENEMY_COUNT EQU $C880+$57   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
 VAR_LEVEL_ENEMY_SPEED EQU $C880+$59   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$5B   ; User variable: NUM_LOCATIONS (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$5D   ; User variable: CURRENT_LOCATION (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$5F   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$61   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
-VAR_JOY_X            EQU $C880+$63   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$65   ; User variable: JOY_Y (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$67   ; User variable: PREV_JOY_X (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$69   ; User variable: PREV_JOY_Y (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$6B   ; User variable: COUNTDOWN_TIMER (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$6D   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$6F   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$71   ; User variable: HOOK_ACTIVE (2 bytes)
-VAR_HOOK_X           EQU $C880+$73   ; User variable: HOOK_X (2 bytes)
-VAR_HOOK_Y           EQU $C880+$75   ; User variable: HOOK_Y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$77   ; User variable: HOOK_MAX_Y (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$79   ; User variable: HOOK_GUN_X (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$7B   ; User variable: HOOK_GUN_Y (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$7D   ; User variable: HOOK_INIT_Y (2 bytes)
-VAR_PLAYER_X         EQU $C880+$7F   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$81   ; User variable: PLAYER_Y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$83   ; User variable: MOVE_SPEED (2 bytes)
-VAR_ABS_JOY          EQU $C880+$85   ; User variable: ABS_JOY (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$87   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$89   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$8B   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$8D   ; User variable: PLAYER_FACING (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$8F   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_GRAVITY          EQU $C880+$91   ; User variable: GRAVITY (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$93   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$95   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_GROUND_Y         EQU $C880+$97   ; User variable: GROUND_Y (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$99   ; User variable: JOYSTICK1_STATE (2 bytes)
-VAR_LOC_X            EQU $C880+$9B   ; User variable: LOC_X (2 bytes)
-VAR_LOC_Y            EQU $C880+$9D   ; User variable: LOC_Y (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$9F   ; User variable: ANIM_THRESHOLD (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$A1   ; User variable: MIRROR_MODE (2 bytes)
-VAR_ACTIVE_COUNT     EQU $C880+$A3   ; User variable: ACTIVE_COUNT (2 bytes)
-VAR_I                EQU $C880+$A5   ; User variable: I (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$A7   ; User variable: ENEMY_ACTIVE (2 bytes)
-VAR_COUNT            EQU $C880+$A9   ; User variable: COUNT (2 bytes)
-VAR_SPEED            EQU $C880+$AB   ; User variable: SPEED (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$AD   ; User variable: ENEMY_SIZE (2 bytes)
-VAR_ENEMY_X          EQU $C880+$AF   ; User variable: ENEMY_X (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$B1   ; User variable: ENEMY_Y (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$B3   ; User variable: ENEMY_VX (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$B5   ; User variable: ENEMY_VY (2 bytes)
-VAR_START_X          EQU $C880+$BF   ; User variable: start_x (2 bytes)
-VAR_START_Y          EQU $C880+$C1   ; User variable: start_y (2 bytes)
-VAR_END_X            EQU $C880+$C3   ; User variable: end_x (2 bytes)
-VAR_END_Y            EQU $C880+$C5   ; User variable: end_y (2 bytes)
-VAR_START_X          EQU $C880+$BF   ; User variable: START_X (2 bytes)
-VAR_START_Y          EQU $C880+$C1   ; User variable: START_Y (2 bytes)
-VAR_END_X            EQU $C880+$C3   ; User variable: END_X (2 bytes)
-VAR_END_Y            EQU $C880+$C5   ; User variable: END_Y (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$C7   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$D3   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$E3   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$F3   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$103   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$113   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$123   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
+VAR_PREV_BTN1        EQU $C880+$5B   ; User variable: PREV_BTN1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$5D   ; User variable: PREV_BTN2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$5F   ; User variable: PREV_BTN3 (2 bytes)
+VAR_PREV_BTN4        EQU $C880+$61   ; User variable: PREV_BTN4 (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$63   ; User variable: NUM_LOCATIONS (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$65   ; User variable: CURRENT_LOCATION (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$67   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$69   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
+VAR_JOY_X            EQU $C880+$6B   ; User variable: JOY_X (2 bytes)
+VAR_JOY_Y            EQU $C880+$6D   ; User variable: JOY_Y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$6F   ; User variable: PREV_JOY_X (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$71   ; User variable: PREV_JOY_Y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$73   ; User variable: COUNTDOWN_TIMER (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$75   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$77   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$79   ; User variable: HOOK_ACTIVE (2 bytes)
+VAR_HOOK_X           EQU $C880+$7B   ; User variable: HOOK_X (2 bytes)
+VAR_HOOK_Y           EQU $C880+$7D   ; User variable: HOOK_Y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$7F   ; User variable: HOOK_MAX_Y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$81   ; User variable: HOOK_GUN_X (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$83   ; User variable: HOOK_GUN_Y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$85   ; User variable: HOOK_INIT_Y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$87   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$89   ; User variable: PLAYER_Y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$8B   ; User variable: MOVE_SPEED (2 bytes)
+VAR_ABS_JOY          EQU $C880+$8D   ; User variable: ABS_JOY (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$8F   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$91   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$93   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$95   ; User variable: PLAYER_FACING (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$97   ; User variable: MAX_ENEMIES (2 bytes)
+VAR_GRAVITY          EQU $C880+$99   ; User variable: GRAVITY (2 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$9B   ; User variable: BOUNCE_DAMPING (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$9D   ; User variable: MIN_BOUNCE_VY (2 bytes)
+VAR_GROUND_Y         EQU $C880+$9F   ; User variable: GROUND_Y (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$A1   ; User variable: JOYSTICK1_STATE (2 bytes)
+VAR_LOC_X            EQU $C880+$A3   ; User variable: LOC_X (2 bytes)
+VAR_LOC_Y            EQU $C880+$A5   ; User variable: LOC_Y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$A7   ; User variable: ANIM_THRESHOLD (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$A9   ; User variable: MIRROR_MODE (2 bytes)
+VAR_COUNT            EQU $C880+$AB   ; User variable: COUNT (2 bytes)
+VAR_SPEED            EQU $C880+$AD   ; User variable: SPEED (2 bytes)
+VAR_I                EQU $C880+$AF   ; User variable: I (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$B1   ; User variable: ENEMY_ACTIVE (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$B3   ; User variable: ENEMY_SIZE (2 bytes)
+VAR_ENEMY_X          EQU $C880+$B5   ; User variable: ENEMY_X (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$B7   ; User variable: ENEMY_Y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$B9   ; User variable: ENEMY_VX (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$BB   ; User variable: ENEMY_VY (2 bytes)
+VAR_START_X          EQU $C880+$C5   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$C7   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$C9   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$CB   ; User variable: end_y (2 bytes)
+VAR_START_X          EQU $C880+$C5   ; User variable: START_X (2 bytes)
+VAR_START_Y          EQU $C880+$C7   ; User variable: START_Y (2 bytes)
+VAR_END_X            EQU $C880+$C9   ; User variable: END_X (2 bytes)
+VAR_END_Y            EQU $C880+$CB   ; User variable: END_Y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$CD   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$D9   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$E9   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$F9   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$109   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$119   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$129   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -480,6 +483,14 @@ MAIN:
     LDX #VAR_JOYSTICK1_STATE_DATA    ; Array now in RAM
     STX VAR_JOYSTICK1_STATE
     LDD #0
+    STD VAR_PREV_BTN1
+    LDD #0
+    STD VAR_PREV_BTN2
+    LDD #0
+    STD VAR_PREV_BTN3
+    LDD #0
+    STD VAR_PREV_BTN4
+    LDD #0
     STD VAR_CURRENT_LOCATION
     LDD #60
     STD VAR_LOCATION_GLOW_INTENSITY
@@ -648,6 +659,26 @@ MAIN:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_Y
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_JOYSTICK_POLL_COUNTER
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN1
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN2
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN3
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN4
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -724,15 +755,50 @@ IF_END_2:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_5_TRUE
+    LBEQ .CMP_3_TRUE
     LDD #0
-    LBRA .CMP_5_END
-.CMP_5_TRUE:
+    LBRA .CMP_3_END
+.CMP_3_TRUE:
     LDD #1
-.CMP_5_END:
+.CMP_3_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_4_TRUE
+    LBEQ .LOGIC_2_FALSE
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_PREV_BTN1
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_4_TRUE
+    LDD #0
+    LBRA .CMP_4_END
+.CMP_4_TRUE:
+    LDD #1
+.CMP_4_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_2_FALSE
+    LDD #1
+    LBRA .LOGIC_2_END
+.LOGIC_2_FALSE:
+    LDD #0
+.LOGIC_2_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_5
+    LDD VAR_STATE_MAP
+    STD RESULT
+    LDD RESULT
+    STD VAR_SCREEN
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    STD VAR_CURRENT_MUSIC
+    LBRA IF_END_4
+IF_NEXT_5:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -758,15 +824,42 @@ IF_END_2:
 .CMP_6_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_4_TRUE
+    LBEQ .LOGIC_5_FALSE
     LDD #0
-    LBRA .LOGIC_4_END
-.LOGIC_4_TRUE:
-    LDD #1
-.LOGIC_4_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_3_TRUE
+    PSHS D
+    LDD VAR_PREV_BTN2
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_7_TRUE
+    LDD #0
+    LBRA .CMP_7_END
+.CMP_7_TRUE:
+    LDD #1
+.CMP_7_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_5_FALSE
+    LDD #1
+    LBRA .LOGIC_5_END
+.LOGIC_5_FALSE:
+    LDD #0
+.LOGIC_5_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_6
+    LDD VAR_STATE_MAP
+    STD RESULT
+    LDD RESULT
+    STD VAR_SCREEN
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    STD VAR_CURRENT_MUSIC
+    LBRA IF_END_4
+IF_NEXT_6:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -784,23 +877,50 @@ IF_END_2:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_7_TRUE
+    LBEQ .CMP_9_TRUE
     LDD #0
-    LBRA .CMP_7_END
-.CMP_7_TRUE:
+    LBRA .CMP_9_END
+.CMP_9_TRUE:
     LDD #1
-.CMP_7_END:
+.CMP_9_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_3_TRUE
+    LBEQ .LOGIC_8_FALSE
     LDD #0
-    LBRA .LOGIC_3_END
-.LOGIC_3_TRUE:
-    LDD #1
-.LOGIC_3_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_2_TRUE
+    PSHS D
+    LDD VAR_PREV_BTN3
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_10_TRUE
+    LDD #0
+    LBRA .CMP_10_END
+.CMP_10_TRUE:
+    LDD #1
+.CMP_10_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_8_FALSE
+    LDD #1
+    LBRA .LOGIC_8_END
+.LOGIC_8_FALSE:
+    LDD #0
+.LOGIC_8_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_7
+    LDD VAR_STATE_MAP
+    STD RESULT
+    LDD RESULT
+    STD VAR_SCREEN
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    STD VAR_CURRENT_MUSIC
+    LBRA IF_END_4
+IF_NEXT_7:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -818,23 +938,40 @@ IF_END_2:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_8_TRUE
+    LBEQ .CMP_12_TRUE
     LDD #0
-    LBRA .CMP_8_END
-.CMP_8_TRUE:
+    LBRA .CMP_12_END
+.CMP_12_TRUE:
     LDD #1
-.CMP_8_END:
+.CMP_12_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_2_TRUE
+    LBEQ .LOGIC_11_FALSE
     LDD #0
-    LBRA .LOGIC_2_END
-.LOGIC_2_TRUE:
-    LDD #1
-.LOGIC_2_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_5
+    PSHS D
+    LDD VAR_PREV_BTN4
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_13_TRUE
+    LDD #0
+    LBRA .CMP_13_END
+.CMP_13_TRUE:
+    LDD #1
+.CMP_13_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_11_FALSE
+    LDD #1
+    LBRA .LOGIC_11_END
+.LOGIC_11_FALSE:
+    LDD #0
+.LOGIC_11_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_END_4
     LDD VAR_STATE_MAP
     STD RESULT
     LDD RESULT
@@ -843,12 +980,7 @@ IF_END_2:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_MUSIC
-    ; PLAY_SFX: Play sound effect
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
     LBRA IF_END_4
-IF_NEXT_5:
 IF_END_4:
     LBRA IF_END_0
 IF_NEXT_1:
@@ -860,15 +992,15 @@ IF_NEXT_1:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_9_TRUE
+    LBEQ .CMP_14_TRUE
     LDD #0
-    LBRA .CMP_9_END
-.CMP_9_TRUE:
+    LBRA .CMP_14_END
+.CMP_14_TRUE:
     LDD #1
-.CMP_9_END:
+.CMP_14_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_6
+    LBEQ IF_NEXT_8
     LDD #1
     STD RESULT
     LDD RESULT
@@ -877,15 +1009,15 @@ IF_NEXT_1:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBNE .CMP_10_TRUE
+    LBNE .CMP_15_TRUE
     LDD #0
-    LBRA .CMP_10_END
-.CMP_10_TRUE:
+    LBRA .CMP_15_END
+.CMP_15_TRUE:
     LDD #1
-.CMP_10_END:
+.CMP_15_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_8
+    LBEQ IF_NEXT_10
     ; PLAY_MUSIC("map_theme") - play music asset (index=0)
     LDX #_MAP_THEME_MUSIC  ; Load music data pointer
     JSR PLAY_MUSIC_RUNTIME
@@ -895,9 +1027,9 @@ IF_NEXT_1:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_MUSIC
-    LBRA IF_END_7
-IF_NEXT_8:
-IF_END_7:
+    LBRA IF_END_9
+IF_NEXT_10:
+IF_END_9:
     LDD VAR_JOYSTICK_POLL_COUNTER
     PSHS D
     LDD #1
@@ -913,15 +1045,15 @@ IF_END_7:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_11_TRUE
+    LBGE .CMP_16_TRUE
     LDD #0
-    LBRA .CMP_11_END
-.CMP_11_TRUE:
+    LBRA .CMP_16_END
+.CMP_16_TRUE:
     LDD #1
-.CMP_11_END:
+.CMP_16_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_10
+    LBEQ IF_NEXT_12
     LDD #0
     STD RESULT
     LDD RESULT
@@ -952,9 +1084,9 @@ IF_END_7:
     STD RESULT
     LDD RESULT
     STD VAR_JOY_Y
-    LBRA IF_END_9
-IF_NEXT_10:
-IF_END_9:
+    LBRA IF_END_11
+IF_NEXT_12:
+IF_END_11:
     LDD #40
     STD RESULT
     LDD RESULT
@@ -963,15 +1095,15 @@ IF_END_9:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_13_TRUE
+    LBGT .CMP_18_TRUE
     LDD #0
-    LBRA .CMP_13_END
-.CMP_13_TRUE:
+    LBRA .CMP_18_END
+.CMP_18_TRUE:
     LDD #1
-.CMP_13_END:
+.CMP_18_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_12_FALSE
+    LBEQ .LOGIC_17_FALSE
     LDD #40
     STD RESULT
     LDD RESULT
@@ -980,23 +1112,23 @@ IF_END_9:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_14_TRUE
+    LBLE .CMP_19_TRUE
     LDD #0
-    LBRA .CMP_14_END
-.CMP_14_TRUE:
+    LBRA .CMP_19_END
+.CMP_19_TRUE:
     LDD #1
-.CMP_14_END:
+.CMP_19_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_12_FALSE
+    LBEQ .LOGIC_17_FALSE
     LDD #1
-    LBRA .LOGIC_12_END
-.LOGIC_12_FALSE:
+    LBRA .LOGIC_17_END
+.LOGIC_17_FALSE:
     LDD #0
-.LOGIC_12_END:
+.LOGIC_17_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_12
+    LBEQ IF_NEXT_14
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
@@ -1016,15 +1148,15 @@ IF_END_9:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_15_TRUE
+    LBGE .CMP_20_TRUE
     LDD #0
-    LBRA .CMP_15_END
-.CMP_15_TRUE:
+    LBRA .CMP_20_END
+.CMP_20_TRUE:
     LDD #1
-.CMP_15_END:
+.CMP_20_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_14
+    LBEQ IF_NEXT_16
     LDD #0
     STD RESULT
     LDD RESULT
@@ -1039,11 +1171,11 @@ IF_END_9:
     STA LEVEL_HEIGHT
     LDD #1                 ; Return success
     STD RESULT
+    LBRA IF_END_15
+IF_NEXT_16:
+IF_END_15:
     LBRA IF_END_13
 IF_NEXT_14:
-IF_END_13:
-    LBRA IF_END_11
-IF_NEXT_12:
     LDD #-40
     STD RESULT
     LDD RESULT
@@ -1052,15 +1184,15 @@ IF_NEXT_12:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_17_TRUE
+    LBLT .CMP_22_TRUE
     LDD #0
-    LBRA .CMP_17_END
-.CMP_17_TRUE:
+    LBRA .CMP_22_END
+.CMP_22_TRUE:
     LDD #1
-.CMP_17_END:
+.CMP_22_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_16_FALSE
+    LBEQ .LOGIC_21_FALSE
     LDD #-40
     STD RESULT
     LDD RESULT
@@ -1069,23 +1201,23 @@ IF_NEXT_12:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_18_TRUE
+    LBGE .CMP_23_TRUE
     LDD #0
-    LBRA .CMP_18_END
-.CMP_18_TRUE:
+    LBRA .CMP_23_END
+.CMP_23_TRUE:
     LDD #1
-.CMP_18_END:
+.CMP_23_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_16_FALSE
+    LBEQ .LOGIC_21_FALSE
     LDD #1
-    LBRA .LOGIC_16_END
-.LOGIC_16_FALSE:
+    LBRA .LOGIC_21_END
+.LOGIC_21_FALSE:
     LDD #0
-.LOGIC_16_END:
+.LOGIC_21_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_15
+    LBEQ IF_NEXT_17
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
@@ -1107,15 +1239,15 @@ IF_NEXT_12:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_19_TRUE
+    LBLT .CMP_24_TRUE
     LDD #0
-    LBRA .CMP_19_END
-.CMP_19_TRUE:
+    LBRA .CMP_24_END
+.CMP_24_TRUE:
     LDD #1
-.CMP_19_END:
+.CMP_24_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_17
+    LBEQ IF_NEXT_19
     LDD VAR_NUM_LOCATIONS
     STD RESULT
     LDD RESULT
@@ -1129,11 +1261,11 @@ IF_NEXT_12:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
-    LBRA IF_END_16
+    LBRA IF_END_18
+IF_NEXT_19:
+IF_END_18:
+    LBRA IF_END_13
 IF_NEXT_17:
-IF_END_16:
-    LBRA IF_END_11
-IF_NEXT_15:
     LDD #40
     STD RESULT
     LDD RESULT
@@ -1142,15 +1274,15 @@ IF_NEXT_15:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_21_TRUE
+    LBGT .CMP_26_TRUE
     LDD #0
-    LBRA .CMP_21_END
-.CMP_21_TRUE:
+    LBRA .CMP_26_END
+.CMP_26_TRUE:
     LDD #1
-.CMP_21_END:
+.CMP_26_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_20_FALSE
+    LBEQ .LOGIC_25_FALSE
     LDD #40
     STD RESULT
     LDD RESULT
@@ -1159,23 +1291,23 @@ IF_NEXT_15:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_22_TRUE
+    LBLE .CMP_27_TRUE
     LDD #0
-    LBRA .CMP_22_END
-.CMP_22_TRUE:
+    LBRA .CMP_27_END
+.CMP_27_TRUE:
     LDD #1
-.CMP_22_END:
+.CMP_27_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_20_FALSE
+    LBEQ .LOGIC_25_FALSE
     LDD #1
-    LBRA .LOGIC_20_END
-.LOGIC_20_FALSE:
+    LBRA .LOGIC_25_END
+.LOGIC_25_FALSE:
     LDD #0
-.LOGIC_20_END:
+.LOGIC_25_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_18
+    LBEQ IF_NEXT_20
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
@@ -1195,24 +1327,24 @@ IF_NEXT_15:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_23_TRUE
+    LBGE .CMP_28_TRUE
     LDD #0
-    LBRA .CMP_23_END
-.CMP_23_TRUE:
+    LBRA .CMP_28_END
+.CMP_28_TRUE:
     LDD #1
-.CMP_23_END:
+.CMP_28_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_20
+    LBEQ IF_NEXT_22
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
-    LBRA IF_END_19
+    LBRA IF_END_21
+IF_NEXT_22:
+IF_END_21:
+    LBRA IF_END_13
 IF_NEXT_20:
-IF_END_19:
-    LBRA IF_END_11
-IF_NEXT_18:
     LDD #-40
     STD RESULT
     LDD RESULT
@@ -1221,15 +1353,15 @@ IF_NEXT_18:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_25_TRUE
+    LBLT .CMP_30_TRUE
     LDD #0
-    LBRA .CMP_25_END
-.CMP_25_TRUE:
+    LBRA .CMP_30_END
+.CMP_30_TRUE:
     LDD #1
-.CMP_25_END:
+.CMP_30_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_24_FALSE
+    LBEQ .LOGIC_29_FALSE
     LDD #-40
     STD RESULT
     LDD RESULT
@@ -1238,23 +1370,23 @@ IF_NEXT_18:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_26_TRUE
+    LBGE .CMP_31_TRUE
     LDD #0
-    LBRA .CMP_26_END
-.CMP_26_TRUE:
+    LBRA .CMP_31_END
+.CMP_31_TRUE:
     LDD #1
-.CMP_26_END:
+.CMP_31_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_24_FALSE
+    LBEQ .LOGIC_29_FALSE
     LDD #1
-    LBRA .LOGIC_24_END
-.LOGIC_24_FALSE:
+    LBRA .LOGIC_29_END
+.LOGIC_29_FALSE:
     LDD #0
-.LOGIC_24_END:
+.LOGIC_29_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_END_11
+    LBEQ IF_END_13
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
@@ -1276,15 +1408,15 @@ IF_NEXT_18:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_27_TRUE
+    LBLT .CMP_32_TRUE
     LDD #0
-    LBRA .CMP_27_END
-.CMP_27_TRUE:
+    LBRA .CMP_32_END
+.CMP_32_TRUE:
     LDD #1
-.CMP_27_END:
+.CMP_32_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_22
+    LBEQ IF_NEXT_24
     LDD VAR_NUM_LOCATIONS
     STD RESULT
     LDD RESULT
@@ -1298,11 +1430,11 @@ IF_NEXT_18:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
-    LBRA IF_END_21
-IF_NEXT_22:
-IF_END_21:
-    LBRA IF_END_11
-IF_END_11:
+    LBRA IF_END_23
+IF_NEXT_24:
+IF_END_23:
+    LBRA IF_END_13
+IF_END_13:
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
@@ -1328,15 +1460,54 @@ IF_END_11:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_31_TRUE
+    LBEQ .CMP_34_TRUE
     LDD #0
-    LBRA .CMP_31_END
-.CMP_31_TRUE:
+    LBRA .CMP_34_END
+.CMP_34_TRUE:
     LDD #1
-.CMP_31_END:
+.CMP_34_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_30_TRUE
+    LBEQ .LOGIC_33_FALSE
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_PREV_BTN1
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_35_TRUE
+    LDD #0
+    LBRA .CMP_35_END
+.CMP_35_TRUE:
+    LDD #1
+.CMP_35_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_33_FALSE
+    LDD #1
+    LBRA .LOGIC_33_END
+.LOGIC_33_FALSE:
+    LDD #0
+.LOGIC_33_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_26
+    LDD VAR_STATE_GAME
+    STD RESULT
+    LDD RESULT
+    STD VAR_SCREEN
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNTDOWN_ACTIVE
+    LDD #180
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNTDOWN_TIMER
+    LBRA IF_END_25
+IF_NEXT_26:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1354,23 +1525,54 @@ IF_END_11:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_32_TRUE
+    LBEQ .CMP_37_TRUE
     LDD #0
-    LBRA .CMP_32_END
-.CMP_32_TRUE:
+    LBRA .CMP_37_END
+.CMP_37_TRUE:
     LDD #1
-.CMP_32_END:
+.CMP_37_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_30_TRUE
+    LBEQ .LOGIC_36_FALSE
     LDD #0
-    LBRA .LOGIC_30_END
-.LOGIC_30_TRUE:
-    LDD #1
-.LOGIC_30_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_29_TRUE
+    PSHS D
+    LDD VAR_PREV_BTN2
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_38_TRUE
+    LDD #0
+    LBRA .CMP_38_END
+.CMP_38_TRUE:
+    LDD #1
+.CMP_38_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_36_FALSE
+    LDD #1
+    LBRA .LOGIC_36_END
+.LOGIC_36_FALSE:
+    LDD #0
+.LOGIC_36_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_27
+    LDD VAR_STATE_GAME
+    STD RESULT
+    LDD RESULT
+    STD VAR_SCREEN
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNTDOWN_ACTIVE
+    LDD #180
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNTDOWN_TIMER
+    LBRA IF_END_25
+IF_NEXT_27:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1388,23 +1590,54 @@ IF_END_11:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_33_TRUE
+    LBEQ .CMP_40_TRUE
     LDD #0
-    LBRA .CMP_33_END
-.CMP_33_TRUE:
+    LBRA .CMP_40_END
+.CMP_40_TRUE:
     LDD #1
-.CMP_33_END:
+.CMP_40_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_29_TRUE
+    LBEQ .LOGIC_39_FALSE
     LDD #0
-    LBRA .LOGIC_29_END
-.LOGIC_29_TRUE:
-    LDD #1
-.LOGIC_29_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_28_TRUE
+    PSHS D
+    LDD VAR_PREV_BTN3
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_41_TRUE
+    LDD #0
+    LBRA .CMP_41_END
+.CMP_41_TRUE:
+    LDD #1
+.CMP_41_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_39_FALSE
+    LDD #1
+    LBRA .LOGIC_39_END
+.LOGIC_39_FALSE:
+    LDD #0
+.LOGIC_39_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_28
+    LDD VAR_STATE_GAME
+    STD RESULT
+    LDD RESULT
+    STD VAR_SCREEN
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNTDOWN_ACTIVE
+    LDD #180
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNTDOWN_TIMER
+    LBRA IF_END_25
+IF_NEXT_28:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1422,27 +1655,40 @@ IF_END_11:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_34_TRUE
+    LBEQ .CMP_43_TRUE
     LDD #0
-    LBRA .CMP_34_END
-.CMP_34_TRUE:
+    LBRA .CMP_43_END
+.CMP_43_TRUE:
     LDD #1
-.CMP_34_END:
+.CMP_43_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_28_TRUE
+    LBEQ .LOGIC_42_FALSE
     LDD #0
-    LBRA .LOGIC_28_END
-.LOGIC_28_TRUE:
-    LDD #1
-.LOGIC_28_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_24
-    ; PLAY_SFX: Play sound effect
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
+    PSHS D
+    LDD VAR_PREV_BTN4
     STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBEQ .CMP_44_TRUE
+    LDD #0
+    LBRA .CMP_44_END
+.CMP_44_TRUE:
+    LDD #1
+.CMP_44_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_42_FALSE
+    LDD #1
+    LBRA .LOGIC_42_END
+.LOGIC_42_FALSE:
+    LDD #0
+.LOGIC_42_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_END_25
     LDD VAR_STATE_GAME
     STD RESULT
     LDD RESULT
@@ -1455,12 +1701,11 @@ IF_END_11:
     STD RESULT
     LDD RESULT
     STD VAR_COUNTDOWN_TIMER
-    LBRA IF_END_23
-IF_NEXT_24:
-IF_END_23:
+    LBRA IF_END_25
+IF_END_25:
     JSR DRAW_MAP_SCREEN
     LBRA IF_END_0
-IF_NEXT_6:
+IF_NEXT_8:
     LDD VAR_STATE_GAME
     STD RESULT
     LDD RESULT
@@ -1469,12 +1714,12 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_35_TRUE
+    LBEQ .CMP_45_TRUE
     LDD #0
-    LBRA .CMP_35_END
-.CMP_35_TRUE:
+    LBRA .CMP_45_END
+.CMP_45_TRUE:
     LDD #1
-.CMP_35_END:
+.CMP_45_END:
     STD RESULT
     LDD RESULT
     LBEQ IF_END_0
@@ -1486,15 +1731,15 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_36_TRUE
+    LBEQ .CMP_46_TRUE
     LDD #0
-    LBRA .CMP_36_END
-.CMP_36_TRUE:
+    LBRA .CMP_46_END
+.CMP_46_TRUE:
     LDD #1
-.CMP_36_END:
+.CMP_46_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_26
+    LBEQ IF_NEXT_30
     JSR DRAW_LEVEL_BACKGROUND
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
@@ -1570,25 +1815,25 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_37_TRUE
+    LBLE .CMP_47_TRUE
     LDD #0
-    LBRA .CMP_37_END
-.CMP_37_TRUE:
+    LBRA .CMP_47_END
+.CMP_47_TRUE:
     LDD #1
-.CMP_37_END:
+.CMP_47_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_28
+    LBEQ IF_NEXT_32
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_COUNTDOWN_ACTIVE
     JSR SPAWN_ENEMIES
-    LBRA IF_END_27
-IF_NEXT_28:
-IF_END_27:
-    LBRA IF_END_25
-IF_NEXT_26:
+    LBRA IF_END_31
+IF_NEXT_32:
+IF_END_31:
+    LBRA IF_END_29
+IF_NEXT_30:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -1597,15 +1842,15 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_38_TRUE
+    LBEQ .CMP_48_TRUE
     LDD #0
-    LBRA .CMP_38_END
-.CMP_38_TRUE:
+    LBRA .CMP_48_END
+.CMP_48_TRUE:
     LDD #1
-.CMP_38_END:
+.CMP_48_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_30
+    LBEQ IF_NEXT_34
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1623,15 +1868,15 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_42_TRUE
+    LBEQ .CMP_52_TRUE
     LDD #0
-    LBRA .CMP_42_END
-.CMP_42_TRUE:
+    LBRA .CMP_52_END
+.CMP_52_TRUE:
     LDD #1
-.CMP_42_END:
+.CMP_52_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_41_TRUE
+    LBNE .LOGIC_51_TRUE
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1649,23 +1894,23 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_43_TRUE
+    LBEQ .CMP_53_TRUE
     LDD #0
-    LBRA .CMP_43_END
-.CMP_43_TRUE:
+    LBRA .CMP_53_END
+.CMP_53_TRUE:
     LDD #1
-.CMP_43_END:
+.CMP_53_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_41_TRUE
+    LBNE .LOGIC_51_TRUE
     LDD #0
-    LBRA .LOGIC_41_END
-.LOGIC_41_TRUE:
+    LBRA .LOGIC_51_END
+.LOGIC_51_TRUE:
     LDD #1
-.LOGIC_41_END:
+.LOGIC_51_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_40_TRUE
+    LBNE .LOGIC_50_TRUE
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1683,23 +1928,23 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_44_TRUE
+    LBEQ .CMP_54_TRUE
     LDD #0
-    LBRA .CMP_44_END
-.CMP_44_TRUE:
+    LBRA .CMP_54_END
+.CMP_54_TRUE:
     LDD #1
-.CMP_44_END:
+.CMP_54_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_40_TRUE
+    LBNE .LOGIC_50_TRUE
     LDD #0
-    LBRA .LOGIC_40_END
-.LOGIC_40_TRUE:
+    LBRA .LOGIC_50_END
+.LOGIC_50_TRUE:
     LDD #1
-.LOGIC_40_END:
+.LOGIC_50_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_39_TRUE
+    LBNE .LOGIC_49_TRUE
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1717,23 +1962,23 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_45_TRUE
+    LBEQ .CMP_55_TRUE
     LDD #0
-    LBRA .CMP_45_END
-.CMP_45_TRUE:
+    LBRA .CMP_55_END
+.CMP_55_TRUE:
     LDD #1
-.CMP_45_END:
+.CMP_55_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_39_TRUE
+    LBNE .LOGIC_49_TRUE
     LDD #0
-    LBRA .LOGIC_39_END
-.LOGIC_39_TRUE:
+    LBRA .LOGIC_49_END
+.LOGIC_49_TRUE:
     LDD #1
-.LOGIC_39_END:
+.LOGIC_49_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_32
+    LBEQ IF_NEXT_36
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1742,10 +1987,6 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_Y
-    ; PLAY_SFX: Play sound effect
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -1758,15 +1999,15 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_46_TRUE
+    LBEQ .CMP_56_TRUE
     LDD #0
-    LBRA .CMP_46_END
-.CMP_46_TRUE:
+    LBRA .CMP_56_END
+.CMP_56_TRUE:
     LDD #1
-.CMP_46_END:
+.CMP_56_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_34
+    LBEQ IF_NEXT_38
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -1778,8 +2019,8 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_GUN_X
-    LBRA IF_END_33
-IF_NEXT_34:
+    LBRA IF_END_37
+IF_NEXT_38:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -1793,7 +2034,7 @@ IF_NEXT_34:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_GUN_X
-IF_END_33:
+IF_END_37:
     LDD VAR_PLAYER_Y
     STD RESULT
     LDD RESULT
@@ -1813,12 +2054,12 @@ IF_END_33:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_X
-    LBRA IF_END_31
-IF_NEXT_32:
-IF_END_31:
-    LBRA IF_END_29
-IF_NEXT_30:
-IF_END_29:
+    LBRA IF_END_35
+IF_NEXT_36:
+IF_END_35:
+    LBRA IF_END_33
+IF_NEXT_34:
+IF_END_33:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1827,15 +2068,15 @@ IF_END_29:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_47_TRUE
+    LBEQ .CMP_57_TRUE
     LDD #0
-    LBRA .CMP_47_END
-.CMP_47_TRUE:
+    LBRA .CMP_57_END
+.CMP_57_TRUE:
     LDD #1
-.CMP_47_END:
+.CMP_57_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_36
+    LBEQ IF_NEXT_40
     LDD VAR_HOOK_Y
     STD RESULT
     LDD RESULT
@@ -1855,15 +2096,15 @@ IF_END_29:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_48_TRUE
+    LBGE .CMP_58_TRUE
     LDD #0
-    LBRA .CMP_48_END
-.CMP_48_TRUE:
+    LBRA .CMP_58_END
+.CMP_58_TRUE:
     LDD #1
-.CMP_48_END:
+.CMP_58_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_38
+    LBEQ IF_NEXT_42
     LDD #0
     STD RESULT
     LDD RESULT
@@ -1872,16 +2113,68 @@ IF_END_29:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_Y
-    LBRA IF_END_37
-IF_NEXT_38:
-IF_END_37:
-    LBRA IF_END_35
-IF_NEXT_36:
-IF_END_35:
+    LBRA IF_END_41
+IF_NEXT_42:
+IF_END_41:
+    LBRA IF_END_39
+IF_NEXT_40:
+IF_END_39:
     JSR DRAW_GAME_LEVEL
-IF_END_25:
+IF_END_29:
     LBRA IF_END_0
 IF_END_0:
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
+    PSHS X
+    LDD #2
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN1
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
+    PSHS X
+    LDD #3
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN2
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
+    PSHS X
+    LDD #4
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN3
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
+    PSHS X
+    LDD #5
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD VAR_PREV_BTN4
     JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
     RTS
 
@@ -1974,15 +2267,15 @@ DRAW_MAP_SCREEN:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_49_TRUE
+    LBEQ .CMP_59_TRUE
     LDD #0
-    LBRA .CMP_49_END
-.CMP_49_TRUE:
+    LBRA .CMP_59_END
+.CMP_59_TRUE:
     LDD #1
-.CMP_49_END:
+.CMP_59_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_40
+    LBEQ IF_NEXT_44
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
@@ -2002,24 +2295,24 @@ DRAW_MAP_SCREEN:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_50_TRUE
+    LBGE .CMP_60_TRUE
     LDD #0
-    LBRA .CMP_50_END
-.CMP_50_TRUE:
+    LBRA .CMP_60_END
+.CMP_60_TRUE:
     LDD #1
-.CMP_50_END:
+.CMP_60_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_42
+    LBEQ IF_NEXT_46
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_LOCATION_GLOW_DIRECTION
-    LBRA IF_END_41
-IF_NEXT_42:
-IF_END_41:
-    LBRA IF_END_39
-IF_NEXT_40:
+    LBRA IF_END_45
+IF_NEXT_46:
+IF_END_45:
+    LBRA IF_END_43
+IF_NEXT_44:
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
@@ -2041,23 +2334,23 @@ IF_NEXT_40:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_51_TRUE
+    LBLE .CMP_61_TRUE
     LDD #0
-    LBRA .CMP_51_END
-.CMP_51_TRUE:
+    LBRA .CMP_61_END
+.CMP_61_TRUE:
     LDD #1
-.CMP_51_END:
+.CMP_61_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_44
+    LBEQ IF_NEXT_48
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_LOCATION_GLOW_DIRECTION
-    LBRA IF_END_43
-IF_NEXT_44:
+    LBRA IF_END_47
+IF_NEXT_48:
+IF_END_47:
 IF_END_43:
-IF_END_39:
     ; PRINT_TEXT: Print text at position
     LDD #-120
     STD RESULT
@@ -2242,15 +2535,15 @@ DRAW_TITLE_SCREEN:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_52_TRUE
+    LBEQ .CMP_62_TRUE
     LDD #0
-    LBRA .CMP_52_END
-.CMP_52_TRUE:
+    LBRA .CMP_62_END
+.CMP_62_TRUE:
     LDD #1
-.CMP_52_END:
+.CMP_62_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_46
+    LBEQ IF_NEXT_50
     LDD VAR_TITLE_INTENSITY
     PSHS D
     LDD #1
@@ -2258,9 +2551,9 @@ DRAW_TITLE_SCREEN:
     LDD RESULT
     ADDD ,S++
     STD VAR_TITLE_INTENSITY
-    LBRA IF_END_45
-IF_NEXT_46:
-IF_END_45:
+    LBRA IF_END_49
+IF_NEXT_50:
+IF_END_49:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2269,15 +2562,15 @@ IF_END_45:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_53_TRUE
+    LBEQ .CMP_63_TRUE
     LDD #0
-    LBRA .CMP_53_END
-.CMP_53_TRUE:
+    LBRA .CMP_63_END
+.CMP_63_TRUE:
     LDD #1
-.CMP_53_END:
+.CMP_63_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_48
+    LBEQ IF_NEXT_52
     LDD VAR_TITLE_INTENSITY
     PSHS D
     LDD #1
@@ -2285,9 +2578,9 @@ IF_END_45:
     LDD RESULT
     SUBD ,S++
     STD VAR_TITLE_INTENSITY
-    LBRA IF_END_47
-IF_NEXT_48:
-IF_END_47:
+    LBRA IF_END_51
+IF_NEXT_52:
+IF_END_51:
     LDD #80
     STD RESULT
     LDD RESULT
@@ -2296,22 +2589,22 @@ IF_END_47:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_54_TRUE
+    LBEQ .CMP_64_TRUE
     LDD #0
-    LBRA .CMP_54_END
-.CMP_54_TRUE:
+    LBRA .CMP_64_END
+.CMP_64_TRUE:
     LDD #1
-.CMP_54_END:
+.CMP_64_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_50
+    LBEQ IF_NEXT_54
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_TITLE_STATE
-    LBRA IF_END_49
-IF_NEXT_50:
-IF_END_49:
+    LBRA IF_END_53
+IF_NEXT_54:
+IF_END_53:
     LDD #30
     STD RESULT
     LDD RESULT
@@ -2320,22 +2613,22 @@ IF_END_49:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_55_TRUE
+    LBEQ .CMP_65_TRUE
     LDD #0
-    LBRA .CMP_55_END
-.CMP_55_TRUE:
+    LBRA .CMP_65_END
+.CMP_65_TRUE:
     LDD #1
-.CMP_55_END:
+.CMP_65_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_52
+    LBEQ IF_NEXT_56
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_TITLE_STATE
-    LBRA IF_END_51
-IF_NEXT_52:
-IF_END_51:
+    LBRA IF_END_55
+IF_NEXT_56:
+IF_END_55:
     RTS
 
 ; Function: DRAW_LEVEL_BACKGROUND
@@ -2355,15 +2648,15 @@ DRAW_LEVEL_BACKGROUND:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_56_TRUE
+    LBEQ .CMP_66_TRUE
     LDD #0
-    LBRA .CMP_56_END
-.CMP_56_TRUE:
+    LBRA .CMP_66_END
+.CMP_66_TRUE:
     LDD #1
-.CMP_56_END:
+.CMP_66_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_54
+    LBEQ IF_NEXT_58
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: fuji_bg (index=11, 6 paths)
     LDD #0
@@ -2397,8 +2690,8 @@ DRAW_LEVEL_BACKGROUND:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_54:
+    LBRA IF_END_57
+IF_NEXT_58:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -2407,15 +2700,15 @@ IF_NEXT_54:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_57_TRUE
+    LBEQ .CMP_67_TRUE
     LDD #0
-    LBRA .CMP_57_END
-.CMP_57_TRUE:
+    LBRA .CMP_67_END
+.CMP_67_TRUE:
     LDD #1
-.CMP_57_END:
+.CMP_67_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_55
+    LBEQ IF_NEXT_59
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: keirin_bg (index=13, 3 paths)
     LDD #0
@@ -2443,8 +2736,8 @@ IF_NEXT_54:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_55:
+    LBRA IF_END_57
+IF_NEXT_59:
     LDD #2
     STD RESULT
     LDD RESULT
@@ -2453,15 +2746,15 @@ IF_NEXT_55:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_58_TRUE
+    LBEQ .CMP_68_TRUE
     LDD #0
-    LBRA .CMP_58_END
-.CMP_58_TRUE:
+    LBRA .CMP_68_END
+.CMP_68_TRUE:
     LDD #1
-.CMP_58_END:
+.CMP_68_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_56
+    LBEQ IF_NEXT_60
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: buddha_bg (index=9, 4 paths)
     LDD #0
@@ -2491,8 +2784,8 @@ IF_NEXT_55:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_56:
+    LBRA IF_END_57
+IF_NEXT_60:
     LDD #3
     STD RESULT
     LDD RESULT
@@ -2501,15 +2794,15 @@ IF_NEXT_56:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_59_TRUE
+    LBEQ .CMP_69_TRUE
     LDD #0
-    LBRA .CMP_59_END
-.CMP_59_TRUE:
+    LBRA .CMP_69_END
+.CMP_69_TRUE:
     LDD #1
-.CMP_59_END:
+.CMP_69_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_57
+    LBEQ IF_NEXT_61
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: angkor_bg (index=0, 192 paths)
     LDD #0
@@ -2915,8 +3208,8 @@ IF_NEXT_56:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_57:
+    LBRA IF_END_57
+IF_NEXT_61:
     LDD #4
     STD RESULT
     LDD RESULT
@@ -2925,15 +3218,15 @@ IF_NEXT_57:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_60_TRUE
+    LBEQ .CMP_70_TRUE
     LDD #0
-    LBRA .CMP_60_END
-.CMP_60_TRUE:
+    LBRA .CMP_70_END
+.CMP_70_TRUE:
     LDD #1
-.CMP_60_END:
+.CMP_70_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_58
+    LBEQ IF_NEXT_62
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: ayers_bg (index=3, 18 paths)
     LDD #0
@@ -2991,8 +3284,8 @@ IF_NEXT_57:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_58:
+    LBRA IF_END_57
+IF_NEXT_62:
     LDD #5
     STD RESULT
     LDD RESULT
@@ -3001,15 +3294,15 @@ IF_NEXT_58:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_61_TRUE
+    LBEQ .CMP_71_TRUE
     LDD #0
-    LBRA .CMP_61_END
-.CMP_61_TRUE:
+    LBRA .CMP_71_END
+.CMP_71_TRUE:
     LDD #1
-.CMP_61_END:
+.CMP_71_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_59
+    LBEQ IF_NEXT_63
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: taj_bg (index=29, 4 paths)
     LDD #0
@@ -3039,8 +3332,8 @@ IF_NEXT_58:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_59:
+    LBRA IF_END_57
+IF_NEXT_63:
     LDD #6
     STD RESULT
     LDD RESULT
@@ -3049,15 +3342,15 @@ IF_NEXT_59:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_62_TRUE
+    LBEQ .CMP_72_TRUE
     LDD #0
-    LBRA .CMP_62_END
-.CMP_62_TRUE:
+    LBRA .CMP_72_END
+.CMP_72_TRUE:
     LDD #1
-.CMP_62_END:
+.CMP_72_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_60
+    LBEQ IF_NEXT_64
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: leningrad_bg (index=15, 5 paths)
     LDD #0
@@ -3089,8 +3382,8 @@ IF_NEXT_59:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_60:
+    LBRA IF_END_57
+IF_NEXT_64:
     LDD #7
     STD RESULT
     LDD RESULT
@@ -3099,15 +3392,15 @@ IF_NEXT_60:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_63_TRUE
+    LBEQ .CMP_73_TRUE
     LDD #0
-    LBRA .CMP_63_END
-.CMP_63_TRUE:
+    LBRA .CMP_73_END
+.CMP_73_TRUE:
     LDD #1
-.CMP_63_END:
+.CMP_73_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_61
+    LBEQ IF_NEXT_65
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: paris_bg (index=22, 5 paths)
     LDD #0
@@ -3139,8 +3432,8 @@ IF_NEXT_60:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_61:
+    LBRA IF_END_57
+IF_NEXT_65:
     LDD #8
     STD RESULT
     LDD RESULT
@@ -3149,15 +3442,15 @@ IF_NEXT_61:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_64_TRUE
+    LBEQ .CMP_74_TRUE
     LDD #0
-    LBRA .CMP_64_END
-.CMP_64_TRUE:
+    LBRA .CMP_74_END
+.CMP_74_TRUE:
     LDD #1
-.CMP_64_END:
+.CMP_74_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_62
+    LBEQ IF_NEXT_66
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: london_bg (index=18, 4 paths)
     LDD #0
@@ -3187,8 +3480,8 @@ IF_NEXT_61:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_62:
+    LBRA IF_END_57
+IF_NEXT_66:
     LDD #9
     STD RESULT
     LDD RESULT
@@ -3197,15 +3490,15 @@ IF_NEXT_62:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_65_TRUE
+    LBEQ .CMP_75_TRUE
     LDD #0
-    LBRA .CMP_65_END
-.CMP_65_TRUE:
+    LBRA .CMP_75_END
+.CMP_75_TRUE:
     LDD #1
-.CMP_65_END:
+.CMP_75_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_63
+    LBEQ IF_NEXT_67
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: barcelona_bg (index=4, 60 paths)
     LDD #0
@@ -3347,8 +3640,8 @@ IF_NEXT_62:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_63:
+    LBRA IF_END_57
+IF_NEXT_67:
     LDD #10
     STD RESULT
     LDD RESULT
@@ -3357,15 +3650,15 @@ IF_NEXT_63:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_66_TRUE
+    LBEQ .CMP_76_TRUE
     LDD #0
-    LBRA .CMP_66_END
-.CMP_66_TRUE:
+    LBRA .CMP_76_END
+.CMP_76_TRUE:
     LDD #1
-.CMP_66_END:
+.CMP_76_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_64
+    LBEQ IF_NEXT_68
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: athens_bg (index=2, 41 paths)
     LDD #0
@@ -3469,8 +3762,8 @@ IF_NEXT_63:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_64:
+    LBRA IF_END_57
+IF_NEXT_68:
     LDD #11
     STD RESULT
     LDD RESULT
@@ -3479,15 +3772,15 @@ IF_NEXT_64:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_67_TRUE
+    LBEQ .CMP_77_TRUE
     LDD #0
-    LBRA .CMP_67_END
-.CMP_67_TRUE:
+    LBRA .CMP_77_END
+.CMP_77_TRUE:
     LDD #1
-.CMP_67_END:
+.CMP_77_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_65
+    LBEQ IF_NEXT_69
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: pyramids_bg (index=28, 4 paths)
     LDD #0
@@ -3517,8 +3810,8 @@ IF_NEXT_64:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_65:
+    LBRA IF_END_57
+IF_NEXT_69:
     LDD #12
     STD RESULT
     LDD RESULT
@@ -3527,15 +3820,15 @@ IF_NEXT_65:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_68_TRUE
+    LBEQ .CMP_78_TRUE
     LDD #0
-    LBRA .CMP_68_END
-.CMP_68_TRUE:
+    LBRA .CMP_78_END
+.CMP_78_TRUE:
     LDD #1
-.CMP_68_END:
+.CMP_78_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_66
+    LBEQ IF_NEXT_70
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: kilimanjaro_bg (index=14, 4 paths)
     LDD #0
@@ -3565,8 +3858,8 @@ IF_NEXT_65:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_66:
+    LBRA IF_END_57
+IF_NEXT_70:
     LDD #13
     STD RESULT
     LDD RESULT
@@ -3575,15 +3868,15 @@ IF_NEXT_66:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_69_TRUE
+    LBEQ .CMP_79_TRUE
     LDD #0
-    LBRA .CMP_69_END
-.CMP_69_TRUE:
+    LBRA .CMP_79_END
+.CMP_79_TRUE:
     LDD #1
-.CMP_69_END:
+.CMP_79_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_67
+    LBEQ IF_NEXT_71
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: newyork_bg (index=21, 5 paths)
     LDD #0
@@ -3615,8 +3908,8 @@ IF_NEXT_66:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_67:
+    LBRA IF_END_57
+IF_NEXT_71:
     LDD #14
     STD RESULT
     LDD RESULT
@@ -3625,15 +3918,15 @@ IF_NEXT_67:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_70_TRUE
+    LBEQ .CMP_80_TRUE
     LDD #0
-    LBRA .CMP_70_END
-.CMP_70_TRUE:
+    LBRA .CMP_80_END
+.CMP_80_TRUE:
     LDD #1
-.CMP_70_END:
+.CMP_80_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_68
+    LBEQ IF_NEXT_72
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: mayan_bg (index=20, 5 paths)
     LDD #0
@@ -3665,8 +3958,8 @@ IF_NEXT_67:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_68:
+    LBRA IF_END_57
+IF_NEXT_72:
     LDD #15
     STD RESULT
     LDD RESULT
@@ -3675,15 +3968,15 @@ IF_NEXT_68:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_71_TRUE
+    LBEQ .CMP_81_TRUE
     LDD #0
-    LBRA .CMP_71_END
-.CMP_71_TRUE:
+    LBRA .CMP_81_END
+.CMP_81_TRUE:
     LDD #1
-.CMP_71_END:
+.CMP_81_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_69
+    LBEQ IF_NEXT_73
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: antarctica_bg (index=1, 20 paths)
     LDD #0
@@ -3745,8 +4038,8 @@ IF_NEXT_68:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_53
-IF_NEXT_69:
+    LBRA IF_END_57
+IF_NEXT_73:
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: easter_bg (index=10, 5 paths)
     LDD #0
@@ -3778,7 +4071,7 @@ IF_NEXT_69:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-IF_END_53:
+IF_END_57:
     RTS
 
 ; Function: DRAW_GAME_LEVEL
@@ -3805,15 +4098,15 @@ DRAW_GAME_LEVEL:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_73_TRUE
+    LBLT .CMP_83_TRUE
     LDD #0
-    LBRA .CMP_73_END
-.CMP_73_TRUE:
+    LBRA .CMP_83_END
+.CMP_83_TRUE:
     LDD #1
-.CMP_73_END:
+.CMP_83_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_72_TRUE
+    LBNE .LOGIC_82_TRUE
     LDD #20
     STD RESULT
     LDD RESULT
@@ -3822,23 +4115,23 @@ DRAW_GAME_LEVEL:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_74_TRUE
+    LBGT .CMP_84_TRUE
     LDD #0
-    LBRA .CMP_74_END
-.CMP_74_TRUE:
+    LBRA .CMP_84_END
+.CMP_84_TRUE:
     LDD #1
-.CMP_74_END:
+.CMP_84_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_72_TRUE
+    LBNE .LOGIC_82_TRUE
     LDD #0
-    LBRA .LOGIC_72_END
-.LOGIC_72_TRUE:
+    LBRA .LOGIC_82_END
+.LOGIC_82_TRUE:
     LDD #1
-.LOGIC_72_END:
+.LOGIC_82_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_71
+    LBEQ IF_NEXT_75
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
@@ -3851,15 +4144,15 @@ DRAW_GAME_LEVEL:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_75_TRUE
+    LBLT .CMP_85_TRUE
     LDD #0
-    LBRA .CMP_75_END
-.CMP_75_TRUE:
+    LBRA .CMP_85_END
+.CMP_85_TRUE:
     LDD #1
-.CMP_75_END:
+.CMP_85_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_73
+    LBEQ IF_NEXT_77
     LDD #-1
     STD RESULT
     LDD RESULT
@@ -3872,9 +4165,9 @@ DRAW_GAME_LEVEL:
     STD RESULT
     LDD RESULT
     STD VAR_ABS_JOY
-    LBRA IF_END_72
-IF_NEXT_73:
-IF_END_72:
+    LBRA IF_END_76
+IF_NEXT_77:
+IF_END_76:
     LDD #40
     STD RESULT
     LDD RESULT
@@ -3883,21 +4176,21 @@ IF_END_72:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_76_TRUE
+    LBLT .CMP_86_TRUE
     LDD #0
-    LBRA .CMP_76_END
-.CMP_76_TRUE:
+    LBRA .CMP_86_END
+.CMP_86_TRUE:
     LDD #1
-.CMP_76_END:
+.CMP_86_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_75
+    LBEQ IF_NEXT_79
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_74
-IF_NEXT_75:
+    LBRA IF_END_78
+IF_NEXT_79:
     LDD #70
     STD RESULT
     LDD RESULT
@@ -3906,21 +4199,21 @@ IF_NEXT_75:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_77_TRUE
+    LBLT .CMP_87_TRUE
     LDD #0
-    LBRA .CMP_77_END
-.CMP_77_TRUE:
+    LBRA .CMP_87_END
+.CMP_87_TRUE:
     LDD #1
-.CMP_77_END:
+.CMP_87_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_76
+    LBEQ IF_NEXT_80
     LDD #2
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_74
-IF_NEXT_76:
+    LBRA IF_END_78
+IF_NEXT_80:
     LDD #100
     STD RESULT
     LDD RESULT
@@ -3929,26 +4222,26 @@ IF_NEXT_76:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_78_TRUE
+    LBLT .CMP_88_TRUE
     LDD #0
-    LBRA .CMP_78_END
-.CMP_78_TRUE:
+    LBRA .CMP_88_END
+.CMP_88_TRUE:
     LDD #1
-.CMP_78_END:
+.CMP_88_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_77
+    LBEQ IF_NEXT_81
     LDD #3
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_74
-IF_NEXT_77:
+    LBRA IF_END_78
+IF_NEXT_81:
     LDD #4
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-IF_END_74:
+IF_END_78:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -3957,15 +4250,15 @@ IF_END_74:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_79_TRUE
+    LBLT .CMP_89_TRUE
     LDD #0
-    LBRA .CMP_79_END
-.CMP_79_TRUE:
+    LBRA .CMP_89_END
+.CMP_89_TRUE:
     LDD #1
-.CMP_79_END:
+.CMP_89_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_79
+    LBEQ IF_NEXT_83
     LDD #-1
     STD RESULT
     LDD RESULT
@@ -3978,9 +4271,9 @@ IF_END_74:
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
-    LBRA IF_END_78
-IF_NEXT_79:
-IF_END_78:
+    LBRA IF_END_82
+IF_NEXT_83:
+IF_END_82:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
@@ -4000,22 +4293,22 @@ IF_END_78:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_80_TRUE
+    LBLT .CMP_90_TRUE
     LDD #0
-    LBRA .CMP_80_END
-.CMP_80_TRUE:
+    LBRA .CMP_90_END
+.CMP_90_TRUE:
     LDD #1
-.CMP_80_END:
+.CMP_90_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_81
+    LBEQ IF_NEXT_85
     LDD #-110
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_X
-    LBRA IF_END_80
-IF_NEXT_81:
-IF_END_80:
+    LBRA IF_END_84
+IF_NEXT_85:
+IF_END_84:
     LDD #110
     STD RESULT
     LDD RESULT
@@ -4024,22 +4317,22 @@ IF_END_80:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_81_TRUE
+    LBGT .CMP_91_TRUE
     LDD #0
-    LBRA .CMP_81_END
-.CMP_81_TRUE:
+    LBRA .CMP_91_END
+.CMP_91_TRUE:
     LDD #1
-.CMP_81_END:
+.CMP_91_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_83
+    LBEQ IF_NEXT_87
     LDD #110
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_X
-    LBRA IF_END_82
-IF_NEXT_83:
-IF_END_82:
+    LBRA IF_END_86
+IF_NEXT_87:
+IF_END_86:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -4048,26 +4341,26 @@ IF_END_82:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_82_TRUE
+    LBLT .CMP_92_TRUE
     LDD #0
-    LBRA .CMP_82_END
-.CMP_82_TRUE:
+    LBRA .CMP_92_END
+.CMP_92_TRUE:
     LDD #1
-.CMP_82_END:
+.CMP_92_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_85
+    LBEQ IF_NEXT_89
     LDD #-1
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_FACING
-    LBRA IF_END_84
-IF_NEXT_85:
+    LBRA IF_END_88
+IF_NEXT_89:
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_FACING
-IF_END_84:
+IF_END_88:
     LDD VAR_PLAYER_ANIM_COUNTER
     STD RESULT
     LDD RESULT
@@ -4091,15 +4384,15 @@ IF_END_84:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_84_TRUE
+    LBLT .CMP_94_TRUE
     LDD #0
-    LBRA .CMP_84_END
-.CMP_84_TRUE:
+    LBRA .CMP_94_END
+.CMP_94_TRUE:
     LDD #1
-.CMP_84_END:
+.CMP_94_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_83_TRUE
+    LBNE .LOGIC_93_TRUE
     LDD #80
     STD RESULT
     LDD RESULT
@@ -4108,23 +4401,23 @@ IF_END_84:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_85_TRUE
+    LBGT .CMP_95_TRUE
     LDD #0
-    LBRA .CMP_85_END
-.CMP_85_TRUE:
+    LBRA .CMP_95_END
+.CMP_95_TRUE:
     LDD #1
-.CMP_85_END:
+.CMP_95_END:
     STD RESULT
     LDD RESULT
-    LBNE .LOGIC_83_TRUE
+    LBNE .LOGIC_93_TRUE
     LDD #0
-    LBRA .LOGIC_83_END
-.LOGIC_83_TRUE:
+    LBRA .LOGIC_93_END
+.LOGIC_93_TRUE:
     LDD #1
-.LOGIC_83_END:
+.LOGIC_93_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_87
+    LBEQ IF_NEXT_91
     LDD VAR_PLAYER_ANIM_SPEED
     STD RESULT
     LDD RESULT
@@ -4137,9 +4430,9 @@ IF_END_84:
     STD RESULT
     LDD RESULT
     STD VAR_ANIM_THRESHOLD
-    LBRA IF_END_86
-IF_NEXT_87:
-IF_END_86:
+    LBRA IF_END_90
+IF_NEXT_91:
+IF_END_90:
     LDD VAR_ANIM_THRESHOLD
     STD RESULT
     LDD RESULT
@@ -4148,15 +4441,15 @@ IF_END_86:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGE .CMP_86_TRUE
+    LBGE .CMP_96_TRUE
     LDD #0
-    LBRA .CMP_86_END
-.CMP_86_TRUE:
+    LBRA .CMP_96_END
+.CMP_96_TRUE:
     LDD #1
-.CMP_86_END:
+.CMP_96_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_89
+    LBEQ IF_NEXT_93
     LDD #0
     STD RESULT
     LDD RESULT
@@ -4180,27 +4473,27 @@ IF_END_86:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBGT .CMP_87_TRUE
+    LBGT .CMP_97_TRUE
     LDD #0
-    LBRA .CMP_87_END
-.CMP_87_TRUE:
+    LBRA .CMP_97_END
+.CMP_97_TRUE:
     LDD #1
-.CMP_87_END:
+.CMP_97_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_91
+    LBEQ IF_NEXT_95
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_FRAME
-    LBRA IF_END_90
-IF_NEXT_91:
-IF_END_90:
-    LBRA IF_END_88
-IF_NEXT_89:
-IF_END_88:
-    LBRA IF_END_70
-IF_NEXT_71:
+    LBRA IF_END_94
+IF_NEXT_95:
+IF_END_94:
+    LBRA IF_END_92
+IF_NEXT_93:
+IF_END_92:
+    LBRA IF_END_74
+IF_NEXT_75:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -4209,7 +4502,7 @@ IF_NEXT_71:
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_COUNTER
-IF_END_70:
+IF_END_74:
     LDD #0
     STD RESULT
     LDD RESULT
@@ -4222,22 +4515,22 @@ IF_END_70:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_88_TRUE
+    LBEQ .CMP_98_TRUE
     LDD #0
-    LBRA .CMP_88_END
-.CMP_88_TRUE:
+    LBRA .CMP_98_END
+.CMP_98_TRUE:
     LDD #1
-.CMP_88_END:
+.CMP_98_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_93
+    LBEQ IF_NEXT_97
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_MIRROR_MODE
-    LBRA IF_END_92
-IF_NEXT_93:
-IF_END_92:
+    LBRA IF_END_96
+IF_NEXT_97:
+IF_END_96:
     LDD #1
     STD RESULT
     LDD RESULT
@@ -4246,15 +4539,15 @@ IF_END_92:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_89_TRUE
+    LBEQ .CMP_99_TRUE
     LDD #0
-    LBRA .CMP_89_END
-.CMP_89_TRUE:
+    LBRA .CMP_99_END
+.CMP_99_TRUE:
     LDD #1
-.CMP_89_END:
+.CMP_99_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_95
+    LBEQ IF_NEXT_99
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_1 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -4331,8 +4624,8 @@ IF_END_92:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_94
-IF_NEXT_95:
+    LBRA IF_END_98
+IF_NEXT_99:
     LDD #2
     STD RESULT
     LDD RESULT
@@ -4341,15 +4634,15 @@ IF_NEXT_95:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_90_TRUE
+    LBEQ .CMP_100_TRUE
     LDD #0
-    LBRA .CMP_90_END
-.CMP_90_TRUE:
+    LBRA .CMP_100_END
+.CMP_100_TRUE:
     LDD #1
-.CMP_90_END:
+.CMP_100_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_96
+    LBEQ IF_NEXT_100
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_2 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -4426,8 +4719,8 @@ IF_NEXT_95:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_94
-IF_NEXT_96:
+    LBRA IF_END_98
+IF_NEXT_100:
     LDD #3
     STD RESULT
     LDD RESULT
@@ -4436,15 +4729,15 @@ IF_NEXT_96:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_91_TRUE
+    LBEQ .CMP_101_TRUE
     LDD #0
-    LBRA .CMP_91_END
-.CMP_91_TRUE:
+    LBRA .CMP_101_END
+.CMP_101_TRUE:
     LDD #1
-.CMP_91_END:
+.CMP_101_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_97
+    LBEQ IF_NEXT_101
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_3 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -4521,8 +4814,8 @@ IF_NEXT_96:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_94
-IF_NEXT_97:
+    LBRA IF_END_98
+IF_NEXT_101:
     LDD #4
     STD RESULT
     LDD RESULT
@@ -4531,15 +4824,15 @@ IF_NEXT_97:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_92_TRUE
+    LBEQ .CMP_102_TRUE
     LDD #0
-    LBRA .CMP_92_END
-.CMP_92_TRUE:
+    LBRA .CMP_102_END
+.CMP_102_TRUE:
     LDD #1
-.CMP_92_END:
+.CMP_102_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_98
+    LBEQ IF_NEXT_102
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_4 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -4616,8 +4909,8 @@ IF_NEXT_97:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_94
-IF_NEXT_98:
+    LBRA IF_END_98
+IF_NEXT_102:
     ; DRAW_VECTOR_EX: Draw vector asset with transformations
     ; Asset: player_walk_5 (17 paths) with mirror + intensity
     LDD VAR_PLAYER_X
@@ -4694,7 +4987,7 @@ IF_NEXT_98:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-IF_END_94:
+IF_END_98:
     JSR UPDATE_ENEMIES
     JSR DRAW_ENEMIES
     LDD #1
@@ -4705,15 +4998,15 @@ IF_END_94:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_93_TRUE
+    LBEQ .CMP_103_TRUE
     LDD #0
-    LBRA .CMP_93_END
-.CMP_93_TRUE:
+    LBRA .CMP_103_END
+.CMP_103_TRUE:
     LDD #1
-.CMP_93_END:
+.CMP_103_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_100
+    LBEQ IF_NEXT_104
     LDD VAR_HOOK_GUN_X
     STD RESULT
     LDD RESULT
@@ -4782,88 +5075,9 @@ IF_END_94:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LBRA IF_END_99
-IF_NEXT_100:
-IF_END_99:
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_ACTIVE_COUNT
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_I
-WH_101: ; while start
-    LDD VAR_MAX_ENEMIES
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_94_TRUE
-    LDD #0
-    LBRA .CMP_94_END
-.CMP_94_TRUE:
-    LDD #1
-.CMP_94_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ WH_END_102
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_95_TRUE
-    LDD #0
-    LBRA .CMP_95_END
-.CMP_95_TRUE:
-    LDD #1
-.CMP_95_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_104
-    LDD VAR_ACTIVE_COUNT
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD ,S++
-    STD RESULT
-    LDD RESULT
-    STD VAR_ACTIVE_COUNT
     LBRA IF_END_103
 IF_NEXT_104:
 IF_END_103:
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD ,S++
-    STD RESULT
-    LDD RESULT
-    STD VAR_I
-    LBRA WH_101
-WH_END_102: ; while end
     RTS
 
 ; Function: SPAWN_ENEMIES
@@ -4894,11 +5108,59 @@ SPAWN_ENEMIES:
     STD RESULT
     LDD RESULT
     STD VAR_SPEED
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_COUNT
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLT .CMP_104_TRUE
+    LDD #0
+    LBRA .CMP_104_END
+.CMP_104_TRUE:
+    LDD #1
+.CMP_104_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_106
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNT
+    LBRA IF_END_105
+IF_NEXT_106:
+IF_END_105:
+    LDD VAR_MAX_ENEMIES
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_COUNT
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBGT .CMP_105_TRUE
+    LDD #0
+    LBRA .CMP_105_END
+.CMP_105_TRUE:
+    LDD #1
+.CMP_105_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_108
+    LDD VAR_MAX_ENEMIES
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNT
+    LBRA IF_END_107
+IF_NEXT_108:
+IF_END_107:
     LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_105: ; while start
+WH_109: ; while start
     LDD VAR_COUNT
     STD RESULT
     LDD RESULT
@@ -4907,15 +5169,40 @@ WH_105: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_96_TRUE
+    LBLT .CMP_107_TRUE
     LDD #0
-    LBRA .CMP_96_END
-.CMP_96_TRUE:
+    LBRA .CMP_107_END
+.CMP_107_TRUE:
     LDD #1
-.CMP_96_END:
+.CMP_107_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_106
+    LBEQ .LOGIC_106_FALSE
+    LDD VAR_MAX_ENEMIES
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLT .CMP_108_TRUE
+    LDD #0
+    LBRA .CMP_108_END
+.CMP_108_TRUE:
+    LDD #1
+.CMP_108_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ .LOGIC_106_FALSE
+    LDD #1
+    LBRA .LOGIC_106_END
+.LOGIC_106_FALSE:
+    LDD #0
+.LOGIC_106_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ WH_END_110
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5027,15 +5314,15 @@ WH_105: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_97_TRUE
+    LBEQ .CMP_109_TRUE
     LDD #0
-    LBRA .CMP_97_END
-.CMP_97_TRUE:
+    LBRA .CMP_109_END
+.CMP_109_TRUE:
     LDD #1
-.CMP_97_END:
+.CMP_109_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_108
+    LBEQ IF_NEXT_112
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5060,9 +5347,9 @@ WH_105: ; while start
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LBRA IF_END_107
-IF_NEXT_108:
-IF_END_107:
+    LBRA IF_END_111
+IF_NEXT_112:
+IF_END_111:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5090,8 +5377,8 @@ IF_END_107:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_105
-WH_END_106: ; while end
+    LBRA WH_109
+WH_END_110: ; while end
     RTS
 
 ; Function: UPDATE_ENEMIES
@@ -5100,7 +5387,7 @@ UPDATE_ENEMIES:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_109: ; while start
+WH_113: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -5109,15 +5396,15 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_98_TRUE
+    LBLT .CMP_110_TRUE
     LDD #0
-    LBRA .CMP_98_END
-.CMP_98_TRUE:
+    LBRA .CMP_110_END
+.CMP_110_TRUE:
     LDD #1
-.CMP_98_END:
+.CMP_110_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_110
+    LBEQ WH_END_114
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5135,15 +5422,15 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_99_TRUE
+    LBEQ .CMP_111_TRUE
     LDD #0
-    LBRA .CMP_99_END
-.CMP_99_TRUE:
+    LBRA .CMP_111_END
+.CMP_111_TRUE:
     LDD #1
-.CMP_99_END:
+.CMP_111_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_112
+    LBEQ IF_NEXT_116
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5277,15 +5564,15 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLE .CMP_100_TRUE
+    LBLE .CMP_112_TRUE
     LDD #0
-    LBRA .CMP_100_END
-.CMP_100_TRUE:
+    LBRA .CMP_112_END
+.CMP_112_TRUE:
     LDD #1
-.CMP_100_END:
+.CMP_112_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_114
+    LBEQ IF_NEXT_118
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5393,15 +5680,15 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_101_TRUE
+    LBLT .CMP_113_TRUE
     LDD #0
-    LBRA .CMP_101_END
-.CMP_101_TRUE:
+    LBRA .CMP_113_END
+.CMP_113_TRUE:
     LDD #1
-.CMP_101_END:
+.CMP_113_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_116
+    LBEQ IF_NEXT_120
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5418,171 +5705,171 @@ WH_109: ; while start
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LBRA IF_END_115
-IF_NEXT_116:
-IF_END_115:
-    LBRA IF_END_113
-IF_NEXT_114:
-IF_END_113:
-    LDD #-85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLE .CMP_102_TRUE
-    LDD #0
-    LBRA .CMP_102_END
-.CMP_102_TRUE:
-    LDD #1
-.CMP_102_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_118
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_117
-IF_NEXT_118:
-IF_END_117:
-    LDD #85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBGE .CMP_103_TRUE
-    LDD #0
-    LBRA .CMP_103_END
-.CMP_103_TRUE:
-    LDD #1
-.CMP_103_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_120
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
     LBRA IF_END_119
 IF_NEXT_120:
 IF_END_119:
-    LBRA IF_END_111
-IF_NEXT_112:
-IF_END_111:
+    LBRA IF_END_117
+IF_NEXT_118:
+IF_END_117:
+    LDD #-85
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_X_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBLE .CMP_114_TRUE
+    LDD #0
+    LBRA .CMP_114_END
+.CMP_114_TRUE:
+    LDD #1
+.CMP_114_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_122
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-85
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_VX_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    PULS X      ; Get left into X
+    JSR MUL16   ; D = X * D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_121
+IF_NEXT_122:
+IF_END_121:
+    LDD #85
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_X_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD ,S++
+    LBGE .CMP_115_TRUE
+    LDD #0
+    LBRA .CMP_115_END
+.CMP_115_TRUE:
+    LDD #1
+.CMP_115_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_124
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #85
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    PSHS D
+    LDX #VAR_ENEMY_VX_DATA  ; Array data
+    PSHS X
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    PULS X      ; Array base
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    PULS X      ; Get left into X
+    JSR MUL16   ; D = X * D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_123
+IF_NEXT_124:
+IF_END_123:
+    LBRA IF_END_115
+IF_NEXT_116:
+IF_END_115:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5594,8 +5881,8 @@ IF_END_111:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_109
-WH_END_110: ; while end
+    LBRA WH_113
+WH_END_114: ; while end
     RTS
 
 ; Function: DRAW_ENEMIES
@@ -5604,7 +5891,7 @@ DRAW_ENEMIES:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_121: ; while start
+WH_125: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
@@ -5613,15 +5900,15 @@ WH_121: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBLT .CMP_104_TRUE
+    LBLT .CMP_116_TRUE
     LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
+    LBRA .CMP_116_END
+.CMP_116_TRUE:
     LDD #1
-.CMP_104_END:
+.CMP_116_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_122
+    LBEQ WH_END_126
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5639,15 +5926,15 @@ WH_121: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_105_TRUE
+    LBEQ .CMP_117_TRUE
     LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
+    LBRA .CMP_117_END
+.CMP_117_TRUE:
     LDD #1
-.CMP_105_END:
+.CMP_117_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_124
+    LBEQ IF_NEXT_128
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     STD RESULT
@@ -5672,15 +5959,15 @@ WH_121: ; while start
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_106_TRUE
+    LBEQ .CMP_118_TRUE
     LDD #0
-    LBRA .CMP_106_END
-.CMP_106_TRUE:
+    LBRA .CMP_118_END
+.CMP_118_TRUE:
     LDD #1
-.CMP_106_END:
+.CMP_118_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_126
+    LBEQ IF_NEXT_130
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_huge (index=5, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -5722,8 +6009,8 @@ WH_121: ; while start
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_125
-IF_NEXT_126:
+    LBRA IF_END_129
+IF_NEXT_130:
     LDD #3
     STD RESULT
     LDD RESULT
@@ -5741,15 +6028,15 @@ IF_NEXT_126:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_107_TRUE
+    LBEQ .CMP_119_TRUE
     LDD #0
-    LBRA .CMP_107_END
-.CMP_107_TRUE:
+    LBRA .CMP_119_END
+.CMP_119_TRUE:
     LDD #1
-.CMP_107_END:
+.CMP_119_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_127
+    LBEQ IF_NEXT_131
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_large (index=6, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -5791,8 +6078,8 @@ IF_NEXT_126:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_125
-IF_NEXT_127:
+    LBRA IF_END_129
+IF_NEXT_131:
     LDD #2
     STD RESULT
     LDD RESULT
@@ -5810,15 +6097,15 @@ IF_NEXT_127:
     STD RESULT
     LDD RESULT
     CMPD ,S++
-    LBEQ .CMP_108_TRUE
+    LBEQ .CMP_120_TRUE
     LDD #0
-    LBRA .CMP_108_END
-.CMP_108_TRUE:
+    LBRA .CMP_120_END
+.CMP_120_TRUE:
     LDD #1
-.CMP_108_END:
+.CMP_120_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_128
+    LBEQ IF_NEXT_132
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_medium (index=7, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -5860,8 +6147,8 @@ IF_NEXT_127:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_125
-IF_NEXT_128:
+    LBRA IF_END_129
+IF_NEXT_132:
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_small (index=8, 1 paths)
     LDX #VAR_ENEMY_X_DATA  ; Array data
@@ -5903,10 +6190,10 @@ IF_NEXT_128:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-IF_END_125:
-    LBRA IF_END_123
-IF_NEXT_124:
-IF_END_123:
+IF_END_129:
+    LBRA IF_END_127
+IF_NEXT_128:
+IF_END_127:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5918,8 +6205,8 @@ IF_END_123:
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_121
-WH_END_122: ; while end
+    LBRA WH_125
+WH_END_126: ; while end
     RTS
 
 ; Function: DRAW_HOOK_ROPE
@@ -12305,111 +12592,6 @@ _FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS:
 
 _FUJI_LEVEL1_V2_FG_OBJECTS:
 
-_HIT_SFX:
-    ; SFX: hit (hit)
-    ; Duration: 300ms (15fr), Freq: 200Hz, Channel: 0
-    FCB $60         ; Frame 0 - flags (vol=0, tone=Y, noise=Y)
-    FCB $00, $8C  ; Tone period = 140 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6F         ; Frame 1 - flags (vol=15, tone=Y, noise=Y)
-    FCB $00, $AA  ; Tone period = 170 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6F         ; Frame 2 - flags (vol=15, tone=Y, noise=Y)
-    FCB $00, $C8  ; Tone period = 200 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6E         ; Frame 3 - flags (vol=14, tone=Y, noise=Y)
-    FCB $00, $E6  ; Tone period = 230 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6D         ; Frame 4 - flags (vol=13, tone=Y, noise=Y)
-    FCB $01, $04  ; Tone period = 260 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 5 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $22  ; Tone period = 290 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 6 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $40  ; Tone period = 320 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 7 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $5E  ; Tone period = 350 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 8 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $7C  ; Tone period = 380 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 9 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $9A  ; Tone period = 410 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 10 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $B8  ; Tone period = 440 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 11 - flags (vol=12, tone=Y, noise=Y)
-    FCB $01, $D6  ; Tone period = 470 (big-endian)
-    FCB $08         ; Noise period
-    FCB $69         ; Frame 12 - flags (vol=9, tone=Y, noise=Y)
-    FCB $01, $F4  ; Tone period = 500 (big-endian)
-    FCB $08         ; Noise period
-    FCB $66         ; Frame 13 - flags (vol=6, tone=Y, noise=Y)
-    FCB $02, $12  ; Tone period = 530 (big-endian)
-    FCB $08         ; Noise period
-    FCB $63         ; Frame 14 - flags (vol=3, tone=Y, noise=Y)
-    FCB $02, $30  ; Tone period = 560 (big-endian)
-    FCB $08         ; Noise period
-    FCB $D0, $20    ; End of effect marker
-
-_LASER_SFX:
-    ; SFX: laser (laser)
-    ; Duration: 500ms (25fr), Freq: 880Hz, Channel: 0
-    FCB $A0         ; Frame 0 - flags (vol=0, tone=Y, noise=N)
-    FCB $00, $34  ; Tone period = 52 (big-endian)
-    FCB $AF         ; Frame 1 - flags (vol=15, tone=Y, noise=N)
-    FCB $00, $3A  ; Tone period = 58 (big-endian)
-    FCB $AC         ; Frame 2 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $42  ; Tone period = 66 (big-endian)
-    FCB $AC         ; Frame 3 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $48  ; Tone period = 72 (big-endian)
-    FCB $AC         ; Frame 4 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $4E  ; Tone period = 78 (big-endian)
-    FCB $AC         ; Frame 5 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $56  ; Tone period = 86 (big-endian)
-    FCB $AC         ; Frame 6 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $5C  ; Tone period = 92 (big-endian)
-    FCB $AC         ; Frame 7 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $62  ; Tone period = 98 (big-endian)
-    FCB $AC         ; Frame 8 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $6A  ; Tone period = 106 (big-endian)
-    FCB $AC         ; Frame 9 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $70  ; Tone period = 112 (big-endian)
-    FCB $AC         ; Frame 10 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $76  ; Tone period = 118 (big-endian)
-    FCB $AC         ; Frame 11 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $7C  ; Tone period = 124 (big-endian)
-    FCB $AC         ; Frame 12 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $84  ; Tone period = 132 (big-endian)
-    FCB $AC         ; Frame 13 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $8A  ; Tone period = 138 (big-endian)
-    FCB $AC         ; Frame 14 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $90  ; Tone period = 144 (big-endian)
-    FCB $AC         ; Frame 15 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $98  ; Tone period = 152 (big-endian)
-    FCB $AC         ; Frame 16 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $9E  ; Tone period = 158 (big-endian)
-    FCB $AC         ; Frame 17 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $A4  ; Tone period = 164 (big-endian)
-    FCB $AC         ; Frame 18 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $AC  ; Tone period = 172 (big-endian)
-    FCB $AC         ; Frame 19 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $B2  ; Tone period = 178 (big-endian)
-    FCB $AC         ; Frame 20 - flags (vol=12, tone=Y, noise=N)
-    FCB $00, $B8  ; Tone period = 184 (big-endian)
-    FCB $A9         ; Frame 21 - flags (vol=9, tone=Y, noise=N)
-    FCB $00, $C0  ; Tone period = 192 (big-endian)
-    FCB $A7         ; Frame 22 - flags (vol=7, tone=Y, noise=N)
-    FCB $00, $C6  ; Tone period = 198 (big-endian)
-    FCB $A4         ; Frame 23 - flags (vol=4, tone=Y, noise=N)
-    FCB $00, $CC  ; Tone period = 204 (big-endian)
-    FCB $A2         ; Frame 24 - flags (vol=2, tone=Y, noise=N)
-    FCB $00, $D4  ; Tone period = 212 (big-endian)
-    FCB $D0, $20    ; End of effect marker
-
 ;***************************************************************************
 ; RUNTIME HELPERS
 ;***************************************************************************
@@ -13160,10 +13342,6 @@ STD >SFX_PTR            ; Clear pointer
 RTS
 
 ;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_103315:
-    FCC "hit"
-    FCB $80          ; Vectrex string terminator
-
 PRINT_TEXT_STR_107868:
     FCC "map"
     FCB $80          ; Vectrex string terminator
@@ -13174,10 +13352,6 @@ PRINT_TEXT_STR_3208483:
 
 PRINT_TEXT_STR_3327403:
     FCC "logo"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_102743755:
-    FCC "laser"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_3413815335:

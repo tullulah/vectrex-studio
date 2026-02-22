@@ -26,6 +26,7 @@ impl std::fmt::Display for StackValidationError {
 impl std::error::Error for StackValidationError {}
 
 /// Count registers in PSHS/PULS postbyte string (e.g., "D,X,Y")
+/// IMPORTANT: Stop parsing at semicolon (comments are not registers)
 fn count_registers(postbyte_str: &str) -> i32 {
     if postbyte_str.is_empty() {
         return 0;
@@ -36,10 +37,17 @@ fn count_registers(postbyte_str: &str) -> i32 {
     // D=A+B, so "D" counts as pushing 2 bytes but as 1 register conceptually
     // We'll count by register count for stack balance (what matters is depth, not bytes)
 
+    // CRITICAL: Stop at semicolon - everything after ; is a comment, not a register
+    let register_part = if let Some(pos) = postbyte_str.find(';') {
+        &postbyte_str[..pos]
+    } else {
+        postbyte_str
+    };
+
     let mut count = 0;
     let mut in_register = false;
 
-    for ch in postbyte_str.chars() {
+    for ch in register_part.chars() {
         if ch.is_alphabetic() || ch.is_numeric() {
             if !in_register {
                 count += 1;
@@ -245,7 +253,14 @@ pub fn validate_stack_balance(asm_source: &str) -> Result<(), Vec<StackValidatio
 
             // Skip data labels like "BANK0_START:", ".COPY_LOOP_0:", etc.
             // Also skip if it starts with a digit
-            if !label_name.starts_with('.') && !label_name.starts_with("BANK") && !label_name.chars().next().map_or(false, |c| c.is_numeric()) {
+            // Also skip internal control flow labels like "IF_END_1:", "IF_NEXT_2:", "WH_LOOP_3:", etc.
+            let is_internal_label = label_name.starts_with("IF_")
+                || label_name.starts_with("ELSE_")
+                || label_name.starts_with("WH_")
+                || label_name.starts_with("CMP_")
+                || label_name.starts_with("."); // Labels starting with . are also internal
+
+            if !is_internal_label && !label_name.starts_with("BANK") && !label_name.chars().next().map_or(false, |c| c.is_numeric()) {
                 // New function found - validate previous one
                 if let Some(func_name) = current_function.take() {
                     if !function_lines.is_empty() {

@@ -12,6 +12,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Emit code for simple expression (numbers, vars, strings, calls)
+///
+/// CRITICAL CONTRACT: This function MUST return with a balanced stack.
+/// Every PSHS operation must have a corresponding PULS or equivalent pop operation
+/// BEFORE returning to the caller. Violations will cause stack corruption when
+/// expressions are evaluated in branching contexts (if/elif/while conditions).
 pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
     match expr {
         Expr::Number(n) => {
@@ -154,6 +159,9 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
 }
 
 fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
+    // CRITICAL: This function pushes left operand to stack, then pops it before returning.
+    // The pop happens BEFORE returning, ensuring stack balance.
+
     // Evaluate left
     emit_simple_expr(left, out, assets);
     out.push_str("    LDD RESULT\n");
@@ -248,7 +256,11 @@ fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[
 
 fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
     let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-    
+
+    // CRITICAL: This function pushes right operand to stack, then pops it via CMPD ,S++
+    // before returning. The pop happens BEFORE exiting, ensuring stack balance.
+    // If this stack balance is violated, branching contexts will cause corruption.
+
     // CRITICAL FIX: Evaluate RIGHT first, push to stack
     // Then evaluate LEFT, compare D (LEFT) with stack (RIGHT)
     // CMPD does: D - [S], so we want LEFT - RIGHT
@@ -279,6 +291,11 @@ fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: 
 }
 
 fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]) {
+    // CRITICAL: This function pushes array base pointer to stack (PSHS X), then pops it
+    // (PULS X) before returning. The pop happens before exiting, ensuring stack balance.
+    // If this stack balance is violated, conditions using indexed arrays will cause
+    // stack corruption when branching.
+
     // CRITICAL FIX (2026-01-19): Use correct label based on array type
     // Mutable arrays (GlobalLet): VAR_{NAME}_DATA (in RAM)
     // Const arrays: ARRAY_{NAME}_DATA (in ROM)
