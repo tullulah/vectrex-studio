@@ -1,0 +1,19 @@
+{
+  "name": "test_square",
+  "width": 40,
+  "height": 40,
+  "shapes": [
+    {
+      "name": "square",
+      "type": "polygon",
+      "points": [
+        {"x": -20, "y": -20},
+        {"x": 20, "y": -20},
+        {"x": 20, "y": 20},
+        {"x": -20, "y": 20}
+      ],
+      "closed": true,
+      "intensity": 127
+    }
+  ]
+}
