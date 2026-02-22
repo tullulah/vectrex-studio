@@ -36,8 +36,8 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
             // Check variable size: use LDB + sign/zero-extend for 8-bit, LDD for 16-bit
             let size = context::get_var_size(&id.name);
             if size.bytes == 1 {
-                // 8-bit load: LDB then extend to 16-bit in D
-                out.push_str(&format!("    LDB VAR_{}\n", id.name.to_uppercase()));
+                // 8-bit load: LDB then extend to 16-bit in D (use > for extended addressing)
+                out.push_str(&format!("    LDB >VAR_{}\n", id.name.to_uppercase()));
                 if size.signed {
                     out.push_str("    SEX             ; Sign-extend B -> D\n");
                 } else {
@@ -45,8 +45,8 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 }
                 out.push_str("    STD RESULT\n");
             } else {
-                // 16-bit load: standard LDD
-                out.push_str(&format!("    LDD VAR_{}\n", id.name.to_uppercase()));
+                // 16-bit load: standard LDD (use > for extended addressing)
+                out.push_str(&format!("    LDD >VAR_{}\n", id.name.to_uppercase()));
                 out.push_str("    STD RESULT\n");
             }
         }

@@ -294,7 +294,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
                     // IMPORTANT: Convert name to uppercase for consistency with variable allocation
-                    asm.push_str(&format!("    LDD VAR_{}\n", name.to_uppercase()));
+                    asm.push_str(&format!("    LDD >VAR_{}\n", name.to_uppercase()));
                     asm.push_str("    STD TMPVAL          ; Save left operand\n");
 
                     // Evaluate right side

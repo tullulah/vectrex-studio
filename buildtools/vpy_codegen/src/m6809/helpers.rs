@@ -403,9 +403,9 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n");
         asm.push_str("    STA >$D00C     ; VIA_cntl\n");
         asm.push_str(&format!("    JSR {}      ; DP_to_D0 - set Direct Page for BIOS/VIA access\n", dp_to_d0));
-        asm.push_str("    LDU VAR_ARG2   ; string pointer (third parameter)\n");
-        asm.push_str("    LDA VAR_ARG1+1 ; Y coordinate (second parameter, low byte)\n");
-        asm.push_str("    LDB VAR_ARG0+1 ; X coordinate (first parameter, low byte)\n");
+        asm.push_str("    LDU >VAR_ARG2   ; string pointer (third parameter)\n");
+        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate (second parameter, low byte)\n");
+        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate (first parameter, low byte)\n");
         asm.push_str("    JSR Print_Str_d ; Print string from U register\n");
         asm.push_str("    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)\n");
         asm.push_str("    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state\n");
@@ -423,12 +423,12 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n");
         asm.push_str("    STA >$D00C     ; VIA_cntl\n");
         asm.push_str(&format!("    JSR {}      ; DP_to_D0 - set Direct Page for BIOS/VIA access\n", dp_to_d0));
-        asm.push_str("    LDA VAR_ARG1+1   ; Y position\n");
-        asm.push_str("    LDB VAR_ARG0+1   ; X position\n");
+        asm.push_str("    LDA >VAR_ARG1+1   ; Y position\n");
+        asm.push_str("    LDB >VAR_ARG0+1   ; X position\n");
         asm.push_str("    JSR Moveto_d     ; Move to position\n");
         asm.push_str("    \n");
         asm.push_str("    ; Convert number to string (show low byte as hex)\n");
-        asm.push_str("    LDA VAR_ARG2+1   ; Load number value\n");
+        asm.push_str("    LDA >VAR_ARG2+1   ; Load number value\n");
         asm.push_str("    \n");
         asm.push_str("    ; Convert high nibble to ASCII\n");
         asm.push_str("    LSRA\n");
