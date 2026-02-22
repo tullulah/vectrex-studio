@@ -894,7 +894,7 @@ def loop():
               fontSize: '12px'
             }}
           >
-            ⚡ Conciso
+            {t('ai.ui.conciseButton', '⚡ Concise')}
           </button>
 
           {/* Clear History */}
@@ -931,7 +931,7 @@ def loop():
               fontSize: '12px'
             }}
           >
-            ⚙️ Config
+            {t('ai.ui.settingsButton', '⚙️ Config')}
           </button>
         </div>
       </div>
@@ -946,7 +946,7 @@ def loop():
           boxSizing: 'border-box',
           overflow: 'hidden'
         }}>
-          <div style={{ marginBottom: '12px', fontWeight: '600' }}>⚙️ Configuración IA</div>
+          <div style={{ marginBottom: '12px', fontWeight: '600' }}>{t('ai.settings.title', '⚙️ AI Settings')}</div>
           
           <div style={{ 
             display: 'flex', 
@@ -957,7 +957,7 @@ def loop():
           }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-              Proveedor:
+              {t('ai.settings.provider', 'Provider:')}
             </label>
             <select 
               value={currentProviderType}
@@ -995,7 +995,7 @@ def loop():
           {currentProviderType !== 'mock' && currentProviderType !== 'ollama' && (
             <div style={{ marginBottom: '8px' }}>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                API Key:
+                {t('ai.settings.apiKey', 'API Key:')}
               </label>
               <input
                 type="password"
@@ -1049,7 +1049,7 @@ def loop():
           {currentProviderType !== 'mock' && availableModels.length > 0 && (
                 <div style={{ marginBottom: '8px' }}>
                   <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                    Modelo:
+                    {t('ai.settings.model', 'Model:')}
                     {isLoadingModels && <span style={{ color: '#6b7280', marginLeft: '8px' }}>{t('ai.ui.loading', 'Loading...')}</span>}
                   </label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
@@ -1107,7 +1107,7 @@ def loop():
                       marginTop: '4px',
                       fontStyle: 'italic'
                     }}>
-                      Modelo seleccionado: {providerConfig.model}
+                      {t('ai.settings.modelSelected', 'Model selected: {{model}}', { model: providerConfig.model })}
                     </div>
                   )}
                   
@@ -1189,7 +1189,7 @@ def loop():
                 fontSize: '12px'
               }}
             >
-              Guardar
+              {t('ai.button.save', 'Save')}
             </button>
             <button
               onClick={() => setShowSettings(false)}
@@ -1203,7 +1203,7 @@ def loop():
                 fontSize: '12px'
               }}
             >
-              Cancelar
+              {t('ai.button.cancel', 'Cancel')}
             </button>
           </div>
           </div>

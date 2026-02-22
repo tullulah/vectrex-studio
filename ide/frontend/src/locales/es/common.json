@@ -231,5 +231,14 @@
   "ai.settings.connectionFailed": "⚠️ Error de conexión con {{provider}}.\n\nPosibles problemas:\n• Verifica que tu clave API es correcta\n• Límite de velocidad excedido (espera un momento)\n• Servicio temporalmente no disponible\n\n¿Deseas guardar la configuración de todas formas?\nPuedes intentar enviar un mensaje para probar si funciona.",
   "ai.settings.connectionSuccess": "✅ ¡Conectado exitosamente a {{provider}}!",
   "ai.settings.connectionError": "⚠️ Error al probar la conexión: {{error}}\n\n¿Deseas guardar la configuración de todas formas?",
+  "ai.settings.title": "⚙️ Configuración IA",
+  "ai.settings.provider": "Proveedor:",
+  "ai.settings.apiKey": "Clave API:",
+  "ai.settings.model": "Modelo:",
+  "ai.settings.modelSelected": "Modelo seleccionado: {{model}}",
+  "ai.ui.conciseButton": "⚡ Conciso",
+  "ai.ui.settingsButton": "⚙️ Config",
+  "ai.button.save": "Guardar",
+  "ai.button.cancel": "Cancelar",
   "dialog.unsavedChanges": "El archivo tiene cambios sin guardar. ¿Cerrar de todas formas?"
 }
