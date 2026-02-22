@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useEditorStore } from '../state/editorStore';
 import { useProjectStore } from '../state/projectStore';
 import { WelcomeView } from './WelcomeView';
@@ -11,6 +12,7 @@ import { SFXEditor } from './SFXEditor';
 // Phase 1: single group, order = documents array order.
 
 export const EditorSurface: React.FC = () => {
+  const { t } = useTranslation(['common']);
   const documents = useEditorStore(s=>s.documents);
   const active = useEditorStore(s=>s.active);
   const setActive = useEditorStore(s=>s.setActive);
@@ -22,10 +24,10 @@ export const EditorSurface: React.FC = () => {
     e.stopPropagation();
     const doc = documents.find(d=>d.uri===uri);
     if (doc?.dirty) {
-      if (!window.confirm('Archivo con cambios sin guardar. ¿Cerrar de todos modos?')) return;
+      if (!window.confirm(t('dialog.unsavedChanges', 'File has unsaved changes. Close anyway?'))) return;
     }
     closeDocument(uri);
-  }, [documents, closeDocument]);
+  }, [documents, closeDocument, t]);
 
   const onTabMouseDown = useCallback((e: React.MouseEvent, uri: string) => {
     // Botón central del ratón (rueda) - cerrar pestaña

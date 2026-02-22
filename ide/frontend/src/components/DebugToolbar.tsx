@@ -1,9 +1,11 @@
 // DebugToolbar.tsx - Debug control buttons (Run, Pause, Stop, Step Over, Step Into, Step Out)
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDebugStore } from '../state/debugStore';
 import './DebugToolbar.css';
 
 export function DebugToolbar() {
+  const { t } = useTranslation(['common']);
   const state = useDebugStore(s => s.state);
   const run = useDebugStore(s => s.run);
   const pause = useDebugStore(s => s.pause);
@@ -58,78 +60,78 @@ export function DebugToolbar() {
     <div className="debug-toolbar">
       <div className="debug-controls">
         {state === 'stopped' && (
-          <button 
-            className="debug-btn debug-btn-run" 
+          <button
+            className="debug-btn debug-btn-run"
             onClick={run}
-            title="Run (F5)"
+            title={t('debug.run', 'Run (F5)')}
           >
             <span className="icon">▶️</span>
-            <span className="label">Run</span>
+            <span className="label">{t('action.run', 'Run')}</span>
           </button>
         )}
-        
+
         {state === 'running' && (
-          <button 
-            className="debug-btn debug-btn-pause" 
+          <button
+            className="debug-btn debug-btn-pause"
             onClick={pause}
-            title="Pause"
+            title={t('debug.pauseLabel', 'Pause')}
           >
             <span className="icon">⏸️</span>
-            <span className="label">Pause</span>
+            <span className="label">{t('action.pause', 'Pause')}</span>
           </button>
         )}
-        
+
         {state === 'paused' && (
-          <button 
-            className="debug-btn debug-btn-continue" 
+          <button
+            className="debug-btn debug-btn-continue"
             onClick={run}
-            title="Continue (F5)"
+            title={t('debug.continue', 'Continue (F5)')}
           >
             <span className="icon">▶️</span>
-            <span className="label">Continue</span>
+            <span className="label">{t('debug.continueLabel', 'Continue')}</span>
           </button>
         )}
-        
+
         {(state === 'running' || state === 'paused') && (
-          <button 
-            className="debug-btn debug-btn-stop" 
+          <button
+            className="debug-btn debug-btn-stop"
             onClick={stop}
-            title="Stop"
+            title={t('action.stop', 'Stop')}
           >
             <span className="icon">⏹️</span>
-            <span className="label">Stop</span>
+            <span className="label">{t('action.stop', 'Stop')}</span>
           </button>
         )}
-        
+
         <div className="debug-separator" />
-        
+
         {state === 'paused' && (
           <>
-            <button 
-              className="debug-btn debug-btn-step-over" 
+            <button
+              className="debug-btn debug-btn-step-over"
               onClick={stepOver}
-              title="Step Over (F10)"
+              title={t('debug.stepOver', 'Step Over')}
             >
               <span className="icon">↗️</span>
-              <span className="label">Step Over</span>
+              <span className="label">{t('debug.stepOverLabel', 'Step Over')}</span>
             </button>
-            
-            <button 
-              className="debug-btn debug-btn-step-into" 
+
+            <button
+              className="debug-btn debug-btn-step-into"
               onClick={stepInto}
-              title="Step Into (F11)"
+              title={t('debug.stepInto', 'Step Into')}
             >
               <span className="icon">↘️</span>
-              <span className="label">Step Into</span>
+              <span className="label">{t('debug.stepIntoLabel', 'Step Into')}</span>
             </button>
-            
-            <button 
-              className="debug-btn debug-btn-step-out" 
+
+            <button
+              className="debug-btn debug-btn-step-out"
               onClick={stepOut}
-              title="Step Out (Shift+F11)"
+              title={t('debug.stepOut', 'Step Out')}
             >
               <span className="icon">↖️</span>
-              <span className="label">Step Out</span>
+              <span className="label">{t('debug.stepOutLabel', 'Step Out')}</span>
             </button>
           </>
         )}
@@ -138,34 +140,34 @@ export function DebugToolbar() {
       <div className="debug-info">
         {currentVpyLine !== null && (
           <span className="debug-info-item">
-            <span className="debug-info-label">Line:</span>
+            <span className="debug-info-label">{t('label.line', 'Line')}:</span>
             <span className="debug-info-value">{currentVpyLine}</span>
           </span>
         )}
-        
+
         {currentAsmAddress !== null && (
           <span className="debug-info-item">
-            <span className="debug-info-label">PC:</span>
+            <span className="debug-info-label">{t('label.pc', 'PC')}:</span>
             <span className="debug-info-value">{currentAsmAddress}</span>
           </span>
         )}
-        
+
         {cycles > 0 && (
           <span className="debug-info-item">
-            <span className="debug-info-label">Cycles:</span>
+            <span className="debug-info-label">{t('label.cycles', 'Cycles')}:</span>
             <span className="debug-info-value">{cycles.toLocaleString()}</span>
           </span>
         )}
-        
+
         {fps > 0 && (
           <span className="debug-info-item">
-            <span className="debug-info-label">FPS:</span>
+            <span className="debug-info-label">{t('label.fps', 'FPS')}:</span>
             <span className="debug-info-value">{fps.toFixed(1)}</span>
           </span>
         )}
-        
+
         <span className="debug-info-item debug-state-badge" data-state={state}>
-          {state.toUpperCase()}
+          {t(`status.${state}`, state.charAt(0).toUpperCase() + state.slice(1))}
         </span>
       </div>
     </div>

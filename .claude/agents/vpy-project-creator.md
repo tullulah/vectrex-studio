@@ -84,6 +84,8 @@ def loop():
 ## Minimal main.vpy Template
 
 ```python
+META MUSIC = music1
+
 var player_x = 0   # Global variable (var = RAM)
 var player_y = 0   # Global variable
 
@@ -196,6 +198,8 @@ sfx = ["assets/sfx/*.vsfx"]
 
 **src/main.vpy**:
 ```python
+META MUSIC = music1
+
 var ship_x = 0     # Global: player X position
 var ship_y = -80   # Global: player Y position
 

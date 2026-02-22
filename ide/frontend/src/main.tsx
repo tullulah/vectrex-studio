@@ -1448,7 +1448,10 @@ def loop():
               setOpenMenu(null);
             }} />
             <MenuSeparator />
-            <MenuItem label={t('menu.languageToggle', 'Language: EN/ES')} onClick={()=>setOpenMenu(null)} />
+            <SubMenu label={t('menu.languageToggle', 'Language: EN/ES')}>
+              <MenuItem label={t('lang.english', 'English')} onClick={()=>{ i18n.changeLanguage('en'); setOpenMenu(null); }} />
+              <MenuItem label={t('lang.spanish', 'Spanish')} onClick={()=>{ i18n.changeLanguage('es'); setOpenMenu(null); }} />
+            </SubMenu>
           </MenuRoot>
         </div>
         <div style={{marginLeft:'auto', display:'flex', alignItems:'center', gap:8}}>

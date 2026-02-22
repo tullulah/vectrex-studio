@@ -69,79 +69,80 @@ PSG_DELAY_FRAMES     EQU $C880+$3C   ; PSG frame delay counter (1 bytes)
 PSG_MUSIC_BANK       EQU $C880+$3D   ; PSG music bank ID (for multibank) (1 bytes)
 SFX_PTR              EQU $C880+$3E   ; SFX data pointer (2 bytes)
 SFX_ACTIVE           EQU $C880+$40   ; SFX active flag (1 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$41   ; User variable: HOOK_GUN_Y (2 bytes)
-VAR_END_X            EQU $C880+$47   ; User variable: END_X (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$45   ; User variable: ANIM_THRESHOLD (2 bytes)
-VAR_END_X            EQU $C880+$47   ; User variable: end_x (2 bytes)
-VAR_JOY_X            EQU $C880+$49   ; User variable: JOY_X (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$4B   ; User variable: CURRENT_MUSIC (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$4D   ; User variable: MIRROR_MODE (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$4F   ; User variable: LOCATION_NAMES (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$51   ; User variable: CURRENT_LOCATION (2 bytes)
-VAR_LOC_Y            EQU $C880+$53   ; User variable: LOC_Y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$55   ; User variable: HOOK_MAX_Y (2 bytes)
-VAR_START_Y          EQU $C880+$95   ; User variable: START_Y (2 bytes)
-VAR_SCREEN           EQU $C880+$59   ; User variable: SCREEN (2 bytes)
-VAR_STATE_TITLE      EQU $C880+$5B   ; User variable: STATE_TITLE (2 bytes)
-VAR_ENEMY_X          EQU $C880+$5D   ; User variable: ENEMY_X (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$5F   ; User variable: COUNTDOWN_TIMER (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$61   ; User variable: NUM_LOCATIONS (2 bytes)
-VAR_SPEED            EQU $C880+$63   ; User variable: SPEED (2 bytes)
-VAR_LEVEL_ENEMY_SPEED EQU $C880+$65   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$67   ; User variable: ENEMY_Y (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$69   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$6B   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$6D   ; User variable: ENEMY_VX (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$6F   ; User variable: TITLE_STATE (2 bytes)
-VAR_JOY_Y            EQU $C880+$71   ; User variable: JOY_Y (2 bytes)
-VAR_HOOK_Y           EQU $C880+$73   ; User variable: HOOK_Y (2 bytes)
-VAR_START_X          EQU $C880+$C3   ; User variable: START_X (2 bytes)
-VAR_GROUND_Y         EQU $C880+$77   ; User variable: GROUND_Y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$79   ; User variable: MOVE_SPEED (2 bytes)
-VAR_STATE_GAME       EQU $C880+$7B   ; User variable: STATE_GAME (2 bytes)
-VAR_GRAVITY          EQU $C880+$7D   ; User variable: GRAVITY (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$7F   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$81   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
-VAR_PLAYER_X         EQU $C880+$83   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$85   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
-VAR_LEVEL_ENEMY_COUNT EQU $C880+$87   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$89   ; User variable: TITLE_INTENSITY (2 bytes)
-VAR_ABS_JOY          EQU $C880+$8B   ; User variable: ABS_JOY (2 bytes)
-VAR_END_Y            EQU $C880+$8F   ; User variable: end_y (2 bytes)
-VAR_END_Y            EQU $C880+$8F   ; User variable: END_Y (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$91   ; User variable: JOYSTICK1_STATE (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$93   ; User variable: ENEMY_SIZE (2 bytes)
-VAR_START_Y          EQU $C880+$95   ; User variable: start_y (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$97   ; User variable: ENEMY_ACTIVE (2 bytes)
-VAR_HOOK_X           EQU $C880+$99   ; User variable: HOOK_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$9B   ; User variable: PLAYER_Y (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$9D   ; User variable: LOCATION_X_COORDS (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$9F   ; User variable: HOOK_ACTIVE (2 bytes)
-VAR_COUNT            EQU $C880+$A1   ; User variable: COUNT (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$A3   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$A5   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$A7   ; User variable: HOOK_INIT_Y (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$A9   ; User variable: PREV_JOY_Y (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$AB   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
-VAR_LOC_X            EQU $C880+$AD   ; User variable: LOC_X (2 bytes)
-VAR_STATE_MAP        EQU $C880+$AF   ; User variable: STATE_MAP (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$B1   ; User variable: LOCATION_Y_COORDS (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$B3   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
+VAR_STATE_TITLE      EQU $C880+$41   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_MAP        EQU $C880+$43   ; User variable: STATE_MAP (2 bytes)
+VAR_STATE_GAME       EQU $C880+$45   ; User variable: STATE_GAME (2 bytes)
+VAR_SCREEN           EQU $C880+$47   ; User variable: SCREEN (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$49   ; User variable: TITLE_INTENSITY (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$4B   ; User variable: TITLE_STATE (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$4D   ; User variable: CURRENT_MUSIC (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$4F   ; User variable: LOCATION_X_COORDS (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$51   ; User variable: LOCATION_Y_COORDS (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$53   ; User variable: LOCATION_NAMES (2 bytes)
+VAR_LEVEL_BACKGROUNDS EQU $C880+$55   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$57   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$59   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$5B   ; User variable: NUM_LOCATIONS (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$5D   ; User variable: CURRENT_LOCATION (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$5F   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$61   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
+VAR_JOY_X            EQU $C880+$63   ; User variable: JOY_X (2 bytes)
+VAR_JOY_Y            EQU $C880+$65   ; User variable: JOY_Y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$67   ; User variable: PREV_JOY_X (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$69   ; User variable: PREV_JOY_Y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$6B   ; User variable: COUNTDOWN_TIMER (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$6D   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$6F   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$71   ; User variable: HOOK_ACTIVE (2 bytes)
+VAR_HOOK_X           EQU $C880+$73   ; User variable: HOOK_X (2 bytes)
+VAR_HOOK_Y           EQU $C880+$75   ; User variable: HOOK_Y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$77   ; User variable: HOOK_MAX_Y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$79   ; User variable: HOOK_GUN_X (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$7B   ; User variable: HOOK_GUN_Y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$7D   ; User variable: HOOK_INIT_Y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$7F   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$81   ; User variable: PLAYER_Y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$83   ; User variable: MOVE_SPEED (2 bytes)
+VAR_ABS_JOY          EQU $C880+$85   ; User variable: ABS_JOY (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$87   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$89   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$8B   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$8D   ; User variable: PLAYER_FACING (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$8F   ; User variable: MAX_ENEMIES (2 bytes)
+VAR_GRAVITY          EQU $C880+$91   ; User variable: GRAVITY (2 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$93   ; User variable: BOUNCE_DAMPING (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$95   ; User variable: MIN_BOUNCE_VY (2 bytes)
+VAR_GROUND_Y         EQU $C880+$97   ; User variable: GROUND_Y (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$99   ; User variable: JOYSTICK1_STATE (2 bytes)
+VAR_LOC_X            EQU $C880+$9B   ; User variable: LOC_X (2 bytes)
+VAR_LOC_Y            EQU $C880+$9D   ; User variable: LOC_Y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$9F   ; User variable: ANIM_THRESHOLD (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$A1   ; User variable: MIRROR_MODE (2 bytes)
+VAR_ACTIVE_COUNT     EQU $C880+$A3   ; User variable: ACTIVE_COUNT (2 bytes)
+VAR_I                EQU $C880+$A5   ; User variable: I (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$A7   ; User variable: ENEMY_ACTIVE (2 bytes)
+VAR_COUNT            EQU $C880+$A9   ; User variable: COUNT (2 bytes)
+VAR_SPEED            EQU $C880+$AB   ; User variable: SPEED (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$AD   ; User variable: ENEMY_SIZE (2 bytes)
+VAR_ENEMY_X          EQU $C880+$AF   ; User variable: ENEMY_X (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$B1   ; User variable: ENEMY_Y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$B3   ; User variable: ENEMY_VX (2 bytes)
 VAR_ENEMY_VY         EQU $C880+$B5   ; User variable: ENEMY_VY (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$B7   ; User variable: PREV_JOY_X (2 bytes)
-VAR_ACTIVE_COUNT     EQU $C880+$B9   ; User variable: ACTIVE_COUNT (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$BB   ; User variable: HOOK_GUN_X (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$BD   ; User variable: PLAYER_FACING (2 bytes)
-VAR_I                EQU $C880+$BF   ; User variable: I (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$C1   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
-VAR_START_X          EQU $C880+$C3   ; User variable: start_x (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$C5   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$D1   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$E1   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$F1   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$101   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$111   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$121   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
+VAR_START_X          EQU $C880+$BF   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$C1   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$C3   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$C5   ; User variable: end_y (2 bytes)
+VAR_START_X          EQU $C880+$BF   ; User variable: START_X (2 bytes)
+VAR_START_Y          EQU $C880+$C1   ; User variable: START_Y (2 bytes)
+VAR_END_X            EQU $C880+$C3   ; User variable: END_X (2 bytes)
+VAR_END_Y            EQU $C880+$C5   ; User variable: END_Y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$C7   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$D3   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$E3   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$F3   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$103   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$113   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$123   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -155,7 +156,7 @@ CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 b
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'LOCATION_X_COORDS' (17 elements)
+; Array literal for variable 'LOCATION_X_COORDS' (17 elements, 2 bytes each)
 ARRAY_LOCATION_X_COORDS_DATA:
     FDB 40   ; Element 0
     FDB 40   ; Element 1
@@ -175,7 +176,7 @@ ARRAY_LOCATION_X_COORDS_DATA:
     FDB 0   ; Element 15
     FDB 45   ; Element 16
 
-; Array literal for variable 'LOCATION_Y_COORDS' (17 elements)
+; Array literal for variable 'LOCATION_Y_COORDS' (17 elements, 2 bytes each)
 ARRAY_LOCATION_Y_COORDS_DATA:
     FDB 110   ; Element 0
     FDB 79   ; Element 1
@@ -339,7 +340,7 @@ ARRAY_LEVEL_BACKGROUNDS_DATA:  ; Pointer table for LEVEL_BACKGROUNDS
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_15  ; Pointer to string
     FDB ARRAY_LEVEL_BACKGROUNDS_DATA_STR_16  ; Pointer to string
 
-; Array literal for variable 'LEVEL_ENEMY_COUNT' (17 elements)
+; Array literal for variable 'LEVEL_ENEMY_COUNT' (17 elements, 2 bytes each)
 ARRAY_LEVEL_ENEMY_COUNT_DATA:
     FDB 1   ; Element 0
     FDB 1   ; Element 1
@@ -359,7 +360,7 @@ ARRAY_LEVEL_ENEMY_COUNT_DATA:
     FDB 6   ; Element 15
     FDB 7   ; Element 16
 
-; Array literal for variable 'LEVEL_ENEMY_SPEED' (17 elements)
+; Array literal for variable 'LEVEL_ENEMY_SPEED' (17 elements, 2 bytes each)
 ARRAY_LEVEL_ENEMY_SPEED_DATA:
     FDB 1   ; Element 0
     FDB 1   ; Element 1
@@ -379,7 +380,7 @@ ARRAY_LEVEL_ENEMY_SPEED_DATA:
     FDB 5   ; Element 15
     FDB 5   ; Element 16
 
-; Array literal for variable 'JOYSTICK1_STATE' (6 elements)
+; Array literal for variable 'JOYSTICK1_STATE' (6 elements, 2 bytes each)
 ARRAY_JOYSTICK1_STATE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -388,7 +389,7 @@ ARRAY_JOYSTICK1_STATE_DATA:
     FDB 0   ; Element 4
     FDB 0   ; Element 5
 
-; Array literal for variable 'ENEMY_ACTIVE' (8 elements)
+; Array literal for variable 'ENEMY_ACTIVE' (8 elements, 2 bytes each)
 ARRAY_ENEMY_ACTIVE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -399,7 +400,7 @@ ARRAY_ENEMY_ACTIVE_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_X' (8 elements)
+; Array literal for variable 'ENEMY_X' (8 elements, 2 bytes each)
 ARRAY_ENEMY_X_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -410,7 +411,7 @@ ARRAY_ENEMY_X_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_Y' (8 elements)
+; Array literal for variable 'ENEMY_Y' (8 elements, 2 bytes each)
 ARRAY_ENEMY_Y_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -421,7 +422,7 @@ ARRAY_ENEMY_Y_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_VX' (8 elements)
+; Array literal for variable 'ENEMY_VX' (8 elements, 2 bytes each)
 ARRAY_ENEMY_VX_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -432,7 +433,7 @@ ARRAY_ENEMY_VX_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_VY' (8 elements)
+; Array literal for variable 'ENEMY_VY' (8 elements, 2 bytes each)
 ARRAY_ENEMY_VY_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -443,7 +444,7 @@ ARRAY_ENEMY_VY_DATA:
     FDB 0   ; Element 6
     FDB 0   ; Element 7
 
-; Array literal for variable 'ENEMY_SIZE' (8 elements)
+; Array literal for variable 'ENEMY_SIZE' (8 elements, 2 bytes each)
 ARRAY_ENEMY_SIZE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -718,8 +719,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -744,8 +745,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -778,8 +779,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -812,8 +813,8 @@ IF_END_2:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -933,8 +934,8 @@ IF_END_7:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_X
@@ -946,8 +947,8 @@ IF_END_7:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_Y
@@ -1322,8 +1323,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1348,8 +1349,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1382,8 +1383,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1416,8 +1417,8 @@ IF_END_11:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1540,8 +1541,8 @@ IF_NEXT_6:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_ARG2
@@ -1617,8 +1618,8 @@ IF_NEXT_26:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1643,8 +1644,8 @@ IF_NEXT_26:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1677,8 +1678,8 @@ IF_NEXT_26:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -1711,8 +1712,8 @@ IF_NEXT_26:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -2074,8 +2075,8 @@ IF_END_39:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_ARG2
@@ -2090,8 +2091,8 @@ IF_END_39:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_LOC_X
@@ -2103,8 +2104,8 @@ IF_END_39:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_LOC_Y
@@ -3791,8 +3792,8 @@ DRAW_GAME_LEVEL:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_X
@@ -4822,8 +4823,8 @@ WH_101: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -4875,8 +4876,8 @@ SPAWN_ENEMIES:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_COUNT
@@ -4888,8 +4889,8 @@ SPAWN_ENEMIES:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_SPEED
@@ -4930,7 +4931,7 @@ WH_105: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4946,7 +4947,7 @@ WH_105: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4977,7 +4978,7 @@ WH_105: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -4993,7 +4994,7 @@ WH_105: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5009,7 +5010,7 @@ WH_105: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5058,7 +5059,7 @@ WH_105: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LBRA IF_END_107
 IF_NEXT_108:
 IF_END_107:
@@ -5077,7 +5078,7 @@ IF_END_107:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5129,8 +5130,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5162,8 +5163,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -5176,7 +5177,7 @@ WH_109: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5196,8 +5197,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -5209,15 +5210,15 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     ADDD ,S++
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5237,8 +5238,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -5250,15 +5251,15 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     ADDD ,S++
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_GROUND_Y
     STD RESULT
     LDD RESULT
@@ -5271,8 +5272,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5300,7 +5301,7 @@ WH_109: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5324,8 +5325,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PULS X      ; Get left into X
@@ -5333,7 +5334,7 @@ WH_109: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5353,8 +5354,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PSHS D
@@ -5374,7 +5375,7 @@ WH_109: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_MIN_BOUNCE_VY
     STD RESULT
     LDD RESULT
@@ -5387,8 +5388,8 @@ WH_109: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5416,7 +5417,7 @@ WH_109: ; while start
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LBRA IF_END_115
 IF_NEXT_116:
 IF_END_115:
@@ -5435,8 +5436,8 @@ IF_END_113:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5464,7 +5465,7 @@ IF_END_113:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5488,8 +5489,8 @@ IF_END_113:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PULS X      ; Get left into X
@@ -5497,7 +5498,7 @@ IF_END_113:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LBRA IF_END_117
 IF_NEXT_118:
 IF_END_117:
@@ -5513,8 +5514,8 @@ IF_END_117:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5542,7 +5543,7 @@ IF_END_117:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5566,8 +5567,8 @@ IF_END_117:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     PULS X      ; Get left into X
@@ -5575,7 +5576,7 @@ IF_END_117:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LBRA IF_END_119
 IF_NEXT_120:
 IF_END_119:
@@ -5633,8 +5634,8 @@ WH_121: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5666,8 +5667,8 @@ WH_121: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5690,8 +5691,8 @@ WH_121: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -5703,8 +5704,8 @@ WH_121: ; while start
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -5735,8 +5736,8 @@ IF_NEXT_126:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5759,8 +5760,8 @@ IF_NEXT_126:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -5772,8 +5773,8 @@ IF_NEXT_126:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -5804,8 +5805,8 @@ IF_NEXT_127:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     CMPD ,S++
@@ -5828,8 +5829,8 @@ IF_NEXT_127:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -5841,8 +5842,8 @@ IF_NEXT_127:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -5871,8 +5872,8 @@ IF_NEXT_128:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
@@ -5884,8 +5885,8 @@ IF_NEXT_128:
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * 2)
-    LDD ,X      ; Load value
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -5966,7 +5967,7 @@ READ_JOYSTICK1_STATE:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #1
     STD RESULT
     LDD RESULT
@@ -5982,7 +5983,7 @@ READ_JOYSTICK1_STATE:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #2
     STD RESULT
     LDD RESULT
@@ -6005,7 +6006,7 @@ READ_JOYSTICK1_STATE:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #3
     STD RESULT
     LDD RESULT
@@ -6028,7 +6029,7 @@ READ_JOYSTICK1_STATE:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #4
     STD RESULT
     LDD RESULT
@@ -6051,7 +6052,7 @@ READ_JOYSTICK1_STATE:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     LDD #5
     STD RESULT
     LDD RESULT
@@ -6074,7 +6075,7 @@ READ_JOYSTICK1_STATE:
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
-    STD ,X          ; Store value
+    STD ,X          ; Store 16-bit value
     RTS
 
 ;***************************************************************************
