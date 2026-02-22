@@ -23,9 +23,6 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
         out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
         out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)\n");
-        // Restore VIA to drawing mode BEFORE changing DP back
-        out.push_str("    LDA #$98     ; VIA_cntl = $98 (restore DAC mode for drawing)\n");
-        out.push_str("    STA $0C      ; Direct page $D00C (VIA_cntl)\n");
         out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)\n");
         out.push_str("    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)\n");
         out.push_str("    SEX          ; Sign-extend B to D\n");
@@ -43,9 +40,6 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
         out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
         out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)\n");
-        // Restore VIA to drawing mode BEFORE changing DP back
-        out.push_str("    LDA #$98     ; VIA_cntl = $98 (restore DAC mode for drawing)\n");
-        out.push_str("    STA $0C      ; Direct page $D00C (VIA_cntl)\n");
         out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)\n");
         out.push_str("    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)\n");
         out.push_str("    SEX          ; Sign-extend B to D\n");
