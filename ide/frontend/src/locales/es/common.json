@@ -228,5 +228,8 @@
   "ai.error.explaining": "❌ Error explicando código: {{message}}",
   "ai.error.optimizing": "❌ Error optimizando código: {{message}}",
   "ai.error.unknown": "Error desconocido",
+  "ai.settings.connectionFailed": "⚠️ Error de conexión con {{provider}}.\n\nPosibles problemas:\n• Verifica que tu clave API es correcta\n• Límite de velocidad excedido (espera un momento)\n• Servicio temporalmente no disponible\n\n¿Deseas guardar la configuración de todas formas?\nPuedes intentar enviar un mensaje para probar si funciona.",
+  "ai.settings.connectionSuccess": "✅ ¡Conectado exitosamente a {{provider}}!",
+  "ai.settings.connectionError": "⚠️ Error al probar la conexión: {{error}}\n\n¿Deseas guardar la configuración de todas formas?",
   "dialog.unsavedChanges": "El archivo tiene cambios sin guardar. ¿Cerrar de todas formas?"
 }

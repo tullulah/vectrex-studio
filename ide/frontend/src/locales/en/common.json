@@ -228,5 +228,8 @@
   "ai.error.explaining": "❌ Error explaining code: {{message}}",
   "ai.error.optimizing": "❌ Error optimizing code: {{message}}",
   "ai.error.unknown": "Unknown error",
+  "ai.settings.connectionFailed": "⚠️ Connection test failed for {{provider}}.\n\nPossible issues:\n• Check your API key is correct\n• Rate limit exceeded (wait a moment)\n• Service temporarily unavailable\n\nDo you want to save the configuration anyway?\nYou can try sending a message to test if it works.",
+  "ai.settings.connectionSuccess": "✅ Successfully connected to {{provider}}!",
+  "ai.settings.connectionError": "⚠️ Error testing connection: {{error}}\n\nDo you want to save the configuration anyway?",
   "dialog.unsavedChanges": "File has unsaved changes. Close anyway?"
 }

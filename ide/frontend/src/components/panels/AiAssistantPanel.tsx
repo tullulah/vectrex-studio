@@ -1159,27 +1159,17 @@ def loop():
                     console.log('Connection test result:', isConnected);
                     
                     if (!isConnected) {
-                      const shouldSave = confirm(`⚠️ Connection test failed for ${currentProviderType}.
+                      const shouldSave = confirm(t('ai.settings.connectionFailed', '⚠️ Connection test failed for {{provider}}.\n\nPossible issues:\n• Check your API key is correct\n• Rate limit exceeded (wait a moment)\n• Service temporarily unavailable\n\nDo you want to save the configuration anyway?\nYou can try sending a message to test if it works.', { provider: currentProviderType }));
 
-Possible issues:
-• Check your API key is correct
-• Rate limit exceeded (wait a moment)
-• Service temporarily unavailable
-
-Do you want to save the configuration anyway?
-You can try sending a message to test if it works.`);
-                      
                       if (!shouldSave) {
                         return;
                       }
                     } else {
-                      alert(`✅ Successfully connected to ${currentProviderType}!`);
+                      alert(t('ai.settings.connectionSuccess', '✅ Successfully connected to {{provider}}!', { provider: currentProviderType }));
                     }
                   } catch (error) {
                     console.error('Connection test error:', error);
-                    const shouldSave = confirm(`⚠️ Error testing connection: ${error}
-
-Do you want to save the configuration anyway?`);
+                    const shouldSave = confirm(t('ai.settings.connectionError', '⚠️ Error testing connection: {{error}}\n\nDo you want to save the configuration anyway?', { error: error instanceof Error ? error.message : String(error) }));
                     
                     if (!shouldSave) {
                       return;
