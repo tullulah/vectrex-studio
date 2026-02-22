@@ -8,6 +8,7 @@ pub mod vecres;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;
+pub mod stack_validator;
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -156,7 +157,26 @@ pub fn generate_from_module(
         bank_config.rom_bank_size,
         assets,
     ).map_err(|e| CodegenError::Error(e))?;
-    
+
+    // Validate stack balance before returning
+    if let Err(validation_errors) = stack_validator::validate_stack_balance(&asm_source) {
+        let mut error_msg = String::from("\nStack Balance Validation FAILED:\n");
+        for error in validation_errors {
+            error_msg.push_str(&format!("\n{}\n", error.error_message));
+            for detail in &error.details {
+                error_msg.push_str(&format!("  {}\n", detail));
+            }
+        }
+        error_msg.push_str("\nStack imbalance will cause runtime crashes and undefined behavior.\n");
+        error_msg.push_str("This is a compiler bug - the generated code has incorrect PSHS/PULS pairing.\n");
+        error_msg.push_str("\nCommon causes:\n");
+        error_msg.push_str("  - Unmatched PSHS in function prologue\n");
+        error_msg.push_str("  - Missing PULS in function epilogue\n");
+        error_msg.push_str("  - Unbalanced branches (if/else not returning to same stack depth)\n");
+        error_msg.push_str("  - JSR call not followed by matching return\n");
+        return Err(CodegenError::Error(error_msg));
+    }
+
     Ok(GeneratedASM {
         asm_source,
         bank_config: bank_config.clone(),

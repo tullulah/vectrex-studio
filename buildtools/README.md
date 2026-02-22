@@ -59,12 +59,22 @@ Phase 9: vpy_debug_gen  → .pdb file (from linker data)
 - **Tests**: 12 passing (single-bank, multibank, overflow)
 - **Status**: Ready for Phase 7 linker integration
 
-### ✅ Phase 5: vpy_codegen - Runtime Helper Optimization (COMPLETE)
+### ✅ Phase 5: vpy_codegen - Stack Balance Validation (COMPLETE)
 - **Tree Shaking System**: Automatic detection and elimination of unused runtime helpers
 - **Modular Architecture**: 5 helper modules (drawing, math, joystick, level, utilities)
 - **Usage Analysis**: AST traversal detects which helpers are actually needed
 - **Results**: Only emits helpers used in code (e.g., joystick_test: 3/17 helpers)
 - **Benefits**: Smaller binaries, zero manual configuration, automatic dependency resolution
+
+**Stack Balance Validator** (NEW - 2026-02-22):
+- **Purpose**: Catches stack corruption bugs at compile time
+- **Validation**: Checks PSHS/PULS balance in all generated functions
+- **Detection**: Reports unmatched pushes/pops with exact line numbers and stack trace
+- **Scope**: Validates each function independently (PSHS/PULS within function must balance)
+- **Implementation**: `stack_validator.rs` module (280 lines, 5 tests)
+- **Error Messages**: Detailed stack traces show depth at each push/pop
+- **Result**: **FOUND 5 STACK IMBALANCES** in pang example (LOOP_BODY +2, IF_NEXT_1 +2, 3x underflow)
+- **Key Finding**: Current codegen has unmatched PSHS/PULS pairs - preventing silent runtime hangs
 
 ### ✅ Phase 6: vpy_assembler - Critical Fixes (2026-01-17)
 - **ORG Directive Processing**: Fixed multibank boot sequence
