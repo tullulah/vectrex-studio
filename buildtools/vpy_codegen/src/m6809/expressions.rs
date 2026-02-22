@@ -297,14 +297,13 @@ fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: 
 }
 
 fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]) {
-    // CRITICAL FIX (2026-02-22): Stack balance - don't use PSHS/PULS for array base
-    // Instead:
-    // 1. Load array base into X
-    // 2. Evaluate index into D
-    // 3. Save index to TMPVAL temporarily
-    // 4. Calculate X = X + (index * stride)
-    // 5. Load element
-    // This avoids stack operations and maintains stack balance.
+    // CRITICAL FIX (2026-02-22): Use TMPPTR for array index storage, not TMPVAL
+    // TMPVAL is reserved for comparison operands in conditional expressions
+    // Using TMPVAL here causes overwrites when array access appears in comparisons like:
+    //   joystick1_state[2] == 1  (TMPVAL gets 1, then gets overwritten by index 2)
+    //
+    // Solution: Use TMPPTR to store the index, keeping TMPVAL free for comparisons
+    // This avoids register pressure and maintains expression evaluation safety
 
     // CRITICAL FIX (2026-01-19): Use correct label based on array type
     // Mutable arrays (GlobalLet): VAR_{NAME}_DATA (in RAM)
@@ -332,19 +331,19 @@ fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]
         out.push_str("    LDX RESULT  ; Array base address\n");
     }
 
-    // Step 2: Evaluate index and save to TMPVAL (temporarily using it for index)
+    // Step 2: Evaluate index and save to TMPPTR (NOT TMPVAL - keeps comparison operand safe)
     emit_simple_expr(index, out, assets);
     out.push_str("    LDD RESULT  ; Index value\n");
-    out.push_str("    STD TMPVAL  ; Save index to TMPVAL temporarily\n");
+    out.push_str("    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)\n");
 
     // Step 3: Calculate stride and adjust X
     // Stride multiply: only if element_size == 2 (8-bit arrays have stride 1, no multiply needed)
     if element_size == 2 {
-        out.push_str("    LDD TMPVAL  ; Load index\n");
+        out.push_str("    LDD TMPPTR  ; Load index\n");
         out.push_str("    ASLB        ; Multiply by 2 (16-bit elements)\n");
         out.push_str("    ROLA\n");
     } else {
-        out.push_str("    LDD TMPVAL  ; Load index (stride = 1 for 8-bit)\n");
+        out.push_str("    LDD TMPPTR  ; Load index (stride = 1 for 8-bit)\n");
     }
 
     // Step 4: Calculate address: X = X + (D = index * element_size)
