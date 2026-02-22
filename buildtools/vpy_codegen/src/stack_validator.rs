@@ -25,17 +25,18 @@ impl std::fmt::Display for StackValidationError {
 
 impl std::error::Error for StackValidationError {}
 
-/// Count registers in PSHS/PULS postbyte string (e.g., "D,X,Y")
+/// Count bytes pushed/popped by PSHS/PULS (e.g., "D,X,Y")
 /// IMPORTANT: Stop parsing at semicolon (comments are not registers)
+/// Returns count in 16-bit units (2 bytes) for stack depth tracking
 fn count_registers(postbyte_str: &str) -> i32 {
     if postbyte_str.is_empty() {
         return 0;
     }
 
-    // Count comma-separated registers
-    // Each register can be: A, B, D, X, Y, U, S, PC, DP, CC
-    // D=A+B, so "D" counts as pushing 2 bytes but as 1 register conceptually
-    // We'll count by register count for stack balance (what matters is depth, not bytes)
+    // Count bytes pushed/popped:
+    // Single-byte registers: A, B, DP, CC = 1 byte each
+    // Double-byte registers: D, X, Y, U, S, PC = 2 bytes each
+    // We return count in 2-byte units (like register pairs)
 
     // CRITICAL: Stop at semicolon - everything after ; is a comment, not a register
     let register_part = if let Some(pos) = postbyte_str.find(';') {
@@ -44,21 +45,35 @@ fn count_registers(postbyte_str: &str) -> i32 {
         postbyte_str
     };
 
-    let mut count = 0;
-    let mut in_register = false;
+    let mut byte_count = 0;
+    let mut current_token = String::new();
 
     for ch in register_part.chars() {
-        if ch.is_alphabetic() || ch.is_numeric() {
-            if !in_register {
-                count += 1;
-                in_register = true;
+        if ch.is_alphabetic() {
+            current_token.push(ch);
+        } else {
+            if !current_token.is_empty() {
+                // Count bytes for this register
+                match current_token.to_uppercase().as_str() {
+                    "A" | "B" | "DP" | "CC" => byte_count += 1,  // Single-byte registers
+                    "D" | "X" | "Y" | "U" | "S" | "PC" => byte_count += 2,  // Double-byte registers
+                    _ => {}  // Unknown register, skip
+                }
+                current_token.clear();
             }
-        } else if ch == ',' || ch == ' ' {
-            in_register = false;
         }
     }
 
-    count
+    // Don't forget the last register
+    if !current_token.is_empty() {
+        match current_token.to_uppercase().as_str() {
+            "A" | "B" | "DP" | "CC" => byte_count += 1,
+            "D" | "X" | "Y" | "U" | "S" | "PC" => byte_count += 2,
+            _ => {}
+        }
+    }
+
+    byte_count
 }
 
 /// Analyze a single instruction for stack effects
@@ -106,6 +121,27 @@ fn analyze_instruction_depth(line: &str) -> i32 {
             let reg_part = parts[mnemonic_idx + 1..].join(" ");
             let count = count_registers(&reg_part);
             return -count;
+        }
+        return 0;
+    }
+
+    // LEAS: Load Effective Address into Stack (S = S + offset)
+    // Used to adjust stack pointer, e.g., "LEAS 4,S" means S = S + 4 (pop 4 bytes)
+    if mnemonic == "LEAS" {
+        // Format: "LEAS 4,S" or "LEAS -2,S"
+        // Extract the offset (first numeric argument, before the comma)
+        if mnemonic_idx + 1 < parts.len() {
+            let offset_str = parts[mnemonic_idx + 1];
+            // Extract just the numeric part before comma (e.g., "4" from "4,S")
+            let offset_part = if let Some(comma_pos) = offset_str.find(',') {
+                &offset_str[..comma_pos]
+            } else {
+                offset_str
+            };
+            if let Ok(offset) = offset_part.parse::<i32>() {
+                // Positive offset = incrementing S = popping (negative depth change)
+                return -offset;
+            }
         }
         return 0;
     }

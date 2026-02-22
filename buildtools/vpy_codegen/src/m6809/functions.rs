@@ -289,24 +289,29 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
         }
         
         Stmt::CompoundAssign { target, op, value, .. } => {
-            // Load current value
+            // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
+            // Load current value, save to TMPVAL, evaluate right side, perform op
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
                     // IMPORTANT: Name already comes uppercase from unifier
                     asm.push_str(&format!("    LDD VAR_{}\n", name));
-                    asm.push_str("    PSHS D\n");
-                    
+                    asm.push_str("    STD TMPVAL          ; Save left operand\n");
+
                     // Evaluate right side
                     expressions::emit_simple_expr(value, asm, assets);
                     asm.push_str("    LDD RESULT\n");
-                    
+
                     // Perform operation
                     match op {
-                        vpy_parser::BinOp::Add => asm.push_str("    ADDD ,S++\n"),
-                        vpy_parser::BinOp::Sub => asm.push_str("    SUBD ,S++\n"),
+                        vpy_parser::BinOp::Add => asm.push_str("    ADDD TMPVAL         ; D = D + TMPVAL\n"),
+                        vpy_parser::BinOp::Sub => {
+                            asm.push_str("    STD TMPPTR          ; Save right operand\n");
+                            asm.push_str("    LDD TMPVAL          ; Get left operand\n");
+                            asm.push_str("    SUBD TMPPTR         ; D = left - right\n");
+                        }
                         _ => return Err(format!("Aug-assign {:?} not yet supported", op)),
                     }
-                    
+
                     // Store back (uppercase for consistency)
                     asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
                 }
