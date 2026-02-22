@@ -122,20 +122,6 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         }
     }
 
-    // Initialize const arrays - set pointer variables to ROM data addresses
-    // BUG FIX (2026-02-22): Const arrays were not being initialized, causing array access
-    // to read from address $0000 (cartridge header) instead of the actual array data
-    for item in &module.items {
-        if let vpy_parser::Item::Const { name, value, .. } = item {
-            if let vpy_parser::Expr::List(_elements) = value {
-                // Const array: set VAR_{NAME} pointer to point to ARRAY_{NAME}_DATA in ROM
-                let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
-                asm.push_str(&format!("    LDX #{}  ; Const array pointer -> ROM\n", rom_label));
-                asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
-            }
-        }
-    }
-    
     // CRITICAL: Initialize joystick mux ONCE before any J1_X/J1_Y calls
     // (copied from core/src/backend/m6809/mod.rs lines 834-849)
     joystick::emit_joystick_init(&mut asm);
