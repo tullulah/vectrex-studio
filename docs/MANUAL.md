@@ -405,7 +405,7 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 |----------|-------------|
 | `PRINT_TEXT(x, y, "text")` | Print a string at screen position |
 | `PRINT_TEXT(x, y, var)` | Print a string variable |
-| `PRINT_NUMBER(x, y, number)` | Print a 16-bit integer value |
+| `PRINT_NUMBER(x, y, number)` | Print a decimal number (range 0–9999, 4 digits with leading zeros) |
 | `DEBUG_PRINT(value)` | Debug output to console (editor only) |
 | `DEBUG_PRINT_LABELED("label", value)` | Debug output with label |
 | `DEBUG_PRINT_STR("text")` | Debug string output |

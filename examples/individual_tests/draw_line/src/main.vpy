@@ -1,6 +1,6 @@
 # TEST: DRAW_LINE
 # Tests basic line drawing
-# Expected: Horizontal, vertical, and diagonal lines visible on screen
+# Expected: A regular pentagon centered on screen
 
 META TITLE = "DRAW_LINE"
 META MUSIC = music1
@@ -9,14 +9,12 @@ def main():
     pass
 
 def loop():
-    # Horizontal line (left to right)
-    DRAW_LINE(-60, 80, 60, 80, 80)
-
-    # Vertical line (top to bottom)
-    DRAW_LINE(-80, 60, -80, -60, 80)
-
-    # Diagonal line (top-left to bottom-right)
-    DRAW_LINE(-50, 60, 50, -60, 80)
-
-    # Another diagonal (top-right to bottom-left)
-    DRAW_LINE(50, 60, -50, -60, 80)
+    # Pentagon - radius 60, vertices starting at top (90deg), going clockwise
+    # V0=(0,60)  V1=(-57,19)  V2=(-35,-49)  V3=(35,-49)  V4=(57,19)
+    DRAW_LINE(0, 60, -57, 19, 80)
+    DRAW_LINE(-57, 19, -35, -49, 80)
+    DRAW_LINE(-35, -49, 35, -49, 80)
+    DRAW_LINE(35, -49, 57, 19, 80)
+    DRAW_LINE(57, 19, 0, 60, 80)
+    PRINT_TEXT( -60, 0, "TEST")
+    PRINT_NUMBER(0, 0, 123)

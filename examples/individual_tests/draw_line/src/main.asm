@@ -166,56 +166,90 @@ LOOP_BODY:
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:13
+    ; VPy_LINE:14
     LDA #$D0
     TFR A,DP
+    JSR Reset0Ref
     LDA #$50
     JSR Intensity_a
+    LDA #$3C
+    LDB #$00
+    JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$78
+    LDA #$D7
+    LDB #$C7
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP
     LDD #0
     STD RESULT
     ; DEBUG: Statement 1 - Discriminant(8)
-    ; VPy_LINE:16
+    ; VPy_LINE:15
     LDA #$D0
     TFR A,DP
+    JSR Reset0Ref
     LDA #$50
     JSR Intensity_a
+    LDA #$13
+    LDB #$C7
+    JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$88
-    LDB #$00
+    LDA #$BC
+    LDB #$16
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP
     LDD #0
     STD RESULT
     ; DEBUG: Statement 2 - Discriminant(8)
-    ; VPy_LINE:19
+    ; VPy_LINE:16
     LDA #$D0
     TFR A,DP
+    JSR Reset0Ref
     LDA #$50
     JSR Intensity_a
+    LDA #$CF
+    LDB #$DD
+    JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$88
-    LDB #$64
+    LDA #$00
+    LDB #$46
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP
     LDD #0
     STD RESULT
     ; DEBUG: Statement 3 - Discriminant(8)
-    ; VPy_LINE:22
+    ; VPy_LINE:17
     LDA #$D0
     TFR A,DP
+    JSR Reset0Ref
     LDA #$50
     JSR Intensity_a
+    LDA #$CF
+    LDB #$23
+    JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$88
-    LDB #$9C
+    LDA #$44
+    LDB #$16
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
+    LDD #0
+    STD RESULT
+    ; DEBUG: Statement 4 - Discriminant(8)
+    ; VPy_LINE:18
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$50
+    JSR Intensity_a
+    LDA #$13
+    LDB #$39
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$29
+    LDB #$C7
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP

@@ -653,20 +653,18 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
     if needed.contains("DRAW_LINE_WRAPPER") {
         out.push_str("; DRAW_LINE unified wrapper - handles 16-bit signed coordinates\n");
         out.push_str("; Args: DRAW_LINE_ARGS+0=x0, +2=y0, +4=x1, +6=y1, +8=intensity\n");
-        out.push_str("; ALWAYS sets intensity. Does NOT reset origin (allows connected lines).\n");
+        out.push_str("; Resets beam to center, moves to (x0,y0), draws to (x1,y1)\n");
         out.push_str("DRAW_LINE_WRAPPER:\n");
-        out.push_str("    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n");
-        out.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for vector drawing)\n");
-        out.push_str("    STA >$D00C     ; VIA_cntl\n");
         out.push_str("    ; Set DP to hardware registers\n");
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
-        
+        out.push_str("    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning\n");
+
         // Set intensity and move to start - USE EXTENDED ADDRESSING (>)
         out.push_str("    ; ALWAYS set intensity (no optimization)\n");
         out.push_str("    LDA >DRAW_LINE_ARGS+8+1  ; intensity (low byte) - EXTENDED addressing\n");
         out.push_str("    JSR Intensity_a\n");
-        out.push_str("    ; Move to start ONCE (y in A, x in B) - use low bytes (8-bit signed -127..+127)\n");
+        out.push_str("    ; Move to start position (y in A, x in B) - use low bytes (8-bit signed -127..+127)\n");
         out.push_str("    LDA >DRAW_LINE_ARGS+2+1  ; Y start (low byte) - EXTENDED addressing\n");
         out.push_str("    LDB >DRAW_LINE_ARGS+0+1  ; X start (low byte) - EXTENDED addressing\n");
         out.push_str("    JSR Moveto_d\n");

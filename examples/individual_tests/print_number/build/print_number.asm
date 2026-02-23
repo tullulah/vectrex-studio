@@ -81,7 +81,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
-    LDD #37
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_COUNTER
@@ -135,7 +135,7 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_84737      ; Pointer to string in helpers bank
+    LDX #PRINT_TEXT_STR_61790933023797      ; Pointer to string in helpers bank
     STX VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
@@ -291,11 +291,11 @@ MOD16:
     RTS
 
 ;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_84737:
-    FCC "VAL"
-    FCB $80          ; Vectrex string terminator
-
 PRINT_TEXT_STR_61805355484:
     FCC "COUNTER"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_61790933023797:
+    FCC "FIXED VAL"
     FCB $80          ; Vectrex string terminator
 

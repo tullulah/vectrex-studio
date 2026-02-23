@@ -41,13 +41,14 @@ TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT
 TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
 TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_LINE_ARGS       EQU $C880+$0A   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$14   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$16   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$18   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$19   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$1A   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$1C   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+NUM_STR              EQU $C880+$0A   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_LINE_ARGS       EQU $C880+$10   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1A   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$1C   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$1E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$1F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -90,19 +91,19 @@ LOOP_BODY:
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #-60
+    LDD #0
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+2    ; y0
     LDD #60
     STD RESULT
     LDD RESULT
+    STD DRAW_LINE_ARGS+2    ; y0
+    LDD #-57
+    STD RESULT
+    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
-    LDD #80
+    LDD #19
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
@@ -114,19 +115,19 @@ LOOP_BODY:
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #-80
+    LDD #-57
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
-    LDD #60
+    LDD #19
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
-    LDD #-80
+    LDD #-35
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
-    LDD #-60
+    LDD #-49
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
@@ -138,19 +139,19 @@ LOOP_BODY:
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #-50
+    LDD #-35
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
-    LDD #60
+    LDD #-49
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
-    LDD #50
+    LDD #35
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
-    LDD #-60
+    LDD #-49
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
@@ -162,19 +163,19 @@ LOOP_BODY:
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #50
+    LDD #35
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
-    LDD #60
+    LDD #-49
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
-    LDD #-50
+    LDD #57
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
-    LDD #-60
+    LDD #19
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
@@ -183,6 +184,60 @@ LOOP_BODY:
     LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
+    LDD #0
+    STD RESULT
+    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
+    LDD #57
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+0    ; x0
+    LDD #19
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+2    ; y0
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+4    ; x1
+    LDD #60
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+6    ; y1
+    LDD #80
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+8    ; intensity
+    JSR DRAW_LINE_WRAPPER
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2571410      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0    ; X position
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1    ; Y position
+    LDD #123
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     RTS
@@ -190,6 +245,104 @@ LOOP_BODY:
 ;***************************************************************************
 ; RUNTIME HELPERS
 ;***************************************************************************
+
+VECTREX_PRINT_TEXT:
+    ; VPy signature: PRINT_TEXT(x, y, string)
+    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
+    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
+    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
+    STA >$D00C     ; VIA_cntl
+    JSR $F1AA      ; DP_to_D0 - set Direct Page for BIOS/VIA access
+    LDU >VAR_ARG2   ; string pointer (third parameter)
+    LDA >VAR_ARG1+1 ; Y coordinate (second parameter, low byte)
+    LDB >VAR_ARG0+1 ; X coordinate (first parameter, low byte)
+    JSR Print_Str_d ; Print string from U register
+    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)
+    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state
+    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    RTS
+
+VECTREX_PRINT_NUMBER:
+    ; Print 16-bit decimal number (0-9999)
+    ; ARG0=x, ARG1=y, ARG2=value
+    ;
+    ; STEP 1: Convert number to decimal string (DP=$C8)
+    ; Algorithm: Store number in TMPVAL, use buffer byte as counter,
+    ; reload D from TMPVAL each iteration (avoids A/D register conflict)
+    LDD >VAR_ARG2   ; Load 16-bit number (safe: DP=$C8)
+    STD >TMPVAL      ; Save number to temp
+    LDX #NUM_STR    ; String buffer pointer
+    
+    ; Check for 0
+    CMPD #0
+    BNE .PN_DIV1000
+    LDA #'0'
+    STA ,X+
+    LDA #$80        ; Terminator byte (same format as FCC/FCB strings)
+    STA ,X
+    BRA .PN_AFTER_CONVERT
+    
+    ; --- 1000s digit ---
+.PN_DIV1000:
+    CLR ,X           ; Counter = 0 (in buffer)
+.PN_L1000:
+    LDD >TMPVAL
+    SUBD #1000
+    BMI .PN_D1000
+    STD >TMPVAL      ; Store reduced value
+    INC ,X           ; Increment digit counter
+    BRA .PN_L1000
+.PN_D1000:
+    LDA ,X           ; Get count
+    ADDA #'0'        ; Convert to ASCII
+    STA ,X+          ; Store and advance
+    
+    ; --- 100s digit ---
+    CLR ,X
+.PN_L100:
+    LDD >TMPVAL
+    SUBD #100
+    BMI .PN_D100
+    STD >TMPVAL
+    INC ,X
+    BRA .PN_L100
+.PN_D100:
+    LDA ,X
+    ADDA #'0'
+    STA ,X+
+    
+    ; --- 10s digit ---
+    CLR ,X
+.PN_L10:
+    LDD >TMPVAL
+    SUBD #10
+    BMI .PN_D10
+    STD >TMPVAL
+    INC ,X
+    BRA .PN_L10
+.PN_D10:
+    LDA ,X
+    ADDA #'0'
+    STA ,X+
+    
+    ; --- 1s digit (remainder) ---
+    LDD >TMPVAL
+    ADDB #'0'        ; Low byte = ones digit
+    STB ,X+          ; Store digit
+    LDA #$80          ; Terminator (same format as FCC/FCB $80 strings)
+    STA ,X
+    
+.PN_AFTER_CONVERT:
+    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
+    LDA #$98
+    STA >$D00C       ; VIA_cntl = $98 (DAC mode)
+    JSR $F1AA      ; DP_to_D0 for Print_Str_d
+    LDA >VAR_ARG1+1  ; Y coordinate
+    LDB >VAR_ARG0+1  ; X coordinate
+    LDU #NUM_STR     ; String pointer
+    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    JSR $F1AF      ; Restore DP to $C8
+    RTS
 
 MOD16:
     ; Modulo 16-bit X % D -> D
@@ -212,18 +365,16 @@ MOD16:
 
 ; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
 ; Args: DRAW_LINE_ARGS+0=x0, +2=y0, +4=x1, +6=y1, +8=intensity
-; ALWAYS sets intensity. Does NOT reset origin (allows connected lines).
+; Resets beam to center, moves to (x0,y0), draws to (x1,y1)
 DRAW_LINE_WRAPPER:
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for vector drawing)
-    STA >$D00C     ; VIA_cntl
     ; Set DP to hardware registers
     LDA #$D0
     TFR A,DP
+    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning
     ; ALWAYS set intensity (no optimization)
     LDA >DRAW_LINE_ARGS+8+1  ; intensity (low byte) - EXTENDED addressing
     JSR Intensity_a
-    ; Move to start ONCE (y in A, x in B) - use low bytes (8-bit signed -127..+127)
+    ; Move to start position (y in A, x in B) - use low bytes (8-bit signed -127..+127)
     LDA >DRAW_LINE_ARGS+2+1  ; Y start (low byte) - EXTENDED addressing
     LDB >DRAW_LINE_ARGS+0+1  ; X start (low byte) - EXTENDED addressing
     JSR Moveto_d
@@ -322,4 +473,9 @@ DLW_DONE:
     LDA #$C8       ; CRITICAL: Restore DP to $C8 for our code
     TFR A,DP
     RTS
+
+;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_2571410:
+    FCC "TEST"
+    FCB $80          ; Vectrex string terminator
 

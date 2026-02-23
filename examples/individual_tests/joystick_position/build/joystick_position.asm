@@ -294,15 +294,12 @@ VECTREX_PRINT_NUMBER:
     STB ,X
     
 .PN_AFTER_CONVERT:
-    ; Move to position
-    LDA >VAR_ARG1+1
-    LDB >VAR_ARG0+1
-    JSR Moveto_d
-    
-    ; Print string
-    LDU #NUM_STR
-    JSR Print_Str_d  ; Print using BIOS
-    JSR Reset_Pen    ; Reset pen parameters after Print_Str_d
+    ; Load coordinates into registers - CRITICAL: must be JUST before Print_Str_d
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
+    LDU #NUM_STR    ; String pointer
+    JSR Print_Str_d ; Print using BIOS (A=Y, B=X, U=string)
+    JSR Reset_Pen   ; Reset pen parameters after Print_Str_d
     JSR $F1AF      ; Restore DP
     RTS
 

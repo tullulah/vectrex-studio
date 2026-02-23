@@ -816,14 +816,14 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     }
     
     // DRAW_LINE optimization: when all args are numeric constants, generate inline BIOS calls
-    // NO hace Moveto - el usuario debe posicionarse antes con MOVETO si es necesario
+    // Reset beam to center, move to (x0,y0), draw delta to (x1,y1)
     if up == "DRAW_LINE" && args.len() == 5 && args.iter().all(|a| matches!(a, Expr::Number(_))) {
-        if let (Expr::Number(x0), Expr::Number(y0), Expr::Number(x1), Expr::Number(y1), Expr::Number(intensity)) 
+        if let (Expr::Number(x0), Expr::Number(y0), Expr::Number(x1), Expr::Number(y1), Expr::Number(intensity))
             = (&args[0], &args[1], &args[2], &args[3], &args[4]) {
             // Calculate deltas from absolute coordinates
             let dx = (*x1 - *x0) as i32;
             let dy = (*y1 - *y0) as i32;
-            
+
             // If deltas require segmentation (> ±127), use DRAW_LINE_WRAPPER instead
             if dy > 127 || dy < -128 || dx > 127 || dx < -128 {
                 // Fall through to wrapper version
@@ -831,18 +831,23 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 // Deltas fit in 8-bit, use inline BIOS call
                 let dx8 = dx as i8;
                 let dy8 = dy as i8;
-                
-                // Set DP and intensity
+
+                // Set DP=$D0 for BIOS calls, reset beam to center
                 out.push_str("    LDA #$D0\n    TFR A,DP\n");
+                out.push_str("    JSR Reset0Ref\n");
+                // Set intensity
                 if *intensity == 0x5F {
                     out.push_str("    JSR Intensity_5F\n");
                 } else {
                     out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", *intensity as u8));
                 }
+                // Move to start position (x0, y0)
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                    (*y0 as i8) as u8, (*x0 as i8) as u8));
                 // Clear Vec_Misc_Count for proper timing
                 out.push_str("    CLR Vec_Misc_Count\n");
                 // Draw line using RELATIVE deltas (A=dy, B=dx)
-                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
                     dy8 as u8, dx8 as u8));
                 // Restore DP after BIOS call
                 out.push_str("    LDA #$C8\n    TFR A,DP\n");
