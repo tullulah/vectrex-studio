@@ -124,11 +124,12 @@ pub fn emit_draw_rect(
             out.push_str(&format!("    LDA #${:02X}\n    LDB #$00\n    JSR Draw_Line_d\n", 
                 neg_h));  // Up
             
+            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }
     }
-    
+
     // Variables - use runtime helper
     out.push_str("    ; ERROR: DRAW_RECT with variables requires expressions module access\n");
     out.push_str("    ; Use constant values for now\n");
@@ -361,22 +362,28 @@ pub fn emit_draw_filled_rect(
             }
             out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
             
-            // Draw horizontal scanlines from top to bottom
-            let num_lines = height.abs().min(64); // Limit scanlines
-            for i in 0..num_lines {
-                let y_offset = if height >= 0 { i } else { -i };
-                let curr_y = (y0 + y_offset) & 0xFF;
-                
-                // Move to start of scanline
-                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
-                    curr_y, (x0 & 0xFF)));
-                
-                // Draw horizontal line
+            // Draw horizontal scanlines using relative Moveto_d between lines
+            // (absolute Moveto_d per line would accumulate position error)
+            let num_lines = height.abs().min(64);
+            // First scanline: absolute position from Reset0Ref origin
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                (y0 & 0xFF), (x0 & 0xFF)));
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+                (width & 0xFF)));
+            // Subsequent scanlines: relative move (dy=±1, dx=-width) from end of previous line
+            let dy_step: i32 = if height >= 0 { 1 } else { -1 };
+            let neg_w = (-(width as i32)) & 0xFF;
+            let dy_byte = (dy_step & 0xFF) as u8;
+            for _ in 1..num_lines {
                 out.push_str("    CLR Vec_Misc_Count\n");
-                out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                    dy_byte, neg_w as u8));
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
                     (width & 0xFF)));
             }
-            
+            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }

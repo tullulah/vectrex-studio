@@ -38,6 +38,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     "ABS"|"MATH_ABS"|"MIN"|"MATH_MIN"|"MAX"|"MATH_MAX"|"CLAMP"|"MATH_CLAMP"|"LEN"|
     "MUL_A"|"DIV_A"|"MOD_A"|
     "DRAW_CIRCLE"|"DRAW_CIRCLE_SEG"|"DRAW_ARC"|"DRAW_SPIRAL"|"DRAW_VECTORLIST"|"DRAW_POLYGON"|
+    "DRAW_RECT"|"DRAW_FILLED_RECT"|
     "DEBUG_PRINT"|"DEBUG_PRINT_LABELED"|"DEBUG_PRINT_STR"
     );
     
@@ -1074,7 +1075,72 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 out.push_str("    CLRA\n    CLRB\n    STD RESULT\n"); return true;
         }
     }
-    
+
+    // DRAW_RECT(x, y, width, height[, intensity]) - outlined rectangle (4 sides)
+    if up == "DRAW_RECT" && (args.len() == 4 || args.len() == 5) && args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        if let (Expr::Number(x), Expr::Number(y), Expr::Number(w), Expr::Number(h)) = (&args[0], &args[1], &args[2], &args[3]) {
+            let mut intensity: i32 = 0x5F;
+            if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
+            let (x0, y0, w0, h0) = (*x, *y, *w, *h);
+            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));   // right
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #$00\n    JSR Draw_Line_d\n", (h0 & 0xFF)));   // up
+            out.push_str("    CLR Vec_Misc_Count\n");
+            let neg_w = (-(w0 as i32)) & 0xFF;
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", neg_w));          // left
+            out.push_str("    CLR Vec_Misc_Count\n");
+            let neg_h = (-(h0 as i32)) & 0xFF;
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #$00\n    JSR Draw_Line_d\n", neg_h));          // down
+            out.push_str("    LDA #$C8\n    TFR A,DP\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return true;
+        }
+    }
+    if up == "DRAW_RECT" && (args.len() == 4 || args.len() == 5) {
+        out.push_str("    ; DRAW_RECT with variables not yet implemented in core\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
+    // DRAW_FILLED_RECT(x, y, width, height[, intensity]) - filled with horizontal scanlines
+    // Uses relative Moveto_d between scanlines to avoid accumulation error
+    if up == "DRAW_FILLED_RECT" && (args.len() == 4 || args.len() == 5) && args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        if let (Expr::Number(x), Expr::Number(y), Expr::Number(w), Expr::Number(h)) = (&args[0], &args[1], &args[2], &args[3]) {
+            let mut intensity: i32 = 0x5F;
+            if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
+            let (x0, y0, w0, h0) = (*x, *y, *w, *h);
+            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            // First scanline: absolute position from (0,0)
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));
+            // Subsequent scanlines: relative move from end-of-previous-line (dy=+1/-1, dx=-w)
+            let num_lines = h0.abs().min(64);
+            let dy_step: i32 = if h0 >= 0 { 1 } else { -1 };
+            let neg_w = (-(w0 as i32)) & 0xFF;
+            let dy_byte = (dy_step & 0xFF) as u8;
+            for _ in 1..num_lines {
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", dy_byte, neg_w as u8));
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));
+            }
+            out.push_str("    LDA #$C8\n    TFR A,DP\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return true;
+        }
+    }
+    if up == "DRAW_FILLED_RECT" && (args.len() == 4 || args.len() == 5) {
+        out.push_str("    ; DRAW_FILLED_RECT with variables not yet implemented in core\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
     // Check if it's a struct instantiation BEFORE checking builtins
     // Structs are detected by checking if name exists in struct registry
     if let Some(layout) = opts.structs.get(name) {

@@ -51,6 +51,13 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "ASM"
             | "SET_INTENSITY"
             | "DRAW_VECTOR_EX"
+            | "DRAW_RECT"
+            | "DRAW_FILLED_RECT"
+            | "DRAW_CIRCLE"
+            | "DRAW_CIRCLE_SEG"
+            | "DRAW_POLYGON"
+            | "DRAW_ARC"
+            | "DRAW_ELLIPSE"
     )
 }
 

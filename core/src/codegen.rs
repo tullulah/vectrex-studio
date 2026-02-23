@@ -89,6 +89,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("DRAW_CIRCLE_SEG", 999),// Variable arity: nseg, xc, yc, diam, [intensity]
     ("DRAW_ARC", 999),       // Variable arity - arc drawing
     ("DRAW_SPIRAL", 999),    // Variable arity - spiral drawing
+    ("DRAW_RECT", 5),       // x, y, width, height, intensity
     
     // Funciones específicas de vectorlist
     ("DRAW_VL", 2),
@@ -97,6 +98,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("WAIT_RECAL", 0),
     ("PLAY_MUSIC1", 0),
     ("DBG_STATIC_VL", 0),
+    
     
     // Math functions
     ("ABS", 1),             // Absolute value
