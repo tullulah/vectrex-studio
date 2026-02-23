@@ -876,9 +876,6 @@ fn emit_ldd(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String
         let val = parse_immediate_16_with_symbols(&operand[1..], equates)?;
         emitter.ldd_immediate(val);
     } else if operand.starts_with('>') {
-        let val = parse_immediate_16_with_symbols(&operand[1..], equates)?;
-        emitter.ldd_immediate(val);
-    } else if operand.starts_with('>') {
         // Force extended addressing (lwasm compatibility)
         let operand_without_prefix = &operand[1..];
         match resolve_address(operand_without_prefix, equates) {

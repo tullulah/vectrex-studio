@@ -8,20 +8,14 @@ META MUSIC = music1
 counter = 0
 
 def main():
-    counter = 0
+    counter = 37
 
 def loop():
     # Display counter and its value
-    PRINT_TEXT(-80, counter, "COUNTER")
-    
-    PRINT_NUMBER(-10, counter, 99)
-    # PRINT_TEXT(10, 30, "COUNT")
-
-    #PRINT_NUMBER(-40, 0, 12345)
-    # PRINT_TEXT(-80, 0, "VAL")
-    # PRINT_TEXT(-40, 0, "12345")
+    PRINT_TEXT(-80, 0, "COUNTER")
+    PRINT_NUMBER(30, 0, counter)
+    PRINT_TEXT(-80, -30, "VAL")
+    PRINT_NUMBER(30, -30, 9999)
     # Increment counter each frame
     counter = counter + 1
 
-    # if(counter > 650):
-    #     counter = 0

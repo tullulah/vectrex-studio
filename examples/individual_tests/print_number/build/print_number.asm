@@ -49,7 +49,7 @@ VLINE_DX             EQU $C880+$1E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
 VLINE_DY             EQU $C880+$1F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_COUNTER          EQU $C880+$24   ; User variable: counter (2 bytes)
+VAR_COUNTER          EQU $C880+$24   ; User variable: COUNTER (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -81,7 +81,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
-    LDD #0
+    LDD #37
     STD RESULT
     LDD RESULT
     STD VAR_COUNTER
@@ -101,7 +101,7 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD >VAR_COUNTER
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -111,15 +111,45 @@ LOOP_BODY:
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-10
+    LDD #30
     STD RESULT
     LDD RESULT
     STD VAR_ARG0    ; X position
-    LDD >VAR_COUNTER
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG1    ; Y position
-    LDD #99
+    LDD >VAR_COUNTER
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-80
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #-30
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_84737      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #30
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0    ; X position
+    LDD #-30
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1    ; Y position
+    LDD #9999
     STD RESULT
     LDD RESULT
     STD VAR_ARG2    ; Number value
@@ -162,70 +192,83 @@ VECTREX_PRINT_TEXT:
 VECTREX_PRINT_NUMBER:
     ; Print 16-bit decimal number (0-9999)
     ; ARG0=x, ARG1=y, ARG2=value
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS
-    LDA #$98
-    STA >$D00C     ; VIA_cntl = $98
-    JSR $F1AA      ; DP_to_D0
-    
-    ; Convert 16-bit number to decimal
-    LDD >VAR_ARG2  ; Load 16-bit number
-    LDX #NUM_STR   ; String buffer
+    ;
+    ; STEP 1: Convert number to decimal string (DP=$C8)
+    ; Algorithm: Store number in TMPVAL, use buffer byte as counter,
+    ; reload D from TMPVAL each iteration (avoids A/D register conflict)
+    LDD >VAR_ARG2   ; Load 16-bit number (safe: DP=$C8)
+    STD >TMPVAL      ; Save number to temp
+    LDX #NUM_STR    ; String buffer pointer
     
     ; Check for 0
     CMPD #0
     BNE .PN_DIV1000
     LDA #'0'
-    ORA #$80
+    STA ,X+
+    LDA #$80        ; Terminator byte (same format as FCC/FCB strings)
     STA ,X
     BRA .PN_AFTER_CONVERT
     
+    ; --- 1000s digit ---
 .PN_DIV1000:
-    CLRA
+    CLR ,X           ; Counter = 0 (in buffer)
 .PN_L1000:
-    CMPD #1000
-    BLT .PN_D1000_DONE
+    LDD >TMPVAL
     SUBD #1000
-    INCA
+    BMI .PN_D1000
+    STD >TMPVAL      ; Store reduced value
+    INC ,X           ; Increment digit counter
     BRA .PN_L1000
-.PN_D1000_DONE:
-    ADDA #'0'
-    STA ,X+
+.PN_D1000:
+    LDA ,X           ; Get count
+    ADDA #'0'        ; Convert to ASCII
+    STA ,X+          ; Store and advance
     
-    CLRA
+    ; --- 100s digit ---
+    CLR ,X
 .PN_L100:
-    CMPD #100
-    BLT .PN_D100_DONE
+    LDD >TMPVAL
     SUBD #100
-    INCA
+    BMI .PN_D100
+    STD >TMPVAL
+    INC ,X
     BRA .PN_L100
-.PN_D100_DONE:
+.PN_D100:
+    LDA ,X
     ADDA #'0'
     STA ,X+
     
-    CLRA
+    ; --- 10s digit ---
+    CLR ,X
 .PN_L10:
-    CMPD #10
-    BLT .PN_D10_DONE
+    LDD >TMPVAL
     SUBD #10
-    INCA
+    BMI .PN_D10
+    STD >TMPVAL
+    INC ,X
     BRA .PN_L10
-.PN_D10_DONE:
+.PN_D10:
+    LDA ,X
     ADDA #'0'
     STA ,X+
     
-    ; Last digit (remainder in D)
-    ADDB #'0'
-    ORB #$80       ; Terminator
-    STB ,X
+    ; --- 1s digit (remainder) ---
+    LDD >TMPVAL
+    ADDB #'0'        ; Low byte = ones digit
+    STB ,X+          ; Store digit
+    LDA #$80          ; Terminator (same format as FCC/FCB $80 strings)
+    STA ,X
     
 .PN_AFTER_CONVERT:
-    ; Load coordinates into registers - CRITICAL: must be JUST before Print_Str_d
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
-    LDU #NUM_STR    ; String pointer
-    JSR Print_Str_d ; Print using BIOS (A=Y, B=X, U=string)
-    JSR Reset_Pen   ; Reset pen parameters after Print_Str_d
-    JSR $F1AF      ; Restore DP
+    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
+    LDA #$98
+    STA >$D00C       ; VIA_cntl = $98 (DAC mode)
+    JSR $F1AA      ; DP_to_D0 for Print_Str_d
+    LDA >VAR_ARG1+1  ; Y coordinate
+    LDB >VAR_ARG0+1  ; X coordinate
+    LDU #NUM_STR     ; String pointer
+    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    JSR $F1AF      ; Restore DP to $C8
     RTS
 
 MOD16:
@@ -248,6 +291,10 @@ MOD16:
     RTS
 
 ;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_84737:
+    FCC "VAL"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_61805355484:
     FCC "COUNTER"
     FCB $80          ; Vectrex string terminator

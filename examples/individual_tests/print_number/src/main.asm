@@ -25,23 +25,19 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 34 bytes
+; Total RAM used: 26 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
-TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
-TMPRIGHT             EQU $C880+$06   ; Right operand temp (2 bytes)
-TMPRIGHT2            EQU $C880+$08   ; Right operand temp 2 (for nested operations) (2 bytes)
-TMPPTR               EQU $C880+$0A   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$0C   ; Pointer temp 2 (for nested array operations) (2 bytes)
-TEMP_YX              EQU $C880+$0E   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$10   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$11   ; Temporary y storage (1 bytes)
-NUM_STR              EQU $C880+$12   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-VAR_COUNTER          EQU $C880+$18   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$1A   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$1C   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$1E   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$20   ; Function argument 3 (2 bytes)
+TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
+TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
+TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
+TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
+TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
+NUM_STR              EQU $C880+$0A   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+VAR_COUNTER          EQU $C880+$10   ; User variable (2 bytes)
+VAR_ARG0             EQU $C880+$12   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$14   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$16   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$18   ; Function argument 3 (2 bytes)
 
     JMP START
 
@@ -138,71 +134,76 @@ VECTREX_PRINT_TEXT:
 VECTREX_PRINT_NUMBER:
     ; Print 16-bit decimal number (0-9999)
     ; ARG0=X, ARG1=Y, ARG2=value
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS
-    LDA #$98
-    STA >$D00C     ; VIA_cntl = $98
-    LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    
-    ; Convert 16-bit number to decimal
-    LDD >VAR_ARG2  ; Load 16-bit number
-    LDX #NUM_STR   ; String buffer
-    
+    ; STEP 1: Convert number to decimal string (DP=$C8)
+    ; Store number in RESULT, use buffer byte as counter, reload D each iteration
+    LDD >VAR_ARG2   ; Load 16-bit number (safe: DP=$C8)
+    STD >RESULT      ; Save number to temp
+    LDX #NUM_STR    ; String buffer pointer
     ; Check for 0
     CMPD #0
     BNE .PN_DIV1000
     LDA #'0'
-    ORA #$80
+    STA ,X+
+    LDA #$80          ; Terminator (same format as FCC/FCB strings)
     STA ,X
     BRA .PN_AFTER_CONVERT
-    
+    ; --- 1000s digit ---
 .PN_DIV1000:
-    CLRA
+    CLR ,X           ; Counter = 0 (in buffer)
 .PN_L1000:
-    CMPD #1000
-    BLT .PN_D1000_DONE
+    LDD >RESULT
     SUBD #1000
-    INCA
+    BMI .PN_D1000
+    STD >RESULT
+    INC ,X
     BRA .PN_L1000
-.PN_D1000_DONE:
+.PN_D1000:
+    LDA ,X
     ADDA #'0'
     STA ,X+
-    
-    CLRA
+    ; --- 100s digit ---
+    CLR ,X
 .PN_L100:
-    CMPD #100
-    BLT .PN_D100_DONE
+    LDD >RESULT
     SUBD #100
-    INCA
+    BMI .PN_D100
+    STD >RESULT
+    INC ,X
     BRA .PN_L100
-.PN_D100_DONE:
+.PN_D100:
+    LDA ,X
     ADDA #'0'
     STA ,X+
-    
-    CLRA
+    ; --- 10s digit ---
+    CLR ,X
 .PN_L10:
-    CMPD #10
-    BLT .PN_D10_DONE
+    LDD >RESULT
     SUBD #10
-    INCA
+    BMI .PN_D10
+    STD >RESULT
+    INC ,X
     BRA .PN_L10
-.PN_D10_DONE:
+.PN_D10:
+    LDA ,X
     ADDA #'0'
     STA ,X+
-    
-    ; Last digit (remainder in D)
+    ; --- 1s digit (remainder) ---
+    LDD >RESULT
     ADDB #'0'
-    ORB #$80       ; Terminator
-    STB ,X
-    
+    STB ,X+
+    LDA #$80          ; Terminator (same format as FCC/FCB strings)
+    STA ,X
 .PN_AFTER_CONVERT:
-    ; Load coordinates into registers - CRITICAL: must be JUST before Print_Str_d
-    LDA VAR_ARG1+1 ; Y coordinate
-    LDB VAR_ARG0+1 ; X coordinate
-    LDU #NUM_STR   ; String pointer
-    JSR Print_Str_d
-    JSR Reset_Pen  ; Reset pen parameters after Print_Str_d
-    JSR $F1AF      ; DP_to_C8 - restore DP
+    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
+    LDA #$98
+    STA >$D00C       ; VIA_cntl = $98 (DAC mode)
+    LDA #$D0
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    LDA >VAR_ARG1+1  ; Y coordinate
+    LDB >VAR_ARG0+1  ; X coordinate
+    LDU #NUM_STR     ; String pointer
+    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    JSR $F1AF        ; DP_to_C8 - restore DP
     RTS
 ; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
 __Intensity_a:
@@ -231,7 +232,7 @@ START:
     LDD #0
     STD VAR_COUNTER
     ; VPy_LINE:11
-    LDD #0
+    LDD #37
     STD RESULT
     LDX RESULT
     LDU #VAR_COUNTER
@@ -273,7 +274,7 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD VAR_COUNTER
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -288,15 +289,15 @@ LOOP_BODY:
     STD RESULT
     ; DEBUG: Statement 1 - Discriminant(8)
     ; VPy_LINE:17
-    LDD #-10
+    LDD #30
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD VAR_COUNTER
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDD #99
+    LDD VAR_COUNTER
     STD RESULT
     LDD RESULT
     STD VAR_ARG2
@@ -305,26 +306,6 @@ LOOP_BODY:
     CLRA
     CLRB
     STD RESULT
-    ; DEBUG: Statement 2 - Discriminant(0)
-    ; VPy_LINE:24
-    LDD VAR_COUNTER
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_COUNTER
-    STU TMPPTR
-    STX ,U
     RTS
 
 ;***************************************************************************
