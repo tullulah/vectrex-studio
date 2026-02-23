@@ -136,97 +136,61 @@ VECTREX_PRINT_TEXT:
     JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)
     RTS
 VECTREX_PRINT_NUMBER:
-    ; Print 16-bit decimal number at position (0-65535)
-    ; ARG0 = X position, ARG1 = Y position, ARG2 = number value (16-bit)
-    ; Uses NUM_STR buffer (6 bytes: 5 digits + terminator)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
+    ; Print decimal 0-9999
+    ; ARG0=X, ARG1=Y, ARG2=value
+    LDA #$98
+    STA >$D00C     ; VIA DAC mode
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    TFR A,DP       ; DP=$D0
     
-    ; Convert number to decimal string
-    LDD >VAR_ARG2  ; Load 16-bit number into D
-    LDX #NUM_STR   ; Point to string buffer
-    PSHS X         ; Save pointer
+    LDD >VAR_ARG2
+    LDX #NUM_STR
     
-    ; Quick number-to-decimal (simple approach: itoa)
-    ; For simplicity, handle 0-9999 (4 digits)
-    CLR TMPVAL     ; Digit counter
-    
-    ; Check if 0
+    ; Zero case
     CMPD #0
-    BNE .PN_NOT_ZERO
-    LDA #'0'
-    STA ,X+
-    BRA .PN_PRINT_IT
-.PN_NOT_ZERO:
-    ; Divide by 1000
-    JSR .PN_DIV_1000
-    ADDA #'0'
-    STA ,X+
+    BNE .PN_DIV1000
+    LDA #'0'|$80
+    STA ,X
+    BRA .PN_MOVE
     
-    ; Divide by 100
-    JSR .PN_DIV_100
-    ADDA #'0'
-    STA ,X+
-    
-    ; Divide by 10
-    JSR .PN_DIV_10
-    ADDA #'0'
-    STA ,X+
-    
-    ; Remainder is ones digit
-    ADDA #'0'
-    ORA #$80       ; Set terminator bit
-    STA ,X+
-    BRA .PN_PRINT_IT
-    
-.PN_DIV_1000:
+.PN_DIV1000:
     CLRA
-.PN_D1000_LOOP:
-    CMPD #1000
-    BLT .PN_D1000_END
+.L1000: CMPD #1000
+    BLT .D1000
     SUBD #1000
     INCA
-    BRA .PN_D1000_LOOP
-.PN_D1000_END:
-    RTS
+    BRA .L1000
+.D1000: ADDA #'0'
+    STA ,X+
     
-.PN_DIV_100:
     CLRA
-.PN_D100_LOOP:
-    CMPD #100
-    BLT .PN_D100_END
+.L100:  CMPD #100
+    BLT .D100
     SUBD #100
     INCA
-    BRA .PN_D100_LOOP
-.PN_D100_END:
-    RTS
+    BRA .L100
+.D100:  ADDA #'0'
+    STA ,X+
     
-.PN_DIV_10:
     CLRA
-.PN_D10_LOOP:
-    CMPD #10
-    BLT .PN_D10_END
+.L10:   CMPD #10
+    BLT .D10
     SUBD #10
     INCA
-    BRA .PN_D10_LOOP
-.PN_D10_END:
-    RTS
+    BRA .L10
+.D10:   ADDA #'0'
+    STA ,X+
     
-.PN_PRINT_IT:
-    PULS X         ; Restore string pointer
+    ADDB #'0'|$80
+    STB ,X
     
-    ; Move to position
-    LDA >VAR_ARG1+1   ; Y position
-    LDB >VAR_ARG0+1   ; X position
-    JSR Moveto_d      ; Move to position
-    
-    ; Print the string
-    LDU #NUM_STR     ; Point to our number string
-    JSR Print_Str_d  ; Print using BIOS
-    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)
+.PN_MOVE:
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    JSR Moveto_d
+    LDU #NUM_STR
+    JSR Print_Str_d
+    JSR $F1AF
     RTS
 ; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
 __Intensity_a:
@@ -293,7 +257,7 @@ LOOP_BODY:
     ; DEBUG: Statement 0 - Discriminant(8)
     ; VPy_LINE:15
 ; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-40
+    LDD #-80
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
@@ -316,7 +280,7 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #70
+    LDD #80
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -332,11 +296,11 @@ LOOP_BODY:
     ; DEBUG: Statement 2 - Discriminant(8)
     ; VPy_LINE:19
 ; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-40
+    LDD #-80
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #50
+    LDD #-50
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -355,7 +319,7 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #40
+    LDD #-50
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -388,6 +352,38 @@ LOOP_BODY:
     LDU #VAR_COUNTER
     STU TMPPTR
     STX ,U
+    ; DEBUG: Statement 5 - Discriminant(9)
+    ; VPy_LINE:25
+    LDD VAR_COUNTER
+    STD RESULT
+    LDD RESULT
+    STD TMPLEFT
+    LDD #650
+    STD RESULT
+    LDD RESULT
+    STD TMPRIGHT
+    LDD TMPLEFT
+    SUBD TMPRIGHT
+    BGT CT_2
+    LDD #0
+    STD RESULT
+    BRA CE_3
+CT_2:
+    LDD #1
+    STD RESULT
+CE_3:
+    LDD RESULT
+    LBEQ IF_NEXT_1
+    ; VPy_LINE:26
+    LDD #0
+    STD RESULT
+    LDX RESULT
+    LDU #VAR_COUNTER
+    STU TMPPTR
+    STX ,U
+    LBRA IF_END_0
+IF_NEXT_1:
+IF_END_0:
     RTS
 
 ;***************************************************************************

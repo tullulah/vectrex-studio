@@ -11,9 +11,9 @@
   "functions": {},
   "nativeCalls": {
     "20": "VECTREX_PRINT_NUMBER",
-    "19": "VECTREX_PRINT_TEXT",
+    "15": "VECTREX_PRINT_TEXT",
     "16": "VECTREX_PRINT_NUMBER",
-    "15": "VECTREX_PRINT_TEXT"
+    "19": "VECTREX_PRINT_TEXT"
   },
   "asmFunctions": {
     "VECTREX_PRINT_TEXT": {
@@ -26,30 +26,9 @@
   },
   "asmAddressMap": {},
   "variables": {
-    "counter": {
-      "name": "counter",
-      "address": "0xC898",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg3": {
-      "name": "arg3",
-      "address": "0xC8A0",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC891",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC88C",
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC89A",
       "size": 2,
       "type": "unknown",
       "declLine": null
@@ -61,30 +40,9 @@
       "type": "unknown",
       "declLine": null
     },
-    "arg0": {
-      "name": "arg0",
-      "address": "0xC89A",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC892",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg1": {
-      "name": "arg1",
-      "address": "0xC89C",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC88A",
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
       "size": 2,
       "type": "unknown",
       "declLine": null
@@ -96,9 +54,9 @@
       "type": "unknown",
       "declLine": null
     },
-    "TEMP_YX": {
-      "name": "TEMP_YX",
-      "address": "0xC88E",
+    "counter": {
+      "name": "counter",
+      "address": "0xC898",
       "size": 2,
       "type": "unknown",
       "declLine": null
@@ -110,17 +68,38 @@
       "type": "unknown",
       "declLine": null
     },
-    "TMPRIGHT": {
-      "name": "TMPRIGHT",
-      "address": "0xC886",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
     "RESULT": {
       "name": "RESULT",
       "address": "0xC880",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC88E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC892",
+      "size": 6,
       "type": "unknown",
       "declLine": null
     },
@@ -131,10 +110,31 @@
       "type": "unknown",
       "declLine": null
     },
-    "TMPLEFT2": {
-      "name": "TMPLEFT2",
-      "address": "0xC884",
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8A0",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC89C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC891",
+      "size": 1,
       "type": "unknown",
       "declLine": null
     }
