@@ -419,10 +419,7 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("VECTREX_PRINT_NUMBER:\n");
         asm.push_str("    ; Print 16-bit decimal number (0-9999)\n");
         asm.push_str("    ; ARG0=x, ARG1=y, ARG2=value\n");
-        asm.push_str("    ; Uses NUM_STR buffer (5 bytes: 4 digits + terminator)\n");
-        asm.push_str("    LDA #$98\n");
-        asm.push_str("    STA >$D00C     ; Set VIA to DAC mode\n");
-        asm.push_str(&format!("    JSR {}      ; Set DP to $D0 for BIOS\n", dp_to_d0));
+        asm.push_str("    ; Uses NUM_STR buffer (6 bytes: 4 digits + terminator)\n");
         asm.push_str("    \n");
         asm.push_str("    ; Convert 16-bit number to decimal\n");
         asm.push_str("    LDD >VAR_ARG2  ; Load 16-bit number\n");
@@ -483,8 +480,7 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("    \n");
         asm.push_str("    ; Print string\n");
         asm.push_str("    LDU #NUM_STR\n");
-        asm.push_str("    JSR Print_Str_d\n");
-        asm.push_str(&format!("    JSR {}      ; Restore DP\n", dp_to_c8));
+        asm.push_str("    JSR Print_Str_hwyx  ; Hardware print: Y in A, X in B, string in U\n");
         asm.push_str("    RTS\n\n");
     }
     
