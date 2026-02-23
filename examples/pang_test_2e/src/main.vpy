@@ -16,5 +16,8 @@ def loop():
     x_pos = 0 - J1_X()
     y_pos = 0 - J1_Y()
 
+    DEBUG_PRINT(x_pos)
+    DEBUG_PRINT(y_pos)
+
     # Draw vector at negated joystick position
     DRAW_VECTOR("test_square", x_pos, y_pos)

@@ -37,21 +37,22 @@ START:
 ; === RAM VARIABLE DEFINITIONS ===
 ;***************************************************************************
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPPTR               EQU $C880+$02   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$04   ; Temporary pointer 2 (2 bytes)
-TEMP_YX              EQU $C880+$06   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_LINE_ARGS       EQU $C880+$08   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$12   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$14   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$16   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$17   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$18   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$1A   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_INDEX            EQU $C880+$1C   ; User variable: INDEX (1 bytes)
-VAR_POSITIONS        EQU $C880+$1D   ; User variable: POSITIONS (2 bytes)
-VAR_COUNTERS         EQU $C880+$1F   ; User variable: COUNTERS (2 bytes)
-VAR_COUNTERS_DATA    EQU $C880+$21   ; Mutable array 'COUNTERS' data (8 elements x 1 bytes) (8 bytes)
-VAR_POSITIONS_DATA   EQU $C880+$29   ; Mutable array 'POSITIONS' data (4 elements x 2 bytes) (8 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
+DRAW_LINE_ARGS       EQU $C880+$0A   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$14   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$16   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$18   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$19   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$1A   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$1C   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_INDEX            EQU $C880+$1E   ; User variable: index (1 bytes)
+VAR_POSITIONS        EQU $C880+$1F   ; User variable: positions (2 bytes)
+VAR_COUNTERS         EQU $C880+$21   ; User variable: counters (2 bytes)
+VAR_COUNTERS_DATA    EQU $C880+$23   ; Mutable array 'counters' data (8 elements x 1 bytes) (8 bytes)
+VAR_POSITIONS_DATA   EQU $C880+$2B   ; Mutable array 'positions' data (4 elements x 2 bytes) (8 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -65,7 +66,7 @@ CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 b
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'COUNTERS' (8 elements, 1 bytes each)
+; Array literal for variable 'counters' (8 elements, 1 bytes each)
 ARRAY_COUNTERS_DATA:
     FCB $0A   ; Element 0
     FCB $14   ; Element 1
@@ -76,7 +77,7 @@ ARRAY_COUNTERS_DATA:
     FCB $46   ; Element 6
     FCB $50   ; Element 7
 
-; Array literal for variable 'POSITIONS' (4 elements, 2 bytes each)
+; Array literal for variable 'positions' (4 elements, 2 bytes each)
 ARRAY_POSITIONS_DATA:
     FDB 0   ; Element 0
     FDB 100   ; Element 1
@@ -90,7 +91,7 @@ ARRAY_POSITIONS_DATA:
 
 MAIN:
     ; Initialize global variables
-    ; Copy array 'COUNTERS' from ROM to RAM (8 elements)
+    ; Copy array 'counters' from ROM to RAM (8 elements)
     LDX #ARRAY_COUNTERS_DATA       ; Source: ROM array data
     LDU #VAR_COUNTERS_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -101,7 +102,7 @@ MAIN:
     LBNE .COPY_LOOP_0 ; Loop until done (LBNE for long branch)
     LDX #VAR_COUNTERS_DATA    ; Array now in RAM
     STX VAR_COUNTERS
-    ; Copy array 'POSITIONS' from ROM to RAM (4 elements)
+    ; Copy array 'positions' from ROM to RAM (4 elements)
     LDX #ARRAY_POSITIONS_DATA       ; Source: ROM array data
     LDU #VAR_POSITIONS_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -155,23 +156,23 @@ LOOP_BODY:
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDB RESULT+1    ; Load low byte
     STB VAR_INDEX
     LDD #7
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB VAR_INDEX
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_0_TRUE
     LDD #0
     LBRA .CMP_0_END
@@ -201,13 +202,13 @@ IF_END_0:
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
-    LDX #VAR_COUNTERS_DATA  ; Array data
-    PSHS X
+    LDX #VAR_COUNTERS_DATA  ; Array base
     LDB VAR_INDEX
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
-    LDD RESULT  ; Index
-    PULS X      ; Array base
+    LDD RESULT  ; Index value
+    STD TMPVAL  ; Save index to TMPVAL temporarily
+    LDD TMPVAL  ; Load index (stride = 1 for 8-bit)
     LEAX D,X    ; X = base + (index * element_size)
     LDB ,X      ; Load 8-bit value
     CLRA        ; Zero-extend to 16-bit (arrays are typically unsigned)

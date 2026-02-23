@@ -419,8 +419,8 @@ def draw_game_level():
         DRAW_VECTOR_EX("player_walk_5", player_x, player_y, mirror_mode, 80)
     
     # Update and draw enemies
-    # update_enemies()
-    # draw_enemies()
+    #update_enemies()
+    #draw_enemies()
 
     # Draw hook rope and hook if active
     if hook_active == 1:

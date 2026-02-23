@@ -1,0 +1,9 @@
+# Build artifacts
+/build/
+*.bin
+*.o
+
+# IDE
+.vscode/
+*.swp
+*~

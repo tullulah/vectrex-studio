@@ -6,7 +6,7 @@
   "publisher": "localdev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tullulah/vectrex-pseudo-python"
+    "url": "https://github.com/tullulah/vectrex-studio"
   },
   "engines": {
     "vscode": "^1.90.0"

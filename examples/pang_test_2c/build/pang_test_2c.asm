@@ -108,11 +108,11 @@ LOOP_BODY:
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
-    LDD VAR_X_VAL
+    LDD >VAR_X_VAL
     STD RESULT
     LDA RESULT+1
     STA DRAW_CIRCLE_XC
-    LDD VAR_Y_VAL
+    LDD >VAR_Y_VAL
     STD RESULT
     LDA RESULT+1
     STA DRAW_CIRCLE_YC

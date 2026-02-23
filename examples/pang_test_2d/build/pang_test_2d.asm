@@ -55,8 +55,6 @@ VLINE_DY             EQU $C880+$2E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 VAR_SCREEN           EQU $C880+$33   ; User variable: SCREEN (2 bytes)
-VAR_X_VAL            EQU $C880+$35   ; User variable: X_VAL (2 bytes)
-VAR_Y_VAL            EQU $C880+$37   ; User variable: Y_VAL (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -73,10 +71,6 @@ MAIN:
     ; Initialize global variables
     LDD #0
     STD VAR_SCREEN
-    LDD #30
-    STD VAR_X_VAL
-    LDD #20
-    STD VAR_Y_VAL
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -108,12 +102,12 @@ LOOP_BODY:
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: test_square (index=0, 0 paths)
-    LDD >VAR_X_VAL
+    ; Asset: test_square (index=0, 1 paths)
+    JSR J1X_BUILTIN
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_Y_VAL
+    JSR J1Y_BUILTIN
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage
@@ -125,6 +119,8 @@ LOOP_BODY:
     CLR MIRROR_Y
     CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_TEST_SQUARE_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
@@ -135,16 +131,26 @@ LOOP_BODY:
 ;***************************************************************************
 
 ; Generated from test_square.vec (Malban Draw_Sync_List format)
-; Total paths: 0, points: 0
-; X bounds: min=0, max=0, width=0
+; Total paths: 1, points: 4
+; X bounds: min=-15, max=15, width=30
 ; Center: (0, 0)
 
-_TEST_SQUARE_WIDTH EQU 0
+_TEST_SQUARE_WIDTH EQU 30
 _TEST_SQUARE_CENTER_X EQU 0
 _TEST_SQUARE_CENTER_Y EQU 0
 
-_TEST_SQUARE_VECTORS:
-    FCB 2               ; end marker (empty)
+_TEST_SQUARE_VECTORS:  ; Main entry (header + 1 path(s))
+    FCB 1               ; path_count (runtime metadata)
+    FDB _TEST_SQUARE_PATH0        ; pointer to path 0
+
+_TEST_SQUARE_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $F1,$F1,0,0        ; path0: header (y=-15, x=-15, relative to center)
+    FCB $FF,$00,$1E          ; line 0: flag=-1, dy=0, dx=30
+    FCB $FF,$1E,$00          ; line 1: flag=-1, dy=30, dx=0
+    FCB $FF,$00,$E2          ; line 2: flag=-1, dy=0, dx=-30
+    FCB $FF,$E2,$00          ; closing line: flag=-1, dy=-30, dx=0
+    FCB 2                ; End marker (path complete)
 ;***************************************************************************
 ; RUNTIME HELPERS
 ;***************************************************************************
@@ -166,6 +172,33 @@ MOD16:
 .MOD16_END:
     LDD 2,S        ; Remainder
     LEAS 4,S
+    RTS
+
+; === JOYSTICK BUILTIN SUBROUTINES ===
+; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
+; Returns: D = raw value from $C81B after Joy_Analog call
+J1X_BUILTIN:
+    PSHS X       ; Save X (Joy_Analog uses it)
+    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
+    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
+    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
+    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
+    SEX          ; Sign-extend B to D
+    ADDD #2      ; Calibrate center offset
+    PULS X       ; Restore X
+    RTS
+
+; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
+; Returns: D = raw value from $C81C after Joy_Analog call
+J1Y_BUILTIN:
+    PSHS X       ; Save X (Joy_Analog uses it)
+    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
+    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
+    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
+    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
+    SEX          ; Sign-extend B to D
+    ADDD #2      ; Calibrate center offset
+    PULS X       ; Restore X
     RTS
 
 Draw_Sync_List_At_With_Mirrors:

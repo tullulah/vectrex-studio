@@ -133,6 +133,40 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_Y_POS
+    LDD >VAR_X_POS
+    STD RESULT
+    ; DEBUG_PRINT(X_POS)
+    LDD RESULT
+    STA $C002
+    STB $C000
+    LDA #$FE
+    STA $C001
+    LDX #DEBUG_LABEL_X_POS
+    STX $C004
+    BRA DEBUG_SKIP_0
+DEBUG_LABEL_X_POS:
+    FCC "X_POS"
+    FCB $00
+DEBUG_SKIP_0:
+    LDD #0
+    STD RESULT
+    LDD >VAR_Y_POS
+    STD RESULT
+    ; DEBUG_PRINT(Y_POS)
+    LDD RESULT
+    STA $C002
+    STB $C000
+    LDA #$FE
+    STA $C001
+    LDX #DEBUG_LABEL_Y_POS
+    STX $C004
+    BRA DEBUG_SKIP_1
+DEBUG_LABEL_Y_POS:
+    FCC "Y_POS"
+    FCB $00
+DEBUG_SKIP_1:
+    LDD #0
+    STD RESULT
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: test_square (index=0, 1 paths)
     LDD >VAR_X_POS

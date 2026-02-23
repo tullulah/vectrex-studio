@@ -45,15 +45,16 @@ DRAW_CIRCLE_XC       EQU $C880+$0A   ; Circle center X (1 bytes)
 DRAW_CIRCLE_YC       EQU $C880+$0B   ; Circle center Y (1 bytes)
 DRAW_CIRCLE_DIAM     EQU $C880+$0C   ; Circle diameter (1 bytes)
 DRAW_CIRCLE_INTENSITY EQU $C880+$0D   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$0E   ; Circle temporary buffer (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$14   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$1E   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$20   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$22   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$23   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$26   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_SCREEN           EQU $C880+$28   ; User variable: SCREEN (2 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$0E   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$0F   ; Circle temporary buffer (6 bytes)
+DRAW_LINE_ARGS       EQU $C880+$15   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1F   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$21   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$23   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$24   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$25   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$27   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_SCREEN           EQU $C880+$29   ; User variable: SCREEN (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -152,8 +153,6 @@ J1X_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    LDA #$98     ; VIA_cntl = $98 (restore DAC mode for drawing)
-    STA $0C      ; Direct page $D00C (VIA_cntl)
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
     LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -167,8 +166,6 @@ J1Y_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    LDA #$98     ; VIA_cntl = $98 (restore DAC mode for drawing)
-    STA $0C      ; Direct page $D00C (VIA_cntl)
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
     LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -212,73 +209,73 @@ DRAW_CIRCLE_RUNTIME:
     ; And r for straight moves
     
     LDB >DRAW_CIRCLE_TEMP  ; B = radius
+    STB >DRAW_CIRCLE_RADIUS  ; Save radius in RAM (not stack)
     
     ; Segment 1: NE to N (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)
     CLR Vec_Misc_Count
-    PSHS B,CC           ; Save radius (aligned to 16-bit)
+    LDB >DRAW_CIRCLE_RADIUS  ; B = radius
     LSRB                ; B = r/2
     NEGB                ; B = -r/2 (dx)
-    LDA ,S              ; A = radius
+    LDA >DRAW_CIRCLE_RADIUS  ; A = radius
     NEGA                ; A = -r (dy)
     JSR Draw_Line_d
     
     ; Segment 2: N to NW (dx=-0.9r, dy=-0.4r) approx (-r, -r/2)
     CLR Vec_Misc_Count
-    LDA ,S              ; radius
+    LDA >DRAW_CIRCLE_RADIUS  ; radius
     LSRA                ; r/2
     NEGA                ; -r/2 (dy)
-    LDB ,S              ; radius
+    LDB >DRAW_CIRCLE_RADIUS  ; radius
     NEGB                ; -r (dx)
     JSR Draw_Line_d
     
     ; Segment 3: NW to W (dx=-0.4r, dy=+0.9r) approx (-r/2, +r)
     CLR Vec_Misc_Count
-    LDA ,S              ; radius
-    LDB ,S
+    LDA >DRAW_CIRCLE_RADIUS  ; radius
+    LDB >DRAW_CIRCLE_RADIUS
     LSRB                ; r/2
     NEGB                ; -r/2 (dx)
     JSR Draw_Line_d
     
     ; Segment 4: W to SW (dx=+0.4r, dy=+0.9r) approx (+r/2, +r)
     CLR Vec_Misc_Count
-    LDA ,S              ; radius (dy)
-    LDB ,S
+    LDA >DRAW_CIRCLE_RADIUS  ; radius (dy)
+    LDB >DRAW_CIRCLE_RADIUS
     LSRB                ; r/2 (dx)
     JSR Draw_Line_d
     
     ; Segment 5: SW to S (dx=+0.9r, dy=+0.4r) approx (+r, +r/2)
     CLR Vec_Misc_Count
-    LDA ,S
+    LDA >DRAW_CIRCLE_RADIUS
     LSRA                ; r/2 (dy)
-    LDB ,S              ; r (dx)
+    LDB >DRAW_CIRCLE_RADIUS  ; r (dx)
     JSR Draw_Line_d
     
     ; Segment 6: S to SE (dx=+0.9r, dy=-0.4r) approx (+r, -r/2)
     CLR Vec_Misc_Count
-    LDA ,S
+    LDA >DRAW_CIRCLE_RADIUS
     LSRA                ; r/2
     NEGA                ; -r/2 (dy)
-    LDB ,S              ; r (dx)
+    LDB >DRAW_CIRCLE_RADIUS  ; r (dx)
     JSR Draw_Line_d
     
     ; Segment 7: SE to E (dx=+0.4r, dy=-0.9r) approx (+r/2, -r)
     CLR Vec_Misc_Count
-    LDA ,S              ; radius
+    LDA >DRAW_CIRCLE_RADIUS  ; radius
     NEGA                ; -r (dy)
-    LDB ,S
+    LDB >DRAW_CIRCLE_RADIUS
     LSRB                ; r/2 (dx)
     JSR Draw_Line_d
     
     ; Segment 8: E to NE (close the loop) (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)
     CLR Vec_Misc_Count
-    LDA ,S              ; radius
+    LDA >DRAW_CIRCLE_RADIUS  ; radius
     NEGA                ; -r (dy)
-    LDB ,S
+    LDB >DRAW_CIRCLE_RADIUS
     LSRB                ; r/2
     NEGB                ; -r/2 (dx)
     JSR Draw_Line_d
     
-    LEAS 2,S            ; Clean up stack (remove saved radius + CC)
     
     ; Restore DP to $C8
     LDA #$C8

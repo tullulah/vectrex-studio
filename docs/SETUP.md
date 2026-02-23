@@ -51,8 +51,8 @@ sudo apt-get install git  # Ubuntu
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/tullulah/vectrex-pseudo-python.git
-cd vectrex-pseudo-python
+git clone https://github.com/tullulah/vectrex-studio.git
+cd vectrex-studio
 ```
 
 ---
@@ -60,7 +60,7 @@ cd vectrex-pseudo-python
 ## Project Structure
 
 ```
-vectrex-pseudo-python/
+vectrex-studio/
 ├── core/              # Core (legacy) compiler — Rust crate
 │   └── src/
 │       ├── lexer.rs

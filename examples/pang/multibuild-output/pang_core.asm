@@ -31,118 +31,106 @@ START:
     LDA #$80
     STA VIA_t1_cnt_lo
     LDS #$CBFF       ; Initialize stack
-    ; Initialize SFX variables to prevent random noise on startup
-    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)
-    LDD #$0000
-    STD >SFX_PTR            ; Clear SFX pointer
     JMP MAIN
 
 ;***************************************************************************
 ; === RAM VARIABLE DEFINITIONS ===
 ;***************************************************************************
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPPTR               EQU $C880+$02   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$04   ; Temporary pointer 2 (2 bytes)
-TEMP_YX              EQU $C880+$06   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_VEC_X           EQU $C880+$08   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$09   ; Vector draw Y offset (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$0A   ; Vector intensity override (0=use vector data) (1 bytes)
-MIRROR_PAD           EQU $C880+$0B   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$1B   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$1C   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$1D   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$27   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$29   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$2B   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$2C   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-LEVEL_PTR            EQU $C880+$31   ; Pointer to currently loaded level data (2 bytes)
-LEVEL_WIDTH          EQU $C880+$33   ; Level width (1 bytes)
-LEVEL_HEIGHT         EQU $C880+$34   ; Level height (1 bytes)
-LEVEL_TILE_SIZE      EQU $C880+$35   ; Tile size (1 bytes)
-PSG_MUSIC_PTR        EQU $C880+$36   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$38   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$3A   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$3B   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$3C   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$3D   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$3E   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$40   ; SFX active flag (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$41   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_MAP        EQU $C880+$43   ; User variable: STATE_MAP (2 bytes)
-VAR_STATE_GAME       EQU $C880+$45   ; User variable: STATE_GAME (2 bytes)
-VAR_SCREEN           EQU $C880+$47   ; User variable: screen (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$49   ; User variable: title_intensity (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$4B   ; User variable: title_state (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$4D   ; User variable: current_music (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$4F   ; User variable: location_x_coords (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$51   ; User variable: location_y_coords (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$53   ; User variable: location_names (2 bytes)
-VAR_LEVEL_BACKGROUNDS EQU $C880+$55   ; User variable: level_backgrounds (2 bytes)
-VAR_LEVEL_ENEMY_COUNT EQU $C880+$57   ; User variable: level_enemy_count (2 bytes)
-VAR_LEVEL_ENEMY_SPEED EQU $C880+$59   ; User variable: level_enemy_speed (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$5B   ; User variable: prev_btn1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$5D   ; User variable: prev_btn2 (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$5F   ; User variable: prev_btn3 (2 bytes)
-VAR_PREV_BTN4        EQU $C880+$61   ; User variable: prev_btn4 (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$63   ; User variable: num_locations (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$65   ; User variable: current_location (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$67   ; User variable: location_glow_intensity (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$69   ; User variable: location_glow_direction (2 bytes)
-VAR_JOY_X            EQU $C880+$6B   ; User variable: joy_x (2 bytes)
-VAR_JOY_Y            EQU $C880+$6D   ; User variable: joy_y (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$6F   ; User variable: prev_joy_x (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$71   ; User variable: prev_joy_y (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$73   ; User variable: countdown_timer (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$75   ; User variable: countdown_active (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$77   ; User variable: joystick_poll_counter (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$79   ; User variable: hook_active (2 bytes)
-VAR_HOOK_X           EQU $C880+$7B   ; User variable: hook_x (2 bytes)
-VAR_HOOK_Y           EQU $C880+$7D   ; User variable: hook_y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$7F   ; User variable: hook_max_y (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$81   ; User variable: hook_gun_x (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$83   ; User variable: hook_gun_y (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$85   ; User variable: hook_init_y (2 bytes)
-VAR_PLAYER_X         EQU $C880+$87   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$89   ; User variable: player_y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$8B   ; User variable: move_speed (2 bytes)
-VAR_ABS_JOY          EQU $C880+$8D   ; User variable: abs_joy (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$8F   ; User variable: player_anim_frame (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$91   ; User variable: player_anim_counter (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$93   ; User variable: player_anim_speed (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$95   ; User variable: player_facing (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$97   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_GRAVITY          EQU $C880+$99   ; User variable: GRAVITY (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$9B   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$9D   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_GROUND_Y         EQU $C880+$9F   ; User variable: GROUND_Y (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$A1   ; User variable: joystick1_state (2 bytes)
-VAR_LOC_X            EQU $C880+$A3   ; User variable: loc_x (2 bytes)
-VAR_LOC_Y            EQU $C880+$A5   ; User variable: loc_y (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$A7   ; User variable: anim_threshold (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$A9   ; User variable: mirror_mode (2 bytes)
-VAR_ACTIVE_COUNT     EQU $C880+$AB   ; User variable: active_count (2 bytes)
-VAR_I                EQU $C880+$AD   ; User variable: i (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$AF   ; User variable: enemy_active (2 bytes)
-VAR_COUNT            EQU $C880+$B1   ; User variable: count (2 bytes)
-VAR_SPEED            EQU $C880+$B3   ; User variable: speed (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$B5   ; User variable: enemy_size (2 bytes)
-VAR_ENEMY_X          EQU $C880+$B7   ; User variable: enemy_x (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$B9   ; User variable: enemy_y (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$BB   ; User variable: enemy_vx (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$BD   ; User variable: enemy_vy (2 bytes)
-VAR_START_X          EQU $C880+$BF   ; User variable: start_x (2 bytes)
-VAR_START_Y          EQU $C880+$C1   ; User variable: start_y (2 bytes)
-VAR_END_X            EQU $C880+$C3   ; User variable: end_x (2 bytes)
-VAR_END_Y            EQU $C880+$C5   ; User variable: end_y (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$C7   ; Mutable array 'joystick1_state' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$D3   ; Mutable array 'enemy_active' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$E3   ; Mutable array 'enemy_x' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$F3   ; Mutable array 'enemy_y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$103   ; Mutable array 'enemy_vx' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$113   ; Mutable array 'enemy_vy' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$123   ; Mutable array 'enemy_size' data (8 elements x 2 bytes) (16 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
+DRAW_VEC_X           EQU $C880+$0A   ; Vector draw X offset (1 bytes)
+DRAW_VEC_Y           EQU $C880+$0B   ; Vector draw Y offset (1 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$0C   ; Vector intensity override (0=use vector data) (1 bytes)
+MIRROR_PAD           EQU $C880+$0D   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
+MIRROR_X             EQU $C880+$1D   ; X mirror flag (0=normal, 1=flip) (1 bytes)
+MIRROR_Y             EQU $C880+$1E   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1F   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$29   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$2B   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+LEVEL_PTR            EQU $C880+$33   ; Pointer to currently loaded level data (2 bytes)
+LEVEL_WIDTH          EQU $C880+$35   ; Level width (1 bytes)
+LEVEL_HEIGHT         EQU $C880+$36   ; Level height (1 bytes)
+LEVEL_TILE_SIZE      EQU $C880+$37   ; Tile size (1 bytes)
+VAR_STATE_TITLE      EQU $C880+$38   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_MAP        EQU $C880+$3A   ; User variable: STATE_MAP (2 bytes)
+VAR_STATE_GAME       EQU $C880+$3C   ; User variable: STATE_GAME (2 bytes)
+VAR_SCREEN           EQU $C880+$3E   ; User variable: screen (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$40   ; User variable: title_intensity (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$42   ; User variable: title_state (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$44   ; User variable: current_music (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$46   ; User variable: location_x_coords (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$48   ; User variable: location_y_coords (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$4A   ; User variable: location_names (2 bytes)
+VAR_LEVEL_BACKGROUNDS EQU $C880+$4C   ; User variable: level_backgrounds (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$4E   ; User variable: level_enemy_count (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$50   ; User variable: level_enemy_speed (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$52   ; User variable: prev_btn1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$54   ; User variable: prev_btn2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$56   ; User variable: prev_btn3 (2 bytes)
+VAR_PREV_BTN4        EQU $C880+$58   ; User variable: prev_btn4 (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$5A   ; User variable: num_locations (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$5C   ; User variable: current_location (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$5E   ; User variable: location_glow_intensity (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$60   ; User variable: location_glow_direction (2 bytes)
+VAR_JOY_X            EQU $C880+$62   ; User variable: joy_x (2 bytes)
+VAR_JOY_Y            EQU $C880+$64   ; User variable: joy_y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$66   ; User variable: prev_joy_x (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$68   ; User variable: prev_joy_y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$6A   ; User variable: countdown_timer (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$6C   ; User variable: countdown_active (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$6E   ; User variable: joystick_poll_counter (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$70   ; User variable: hook_active (2 bytes)
+VAR_HOOK_X           EQU $C880+$72   ; User variable: hook_x (2 bytes)
+VAR_HOOK_Y           EQU $C880+$74   ; User variable: hook_y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$76   ; User variable: hook_max_y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$78   ; User variable: hook_gun_x (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$7A   ; User variable: hook_gun_y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$7C   ; User variable: hook_init_y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$7E   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$80   ; User variable: player_y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$82   ; User variable: move_speed (2 bytes)
+VAR_ABS_JOY          EQU $C880+$84   ; User variable: abs_joy (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$86   ; User variable: player_anim_frame (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$88   ; User variable: player_anim_counter (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$8A   ; User variable: player_anim_speed (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$8C   ; User variable: player_facing (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$8E   ; User variable: MAX_ENEMIES (2 bytes)
+VAR_GRAVITY          EQU $C880+$90   ; User variable: GRAVITY (2 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$92   ; User variable: BOUNCE_DAMPING (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$94   ; User variable: MIN_BOUNCE_VY (2 bytes)
+VAR_GROUND_Y         EQU $C880+$96   ; User variable: GROUND_Y (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$98   ; User variable: joystick1_state (2 bytes)
+VAR_LOC_X            EQU $C880+$9A   ; User variable: loc_x (2 bytes)
+VAR_LOC_Y            EQU $C880+$9C   ; User variable: loc_y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$9E   ; User variable: anim_threshold (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$A0   ; User variable: mirror_mode (2 bytes)
+VAR_COUNT            EQU $C880+$A2   ; User variable: count (2 bytes)
+VAR_SPEED            EQU $C880+$A4   ; User variable: speed (2 bytes)
+VAR_I                EQU $C880+$A6   ; User variable: i (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$A8   ; User variable: enemy_active (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$AA   ; User variable: enemy_size (2 bytes)
+VAR_ENEMY_X          EQU $C880+$AC   ; User variable: enemy_x (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$AE   ; User variable: enemy_y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$B0   ; User variable: enemy_vx (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$B2   ; User variable: enemy_vy (2 bytes)
+VAR_START_X          EQU $C880+$B4   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$B6   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$B8   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$BA   ; User variable: end_y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$BC   ; Mutable array 'joystick1_state' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$C8   ; Mutable array 'enemy_active' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$D8   ; Mutable array 'enemy_x' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$E8   ; Mutable array 'enemy_y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$F8   ; Mutable array 'enemy_vx' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$108   ; Mutable array 'enemy_vy' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$118   ; Mutable array 'enemy_size' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -691,11 +679,11 @@ LOOP_BODY:
     LDD VAR_STATE_TITLE
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_SCREEN
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_0_TRUE
     LDD #0
     LBRA .CMP_0_END
@@ -708,11 +696,11 @@ LOOP_BODY:
     LDD #-1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_MUSIC
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_1_TRUE
     LDD #0
     LBRA .CMP_1_END
@@ -722,11 +710,6 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_3
-    ; PLAY_MUSIC("pang_theme") - play music asset (index=1)
-    LDX #_PANG_THEME_MUSIC  ; Load music data pointer
-    JSR PLAY_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
     LDD #0
     STD RESULT
     LDD RESULT
@@ -738,20 +721,20 @@ IF_END_2:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #2
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_3_TRUE
     LDD #0
     LBRA .CMP_3_END
@@ -764,11 +747,11 @@ IF_END_2:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN1
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_4_TRUE
     LDD #0
     LBRA .CMP_4_END
@@ -799,20 +782,20 @@ IF_NEXT_5:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #3
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_6_TRUE
     LDD #0
     LBRA .CMP_6_END
@@ -825,11 +808,11 @@ IF_NEXT_5:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN2
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_7_TRUE
     LDD #0
     LBRA .CMP_7_END
@@ -860,20 +843,20 @@ IF_NEXT_6:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #4
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_9_TRUE
     LDD #0
     LBRA .CMP_9_END
@@ -886,11 +869,11 @@ IF_NEXT_6:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN3
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_10_TRUE
     LDD #0
     LBRA .CMP_10_END
@@ -921,20 +904,20 @@ IF_NEXT_7:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #5
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_12_TRUE
     LDD #0
     LBRA .CMP_12_END
@@ -947,11 +930,11 @@ IF_NEXT_7:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN4
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_13_TRUE
     LDD #0
     LBRA .CMP_13_END
@@ -984,11 +967,11 @@ IF_NEXT_1:
     LDD VAR_STATE_MAP
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_SCREEN
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_14_TRUE
     LDD #0
     LBRA .CMP_14_END
@@ -1001,11 +984,11 @@ IF_NEXT_1:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_MUSIC
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBNE .CMP_15_TRUE
     LDD #0
     LBRA .CMP_15_END
@@ -1015,11 +998,6 @@ IF_NEXT_1:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_10
-    ; PLAY_MUSIC("map_theme") - play music asset (index=0)
-    LDX #_MAP_THEME_MUSIC  ; Load music data pointer
-    JSR PLAY_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
     LDD #1
     STD RESULT
     LDD RESULT
@@ -1027,21 +1005,21 @@ IF_NEXT_1:
     LBRA IF_END_9
 IF_NEXT_10:
 IF_END_9:
-    LDD VAR_joystick_poll_counter
-    PSHS D
+    LDD VAR_JOYSTICK_POLL_COUNTER
+    STD TMPVAL          ; Save left operand
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + TMPVAL
     STD VAR_JOYSTICK_POLL_COUNTER
     LDD #15
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOYSTICK_POLL_COUNTER
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_16_TRUE
     LDD #0
     LBRA .CMP_16_END
@@ -1055,27 +1033,27 @@ IF_END_9:
     STD RESULT
     LDD RESULT
     STD VAR_JOYSTICK_POLL_COUNTER
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #0
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_JOY_X
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #1
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -1087,11 +1065,11 @@ IF_END_11:
     LDD #40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_18_TRUE
     LDD #0
     LBRA .CMP_18_END
@@ -1104,11 +1082,11 @@ IF_END_11:
     LDD #40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLE .CMP_19_TRUE
     LDD #0
     LBRA .CMP_19_END
@@ -1129,22 +1107,22 @@ IF_END_11:
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
     LDD VAR_NUM_LOCATIONS
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_20_TRUE
     LDD #0
     LBRA .CMP_20_END
@@ -1176,11 +1154,11 @@ IF_NEXT_14:
     LDD #-40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_22_TRUE
     LDD #0
     LBRA .CMP_22_END
@@ -1193,11 +1171,11 @@ IF_NEXT_14:
     LDD #-40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_23_TRUE
     LDD #0
     LBRA .CMP_23_END
@@ -1218,12 +1196,12 @@ IF_NEXT_14:
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -1231,11 +1209,11 @@ IF_NEXT_14:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_24_TRUE
     LDD #0
     LBRA .CMP_24_END
@@ -1248,12 +1226,12 @@ IF_NEXT_14:
     LDD VAR_NUM_LOCATIONS
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -1266,11 +1244,11 @@ IF_NEXT_17:
     LDD #40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_Y
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_26_TRUE
     LDD #0
     LBRA .CMP_26_END
@@ -1283,11 +1261,11 @@ IF_NEXT_17:
     LDD #40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_JOY_Y
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLE .CMP_27_TRUE
     LDD #0
     LBRA .CMP_27_END
@@ -1308,22 +1286,22 @@ IF_NEXT_17:
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
     LDD VAR_NUM_LOCATIONS
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_28_TRUE
     LDD #0
     LBRA .CMP_28_END
@@ -1345,11 +1323,11 @@ IF_NEXT_20:
     LDD #-40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_Y
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_30_TRUE
     LDD #0
     LBRA .CMP_30_END
@@ -1362,11 +1340,11 @@ IF_NEXT_20:
     LDD #-40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_JOY_Y
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_31_TRUE
     LDD #0
     LBRA .CMP_31_END
@@ -1387,12 +1365,12 @@ IF_NEXT_20:
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -1400,11 +1378,11 @@ IF_NEXT_20:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_32_TRUE
     LDD #0
     LBRA .CMP_32_END
@@ -1417,12 +1395,12 @@ IF_NEXT_20:
     LDD VAR_NUM_LOCATIONS
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -1443,20 +1421,20 @@ IF_END_13:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #2
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_34_TRUE
     LDD #0
     LBRA .CMP_34_END
@@ -1469,11 +1447,11 @@ IF_END_13:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN1
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_35_TRUE
     LDD #0
     LBRA .CMP_35_END
@@ -1508,20 +1486,20 @@ IF_NEXT_26:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #3
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_37_TRUE
     LDD #0
     LBRA .CMP_37_END
@@ -1534,11 +1512,11 @@ IF_NEXT_26:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN2
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_38_TRUE
     LDD #0
     LBRA .CMP_38_END
@@ -1573,20 +1551,20 @@ IF_NEXT_27:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #4
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_40_TRUE
     LDD #0
     LBRA .CMP_40_END
@@ -1599,11 +1577,11 @@ IF_NEXT_27:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN3
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_41_TRUE
     LDD #0
     LBRA .CMP_41_END
@@ -1638,20 +1616,20 @@ IF_NEXT_28:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #5
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_43_TRUE
     LDD #0
     LBRA .CMP_43_END
@@ -1664,11 +1642,11 @@ IF_NEXT_28:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PREV_BTN4
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_44_TRUE
     LDD #0
     LBRA .CMP_44_END
@@ -1706,11 +1684,11 @@ IF_NEXT_8:
     LDD VAR_STATE_GAME
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_SCREEN
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_45_TRUE
     LDD #0
     LBRA .CMP_45_END
@@ -1723,11 +1701,11 @@ IF_NEXT_8:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_COUNTDOWN_ACTIVE
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_46_TRUE
     LDD #0
     LBRA .CMP_46_END
@@ -1775,14 +1753,14 @@ IF_NEXT_8:
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #ARRAY_LOCATION_NAMES_DATA  ; Array data
-    PSHS X
+    LDX #ARRAY_LOCATION_NAMES_DATA  ; Array base
     LDD VAR_CURRENT_LOCATION
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -1794,12 +1772,12 @@ IF_NEXT_8:
     LDD VAR_COUNTDOWN_TIMER
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -1807,11 +1785,11 @@ IF_NEXT_8:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_COUNTDOWN_TIMER
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLE .CMP_47_TRUE
     LDD #0
     LBRA .CMP_47_END
@@ -1834,11 +1812,11 @@ IF_NEXT_30:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_HOOK_ACTIVE
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_48_TRUE
     LDD #0
     LBRA .CMP_48_END
@@ -1851,20 +1829,20 @@ IF_NEXT_30:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #2
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_52_TRUE
     LDD #0
     LBRA .CMP_52_END
@@ -1877,20 +1855,20 @@ IF_NEXT_30:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #3
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_53_TRUE
     LDD #0
     LBRA .CMP_53_END
@@ -1911,20 +1889,20 @@ IF_NEXT_30:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #4
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_54_TRUE
     LDD #0
     LBRA .CMP_54_END
@@ -1945,20 +1923,20 @@ IF_NEXT_30:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #5
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_55_TRUE
     LDD #0
     LBRA .CMP_55_END
@@ -1991,11 +1969,11 @@ IF_NEXT_30:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_FACING
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_56_TRUE
     LDD #0
     LBRA .CMP_56_END
@@ -2008,11 +1986,11 @@ IF_NEXT_30:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #11
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_GUN_X
@@ -2021,12 +1999,12 @@ IF_NEXT_38:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #11
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -2035,11 +2013,11 @@ IF_END_37:
     LDD VAR_PLAYER_Y
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_GUN_Y
@@ -2060,11 +2038,11 @@ IF_END_33:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_HOOK_ACTIVE
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_57_TRUE
     LDD #0
     LBRA .CMP_57_END
@@ -2077,22 +2055,22 @@ IF_END_33:
     LDD VAR_HOOK_Y
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_Y
     LDD VAR_HOOK_MAX_Y
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_HOOK_Y
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_58_TRUE
     LDD #0
     LBRA .CMP_58_END
@@ -2120,59 +2098,58 @@ IF_END_39:
 IF_END_29:
     LBRA IF_END_0
 IF_END_0:
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #2
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_PREV_BTN1
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #3
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_PREV_BTN2
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #4
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_PREV_BTN3
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #5
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_PREV_BTN4
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
     RTS
 
 ; Function: draw_map_screen
@@ -2259,11 +2236,11 @@ draw_map_screen:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_LOCATION_GLOW_DIRECTION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_59_TRUE
     LDD #0
     LBRA .CMP_59_END
@@ -2276,22 +2253,22 @@ draw_map_screen:
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_LOCATION_GLOW_INTENSITY
     LDD #127
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_60_TRUE
     LDD #0
     LBRA .CMP_60_END
@@ -2313,12 +2290,12 @@ IF_NEXT_44:
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -2326,11 +2303,11 @@ IF_NEXT_44:
     LDD #80
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_LOCATION_GLOW_INTENSITY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLE .CMP_61_TRUE
     LDD #0
     LBRA .CMP_61_END
@@ -2357,14 +2334,14 @@ IF_END_43:
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #ARRAY_LOCATION_NAMES_DATA  ; Array data
-    PSHS X
+    LDX #ARRAY_LOCATION_NAMES_DATA  ; Array base
     LDD VAR_CURRENT_LOCATION
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -2373,27 +2350,27 @@ IF_END_43:
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
-    LDX #ARRAY_LOCATION_X_COORDS_DATA  ; Array data
-    PSHS X
+    LDX #ARRAY_LOCATION_X_COORDS_DATA  ; Array base
     LDD VAR_CURRENT_LOCATION
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_LOC_X
-    LDX #ARRAY_LOCATION_Y_COORDS_DATA  ; Array data
-    PSHS X
+    LDX #ARRAY_LOCATION_Y_COORDS_DATA  ; Array base
     LDD VAR_CURRENT_LOCATION
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -2527,11 +2504,11 @@ draw_title_screen:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_TITLE_STATE
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_62_TRUE
     LDD #0
     LBRA .CMP_62_END
@@ -2541,12 +2518,12 @@ draw_title_screen:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_50
-    LDD VAR_title_intensity
-    PSHS D
+    LDD VAR_TITLE_INTENSITY
+    STD TMPVAL          ; Save left operand
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + TMPVAL
     STD VAR_TITLE_INTENSITY
     LBRA IF_END_49
 IF_NEXT_50:
@@ -2554,11 +2531,11 @@ IF_END_49:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_TITLE_STATE
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_63_TRUE
     LDD #0
     LBRA .CMP_63_END
@@ -2568,12 +2545,14 @@ IF_END_49:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_52
-    LDD VAR_title_intensity
-    PSHS D
+    LDD VAR_TITLE_INTENSITY
+    STD TMPVAL          ; Save left operand
     LDD #1
     STD RESULT
     LDD RESULT
-    SUBD ,S++
+    STD TMPPTR          ; Save right operand
+    LDD TMPVAL          ; Get left operand
+    SUBD TMPPTR         ; D = left - right
     STD VAR_TITLE_INTENSITY
     LBRA IF_END_51
 IF_NEXT_52:
@@ -2581,11 +2560,11 @@ IF_END_51:
     LDD #80
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_TITLE_INTENSITY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_64_TRUE
     LDD #0
     LBRA .CMP_64_END
@@ -2605,11 +2584,11 @@ IF_END_53:
     LDD #30
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_TITLE_INTENSITY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_65_TRUE
     LDD #0
     LBRA .CMP_65_END
@@ -2640,11 +2619,11 @@ draw_level_background:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_66_TRUE
     LDD #0
     LBRA .CMP_66_END
@@ -2692,11 +2671,11 @@ IF_NEXT_58:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_67_TRUE
     LDD #0
     LBRA .CMP_67_END
@@ -2738,11 +2717,11 @@ IF_NEXT_59:
     LDD #2
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_68_TRUE
     LDD #0
     LBRA .CMP_68_END
@@ -2786,11 +2765,11 @@ IF_NEXT_60:
     LDD #3
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_69_TRUE
     LDD #0
     LBRA .CMP_69_END
@@ -3210,11 +3189,11 @@ IF_NEXT_61:
     LDD #4
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_70_TRUE
     LDD #0
     LBRA .CMP_70_END
@@ -3286,11 +3265,11 @@ IF_NEXT_62:
     LDD #5
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_71_TRUE
     LDD #0
     LBRA .CMP_71_END
@@ -3334,11 +3313,11 @@ IF_NEXT_63:
     LDD #6
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_72_TRUE
     LDD #0
     LBRA .CMP_72_END
@@ -3384,11 +3363,11 @@ IF_NEXT_64:
     LDD #7
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_73_TRUE
     LDD #0
     LBRA .CMP_73_END
@@ -3434,11 +3413,11 @@ IF_NEXT_65:
     LDD #8
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_74_TRUE
     LDD #0
     LBRA .CMP_74_END
@@ -3482,11 +3461,11 @@ IF_NEXT_66:
     LDD #9
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_75_TRUE
     LDD #0
     LBRA .CMP_75_END
@@ -3642,11 +3621,11 @@ IF_NEXT_67:
     LDD #10
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_76_TRUE
     LDD #0
     LBRA .CMP_76_END
@@ -3764,11 +3743,11 @@ IF_NEXT_68:
     LDD #11
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_77_TRUE
     LDD #0
     LBRA .CMP_77_END
@@ -3812,11 +3791,11 @@ IF_NEXT_69:
     LDD #12
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_78_TRUE
     LDD #0
     LBRA .CMP_78_END
@@ -3860,11 +3839,11 @@ IF_NEXT_70:
     LDD #13
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_79_TRUE
     LDD #0
     LBRA .CMP_79_END
@@ -3910,11 +3889,11 @@ IF_NEXT_71:
     LDD #14
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_80_TRUE
     LDD #0
     LBRA .CMP_80_END
@@ -3960,11 +3939,11 @@ IF_NEXT_72:
     LDD #15
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_CURRENT_LOCATION
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_81_TRUE
     LDD #0
     LBRA .CMP_81_END
@@ -4074,14 +4053,14 @@ IF_END_57:
 ; Function: draw_game_level
 draw_game_level:
     JSR draw_level_background
-    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array data
-    PSHS X
+    LDX #VAR_JOYSTICK1_STATE_DATA  ; Array base
     LDD #0
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -4090,11 +4069,11 @@ draw_game_level:
     LDD #-20
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_83_TRUE
     LDD #0
     LBRA .CMP_83_END
@@ -4107,11 +4086,11 @@ draw_game_level:
     LDD #20
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_84_TRUE
     LDD #0
     LBRA .CMP_84_END
@@ -4136,11 +4115,11 @@ draw_game_level:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_ABS_JOY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_85_TRUE
     LDD #0
     LBRA .CMP_85_END
@@ -4153,12 +4132,12 @@ draw_game_level:
     LDD #-1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD VAR_ABS_JOY
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
     STD RESULT
     LDD RESULT
     STD VAR_ABS_JOY
@@ -4168,11 +4147,11 @@ IF_END_76:
     LDD #40
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_ABS_JOY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_86_TRUE
     LDD #0
     LBRA .CMP_86_END
@@ -4191,11 +4170,11 @@ IF_NEXT_79:
     LDD #70
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_ABS_JOY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_87_TRUE
     LDD #0
     LBRA .CMP_87_END
@@ -4214,11 +4193,11 @@ IF_NEXT_80:
     LDD #100
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_ABS_JOY
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_88_TRUE
     LDD #0
     LBRA .CMP_88_END
@@ -4242,11 +4221,11 @@ IF_END_78:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_89_TRUE
     LDD #0
     LBRA .CMP_89_END
@@ -4259,12 +4238,12 @@ IF_END_78:
     LDD #-1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD VAR_MOVE_SPEED
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
     STD RESULT
     LDD RESULT
     STD VAR_MOVE_SPEED
@@ -4274,22 +4253,22 @@ IF_END_82:
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD VAR_MOVE_SPEED
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_X
     LDD #-110
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_90_TRUE
     LDD #0
     LBRA .CMP_90_END
@@ -4309,11 +4288,11 @@ IF_END_84:
     LDD #110
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_91_TRUE
     LDD #0
     LBRA .CMP_91_END
@@ -4333,11 +4312,11 @@ IF_END_86:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_92_TRUE
     LDD #0
     LBRA .CMP_92_END
@@ -4361,11 +4340,11 @@ IF_END_88:
     LDD VAR_PLAYER_ANIM_COUNTER
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_COUNTER
@@ -4376,11 +4355,11 @@ IF_END_88:
     LDD #-80
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_94_TRUE
     LDD #0
     LBRA .CMP_94_END
@@ -4393,11 +4372,11 @@ IF_END_88:
     LDD #80
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_95_TRUE
     LDD #0
     LBRA .CMP_95_END
@@ -4418,12 +4397,12 @@ IF_END_88:
     LDD VAR_PLAYER_ANIM_SPEED
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #2
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR DIV16   ; D = X / D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR DIV16       ; D = X / D
     STD RESULT
     LDD RESULT
     STD VAR_ANIM_THRESHOLD
@@ -4433,11 +4412,11 @@ IF_END_90:
     LDD VAR_ANIM_THRESHOLD
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_ANIM_COUNTER
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGE .CMP_96_TRUE
     LDD #0
     LBRA .CMP_96_END
@@ -4454,22 +4433,22 @@ IF_END_90:
     LDD VAR_PLAYER_ANIM_FRAME
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_FRAME
     LDD #5
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_ANIM_FRAME
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_97_TRUE
     LDD #0
     LBRA .CMP_97_END
@@ -4507,11 +4486,11 @@ IF_END_74:
     LDD #-1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_FACING
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_98_TRUE
     LDD #0
     LBRA .CMP_98_END
@@ -4531,11 +4510,11 @@ IF_END_96:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_ANIM_FRAME
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_99_TRUE
     LDD #0
     LBRA .CMP_99_END
@@ -4626,11 +4605,11 @@ IF_NEXT_99:
     LDD #2
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_ANIM_FRAME
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_100_TRUE
     LDD #0
     LBRA .CMP_100_END
@@ -4721,11 +4700,11 @@ IF_NEXT_100:
     LDD #3
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_ANIM_FRAME
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_101_TRUE
     LDD #0
     LBRA .CMP_101_END
@@ -4816,11 +4795,11 @@ IF_NEXT_101:
     LDD #4
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_PLAYER_ANIM_FRAME
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_102_TRUE
     LDD #0
     LBRA .CMP_102_END
@@ -4985,14 +4964,16 @@ IF_NEXT_102:
     LDD #0
     STD RESULT
 IF_END_98:
+    JSR update_enemies
+    JSR draw_enemies
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_HOOK_ACTIVE
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_103_TRUE
     LDD #0
     LBRA .CMP_103_END
@@ -5073,110 +5054,31 @@ IF_END_98:
     LBRA IF_END_103
 IF_NEXT_104:
 IF_END_103:
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_ACTIVE_COUNT
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_I
-WH_105: ; while start
-    LDD VAR_MAX_ENEMIES
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_104_TRUE
-    LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
-    LDD #1
-.CMP_104_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ WH_END_106
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_105_TRUE
-    LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
-    LDD #1
-.CMP_105_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_108
-    LDD VAR_ACTIVE_COUNT
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD ,S++
-    STD RESULT
-    LDD RESULT
-    STD VAR_ACTIVE_COUNT
-    LBRA IF_END_107
-IF_NEXT_108:
-IF_END_107:
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD ,S++
-    STD RESULT
-    LDD RESULT
-    STD VAR_I
-    LBRA WH_105
-WH_END_106: ; while end
     RTS
 
 ; Function: spawn_enemies
 spawn_enemies:
-    LDX #ARRAY_LEVEL_ENEMY_COUNT_DATA  ; Array data
-    PSHS X
+    LDX #ARRAY_LEVEL_ENEMY_COUNT_DATA  ; Array base
     LDD VAR_CURRENT_LOCATION
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
     STD VAR_COUNT
-    LDX #ARRAY_LEVEL_ENEMY_SPEED_DATA  ; Array data
-    PSHS X
+    LDX #ARRAY_LEVEL_ENEMY_SPEED_DATA  ; Array base
     LDD VAR_CURRENT_LOCATION
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -5185,36 +5087,65 @@ spawn_enemies:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_COUNT
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_106_TRUE
+    CMPD TMPVAL
+    LBLT .CMP_104_TRUE
     LDD #0
-    LBRA .CMP_106_END
-.CMP_106_TRUE:
+    LBRA .CMP_104_END
+.CMP_104_TRUE:
     LDD #1
-.CMP_106_END:
+.CMP_104_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_110
+    LBEQ IF_NEXT_106
     LDD #1
     STD RESULT
     LDD RESULT
     STD VAR_COUNT
-    LBRA IF_END_109
-IF_NEXT_110:
-IF_END_109:
+    LBRA IF_END_105
+IF_NEXT_106:
+IF_END_105:
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_COUNT
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBGT .CMP_107_TRUE
+    CMPD TMPVAL
+    LBGT .CMP_105_TRUE
+    LDD #0
+    LBRA .CMP_105_END
+.CMP_105_TRUE:
+    LDD #1
+.CMP_105_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_108
+    LDD VAR_MAX_ENEMIES
+    STD RESULT
+    LDD RESULT
+    STD VAR_COUNT
+    LBRA IF_END_107
+IF_NEXT_108:
+IF_END_107:
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_I
+WH_109: ; while start
+    LDD VAR_COUNT
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    CMPD TMPVAL
+    LBLT .CMP_107_TRUE
     LDD #0
     LBRA .CMP_107_END
 .CMP_107_TRUE:
@@ -5222,61 +5153,32 @@ IF_END_109:
 .CMP_107_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_112
+    LBEQ .LOGIC_106_FALSE
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
-    STD VAR_COUNT
-    LBRA IF_END_111
-IF_NEXT_112:
-IF_END_111:
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_I
-WH_113: ; while start
-    LDD VAR_COUNT
-    STD RESULT
-    LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_109_TRUE
+    CMPD TMPVAL
+    LBLT .CMP_108_TRUE
     LDD #0
-    LBRA .CMP_109_END
-.CMP_109_TRUE:
+    LBRA .CMP_108_END
+.CMP_108_TRUE:
     LDD #1
-.CMP_109_END:
+.CMP_108_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_108_FALSE
-    LDD VAR_MAX_ENEMIES
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_110_TRUE
+    LBEQ .LOGIC_106_FALSE
+    LDD #1
+    LBRA .LOGIC_106_END
+.LOGIC_106_FALSE:
     LDD #0
-    LBRA .CMP_110_END
-.CMP_110_TRUE:
-    LDD #1
-.CMP_110_END:
+.LOGIC_106_END:
     STD RESULT
     LDD RESULT
-    LBEQ .LOGIC_108_FALSE
-    LDD #1
-    LBRA .LOGIC_108_END
-.LOGIC_108_FALSE:
-    LDD #0
-.LOGIC_108_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ WH_END_114
+    LBEQ WH_END_110
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5323,19 +5225,19 @@ WH_113: ; while start
     LDD #-80
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #50
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
@@ -5375,28 +5277,28 @@ WH_113: ; while start
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #2
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR MOD16   ; D = X % D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MOD16       ; D = X % D
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_111_TRUE
+    CMPD TMPVAL
+    LBEQ .CMP_109_TRUE
     LDD #0
-    LBRA .CMP_111_END
-.CMP_111_TRUE:
+    LBRA .CMP_109_END
+.CMP_109_TRUE:
     LDD #1
-.CMP_111_END:
+.CMP_109_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_116
+    LBEQ IF_NEXT_112
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5411,19 +5313,19 @@ WH_113: ; while start
     LDD #-1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD VAR_SPEED
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LBRA IF_END_115
-IF_NEXT_116:
-IF_END_115:
+    LBRA IF_END_111
+IF_NEXT_112:
+IF_END_111:
     LDD VAR_I
     STD RESULT
     LDD RESULT
@@ -5443,16 +5345,16 @@ IF_END_115:
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_113
-WH_END_114: ; while end
+    LBRA WH_109
+WH_END_110: ; while end
     RTS
 
 ; Function: update_enemies
@@ -5461,16 +5363,184 @@ update_enemies:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_117: ; while start
+WH_113: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_112_TRUE
+    CMPD TMPVAL
+    LBLT .CMP_110_TRUE
+    LDD #0
+    LBRA .CMP_110_END
+.CMP_110_TRUE:
+    LDD #1
+.CMP_110_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ WH_END_114
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_111_TRUE
+    LDD #0
+    LBRA .CMP_111_END
+.CMP_111_TRUE:
+    LDD #1
+.CMP_111_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_116
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VY_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_ENEMY_VY_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD VAR_GRAVITY
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_ENEMY_X_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_VX_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_Y_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_ENEMY_Y_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_VY_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_GROUND_Y
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_Y_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_112_TRUE
     LDD #0
     LBRA .CMP_112_END
 .CMP_112_TRUE:
@@ -5478,25 +5548,115 @@ WH_117: ; while start
 .CMP_112_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_118
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array data
-    PSHS X
+    LBEQ IF_NEXT_118
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_Y_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD VAR_GROUND_Y
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VY_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_VY_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_113_TRUE
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VY_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_ENEMY_VY_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD VAR_BOUNCE_DAMPING
+    STD RESULT
+    LDD RESULT
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #20
+    STD RESULT
+    LDD RESULT
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR DIV16       ; D = X / D
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_MIN_BOUNCE_VY
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_VY_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    CMPD TMPVAL
+    LBLT .CMP_113_TRUE
     LDD #0
     LBRA .CMP_113_END
 .CMP_113_TRUE:
@@ -5516,128 +5676,34 @@ WH_117: ; while start
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
-    LDX #VAR_ENEMY_VY_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD VAR_GRAVITY
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
-    SUBD TMPPTR     ; Left - Right
+    LDD VAR_MIN_BOUNCE_VY
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LDD VAR_I
+    LBRA IF_END_119
+IF_NEXT_120:
+IF_END_119:
+    LBRA IF_END_117
+IF_NEXT_118:
+IF_END_117:
+    LDD #-85
     STD RESULT
     LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_X_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    ADDD ,S++
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_Y_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_ENEMY_Y_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VY_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    ADDD ,S++
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_GROUND_Y
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_Y_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLE .CMP_114_TRUE
     LDD #0
     LBRA .CMP_114_END
@@ -5653,12 +5719,12 @@ WH_117: ; while start
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_Y_DATA  ; Array data address
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
-    LDD VAR_GROUND_Y
+    LDD #-85
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
@@ -5669,7 +5735,7 @@ WH_117: ; while start
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VY_DATA  ; Array data address
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
@@ -5677,84 +5743,46 @@ WH_117: ; while start
     LDD #-1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VY_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_VX_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LDD VAR_I
+    LBRA IF_END_121
+IF_NEXT_122:
+IF_END_121:
+    LDD #85
     STD RESULT
     LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VY_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_ENEMY_VY_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_X_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDD VAR_BOUNCE_DAMPING
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDD #20
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR DIV16   ; D = X / D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_MIN_BOUNCE_VY
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VY_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_115_TRUE
+    CMPD TMPVAL
+    LBGE .CMP_115_TRUE
     LDD #0
     LBRA .CMP_115_END
 .CMP_115_TRUE:
@@ -5769,12 +5797,45 @@ WH_117: ; while start
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VY_DATA  ; Array data address
+    LDD #VAR_ENEMY_X_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
-    LDD VAR_MIN_BOUNCE_VY
+    LDD #85
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    LDD RESULT      ; Load value
+    STD ,X          ; Store 16-bit value
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_ENEMY_VX_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_VX_DATA  ; Array base
+    LDD VAR_I
+    STD RESULT
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
@@ -5782,181 +5843,22 @@ WH_117: ; while start
     LBRA IF_END_123
 IF_NEXT_124:
 IF_END_123:
-    LBRA IF_END_121
-IF_NEXT_122:
-IF_END_121:
-    LDD #-85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBLE .CMP_116_TRUE
-    LDD #0
-    LBRA .CMP_116_END
-.CMP_116_TRUE:
-    LDD #1
-.CMP_116_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_126
+    LBRA IF_END_115
+IF_NEXT_116:
+IF_END_115:
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_125
-IF_NEXT_126:
-IF_END_125:
-    LDD #85
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    CMPD ,S++
-    LBGE .CMP_117_TRUE
-    LDD #0
-    LBRA .CMP_117_END
-.CMP_117_TRUE:
-    LDD #1
-.CMP_117_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_128
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_X_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #85
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_ENEMY_VX_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #-1
-    STD RESULT
-    LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_VX_DATA  ; Array data
-    PSHS X
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT  ; Index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    PULS X      ; Array base
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    PULS X      ; Get left into X
-    JSR MUL16   ; D = X * D
-    STD RESULT
-    LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_127
-IF_NEXT_128:
-IF_END_127:
-    LBRA IF_END_119
-IF_NEXT_120:
-IF_END_119:
-    LDD VAR_I
-    STD RESULT
-    LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_117
-WH_END_118: ; while end
+    LBRA WH_113
+WH_END_114: ; while end
     RTS
 
 ; Function: draw_enemies
@@ -5965,50 +5867,50 @@ draw_enemies:
     STD RESULT
     LDD RESULT
     STD VAR_I
-WH_129: ; while start
+WH_125: ; while start
     LDD VAR_MAX_ENEMIES
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBLT .CMP_118_TRUE
+    CMPD TMPVAL
+    LBLT .CMP_116_TRUE
     LDD #0
-    LBRA .CMP_118_END
-.CMP_118_TRUE:
+    LBRA .CMP_116_END
+.CMP_116_TRUE:
     LDD #1
-.CMP_118_END:
+.CMP_116_END:
     STD RESULT
     LDD RESULT
-    LBEQ WH_END_130
+    LBEQ WH_END_126
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_ACTIVE_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_119_TRUE
+    CMPD TMPVAL
+    LBEQ .CMP_117_TRUE
     LDD #0
-    LBRA .CMP_119_END
-.CMP_119_TRUE:
+    LBRA .CMP_117_END
+.CMP_117_TRUE:
     LDD #1
-.CMP_119_END:
+.CMP_117_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_132
+    LBEQ IF_NEXT_128
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     STD RESULT
@@ -6019,52 +5921,52 @@ WH_129: ; while start
     LDD #4
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_SIZE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_SIZE_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_120_TRUE
+    CMPD TMPVAL
+    LBEQ .CMP_118_TRUE
     LDD #0
-    LBRA .CMP_120_END
-.CMP_120_TRUE:
+    LBRA .CMP_118_END
+.CMP_118_TRUE:
     LDD #1
-.CMP_120_END:
+.CMP_118_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_134
+    LBEQ IF_NEXT_130
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_huge (index=5, 1 paths)
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_X_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
-    LDX #VAR_ENEMY_Y_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_Y_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -6083,57 +5985,57 @@ WH_129: ; while start
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_133
-IF_NEXT_134:
+    LBRA IF_END_129
+IF_NEXT_130:
     LDD #3
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_SIZE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_SIZE_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_121_TRUE
+    CMPD TMPVAL
+    LBEQ .CMP_119_TRUE
     LDD #0
-    LBRA .CMP_121_END
-.CMP_121_TRUE:
+    LBRA .CMP_119_END
+.CMP_119_TRUE:
     LDD #1
-.CMP_121_END:
+.CMP_119_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_135
+    LBEQ IF_NEXT_131
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_large (index=6, 1 paths)
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_X_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
-    LDX #VAR_ENEMY_Y_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_Y_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -6152,57 +6054,57 @@ IF_NEXT_134:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_133
-IF_NEXT_135:
+    LBRA IF_END_129
+IF_NEXT_131:
     LDD #2
     STD RESULT
     LDD RESULT
-    PSHS D
-    LDX #VAR_ENEMY_SIZE_DATA  ; Array data
-    PSHS X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_ENEMY_SIZE_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
-    LBEQ .CMP_122_TRUE
+    CMPD TMPVAL
+    LBEQ .CMP_120_TRUE
     LDD #0
-    LBRA .CMP_122_END
-.CMP_122_TRUE:
+    LBRA .CMP_120_END
+.CMP_120_TRUE:
     LDD #1
-.CMP_122_END:
+.CMP_120_END:
     STD RESULT
     LDD RESULT
-    LBEQ IF_NEXT_136
+    LBEQ IF_NEXT_132
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_medium (index=7, 1 paths)
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_X_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
-    LDX #VAR_ENEMY_Y_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_Y_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -6221,31 +6123,31 @@ IF_NEXT_135:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-    LBRA IF_END_133
-IF_NEXT_136:
+    LBRA IF_END_129
+IF_NEXT_132:
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bubble_small (index=8, 1 paths)
-    LDX #VAR_ENEMY_X_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_X_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
-    LDX #VAR_ENEMY_Y_DATA  ; Array data
-    PSHS X
+    LDX #VAR_ENEMY_Y_DATA  ; Array base
     LDD VAR_I
     STD RESULT
-    LDD RESULT  ; Index
+    LDD RESULT  ; Index value
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
-    PULS X      ; Array base
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
     STD RESULT
@@ -6264,23 +6166,23 @@ IF_NEXT_136:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
-IF_END_133:
-    LBRA IF_END_131
-IF_NEXT_132:
-IF_END_131:
+IF_END_129:
+    LBRA IF_END_127
+IF_NEXT_128:
+IF_END_127:
     LDD VAR_I
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_I
-    LBRA WH_129
-WH_END_130: ; while end
+    LBRA WH_125
+WH_END_126: ; while end
     RTS
 
 ; Function: draw_hook_rope
@@ -11402,1198 +11304,6 @@ _TAJ_BG_PATH3:    ; Path 3
     FCB $D6,$46,0,0        ; path3: header (y=-42, x=70, relative to center)
     FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
     FCB 2                ; End marker (path complete)
-; Generated from map_theme.vmus (internal name: Space Groove)
-; Tempo: 140 BPM, Total events: 36 (PSG Direct format)
-; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
-
-_MAP_THEME_MUSIC:
-    ; Frame-based PSG register writes
-    FCB     0              ; Delay 0 frames (maintain previous state)
-    FCB     11              ; Frame 0 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     10              ; Frame 5 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     11              ; Frame 10 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     10              ; Frame 13 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 21 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     8              ; Frame 24 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 32 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 34 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     11              ; Frame 42 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     6              ; Delay 6 frames (maintain previous state)
-    FCB     10              ; Frame 48 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     11              ; Frame 53 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     10              ; Frame 56 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 64 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $D5             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 66 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $D5             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     9              ; Delay 9 frames (maintain previous state)
-    FCB     9              ; Frame 75 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $EF             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0B             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 77 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $EF             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0B             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     11              ; Frame 85 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     6              ; Delay 6 frames (maintain previous state)
-    FCB     10              ; Frame 91 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     11              ; Frame 96 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     10              ; Frame 99 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 107 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 109 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 117 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     8              ; Frame 120 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     11              ; Frame 128 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     10              ; Frame 133 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     6              ; Delay 6 frames (maintain previous state)
-    FCB     11              ; Frame 139 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     10              ; Frame 141 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     9              ; Delay 9 frames (maintain previous state)
-    FCB     9              ; Frame 150 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 152 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 160 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     8              ; Frame 163 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames before loop
-    FCB     $FF             ; Loop command ($FF never valid as count)
-    FDB     _MAP_THEME_MUSIC       ; Jump to start (absolute address)
-
-; Generated from pang_theme.vmus (internal name: pang_theme)
-; Tempo: 120 BPM, Total events: 34 (PSG Direct format)
-; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
-
-_PANG_THEME_MUSIC:
-    ; Frame-based PSG register writes
-    FCB     0              ; Delay 0 frames (maintain previous state)
-    FCB     11              ; Frame 0 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 12 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 25 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 50 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $EF             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 62 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $EF             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 75 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $59             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $EF             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 100 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $B3             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 112 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $B3             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 124 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $B3             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     26              ; Delay 26 frames (maintain previous state)
-    FCB     11              ; Frame 150 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 162 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     38              ; Delay 38 frames (maintain previous state)
-    FCB     11              ; Frame 200 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 212 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 224 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $86             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 249 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $D5             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 262 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $D5             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 275 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $4F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $D5             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 300 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $9F             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 312 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $9F             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 325 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $86             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $9F             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 350 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 362 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     38              ; Delay 38 frames before loop
-    FCB     $FF             ; Loop command ($FF never valid as count)
-    FDB     _PANG_THEME_MUSIC       ; Jump to start (absolute address)
-
 ; ==== Level: FUJI_LEVEL1_V2 ====
 ; Author: 
 ; Difficulty: medium
@@ -13055,366 +11765,6 @@ CLR VIA_shift_reg
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
-; ============================================================================
-; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
-; ============================================================================
-; Writes directly to PSG chip using WRITE_PSG sequence
-;
-; Music data format (frame-based):
-;   FCB count           ; Number of register writes this frame
-;   FCB reg, val        ; PSG register/value pairs
-;   ...                 ; Repeat for each register
-;   FCB $FF             ; End marker
-;
-; PSG Registers:
-;   0-1: Channel A frequency (12-bit)
-;   2-3: Channel B frequency
-;   4-5: Channel C frequency
-;   6:   Noise period
-;   7:   Mixer control (enable/disable channels)
-;   8-10: Channel A/B/C volume
-;   11-12: Envelope period
-;   13:  Envelope shape
-; ============================================================================
-
-; RAM variables (defined in SYSTEM RAM VARIABLES section):
-; PSG_MUSIC_PTR, PSG_MUSIC_START, PSG_IS_PLAYING,
-; PSG_MUSIC_ACTIVE, PSG_DELAY_FRAMES
-
-; PLAY_MUSIC_RUNTIME - Start PSG music playback
-; Input: X = pointer to PSG music data
-PLAY_MUSIC_RUNTIME:
-CMPX >PSG_MUSIC_START   ; Check if already playing this music
-BNE PMr_start_new       ; If different, start fresh
-LDA >PSG_IS_PLAYING     ; Check if currently playing
-BNE PMr_done            ; If playing same song, ignore
-PMr_start_new:
-STX >PSG_MUSIC_PTR      ; Store current music pointer (force extended)
-STX >PSG_MUSIC_START    ; Store start pointer for loops (force extended)
-CLR >PSG_DELAY_FRAMES   ; Clear delay counter
-LDA #$01
-STA >PSG_IS_PLAYING     ; Mark as playing (extended - var at 0xC8A0)
-PMr_done:
-RTS
-
-; ============================================================================
-; UPDATE_MUSIC_PSG - Update PSG (call every frame)
-; ============================================================================
-UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
-LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done     ; Not playing, exit
-
-LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)
-BEQ PSG_update_done     ; No music loaded
-
-; Read frame count byte (number of register writes)
-LDB ,X+
-BEQ PSG_music_ended     ; Count=0 means end (no loop)
-CMPB #$FF               ; Check for loop command
-BEQ PSG_music_loop      ; $FF means loop (never valid as count)
-
-; Process frame - push counter to stack
-PSHS B                  ; Save count on stack
-
-; Write register/value pairs to PSG
-PSG_write_loop:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer (after reads)
-
-; WRITE_PSG sequence
-STA VIA_port_a          ; Store register number
-LDA #$19                ; BDIR=1, BC1=1 (LATCH)
-STA VIA_port_b
-LDA #$01                ; BDIR=0, BC1=0 (INACTIVE)
-STA VIA_port_b
-LDA VIA_port_a          ; Read status
-STB VIA_port_a          ; Store data
-LDB #$11                ; BDIR=1, BC1=0 (WRITE)
-STB VIA_port_b
-LDB #$01                ; BDIR=0, BC1=0 (INACTIVE)
-STB VIA_port_b
-
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ PSG_frame_done      ; Done with this frame
-PSHS B                  ; Save counter back
-BRA PSG_write_loop
-
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR      ; Update pointer (force extended)
-BRA PSG_update_done
-
-PSG_music_ended:
-CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
-
-PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                  ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR      ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
-
-PSG_update_done:
-CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
-RTS
-
-; ============================================================================
-; STOP_MUSIC_RUNTIME - Stop music playback
-; ============================================================================
-STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING     ; Clear playing flag (extended - var at 0xC8A0)
-CLR >PSG_MUSIC_PTR      ; Clear pointer high byte (force extended)
-CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte (force extended)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-RTS
-
-; ============================================================================
-; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)
-; ============================================================================
-; Processes both music (channel B) and SFX (channel C) in one pass
-; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems
-; Sets DP=$D0 once at entry, restores at exit
-; RAM variables: PSG_MUSIC_PTR, PSG_IS_PLAYING, PSG_DELAY_FRAMES
-;                PSG_MUSIC_BANK (for multibank: bank ID where music data lives)
-;                SFX_PTR, SFX_ACTIVE (defined in SYSTEM RAM VARIABLES)
-
-AUDIO_UPDATE:
-PSHS DP                 ; Save current DP
-LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)
-TFR A,DP
-
-; MULTIBANK: Switch to music's bank before accessing data
-LDA >CURRENT_ROM_BANK   ; Get current bank
-PSHS A                  ; Save on stack
-LDA >PSG_MUSIC_BANK     ; Get music's bank
-CMPA ,S                 ; Compare with current bank
-BEQ AU_BANK_OK          ; Skip switch if same
-STA >CURRENT_ROM_BANK   ; Update RAM tracker
-STA $DF00               ; Switch bank hardware register
-AU_BANK_OK:
-
-; UPDATE MUSIC (channel B: registers 9, 11-14)
-LDA >PSG_IS_PLAYING     ; Check if music is playing
-BEQ AU_SKIP_MUSIC       ; Skip if not
-
-; Check delay counter first
-LDA >PSG_DELAY_FRAMES   ; Load delay counter
-BEQ AU_MUSIC_READ       ; If zero, read next frame data
-DECA                    ; Decrement delay
-STA >PSG_DELAY_FRAMES   ; Store back
-CMPA #0                 ; Check if it just reached zero
-BNE AU_UPDATE_SFX       ; If not zero yet, skip this frame
-
-; Delay just reached zero, X points to count byte already
-LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)
-BEQ AU_SKIP_MUSIC       ; Skip if null
-BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count
-
-AU_MUSIC_READ:
-LDX >PSG_MUSIC_PTR      ; Load music pointer
-BEQ AU_SKIP_MUSIC       ; Skip if null
-
-; Check if we need to read delay or we're ready for count
-; PSG_DELAY_FRAMES just reached 0, so we read delay byte first
-LDB ,X+                 ; Read delay counter (X now points to count byte)
-CMPB #$FF               ; Check for loop marker
-BEQ AU_MUSIC_LOOP       ; Handle loop
-CMPB #0                 ; Check if delay is 0
-BNE AU_MUSIC_HAS_DELAY  ; If not 0, process delay
-
-; Delay is 0, read count immediately
-AU_MUSIC_NO_DELAY:
-AU_MUSIC_READ_COUNT:
-LDB ,X+                 ; Read count (number of register writes)
-BEQ AU_MUSIC_ENDED      ; If 0, end of music
-CMPB #$FF               ; Check for loop marker (can appear after delay)
-BEQ AU_MUSIC_LOOP       ; Handle loop
-BRA AU_MUSIC_PROCESS_WRITES
-
-AU_MUSIC_HAS_DELAY:
-; B has delay > 0, store it and skip to next frame
-DECB                    ; Delay-1 (we consume this frame)
-STB >PSG_DELAY_FRAMES   ; Save delay counter
-STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
-BRA AU_UPDATE_SFX       ; Skip reading data this frame
-
-AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
-; Mark that next time we should read delay, not count
-; (This is implicit - after processing, X points to next delay byte)
-
-AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
-
-AU_MUSIC_DONE:
-STX >PSG_MUSIC_PTR      ; Update music pointer
-BRA AU_UPDATE_SFX       ; Now update SFX
-
-AU_MUSIC_ENDED:
-CLR >PSG_IS_PLAYING     ; Stop music
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_MUSIC_LOOP:
-LDD ,X                  ; Load loop target
-STD >PSG_MUSIC_PTR      ; Set music pointer to loop
-CLR >PSG_DELAY_FRAMES   ; Clear delay on loop
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_SKIP_MUSIC:
-BRA AU_UPDATE_SFX       ; Skip music, go to SFX
-
-; UPDATE SFX (channel C: registers 4/5=tone, 6=noise, 10=volume, 7=mixer)
-AU_UPDATE_SFX:
-LDA >SFX_ACTIVE         ; Check if SFX is active
-BEQ AU_DONE             ; Skip if not active
-
-JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
-
-AU_DONE:
-; MULTIBANK: Restore original bank
-PULS A                  ; Get saved bank from stack
-STA >CURRENT_ROM_BANK   ; Update RAM tracker
-STA $DF00               ; Restore bank hardware register
-PULS DP                 ; Restore original DP
-RTS
-
-; ============================================================================
-; AYFX SOUND EFFECTS PLAYER (Richard Chadd original system)
-; ============================================================================
-; Uses channel C (registers 4/5=tone, 6=noise, 10=volume, 7=mixer bit2/bit5)
-; RAM variables: SFX_PTR (16-bit), SFX_ACTIVE (8-bit)
-; AYFX format: flag byte + optional data per frame, end marker $D0 $20
-; Flag bits: 0-3=volume, 4=disable tone, 5=tone data present,
-;            6=noise data present, 7=disable noise
-; ============================================================================
-
-; PLAY_SFX_RUNTIME - Start SFX playback
-; Input: X = pointer to AYFX data
-PLAY_SFX_RUNTIME:
-STX >SFX_PTR           ; Store pointer (force extended addressing)
-LDA #$01
-STA >SFX_ACTIVE        ; Mark as active
-RTS
-
-; SFX_UPDATE - Process one AYFX frame (call once per frame in loop)
-SFX_UPDATE:
-LDA >SFX_ACTIVE        ; Check if active
-BEQ noay               ; Not active, skip
-JSR sfx_doframe        ; Process one frame
-noay:
-RTS
-
-; sfx_doframe - AYFX frame parser (Richard Chadd original)
-sfx_doframe:
-LDU >SFX_PTR           ; Get current frame pointer
-LDB ,U                 ; Read flag byte (NO auto-increment)
-CMPB #$D0              ; Check end marker (first byte)
-BNE sfx_checktonefreq  ; Not end, continue
-LDB 1,U                ; Check second byte at offset 1
-CMPB #$20              ; End marker $D0 $20?
-BEQ sfx_endofeffect    ; Yes, stop
-
-sfx_checktonefreq:
-LEAY 1,U               ; Y = pointer to tone/noise data
-LDB ,U                 ; Reload flag byte (Sound_Byte corrupts B)
-BITB #$20              ; Bit 5: tone data present?
-BEQ sfx_checknoisefreq ; No, skip tone
-; Set tone frequency (channel C = reg 4/5)
-LDB 2,U                ; Get LOW byte (fine tune)
-LDA #$04               ; Register 4
-JSR Sound_Byte         ; Write to PSG
-LDB 1,U                ; Get HIGH byte (coarse tune)
-LDA #$05               ; Register 5
-JSR Sound_Byte         ; Write to PSG
-LEAY 2,Y               ; Skip 2 tone bytes
-
-sfx_checknoisefreq:
-LDB ,U                 ; Reload flag byte
-BITB #$40              ; Bit 6: noise data present?
-BEQ sfx_checkvolume    ; No, skip noise
-LDB ,Y                 ; Get noise period
-LDA #$06               ; Register 6
-JSR Sound_Byte         ; Write to PSG
-LEAY 1,Y               ; Skip 1 noise byte
-
-sfx_checkvolume:
-LDB ,U                 ; Reload flag byte
-ANDB #$0F              ; Get volume from bits 0-3
-LDA #$0A               ; Register 10 (volume C)
-JSR Sound_Byte         ; Write to PSG
-
-sfx_checktonedisable:
-LDB ,U                 ; Reload flag byte
-BITB #$10              ; Bit 4: disable tone?
-BEQ sfx_enabletone
-sfx_disabletone:
-LDB $C807              ; Read mixer shadow (MUST be B register)
-ORB #$04               ; Set bit 2 (disable tone C)
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Write to PSG
-BRA sfx_checknoisedisable  ; Continue to noise check
-
-sfx_enabletone:
-LDB $C807              ; Read mixer shadow (MUST be B register)
-ANDB #$FB              ; Clear bit 2 (enable tone C)
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Write to PSG
-
-sfx_checknoisedisable:
-LDB ,U                 ; Reload flag byte
-BITB #$80              ; Bit 7: disable noise?
-BEQ sfx_enablenoise
-sfx_disablenoise:
-LDB $C807              ; Read mixer shadow (MUST be B register)
-ORB #$20               ; Set bit 5 (disable noise C)
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Write to PSG
-BRA sfx_nextframe      ; Done, update pointer
-
-sfx_enablenoise:
-LDB $C807              ; Read mixer shadow (MUST be B register)
-ANDB #$DF              ; Clear bit 5 (enable noise C)
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Write to PSG
-
-sfx_nextframe:
-STY >SFX_PTR            ; Update pointer for next frame
-RTS
-
-sfx_endofeffect:
-; Stop SFX - set volume to 0
-CLR >SFX_ACTIVE         ; Mark as inactive
-LDA #$0A                ; Register 10 (volume C)
-LDB #$00                ; Volume = 0
-JSR Sound_Byte
-LDD #$0000
-STD >SFX_PTR            ; Clear pointer
-RTS
-
 ;**** PRINT_TEXT String Data ****
 PRINT_TEXT_STR_107868:
     FCC "map"
@@ -13480,16 +11830,8 @@ PRINT_TEXT_STR_95266726412236:
     FCC "london_bg"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_95736077158694:
-    FCC "map_theme"
-    FCB $80          ; Vectrex string terminator
-
 PRINT_TEXT_STR_2997885107879189:
     FCC "newyork_bg"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_3047088743154868:
-    FCC "pang_theme"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_83503386307659390:

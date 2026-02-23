@@ -37,33 +37,34 @@ START:
 ; === RAM VARIABLE DEFINITIONS ===
 ;***************************************************************************
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPPTR               EQU $C880+$02   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$04   ; Temporary pointer 2 (2 bytes)
-TEMP_YX              EQU $C880+$06   ; Temporary Y/X coordinate storage (2 bytes)
-NUM_STR              EQU $C880+$08   ; Buffer for PRINT_NUMBER hex output (2 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$0A   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$0B   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$0C   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$0D   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$0E   ; Circle temporary buffer (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$14   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$1E   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$20   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$22   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$23   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$26   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_COUNTER          EQU $C880+$28   ; User variable: COUNTER (1 bytes)
-VAR_STATE            EQU $C880+$29   ; User variable: STATE (1 bytes)
-VAR_SHAPE_TYPE       EQU $C880+$2A   ; User variable: SHAPE_TYPE (1 bytes)
-VAR_DIRECTION_X      EQU $C880+$2B   ; User variable: DIRECTION_X (1 bytes)
-VAR_DIRECTION_Y      EQU $C880+$2C   ; User variable: DIRECTION_Y (1 bytes)
-VAR_POS_X            EQU $C880+$2D   ; User variable: POS_X (2 bytes)
-VAR_POS_Y            EQU $C880+$2F   ; User variable: POS_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$31   ; User variable: JOY_X (2 bytes)
-VAR_BASE_INTENSITY   EQU $C880+$33   ; User variable: BASE_INTENSITY (2 bytes)
-VAR_MAX_X            EQU $C880+$35   ; User variable: MAX_X (2 bytes)
-VAR_MIN_X            EQU $C880+$37   ; User variable: MIN_X (2 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
+NUM_STR              EQU $C880+$0A   ; Buffer for PRINT_NUMBER hex output (2 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$0C   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$0D   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$0E   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$0F   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$10   ; Circle temporary buffer (6 bytes)
+DRAW_LINE_ARGS       EQU $C880+$16   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$20   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$22   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$24   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$25   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$26   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$28   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_COUNTER          EQU $C880+$2A   ; User variable: counter (1 bytes)
+VAR_STATE            EQU $C880+$2B   ; User variable: state (1 bytes)
+VAR_SHAPE_TYPE       EQU $C880+$2C   ; User variable: shape_type (1 bytes)
+VAR_DIRECTION_X      EQU $C880+$2D   ; User variable: direction_x (1 bytes)
+VAR_DIRECTION_Y      EQU $C880+$2E   ; User variable: direction_y (1 bytes)
+VAR_POS_X            EQU $C880+$2F   ; User variable: pos_x (2 bytes)
+VAR_POS_Y            EQU $C880+$31   ; User variable: pos_y (2 bytes)
+VAR_JOY_X            EQU $C880+$33   ; User variable: joy_x (2 bytes)
+VAR_BASE_INTENSITY   EQU $C880+$35   ; User variable: BASE_INTENSITY (2 bytes)
+VAR_MAX_X            EQU $C880+$37   ; User variable: MAX_X (2 bytes)
+VAR_MIN_X            EQU $C880+$39   ; User variable: MIN_X (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -166,11 +167,11 @@ LOOP_BODY:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_0_TRUE
     LDD #0
     LBRA .CMP_0_END
@@ -189,11 +190,11 @@ IF_NEXT_1:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_JOY_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_1_TRUE
     LDD #0
     LBRA .CMP_1_END
@@ -217,23 +218,23 @@ IF_END_0:
     LDD VAR_POS_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDB VAR_DIRECTION_X
     SEX             ; Sign-extend B -> D
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD VAR_POS_X
     LDD VAR_MAX_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_POS_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_2_TRUE
     LDD #0
     LBRA .CMP_2_END
@@ -253,11 +254,11 @@ IF_END_3:
     LDD VAR_MIN_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD VAR_POS_X
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_3_TRUE
     LDD #0
     LBRA .CMP_3_END
@@ -277,12 +278,12 @@ IF_END_5:
     LDD #32
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB VAR_COUNTER
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_4_TRUE
     LDD #0
     LBRA .CMP_4_END
@@ -302,12 +303,12 @@ IF_NEXT_8:
     LDD #64
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB VAR_COUNTER
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBLT .CMP_5_TRUE
     LDD #0
     LBRA .CMP_5_END
@@ -320,13 +321,13 @@ IF_NEXT_8:
     LDD #64
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDB VAR_COUNTER
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -342,18 +343,18 @@ IF_END_7:
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDB RESULT+1    ; Load low byte
     STB VAR_COUNTER
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)
     ANDA #$01      ; Test bit 0
     LBEQ .J1B1_0_OFF
@@ -364,7 +365,7 @@ IF_END_7:
 .J1B1_0_END:
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_6_TRUE
     LDD #0
     LBRA .CMP_6_END
@@ -378,23 +379,23 @@ IF_END_7:
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDB RESULT+1    ; Load low byte
     STB VAR_SHAPE_TYPE
     LDD #2
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB VAR_SHAPE_TYPE
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBGT .CMP_7_TRUE
     LDD #0
     LBRA .CMP_7_END
@@ -421,12 +422,12 @@ IF_END_10:
     LDD #0
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB VAR_SHAPE_TYPE
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_8_TRUE
     LDD #0
     LBRA .CMP_8_END
@@ -440,12 +441,12 @@ IF_END_10:
     LDD VAR_POS_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #10
     STD RESULT
     LDD RESULT
-    STD TMPPTR      ; Save right operand
-    PULS D          ; Get left operand
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD RESULT
     LDD RESULT
@@ -457,11 +458,11 @@ IF_END_10:
     LDD VAR_POS_X
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #10
     STD RESULT
     LDD RESULT
-    ADDD ,S++
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD RESULT
     LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
@@ -481,12 +482,12 @@ IF_NEXT_15:
     LDD #1
     STD RESULT
     LDD RESULT
-    PSHS D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB VAR_SHAPE_TYPE
     CLRA            ; Zero-extend: A=0, B=value
     STD RESULT
     LDD RESULT
-    CMPD ,S++
+    CMPD TMPVAL
     LBEQ .CMP_9_TRUE
     LDD #0
     LBRA .CMP_9_END

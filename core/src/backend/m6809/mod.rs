@@ -507,7 +507,7 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     
     // 8. PRINT_NUMBER buffer (always allocate if not suppressed)
     if !suppress_runtime {
-        ram.allocate("NUM_STR", 2, "String buffer for PRINT_NUMBER");
+        ram.allocate("NUM_STR", 6, "String buffer for PRINT_NUMBER (5 digits + terminator)");
     }
     
     // 9. DRAW_VECTOR position/mirror variables (used by DRAW_VECTOR, DRAW_VECTOR_EX, and SHOW_LEVEL)
@@ -1170,10 +1170,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     out.push_str(";***************************************************************************\n; DATA SECTION\n;***************************************************************************\n");
     
     // Re-evaluate suppress_runtime now that we know max_args (calculated earlier)
-    let no_runtime_vars_needed = !rt_usage.needs_tmp_left && !rt_usage.needs_tmp_right && 
-                                 !rt_usage.needs_tmp_ptr && 
-                                 !rt_usage.needs_mul_helper && !rt_usage.needs_div_helper && 
+    let no_runtime_vars_needed = !rt_usage.needs_tmp_left && !rt_usage.needs_tmp_right &&
+                                 !rt_usage.needs_tmp_ptr &&
+                                 !rt_usage.needs_mul_helper && !rt_usage.needs_div_helper &&
                                  !rt_usage.needs_line_vars && !rt_usage.needs_vcur_vars &&
+                                 !rt_usage.uses_print_number &&  // BUGFIX: must allocate NUM_STR if PRINT_NUMBER is used
                                  string_map.is_empty() && max_args == 0;
     suppress_runtime = main_inlined || no_runtime_vars_needed;
     
