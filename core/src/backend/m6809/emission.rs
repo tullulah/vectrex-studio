@@ -1288,7 +1288,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ; ============================================================================\n\
         ; Follows Draw_Sync_List_At pattern: read params BEFORE DP change\n\
         ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)\n\
-        ; Uses 8 segments (octagon) with lookup table for efficiency\n\
+        ; Uses 8 segments (regular octagon inscribed in circle) with unrolled loop\n\
         DRAW_CIRCLE_RUNTIME:\n\
         ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)\n\
         ; (These are byte variables, use LDB not LDD)\n\
@@ -1335,127 +1335,77 @@ DCR_after_intensity:\n\
         PULS B                 ; X to B\n\
         JSR Moveto_d\n\
         \n\
-        ; Loop through 8 segments using lookup table\n\
-        LDX #DCR_DELTA_TABLE   ; Point to delta table\n\
-        LDB #8                 ; 8 segments\n\
-        PSHS B                 ; Save counter on stack\n\
+        ; Precompute r/4 and 3r/4 for regular octagon segments\n\
+        ; Radius low byte is at DRAW_CIRCLE_TEMP+1\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; Load radius (low byte)\n\
+        LSRB\n\
+        LSRB                   ; B = r/4\n\
+        STB DRAW_CIRCLE_TEMP+6 ; Save r/4 in spare byte\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; Load radius\n\
+        SUBB DRAW_CIRCLE_TEMP+6 ; B = r - r/4 = 3r/4\n\
+        STB DRAW_CIRCLE_TEMP+7 ; Save 3r/4 in spare byte\n\
         \n\
-DCR_LOOP:\n\
-        CLR Vec_Misc_Count     ; Relative drawing\n\
+        ; Draw 8 unrolled segments - regular octagon inscribed in circle\n\
+        ; Counterclockwise from rightmost point (xc+r, yc)\n\
+        ; Draw_Line_d(A=dy, B=dx)\n\
         \n\
-        ; Load delta multipliers from table\n\
-        LDA ,X+                ; dx multiplier (-1, 0, 1, or 2 for half)\n\
-        LDB ,X+                ; dy multiplier\n\
-        PSHS A,B               ; Save multipliers\n\
-        \n\
-        ; Calculate dy = (dy_mult * radius) / 2 if needed\n\
-        LDD DRAW_CIRCLE_TEMP   ; Load radius\n\
-        PULS A,B               ; Get multipliers (A=dx_mult, B=dy_mult)\n\
-        PSHS A                 ; Save dx_mult\n\
-        \n\
-        ; Process dy_mult\n\
-        TSTB\n\
-        BEQ DCR_dy_zero        ; dy = 0\n\
-        CMPB #2\n\
-        BEQ DCR_dy_half        ; dy = r/2\n\
-        CMPB #$FE              ; -2 (half negative)\n\
-        BEQ DCR_dy_neg_half\n\
-        CMPB #1\n\
-        BEQ DCR_dy_pos         ; dy = r\n\
-        ; dy = -r\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        NEGA\n\
+        ; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4\n\
         NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dy_done\n\
-DCR_dy_zero:\n\
-        LDD #0                 ; Clear both A and B\n\
-        BRA DCR_dy_done\n\
-DCR_dy_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        BRA DCR_dy_done\n\
-DCR_dy_neg_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        NEGA\n\
-        NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dy_done\n\
-DCR_dy_pos:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-DCR_dy_done:\n\
-        TFR B,A                ; Move dy result to A (we only need 8-bit for Vectrex coordinates)\n\
-        PSHS A                 ; Save dy on stack\n\
-        \n\
-        ; Process dx_mult (same logic)\n\
-        LDB 1,S                ; Get dx_mult from stack\n\
-        TSTB\n\
-        BEQ DCR_dx_zero\n\
-        CMPB #2\n\
-        BEQ DCR_dx_half\n\
-        CMPB #$FE\n\
-        BEQ DCR_dx_neg_half\n\
-        CMPB #1\n\
-        BEQ DCR_dx_pos\n\
-        ; dx = -r\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        NEGA\n\
-        NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dx_done\n\
-DCR_dx_zero:\n\
-        LDD #0                 ; Clear both A and B\n\
-        BRA DCR_dx_done\n\
-DCR_dx_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        BRA DCR_dx_done\n\
-DCR_dx_neg_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        NEGA\n\
-        NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dx_done\n\
-DCR_dx_pos:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-DCR_dx_done:\n\
-        TFR B,B                ; dx in B\n\
-        PULS A                 ; dy in A\n\
-        LEAS 1,S               ; Drop dx_mult\n\
-        \n\
-        ; Draw line with calculated deltas (preserve X - it points to table)\n\
-        PSHS X                 ; Save table pointer\n\
         JSR Draw_Line_d\n\
-        PULS X                 ; Restore table pointer\n\
         \n\
-        ; Loop control\n\
-        DEC ,S                 ; Decrement counter\n\
-        BNE DCR_LOOP\n\
+        ; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
         \n\
-        LEAS 1,S               ; Clean counter from stack\n\
+        ; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
         \n\
-        ; DP is ALREADY $D0 from BIOS, no need to restore (Draw_Sync_List_At doesn't restore either)\n\
+        ; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
         RTS\n\
-        \n\
-        RTS\n\
-        \n\
-        ; Delta multiplier table: 8 segments (dx_mult, dy_mult)\n\
-        ; 0=zero, 1=r, -1=$FF=-r, 2=r/2, -2=$FE=-r/2\n\
-DCR_DELTA_TABLE:\n\
-        FCB 2,2      ; Seg 1: dx=r/2, dy=r/2 (right-up)\n\
-        FCB 0,1      ; Seg 2: dx=0, dy=r (up)\n\
-        FCB $FE,2    ; Seg 3: dx=-r/2, dy=r/2 (left-up)\n\
-        FCB $FF,0    ; Seg 4: dx=-r, dy=0 (left)\n\
-        FCB $FE,$FE  ; Seg 5: dx=-r/2, dy=-r/2 (left-down)\n\
-        FCB 0,$FF    ; Seg 6: dx=0, dy=-r (down)\n\
-        FCB 2,$FE    ; Seg 7: dx=r/2, dy=-r/2 (right-down)\n\
-        FCB 1,0      ; Seg 8: dx=r, dy=0 (right)\n\
         \n"
         );
     }
