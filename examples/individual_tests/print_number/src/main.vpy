@@ -12,15 +12,16 @@ def main():
 
 def loop():
     # Display counter and its value
-    PRINT_TEXT(-80, 80, "COUNTER")
-    PRINT_NUMBER(-40, 80, counter)
+    PRINT_TEXT(-80, counter, "COUNTER")
+    
+    PRINT_NUMBER(-10, counter, 99)
+    # PRINT_TEXT(10, 30, "COUNT")
 
-    # Display test values
-    PRINT_TEXT(-80, -50, "VAL")
-    PRINT_NUMBER(-40, -50, 12345)
-
+    #PRINT_NUMBER(-40, 0, 12345)
+    # PRINT_TEXT(-80, 0, "VAL")
+    # PRINT_TEXT(-40, 0, "12345")
     # Increment counter each frame
     counter = counter + 1
 
-    if(counter > 650):
-        counter = 0
+    # if(counter > 650):
+    #     counter = 0

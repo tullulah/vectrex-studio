@@ -476,15 +476,12 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("    STB ,X\n");
         asm.push_str("    \n");
         asm.push_str(".PN_AFTER_CONVERT:\n");
-        asm.push_str("    ; Move to position\n");
-        asm.push_str("    LDA >VAR_ARG1+1\n");
-        asm.push_str("    LDB >VAR_ARG0+1\n");
-        asm.push_str("    JSR Moveto_d\n");
-        asm.push_str("    \n");
-        asm.push_str("    ; Print string\n");
-        asm.push_str("    LDU #NUM_STR\n");
-        asm.push_str("    JSR Print_Str_d  ; Print using BIOS\n");
-        asm.push_str("    JSR Reset_Pen    ; Reset pen parameters after Print_Str_d\n");
+        asm.push_str("    ; Load coordinates into registers - CRITICAL: must be JUST before Print_Str_d\n");
+        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
+        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
+        asm.push_str("    LDU #NUM_STR    ; String pointer\n");
+        asm.push_str("    JSR Print_Str_d ; Print using BIOS (A=Y, B=X, U=string)\n");
+        asm.push_str("    JSR Reset_Pen   ; Reset pen parameters after Print_Str_d\n");
         asm.push_str(&format!("    JSR {}      ; Restore DP\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }

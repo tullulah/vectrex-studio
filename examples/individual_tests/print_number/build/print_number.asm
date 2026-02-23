@@ -101,7 +101,7 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #80
+    LDD >VAR_COUNTER
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -111,45 +111,15 @@ LOOP_BODY:
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-40
+    LDD #-10
     STD RESULT
     LDD RESULT
     STD VAR_ARG0    ; X position
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
     LDD >VAR_COUNTER
     STD RESULT
     LDD RESULT
-    STD VAR_ARG2    ; Number value
-    JSR VECTREX_PRINT_NUMBER
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_84737      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_NUMBER(x, y, num)
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
-    LDD #-50
-    STD RESULT
-    LDD RESULT
     STD VAR_ARG1    ; Y position
-    LDD #12345
+    LDD #99
     STD RESULT
     LDD RESULT
     STD VAR_ARG2    ; Number value
@@ -167,30 +137,6 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_COUNTER
-    LDD #650
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_COUNTER
-    STD RESULT
-    LDD RESULT
-    CMPD TMPVAL
-    LBGT .CMP_0_TRUE
-    LDD #0
-    LBRA .CMP_0_END
-.CMP_0_TRUE:
-    LDD #1
-.CMP_0_END:
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_1
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_COUNTER
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
     RTS
 
 ;***************************************************************************
@@ -216,7 +162,10 @@ VECTREX_PRINT_TEXT:
 VECTREX_PRINT_NUMBER:
     ; Print 16-bit decimal number (0-9999)
     ; ARG0=x, ARG1=y, ARG2=value
-    ; Uses NUM_STR buffer (6 bytes: 4 digits + terminator)
+    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS
+    LDA #$98
+    STA >$D00C     ; VIA_cntl = $98
+    JSR $F1AA      ; DP_to_D0
     
     ; Convert 16-bit number to decimal
     LDD >VAR_ARG2  ; Load 16-bit number
@@ -270,14 +219,13 @@ VECTREX_PRINT_NUMBER:
     STB ,X
     
 .PN_AFTER_CONVERT:
-    ; Move to position
-    LDA >VAR_ARG1+1
-    LDB >VAR_ARG0+1
-    JSR Moveto_d
-    
-    ; Print string
-    LDU #NUM_STR
-    JSR Print_Str_hwyx  ; Hardware print: Y in A, X in B, string in U
+    ; Load coordinates into registers - CRITICAL: must be JUST before Print_Str_d
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
+    LDU #NUM_STR    ; String pointer
+    JSR Print_Str_d ; Print using BIOS (A=Y, B=X, U=string)
+    JSR Reset_Pen   ; Reset pen parameters after Print_Str_d
+    JSR $F1AF      ; Restore DP
     RTS
 
 MOD16:
@@ -300,10 +248,6 @@ MOD16:
     RTS
 
 ;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_84737:
-    FCC "VAL"
-    FCB $80          ; Vectrex string terminator
-
 PRINT_TEXT_STR_61805355484:
     FCC "COUNTER"
     FCB $80          ; Vectrex string terminator

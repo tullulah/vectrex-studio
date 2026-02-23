@@ -1,0 +1,66 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "main.asm",
+  "binary": "main.bin",
+  "entryPoint": "0x0000",
+  "symbols": {},
+  "lineMap": {},
+  "vpyLineMap": {},
+  "asmLineMap": {},
+  "functions": {},
+  "nativeCalls": {},
+  "asmFunctions": {},
+  "asmAddressMap": {},
+  "variables": {
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC888",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC889",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC88A",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

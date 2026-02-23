@@ -41,24 +41,24 @@ TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT
 TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
 TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
-NUM_STR              EQU $C880+$0A   ; Buffer for PRINT_NUMBER hex output (2 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$0C   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$0D   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$0E   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$0F   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$10   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$11   ; Circle temporary buffer (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$17   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$21   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$23   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$25   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$26   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$27   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$29   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_BTN1             EQU $C880+$2B   ; User variable: btn1 (2 bytes)
-VAR_BTN2             EQU $C880+$2D   ; User variable: btn2 (2 bytes)
-VAR_BTN3             EQU $C880+$2F   ; User variable: btn3 (2 bytes)
-VAR_BTN4             EQU $C880+$31   ; User variable: btn4 (2 bytes)
+NUM_STR              EQU $C880+$0A   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$10   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$11   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$12   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$13   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$14   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$15   ; Circle temporary buffer (6 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$25   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$27   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$29   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_BTN1             EQU $C880+$2F   ; User variable: btn1 (2 bytes)
+VAR_BTN2             EQU $C880+$31   ; User variable: btn2 (2 bytes)
+VAR_BTN3             EQU $C880+$33   ; User variable: btn3 (2 bytes)
+VAR_BTN4             EQU $C880+$35   ; User variable: btn4 (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -447,49 +447,75 @@ VECTREX_PRINT_TEXT:
     RTS
 
 VECTREX_PRINT_NUMBER:
-    ; VPy signature: PRINT_NUMBER(x, y, num)
-    ; Convert number to hex string and print
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
-    JSR $F1AA      ; DP_to_D0 - set Direct Page for BIOS/VIA access
-    LDA >VAR_ARG1+1   ; Y position
-    LDB >VAR_ARG0+1   ; X position
-    JSR Moveto_d     ; Move to position
+    ; Print 16-bit decimal number (0-9999)
+    ; ARG0=x, ARG1=y, ARG2=value
+    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS
+    LDA #$98
+    STA >$D00C     ; VIA_cntl = $98
+    JSR $F1AA      ; DP_to_D0
     
-    ; Convert number to string (show low byte as hex)
-    LDA >VAR_ARG2+1   ; Load number value
+    ; Convert 16-bit number to decimal
+    LDD >VAR_ARG2  ; Load 16-bit number
+    LDX #NUM_STR   ; String buffer
     
-    ; Convert high nibble to ASCII
-    LSRA
-    LSRA
-    LSRA
-    LSRA
-    ANDA #$0F
-    CMPA #10
-    BLO PN_DIGIT1
-    ADDA #7          ; A-F
-PN_DIGIT1:
+    ; Check for 0
+    CMPD #0
+    BNE .PN_DIV1000
+    LDA #'0'
+    ORA #$80
+    STA ,X
+    BRA .PN_AFTER_CONVERT
+    
+.PN_DIV1000:
+    CLRA
+.PN_L1000:
+    CMPD #1000
+    BLT .PN_D1000_DONE
+    SUBD #1000
+    INCA
+    BRA .PN_L1000
+.PN_D1000_DONE:
     ADDA #'0'
-    STA NUM_STR      ; Store first digit
+    STA ,X+
     
-    ; Convert low nibble to ASCII  
-    LDA VAR_ARG2+1
-    ANDA #$0F
-    CMPA #10
-    BLO PN_DIGIT2
-    ADDA #7          ; A-F
-PN_DIGIT2:
+    CLRA
+.PN_L100:
+    CMPD #100
+    BLT .PN_D100_DONE
+    SUBD #100
+    INCA
+    BRA .PN_L100
+.PN_D100_DONE:
     ADDA #'0'
-    ORA #$80         ; Set high bit for string termination
-    STA NUM_STR+1    ; Store second digit with high bit
+    STA ,X+
     
-    ; Print the string
-    LDU #NUM_STR     ; Point to our number string
+    CLRA
+.PN_L10:
+    CMPD #10
+    BLT .PN_D10_DONE
+    SUBD #10
+    INCA
+    BRA .PN_L10
+.PN_D10_DONE:
+    ADDA #'0'
+    STA ,X+
+    
+    ; Last digit (remainder in D)
+    ADDB #'0'
+    ORB #$80       ; Terminator
+    STB ,X
+    
+.PN_AFTER_CONVERT:
+    ; Move to position
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    JSR Moveto_d
+    
+    ; Print string
+    LDU #NUM_STR
     JSR Print_Str_d  ; Print using BIOS
-    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)
-    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    JSR Reset_Pen    ; Reset pen parameters after Print_Str_d
+    JSR $F1AF      ; Restore DP
     RTS
 
 MOD16:
