@@ -1,4 +1,4 @@
-; --- Motorola 6809 backend (Vectrex) title='PRINT_TEXT' origin=$0000 ---
+; --- Motorola 6809 backend (Vectrex) title='DRAW_RECT' origin=$0000 ---
         ORG $0000
 ;***************************************************************************
 ; DEFINE SECTION
@@ -15,7 +15,7 @@
     FCB $50
     FCB $20
     FCB $BB
-    FCC "PRINT TEXT"
+    FCC "DRAW RECT"
     FCB $80
     FCB 0
 
@@ -25,7 +25,7 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 24 bytes
+; Total RAM used: 28 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
 TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
@@ -37,6 +37,8 @@ VAR_ARG0             EQU $C880+$10   ; Function argument 0 (2 bytes)
 VAR_ARG1             EQU $C880+$12   ; Function argument 1 (2 bytes)
 VAR_ARG2             EQU $C880+$14   ; Function argument 2 (2 bytes)
 VAR_ARG3             EQU $C880+$16   ; Function argument 3 (2 bytes)
+VAR_ARG4             EQU $C880+$18   ; Function argument 4 (2 bytes)
+VAR_ARG5             EQU $C880+$1A   ; Function argument 5 (2 bytes)
 
     JMP START
 
@@ -115,21 +117,6 @@ J1B4_BUILTIN:
     LDD #0
     RTS
 
-VECTREX_PRINT_TEXT:
-    ; CRITICAL: Print_Str_d requires DP=$D0 and signature is (Y, X, string)
-    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
-    LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    LDU VAR_ARG2   ; string pointer (ARG2 = third param)
-    LDA VAR_ARG1+1 ; Y (ARG1 = second param)
-    LDB VAR_ARG0+1 ; X (ARG0 = first param)
-    JSR Print_Str_d
-    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)
-    RTS
 ; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
 __Intensity_a:
 TFR B,A         ; Move B to A (BIOS expects intensity in A)
@@ -152,8 +139,8 @@ START:
     TFR X,S
 
     ; *** DEBUG *** main() function code inline (initialization)
-    ; VPy_LINE:7
     ; VPy_LINE:8
+    ; VPy_LINE:9
     ; pass (no-op)
 
 MAIN:
@@ -178,84 +165,104 @@ MAIN:
     JSR LOOP_BODY
     BRA MAIN
 
-    ; VPy_LINE:10
+    ; VPy_LINE:11
 LOOP_BODY:
     JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:12
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #20
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_0
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 12
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(8)
     ; VPy_LINE:13
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    LDA #$50
+    JSR Intensity_a
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$D8
+    LDB #$B0
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$1E
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$50
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$E2
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$B0
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
     STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_2
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 13
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
+    ; DEBUG: Statement 1 - Discriminant(8)
+    ; VPy_LINE:16
+    LDA #$50
+    JSR Intensity_a
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$D8
+    LDB #$32
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$1E
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$50
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$E2
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$B0
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
+    LDD #0
     STD RESULT
     ; DEBUG: Statement 2 - Discriminant(8)
-    ; VPy_LINE:14
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-55
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #-20
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_1
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 14
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
+    ; VPy_LINE:19
+    LDA #$50
+    JSR Intensity_a
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$F1
+    LDB #$F1
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$1E
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$1E
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$E2
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$E2
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
+    LDD #0
     STD RESULT
     RTS
 
 ;***************************************************************************
 ; DATA SECTION
 ;***************************************************************************
-; String literals (classic FCC + $80 terminator)
-STR_0:
-    FCC "HELLO"
-    FCB $80
-STR_1:
-    FCC "VPY TEST"
-    FCB $80
-STR_2:
-    FCC "WORLD"
-    FCB $80

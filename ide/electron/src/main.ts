@@ -830,6 +830,7 @@ ipcMain.handle('bin:open', async () => {
 // Removed ipcMain.handle('emu:load') legacy handler.
 
 // Resolve compiler binary path. Supports env override VPY_COMPILER_BIN.
+// Binaries live in ide/electron/resources/ (dev) or process.resourcesPath (packaged).
 // @param backend: 'buildtools' (default, new modular compiler) or 'core' (legacy compiler)
 function resolveCompilerPath(backend: 'buildtools' | 'core' = 'buildtools'): string | null {
   const override = process.env.VPY_COMPILER_BIN;
@@ -837,48 +838,22 @@ function resolveCompilerPath(backend: 'buildtools' | 'core' = 'buildtools'): str
     try { if (existsSync(override)) return override; } catch {}
     mainWindow?.webContents.send('run://stderr', `VPY_COMPILER_BIN set but file not found: ${override}`);
   }
-  
-  const cwd = process.cwd();
-  const candidates: string[] = [];
-  
+
+  const isWin = process.platform === 'win32';
+  const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
+
   if (backend === 'core') {
-    // LEGACY CORE COMPILER: vectrexc
-    const names = process.platform === 'win32' ? ['vectrexc.exe'] : ['vectrexc'];
-    for (const exe of names) {
-      candidates.push(
-        // Packaged app: resources directory (highest priority)
-        join(process.resourcesPath, exe),
-        join(cwd, 'target', 'debug', exe),
-        join(cwd, 'target', 'release', exe),
-        join(cwd, 'core', 'target', 'debug', exe),
-        join(cwd, 'core', 'target', 'release', exe),
-        join(cwd, exe),
-        join(cwd, '..', '..', 'target', 'debug', exe),
-        join(cwd, '..', '..', 'target', 'release', exe),
-      );
-    }
-    for (const p of candidates) { try { if (existsSync(p)) return p; } catch {} }
-    mainWindow?.webContents.send('run://stderr', `Core compiler (vectrexc) not found. Tried paths:\n${candidates.join('\n')}\nBuild with: cargo build --bin vectrexc --release`);
+    const exe = isWin ? 'vectrexc.exe' : 'vectrexc';
+    const p = join(resourcesDir, exe);
+    try { if (existsSync(p)) return p; } catch {}
+    mainWindow?.webContents.send('run://stderr', `Core compiler not found: ${p}\nCopy binary to ide/electron/resources/ or build with: cargo build --bin vectrexc --release`);
     return null;
   }
-  
-  // NEW BUILDTOOLS COMPILER: vpy_cli (default)
-  const names = process.platform === 'win32' ? ['vpy_cli.exe'] : ['vpy_cli'];
-  for (const exe of names) {
-    candidates.push(
-      // Packaged app: resources directory (highest priority)
-      join(process.resourcesPath, exe),
-      join(cwd, 'buildtools', 'target', 'debug', exe),
-      join(cwd, 'buildtools', 'target', 'release', exe),
-      join(cwd, 'target', 'debug', exe),
-      join(cwd, 'target', 'release', exe),
-      join(cwd, exe),
-      join(cwd, '..', '..', 'buildtools', 'target', 'debug', exe),
-      join(cwd, '..', '..', 'buildtools', 'target', 'release', exe),
-    );
-  }
-  for (const p of candidates) { try { if (existsSync(p)) return p; } catch {} }
-  mainWindow?.webContents.send('run://stderr', `Compiler binary not found. Tried paths (names: ${names.join(', ')}):\n${candidates.join('\n')}\nBuild with:\n  cd buildtools && cargo build --bin vpy_cli\nOr set VPY_COMPILER_BIN=full/path/to/vpy_cli`);
+
+  const exe = isWin ? 'vpy_cli.exe' : 'vpy_cli';
+  const p = join(resourcesDir, exe);
+  try { if (existsSync(p)) return p; } catch {}
+  mainWindow?.webContents.send('run://stderr', `Compiler not found: ${p}\nCopy binary to ide/electron/resources/ or build with: cd buildtools && cargo build --bin vpy_cli --release`);
   return null;
 }
 

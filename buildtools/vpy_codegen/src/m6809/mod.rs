@@ -324,27 +324,44 @@ pub fn generate_m6809_asm(
     asm.push_str("    CLR $C80E        ; Initialize Vec_Prev_Btns\n");
     asm.push_str("    LDA #$80\n");
     asm.push_str("    STA VIA_t1_cnt_lo\n");
-    asm.push_str("    LDS #$CBFF       ; Initialize stack\n");
-    
-    // CRITICAL: Initialize CURRENT_ROM_BANK for multibank projects
-    if is_multibank {
-        asm.push_str("    ; Initialize CURRENT_ROM_BANK to Bank 0 (current switchable window on boot)\n");
-        asm.push_str("    LDA #0\n");
-        asm.push_str("    STA >CURRENT_ROM_BANK   ; Initialize bank tracker (Bank 0 is visible at boot)\n");
-    }
-    
-    // CRITICAL: Initialize SFX system variables to prevent garbage data interference
+    asm.push_str("    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)\n");
+    asm.push_str("    TFR X,S\n");
+
+    // CRITICAL: Init_Music_Buf ($F533) uses the current S value to initialize
+    // Vec_Music_Work. Must be called after S = Vec_Default_Stk so that
+    // Wait_Recal uses the correct buffer. Wrong S value causes Wait_Recal to
+    // write garbage to PSG registers each frame (random noise on noise channel).
     use crate::m6809::functions::has_audio_calls;
     if has_audio_calls(module) {
-        asm.push_str("    ; Initialize SFX variables to prevent random noise on startup\n");
+        asm.push_str("    JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk\n");
+    }
+
+    // CRITICAL: Initialize CURRENT_ROM_BANK always (not just multibank).
+    // AUDIO_UPDATE compares CURRENT_ROM_BANK vs PSG_MUSIC_BANK; if both are
+    // uninitialized garbage that differs, it executes STA $DF00 with garbage,
+    // causing a spurious bank-switch in the emulator which corrupts music data.
+    asm.push_str("    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)\n");
+    asm.push_str("    LDA #0\n");
+    asm.push_str("    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot\n");
+    
+    // CRITICAL: Initialize SFX system variables to prevent garbage data interference
+    if has_audio_calls(module) {
+        asm.push_str("    ; Initialize audio system variables to prevent random noise on startup\n");
         asm.push_str("    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)\n");
         asm.push_str("    LDD #$0000\n");
         asm.push_str("    STD >SFX_PTR            ; Clear SFX pointer\n");
-        
-        // CRITICAL (2026-01-20): Initialize PSG_MUSIC_BANK for multibank
-        if is_multibank {
-            asm.push_str("    CLR >PSG_MUSIC_BANK     ; Initialize to 0 (prevents garbage bank switches)\n");
-        }
+        // Always initialize PSG_MUSIC_BANK=0: AUDIO_UPDATE compares it with
+        // CURRENT_ROM_BANK every frame; garbage != 0 causes STA $DF00 corruption.
+        asm.push_str("    STA >PSG_MUSIC_BANK     ; Bank 0 for music (prevents garbage bank switch in emulator)\n");
+        // CRITICAL: Initialize PSG music playback state variables.
+        // If PSG_IS_PLAYING is garbage (non-zero) at boot, AUDIO_UPDATE immediately
+        // tries to play music from a garbage PSG_MUSIC_PTR, sending random bytes to
+        // PSG registers including reg 6 (noise period) and reg 7 (mixer), causing
+        // the noise channel to emit continuous random noise before PLAY_MUSIC is called.
+        asm.push_str("    CLR >PSG_IS_PLAYING     ; No music playing at startup\n");
+        asm.push_str("    CLR >PSG_DELAY_FRAMES   ; Clear delay counter\n");
+        asm.push_str("    STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)\n");
+        asm.push_str("    STD >PSG_MUSIC_START    ; Clear loop pointer\n");
     }
     
     // For multibank: Fixed bank is ALWAYS visible at $4000-$7FFF
@@ -535,13 +552,13 @@ pub fn generate_m6809_asm(
         // NOTE: VAR_ARG0-4 are already defined in SYSTEM RAM VARIABLES section above
         // (before bank split). No need to redefine them here in Bank #31.
         
-        let helpers_asm = helpers::generate_helpers(module)?;
+        let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
         asm.push_str(&helpers_asm);
     }
     
     // For single-bank: Emit helpers normally
     if !is_multibank {
-        let helpers_asm = helpers::generate_helpers(module)?;
+        let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
         asm.push_str(&helpers_asm);
     }
     

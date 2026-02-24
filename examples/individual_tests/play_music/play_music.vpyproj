@@ -10,3 +10,6 @@ debug_symbols = true
 
 [sources]
 vpy = ["src/**/*.vpy"]
+
+[resources]
+music = ["assets/music/*.vmus"]

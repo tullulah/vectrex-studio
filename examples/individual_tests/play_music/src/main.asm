@@ -25,42 +25,30 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 57 bytes
+; Total RAM used: 31 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
-TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
-TMPRIGHT             EQU $C880+$06   ; Right operand temp (2 bytes)
-TMPRIGHT2            EQU $C880+$08   ; Right operand temp 2 (for nested operations) (2 bytes)
-TMPPTR               EQU $C880+$0A   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$0C   ; Pointer temp 2 (for nested array operations) (2 bytes)
-TEMP_YX              EQU $C880+$0E   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$10   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$11   ; Temporary y storage (1 bytes)
-PSG_MUSIC_PTR        EQU $C880+$12   ; Current music position pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$14   ; Music start pointer (for loops) (2 bytes)
-PSG_IS_PLAYING       EQU $C880+$16   ; Playing flag ($00=stopped, $01=playing) (1 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$17   ; Set during UPDATE_MUSIC_PSG (1 bytes)
-PSG_FRAME_COUNT      EQU $C880+$18   ; Frame register write count (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$19   ; Frames to wait before next read (1 bytes)
-SFX_ACTIVE           EQU $C880+$1A   ; SFX playback flag (always needed by AUDIO_UPDATE) (1 bytes)
-NUM_STR              EQU $C880+$1B   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$21   ; Circle center X (byte) (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$22   ; Circle center Y (byte) (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$23   ; Circle diameter (byte) (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$24   ; Circle intensity (byte) (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$25   ; Circle drawing temporaries (radius=2, xc=2, yc=2, spare=2) (8 bytes)
-VAR_MUSIC_PLAYING    EQU $C880+$2D   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$2F   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$31   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$33   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$35   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$37   ; Function argument 4 (2 bytes)
-PSG_MUSIC_PTR_DP   EQU $12  ; DP-relative
-PSG_MUSIC_START_DP EQU $14  ; DP-relative
-PSG_IS_PLAYING_DP  EQU $16  ; DP-relative
-PSG_MUSIC_ACTIVE_DP EQU $17  ; DP-relative
-PSG_FRAME_COUNT_DP EQU $18  ; DP-relative
-PSG_DELAY_FRAMES_DP EQU $19  ; DP-relative
+TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
+TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
+TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
+TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
+TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
+PSG_MUSIC_PTR        EQU $C880+$0A   ; Current music position pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$0C   ; Music start pointer (for loops) (2 bytes)
+PSG_IS_PLAYING       EQU $C880+$0E   ; Playing flag ($00=stopped, $01=playing) (1 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$0F   ; Set during UPDATE_MUSIC_PSG (1 bytes)
+PSG_FRAME_COUNT      EQU $C880+$10   ; Frame register write count (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$11   ; Frames to wait before next read (1 bytes)
+SFX_ACTIVE           EQU $C880+$12   ; SFX playback flag (always needed by AUDIO_UPDATE) (1 bytes)
+NUM_STR              EQU $C880+$13   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+VAR_MUSIC_PLAYING    EQU $C880+$19   ; User variable (2 bytes)
+VAR_ARG0             EQU $C880+$1B   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$1D   ; Function argument 1 (2 bytes)
+PSG_MUSIC_PTR_DP   EQU $0A  ; DP-relative
+PSG_MUSIC_START_DP EQU $0C  ; DP-relative
+PSG_IS_PLAYING_DP  EQU $0E  ; DP-relative
+PSG_MUSIC_ACTIVE_DP EQU $0F  ; DP-relative
+PSG_FRAME_COUNT_DP EQU $10  ; DP-relative
+PSG_DELAY_FRAMES_DP EQU $11  ; DP-relative
 
     JMP START
 
@@ -139,21 +127,6 @@ J1B4_BUILTIN:
     LDD #0
     RTS
 
-VECTREX_PRINT_TEXT:
-    ; CRITICAL: Print_Str_d requires DP=$D0 and signature is (Y, X, string)
-    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
-    LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    LDU VAR_ARG2   ; string pointer (ARG2 = third param)
-    LDA VAR_ARG1+1 ; Y (ARG1 = second param)
-    LDB VAR_ARG0+1 ; X (ARG0 = first param)
-    JSR Print_Str_d
-    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)
-    RTS
 ; ============================================================================
 ; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
 ; ============================================================================
@@ -395,130 +368,6 @@ JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
 __Draw_Line_d:
 LDA 2,S         ; Get dy from stack (after return address)
 JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
-; ============================================================================
-; DRAW_CIRCLE_RUNTIME - Draw circle with runtime parameters
-; ============================================================================
-; Follows Draw_Sync_List_At pattern: read params BEFORE DP change
-; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
-; Uses 8 segments (regular octagon inscribed in circle) with unrolled loop
-DRAW_CIRCLE_RUNTIME:
-; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
-; (These are byte variables, use LDB not LDD)
-LDB DRAW_CIRCLE_INTENSITY
-PSHS B                 ; Save intensity on stack
-
-LDB DRAW_CIRCLE_DIAM
-SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
-LSRA                   ; Divide by 2 to get radius
-RORB
-STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit)
-
-LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
-SEX
-STD DRAW_CIRCLE_TEMP+2 ; Save xc
-
-LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
-SEX
-STD DRAW_CIRCLE_TEMP+4 ; Save yc
-
-; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
-LDA #$D0
-TFR A,DP
-JSR Reset0Ref
-
-; Set intensity (from stack)
-PULS A                 ; Get intensity from stack
-CMPA #$5F
-BEQ DCR_intensity_5F
-JSR Intensity_a
-BRA DCR_after_intensity
-DCR_intensity_5F:
-JSR Intensity_5F
-DCR_after_intensity:
-
-; Move to start position: (xc + radius, yc)
-; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
-LDD DRAW_CIRCLE_TEMP   ; D = radius
-ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
-TFR B,B                ; Keep X in B (low byte)
-PSHS B                 ; Save X on stack
-LDD DRAW_CIRCLE_TEMP+4 ; Load yc
-TFR B,A                ; Y to A
-PULS B                 ; X to B
-JSR Moveto_d
-
-; Precompute r/4 and 3r/4 for regular octagon segments
-; Radius low byte is at DRAW_CIRCLE_TEMP+1
-LDB DRAW_CIRCLE_TEMP+1 ; Load radius (low byte)
-LSRB
-LSRB                   ; B = r/4
-STB DRAW_CIRCLE_TEMP+6 ; Save r/4 in spare byte
-LDB DRAW_CIRCLE_TEMP+1 ; Load radius
-SUBB DRAW_CIRCLE_TEMP+6 ; B = r - r/4 = 3r/4
-STB DRAW_CIRCLE_TEMP+7 ; Save 3r/4 in spare byte
-
-; Draw 8 unrolled segments - regular octagon inscribed in circle
-; Counterclockwise from rightmost point (xc+r, yc)
-; Draw_Line_d(A=dy, B=dx)
-
-; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
-LDB DRAW_CIRCLE_TEMP+6  ; r/4
-NEGB
-JSR Draw_Line_d
-
-; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4
-NEGB
-JSR Draw_Line_d
-
-; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4
-NEGA
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4
-NEGB
-JSR Draw_Line_d
-
-; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
-NEGA
-LDB DRAW_CIRCLE_TEMP+6  ; r/4
-NEGB
-JSR Draw_Line_d
-
-; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
-NEGA
-LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
-JSR Draw_Line_d
-
-; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4
-NEGA
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
-JSR Draw_Line_d
-
-; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
-JSR Draw_Line_d
-
-; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4
-CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
-LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
-JSR Draw_Line_d
-
-RTS
-
 START:
     LDA #$D0
     TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
@@ -576,146 +425,9 @@ LOOP_BODY:
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:15
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-70
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_0
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 15
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(8)
-    ; VPy_LINE:16
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_1
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 16
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 2 - Discriminant(9)
-    ; VPy_LINE:19
-    LDD VAR_MUSIC_PLAYING
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BEQ CT_2
-    LDD #0
-    STD RESULT
-    BRA CE_3
-CT_2:
-    LDD #1
-    STD RESULT
-CE_3:
-    LDD RESULT
-    LBEQ IF_NEXT_1
-    ; VPy_LINE:20
-    LDA #$50
-    JSR Intensity_a
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    LDA #$00
-    LDB #$0A
-    JSR Moveto_d
-    CLR Vec_Misc_Count
-    LDA #$04
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$03
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$FD
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FC
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FC
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$FD
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FD
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FC
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FC
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FD
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$03
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$04
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$04
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$03
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$03
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$04
-    LDB #$01
-    JSR Draw_Line_d
-    LDD #0
-    STD RESULT
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
+    ; DEBUG: Statement 0 - Discriminant(7)
+    ; VPy_LINE:21
+    ; pass (no-op)
     JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
     RTS
 
@@ -1169,10 +881,3 @@ _MUSIC1_MUSIC:
     FDB     _MUSIC1_MUSIC       ; Jump to start (absolute address)
 
 
-; String literals (classic FCC + $80 terminator)
-STR_0:
-    FCC "MUSIC"
-    FCB $80
-STR_1:
-    FCC "PLAYING"
-    FCB $80

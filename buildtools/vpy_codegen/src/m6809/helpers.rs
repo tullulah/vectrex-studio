@@ -372,7 +372,7 @@ fn get_bios_address(symbol_name: &str, fallback_address: &str) -> String {
     fallback_address.to_string()
 }
 
-pub fn generate_helpers(module: &Module) -> Result<String, String> {
+pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, String> {
     let mut asm = String::new();
 
     // Import has_audio_calls for audio helper detection
@@ -399,16 +399,14 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("VECTREX_PRINT_TEXT:\n");
         asm.push_str("    ; VPy signature: PRINT_TEXT(x, y, string)\n");
         asm.push_str("    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n");
-        asm.push_str("    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n");
         asm.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n");
         asm.push_str("    STA >$D00C     ; VIA_cntl\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_D0 - set Direct Page for BIOS/VIA access\n", dp_to_d0));
-        asm.push_str("    LDU >VAR_ARG2   ; string pointer (third parameter)\n");
-        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate (second parameter, low byte)\n");
-        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate (first parameter, low byte)\n");
-        asm.push_str("    JSR Print_Str_d ; Print string from U register\n");
-        asm.push_str("    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)\n");
-        asm.push_str("    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state\n");
+        asm.push_str("    LDA #$D0\n");
+        asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
+        asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
+        asm.push_str("    LDA VAR_ARG1+1 ; Y coordinate\n");
+        asm.push_str("    LDB VAR_ARG0+1 ; X coordinate\n");
+        asm.push_str("    JSR Print_Str_d\n");
         asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }
@@ -514,7 +512,7 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
 
     // AUDIO_UPDATE: Auto-inject if PLAY_MUSIC or PLAY_SFX detected
     if has_audio_calls(module) {
-        emit_audio_update_helper(&mut asm);
+        emit_audio_update_helper(&mut asm, is_multibank);
         emit_play_sfx_runtime(&mut asm);
     }
 
@@ -658,34 +656,43 @@ PMr_done:\n\
 /// Emit AUDIO_UPDATE helper for PSG music + SFX playback
 /// Auto-called at end of LOOP_BODY when PLAY_MUSIC/PLAY_SFX detected
 /// Uses Sound_Byte BIOS call for PSG writes (DP=$D0 required)
-fn emit_audio_update_helper(asm: &mut String) {
+fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
+    // Common header (no bank-switch code for single-bank)
     asm.push_str(
         "; ============================================================================\n\
         ; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)\n\
         ; ============================================================================\n\
-        ; Processes both music (channel B) and SFX (channel C) in one pass\n\
         ; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems\n\
         ; Sets DP=$D0 once at entry, restores at exit\n\
-        ; RAM variables: PSG_MUSIC_PTR, PSG_IS_PLAYING, PSG_DELAY_FRAMES\n\
-        ;                PSG_MUSIC_BANK (for multibank: bank ID where music data lives)\n\
-        ;                SFX_PTR, SFX_ACTIVE (defined in SYSTEM RAM VARIABLES)\n\
         \n\
         AUDIO_UPDATE:\n\
         PSHS DP                 ; Save current DP\n\
         LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)\n\
         TFR A,DP\n\
-        \n\
-        ; MULTIBANK: Switch to music's bank before accessing data\n\
-        LDA >CURRENT_ROM_BANK   ; Get current bank\n\
-        PSHS A                  ; Save on stack\n\
-        LDA >PSG_MUSIC_BANK     ; Get music's bank\n\
-        CMPA ,S                 ; Compare with current bank\n\
-        BEQ AU_BANK_OK          ; Skip switch if same\n\
-        STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
-        STA $DF00               ; Switch bank hardware register\n\
-        AU_BANK_OK:\n\
-        \n\
-        ; UPDATE MUSIC (channel B: registers 9, 11-14)\n\
+        \n"
+    );
+
+    // Bank-switch block only for multibank projects.
+    // Single-bank: emitting PSHS A / STA $DF00 every frame causes spurious
+    // bank-switch side-effects in the emulator due to uninitialized RAM data.
+    if is_multibank {
+        asm.push_str(
+            "        ; MULTIBANK: Switch to music's bank before accessing data\n\
+            LDA >CURRENT_ROM_BANK   ; Get current bank\n\
+            PSHS A                  ; Save on stack\n\
+            LDA >PSG_MUSIC_BANK     ; Get music's bank\n\
+            CMPA ,S                 ; Compare with current bank\n\
+            BEQ AU_BANK_OK          ; Skip switch if same\n\
+            STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
+            STA $DF00               ; Switch bank hardware register\n\
+            AU_BANK_OK:\n\
+            \n"
+        );
+    }
+
+    // Music player body (common to both single and multibank)
+    asm.push_str(
+        "        ; UPDATE MUSIC\n\
         LDA >PSG_IS_PLAYING     ; Check if music is playing\n\
         BEQ AU_SKIP_MUSIC       ; Skip if not\n\
         \n\
@@ -733,9 +740,6 @@ fn emit_audio_update_helper(asm: &mut String) {
         AU_MUSIC_PROCESS_WRITES:\n\
         PSHS B                  ; Save count\n\
         \n\
-        ; Mark that next time we should read delay, not count\n\
-        ; (This is implicit - after processing, X points to next delay byte)\n\
-        \n\
         AU_MUSIC_WRITE_LOOP:\n\
         LDA ,X+                 ; Load register number\n\
         LDB ,X+                 ; Load register value\n\
@@ -772,12 +776,21 @@ fn emit_audio_update_helper(asm: &mut String) {
         \n\
         JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)\n\
         \n\
-        AU_DONE:\n\
-        ; MULTIBANK: Restore original bank\n\
-        PULS A                  ; Get saved bank from stack\n\
-        STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
-        STA $DF00               ; Restore bank hardware register\n\
-        PULS DP                 ; Restore original DP\n\
+        AU_DONE:\n"
+    );
+
+    // Bank-restore block only for multibank
+    if is_multibank {
+        asm.push_str(
+            "        ; MULTIBANK: Restore original bank\n\
+            PULS A                  ; Get saved bank from stack\n\
+            STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
+            STA $DF00               ; Restore bank hardware register\n"
+        );
+    }
+
+    asm.push_str(
+        "        PULS DP                 ; Restore original DP\n\
         RTS\n\
         \n"
     );

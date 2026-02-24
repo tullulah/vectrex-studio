@@ -25,18 +25,18 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 20 bytes
+; Total RAM used: 24 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
 TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
 TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
 TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
 TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
-NUM_STR              EQU $C880+$0A   ; String buffer for PRINT_NUMBER (2 bytes)
-VAR_ARG0             EQU $C880+$0C   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$0E   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$10   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$12   ; Function argument 3 (2 bytes)
+NUM_STR              EQU $C880+$0A   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+VAR_ARG0             EQU $C880+$10   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$12   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$14   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$16   ; Function argument 3 (2 bytes)
 
     JMP START
 
@@ -187,11 +187,11 @@ LOOP_BODY:
     ; DEBUG: Statement 0 - Discriminant(8)
     ; VPy_LINE:12
 ; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #10
+    LDD #-40
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #80
+    LDD #20
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -207,11 +207,11 @@ LOOP_BODY:
     ; DEBUG: Statement 1 - Discriminant(8)
     ; VPy_LINE:13
 ; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #10
+    LDD #-40
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #70
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
@@ -227,11 +227,11 @@ LOOP_BODY:
     ; DEBUG: Statement 2 - Discriminant(8)
     ; VPy_LINE:14
 ; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #10
+    LDD #-55
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #60
+    LDD #-20
     STD RESULT
     LDD RESULT
     STD VAR_ARG1

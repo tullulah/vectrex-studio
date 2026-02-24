@@ -142,8 +142,10 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("LOOP_BODY:\n");
         // Inject WAIT_RECAL at the start of every loop
         asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        // Inject Reset0Ref to position beam at center (0,0) before drawing
-        asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref is NOT called here. Each drawing primitive (DRAW_LINE,
+        // DRAW_CIRCLE, etc.) calls Reset0Ref internally before positioning the beam.
+        // Calling it here breaks PRINT_TEXT because it consumes the VIA scale factor
+        // that Wait_Recal sets up ($80), leaving it at a wrong value for Print_Str_d.
         // CRITICAL (2026-01-19): Button reading with proper DP handling
         // This sequence MUST happen before any user code to ensure DP=$C8 for normal RAM access
         asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
@@ -161,7 +163,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // Empty loop if not defined
         asm.push_str("LOOP_BODY:\n");
         asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         // CRITICAL: Button reading with proper DP handling (even if no user code)
         asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
@@ -485,7 +487,7 @@ pub fn generate_functions_by_bank(
     if let Some(loop_fn) = loop_fn {
         bank0_asm.push_str("LOOP_BODY:\n");
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        bank0_asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
         bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
@@ -499,7 +501,7 @@ pub fn generate_functions_by_bank(
     } else {
         bank0_asm.push_str("LOOP_BODY:\n");
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        bank0_asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
         bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");

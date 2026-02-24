@@ -30,7 +30,11 @@ START:
     CLR $C80E        ; Initialize Vec_Prev_Btns
     LDA #$80
     STA VIA_t1_cnt_lo
-    LDS #$CBFF       ; Initialize stack
+    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
+    TFR X,S
+    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
+    LDA #0
+    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
     JMP MAIN
 
 ;***************************************************************************
@@ -92,7 +96,6 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR Reset0Ref    ; Reset beam to center (0,0)
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
@@ -176,16 +179,14 @@ LOOP_BODY:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
     LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
     STA >$D00C     ; VIA_cntl
-    JSR $F1AA      ; DP_to_D0 - set Direct Page for BIOS/VIA access
-    LDU >VAR_ARG2   ; string pointer (third parameter)
-    LDA >VAR_ARG1+1 ; Y coordinate (second parameter, low byte)
-    LDB >VAR_ARG0+1 ; X coordinate (first parameter, low byte)
-    JSR Print_Str_d ; Print string from U register
-    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)
-    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state
+    LDA #$D0
+    TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    LDU VAR_ARG2   ; string pointer
+    LDA VAR_ARG1+1 ; Y coordinate
+    LDB VAR_ARG0+1 ; X coordinate
+    JSR Print_Str_d
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 

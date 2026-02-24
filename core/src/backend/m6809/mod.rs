@@ -494,6 +494,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         ram.allocate("PSG_MUSIC_ACTIVE", 1, "Set during UPDATE_MUSIC_PSG");
         ram.allocate("PSG_FRAME_COUNT", 1, "Frame register write count");
         ram.allocate("PSG_DELAY_FRAMES", 1, "Frames to wait before next read");
+        // Always allocate SFX_ACTIVE: AUDIO_UPDATE (emitted for music) unconditionally
+        // references it even when no SFX assets exist.
+        if !has_sfx_assets {
+            ram.allocate("SFX_ACTIVE", 1, "SFX playback flag (always needed by AUDIO_UPDATE)");
+        }
     }
     
     // 7. SFX variables (if SFX assets exist)
