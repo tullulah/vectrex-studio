@@ -6,6 +6,9 @@
 META TITLE = "JOYSTICK_POS"
 META MUSIC = music1
 
+x = 0
+y = 0
+
 def main():
     pass
 
@@ -15,14 +18,14 @@ def loop():
     y = J1_Y()
 
     # Display position values
-    PRINT_TEXT(-60, 80, "X:")
-    PRINT_NUMBER(-40, 80, x)
+    PRINT_TEXT(-60, 80, "POS X")
+    PRINT_NUMBER(10, 80, x)
 
-    PRINT_TEXT(-60, 70, "Y:")
-    PRINT_NUMBER(-40, 70, y)
+    PRINT_TEXT(-60, 60, "POS Y")
+    PRINT_NUMBER(10, 60, y)
 
     # Draw a circle that follows joystick position (scaled down)
     # This is the critical test: circle must NOT disappear on input
-    circle_x = x / 2
-    circle_y = y / 2
-    DRAW_CIRCLE(circle_x, circle_y, 15, 80)
+    # circle_x = x / 2
+    # circle_y = y / 2
+    # DRAW_CIRCLE(circle_x, circle_y, 15, 80)

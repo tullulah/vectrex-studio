@@ -402,9 +402,10 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    STA >$D00C     ; VIA_cntl\n");
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
-        asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
-        asm.push_str("    LDA VAR_ARG1+1 ; Y coordinate\n");
-        asm.push_str("    LDB VAR_ARG0+1 ; X coordinate\n");
+        asm.push_str("    JSR Reset0Ref  ; Zero integrators (CRITICAL: Joy_Analog leaves them at joystick pos)\n");
+        asm.push_str("    LDU >VAR_ARG2  ; string pointer (extended - DP=$D0 now)\n");
+        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
+        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
         asm.push_str("    JSR Print_Str_d\n");
         asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
@@ -489,6 +490,7 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    STA >$D00C       ; VIA_cntl = $98 (DAC mode)\n");
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
+        asm.push_str("    JSR Reset0Ref    ; Zero integrators (CRITICAL: Joy_Analog leaves them at joystick pos)\n");
         asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
         asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
         asm.push_str("    LDU #NUM_STR     ; String pointer\n");

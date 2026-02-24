@@ -46,23 +46,15 @@ TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
 TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
 NUM_STR              EQU $C880+$0A   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$10   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$11   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$12   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$13   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$14   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$15   ; Circle temporary buffer (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$1B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$25   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$27   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$29   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$2A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_X                EQU $C880+$2F   ; User variable: X (2 bytes)
-VAR_Y                EQU $C880+$31   ; User variable: Y (2 bytes)
-VAR_CIRCLE_X         EQU $C880+$33   ; User variable: CIRCLE_X (2 bytes)
-VAR_CIRCLE_Y         EQU $C880+$35   ; User variable: CIRCLE_Y (2 bytes)
+DRAW_LINE_ARGS       EQU $C880+$10   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1A   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$1C   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$1E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$1F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_X                EQU $C880+$24   ; User variable: x (2 bytes)
+VAR_Y                EQU $C880+$26   ; User variable: y (2 bytes)
 VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
@@ -175,50 +167,6 @@ LOOP_BODY:
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
-    LDD >VAR_X
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #2
-    STD RESULT
-    LDD RESULT
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD RESULT
-    LDD RESULT
-    STD VAR_CIRCLE_X
-    LDD >VAR_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #2
-    STD RESULT
-    LDD RESULT
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD RESULT
-    LDD RESULT
-    STD VAR_CIRCLE_Y
-    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
-    LDD >VAR_CIRCLE_X
-    STD RESULT
-    LDA RESULT+1
-    STA DRAW_CIRCLE_XC
-    LDD >VAR_CIRCLE_Y
-    STD RESULT
-    LDA RESULT+1
-    STA DRAW_CIRCLE_YC
-    LDD #15
-    STD RESULT
-    LDA RESULT+1
-    STA DRAW_CIRCLE_DIAM
-    LDD #80
-    STD RESULT
-    LDA RESULT+1
-    STA DRAW_CIRCLE_INTENSITY
-    JSR DRAW_CIRCLE_RUNTIME
-    LDD #0
-    STD RESULT
     RTS
 
 ;***************************************************************************
@@ -232,9 +180,10 @@ VECTREX_PRINT_TEXT:
     STA >$D00C     ; VIA_cntl
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    LDU VAR_ARG2   ; string pointer
-    LDA VAR_ARG1+1 ; Y coordinate
-    LDB VAR_ARG0+1 ; X coordinate
+    JSR Reset0Ref  ; Zero integrators (CRITICAL: Joy_Analog leaves them at joystick pos)
+    LDU >VAR_ARG2  ; string pointer (extended - DP=$D0 now)
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
@@ -315,34 +264,12 @@ VECTREX_PRINT_NUMBER:
     STA >$D00C       ; VIA_cntl = $98 (DAC mode)
     LDA #$D0
     TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    JSR Reset0Ref    ; Zero integrators (CRITICAL: Joy_Analog leaves them at joystick pos)
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
     LDU #NUM_STR     ; String pointer
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
     JSR $F1AF      ; Restore DP to $C8
-    RTS
-
-DIV16:
-    ; Divide 16-bit X / D -> D
-    ; Simple implementation
-    PSHS X,D
-    LDD #0         ; Quotient
-.DIV16_LOOP:
-    PSHS D         ; Save quotient
-    LDD 4,S        ; Load dividend (after PSHS D)
-    CMPD 2,S       ; Compare with divisor (after PSHS D)
-    PULS D         ; Restore quotient
-    BLT .DIV16_END
-    ADDD #1        ; Increment quotient
-    LDX 2,S
-    PSHS D
-    LDD 2,S        ; Divisor
-    LEAX D,X       ; Subtract divisor
-    STX 4,S
-    PULS D
-    BRA .DIV16_LOOP
-.DIV16_END:
-    LEAS 4,S
     RTS
 
 MOD16:
@@ -389,108 +316,6 @@ J1Y_BUILTIN:
     SEX          ; Sign-extend B to D
     ADDD #2      ; Calibrate center offset
     PULS X       ; Restore X
-    RTS
-
-DRAW_CIRCLE_RUNTIME:
-    ; Input: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY
-    ; Draw 8-sided polygon (octagon) approximation
-    
-    ; Set DP to $D0 for BIOS calls
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    
-    ; Set intensity
-    LDA >DRAW_CIRCLE_INTENSITY
-    JSR Intensity_a
-    
-    ; Calculate radius = diam / 2 (use B for 8-bit)
-    LDB >DRAW_CIRCLE_DIAM
-    LSRB                ; radius = diam / 2
-    STB >DRAW_CIRCLE_TEMP  ; Save radius
-    
-    ; Move to start point: (xc + radius, yc)
-    ; For octagon, start at rightmost point
-    LDB >DRAW_CIRCLE_XC
-    ADDB >DRAW_CIRCLE_TEMP  ; B = xc + radius
-    LDA >DRAW_CIRCLE_YC     ; A = yc
-    JSR Moveto_d            ; Move to (yc, xc+r)
-    
-    LDB >DRAW_CIRCLE_TEMP  ; B = radius
-    STB >DRAW_CIRCLE_RADIUS  ; Save radius in RAM
-    
-    ; Precompute r/4 and 3r/4 for regular octagon segments
-    LDB >DRAW_CIRCLE_RADIUS  ; B = r
-    LSRB
-    LSRB                ; B = r/4
-    STB >DRAW_CIRCLE_TEMP    ; Save r/4
-    LDB >DRAW_CIRCLE_RADIUS  ; B = r
-    SUBB >DRAW_CIRCLE_TEMP   ; B = r - r/4 = 3r/4
-    STB >DRAW_CIRCLE_TEMP+1  ; Save 3r/4
-    
-    ; Draw 8 unrolled segments - regular octagon inscribed in circle
-    ; Counterclockwise from rightmost point (xc+r, yc)
-    ; Draw_Line_d(A=dy, B=dx)
-    
-    ; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4
-    LDB >DRAW_CIRCLE_TEMP    ; r/4
-    NEGB
-    JSR Draw_Line_d
-    
-    ; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP    ; r/4
-    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4
-    NEGB
-    JSR Draw_Line_d
-    
-    ; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP    ; r/4
-    NEGA
-    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4
-    NEGB
-    JSR Draw_Line_d
-    
-    ; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4
-    NEGA
-    LDB >DRAW_CIRCLE_TEMP    ; r/4
-    NEGB
-    JSR Draw_Line_d
-    
-    ; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4
-    NEGA
-    LDB >DRAW_CIRCLE_TEMP    ; r/4 (positive)
-    JSR Draw_Line_d
-    
-    ; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP    ; r/4
-    NEGA
-    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4 (positive)
-    JSR Draw_Line_d
-    
-    ; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP    ; r/4 (positive)
-    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4 (positive)
-    JSR Draw_Line_d
-    
-    ; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4 (positive)
-    LDB >DRAW_CIRCLE_TEMP    ; r/4 (positive)
-    JSR Draw_Line_d
-    
-    ; Restore DP to $C8
-    LDA #$C8
-    TFR A,DP
     RTS
 
 ;**** PRINT_TEXT String Data ****
