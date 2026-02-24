@@ -382,7 +382,6 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
     let needed = analyze_module_helpers(module);
     
     // Get BIOS function addresses from VECTREX.I
-    let dp_to_d0 = get_bios_address("DP_to_D0", "$F1AA");
     let dp_to_c8 = get_bios_address("DP_to_C8", "$F1AF");
     
     // NOTE: RAM allocation and EQU definitions are now handled by generate_ram_and_arrays()
@@ -415,24 +414,24 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
     // Only emit if PRINT_NUMBER is actually used in code
     if needed.contains("PRINT_NUMBER") {
         asm.push_str("VECTREX_PRINT_NUMBER:\n");
-        asm.push_str("    ; Print 16-bit decimal number (0-9999)\n");
+        asm.push_str("    ; Print signed decimal number (-9999 to 9999)\n");
         asm.push_str("    ; ARG0=x, ARG1=y, ARG2=value\n");
         asm.push_str("    ;\n");
         asm.push_str("    ; STEP 1: Convert number to decimal string (DP=$C8)\n");
-        asm.push_str("    ; Algorithm: Store number in TMPVAL, use buffer byte as counter,\n");
-        asm.push_str("    ; reload D from TMPVAL each iteration (avoids A/D register conflict)\n");
-        asm.push_str("    LDD >VAR_ARG2   ; Load 16-bit number (safe: DP=$C8)\n");
-        asm.push_str("    STD >TMPVAL      ; Save number to temp\n");
+        asm.push_str("    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n");
+        asm.push_str("    STD >TMPVAL      ; Save to temp\n");
         asm.push_str("    LDX #NUM_STR    ; String buffer pointer\n");
         asm.push_str("    \n");
-        asm.push_str("    ; Check for 0\n");
+        asm.push_str("    ; Check sign: negative values get '-' prefix and are negated\n");
         asm.push_str("    CMPD #0\n");
-        asm.push_str("    BNE .PN_DIV1000\n");
-        asm.push_str("    LDA #'0'\n");
-        asm.push_str("    STA ,X+\n");
-        asm.push_str("    LDA #$80        ; Terminator byte (same format as FCC/FCB strings)\n");
-        asm.push_str("    STA ,X\n");
-        asm.push_str("    BRA .PN_AFTER_CONVERT\n");
+        asm.push_str("    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion\n");
+        asm.push_str("    LDA #'-'\n");
+        asm.push_str("    STA ,X+          ; Store '-', advance buffer pointer\n");
+        asm.push_str("    LDD >TMPVAL\n");
+        asm.push_str("    COMA\n");
+        asm.push_str("    COMB\n");
+        asm.push_str("    ADDD #1          ; Two's complement negation -> absolute value\n");
+        asm.push_str("    STD >TMPVAL\n");
         asm.push_str("    \n");
         asm.push_str("    ; --- 1000s digit ---\n");
         asm.push_str(".PN_DIV1000:\n");
@@ -488,7 +487,8 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n");
         asm.push_str("    LDA #$98\n");
         asm.push_str("    STA >$D00C       ; VIA_cntl = $98 (DAC mode)\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_D0 for Print_Str_d\n", dp_to_d0));
+        asm.push_str("    LDA #$D0\n");
+        asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
         asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
         asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
         asm.push_str("    LDU #NUM_STR     ; String pointer\n");
