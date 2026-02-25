@@ -1226,7 +1226,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     if matches!(up.as_str(), "ABS"|"MATH_ABS") {
     if let Some(arg) = args.first() { emit_expr(arg, out, fctx, string_map, opts); } else { out.push_str("    LDD #0\n    STD RESULT\n"); return true; }
         let done = fresh_label("ABS_DONE");
-        out.push_str(&format!("    LDD RESULT\n    TSTA\n    BPL {}\n    COMA\n    COMB\n    ADDD #1\n{}: STD RESULT\n", done, done));
+        out.push_str(&format!("    LDD RESULT\n    TSTA\n    BPL {}\n    COMA\n    COMB\n    ADDD #1\n{}:\n    STD RESULT\n", done, done));
         return true;
     }
     
@@ -1432,7 +1432,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         let done      = fresh_label("MIN_DONE");
         // Compare TMPLEFT (first) with RESULT (second)
         out.push_str(&format!(
-            "    LDD TMPLEFT\n    CMPD RESULT\n    BLE {}\n    BRA {}\n{}: STD RESULT\n{}: \n",
+            "    LDD TMPLEFT\n    CMPD RESULT\n    BLE {}\n    BRA {}\n{}:\n    STD RESULT\n{}:\n",
             first_wins, done, first_wins, done
         ));
         return true;
@@ -1447,7 +1447,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         let first_wins = fresh_label("MAX_FIRST");
         let done      = fresh_label("MAX_DONE");
         out.push_str(&format!(
-            "    LDD TMPLEFT\n    CMPD RESULT\n    BGE {}\n    BRA {}\n{}: STD RESULT\n{}: \n",
+            "    LDD TMPLEFT\n    CMPD RESULT\n    BGE {}\n    BRA {}\n{}:\n    STD RESULT\n{}:\n",
             first_wins, done, first_wins, done
         ));
         return true;
@@ -1469,7 +1469,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         let use_hi = fresh_label("CLAMP_USE_HI");
         let done = fresh_label("CLAMP_DONE");
         out.push_str(&format!(
-            "    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    BRA {}\n{}: LDD TMPRIGHT\n    BRA {}\n{}: LDD TMPLEFT\n    SUBD TMPLEFT2\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD TMPLEFT2\n{}: STD RESULT\n",
+            "    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    BRA {}\n{}:\n    LDD TMPRIGHT\n    BRA {}\n{}:\n    LDD TMPLEFT\n    SUBD TMPLEFT2\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}:\n    LDD TMPLEFT2\n{}:\n    STD RESULT\n",
             use_lo, check_hi, use_lo, done, check_hi, use_hi, done, use_hi, done
         ));
         return true;
