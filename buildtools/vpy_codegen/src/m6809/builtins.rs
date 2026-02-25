@@ -189,8 +189,8 @@ pub fn emit_builtin(
         }
         "J1_BUTTON_1" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)\n");
-            out.push_str("    ANDA #$01      ; Test bit 0\n");
+            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
+            out.push_str("    ANDA #$01      ; Test bit 0 (Button 1)\n");
             out.push_str(&format!("    LBEQ .J1B1_{}_OFF\n", label_id));
             out.push_str("    LDD #1\n");
             out.push_str(&format!("    LBRA .J1B1_{}_END\n", label_id));
@@ -202,8 +202,8 @@ pub fn emit_builtin(
         }
         "J1_BUTTON_2" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)\n");
-            out.push_str("    ANDA #$02      ; Test bit 1\n");
+            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
+            out.push_str("    ANDA #$02      ; Test bit 1 (Button 2)\n");
             out.push_str(&format!("    LBEQ .J1B2_{}_OFF\n", label_id));
             out.push_str("    LDD #1\n");
             out.push_str(&format!("    LBRA .J1B2_{}_END\n", label_id));
@@ -215,8 +215,8 @@ pub fn emit_builtin(
         }
         "J1_BUTTON_3" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)\n");
-            out.push_str("    ANDA #$04      ; Test bit 2\n");
+            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
+            out.push_str("    ANDA #$04      ; Test bit 2 (Button 3)\n");
             out.push_str(&format!("    LBEQ .J1B3_{}_OFF\n", label_id));
             out.push_str("    LDD #1\n");
             out.push_str(&format!("    LBRA .J1B3_{}_END\n", label_id));
@@ -228,8 +228,8 @@ pub fn emit_builtin(
         }
         "J1_BUTTON_4" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)\n");
-            out.push_str("    ANDA #$08      ; Test bit 3\n");
+            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
+            out.push_str("    ANDA #$08      ; Test bit 3 (Button 4)\n");
             out.push_str(&format!("    LBEQ .J1B4_{}_OFF\n", label_id));
             out.push_str("    LDD #1\n");
             out.push_str(&format!("    LBRA .J1B4_{}_END\n", label_id));

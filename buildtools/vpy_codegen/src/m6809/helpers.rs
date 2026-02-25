@@ -405,6 +405,7 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.\n");
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
+        asm.push_str("    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)\n");
         asm.push_str("    JSR Reset0Ref   ; Reset beam to center before positioning text\n");
         asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
         asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");

@@ -58,6 +58,7 @@ pub fn emit_draw_circle(
                 out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
                     dy, dx));
             }
+            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after circle drawing\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }
