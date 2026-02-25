@@ -189,19 +189,37 @@ install_node_modules_if_missing() {
 install_node_modules_if_missing "$ROOT/ide/frontend"
 install_node_modules_if_missing "$ROOT/ide/electron"
 
-# Build Rust (buildtools compiler only) salvo --no-rust-build
-# NOTE: LSP compilation disabled - core is deprecated, LSP needs migration to buildtools
+# Build Rust compilers salvo --no-rust-build
+# Siempre compilar en --release y copiar a ide/electron/resources/
+# para garantizar que el IDE usa el binario más reciente del código fuente.
 if [ "$NO_RUST_BUILD" = false ]; then
   if ! command -v cargo &> /dev/null; then
     echo '[WARN] cargo no encontrado; se omite build Rust'
   else
-    # Build buildtools compiler (nuevo modular compiler)
-    echo '[INFO] cargo build (buildtools compiler)'
-    (cd "$ROOT/buildtools" && cargo build --bin vpy_cli)
+    RESOURCES_DIR="$ROOT/ide/electron/resources"
+
+    # El workspace raíz incluye buildtools/* y core, por lo que ambos
+    # binarios se generan en $ROOT/target/release/
+
+    # 1. Build buildtools compiler (vpy_cli) — compilador principal
+    echo '[INFO] cargo build --release (vpy_cli)'
+    (cd "$ROOT" && cargo build --release --bin vpy_cli)
     if [ $? -ne 0 ]; then
-      echo '[ERR ] cargo build (buildtools) falló'
+      echo '[ERR ] cargo build (vpy_cli) falló'
       exit 1
     fi
+    cp "$ROOT/target/release/vpy_cli" "$RESOURCES_DIR/vpy_cli"
+    echo "[OK  ] vpy_cli copiado a $RESOURCES_DIR/"
+
+    # 2. Build core compiler (vectrexc) — compilador legacy usado por el IDE
+    echo '[INFO] cargo build --release (vectrexc)'
+    (cd "$ROOT" && cargo build --release --bin vectrexc)
+    if [ $? -ne 0 ]; then
+      echo '[ERR ] cargo build (vectrexc) falló'
+      exit 1
+    fi
+    cp "$ROOT/target/release/vectrexc" "$RESOURCES_DIR/vectrexc"
+    echo "[OK  ] vectrexc copiado a $RESOURCES_DIR/"
   fi
 fi
 
