@@ -4,6 +4,15 @@ All documentation lives in `docs/`. The only exception is `README.md` at the pro
 
 ---
 
+## Release Notes
+
+| File | Description |
+|------|-------------|
+| [CHANGELOG.md](CHANGELOG.md) | Full version history |
+| [blog/2026-02-25-v0.1.1.md](blog/2026-02-25-v0.1.1.md) | v0.1.1 — Math builtins, MOVE, 16-seg circles, snippets |
+
+---
+
 ## Getting Started
 
 | File | Description |

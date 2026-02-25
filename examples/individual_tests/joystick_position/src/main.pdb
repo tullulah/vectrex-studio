@@ -1,0 +1,221 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "main.asm",
+  "binary": "main.bin",
+  "entryPoint": "0x0000",
+  "symbols": {},
+  "lineMap": {},
+  "vpyLineMap": {},
+  "asmLineMap": {},
+  "functions": {},
+  "nativeCalls": {
+    "21": "VECTREX_PRINT_TEXT",
+    "22": "VECTREX_PRINT_NUMBER",
+    "24": "VECTREX_PRINT_TEXT",
+    "17": "J1_X",
+    "25": "VECTREX_PRINT_NUMBER",
+    "18": "J1_Y"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "main.asm",
+      "startLine": 136,
+      "endLine": 150,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {},
+  "variables": {
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC89A",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "y": {
+      "name": "y",
+      "address": "0xC8AE",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC899",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8B8",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8A4",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT": {
+      "name": "TMPLEFT",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC898",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8B2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_B": {
+      "name": "DIV_B",
+      "address": "0xC890",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8B4",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC896",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8B6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8A2",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_Q": {
+      "name": "DIV_Q",
+      "address": "0xC892",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "x": {
+      "name": "x",
+      "address": "0xC8AC",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_R": {
+      "name": "DIV_R",
+      "address": "0xC894",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC8A0",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC8A1",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8A3",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_A": {
+      "name": "DIV_A",
+      "address": "0xC88E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8B0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

@@ -54,12 +54,12 @@ VLINE_DY             EQU $C880+$1F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 VAR_COUNTER          EQU $C880+$24   ; User variable: COUNTER (2 bytes)
-VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CFE6   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CFE8   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 
 ;***************************************************************************
@@ -179,36 +179,40 @@ LOOP_BODY:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
+    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
+    ;       causing integrators to drift toward joystick DAC value.
+    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
-    LDA VAR_ARG1+1 ; Y coordinate
-    LDB VAR_ARG0+1 ; X coordinate
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
+    LDA #$80
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
 VECTREX_PRINT_NUMBER:
-    ; Print 16-bit decimal number (0-9999)
+    ; Print signed decimal number (-9999 to 9999)
     ; ARG0=x, ARG1=y, ARG2=value
     ;
     ; STEP 1: Convert number to decimal string (DP=$C8)
-    ; Algorithm: Store number in TMPVAL, use buffer byte as counter,
-    ; reload D from TMPVAL each iteration (avoids A/D register conflict)
-    LDD >VAR_ARG2   ; Load 16-bit number (safe: DP=$C8)
-    STD >TMPVAL      ; Save number to temp
+    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)
+    STD >TMPVAL      ; Save to temp
     LDX #NUM_STR    ; String buffer pointer
     
-    ; Check for 0
+    ; Check sign: negative values get '-' prefix and are negated
     CMPD #0
-    BNE .PN_DIV1000
-    LDA #'0'
-    STA ,X+
-    LDA #$80        ; Terminator byte (same format as FCC/FCB strings)
-    STA ,X
-    BRA .PN_AFTER_CONVERT
+    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion
+    LDA #'-'
+    STA ,X+          ; Store '-', advance buffer pointer
+    LDD >TMPVAL
+    COMA
+    COMB
+    ADDD #1          ; Two's complement negation -> absolute value
+    STD >TMPVAL
     
     ; --- 1000s digit ---
 .PN_DIV1000:
@@ -262,33 +266,59 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    LDA #$98
-    STA >$D00C       ; VIA_cntl = $98 (DAC mode)
-    JSR $F1AA      ; DP_to_D0 for Print_Str_d
+    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
+    LDA #$D0
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    JSR Reset0Ref    ; Reset beam to center before positioning text
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
     LDU #NUM_STR     ; String pointer
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    LDA #$80
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
     JSR $F1AF      ; Restore DP to $C8
     RTS
 
 MOD16:
-    ; Modulo 16-bit X % D -> D
-    PSHS X,D
-.MOD16_LOOP:
-    PSHS D         ; Save D
-    LDD 4,S        ; Load dividend (after PSHS D)
-    CMPD 2,S       ; Compare with divisor (after PSHS D)
-    PULS D         ; Restore D
-    BLT .MOD16_END
-    LDX 2,S
-    LDD ,S
-    LEAX D,X
-    STX 2,S
-    BRA .MOD16_LOOP
-.MOD16_END:
-    LDD 2,S        ; Remainder
-    LEAS 4,S
+    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
+    ; X = dividend (i16), D = divisor (i16) -> D = remainder
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .M16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1
+    BRA .M16_RCHECK
+.M16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.M16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .M16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+.M16_RPOS:
+.M16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .M16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    BRA .M16_LOOP
+.M16_END:
+    LDD TMPVAL          ; D = |remainder|
+    LDA TMPPTR2
+    BEQ .M16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate (same sign as dividend)
+.M16_DONE:
     RTS
 
 ;**** PRINT_TEXT String Data ****

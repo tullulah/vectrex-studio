@@ -60,6 +60,7 @@ J1X_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
     LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -73,6 +74,7 @@ J1Y_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
     LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -143,7 +145,13 @@ JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
 ; ============================================================================
 ; Follows Draw_Sync_List_At pattern: read params BEFORE DP change
 ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
-; Uses 8 segments (regular octagon inscribed in circle) with unrolled loop
+; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions
+; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):
+;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2
+;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3
+;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4
+;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5
+; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
 DRAW_CIRCLE_RUNTIME:
 ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
 ; (These are byte variables, use LDB not LDD)
@@ -154,20 +162,22 @@ LDB DRAW_CIRCLE_DIAM
 SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
 LSRA                   ; Divide by 2 to get radius
 RORB
-STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit)
+STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)
 
 LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+2 ; Save xc
+STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
 
 LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+4 ; Save yc
+STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
 
 ; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
 LDA #$D0
 TFR A,DP
 JSR Reset0Ref
+LDA #$80
+STA <$04           ; VIA_t1_cnt_lo = $80 (ensure correct scale)
 
 ; Set intensity (from stack)
 PULS A                 ; Get intensity from stack
@@ -179,9 +189,9 @@ DCR_intensity_5F:
 JSR Intensity_5F
 DCR_after_intensity:
 
-; Move to start position: (xc + radius, yc)
+; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]
 ; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
-LDD DRAW_CIRCLE_TEMP   ; D = radius
+LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
 ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
 TFR B,B                ; Keep X in B (low byte)
 PSHS B                 ; Save X on stack
@@ -190,76 +200,140 @@ TFR B,A                ; Y to A
 PULS B                 ; X to B
 JSR Moveto_d
 
-; Precompute r/4 and 3r/4 for regular octagon segments
-; Radius low byte is at DRAW_CIRCLE_TEMP+1
-LDB DRAW_CIRCLE_TEMP+1 ; Load radius (low byte)
-LSRB
-LSRB                   ; B = r/4
-STB DRAW_CIRCLE_TEMP+6 ; Save r/4 in spare byte
-LDB DRAW_CIRCLE_TEMP+1 ; Load radius
-SUBB DRAW_CIRCLE_TEMP+6 ; B = r - r/4 = 3r/4
-STB DRAW_CIRCLE_TEMP+7 ; Save 3r/4 in spare byte
+; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)
+; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
+; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
+; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)
+LDB DRAW_CIRCLE_TEMP+1 ; radius
+LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827
+MUL                    ; A = floor(0.3828 * r) = a
+STA DRAW_CIRCLE_TEMP+2 ; Store a
+LDB DRAW_CIRCLE_TEMP+1 ; radius
+LDA #83                ; 83/256 = 0.3242 ~ 0.3244
+MUL                    ; A = b
+STA DRAW_CIRCLE_TEMP+3 ; Store b
+LDB DRAW_CIRCLE_TEMP+1 ; radius
+LDA #56                ; 56/256 = 0.2188 ~ 0.2168
+MUL                    ; A = c
+STA DRAW_CIRCLE_TEMP+4 ; Store c
+LDB DRAW_CIRCLE_TEMP+1 ; radius
+LDA #19                ; 19/256 = 0.0742 ~ 0.0761
+MUL                    ; A = d
+STA DRAW_CIRCLE_TEMP+5 ; Store d
 
-; Draw 8 unrolled segments - regular octagon inscribed in circle
-; Counterclockwise from rightmost point (xc+r, yc)
-; Draw_Line_d(A=dy, B=dx)
+; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)
+; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:
+;   Q1 (0->90):   (+a,-d), (+b,-c), (+c,-b), (+d,-a)
+;   Q2 (90->180): (-d,-a), (-c,-b), (-b,-c), (-a,-d)
+;   Q3 (180->270):(-a,+d), (-b,+c), (-c,+b), (-d,+a)
+;   Q4 (270->360):(+d,+a), (+c,+b), (+b,+c), (+a,+d)
 
-; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4
+; --- Q1 ---
+; Seg 0: dy=+a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
-LDB DRAW_CIRCLE_TEMP+6  ; r/4
+LDA DRAW_CIRCLE_TEMP+2  ; a
+LDB DRAW_CIRCLE_TEMP+5  ; d
+NEGB
+JSR Draw_Line_d
+; Seg 1: dy=+b, dx=-c
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+3  ; b
+LDB DRAW_CIRCLE_TEMP+4  ; c
+NEGB
+JSR Draw_Line_d
+; Seg 2: dy=+c, dx=-b
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+4  ; c
+LDB DRAW_CIRCLE_TEMP+3  ; b
+NEGB
+JSR Draw_Line_d
+; Seg 3: dy=+d, dx=-a
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+5  ; d
+LDB DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 
-; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4
+; --- Q2 ---
+; Seg 4: dy=-d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4
+LDA DRAW_CIRCLE_TEMP+5  ; d
+NEGA
+LDB DRAW_CIRCLE_TEMP+2  ; a
+NEGB
+JSR Draw_Line_d
+; Seg 5: dy=-c, dx=-b
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+4  ; c
+NEGA
+LDB DRAW_CIRCLE_TEMP+3  ; b
+NEGB
+JSR Draw_Line_d
+; Seg 6: dy=-b, dx=-c
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+3  ; b
+NEGA
+LDB DRAW_CIRCLE_TEMP+4  ; c
+NEGB
+JSR Draw_Line_d
+; Seg 7: dy=-a, dx=-d
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+2  ; a
+NEGA
+LDB DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 
-; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4
+; --- Q3 ---
+; Seg 8: dy=-a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4
+LDA DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4
-NEGB
+LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
-
-; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4
+; Seg 9: dy=-b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
+LDA DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+6  ; r/4
-NEGB
+LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
-
-; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4
+; Seg 10: dy=-c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
+LDA DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
+LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
-
-; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4
+; Seg 11: dy=-d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4
+LDA DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
+LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 
-; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4
+; --- Q4 ---
+; Seg 12: dy=+d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
-LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
+LDA DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
-
-; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4
+; Seg 13: dy=+c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
-LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
+LDA DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+JSR Draw_Line_d
+; Seg 14: dy=+b, dx=+c
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+JSR Draw_Line_d
+; Seg 15: dy=+a, dx=+d
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 
+LDA #$C8
+TFR A,DP           ; Restore DP=$C8 before return
 RTS
 
 START:
@@ -319,6 +393,8 @@ LOOP_BODY:
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
+    LDA #$80
+    STA <$04
     LDA #$00
     LDB #$0F
     JSR Moveto_d
@@ -395,6 +471,8 @@ LOOP_BODY:
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
+    LDA #$80
+    STA <$04
     LDA #$00
     LDB #$CE
     JSR Moveto_d
@@ -492,6 +570,8 @@ LOOP_BODY:
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
+    LDA #$80
+    STA <$04
     LDA #$3C
     LDB #$08
     JSR Moveto_d

@@ -3,1564 +3,2576 @@
   "source": "main.vpy",
   "asm": "joystick_position.asm",
   "binary": "joystick_position.bin",
-  "entryPoint": "0x013A",
+  "entryPoint": "0x020D",
   "symbols": {
-    "VECTREX_PRINT_NUMBER.PN_L100": "0x00D8",
-    "__Draw_Line_d": "0x0135",
-    "J1B3_BUILTIN": "0x006A",
-    "__Moveto_d": "0x0130",
-    "VECTREX_PRINT_NUMBER.PN_D1000": "0x00D0",
-    "J1B2_BUILTIN": "0x005B",
-    "MAIN": "0x0157",
-    "LOOP_BODY": "0x017E",
-    "VECTREX_PRINT_NUMBER.PN_DIV1000": "0x00BF",
-    "VECTREX_PRINT_TEXT": "0x0088",
-    "J1B1_BUILTIN.J1B1_OFF": "0x0057",
-    "J1B3_BUILTIN.J1B3_OFF": "0x0075",
-    "VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT": "0x010F",
-    "STR_1": "0x0263",
-    "VECTREX_PRINT_NUMBER.PN_L10": "0x00EF",
-    "J1B4_BUILTIN": "0x0079",
-    "__Intensity_a": "0x0128",
-    "VECTREX_PRINT_NUMBER.PN_D10": "0x00FE",
     "J1X_BUILTIN": "0x0022",
-    "J1Y_BUILTIN": "0x0037",
-    "J1B1_BUILTIN": "0x004C",
-    "START": "0x013A",
-    "__Reset0Ref": "0x012D",
-    "STR_0": "0x025D",
-    "VECTREX_PRINT_NUMBER": "0x00A1",
-    "J1B2_BUILTIN.J1B2_OFF": "0x0066",
-    "J1B4_BUILTIN.J1B4_OFF": "0x0084",
-    "VECTREX_PRINT_NUMBER.PN_L1000": "0x00C1",
-    "VECTREX_PRINT_NUMBER.PN_D100": "0x00E7"
+    "J1B1_BUILTIN.J1B1_OFF": "0x005D",
+    "VECTREX_PRINT_NUMBER.PN_D10": "0x0107",
+    "J1B4_BUILTIN": "0x007F",
+    "J1B3_BUILTIN.J1B3_OFF": "0x007B",
+    "J1B1_BUILTIN": "0x0052",
+    "__Moveto_d": "0x013C",
+    "DIV16": "0x03A7",
+    "LOOP_BODY": "0x025D",
+    "__Intensity_a": "0x0134",
+    "DIV16_LOOP": "0x03B8",
+    "J1B2_BUILTIN.J1B2_OFF": "0x006C",
+    "DIV16_DONE": "0x03CE",
+    "DCR_after_intensity": "0x017B",
+    "J1B2_BUILTIN": "0x0061",
+    "VECTREX_PRINT_NUMBER": "0x00AA",
+    "MAIN": "0x0236",
+    "J1B3_BUILTIN": "0x0070",
+    "VECTREX_PRINT_NUMBER.PN_D100": "0x00F0",
+    "DCR_intensity_5F": "0x0178",
+    "J1B4_BUILTIN.J1B4_OFF": "0x008A",
+    "VECTREX_PRINT_TEXT": "0x008E",
+    "VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT": "0x0118",
+    "VECTREX_PRINT_NUMBER.PN_L1000": "0x00CA",
+    "STR_0": "0x03D5",
+    "VECTREX_PRINT_NUMBER.PN_D1000": "0x00D9",
+    "DRAW_CIRCLE_RUNTIME": "0x0146",
+    "J1Y_BUILTIN": "0x003A",
+    "VECTREX_PRINT_NUMBER.PN_L10": "0x00F8",
+    "VECTREX_PRINT_NUMBER.PN_DIV1000": "0x00C8",
+    "__Draw_Line_d": "0x0141",
+    "STR_1": "0x03DB",
+    "__Reset0Ref": "0x0139",
+    "START": "0x020D",
+    "VECTREX_PRINT_NUMBER.PN_L100": "0x00E1"
   },
   "lineMap": {
-    "9": "0x014B",
-    "25": "0x0230",
-    "21": "0x01AC",
-    "10": "0x0151",
-    "24": "0x0204",
-    "18": "0x019B",
-    "22": "0x01D8",
-    "17": "0x018A"
+    "23": "0x028B",
+    "27": "0x030F",
+    "32": "0x0354",
+    "33": "0x036D",
+    "26": "0x02E3",
+    "11": "0x022A",
+    "10": "0x0224",
+    "12": "0x0230",
+    "19": "0x0269",
+    "20": "0x027A",
+    "24": "0x02B7",
+    "9": "0x021E",
+    "31": "0x033B"
   },
   "vpyLineMap": {
-    "0x014B": {
-      "file": "main.vpy",
-      "address": "0x014B",
-      "line": 9
-    },
-    "0x0151": {
-      "file": "main.vpy",
-      "address": "0x0151",
-      "line": 10
-    },
-    "0x018A": {
-      "file": "main.vpy",
-      "address": "0x018A",
-      "line": 17
-    },
-    "0x0204": {
-      "file": "main.vpy",
-      "address": "0x0204",
-      "line": 24
-    },
-    "0x01D8": {
-      "file": "main.vpy",
-      "address": "0x01D8",
-      "line": 22
-    },
     "0x0230": {
       "file": "main.vpy",
       "address": "0x0230",
-      "line": 25
+      "line": 12
     },
-    "0x019B": {
+    "0x0354": {
       "file": "main.vpy",
-      "address": "0x019B",
-      "line": 18
+      "address": "0x0354",
+      "line": 32
     },
-    "0x01AC": {
+    "0x0269": {
       "file": "main.vpy",
-      "address": "0x01AC",
-      "line": 21
+      "address": "0x0269",
+      "line": 19
+    },
+    "0x030F": {
+      "file": "main.vpy",
+      "address": "0x030F",
+      "line": 27
+    },
+    "0x033B": {
+      "file": "main.vpy",
+      "address": "0x033B",
+      "line": 31
+    },
+    "0x022A": {
+      "file": "main.vpy",
+      "address": "0x022A",
+      "line": 11
+    },
+    "0x0224": {
+      "file": "main.vpy",
+      "address": "0x0224",
+      "line": 10
+    },
+    "0x027A": {
+      "file": "main.vpy",
+      "address": "0x027A",
+      "line": 20
+    },
+    "0x02B7": {
+      "file": "main.vpy",
+      "address": "0x02B7",
+      "line": 24
+    },
+    "0x021E": {
+      "file": "main.vpy",
+      "address": "0x021E",
+      "line": 9
+    },
+    "0x036D": {
+      "file": "main.vpy",
+      "address": "0x036D",
+      "line": 33
+    },
+    "0x028B": {
+      "file": "main.vpy",
+      "address": "0x028B",
+      "line": 23
+    },
+    "0x02E3": {
+      "file": "main.vpy",
+      "address": "0x02E3",
+      "line": 26
     }
   },
   "asmLineMap": {
-    "0x0079": {
+    "0x0255": {
       "file": "joystick_position.asm",
-      "address": "0x0079",
-      "line": 111
+      "address": "0x0255",
+      "line": 45
     },
-    "0x0083": {
+    "0x00EE": {
       "file": "joystick_position.asm",
-      "address": "0x0083",
-      "line": 117
+      "address": "0x00EE",
+      "line": 202
     },
-    "0x0024": {
+    "0x0394": {
       "file": "joystick_position.asm",
-      "address": "0x0024",
-      "line": 52
+      "address": "0x0394",
+      "line": 558
     },
-    "0x00C9": {
+    "0x00E9": {
       "file": "joystick_position.asm",
-      "address": "0x00C9",
-      "line": 164
+      "address": "0x00E9",
+      "line": 200
     },
-    "0x0130": {
+    "0x00C5": {
       "file": "joystick_position.asm",
-      "address": "0x0130",
-      "line": 217
+      "address": "0x00C5",
+      "line": 174
     },
-    "0x002D": {
+    "0x0312": {
       "file": "joystick_position.asm",
-      "address": "0x002D",
-      "line": 55
+      "address": "0x0312",
+      "line": 503
     },
-    "0x0207": {
+    "0x00B0": {
       "file": "joystick_position.asm",
-      "address": "0x0207",
-      "line": 331
+      "address": "0x00B0",
+      "line": 159
     },
-    "0x0239": {
+    "0x00DF": {
       "file": "joystick_position.asm",
-      "address": "0x0239",
-      "line": 352
+      "address": "0x00DF",
+      "line": 191
     },
-    "0x016C": {
+    "0x00DD": {
       "file": "joystick_position.asm",
-      "address": "0x016C",
-      "line": 252
+      "address": "0x00DD",
+      "line": 190
     },
-    "0x018A": {
+    "0x0388": {
       "file": "joystick_position.asm",
-      "address": "0x018A",
-      "line": 273
+      "address": "0x0388",
+      "line": 554
     },
-    "0x0251": {
+    "0x002A": {
       "file": "joystick_position.asm",
-      "address": "0x0251",
-      "line": 360
+      "address": "0x002A",
+      "line": 70
     },
-    "0x01F0": {
+    "0x0333": {
       "file": "joystick_position.asm",
-      "address": "0x01F0",
-      "line": 318
+      "address": "0x0333",
+      "line": 515
     },
-    "0x025D": {
+    "0x00C3": {
       "file": "joystick_position.asm",
-      "address": "0x025D",
+      "address": "0x00C3",
+      "line": 169
+    },
+    "0x0397": {
+      "file": "joystick_position.asm",
+      "address": "0x0397",
+      "line": 559
+    },
+    "0x03C0": {
+      "file": "joystick_position.asm",
+      "address": "0x03C0",
+      "line": 579
+    },
+    "0x01C8": {
+      "file": "joystick_position.asm",
+      "address": "0x01C8",
+      "line": 341
+    },
+    "0x01CF": {
+      "file": "joystick_position.asm",
+      "address": "0x01CF",
+      "line": 344
+    },
+    "0x0146": {
+      "file": "joystick_position.asm",
+      "address": "0x0146",
+      "line": 250
+    },
+    "0x0139": {
+      "file": "joystick_position.asm",
+      "address": "0x0139",
+      "line": 234
+    },
+    "0x02B7": {
+      "file": "joystick_position.asm",
+      "address": "0x02B7",
+      "line": 463
+    },
+    "0x0214": {
+      "file": "joystick_position.asm",
+      "address": "0x0214",
       "line": 373
     },
-    "0x0132": {
+    "0x037C": {
       "file": "joystick_position.asm",
-      "address": "0x0132",
-      "line": 218
+      "address": "0x037C",
+      "line": 550
     },
-    "0x00EA": {
+    "0x0033": {
       "file": "joystick_position.asm",
-      "address": "0x00EA",
-      "line": 187
+      "address": "0x0033",
+      "line": 73
     },
-    "0x012A": {
+    "0x0134": {
       "file": "joystick_position.asm",
-      "address": "0x012A",
-      "line": 213
-    },
-    "0x005B": {
-      "file": "joystick_position.asm",
-      "address": "0x005B",
-      "line": 91
-    },
-    "0x0109": {
-      "file": "joystick_position.asm",
-      "address": "0x0109",
-      "line": 209
-    },
-    "0x0179": {
-      "file": "joystick_position.asm",
-      "address": "0x0179",
-      "line": 261
-    },
-    "0x01AA": {
-      "file": "joystick_position.asm",
-      "address": "0x01AA",
-      "line": 287
-    },
-    "0x012D": {
-      "file": "joystick_position.asm",
-      "address": "0x012D",
-      "line": 215
-    },
-    "0x00F4": {
-      "file": "joystick_position.asm",
-      "address": "0x00F4",
-      "line": 195
-    },
-    "0x0135": {
-      "file": "joystick_position.asm",
-      "address": "0x0135",
-      "line": 220
-    },
-    "0x0143": {
-      "file": "joystick_position.asm",
-      "address": "0x0143",
-      "line": 14
-    },
-    "0x0104": {
-      "file": "joystick_position.asm",
-      "address": "0x0104",
-      "line": 206
-    },
-    "0x00CE": {
-      "file": "joystick_position.asm",
-      "address": "0x00CE",
-      "line": 167
-    },
-    "0x0169": {
-      "file": "joystick_position.asm",
-      "address": "0x0169",
-      "line": 36
-    },
-    "0x0213": {
-      "file": "joystick_position.asm",
-      "address": "0x0213",
-      "line": 335
-    },
-    "0x019E": {
-      "file": "joystick_position.asm",
-      "address": "0x019E",
-      "line": 283
-    },
-    "0x0204": {
-      "file": "joystick_position.asm",
-      "address": "0x0204",
-      "line": 330
-    },
-    "0x013E": {
-      "file": "joystick_position.asm",
-      "address": "0x013E",
-      "line": 12
-    },
-    "0x0066": {
-      "file": "joystick_position.asm",
-      "address": "0x0066",
-      "line": 98
-    },
-    "0x0216": {
-      "file": "joystick_position.asm",
-      "address": "0x0216",
-      "line": 336
-    },
-    "0x01BB": {
-      "file": "joystick_position.asm",
-      "address": "0x01BB",
-      "line": 296
+      "address": "0x0134",
+      "line": 231
     },
     "0x003C": {
       "file": "joystick_position.asm",
       "address": "0x003C",
-      "line": 66
+      "line": 82
     },
-    "0x01CA": {
+    "0x0036": {
       "file": "joystick_position.asm",
-      "address": "0x01CA",
-      "line": 301
+      "address": "0x0036",
+      "line": 76
     },
-    "0x0149": {
+    "0x0183": {
       "file": "joystick_position.asm",
-      "address": "0x0149",
-      "line": 229
+      "address": "0x0183",
+      "line": 291
     },
-    "0x00D6": {
+    "0x0391": {
       "file": "joystick_position.asm",
-      "address": "0x00D6",
-      "line": 173
+      "address": "0x0391",
+      "line": 557
     },
-    "0x01CD": {
+    "0x0263": {
       "file": "joystick_position.asm",
-      "address": "0x01CD",
-      "line": 302
+      "address": "0x0263",
+      "line": 421
     },
-    "0x007E": {
+    "0x0241": {
       "file": "joystick_position.asm",
-      "address": "0x007E",
-      "line": 114
+      "address": "0x0241",
+      "line": 401
     },
-    "0x019B": {
+    "0x03AA": {
       "file": "joystick_position.asm",
-      "address": "0x019B",
-      "line": 282
+      "address": "0x03AA",
+      "line": 568
+    },
+    "0x0066": {
+      "file": "joystick_position.asm",
+      "address": "0x0066",
+      "line": 112
+    },
+    "0x0098": {
+      "file": "joystick_position.asm",
+      "address": "0x0098",
+      "line": 146
+    },
+    "0x024D": {
+      "file": "joystick_position.asm",
+      "address": "0x024D",
+      "line": 42
+    },
+    "0x0111": {
+      "file": "joystick_position.asm",
+      "address": "0x0111",
+      "line": 226
+    },
+    "0x03D6": {
+      "file": "joystick_position.asm",
+      "address": "0x03D6",
+      "line": 593
+    },
+    "0x01C4": {
+      "file": "joystick_position.asm",
+      "address": "0x01C4",
+      "line": 337
+    },
+    "0x03BD": {
+      "file": "joystick_position.asm",
+      "address": "0x03BD",
+      "line": 577
+    },
+    "0x0283": {
+      "file": "joystick_position.asm",
+      "address": "0x0283",
+      "line": 438
+    },
+    "0x00D2": {
+      "file": "joystick_position.asm",
+      "address": "0x00D2",
+      "line": 182
+    },
+    "0x031B": {
+      "file": "joystick_position.asm",
+      "address": "0x031B",
+      "line": 506
+    },
+    "0x015E": {
+      "file": "joystick_position.asm",
+      "address": "0x015E",
+      "line": 264
+    },
+    "0x02C9": {
+      "file": "joystick_position.asm",
+      "address": "0x02C9",
+      "line": 469
+    },
+    "0x019C": {
+      "file": "joystick_position.asm",
+      "address": "0x019C",
+      "line": 312
+    },
+    "0x0065": {
+      "file": "joystick_position.asm",
+      "address": "0x0065",
+      "line": 111
+    },
+    "0x00A1": {
+      "file": "joystick_position.asm",
+      "address": "0x00A1",
+      "line": 149
+    },
+    "0x02F5": {
+      "file": "joystick_position.asm",
+      "address": "0x02F5",
+      "line": 489
+    },
+    "0x019F": {
+      "file": "joystick_position.asm",
+      "address": "0x019F",
+      "line": 314
+    },
+    "0x0112": {
+      "file": "joystick_position.asm",
+      "address": "0x0112",
+      "line": 227
+    },
+    "0x0336": {
+      "file": "joystick_position.asm",
+      "address": "0x0336",
+      "line": 516
+    },
+    "0x0185": {
+      "file": "joystick_position.asm",
+      "address": "0x0185",
+      "line": 292
+    },
+    "0x030B": {
+      "file": "joystick_position.asm",
+      "address": "0x030B",
+      "line": 498
+    },
+    "0x00D7": {
+      "file": "joystick_position.asm",
+      "address": "0x00D7",
+      "line": 185
+    },
+    "0x00C4": {
+      "file": "joystick_position.asm",
+      "address": "0x00C4",
+      "line": 172
+    },
+    "0x01A5": {
+      "file": "joystick_position.asm",
+      "address": "0x01A5",
+      "line": 320
+    },
+    "0x01F6": {
+      "file": "joystick_position.asm",
+      "address": "0x01F6",
+      "line": 366
+    },
+    "0x03B6": {
+      "file": "joystick_position.asm",
+      "address": "0x03B6",
+      "line": 572
+    },
+    "0x00DC": {
+      "file": "joystick_position.asm",
+      "address": "0x00DC",
+      "line": 189
+    },
+    "0x0330": {
+      "file": "joystick_position.asm",
+      "address": "0x0330",
+      "line": 513
+    },
+    "0x0077": {
+      "file": "joystick_position.asm",
+      "address": "0x0077",
+      "line": 123
+    },
+    "0x00AD": {
+      "file": "joystick_position.asm",
+      "address": "0x00AD",
+      "line": 158
+    },
+    "0x01B3": {
+      "file": "joystick_position.asm",
+      "address": "0x01B3",
+      "line": 328
     },
     "0x01ED": {
       "file": "joystick_position.asm",
       "address": "0x01ED",
-      "line": 317
+      "line": 362
     },
-    "0x0100": {
+    "0x0164": {
       "file": "joystick_position.asm",
-      "address": "0x0100",
-      "line": 203
+      "address": "0x0164",
+      "line": 269
     },
-    "0x0071": {
+    "0x023E": {
       "file": "joystick_position.asm",
-      "address": "0x0071",
-      "line": 105
+      "address": "0x023E",
+      "line": 400
     },
-    "0x0242": {
+    "0x014F": {
       "file": "joystick_position.asm",
-      "address": "0x0242",
-      "line": 355
+      "address": "0x014F",
+      "line": 255
     },
-    "0x00CC": {
+    "0x00E8": {
       "file": "joystick_position.asm",
-      "address": "0x00CC",
+      "address": "0x00E8",
+      "line": 198
+    },
+    "0x014E": {
+      "file": "joystick_position.asm",
+      "address": "0x014E",
+      "line": 254
+    },
+    "0x003F": {
+      "file": "joystick_position.asm",
+      "address": "0x003F",
+      "line": 83
+    },
+    "0x0166": {
+      "file": "joystick_position.asm",
+      "address": "0x0166",
+      "line": 270
+    },
+    "0x0344": {
+      "file": "joystick_position.asm",
+      "address": "0x0344",
+      "line": 524
+    },
+    "0x010B": {
+      "file": "joystick_position.asm",
+      "address": "0x010B",
+      "line": 223
+    },
+    "0x0109": {
+      "file": "joystick_position.asm",
+      "address": "0x0109",
+      "line": 221
+    },
+    "0x0352": {
+      "file": "joystick_position.asm",
+      "address": "0x0352",
+      "line": 530
+    },
+    "0x01AA": {
+      "file": "joystick_position.asm",
+      "address": "0x01AA",
+      "line": 325
+    },
+    "0x02AC": {
+      "file": "joystick_position.asm",
+      "address": "0x02AC",
+      "line": 455
+    },
+    "0x00E1": {
+      "file": "joystick_position.asm",
+      "address": "0x00E1",
+      "line": 192
+    },
+    "0x0243": {
+      "file": "joystick_position.asm",
+      "address": "0x0243",
+      "line": 38
+    },
+    "0x0216": {
+      "file": "joystick_position.asm",
+      "address": "0x0216",
+      "line": 14
+    },
+    "0x0382": {
+      "file": "joystick_position.asm",
+      "address": "0x0382",
+      "line": 552
+    },
+    "0x0357": {
+      "file": "joystick_position.asm",
+      "address": "0x0357",
+      "line": 534
+    },
+    "0x0068": {
+      "file": "joystick_position.asm",
+      "address": "0x0068",
+      "line": 113
+    },
+    "0x01F0": {
+      "file": "joystick_position.asm",
+      "address": "0x01F0",
+      "line": 363
+    },
+    "0x02A0": {
+      "file": "joystick_position.asm",
+      "address": "0x02A0",
+      "line": 451
+    },
+    "0x035E": {
+      "file": "joystick_position.asm",
+      "address": "0x035E",
+      "line": 537
+    },
+    "0x01F3": {
+      "file": "joystick_position.asm",
+      "address": "0x01F3",
+      "line": 365
+    },
+    "0x03DC": {
+      "file": "joystick_position.asm",
+      "address": "0x03DC",
+      "line": 596
+    },
+    "0x02E0": {
+      "file": "joystick_position.asm",
+      "address": "0x02E0",
+      "line": 479
+    },
+    "0x00BD": {
+      "file": "joystick_position.asm",
+      "address": "0x00BD",
       "line": 165
     },
-    "0x00C1": {
+    "0x0376": {
       "file": "joystick_position.asm",
-      "address": "0x00C1",
-      "line": 158
+      "address": "0x0376",
+      "line": 548
     },
-    "0x008A": {
+    "0x01DD": {
       "file": "joystick_position.asm",
-      "address": "0x008A",
-      "line": 126
+      "address": "0x01DD",
+      "line": 354
     },
-    "0x01D3": {
+    "0x02DF": {
       "file": "joystick_position.asm",
-      "address": "0x01D3",
-      "line": 305
+      "address": "0x02DF",
+      "line": 478
     },
-    "0x0107": {
+    "0x015B": {
       "file": "joystick_position.asm",
-      "address": "0x0107",
-      "line": 207
+      "address": "0x015B",
+      "line": 263
     },
-    "0x0157": {
+    "0x00FD": {
       "file": "joystick_position.asm",
-      "address": "0x0157",
-      "line": 243
+      "address": "0x00FD",
+      "line": 213
     },
-    "0x01D5": {
+    "0x01A1": {
       "file": "joystick_position.asm",
-      "address": "0x01D5",
-      "line": 307
+      "address": "0x01A1",
+      "line": 317
     },
-    "0x00BA": {
+    "0x0327": {
       "file": "joystick_position.asm",
-      "address": "0x00BA",
-      "line": 151
+      "address": "0x0327",
+      "line": 510
     },
-    "0x009D": {
+    "0x028B": {
       "file": "joystick_position.asm",
-      "address": "0x009D",
-      "line": 133
+      "address": "0x028B",
+      "line": 444
     },
-    "0x00FE": {
+    "0x035D": {
       "file": "joystick_position.asm",
-      "address": "0x00FE",
-      "line": 202
+      "address": "0x035D",
+      "line": 536
     },
-    "0x0184": {
+    "0x0052": {
       "file": "joystick_position.asm",
-      "address": "0x0184",
+      "address": "0x0052",
+      "line": 99
+    },
+    "0x03BB": {
+      "file": "joystick_position.asm",
+      "address": "0x03BB",
+      "line": 575
+    },
+    "0x038E": {
+      "file": "joystick_position.asm",
+      "address": "0x038E",
+      "line": 556
+    },
+    "0x00E4": {
+      "file": "joystick_position.asm",
+      "address": "0x00E4",
+      "line": 194
+    },
+    "0x02A6": {
+      "file": "joystick_position.asm",
+      "address": "0x02A6",
+      "line": 453
+    },
+    "0x0286": {
+      "file": "joystick_position.asm",
+      "address": "0x0286",
+      "line": 439
+    },
+    "0x0162": {
+      "file": "joystick_position.asm",
+      "address": "0x0162",
       "line": 268
     },
     "0x0248": {
       "file": "joystick_position.asm",
       "address": "0x0248",
-      "line": 357
-    },
-    "0x00B4": {
-      "file": "joystick_position.asm",
-      "address": "0x00B4",
-      "line": 147
-    },
-    "0x005E": {
-      "file": "joystick_position.asm",
-      "address": "0x005E",
-      "line": 92
-    },
-    "0x0102": {
-      "file": "joystick_position.asm",
-      "address": "0x0102",
-      "line": 205
-    },
-    "0x0128": {
-      "file": "joystick_position.asm",
-      "address": "0x0128",
-      "line": 212
-    },
-    "0x00EF": {
-      "file": "joystick_position.asm",
-      "address": "0x00EF",
-      "line": 191
-    },
-    "0x01C7": {
-      "file": "joystick_position.asm",
-      "address": "0x01C7",
-      "line": 300
-    },
-    "0x00C6": {
-      "file": "joystick_position.asm",
-      "address": "0x00C6",
-      "line": 161
-    },
-    "0x00AE": {
-      "file": "joystick_position.asm",
-      "address": "0x00AE",
-      "line": 144
-    },
-    "0x00FC": {
-      "file": "joystick_position.asm",
-      "address": "0x00FC",
-      "line": 201
-    },
-    "0x0258": {
-      "file": "joystick_position.asm",
-      "address": "0x0258",
-      "line": 364
-    },
-    "0x01C4": {
-      "file": "joystick_position.asm",
-      "address": "0x01C4",
-      "line": 299
-    },
-    "0x0137": {
-      "file": "joystick_position.asm",
-      "address": "0x0137",
-      "line": 221
-    },
-    "0x01FF": {
-      "file": "joystick_position.asm",
-      "address": "0x01FF",
-      "line": 324
-    },
-    "0x0167": {
-      "file": "joystick_position.asm",
-      "address": "0x0167",
-      "line": 35
-    },
-    "0x00BC": {
-      "file": "joystick_position.asm",
-      "address": "0x00BC",
-      "line": 156
-    },
-    "0x0199": {
-      "file": "joystick_position.asm",
-      "address": "0x0199",
-      "line": 278
-    },
-    "0x00C5": {
-      "file": "joystick_position.asm",
-      "address": "0x00C5",
-      "line": 160
-    },
-    "0x00DC": {
-      "file": "joystick_position.asm",
-      "address": "0x00DC",
-      "line": 177
-    },
-    "0x01D0": {
-      "file": "joystick_position.asm",
-      "address": "0x01D0",
-      "line": 304
-    },
-    "0x00BB": {
-      "file": "joystick_position.asm",
-      "address": "0x00BB",
-      "line": 154
-    },
-    "0x0051": {
-      "file": "joystick_position.asm",
-      "address": "0x0051",
-      "line": 84
-    },
-    "0x0201": {
-      "file": "joystick_position.asm",
-      "address": "0x0201",
-      "line": 326
-    },
-    "0x01BE": {
-      "file": "joystick_position.asm",
-      "address": "0x01BE",
-      "line": 297
-    },
-    "0x006F": {
-      "file": "joystick_position.asm",
-      "address": "0x006F",
-      "line": 104
-    },
-    "0x00DD": {
-      "file": "joystick_position.asm",
-      "address": "0x00DD",
-      "line": 178
-    },
-    "0x0053": {
-      "file": "joystick_position.asm",
-      "address": "0x0053",
-      "line": 85
-    },
-    "0x01F6": {
-      "file": "joystick_position.asm",
-      "address": "0x01F6",
-      "line": 320
-    },
-    "0x022C": {
-      "file": "joystick_position.asm",
-      "address": "0x022C",
-      "line": 345
-    },
-    "0x0080": {
-      "file": "joystick_position.asm",
-      "address": "0x0080",
-      "line": 115
-    },
-    "0x0084": {
-      "file": "joystick_position.asm",
-      "address": "0x0084",
-      "line": 118
-    },
-    "0x0190": {
-      "file": "joystick_position.asm",
-      "address": "0x0190",
-      "line": 275
-    },
-    "0x014B": {
-      "file": "joystick_position.asm",
-      "address": "0x014B",
-      "line": 234
-    },
-    "0x016E": {
-      "file": "joystick_position.asm",
-      "address": "0x016E",
-      "line": 38
-    },
-    "0x01A7": {
-      "file": "joystick_position.asm",
-      "address": "0x01A7",
-      "line": 286
-    },
-    "0x0022": {
-      "file": "joystick_position.asm",
-      "address": "0x0022",
-      "line": 51
-    },
-    "0x00FA": {
-      "file": "joystick_position.asm",
-      "address": "0x00FA",
-      "line": 200
-    },
-    "0x00B0": {
-      "file": "joystick_position.asm",
-      "address": "0x00B0",
-      "line": 145
-    },
-    "0x0146": {
-      "file": "joystick_position.asm",
-      "address": "0x0146",
-      "line": 228
-    },
-    "0x01FC": {
-      "file": "joystick_position.asm",
-      "address": "0x01FC",
-      "line": 323
-    },
-    "0x023C": {
-      "file": "joystick_position.asm",
-      "address": "0x023C",
-      "line": 353
-    },
-    "0x01F9": {
-      "file": "joystick_position.asm",
-      "address": "0x01F9",
-      "line": 321
-    },
-    "0x0050": {
-      "file": "joystick_position.asm",
-      "address": "0x0050",
-      "line": 83
-    },
-    "0x00D3": {
-      "file": "joystick_position.asm",
-      "address": "0x00D3",
-      "line": 171
-    },
-    "0x007D": {
-      "file": "joystick_position.asm",
-      "address": "0x007D",
-      "line": 113
-    },
-    "0x0062": {
-      "file": "joystick_position.asm",
-      "address": "0x0062",
-      "line": 95
-    },
-    "0x0042": {
-      "file": "joystick_position.asm",
-      "address": "0x0042",
-      "line": 68
-    },
-    "0x01E1": {
-      "file": "joystick_position.asm",
-      "address": "0x01E1",
-      "line": 313
-    },
-    "0x0048": {
-      "file": "joystick_position.asm",
-      "address": "0x0048",
-      "line": 72
-    },
-    "0x00D4": {
-      "file": "joystick_position.asm",
-      "address": "0x00D4",
-      "line": 172
-    },
-    "0x01E7": {
-      "file": "joystick_position.asm",
-      "address": "0x01E7",
-      "line": 315
-    },
-    "0x0094": {
-      "file": "joystick_position.asm",
-      "address": "0x0094",
-      "line": 130
-    },
-    "0x0065": {
-      "file": "joystick_position.asm",
-      "address": "0x0065",
-      "line": 97
-    },
-    "0x00C4": {
-      "file": "joystick_position.asm",
-      "address": "0x00C4",
-      "line": 159
-    },
-    "0x0141": {
-      "file": "joystick_position.asm",
-      "address": "0x0141",
-      "line": 13
-    },
-    "0x015A": {
-      "file": "joystick_position.asm",
-      "address": "0x015A",
-      "line": 30
-    },
-    "0x018D": {
-      "file": "joystick_position.asm",
-      "address": "0x018D",
-      "line": 274
-    },
-    "0x014E": {
-      "file": "joystick_position.asm",
-      "address": "0x014E",
-      "line": 235
-    },
-    "0x007C": {
-      "file": "joystick_position.asm",
-      "address": "0x007C",
-      "line": 112
-    },
-    "0x01B8": {
-      "file": "joystick_position.asm",
-      "address": "0x01B8",
-      "line": 295
-    },
-    "0x024B": {
-      "file": "joystick_position.asm",
-      "address": "0x024B",
-      "line": 358
-    },
-    "0x00F2": {
-      "file": "joystick_position.asm",
-      "address": "0x00F2",
-      "line": 193
-    },
-    "0x0233": {
-      "file": "joystick_position.asm",
-      "address": "0x0233",
-      "line": 350
-    },
-    "0x006D": {
-      "file": "joystick_position.asm",
-      "address": "0x006D",
-      "line": 102
-    },
-    "0x00AA": {
-      "file": "joystick_position.asm",
-      "address": "0x00AA",
-      "line": 143
-    },
-    "0x0254": {
-      "file": "joystick_position.asm",
-      "address": "0x0254",
-      "line": 362
-    },
-    "0x013C": {
-      "file": "joystick_position.asm",
-      "address": "0x013C",
-      "line": 11
-    },
-    "0x0030": {
-      "file": "joystick_position.asm",
-      "address": "0x0030",
-      "line": 56
-    },
-    "0x01DE": {
-      "file": "joystick_position.asm",
-      "address": "0x01DE",
-      "line": 312
-    },
-    "0x00F5": {
-      "file": "joystick_position.asm",
-      "address": "0x00F5",
-      "line": 196
-    },
-    "0x0193": {
-      "file": "joystick_position.asm",
-      "address": "0x0193",
-      "line": 276
-    },
-    "0x0091": {
-      "file": "joystick_position.asm",
-      "address": "0x0091",
-      "line": 129
-    },
-    "0x0088": {
-      "file": "joystick_position.asm",
-      "address": "0x0088",
-      "line": 125
-    },
-    "0x013A": {
-      "file": "joystick_position.asm",
-      "address": "0x013A",
-      "line": 6
-    },
-    "0x021C": {
-      "file": "joystick_position.asm",
-      "address": "0x021C",
-      "line": 338
-    },
-    "0x01C1": {
-      "file": "joystick_position.asm",
-      "address": "0x01C1",
-      "line": 298
-    },
-    "0x0263": {
-      "file": "joystick_position.asm",
-      "address": "0x0263",
-      "line": 376
-    },
-    "0x0074": {
-      "file": "joystick_position.asm",
-      "address": "0x0074",
-      "line": 107
-    },
-    "0x004F": {
-      "file": "joystick_position.asm",
-      "address": "0x004F",
-      "line": 82
-    },
-    "0x0196": {
-      "file": "joystick_position.asm",
-      "address": "0x0196",
-      "line": 277
-    },
-    "0x00A0": {
-      "file": "joystick_position.asm",
-      "address": "0x00A0",
-      "line": 134
-    },
-    "0x0046": {
-      "file": "joystick_position.asm",
-      "address": "0x0046",
-      "line": 70
-    },
-    "0x00B8": {
-      "file": "joystick_position.asm",
-      "address": "0x00B8",
-      "line": 149
-    },
-    "0x00B2": {
-      "file": "joystick_position.asm",
-      "address": "0x00B2",
-      "line": 146
-    },
-    "0x0037": {
-      "file": "joystick_position.asm",
-      "address": "0x0037",
-      "line": 64
-    },
-    "0x017C": {
-      "file": "joystick_position.asm",
-      "address": "0x017C",
-      "line": 262
-    },
-    "0x01D4": {
-      "file": "joystick_position.asm",
-      "address": "0x01D4",
-      "line": 306
-    },
-    "0x0162": {
-      "file": "joystick_position.asm",
-      "address": "0x0162",
-      "line": 33
-    },
-    "0x01EA": {
-      "file": "joystick_position.asm",
-      "address": "0x01EA",
-      "line": 316
-    },
-    "0x006E": {
-      "file": "joystick_position.asm",
-      "address": "0x006E",
-      "line": 103
-    },
-    "0x0210": {
-      "file": "joystick_position.asm",
-      "address": "0x0210",
-      "line": 334
-    },
-    "0x020D": {
-      "file": "joystick_position.asm",
-      "address": "0x020D",
-      "line": 333
-    },
-    "0x022D": {
-      "file": "joystick_position.asm",
-      "address": "0x022D",
-      "line": 346
-    },
-    "0x0097": {
-      "file": "joystick_position.asm",
-      "address": "0x0097",
-      "line": 131
-    },
-    "0x0056": {
-      "file": "joystick_position.asm",
-      "address": "0x0056",
-      "line": 87
-    },
-    "0x024E": {
-      "file": "joystick_position.asm",
-      "address": "0x024E",
-      "line": 359
-    },
-    "0x0027": {
-      "file": "joystick_position.asm",
-      "address": "0x0027",
-      "line": 53
-    },
-    "0x00DB": {
-      "file": "joystick_position.asm",
-      "address": "0x00DB",
-      "line": 176
-    },
-    "0x01B5": {
-      "file": "joystick_position.asm",
-      "address": "0x01B5",
-      "line": 294
-    },
-    "0x00ED": {
-      "file": "joystick_position.asm",
-      "address": "0x00ED",
-      "line": 190
-    },
-    "0x0176": {
-      "file": "joystick_position.asm",
-      "address": "0x0176",
-      "line": 41
-    },
-    "0x008F": {
-      "file": "joystick_position.asm",
-      "address": "0x008F",
-      "line": 128
-    },
-    "0x015F": {
-      "file": "joystick_position.asm",
-      "address": "0x015F",
-      "line": 247
-    },
-    "0x0047": {
-      "file": "joystick_position.asm",
-      "address": "0x0047",
-      "line": 71
-    },
-    "0x00E0": {
-      "file": "joystick_position.asm",
-      "address": "0x00E0",
-      "line": 182
-    },
-    "0x00E3": {
-      "file": "joystick_position.asm",
-      "address": "0x00E3",
-      "line": 183
-    },
-    "0x0200": {
-      "file": "joystick_position.asm",
-      "address": "0x0200",
-      "line": 325
-    },
-    "0x0181": {
-      "file": "joystick_position.asm",
-      "address": "0x0181",
-      "line": 267
-    },
-    "0x025C": {
-      "file": "joystick_position.asm",
-      "address": "0x025C",
-      "line": 366
-    },
-    "0x025E": {
-      "file": "joystick_position.asm",
-      "address": "0x025E",
-      "line": 374
-    },
-    "0x0032": {
-      "file": "joystick_position.asm",
-      "address": "0x0032",
-      "line": 58
-    },
-    "0x023F": {
-      "file": "joystick_position.asm",
-      "address": "0x023F",
-      "line": 354
-    },
-    "0x01AF": {
-      "file": "joystick_position.asm",
-      "address": "0x01AF",
-      "line": 292
-    },
-    "0x0057": {
-      "file": "joystick_position.asm",
-      "address": "0x0057",
-      "line": 88
-    },
-    "0x0257": {
-      "file": "joystick_position.asm",
-      "address": "0x0257",
-      "line": 363
-    },
-    "0x002A": {
-      "file": "joystick_position.asm",
-      "address": "0x002A",
-      "line": 54
-    },
-    "0x0219": {
-      "file": "joystick_position.asm",
-      "address": "0x0219",
-      "line": 337
-    },
-    "0x0187": {
-      "file": "joystick_position.asm",
-      "address": "0x0187",
-      "line": 269
-    },
-    "0x0225": {
-      "file": "joystick_position.asm",
-      "address": "0x0225",
-      "line": 341
-    },
-    "0x00EB": {
-      "file": "joystick_position.asm",
-      "address": "0x00EB",
-      "line": 189
-    },
-    "0x01AC": {
-      "file": "joystick_position.asm",
-      "address": "0x01AC",
-      "line": 291
-    },
-    "0x015D": {
-      "file": "joystick_position.asm",
-      "address": "0x015D",
-      "line": 31
-    },
-    "0x003F": {
-      "file": "joystick_position.asm",
-      "address": "0x003F",
-      "line": 67
-    },
-    "0x006A": {
-      "file": "joystick_position.asm",
-      "address": "0x006A",
-      "line": 101
-    },
-    "0x00D2": {
-      "file": "joystick_position.asm",
-      "address": "0x00D2",
-      "line": 170
-    },
-    "0x00E9": {
-      "file": "joystick_position.asm",
-      "address": "0x00E9",
-      "line": 186
-    },
-    "0x020A": {
-      "file": "joystick_position.asm",
-      "address": "0x020A",
-      "line": 332
-    },
-    "0x00F3": {
-      "file": "joystick_position.asm",
-      "address": "0x00F3",
-      "line": 194
-    },
-    "0x00DF": {
-      "file": "joystick_position.asm",
-      "address": "0x00DF",
-      "line": 180
-    },
-    "0x0075": {
-      "file": "joystick_position.asm",
-      "address": "0x0075",
-      "line": 108
-    },
-    "0x0039": {
-      "file": "joystick_position.asm",
-      "address": "0x0039",
-      "line": 65
-    },
-    "0x0151": {
-      "file": "joystick_position.asm",
-      "address": "0x0151",
-      "line": 19
-    },
-    "0x0171": {
-      "file": "joystick_position.asm",
-      "address": "0x0171",
-      "line": 39
-    },
-    "0x00E5": {
-      "file": "joystick_position.asm",
-      "address": "0x00E5",
-      "line": 184
-    },
-    "0x0108": {
-      "file": "joystick_position.asm",
-      "address": "0x0108",
-      "line": 208
-    },
-    "0x00B7": {
-      "file": "joystick_position.asm",
-      "address": "0x00B7",
-      "line": 148
+      "line": 404
     },
     "0x0236": {
       "file": "joystick_position.asm",
       "address": "0x0236",
-      "line": 351
+      "line": 396
     },
-    "0x01B2": {
+    "0x01B7": {
       "file": "joystick_position.asm",
-      "address": "0x01B2",
-      "line": 293
+      "address": "0x01B7",
+      "line": 332
     },
-    "0x0245": {
+    "0x01BD": {
       "file": "joystick_position.asm",
-      "address": "0x0245",
+      "address": "0x01BD",
+      "line": 334
+    },
+    "0x0059": {
+      "file": "joystick_position.asm",
+      "address": "0x0059",
+      "line": 103
+    },
+    "0x009B": {
+      "file": "joystick_position.asm",
+      "address": "0x009B",
+      "line": 147
+    },
+    "0x016B": {
+      "file": "joystick_position.asm",
+      "address": "0x016B",
+      "line": 272
+    },
+    "0x02CC": {
+      "file": "joystick_position.asm",
+      "address": "0x02CC",
+      "line": 470
+    },
+    "0x02C0": {
+      "file": "joystick_position.asm",
+      "address": "0x02C0",
+      "line": 466
+    },
+    "0x035F": {
+      "file": "joystick_position.asm",
+      "address": "0x035F",
+      "line": 538
+    },
+    "0x037F": {
+      "file": "joystick_position.asm",
+      "address": "0x037F",
+      "line": 551
+    },
+    "0x0221": {
+      "file": "joystick_position.asm",
+      "address": "0x0221",
+      "line": 18
+    },
+    "0x0289": {
+      "file": "joystick_position.asm",
+      "address": "0x0289",
+      "line": 440
+    },
+    "0x017B": {
+      "file": "joystick_position.asm",
+      "address": "0x017B",
+      "line": 286
+    },
+    "0x01A8": {
+      "file": "joystick_position.asm",
+      "address": "0x01A8",
+      "line": 324
+    },
+    "0x034F": {
+      "file": "joystick_position.asm",
+      "address": "0x034F",
+      "line": 529
+    },
+    "0x010D": {
+      "file": "joystick_position.asm",
+      "address": "0x010D",
+      "line": 224
+    },
+    "0x0341": {
+      "file": "joystick_position.asm",
+      "address": "0x0341",
+      "line": 523
+    },
+    "0x01CB": {
+      "file": "joystick_position.asm",
+      "address": "0x01CB",
+      "line": 342
+    },
+    "0x00FC": {
+      "file": "joystick_position.asm",
+      "address": "0x00FC",
+      "line": 212
+    },
+    "0x0180": {
+      "file": "joystick_position.asm",
+      "address": "0x0180",
+      "line": 289
+    },
+    "0x0158": {
+      "file": "joystick_position.asm",
+      "address": "0x0158",
+      "line": 261
+    },
+    "0x036B": {
+      "file": "joystick_position.asm",
+      "address": "0x036B",
+      "line": 542
+    },
+    "0x00D1": {
+      "file": "joystick_position.asm",
+      "address": "0x00D1",
+      "line": 181
+    },
+    "0x0110": {
+      "file": "joystick_position.asm",
+      "address": "0x0110",
+      "line": 225
+    },
+    "0x036D": {
+      "file": "joystick_position.asm",
+      "address": "0x036D",
+      "line": 545
+    },
+    "0x03A7": {
+      "file": "joystick_position.asm",
+      "address": "0x03A7",
+      "line": 567
+    },
+    "0x02C6": {
+      "file": "joystick_position.asm",
+      "address": "0x02C6",
+      "line": 468
+    },
+    "0x0103": {
+      "file": "joystick_position.asm",
+      "address": "0x0103",
+      "line": 218
+    },
+    "0x01E3": {
+      "file": "joystick_position.asm",
+      "address": "0x01E3",
       "line": 356
     },
-    "0x01E4": {
+    "0x02DB": {
       "file": "joystick_position.asm",
-      "address": "0x01E4",
-      "line": 314
+      "address": "0x02DB",
+      "line": 476
     },
-    "0x0230": {
+    "0x0169": {
       "file": "joystick_position.asm",
-      "address": "0x0230",
-      "line": 349
-    },
-    "0x00A4": {
-      "file": "joystick_position.asm",
-      "address": "0x00A4",
-      "line": 140
-    },
-    "0x00A7": {
-      "file": "joystick_position.asm",
-      "address": "0x00A7",
-      "line": 141
-    },
-    "0x0164": {
-      "file": "joystick_position.asm",
-      "address": "0x0164",
-      "line": 34
-    },
-    "0x0045": {
-      "file": "joystick_position.asm",
-      "address": "0x0045",
-      "line": 69
-    },
-    "0x0222": {
-      "file": "joystick_position.asm",
-      "address": "0x0222",
-      "line": 340
-    },
-    "0x021F": {
-      "file": "joystick_position.asm",
-      "address": "0x021F",
-      "line": 339
-    },
-    "0x0264": {
-      "file": "joystick_position.asm",
-      "address": "0x0264",
-      "line": 377
-    },
-    "0x00BF": {
-      "file": "joystick_position.asm",
-      "address": "0x00BF",
-      "line": 157
+      "address": "0x0169",
+      "line": 271
     },
     "0x00C8": {
       "file": "joystick_position.asm",
       "address": "0x00C8",
-      "line": 163
+      "line": 175
     },
-    "0x0154": {
+    "0x0354": {
       "file": "joystick_position.asm",
-      "address": "0x0154",
-      "line": 20
+      "address": "0x0354",
+      "line": 533
     },
-    "0x00F7": {
+    "0x00F6": {
       "file": "joystick_position.asm",
-      "address": "0x00F7",
-      "line": 197
+      "address": "0x00F6",
+      "line": 208
     },
-    "0x01D8": {
+    "0x007A": {
       "file": "joystick_position.asm",
-      "address": "0x01D8",
-      "line": 310
+      "address": "0x007A",
+      "line": 125
     },
-    "0x008D": {
+    "0x00CD": {
       "file": "joystick_position.asm",
-      "address": "0x008D",
-      "line": 127
+      "address": "0x00CD",
+      "line": 177
     },
-    "0x0060": {
+    "0x0269": {
       "file": "joystick_position.asm",
-      "address": "0x0060",
-      "line": 94
+      "address": "0x0269",
+      "line": 52
     },
-    "0x00E7": {
+    "0x0294": {
       "file": "joystick_position.asm",
-      "address": "0x00E7",
-      "line": 185
+      "address": "0x0294",
+      "line": 447
     },
-    "0x0033": {
+    "0x0297": {
       "file": "joystick_position.asm",
-      "address": "0x0033",
+      "address": "0x0297",
+      "line": 448
+    },
+    "0x010A": {
+      "file": "joystick_position.asm",
+      "address": "0x010A",
+      "line": 222
+    },
+    "0x0280": {
+      "file": "joystick_position.asm",
+      "address": "0x0280",
+      "line": 437
+    },
+    "0x0105": {
+      "file": "joystick_position.asm",
+      "address": "0x0105",
+      "line": 219
+    },
+    "0x019E": {
+      "file": "joystick_position.asm",
+      "address": "0x019E",
+      "line": 313
+    },
+    "0x02E9": {
+      "file": "joystick_position.asm",
+      "address": "0x02E9",
+      "line": 485
+    },
+    "0x0090": {
+      "file": "joystick_position.asm",
+      "address": "0x0090",
+      "line": 143
+    },
+    "0x00EC": {
+      "file": "joystick_position.asm",
+      "address": "0x00EC",
+      "line": 201
+    },
+    "0x0370": {
+      "file": "joystick_position.asm",
+      "address": "0x0370",
+      "line": 546
+    },
+    "0x0253": {
+      "file": "joystick_position.asm",
+      "address": "0x0253",
+      "line": 411
+    },
+    "0x0086": {
+      "file": "joystick_position.asm",
+      "address": "0x0086",
+      "line": 133
+    },
+    "0x00D9": {
+      "file": "joystick_position.asm",
+      "address": "0x00D9",
+      "line": 187
+    },
+    "0x0057": {
+      "file": "joystick_position.asm",
+      "address": "0x0057",
+      "line": 102
+    },
+    "0x02C3": {
+      "file": "joystick_position.asm",
+      "address": "0x02C3",
+      "line": 467
+    },
+    "0x0260": {
+      "file": "joystick_position.asm",
+      "address": "0x0260",
+      "line": 49
+    },
+    "0x025D": {
+      "file": "joystick_position.asm",
+      "address": "0x025D",
+      "line": 48
+    },
+    "0x023C": {
+      "file": "joystick_position.asm",
+      "address": "0x023C",
+      "line": 35
+    },
+    "0x0178": {
+      "file": "joystick_position.asm",
+      "address": "0x0178",
+      "line": 281
+    },
+    "0x01D6": {
+      "file": "joystick_position.asm",
+      "address": "0x01D6",
+      "line": 349
+    },
+    "0x0219": {
+      "file": "joystick_position.asm",
+      "address": "0x0219",
+      "line": 375
+    },
+    "0x035A": {
+      "file": "joystick_position.asm",
+      "address": "0x035A",
+      "line": 535
+    },
+    "0x01EA": {
+      "file": "joystick_position.asm",
+      "address": "0x01EA",
+      "line": 361
+    },
+    "0x01B6": {
+      "file": "joystick_position.asm",
+      "address": "0x01B6",
+      "line": 329
+    },
+    "0x03C6": {
+      "file": "joystick_position.asm",
+      "address": "0x03C6",
+      "line": 581
+    },
+    "0x0073": {
+      "file": "joystick_position.asm",
+      "address": "0x0073",
+      "line": 120
+    },
+    "0x0193": {
+      "file": "joystick_position.asm",
+      "address": "0x0193",
+      "line": 301
+    },
+    "0x0143": {
+      "file": "joystick_position.asm",
+      "address": "0x0143",
+      "line": 240
+    },
+    "0x020D": {
+      "file": "joystick_position.asm",
+      "address": "0x020D",
+      "line": 370
+    },
+    "0x019B": {
+      "file": "joystick_position.asm",
+      "address": "0x019B",
+      "line": 311
+    },
+    "0x030C": {
+      "file": "joystick_position.asm",
+      "address": "0x030C",
+      "line": 499
+    },
+    "0x02A9": {
+      "file": "joystick_position.asm",
+      "address": "0x02A9",
+      "line": 454
+    },
+    "0x02CF": {
+      "file": "joystick_position.asm",
+      "address": "0x02CF",
+      "line": 471
+    },
+    "0x0321": {
+      "file": "joystick_position.asm",
+      "address": "0x0321",
+      "line": 508
+    },
+    "0x033B": {
+      "file": "joystick_position.asm",
+      "address": "0x033B",
+      "line": 521
+    },
+    "0x00CF": {
+      "file": "joystick_position.asm",
+      "address": "0x00CF",
+      "line": 179
+    },
+    "0x01D3": {
+      "file": "joystick_position.asm",
+      "address": "0x01D3",
+      "line": 348
+    },
+    "0x039D": {
+      "file": "joystick_position.asm",
+      "address": "0x039D",
+      "line": 561
+    },
+    "0x032A": {
+      "file": "joystick_position.asm",
+      "address": "0x032A",
+      "line": 511
+    },
+    "0x0197": {
+      "file": "joystick_position.asm",
+      "address": "0x0197",
+      "line": 303
+    },
+    "0x00CE": {
+      "file": "joystick_position.asm",
+      "address": "0x00CE",
+      "line": 178
+    },
+    "0x03BE": {
+      "file": "joystick_position.asm",
+      "address": "0x03BE",
+      "line": 578
+    },
+    "0x0368": {
+      "file": "joystick_position.asm",
+      "address": "0x0368",
+      "line": 541
+    },
+    "0x0337": {
+      "file": "joystick_position.asm",
+      "address": "0x0337",
+      "line": 517
+    },
+    "0x0349": {
+      "file": "joystick_position.asm",
+      "address": "0x0349",
+      "line": 527
+    },
+    "0x03C3": {
+      "file": "joystick_position.asm",
+      "address": "0x03C3",
+      "line": 580
+    },
+    "0x002D": {
+      "file": "joystick_position.asm",
+      "address": "0x002D",
+      "line": 71
+    },
+    "0x030F": {
+      "file": "joystick_position.asm",
+      "address": "0x030F",
+      "line": 502
+    },
+    "0x03AD": {
+      "file": "joystick_position.asm",
+      "address": "0x03AD",
+      "line": 569
+    },
+    "0x01D2": {
+      "file": "joystick_position.asm",
+      "address": "0x01D2",
+      "line": 347
+    },
+    "0x0315": {
+      "file": "joystick_position.asm",
+      "address": "0x0315",
+      "line": 504
+    },
+    "0x02DE": {
+      "file": "joystick_position.asm",
+      "address": "0x02DE",
+      "line": 477
+    },
+    "0x029D": {
+      "file": "joystick_position.asm",
+      "address": "0x029D",
+      "line": 450
+    },
+    "0x00C2": {
+      "file": "joystick_position.asm",
+      "address": "0x00C2",
+      "line": 168
+    },
+    "0x01C0": {
+      "file": "joystick_position.asm",
+      "address": "0x01C0",
+      "line": 335
+    },
+    "0x0170": {
+      "file": "joystick_position.asm",
+      "address": "0x0170",
+      "line": 278
+    },
+    "0x008A": {
+      "file": "joystick_position.asm",
+      "address": "0x008A",
+      "line": 136
+    },
+    "0x027A": {
+      "file": "joystick_position.asm",
+      "address": "0x027A",
       "line": 59
     },
-    "0x022B": {
+    "0x03D4": {
       "file": "joystick_position.asm",
-      "address": "0x022B",
-      "line": 344
+      "address": "0x03D4",
+      "line": 585
     },
-    "0x005F": {
+    "0x0291": {
       "file": "joystick_position.asm",
-      "address": "0x005F",
-      "line": 93
+      "address": "0x0291",
+      "line": 446
     },
-    "0x0228": {
+    "0x03DB": {
       "file": "joystick_position.asm",
-      "address": "0x0228",
-      "line": 343
+      "address": "0x03DB",
+      "line": 595
     },
-    "0x00B9": {
+    "0x0149": {
       "file": "joystick_position.asm",
-      "address": "0x00B9",
-      "line": 150
+      "address": "0x0149",
+      "line": 251
     },
-    "0x0101": {
+    "0x03CE": {
       "file": "joystick_position.asm",
-      "address": "0x0101",
-      "line": 204
+      "address": "0x03CE",
+      "line": 583
     },
-    "0x0031": {
+    "0x0064": {
       "file": "joystick_position.asm",
-      "address": "0x0031",
-      "line": 57
+      "address": "0x0064",
+      "line": 110
     },
-    "0x009A": {
+    "0x0070": {
       "file": "joystick_position.asm",
-      "address": "0x009A",
-      "line": 132
+      "address": "0x0070",
+      "line": 119
     },
-    "0x01A1": {
+    "0x01DC": {
       "file": "joystick_position.asm",
-      "address": "0x01A1",
-      "line": 284
+      "address": "0x01DC",
+      "line": 351
     },
-    "0x01F3": {
+    "0x03BC": {
       "file": "joystick_position.asm",
-      "address": "0x01F3",
-      "line": 319
+      "address": "0x03BC",
+      "line": 576
     },
-    "0x0174": {
+    "0x01E6": {
       "file": "joystick_position.asm",
-      "address": "0x0174",
-      "line": 258
+      "address": "0x01E6",
+      "line": 357
     },
-    "0x0259": {
+    "0x0258": {
       "file": "joystick_position.asm",
-      "address": "0x0259",
-      "line": 365
+      "address": "0x0258",
+      "line": 414
     },
-    "0x00D0": {
+    "0x022A": {
       "file": "joystick_position.asm",
-      "address": "0x00D0",
-      "line": 169
+      "address": "0x022A",
+      "line": 387
     },
-    "0x017E": {
+    "0x033E": {
       "file": "joystick_position.asm",
-      "address": "0x017E",
-      "line": 266
+      "address": "0x033E",
+      "line": 522
     },
-    "0x00D8": {
+    "0x0239": {
       "file": "joystick_position.asm",
-      "address": "0x00D8",
-      "line": 174
+      "address": "0x0239",
+      "line": 34
+    },
+    "0x018A": {
+      "file": "joystick_position.asm",
+      "address": "0x018A",
+      "line": 297
+    },
+    "0x0082": {
+      "file": "joystick_position.asm",
+      "address": "0x0082",
+      "line": 130
+    },
+    "0x02D5": {
+      "file": "joystick_position.asm",
+      "address": "0x02D5",
+      "line": 473
+    },
+    "0x01E0": {
+      "file": "joystick_position.asm",
+      "address": "0x01E0",
+      "line": 355
+    },
+    "0x00AA": {
+      "file": "joystick_position.asm",
+      "address": "0x00AA",
+      "line": 157
+    },
+    "0x0304": {
+      "file": "joystick_position.asm",
+      "address": "0x0304",
+      "line": 494
+    },
+    "0x01C5": {
+      "file": "joystick_position.asm",
+      "address": "0x01C5",
+      "line": 340
+    },
+    "0x0338": {
+      "file": "joystick_position.asm",
+      "address": "0x0338",
+      "line": 518
+    },
+    "0x021E": {
+      "file": "joystick_position.asm",
+      "address": "0x021E",
+      "line": 381
+    },
+    "0x03A3": {
+      "file": "joystick_position.asm",
+      "address": "0x03A3",
+      "line": 563
+    },
+    "0x016D": {
+      "file": "joystick_position.asm",
+      "address": "0x016D",
+      "line": 276
+    },
+    "0x029A": {
+      "file": "joystick_position.asm",
+      "address": "0x029A",
+      "line": 449
+    },
+    "0x0157": {
+      "file": "joystick_position.asm",
+      "address": "0x0157",
+      "line": 260
+    },
+    "0x025B": {
+      "file": "joystick_position.asm",
+      "address": "0x025B",
+      "line": 47
+    },
+    "0x0373": {
+      "file": "joystick_position.asm",
+      "address": "0x0373",
+      "line": 547
+    },
+    "0x016C": {
+      "file": "joystick_position.asm",
+      "address": "0x016C",
+      "line": 275
+    },
+    "0x01BA": {
+      "file": "joystick_position.asm",
+      "address": "0x01BA",
+      "line": 333
+    },
+    "0x0074": {
+      "file": "joystick_position.asm",
+      "address": "0x0074",
+      "line": 121
+    },
+    "0x004E": {
+      "file": "joystick_position.asm",
+      "address": "0x004E",
+      "line": 90
+    },
+    "0x02F2": {
+      "file": "joystick_position.asm",
+      "address": "0x02F2",
+      "line": 488
     },
     "0x01A4": {
       "file": "joystick_position.asm",
       "address": "0x01A4",
-      "line": 285
+      "line": 319
     },
-    "0x00A1": {
+    "0x013E": {
       "file": "joystick_position.asm",
-      "address": "0x00A1",
-      "line": 139
+      "address": "0x013E",
+      "line": 237
     },
-    "0x01DB": {
+    "0x01AD": {
       "file": "joystick_position.asm",
-      "address": "0x01DB",
-      "line": 311
+      "address": "0x01AD",
+      "line": 326
+    },
+    "0x0275": {
+      "file": "joystick_position.asm",
+      "address": "0x0275",
+      "line": 56
+    },
+    "0x0318": {
+      "file": "joystick_position.asm",
+      "address": "0x0318",
+      "line": 505
+    },
+    "0x003A": {
+      "file": "joystick_position.asm",
+      "address": "0x003A",
+      "line": 81
+    },
+    "0x006B": {
+      "file": "joystick_position.asm",
+      "address": "0x006B",
+      "line": 115
+    },
+    "0x0346": {
+      "file": "joystick_position.asm",
+      "address": "0x0346",
+      "line": 526
+    },
+    "0x00E5": {
+      "file": "joystick_position.asm",
+      "address": "0x00E5",
+      "line": 195
+    },
+    "0x00DB": {
+      "file": "joystick_position.asm",
+      "address": "0x00DB",
+      "line": 188
+    },
+    "0x0233": {
+      "file": "joystick_position.asm",
+      "address": "0x0233",
+      "line": 391
+    },
+    "0x0385": {
+      "file": "joystick_position.asm",
+      "address": "0x0385",
+      "line": 553
+    },
+    "0x0171": {
+      "file": "joystick_position.asm",
+      "address": "0x0171",
+      "line": 279
+    },
+    "0x0114": {
+      "file": "joystick_position.asm",
+      "address": "0x0114",
+      "line": 228
+    },
+    "0x0136": {
+      "file": "joystick_position.asm",
+      "address": "0x0136",
+      "line": 232
+    },
+    "0x004D": {
+      "file": "joystick_position.asm",
+      "address": "0x004D",
+      "line": 89
+    },
+    "0x02B2": {
+      "file": "joystick_position.asm",
+      "address": "0x02B2",
+      "line": 458
+    },
+    "0x018F": {
+      "file": "joystick_position.asm",
+      "address": "0x018F",
+      "line": 299
+    },
+    "0x00A6": {
+      "file": "joystick_position.asm",
+      "address": "0x00A6",
+      "line": 151
+    },
+    "0x00F0": {
+      "file": "joystick_position.asm",
+      "address": "0x00F0",
+      "line": 203
+    },
+    "0x0030": {
+      "file": "joystick_position.asm",
+      "address": "0x0030",
+      "line": 72
+    },
+    "0x01CE": {
+      "file": "joystick_position.asm",
+      "address": "0x01CE",
+      "line": 343
+    },
+    "0x01A2": {
+      "file": "joystick_position.asm",
+      "address": "0x01A2",
+      "line": 318
+    },
+    "0x02A3": {
+      "file": "joystick_position.asm",
+      "address": "0x02A3",
+      "line": 452
+    },
+    "0x00CA": {
+      "file": "joystick_position.asm",
+      "address": "0x00CA",
+      "line": 176
+    },
+    "0x020F": {
+      "file": "joystick_position.asm",
+      "address": "0x020F",
+      "line": 371
+    },
+    "0x015F": {
+      "file": "joystick_position.asm",
+      "address": "0x015F",
+      "line": 265
+    },
+    "0x03B0": {
+      "file": "joystick_position.asm",
+      "address": "0x03B0",
+      "line": 570
+    },
+    "0x02F8": {
+      "file": "joystick_position.asm",
+      "address": "0x02F8",
+      "line": 490
+    },
+    "0x034C": {
+      "file": "joystick_position.asm",
+      "address": "0x034C",
+      "line": 528
+    },
+    "0x0092": {
+      "file": "joystick_position.asm",
+      "address": "0x0092",
+      "line": 144
+    },
+    "0x03B8": {
+      "file": "joystick_position.asm",
+      "address": "0x03B8",
+      "line": 574
+    },
+    "0x00D5": {
+      "file": "joystick_position.asm",
+      "address": "0x00D5",
+      "line": 183
+    },
+    "0x02D2": {
+      "file": "joystick_position.asm",
+      "address": "0x02D2",
+      "line": 472
+    },
+    "0x017F": {
+      "file": "joystick_position.asm",
+      "address": "0x017F",
+      "line": 288
+    },
+    "0x0266": {
+      "file": "joystick_position.asm",
+      "address": "0x0266",
+      "line": 422
+    },
+    "0x024B": {
+      "file": "joystick_position.asm",
+      "address": "0x024B",
+      "line": 41
+    },
+    "0x02E3": {
+      "file": "joystick_position.asm",
+      "address": "0x02E3",
+      "line": 483
+    },
+    "0x02B4": {
+      "file": "joystick_position.asm",
+      "address": "0x02B4",
+      "line": 460
+    },
+    "0x02FB": {
+      "file": "joystick_position.asm",
+      "address": "0x02FB",
+      "line": 491
+    },
+    "0x0141": {
+      "file": "joystick_position.asm",
+      "address": "0x0141",
+      "line": 239
+    },
+    "0x039A": {
+      "file": "joystick_position.asm",
+      "address": "0x039A",
+      "line": 560
+    },
+    "0x017E": {
+      "file": "joystick_position.asm",
+      "address": "0x017E",
+      "line": 287
+    },
+    "0x0301": {
+      "file": "joystick_position.asm",
+      "address": "0x0301",
+      "line": 493
+    },
+    "0x00C1": {
+      "file": "joystick_position.asm",
+      "address": "0x00C1",
+      "line": 167
+    },
+    "0x0048": {
+      "file": "joystick_position.asm",
+      "address": "0x0048",
+      "line": 86
+    },
+    "0x0192": {
+      "file": "joystick_position.asm",
+      "address": "0x0192",
+      "line": 300
+    },
+    "0x00FB": {
+      "file": "joystick_position.asm",
+      "address": "0x00FB",
+      "line": 211
+    },
+    "0x01B0": {
+      "file": "joystick_position.asm",
+      "address": "0x01B0",
+      "line": 327
+    },
+    "0x0107": {
+      "file": "joystick_position.asm",
+      "address": "0x0107",
+      "line": 220
+    },
+    "0x00C0": {
+      "file": "joystick_position.asm",
+      "address": "0x00C0",
+      "line": 166
+    },
+    "0x028E": {
+      "file": "joystick_position.asm",
+      "address": "0x028E",
+      "line": 445
+    },
+    "0x0045": {
+      "file": "joystick_position.asm",
+      "address": "0x0045",
+      "line": 85
+    },
+    "0x021C": {
+      "file": "joystick_position.asm",
+      "address": "0x021C",
+      "line": 16
+    },
+    "0x00A9": {
+      "file": "joystick_position.asm",
+      "address": "0x00A9",
+      "line": 152
+    },
+    "0x01E9": {
+      "file": "joystick_position.asm",
+      "address": "0x01E9",
+      "line": 360
+    },
+    "0x0022": {
+      "file": "joystick_position.asm",
+      "address": "0x0022",
+      "line": 67
+    },
+    "0x02E6": {
+      "file": "joystick_position.asm",
+      "address": "0x02E6",
+      "line": 484
+    },
+    "0x0034": {
+      "file": "joystick_position.asm",
+      "address": "0x0034",
+      "line": 74
+    },
+    "0x0379": {
+      "file": "joystick_position.asm",
+      "address": "0x0379",
+      "line": 549
+    },
+    "0x00B9": {
+      "file": "joystick_position.asm",
+      "address": "0x00B9",
+      "line": 163
+    },
+    "0x005C": {
+      "file": "joystick_position.asm",
+      "address": "0x005C",
+      "line": 105
+    },
+    "0x00F3": {
+      "file": "joystick_position.asm",
+      "address": "0x00F3",
+      "line": 205
+    },
+    "0x0035": {
+      "file": "joystick_position.asm",
+      "address": "0x0035",
+      "line": 75
+    },
+    "0x0095": {
+      "file": "joystick_position.asm",
+      "address": "0x0095",
+      "line": 145
+    },
+    "0x02B3": {
+      "file": "joystick_position.asm",
+      "address": "0x02B3",
+      "line": 459
+    },
+    "0x03B3": {
+      "file": "joystick_position.asm",
+      "address": "0x03B3",
+      "line": 571
+    },
+    "0x00BB": {
+      "file": "joystick_position.asm",
+      "address": "0x00BB",
+      "line": 164
+    },
+    "0x0227": {
+      "file": "joystick_position.asm",
+      "address": "0x0227",
+      "line": 20
+    },
+    "0x0278": {
+      "file": "joystick_position.asm",
+      "address": "0x0278",
+      "line": 431
+    },
+    "0x014B": {
+      "file": "joystick_position.asm",
+      "address": "0x014B",
+      "line": 253
+    },
+    "0x007F": {
+      "file": "joystick_position.asm",
+      "address": "0x007F",
+      "line": 129
+    },
+    "0x0154": {
+      "file": "joystick_position.asm",
+      "address": "0x0154",
+      "line": 259
+    },
+    "0x01D9": {
+      "file": "joystick_position.asm",
+      "address": "0x01D9",
+      "line": 350
+    },
+    "0x02AF": {
+      "file": "joystick_position.asm",
+      "address": "0x02AF",
+      "line": 457
+    },
+    "0x0272": {
+      "file": "joystick_position.asm",
+      "address": "0x0272",
+      "line": 429
+    },
+    "0x019A": {
+      "file": "joystick_position.asm",
+      "address": "0x019A",
+      "line": 310
+    },
+    "0x030A": {
+      "file": "joystick_position.asm",
+      "address": "0x030A",
+      "line": 497
+    },
+    "0x0182": {
+      "file": "joystick_position.asm",
+      "address": "0x0182",
+      "line": 290
+    },
+    "0x0250": {
+      "file": "joystick_position.asm",
+      "address": "0x0250",
+      "line": 407
+    },
+    "0x0084": {
+      "file": "joystick_position.asm",
+      "address": "0x0084",
+      "line": 132
+    },
+    "0x022D": {
+      "file": "joystick_position.asm",
+      "address": "0x022D",
+      "line": 30
+    },
+    "0x00B3": {
+      "file": "joystick_position.asm",
+      "address": "0x00B3",
+      "line": 161
+    },
+    "0x01C1": {
+      "file": "joystick_position.asm",
+      "address": "0x01C1",
+      "line": 336
+    },
+    "0x018C": {
+      "file": "joystick_position.asm",
+      "address": "0x018C",
+      "line": 298
+    },
+    "0x007B": {
+      "file": "joystick_position.asm",
+      "address": "0x007B",
+      "line": 126
+    },
+    "0x0150": {
+      "file": "joystick_position.asm",
+      "address": "0x0150",
+      "line": 256
+    },
+    "0x0230": {
+      "file": "joystick_position.asm",
+      "address": "0x0230",
+      "line": 390
+    },
+    "0x00F8": {
+      "file": "joystick_position.asm",
+      "address": "0x00F8",
+      "line": 209
+    },
+    "0x02BA": {
+      "file": "joystick_position.asm",
+      "address": "0x02BA",
+      "line": 464
+    },
+    "0x004B": {
+      "file": "joystick_position.asm",
+      "address": "0x004B",
+      "line": 87
+    },
+    "0x01F9": {
+      "file": "joystick_position.asm",
+      "address": "0x01F9",
+      "line": 367
+    },
+    "0x0188": {
+      "file": "joystick_position.asm",
+      "address": "0x0188",
+      "line": 293
+    },
+    "0x0151": {
+      "file": "joystick_position.asm",
+      "address": "0x0151",
+      "line": 257
+    },
+    "0x0307": {
+      "file": "joystick_position.asm",
+      "address": "0x0307",
+      "line": 496
+    },
+    "0x0211": {
+      "file": "joystick_position.asm",
+      "address": "0x0211",
+      "line": 12
+    },
+    "0x02EC": {
+      "file": "joystick_position.asm",
+      "address": "0x02EC",
+      "line": 486
+    },
+    "0x00FE": {
+      "file": "joystick_position.asm",
+      "address": "0x00FE",
+      "line": 214
+    },
+    "0x027D": {
+      "file": "joystick_position.asm",
+      "address": "0x027D",
+      "line": 436
+    },
+    "0x0075": {
+      "file": "joystick_position.asm",
+      "address": "0x0075",
+      "line": 122
+    },
+    "0x026F": {
+      "file": "joystick_position.asm",
+      "address": "0x026F",
+      "line": 54
+    },
+    "0x0100": {
+      "file": "joystick_position.asm",
+      "address": "0x0100",
+      "line": 215
+    },
+    "0x0345": {
+      "file": "joystick_position.asm",
+      "address": "0x0345",
+      "line": 525
     },
     "0x004C": {
       "file": "joystick_position.asm",
       "address": "0x004C",
-      "line": 81
+      "line": 88
+    },
+    "0x0056": {
+      "file": "joystick_position.asm",
+      "address": "0x0056",
+      "line": 101
+    },
+    "0x03A6": {
+      "file": "joystick_position.asm",
+      "address": "0x03A6",
+      "line": 564
+    },
+    "0x00B7": {
+      "file": "joystick_position.asm",
+      "address": "0x00B7",
+      "line": 162
+    },
+    "0x0194": {
+      "file": "joystick_position.asm",
+      "address": "0x0194",
+      "line": 302
+    },
+    "0x032D": {
+      "file": "joystick_position.asm",
+      "address": "0x032D",
+      "line": 512
+    },
+    "0x00E6": {
+      "file": "joystick_position.asm",
+      "address": "0x00E6",
+      "line": 196
+    },
+    "0x03A0": {
+      "file": "joystick_position.asm",
+      "address": "0x03A0",
+      "line": 562
+    },
+    "0x0027": {
+      "file": "joystick_position.asm",
+      "address": "0x0027",
+      "line": 69
+    },
+    "0x0061": {
+      "file": "joystick_position.asm",
+      "address": "0x0061",
+      "line": 109
+    },
+    "0x0089": {
+      "file": "joystick_position.asm",
+      "address": "0x0089",
+      "line": 135
+    },
+    "0x009E": {
+      "file": "joystick_position.asm",
+      "address": "0x009E",
+      "line": 148
+    },
+    "0x00F4": {
+      "file": "joystick_position.asm",
+      "address": "0x00F4",
+      "line": 207
+    },
+    "0x0324": {
+      "file": "joystick_position.asm",
+      "address": "0x0324",
+      "line": 509
+    },
+    "0x00A3": {
+      "file": "joystick_position.asm",
+      "address": "0x00A3",
+      "line": 150
+    },
+    "0x00F2": {
+      "file": "joystick_position.asm",
+      "address": "0x00F2",
+      "line": 204
+    },
+    "0x0224": {
+      "file": "joystick_position.asm",
+      "address": "0x0224",
+      "line": 384
+    },
+    "0x016F": {
+      "file": "joystick_position.asm",
+      "address": "0x016F",
+      "line": 277
+    },
+    "0x005D": {
+      "file": "joystick_position.asm",
+      "address": "0x005D",
+      "line": 106
+    },
+    "0x038B": {
+      "file": "joystick_position.asm",
+      "address": "0x038B",
+      "line": 555
+    },
+    "0x026C": {
+      "file": "joystick_position.asm",
+      "address": "0x026C",
+      "line": 53
+    },
+    "0x0362": {
+      "file": "joystick_position.asm",
+      "address": "0x0362",
+      "line": 539
+    },
+    "0x02D8": {
+      "file": "joystick_position.asm",
+      "address": "0x02D8",
+      "line": 474
+    },
+    "0x02BD": {
+      "file": "joystick_position.asm",
+      "address": "0x02BD",
+      "line": 465
+    },
+    "0x008E": {
+      "file": "joystick_position.asm",
+      "address": "0x008E",
+      "line": 142
+    },
+    "0x0365": {
+      "file": "joystick_position.asm",
+      "address": "0x0365",
+      "line": 540
+    },
+    "0x02EF": {
+      "file": "joystick_position.asm",
+      "address": "0x02EF",
+      "line": 487
+    },
+    "0x0042": {
+      "file": "joystick_position.asm",
+      "address": "0x0042",
+      "line": 84
+    },
+    "0x0083": {
+      "file": "joystick_position.asm",
+      "address": "0x0083",
+      "line": 131
+    },
+    "0x006C": {
+      "file": "joystick_position.asm",
+      "address": "0x006C",
+      "line": 116
+    },
+    "0x0246": {
+      "file": "joystick_position.asm",
+      "address": "0x0246",
+      "line": 39
+    },
+    "0x03D5": {
+      "file": "joystick_position.asm",
+      "address": "0x03D5",
+      "line": 592
+    },
+    "0x0024": {
+      "file": "joystick_position.asm",
+      "address": "0x0024",
+      "line": 68
+    },
+    "0x03D1": {
+      "file": "joystick_position.asm",
+      "address": "0x03D1",
+      "line": 584
+    },
+    "0x02FE": {
+      "file": "joystick_position.asm",
+      "address": "0x02FE",
+      "line": 492
+    },
+    "0x01A7": {
+      "file": "joystick_position.asm",
+      "address": "0x01A7",
+      "line": 321
+    },
+    "0x013C": {
+      "file": "joystick_position.asm",
+      "address": "0x013C",
+      "line": 236
+    },
+    "0x0055": {
+      "file": "joystick_position.asm",
+      "address": "0x0055",
+      "line": 100
+    },
+    "0x031E": {
+      "file": "joystick_position.asm",
+      "address": "0x031E",
+      "line": 507
     }
   },
   "functions": {},
   "nativeCalls": {
-    "18": "J1_Y",
-    "21": "VECTREX_PRINT_TEXT",
-    "24": "VECTREX_PRINT_TEXT",
-    "17": "J1_X",
-    "25": "VECTREX_PRINT_NUMBER",
-    "22": "VECTREX_PRINT_NUMBER"
+    "27": "VECTREX_PRINT_NUMBER",
+    "20": "J1_Y",
+    "24": "VECTREX_PRINT_NUMBER",
+    "26": "VECTREX_PRINT_TEXT",
+    "19": "J1_X",
+    "23": "VECTREX_PRINT_TEXT"
   },
   "asmFunctions": {
     "VECTREX_PRINT_TEXT": {
       "name": "VECTREX_PRINT_TEXT",
       "file": "joystick_position.asm",
-      "startLine": 120,
-      "endLine": 134,
+      "startLine": 138,
+      "endLine": 152,
       "type": "native"
     }
   },
   "asmAddressMap": {
-    "364": "0x0258",
-    "151": "0x00BA",
-    "291": "0x01AC",
-    "43": "0x0179",
-    "209": "0x0109",
-    "248": "0x0162",
-    "362": "0x0254",
-    "93": "0x005F",
-    "180": "0x00DF",
-    "363": "0x0257",
-    "261": "0x0179",
-    "238": "0x0154",
-    "226": "0x0141",
-    "161": "0x00C6",
-    "254": "0x0171",
-    "189": "0x00EB",
-    "102": "0x006D",
-    "360": "0x0251",
-    "114": "0x007E",
-    "268": "0x0184",
-    "92": "0x005E",
-    "316": "0x01EA",
-    "266": "0x017E",
-    "282": "0x019B",
-    "313": "0x01E1",
-    "197": "0x00F7",
-    "185": "0x00E7",
-    "353": "0x023C",
-    "58": "0x0032",
-    "15": "0x0146",
-    "190": "0x00ED",
-    "104": "0x006F",
-    "103": "0x006E",
-    "337": "0x0219",
-    "101": "0x006A",
-    "300": "0x01C7",
-    "65": "0x0039",
-    "317": "0x01ED",
-    "365": "0x0259",
-    "176": "0x00DB",
-    "284": "0x01A1",
-    "29": "0x0157",
-    "32": "0x015F",
-    "16": "0x0149",
-    "145": "0x00B0",
-    "113": "0x007D",
-    "169": "0x00D0",
-    "105": "0x0071",
-    "71": "0x0047",
-    "215": "0x012D",
-    "299": "0x01C4",
-    "170": "0x00D2",
-    "2": "0x013A",
-    "64": "0x0037",
-    "20": "0x0154",
-    "68": "0x0042",
-    "366": "0x025C",
-    "297": "0x01BE",
-    "340": "0x0222",
-    "163": "0x00C8",
-    "126": "0x008A",
-    "186": "0x00E9",
-    "341": "0x0225",
-    "311": "0x01DB",
-    "287": "0x01AA",
-    "321": "0x01F9",
-    "83": "0x0050",
-    "310": "0x01D8",
-    "13": "0x0141",
-    "224": "0x013C",
-    "259": "0x0176",
-    "150": "0x00B9",
-    "262": "0x017C",
-    "325": "0x0200",
-    "314": "0x01E4",
-    "174": "0x00D8",
-    "195": "0x00F4",
-    "40": "0x0174",
-    "191": "0x00EF",
-    "350": "0x0233",
-    "167": "0x00CE",
-    "171": "0x00D3",
-    "117": "0x0083",
-    "249": "0x0164",
-    "294": "0x01B5",
-    "335": "0x0213",
-    "258": "0x0174",
-    "205": "0x0102",
-    "351": "0x0236",
-    "357": "0x0248",
-    "245": "0x015A",
-    "324": "0x01FF",
-    "212": "0x0128",
-    "247": "0x015F",
-    "159": "0x00C4",
-    "273": "0x018A",
-    "115": "0x0080",
-    "318": "0x01F0",
-    "34": "0x0164",
-    "285": "0x01A4",
-    "302": "0x01CD",
-    "377": "0x0264",
-    "227": "0x0143",
-    "196": "0x00F5",
-    "108": "0x0075",
-    "51": "0x0022",
-    "202": "0x00FE",
-    "57": "0x0031",
-    "301": "0x01CA",
-    "343": "0x0228",
-    "140": "0x00A4",
-    "349": "0x0230",
-    "293": "0x01B2",
-    "243": "0x0157",
-    "30": "0x015A",
-    "70": "0x0046",
-    "107": "0x0074",
-    "82": "0x004F",
-    "41": "0x0176",
-    "178": "0x00DD",
-    "141": "0x00A7",
-    "355": "0x0242",
-    "374": "0x025E",
-    "274": "0x018D",
-    "275": "0x0190",
-    "187": "0x00EA",
-    "352": "0x0239",
-    "267": "0x0181",
-    "223": "0x013A",
-    "72": "0x0048",
-    "55": "0x002D",
-    "158": "0x00C1",
-    "182": "0x00E0",
-    "172": "0x00D4",
-    "319": "0x01F3",
-    "139": "0x00A1",
-    "33": "0x0162",
-    "298": "0x01C1",
-    "278": "0x0199",
-    "85": "0x0053",
-    "305": "0x01D3",
-    "251": "0x0169",
-    "331": "0x0207",
-    "6": "0x013A",
-    "203": "0x0100",
-    "84": "0x0051",
-    "17": "0x014B",
-    "234": "0x014B",
-    "14": "0x0143",
-    "39": "0x0171",
-    "130": "0x0094",
-    "157": "0x00BF",
-    "237": "0x0151",
-    "225": "0x013E",
-    "359": "0x024E",
-    "56": "0x0030",
-    "276": "0x0193",
-    "250": "0x0167",
-    "88": "0x0057",
-    "373": "0x025D",
-    "37": "0x016C",
-    "320": "0x01F6",
-    "36": "0x0169",
-    "213": "0x012A",
-    "147": "0x00B4",
-    "87": "0x0056",
-    "81": "0x004C",
-    "292": "0x01AF",
-    "133": "0x009D",
-    "144": "0x00AE",
-    "128": "0x008F",
-    "127": "0x008D",
-    "346": "0x022D",
-    "183": "0x00E3",
-    "149": "0x00B8",
-    "354": "0x023F",
-    "312": "0x01DE",
-    "246": "0x015D",
-    "12": "0x013E",
-    "52": "0x0024",
-    "160": "0x00C5",
-    "177": "0x00DC",
-    "326": "0x0201",
-    "131": "0x0097",
-    "164": "0x00C9",
-    "323": "0x01FC",
-    "376": "0x0263",
-    "221": "0x0137",
-    "54": "0x002A",
-    "154": "0x00BB",
-    "334": "0x0210",
-    "277": "0x0196",
-    "165": "0x00CC",
-    "95": "0x0062",
-    "173": "0x00D6",
-    "295": "0x01B8",
-    "220": "0x0135",
-    "111": "0x0079",
-    "18": "0x014E",
-    "11": "0x013C",
-    "218": "0x0132",
-    "184": "0x00E5",
-    "338": "0x021C",
-    "35": "0x0167",
-    "146": "0x00B2",
-    "208": "0x0108",
-    "206": "0x0104",
-    "143": "0x00AA",
-    "307": "0x01D5",
-    "125": "0x0088",
-    "118": "0x0084",
-    "201": "0x00FC",
-    "112": "0x007C",
-    "315": "0x01E7",
-    "31": "0x015D",
-    "235": "0x014E",
-    "252": "0x016C",
-    "229": "0x0149",
-    "134": "0x00A0",
-    "129": "0x0091",
-    "194": "0x00F3",
-    "59": "0x0033",
-    "344": "0x022B",
-    "339": "0x021F",
-    "356": "0x0245",
-    "306": "0x01D4",
-    "67": "0x003F",
-    "304": "0x01D0",
-    "283": "0x019E",
-    "217": "0x0130",
-    "66": "0x003C",
-    "98": "0x0066",
-    "253": "0x016E",
-    "336": "0x0216",
-    "132": "0x009A",
-    "332": "0x020A",
-    "207": "0x0107",
-    "358": "0x024B",
-    "330": "0x0204",
-    "228": "0x0146",
-    "148": "0x00B7",
-    "91": "0x005B",
-    "286": "0x01A7",
-    "269": "0x0187",
-    "94": "0x0060",
-    "69": "0x0045",
-    "204": "0x0101",
-    "296": "0x01BB",
-    "97": "0x0065",
-    "345": "0x022C",
-    "53": "0x0027",
-    "38": "0x016E",
-    "19": "0x0151",
-    "156": "0x00BC",
-    "200": "0x00FA",
-    "193": "0x00F2",
-    "333": "0x020D"
+    "318": "0x01A2",
+    "518": "0x0338",
+    "15": "0x0219",
+    "176": "0x00CA",
+    "460": "0x02B4",
+    "439": "0x0286",
+    "129": "0x007F",
+    "43": "0x0250",
+    "568": "0x03AA",
+    "562": "0x03A0",
+    "289": "0x0180",
+    "317": "0x01A1",
+    "149": "0x00A1",
+    "539": "0x0362",
+    "541": "0x0368",
+    "494": "0x0304",
+    "207": "0x00F4",
+    "172": "0x00C4",
+    "269": "0x0164",
+    "311": "0x019B",
+    "491": "0x02FB",
+    "372": "0x0211",
+    "299": "0x018F",
+    "497": "0x030A",
+    "399": "0x023C",
+    "472": "0x02D2",
+    "268": "0x0162",
+    "143": "0x0090",
+    "50": "0x0263",
+    "454": "0x02A9",
+    "202": "0x00EE",
+    "183": "0x00D5",
+    "290": "0x0182",
+    "103": "0x0059",
+    "474": "0x02D8",
+    "192": "0x00E1",
+    "151": "0x00A6",
+    "506": "0x031B",
+    "552": "0x0382",
+    "147": "0x009B",
+    "473": "0x02D5",
+    "150": "0x00A3",
+    "181": "0x00D1",
+    "19": "0x0224",
+    "11": "0x020F",
+    "251": "0x0149",
+    "560": "0x039A",
+    "257": "0x0151",
+    "458": "0x02B2",
+    "29": "0x022A",
+    "468": "0x02C6",
+    "502": "0x030F",
+    "196": "0x00E6",
+    "105": "0x005C",
+    "204": "0x00F2",
+    "291": "0x0183",
+    "88": "0x004C",
+    "403": "0x0246",
+    "374": "0x0216",
+    "361": "0x01EA",
+    "136": "0x008A",
+    "467": "0x02C3",
+    "554": "0x0388",
+    "123": "0x0077",
+    "569": "0x03AD",
+    "376": "0x021C",
+    "152": "0x00A9",
+    "277": "0x016F",
+    "362": "0x01ED",
+    "486": "0x02EC",
+    "440": "0x0289",
+    "37": "0x0241",
+    "522": "0x033E",
+    "70": "0x002A",
+    "402": "0x0243",
+    "203": "0x00F0",
+    "189": "0x00DC",
+    "421": "0x0263",
+    "516": "0x0336",
+    "300": "0x0192",
+    "329": "0x01B6",
+    "68": "0x0024",
+    "401": "0x0241",
+    "344": "0x01CF",
+    "347": "0x01D2",
+    "545": "0x036D",
+    "355": "0x01E0",
+    "265": "0x015F",
+    "504": "0x0315",
+    "365": "0x01F3",
+    "349": "0x01D6",
+    "208": "0x00F6",
+    "39": "0x0246",
+    "510": "0x0327",
+    "125": "0x007A",
+    "85": "0x0045",
+    "559": "0x0397",
+    "592": "0x03D5",
+    "449": "0x029A",
+    "109": "0x0061",
+    "112": "0x0066",
+    "484": "0x02E6",
+    "499": "0x030C",
+    "503": "0x0312",
+    "303": "0x0197",
+    "513": "0x0330",
+    "84": "0x0042",
+    "212": "0x00FC",
+    "459": "0x02B3",
+    "535": "0x035A",
+    "496": "0x0307",
+    "436": "0x027D",
+    "335": "0x01C0",
+    "398": "0x0239",
+    "488": "0x02F2",
+    "224": "0x010D",
+    "444": "0x028B",
+    "581": "0x03C6",
+    "341": "0x01C8",
+    "175": "0x00C8",
+    "366": "0x01F6",
+    "146": "0x0098",
+    "200": "0x00E9",
+    "477": "0x02DE",
+    "240": "0x0143",
+    "298": "0x018C",
+    "493": "0x0301",
+    "465": "0x02BD",
+    "142": "0x008E",
+    "272": "0x016B",
+    "524": "0x0344",
+    "430": "0x0275",
+    "144": "0x0092",
+    "76": "0x0036",
+    "254": "0x014E",
+    "209": "0x00F8",
+    "340": "0x01C5",
+    "32": "0x0233",
+    "571": "0x03B3",
+    "534": "0x0357",
+    "426": "0x0269",
+    "74": "0x0034",
+    "110": "0x0064",
+    "542": "0x036B",
+    "194": "0x00E4",
+    "479": "0x02E0",
+    "287": "0x017E",
+    "464": "0x02BA",
+    "297": "0x018A",
+    "463": "0x02B7",
+    "16": "0x021C",
+    "356": "0x01E3",
+    "17": "0x021E",
+    "471": "0x02CF",
+    "360": "0x01E9",
+    "158": "0x00AD",
+    "31": "0x0230",
+    "113": "0x0068",
+    "135": "0x0089",
+    "451": "0x02A0",
+    "259": "0x0154",
+    "101": "0x0056",
+    "121": "0x0074",
+    "148": "0x009E",
+    "537": "0x035E",
+    "214": "0x00FE",
+    "46": "0x0258",
+    "529": "0x034F",
+    "100": "0x0055",
+    "213": "0x00FD",
+    "40": "0x0248",
+    "71": "0x002D",
+    "131": "0x0083",
+    "165": "0x00BD",
+    "255": "0x014F",
+    "558": "0x0394",
+    "404": "0x0248",
+    "498": "0x030B",
+    "521": "0x033B",
+    "470": "0x02CC",
+    "412": "0x0255",
+    "489": "0x02F5",
+    "466": "0x02C0",
+    "384": "0x0224",
+    "385": "0x0227",
+    "86": "0x0048",
+    "44": "0x0253",
+    "342": "0x01CB",
+    "333": "0x01BA",
+    "221": "0x0109",
+    "51": "0x0266",
+    "122": "0x0075",
+    "580": "0x03C3",
+    "288": "0x017F",
+    "14": "0x0216",
+    "553": "0x0385",
+    "72": "0x0030",
+    "314": "0x019F",
+    "530": "0x0352",
+    "211": "0x00FB",
+    "405": "0x024B",
+    "357": "0x01E6",
+    "227": "0x0112",
+    "261": "0x0158",
+    "55": "0x0272",
+    "126": "0x007B",
+    "557": "0x0391",
+    "450": "0x029D",
+    "225": "0x0110",
+    "69": "0x0027",
+    "579": "0x03C0",
+    "33": "0x0236",
+    "191": "0x00DF",
+    "205": "0x00F3",
+    "168": "0x00C2",
+    "167": "0x00C1",
+    "564": "0x03A6",
+    "6": "0x020D",
+    "343": "0x01CE",
+    "448": "0x0297",
+    "427": "0x026C",
+    "411": "0x0253",
+    "336": "0x01C1",
+    "438": "0x0283",
+    "332": "0x01B7",
+    "36": "0x023E",
+    "525": "0x0345",
+    "396": "0x0236",
+    "13": "0x0214",
+    "363": "0x01F0",
+    "237": "0x013E",
+    "106": "0x005D",
+    "556": "0x038E",
+    "41": "0x024B",
+    "130": "0x0082",
+    "373": "0x0214",
+    "567": "0x03A7",
+    "536": "0x035D",
+    "90": "0x004E",
+    "250": "0x0146",
+    "236": "0x013C",
+    "584": "0x03D1",
+    "52": "0x0269",
+    "278": "0x0170",
+    "201": "0x00EC",
+    "550": "0x037C",
+    "469": "0x02C9",
+    "422": "0x0266",
+    "540": "0x0365",
+    "188": "0x00DB",
+    "182": "0x00D2",
+    "179": "0x00CF",
+    "226": "0x0111",
+    "327": "0x01B0",
+    "99": "0x0052",
+    "319": "0x01A4",
+    "428": "0x026F",
+    "334": "0x01BD",
+    "406": "0x024D",
+    "215": "0x0100",
+    "538": "0x035F",
+    "367": "0x01F9",
+    "75": "0x0035",
+    "453": "0x02A6",
+    "511": "0x032A",
+    "419": "0x025D",
+    "435": "0x027A",
+    "42": "0x024D",
+    "292": "0x0185",
+    "220": "0x0107",
+    "387": "0x022A",
+    "585": "0x03D4",
+    "102": "0x0057",
+    "195": "0x00E5",
+    "420": "0x0260",
+    "73": "0x0033",
+    "157": "0x00AA",
+    "388": "0x022D",
+    "12": "0x0211",
+    "572": "0x03B6",
+    "555": "0x038B",
+    "400": "0x023E",
+    "583": "0x03CE",
+    "275": "0x016C",
+    "239": "0x0141",
+    "457": "0x02AF",
+    "414": "0x0258",
+    "281": "0x0178",
+    "596": "0x03DC",
+    "162": "0x00B7",
+    "120": "0x0073",
+    "83": "0x003F",
+    "528": "0x034C",
+    "350": "0x01D9",
+    "452": "0x02A3",
+    "164": "0x00BB",
+    "302": "0x0194",
+    "547": "0x0373",
+    "89": "0x004D",
+    "198": "0x00E8",
+    "549": "0x0379",
+    "563": "0x03A3",
+    "234": "0x0139",
+    "57": "0x0278",
+    "375": "0x0219",
+    "446": "0x0291",
+    "270": "0x0166",
+    "133": "0x0086",
+    "326": "0x01AD",
+    "53": "0x026C",
+    "551": "0x037F",
+    "533": "0x0354",
+    "34": "0x0239",
+    "351": "0x01DC",
+    "169": "0x00C3",
+    "219": "0x0105",
+    "328": "0x01B3",
+    "508": "0x0321",
+    "492": "0x02FE",
+    "163": "0x00B9",
+    "174": "0x00C5",
+    "415": "0x025B",
+    "407": "0x0250",
+    "187": "0x00D9",
+    "301": "0x0193",
+    "119": "0x0070",
+    "276": "0x016D",
+    "185": "0x00D7",
+    "382": "0x0221",
+    "132": "0x0084",
+    "228": "0x0114",
+    "310": "0x019A",
+    "483": "0x02E3",
+    "476": "0x02DB",
+    "574": "0x03B8",
+    "431": "0x0278",
+    "507": "0x031E",
+    "177": "0x00CD",
+    "2": "0x020D",
+    "286": "0x017B",
+    "260": "0x0157",
+    "370": "0x020D",
+    "320": "0x01A5",
+    "575": "0x03BB",
+    "56": "0x0275",
+    "487": "0x02EF",
+    "166": "0x00C0",
+    "161": "0x00B3",
+    "279": "0x0171",
+    "35": "0x023C",
+    "390": "0x0230",
+    "231": "0x0134",
+    "570": "0x03B0",
+    "517": "0x0337",
+    "178": "0x00CE",
+    "116": "0x006C",
+    "48": "0x025D",
+    "548": "0x0376",
+    "490": "0x02F8",
+    "593": "0x03D6",
+    "561": "0x039D",
+    "67": "0x0022",
+    "59": "0x027A",
+    "264": "0x015E",
+    "312": "0x019C",
+    "381": "0x021E",
+    "429": "0x0272",
+    "447": "0x0294",
+    "595": "0x03DB",
+    "337": "0x01C4",
+    "391": "0x0233",
+    "49": "0x0260",
+    "321": "0x01A7",
+    "115": "0x006B",
+    "348": "0x01D3",
+    "515": "0x0333",
+    "576": "0x03BC",
+    "222": "0x010A",
+    "18": "0x0221",
+    "145": "0x0095",
+    "82": "0x003C",
+    "253": "0x014B",
+    "325": "0x01AA",
+    "371": "0x020F",
+    "190": "0x00DD",
+    "111": "0x0065",
+    "324": "0x01A8",
+    "20": "0x0227",
+    "455": "0x02AC",
+    "505": "0x0318",
+    "271": "0x0169",
+    "54": "0x026F",
+    "578": "0x03BE",
+    "485": "0x02E9",
+    "445": "0x028E",
+    "527": "0x0349",
+    "354": "0x01DD",
+    "38": "0x0243",
+    "523": "0x0341",
+    "512": "0x032D",
+    "45": "0x0255",
+    "256": "0x0150",
+    "313": "0x019E",
+    "47": "0x025B",
+    "81": "0x003A",
+    "223": "0x010B",
+    "577": "0x03BD",
+    "478": "0x02DF",
+    "526": "0x0346",
+    "437": "0x0280",
+    "232": "0x0136",
+    "546": "0x0370",
+    "263": "0x015B",
+    "30": "0x022D",
+    "87": "0x004B",
+    "509": "0x0324",
+    "293": "0x0188",
+    "159": "0x00B0",
+    "218": "0x0103"
   },
   "variables": {
-    "arg1": {
-      "name": "arg1",
-      "address": "0xC896",
+    "x": {
+      "name": "x",
+      "address": "0xC8AC",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "circle_y": {
+      "name": "circle_y",
+      "address": "0xC8B2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "y": {
+      "name": "y",
+      "address": "0xC8AE",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8B8",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "circle_x": {
+      "name": "circle_x",
+      "address": "0xC8B0",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
     "TMPPTR2": {
       "name": "TMPPTR2",
-      "address": "0xC884",
+      "address": "0xC88C",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
-    "arg3": {
-      "name": "arg3",
-      "address": "0xC89A",
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8A4",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8BC",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
     "TEMP_X": {
       "name": "TEMP_X",
-      "address": "0xC888",
+      "address": "0xC898",
       "size": 1,
       "type": "unknown",
       "declLine": null
     },
-    "y": {
-      "name": "y",
-      "address": "0xC892",
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_B": {
+      "name": "DIV_B",
+      "address": "0xC890",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC899",
+      "size": 1,
       "type": "unknown",
       "declLine": null
     },
     "TMPPTR": {
       "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC89A",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8B6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT": {
+      "name": "TMPLEFT",
       "address": "0xC882",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC8A1",
+      "size": 1,
       "type": "unknown",
       "declLine": null
     },
@@ -1571,45 +2583,73 @@
       "type": "unknown",
       "declLine": null
     },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC889",
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8A2",
       "size": 1,
       "type": "unknown",
       "declLine": null
     },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC88A",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg0": {
-      "name": "arg0",
+    "DIV_R": {
+      "name": "DIV_R",
       "address": "0xC894",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8B4",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8A3",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
     "TEMP_YX": {
       "name": "TEMP_YX",
-      "address": "0xC886",
+      "address": "0xC896",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC898",
+    "DIV_Q": {
+      "name": "DIV_Q",
+      "address": "0xC892",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
-    "x": {
-      "name": "x",
-      "address": "0xC890",
+    "DIV_A": {
+      "name": "DIV_A",
+      "address": "0xC88E",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8BA",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC8A0",
+      "size": 1,
       "type": "unknown",
       "declLine": null
     }

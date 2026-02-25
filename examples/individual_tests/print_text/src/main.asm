@@ -49,6 +49,7 @@ J1X_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
     LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -62,6 +63,7 @@ J1Y_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
     LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -116,19 +118,19 @@ J1B4_BUILTIN:
     RTS
 
 VECTREX_PRINT_TEXT:
-    ; CRITICAL: Print_Str_d requires DP=$D0 and signature is (Y, X, string)
+    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)
     ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Reset0Ref  ; Reset beam to center for absolute text positioning
     LDU VAR_ARG2   ; string pointer (ARG2 = third param)
     LDA VAR_ARG1+1 ; Y (ARG1 = second param)
     LDB VAR_ARG0+1 ; X (ARG0 = first param)
     JSR Print_Str_d
-    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)
+    LDA #$80
+    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)
+    JSR $F1AF      ; DP_to_C8 (restore before return)
     RTS
 ; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
 __Intensity_a:

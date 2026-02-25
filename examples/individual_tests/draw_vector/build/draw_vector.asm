@@ -1,69 +1,456 @@
-; VPy M6809 Assembly (Vectrex)
-; ROM: 32768 bytes
-
-
-    ORG $0000
-
+; --- Motorola 6809 backend (Vectrex) title='DRAW_VECTOR' origin=$0000 ---
+        ORG $0000
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
     INCLUDE "VECTREX.I"
 
 ;***************************************************************************
-; CARTRIDGE HEADER
+; HEADER SECTION
 ;***************************************************************************
-    FCC "g GCE 2025"
-    FCB $80                 ; String terminator
-    FDB music1              ; Music pointer
-    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
-    FCC "DRAW_VECTOR"
-    FCB $80                 ; String terminator
-    FCB 0                   ; End of header
+    FCC "g GCE 1982"
+    FCB $80
+    FDB music1
+    FCB $F8
+    FCB $50
+    FCB $20
+    FCB $BB
+    FCC "DRAW VECTOR"
+    FCB $80
+    FCB 0
 
 ;***************************************************************************
 ; CODE SECTION
 ;***************************************************************************
 
+; === RAM VARIABLE DEFINITIONS (EQU) ===
+; AUTO-GENERATED - All offsets calculated automatically
+; Total RAM used: 29 bytes
+RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
+TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
+TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
+TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
+TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
+TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
+NUM_STR              EQU $C880+$0A   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+DRAW_VEC_X           EQU $C880+$10   ; X position offset for vector drawing (1 bytes)
+DRAW_VEC_Y           EQU $C880+$11   ; Y position offset for vector drawing (1 bytes)
+MIRROR_X             EQU $C880+$12   ; X-axis mirror flag (0=normal, 1=flip) (1 bytes)
+MIRROR_Y             EQU $C880+$13   ; Y-axis mirror flag (0=normal, 1=flip) (1 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$14   ; Intensity override (0=use vector's, >0=override) (1 bytes)
+VAR_ARG0             EQU $C880+$15   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$17   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$19   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$1B   ; Function argument 3 (2 bytes)
+
+    JMP START
+
+;**** CONST DECLARATIONS (NUMBER-ONLY) ****
+
+; === JOYSTICK BUILTIN SUBROUTINES ===
+; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
+; Returns: D = raw value from $C81B after Joy_Analog call
+J1X_BUILTIN:
+    PSHS X       ; Save X (Joy_Analog uses it)
+    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
+    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
+    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
+    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
+    SEX          ; Sign-extend B to D
+    ADDD #2      ; Calibrate center offset
+    PULS X       ; Restore X
+    RTS
+
+; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
+; Returns: D = raw value from $C81C after Joy_Analog call
+J1Y_BUILTIN:
+    PSHS X       ; Save X (Joy_Analog uses it)
+    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
+    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
+    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
+    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
+    SEX          ; Sign-extend B to D
+    ADDD #2      ; Calibrate center offset
+    PULS X       ; Restore X
+    RTS
+
+; === BUTTON SYSTEM - BIOS TRANSITIONS ===
+; J1_BUTTON_1-4() - Read transition bits from $C811
+; Read_Btns (auto-injected) calculates: ~(new) OR Vec_Prev_Btns
+; Result: bit=1 ONLY on rising edge (0→1 transition)
+; Returns: D = 1 (just pressed), 0 (not pressed or still held)
+
+J1B1_BUILTIN:
+    LDA $C811      ; Read transition bits (Vec_Button_1_1)
+    ANDA #$01      ; Test bit 0 (Button 1)
+    BEQ .J1B1_OFF
+    LDD #1         ; Return pressed (rising edge)
+    RTS
+.J1B1_OFF:
+    LDD #0         ; Return not pressed
+    RTS
+
+J1B2_BUILTIN:
+    LDA $C811
+    ANDA #$02      ; Test bit 1 (Button 2)
+    BEQ .J1B2_OFF
+    LDD #1
+    RTS
+.J1B2_OFF:
+    LDD #0
+    RTS
+
+J1B3_BUILTIN:
+    LDA $C811
+    ANDA #$04      ; Test bit 2 (Button 3)
+    BEQ .J1B3_OFF
+    LDD #1
+    RTS
+.J1B3_OFF:
+    LDD #0
+    RTS
+
+J1B4_BUILTIN:
+    LDA $C811
+    ANDA #$08      ; Test bit 3 (Button 4)
+    BEQ .J1B4_OFF
+    LDD #1
+    RTS
+.J1B4_OFF:
+    LDD #0
+    RTS
+
+; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
+__Intensity_a:
+TFR B,A         ; Move B to A (BIOS expects intensity in A)
+JMP Intensity_a ; JMP (not JSR) - BIOS returns to original caller
+__Reset0Ref:
+JMP Reset0Ref   ; JMP (not JSR) - BIOS returns to original caller
+__Moveto_d:
+LDA 2,S         ; Get Y from stack (after return address)
+JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
+__Draw_Line_d:
+LDA 2,S         ; Get dy from stack (after return address)
+JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
+; ============================================================================
+; Draw_Sync_List - EXACT port of Malban's draw_synced_list_c
+; Data: FCB intensity, y_start, x_start, next_y, next_x, [flag, dy, dx]*, 2
+; ============================================================================
+Draw_Sync_List:
+; ITERACIÓN 11: Loop completo dentro (bug assembler arreglado, datos embebidos OK)
+LDA ,X+                 ; intensity
+JSR $F2AB               ; BIOS Intensity_a (expects value in A)
+LDB ,X+                 ; y_start
+LDA ,X+                 ; x_start
+STD TEMP_YX             ; Guardar en variable temporal (evita stack)
+; Reset completo
+CLR VIA_shift_reg
+LDA #$CC
+STA VIA_cntl
+CLR VIA_port_a
+LDA #$82
+STA VIA_port_b
+NOP
+NOP
+NOP
+NOP
+NOP
+LDA #$83
+STA VIA_port_b
+; Move sequence
+LDD TEMP_YX             ; Recuperar y,x
+STB VIA_port_a          ; y to DAC
+PSHS A                  ; Save x
+LDA #$CE
+STA VIA_cntl
+CLR VIA_port_b
+LDA #1
+STA VIA_port_b
+PULS A                  ; Restore x
+STA VIA_port_a          ; x to DAC
+; Timing setup
+LDA #$7F
+STA VIA_t1_cnt_lo
+CLR VIA_t1_cnt_hi
+LEAX 2,X                ; Skip next_y, next_x
+; Wait for move to complete
+DSL_W1:
+LDA VIA_int_flags
+ANDA #$40
+BEQ DSL_W1
+; Loop de dibujo
+DSL_LOOP:
+LDA ,X+                 ; Read flag
+CMPA #2                 ; Check end marker
+LBEQ DSL_DONE           ; Exit if end (long branch)
+CMPA #1                 ; Check next path marker
+LBEQ DSL_NEXT_PATH      ; Process next path (long branch)
+; Draw line
+CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)
+LDB ,X+                 ; dy
+LDA ,X+                 ; dx
+PSHS A                  ; Save dx
+STB VIA_port_a          ; dy to DAC
+CLR VIA_port_b
+LDA #1
+STA VIA_port_b
+PULS A                  ; Restore dx
+STA VIA_port_a          ; dx to DAC
+CLR VIA_t1_cnt_hi
+LDA #$FF
+STA VIA_shift_reg
+; Wait for line draw
+DSL_W2:
+LDA VIA_int_flags
+ANDA #$40
+BEQ DSL_W2
+CLR VIA_shift_reg
+LBRA DSL_LOOP            ; Long branch back to loop start
+; Next path: read new intensity and header, then continue drawing
+DSL_NEXT_PATH:
+; Save current X position before reading anything
+TFR X,D                 ; D = X (current position)
+PSHS D                  ; Save X address
+LDA ,X+                 ; Read intensity (X now points to y_start)
+PSHS A                  ; Save intensity
+LDB ,X+                 ; y_start
+LDA ,X+                 ; x_start (X now points to next_y)
+STD TEMP_YX             ; Save y,x
+PULS A                  ; Get intensity back
+PSHS A                  ; Save intensity again
+LDA #$D0
+TFR A,DP                ; Set DP=$D0 (BIOS requirement)
+PULS A                  ; Restore intensity
+JSR $F2AB               ; BIOS Intensity_a (may corrupt X!)
+; Restore X to point to next_y,next_x (after the 3 bytes we read)
+PULS D                  ; Get original X
+ADDD #3                 ; Skip intensity, y_start, x_start
+TFR D,X                 ; X now points to next_y
+; Reset to zero (same as Draw_Sync_List start)
+CLR VIA_shift_reg
+LDA #$CC
+STA VIA_cntl
+CLR VIA_port_a
+LDA #$82
+STA VIA_port_b
+NOP
+NOP
+NOP
+NOP
+NOP
+LDA #$83
+STA VIA_port_b
+; Move to new start position
+LDD TEMP_YX
+STB VIA_port_a          ; y to DAC
+PSHS A
+LDA #$CE
+STA VIA_cntl
+CLR VIA_port_b
+LDA #1
+STA VIA_port_b
+PULS A
+STA VIA_port_a          ; x to DAC
+LDA #$7F
+STA VIA_t1_cnt_lo
+CLR VIA_t1_cnt_hi
+LEAX 2,X                ; Skip next_y, next_x
+; Wait for move
+DSL_W3:
+LDA VIA_int_flags
+ANDA #$40
+BEQ DSL_W3
+CLR VIA_shift_reg       ; Clear before continuing
+LBRA DSL_LOOP            ; Continue drawing - LONG BRANCH
+DSL_DONE:
+RTS
+Draw_Sync_List_At_With_Mirrors:
+; Unified mirror support using flags: MIRROR_X and MIRROR_Y
+; Conditionally negates X and/or Y coordinates and deltas
+; NOTE: Caller must ensure DP=$D0 for VIA access
+LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
+DSWM_SET_INTENSITY:
+JSR $F2AB               ; BIOS Intensity_a
+LDB ,X+                 ; y_start from .vec (already relative to center)
+; Check if Y mirroring is enabled
+TST MIRROR_Y
+BEQ DSWM_NO_NEGATE_Y
+NEGB                    ; ← Negate Y if flag set
+DSWM_NO_NEGATE_Y:
+ADDB DRAW_VEC_Y         ; Add Y offset
+LDA ,X+                 ; x_start from .vec (already relative to center)
+; Check if X mirroring is enabled
+TST MIRROR_X
+BEQ DSWM_NO_NEGATE_X
+NEGA                    ; ← Negate X if flag set
+DSWM_NO_NEGATE_X:
+ADDA DRAW_VEC_X         ; Add X offset
+STD TEMP_YX             ; Save adjusted position
+; Reset completo
+CLR VIA_shift_reg
+LDA #$CC
+STA VIA_cntl
+CLR VIA_port_a
+LDA #$82
+STA VIA_port_b
+NOP
+NOP
+NOP
+NOP
+NOP
+LDA #$83
+STA VIA_port_b
+; Move sequence
+LDD TEMP_YX
+STB VIA_port_a          ; y to DAC
+PSHS A                  ; Save x
+LDA #$CE
+STA VIA_cntl
+CLR VIA_port_b
+LDA #1
+STA VIA_port_b
+PULS A                  ; Restore x
+STA VIA_port_a          ; x to DAC
+; Timing setup
+LDA #$7F
+STA VIA_t1_cnt_lo
+CLR VIA_t1_cnt_hi
+LEAX 2,X                ; Skip next_y, next_x
+; Wait for move to complete
+DSWM_W1:
+LDA VIA_int_flags
+ANDA #$40
+BEQ DSWM_W1
+; Loop de dibujo (conditional mirrors)
+DSWM_LOOP:
+LDA ,X+                 ; Read flag
+CMPA #2                 ; Check end marker
+LBEQ DSWM_DONE
+CMPA #1                 ; Check next path marker
+LBEQ DSWM_NEXT_PATH
+; Draw line with conditional negations
+LDB ,X+                 ; dy
+; Check if Y mirroring is enabled
+TST MIRROR_Y
+BEQ DSWM_NO_NEGATE_DY
+NEGB                    ; ← Negate dy if flag set
+DSWM_NO_NEGATE_DY:
+LDA ,X+                 ; dx
+; Check if X mirroring is enabled
+TST MIRROR_X
+BEQ DSWM_NO_NEGATE_DX
+NEGA                    ; ← Negate dx if flag set
+DSWM_NO_NEGATE_DX:
+PSHS A                  ; Save final dx
+STB VIA_port_a          ; dy (possibly negated) to DAC
+CLR VIA_port_b
+LDA #1
+STA VIA_port_b
+PULS A                  ; Restore final dx
+STA VIA_port_a          ; dx (possibly negated) to DAC
+CLR VIA_t1_cnt_hi
+LDA #$FF
+STA VIA_shift_reg
+; Wait for line draw
+DSWM_W2:
+LDA VIA_int_flags
+ANDA #$40
+BEQ DSWM_W2
+CLR VIA_shift_reg
+LBRA DSWM_LOOP          ; Long branch
+; Next path: repeat mirror logic for new path header
+DSWM_NEXT_PATH:
+TFR X,D
+PSHS D
+; Check intensity override (same logic as start)
+LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
+DSWM_NEXT_SET_INTENSITY:
+PSHS A
+LDB ,X+                 ; y_start
+TST MIRROR_Y
+BEQ DSWM_NEXT_NO_NEGATE_Y
+NEGB
+DSWM_NEXT_NO_NEGATE_Y:
+ADDB DRAW_VEC_Y         ; Add Y offset
+LDA ,X+                 ; x_start
+TST MIRROR_X
+BEQ DSWM_NEXT_NO_NEGATE_X
+NEGA
+DSWM_NEXT_NO_NEGATE_X:
+ADDA DRAW_VEC_X         ; Add X offset
+STD TEMP_YX
+PULS A                  ; Get intensity back
+JSR $F2AB
+PULS D
+ADDD #3
+TFR D,X
+; Reset to zero
+CLR VIA_shift_reg
+LDA #$CC
+STA VIA_cntl
+CLR VIA_port_a
+LDA #$82
+STA VIA_port_b
+NOP
+NOP
+NOP
+NOP
+NOP
+LDA #$83
+STA VIA_port_b
+; Move to new start position
+LDD TEMP_YX
+STB VIA_port_a
+PSHS A
+LDA #$CE
+STA VIA_cntl
+CLR VIA_port_b
+LDA #1
+STA VIA_port_b
+PULS A
+STA VIA_port_a
+LDA #$7F
+STA VIA_t1_cnt_lo
+CLR VIA_t1_cnt_hi
+LEAX 2,X
+; Wait for move
+DSWM_W3:
+LDA VIA_int_flags
+ANDA #$40
+BEQ DSWM_W3
+CLR VIA_shift_reg
+LBRA DSWM_LOOP          ; Long branch
+DSWM_DONE:
+RTS
 START:
     LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS
-    CLR $C80E        ; Initialize Vec_Prev_Btns
+    TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
+    CLR $C80E        ; Initialize Vec_Prev_Btns to 0 for Read_Btns debounce
     LDA #$80
     STA VIA_t1_cnt_lo
-    LDS #$CBFF       ; Initialize stack
-    JMP MAIN
+    LDX #Vec_Default_Stk
+    TFR X,S
 
-;***************************************************************************
-; === RAM VARIABLE DEFINITIONS ===
-;***************************************************************************
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
-TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
-TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_LINE_ARGS       EQU $C880+$0A   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$14   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$16   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$18   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$19   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$1A   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$1C   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CFE6   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CFE8   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
-
-;***************************************************************************
-; MAIN PROGRAM
-;***************************************************************************
+    ; *** DEBUG *** main() function code inline (initialization)
+    ; VPy_LINE:9
+    ; VPy_LINE:10
+    ; pass (no-op)
 
 MAIN:
-    ; Initialize global variables
-    ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
+    ; === Initialize Joystick (one-time setup) ===
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
     LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
     STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
@@ -76,250 +463,73 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
-    ; Call main() for initialization
-    ; TODO: Statement Pass { source_line: 10 }
-
-.MAIN_LOOP:
+    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
+    LDA #$80
+    STA VIA_t1_cnt_lo
+    ; *** Call loop() as subroutine (executed every frame)
     JSR LOOP_BODY
-    LBRA .MAIN_LOOP   ; Use long branch for multibank support
+    BRA MAIN
 
+    ; VPy_LINE:12
 LOOP_BODY:
-    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR Reset0Ref    ; Reset beam to center (0,0)
+    JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+0    ; x0
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+2    ; y0
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+4    ; x1
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+6    ; y1
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+8    ; intensity
-    JSR DRAW_LINE_WRAPPER
+    ; DEBUG: Statement 0 - Discriminant(8)
+    ; VPy_LINE:14
+; DRAW_VECTOR("vec", x, y) - 1 path(s) at position
     LDD #0
     STD RESULT
-    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+0    ; x0
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+2    ; y0
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+4    ; x1
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+6    ; y1
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+8    ; intensity
-    JSR DRAW_LINE_WRAPPER
+    LDA RESULT+1  ; X position (low byte)
+    STA TMPPTR    ; Save X to temporary storage
     LDD #0
     STD RESULT
-    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+0    ; x0
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+2    ; y0
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+4    ; x1
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+6    ; y1
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+8    ; intensity
-    JSR DRAW_LINE_WRAPPER
-    LDD #0
-    STD RESULT
-    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+0    ; x0
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+2    ; y0
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+4    ; x1
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+6    ; y1
-    LDD #80
-    STD RESULT
-    LDD RESULT
-    STD DRAW_LINE_ARGS+8    ; intensity
-    JSR DRAW_LINE_WRAPPER
+    LDA RESULT+1  ; Y position (low byte)
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_VEC_PATH0  ; Path 0
+    JSR Draw_Sync_List_At_With_Mirrors  ; Uses unified mirror function
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     LDD #0
     STD RESULT
     RTS
 
 ;***************************************************************************
-; RUNTIME HELPERS
+; DATA SECTION
 ;***************************************************************************
 
-MOD16:
-    ; Modulo 16-bit X % D -> D
-    PSHS X,D
-.MOD16_LOOP:
-    PSHS D         ; Save D
-    LDD 4,S        ; Load dividend (after PSHS D)
-    CMPD 2,S       ; Compare with divisor (after PSHS D)
-    PULS D         ; Restore D
-    BLT .MOD16_END
-    LDX 2,S
-    LDD ,S
-    LEAX D,X
-    STX 2,S
-    BRA .MOD16_LOOP
-.MOD16_END:
-    LDD 2,S        ; Remainder
-    LEAS 4,S
-    RTS
+; ========================================
+; ASSET DATA SECTION
+; Embedded 1 of 1 assets (unused assets excluded)
+; ========================================
 
-; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
-; Args: DRAW_LINE_ARGS+0=x0, +2=y0, +4=x1, +6=y1, +8=intensity
-; ALWAYS sets intensity. Does NOT reset origin (allows connected lines).
-DRAW_LINE_WRAPPER:
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for vector drawing)
-    STA >$D00C     ; VIA_cntl
-    ; Set DP to hardware registers
-    LDA #$D0
-    TFR A,DP
-    ; ALWAYS set intensity (no optimization)
-    LDA >DRAW_LINE_ARGS+8+1  ; intensity (low byte) - EXTENDED addressing
-    JSR Intensity_a
-    ; Move to start ONCE (y in A, x in B) - use low bytes (8-bit signed -127..+127)
-    LDA >DRAW_LINE_ARGS+2+1  ; Y start (low byte) - EXTENDED addressing
-    LDB >DRAW_LINE_ARGS+0+1  ; X start (low byte) - EXTENDED addressing
-    JSR Moveto_d
-    ; Compute deltas using 16-bit arithmetic
-    ; dx = x1 - x0 (treating as signed 16-bit)
-    LDD >DRAW_LINE_ARGS+4    ; x1 (16-bit) - EXTENDED
-    SUBD >DRAW_LINE_ARGS+0   ; subtract x0 (16-bit) - EXTENDED
-    STD >VLINE_DX_16 ; Store full 16-bit dx - EXTENDED
-    ; dy = y1 - y0 (treating as signed 16-bit)
-    LDD >DRAW_LINE_ARGS+6    ; y1 (16-bit) - EXTENDED
-    SUBD >DRAW_LINE_ARGS+2   ; subtract y0 (16-bit) - EXTENDED
-    STD >VLINE_DY_16 ; Store full 16-bit dy - EXTENDED
-    ; SEGMENT 1: Clamp dy to ±127 and draw
-    LDD >VLINE_DY_16 ; Load full dy - EXTENDED
-    CMPD #127
-    BLE DLW_SEG1_DY_LO
-    LDA #127        ; dy > 127: use 127
-    BRA DLW_SEG1_DY_READY
-DLW_SEG1_DY_LO:
-    CMPD #-128
-    BGE DLW_SEG1_DY_NO_CLAMP  ; -128 <= dy <= 127: use original (sign-extended)
-    LDA #$80        ; dy < -128: use -128
-    BRA DLW_SEG1_DY_READY
-DLW_SEG1_DY_NO_CLAMP:
-    LDA >VLINE_DY_16+1  ; Use original low byte - EXTENDED
-DLW_SEG1_DY_READY:
-    STA >VLINE_DY    ; Save clamped dy for segment 1 - EXTENDED
-    ; Clamp dx to ±127
-    LDD >VLINE_DX_16  ; EXTENDED
-    CMPD #127
-    BLE DLW_SEG1_DX_LO
-    LDB #127        ; dx > 127: use 127
-    BRA DLW_SEG1_DX_READY
-DLW_SEG1_DX_LO:
-    CMPD #-128
-    BGE DLW_SEG1_DX_NO_CLAMP  ; -128 <= dx <= 127: use original (sign-extended)
-    LDB #$80        ; dx < -128: use -128
-    BRA DLW_SEG1_DX_READY
-DLW_SEG1_DX_NO_CLAMP:
-    LDB >VLINE_DX_16+1  ; Use original low byte - EXTENDED
-DLW_SEG1_DX_READY:
-    STB >VLINE_DX    ; Save clamped dx for segment 1 - EXTENDED
-    ; Draw segment 1
-    CLR Vec_Misc_Count
-    LDA >VLINE_DY  ; EXTENDED
-    LDB >VLINE_DX  ; EXTENDED
-    JSR Draw_Line_d ; Beam moves automatically
-    ; Check if we need SEGMENT 2 (dy outside ±127 range)
-    LDD >VLINE_DY_16 ; Reload original dy - EXTENDED
-    CMPD #127
-    BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
-    CMPD #-128
-    BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
-    BRA DLW_DONE       ; dy in range ±127: no segment 2
-DLW_NEED_SEG2:
-    ; SEGMENT 2: Draw remaining dy and dx
-    ; Calculate remaining dy
-    LDD >VLINE_DY_16 ; Load original full dy - EXTENDED
-    CMPD #127
-    BGT DLW_SEG2_DY_POS  ; dy > 127
-    ; dy < -128, so we drew -128 in segment 1
-    ; remaining = dy - (-128) = dy + 128
-    ADDD #128       ; Add back the -128 we already drew
-    BRA DLW_SEG2_DY_DONE
-DLW_SEG2_DY_POS:
-    ; dy > 127, so we drew 127 in segment 1
-    ; remaining = dy - 127
-    SUBD #127       ; Subtract 127 we already drew
-DLW_SEG2_DY_DONE:
-    STD >VLINE_DY_REMAINING  ; Store remaining dy (16-bit) - EXTENDED
-    ; Calculate remaining dx
-    LDD >VLINE_DX_16 ; Load original full dx - EXTENDED
-    CMPD #127
-    BLE DLW_SEG2_DX_CHECK_NEG
-    ; dx > 127, so we drew 127 in segment 1
-    ; remaining = dx - 127
-    SUBD #127
-    BRA DLW_SEG2_DX_DONE
-DLW_SEG2_DX_CHECK_NEG:
-    CMPD #-128
-    BGE DLW_SEG2_DX_NO_REMAIN  ; -128 <= dx <= 127: no remaining dx
-    ; dx < -128, so we drew -128 in segment 1
-    ; remaining = dx - (-128) = dx + 128
-    ADDD #128
-    BRA DLW_SEG2_DX_DONE
-DLW_SEG2_DX_NO_REMAIN:
-    LDD #0          ; No remaining dx
-DLW_SEG2_DX_DONE:
-    STD >VLINE_DX_REMAINING  ; Store remaining dx (16-bit) - EXTENDED
-    ; Setup for Draw_Line_d: A=dy, B=dx (CRITICAL: order matters!)
-    LDA >VLINE_DY_REMAINING+1  ; Low byte of remaining dy - EXTENDED
-    LDB >VLINE_DX_REMAINING+1  ; Low byte of remaining dx - EXTENDED
-    CLR Vec_Misc_Count
-    JSR Draw_Line_d ; Beam continues from segment 1 endpoint
-DLW_DONE:
-    LDA #$C8       ; CRITICAL: Restore DP to $C8 for our code
-    TFR A,DP
-    RTS
+; Vector asset: vec
+; Generated from vec.vec (Malban Draw_Sync_List format)
+; Total paths: 1, points: 3
+; X bounds: min=-15, max=15, width=30
+; Center: (0, 5)
+
+_VEC_WIDTH EQU 30
+_VEC_CENTER_X EQU 0
+_VEC_CENTER_Y EQU 5
+
+_VEC_VECTORS:  ; Main entry (header + 1 path(s))
+    FCB 1               ; path_count (runtime metadata)
+    FDB _VEC_PATH0        ; pointer to path 0
+
+_VEC_PATH0:    ; Path 0
+    FCB 127              ; path0: intensity
+    FCB $0F,$00,0,0        ; path0: header (y=15, x=0, relative to center)
+    FCB $FF,$E2,$F1          ; line 0: flag=-1, dy=-30, dx=-15
+    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
+    FCB $FF,$1E,$F1          ; closing line: flag=-1, dy=30, dx=-15
+    FCB 2                ; End marker (path complete)
 

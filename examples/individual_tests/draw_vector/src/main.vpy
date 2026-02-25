@@ -11,7 +11,4 @@ def main():
 
 def loop():
     # Draw a star pattern with lines
-    DRAW_LINE(-40, 40, 40, -40, 80)
-    DRAW_LINE(40, 40, -40, -40, 80)
-    DRAW_LINE(-40, 0, 40, 0, 80)
-    DRAW_LINE(0, 40, 0, -40, 80)
+    DRAW_VECTOR("vec", 0, 0)

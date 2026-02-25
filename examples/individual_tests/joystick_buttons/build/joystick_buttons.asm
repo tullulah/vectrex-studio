@@ -30,7 +30,11 @@ START:
     CLR $C80E        ; Initialize Vec_Prev_Btns
     LDA #$80
     STA VIA_t1_cnt_lo
-    LDS #$CBFF       ; Initialize stack
+    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
+    TFR X,S
+    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
+    LDA #0
+    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
     JMP MAIN
 
 ;***************************************************************************
@@ -47,24 +51,24 @@ DRAW_CIRCLE_YC       EQU $C880+$11   ; Circle center Y (1 bytes)
 DRAW_CIRCLE_DIAM     EQU $C880+$12   ; Circle diameter (1 bytes)
 DRAW_CIRCLE_INTENSITY EQU $C880+$13   ; Circle intensity (1 bytes)
 DRAW_CIRCLE_RADIUS   EQU $C880+$14   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$15   ; Circle temporary buffer (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$1B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$25   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$27   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$29   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$2A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_BTN1             EQU $C880+$2F   ; User variable: btn1 (2 bytes)
-VAR_BTN2             EQU $C880+$31   ; User variable: btn2 (2 bytes)
-VAR_BTN3             EQU $C880+$33   ; User variable: btn3 (2 bytes)
-VAR_BTN4             EQU $C880+$35   ; User variable: btn4 (2 bytes)
-VAR_ARG0             EQU $CFE0   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CFE2   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CFE4   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CFE6   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CFE8   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CFEA   ; Current ROM bank ID (multibank tracking) (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$15   ; Circle temporary buffer (8 bytes: radius16, xc16, yc16, r/4, 3r/4) (8 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1D   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$27   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$29   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2B   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2C   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_BTN1             EQU $C880+$31   ; User variable: BTN1 (2 bytes)
+VAR_BTN2             EQU $C880+$33   ; User variable: BTN2 (2 bytes)
+VAR_BTN3             EQU $C880+$35   ; User variable: BTN3 (2 bytes)
+VAR_BTN4             EQU $C880+$37   ; User variable: BTN4 (2 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 
 ;***************************************************************************
@@ -96,12 +100,11 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR Reset0Ref    ; Reset beam to center (0,0)
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)
-    ANDA #$01      ; Test bit 0
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$01      ; Test bit 0 (Button 1)
     LBEQ .J1B1_0_OFF
     LDD #1
     LBRA .J1B1_0_END
@@ -111,8 +114,8 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_BTN1
-    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)
-    ANDA #$02      ; Test bit 1
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$02      ; Test bit 1 (Button 2)
     LBEQ .J1B2_1_OFF
     LDD #1
     LBRA .J1B2_1_END
@@ -122,8 +125,8 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_BTN2
-    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)
-    ANDA #$04      ; Test bit 2
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$04      ; Test bit 2 (Button 3)
     LBEQ .J1B3_2_OFF
     LDD #1
     LBRA .J1B3_2_END
@@ -133,8 +136,8 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_BTN3
-    LDA $C80F      ; Vec_Btn_State (updated by Read_Btns)
-    ANDA #$08      ; Test bit 3
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$08      ; Test bit 3 (Button 4)
     LBEQ .J1B4_3_OFF
     LDD #1
     LBRA .J1B4_3_END
@@ -153,13 +156,13 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_63531365      ; Pointer to string in helpers bank
+    LDX #PRINT_TEXT_STR_2049397      ; Pointer to string in helpers bank
     STX VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-20
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG0    ; X position
@@ -179,21 +182,21 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #70
+    LDD #60
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_63531396      ; Pointer to string in helpers bank
+    LDX #PRINT_TEXT_STR_2049398      ; Pointer to string in helpers bank
     STX VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-20
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG0    ; X position
-    LDD #70
+    LDD #60
     STD RESULT
     LDD RESULT
     STD VAR_ARG1    ; Y position
@@ -209,21 +212,21 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #60
+    LDD #40
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_63531427      ; Pointer to string in helpers bank
+    LDX #PRINT_TEXT_STR_2049399      ; Pointer to string in helpers bank
     STX VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-20
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG0    ; X position
-    LDD #60
+    LDD #40
     STD RESULT
     LDD RESULT
     STD VAR_ARG1    ; Y position
@@ -239,21 +242,21 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     STD VAR_ARG0
-    LDD #50
+    LDD #20
     STD RESULT
     LDD RESULT
     STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_63531458      ; Pointer to string in helpers bank
+    LDX #PRINT_TEXT_STR_2049400      ; Pointer to string in helpers bank
     STX VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-20
+    LDD #0
     STD RESULT
     LDD RESULT
     STD VAR_ARG0    ; X position
-    LDD #50
+    LDD #20
     STD RESULT
     LDD RESULT
     STD VAR_ARG1    ; Y position
@@ -433,230 +436,291 @@ IF_END_6:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
-    JSR $F1AA      ; DP_to_D0 - set Direct Page for BIOS/VIA access
-    LDU >VAR_ARG2   ; string pointer (third parameter)
-    LDA >VAR_ARG1+1 ; Y coordinate (second parameter, low byte)
-    LDB >VAR_ARG0+1 ; X coordinate (first parameter, low byte)
-    JSR Print_Str_d ; Print string from U register
-    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)
-    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state
+    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
+    ;       causing integrators to drift toward joystick DAC value.
+    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
+    LDA #$D0
+    TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
+    JSR Reset0Ref   ; Reset beam to center before positioning text
+    LDU VAR_ARG2   ; string pointer
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
+    JSR Print_Str_d
+    LDA #$80
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
 VECTREX_PRINT_NUMBER:
-    ; Print 16-bit decimal number (0-9999)
+    ; Print signed decimal number (-9999 to 9999)
     ; ARG0=x, ARG1=y, ARG2=value
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS
-    LDA #$98
-    STA >$D00C     ; VIA_cntl = $98
-    JSR $F1AA      ; DP_to_D0
+    ;
+    ; STEP 1: Convert number to decimal string (DP=$C8)
+    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)
+    STD >TMPVAL      ; Save to temp
+    LDX #NUM_STR    ; String buffer pointer
     
-    ; Convert 16-bit number to decimal
-    LDD >VAR_ARG2  ; Load 16-bit number
-    LDX #NUM_STR   ; String buffer
-    
-    ; Check for 0
+    ; Check sign: negative values get '-' prefix and are negated
     CMPD #0
-    BNE .PN_DIV1000
-    LDA #'0'
-    ORA #$80
-    STA ,X
-    BRA .PN_AFTER_CONVERT
+    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion
+    LDA #'-'
+    STA ,X+          ; Store '-', advance buffer pointer
+    LDD >TMPVAL
+    COMA
+    COMB
+    ADDD #1          ; Two's complement negation -> absolute value
+    STD >TMPVAL
     
+    ; --- 1000s digit ---
 .PN_DIV1000:
-    CLRA
+    CLR ,X           ; Counter = 0 (in buffer)
 .PN_L1000:
-    CMPD #1000
-    BLT .PN_D1000_DONE
+    LDD >TMPVAL
     SUBD #1000
-    INCA
+    BMI .PN_D1000
+    STD >TMPVAL      ; Store reduced value
+    INC ,X           ; Increment digit counter
     BRA .PN_L1000
-.PN_D1000_DONE:
-    ADDA #'0'
-    STA ,X+
+.PN_D1000:
+    LDA ,X           ; Get count
+    ADDA #'0'        ; Convert to ASCII
+    STA ,X+          ; Store and advance
     
-    CLRA
+    ; --- 100s digit ---
+    CLR ,X
 .PN_L100:
-    CMPD #100
-    BLT .PN_D100_DONE
+    LDD >TMPVAL
     SUBD #100
-    INCA
+    BMI .PN_D100
+    STD >TMPVAL
+    INC ,X
     BRA .PN_L100
-.PN_D100_DONE:
+.PN_D100:
+    LDA ,X
     ADDA #'0'
     STA ,X+
     
-    CLRA
+    ; --- 10s digit ---
+    CLR ,X
 .PN_L10:
-    CMPD #10
-    BLT .PN_D10_DONE
+    LDD >TMPVAL
     SUBD #10
-    INCA
+    BMI .PN_D10
+    STD >TMPVAL
+    INC ,X
     BRA .PN_L10
-.PN_D10_DONE:
+.PN_D10:
+    LDA ,X
     ADDA #'0'
     STA ,X+
     
-    ; Last digit (remainder in D)
-    ADDB #'0'
-    ORB #$80       ; Terminator
-    STB ,X
+    ; --- 1s digit (remainder) ---
+    LDD >TMPVAL
+    ADDB #'0'        ; Low byte = ones digit
+    STB ,X+          ; Store digit
+    LDA #$80          ; Terminator (same format as FCC/FCB $80 strings)
+    STA ,X
     
 .PN_AFTER_CONVERT:
-    ; Load coordinates into registers - CRITICAL: must be JUST before Print_Str_d
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
-    LDU #NUM_STR    ; String pointer
-    JSR Print_Str_d ; Print using BIOS (A=Y, B=X, U=string)
-    JSR Reset_Pen   ; Reset pen parameters after Print_Str_d
-    JSR $F1AF      ; Restore DP
+    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
+    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
+    LDA #$D0
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    JSR Reset0Ref    ; Reset beam to center before positioning text
+    LDA >VAR_ARG1+1  ; Y coordinate
+    LDB >VAR_ARG0+1  ; X coordinate
+    LDU #NUM_STR     ; String pointer
+    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    LDA #$80
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    JSR $F1AF      ; Restore DP to $C8
     RTS
 
 MOD16:
-    ; Modulo 16-bit X % D -> D
-    PSHS X,D
-.MOD16_LOOP:
-    PSHS D         ; Save D
-    LDD 4,S        ; Load dividend (after PSHS D)
-    CMPD 2,S       ; Compare with divisor (after PSHS D)
-    PULS D         ; Restore D
-    BLT .MOD16_END
-    LDX 2,S
-    LDD ,S
-    LEAX D,X
-    STX 2,S
-    BRA .MOD16_LOOP
-.MOD16_END:
-    LDD 2,S        ; Remainder
-    LEAS 4,S
+    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
+    ; X = dividend (i16), D = divisor (i16) -> D = remainder
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .M16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1
+    BRA .M16_RCHECK
+.M16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.M16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .M16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+.M16_RPOS:
+.M16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .M16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    BRA .M16_LOOP
+.M16_END:
+    LDD TMPVAL          ; D = |remainder|
+    LDA TMPPTR2
+    BEQ .M16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate (same sign as dividend)
+.M16_DONE:
     RTS
 
+; ============================================================================
+; DRAW_CIRCLE_RUNTIME - Draw circle with runtime parameters
+; ============================================================================
+; Follows Draw_Sync_List_At pattern: read params BEFORE DP change
+; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
+; Uses 8 segments (regular octagon inscribed in circle) with unrolled loop
 DRAW_CIRCLE_RUNTIME:
-    ; Input: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY
-    ; Draw 8-sided polygon (octagon) approximation
-    
-    ; Set DP to $D0 for BIOS calls
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    
-    ; Set intensity
-    LDA >DRAW_CIRCLE_INTENSITY
-    JSR Intensity_a
-    
-    ; Calculate radius = diam / 2 (use B for 8-bit)
-    LDB >DRAW_CIRCLE_DIAM
-    LSRB                ; radius = diam / 2
-    STB >DRAW_CIRCLE_TEMP  ; Save radius
-    
-    ; Move to start point: (xc + radius, yc)
-    ; For octagon, start at rightmost point
-    LDB >DRAW_CIRCLE_XC
-    ADDB >DRAW_CIRCLE_TEMP  ; B = xc + radius
-    LDA >DRAW_CIRCLE_YC     ; A = yc
-    JSR Moveto_d            ; Move to (yc, xc+r)
-    
-    ; Draw 8 segments of octagon
-    ; Each segment: approximate circle direction with fixed ratios
-    ; For radius r, segment deltas are approximately:
-    ; Seg 0: dx=-r*0.41, dy=-r*0.41 (upper right to top)
-    ; Seg 1: dx=-r*0.41, dy=-r*0.41 (continue)
-    ; ... etc around the circle
-    
-    ; We use simplified ratios: 0.7*r and 0.7*r for diagonal moves
-    ; And r for straight moves
-    
-    LDB >DRAW_CIRCLE_TEMP  ; B = radius
-    STB >DRAW_CIRCLE_RADIUS  ; Save radius in RAM (not stack)
-    
-    ; Segment 1: NE to N (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)
-    CLR Vec_Misc_Count
-    LDB >DRAW_CIRCLE_RADIUS  ; B = radius
-    LSRB                ; B = r/2
-    NEGB                ; B = -r/2 (dx)
-    LDA >DRAW_CIRCLE_RADIUS  ; A = radius
-    NEGA                ; A = -r (dy)
-    JSR Draw_Line_d
-    
-    ; Segment 2: N to NW (dx=-0.9r, dy=-0.4r) approx (-r, -r/2)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS  ; radius
-    LSRA                ; r/2
-    NEGA                ; -r/2 (dy)
-    LDB >DRAW_CIRCLE_RADIUS  ; radius
-    NEGB                ; -r (dx)
-    JSR Draw_Line_d
-    
-    ; Segment 3: NW to W (dx=-0.4r, dy=+0.9r) approx (-r/2, +r)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS  ; radius
-    LDB >DRAW_CIRCLE_RADIUS
-    LSRB                ; r/2
-    NEGB                ; -r/2 (dx)
-    JSR Draw_Line_d
-    
-    ; Segment 4: W to SW (dx=+0.4r, dy=+0.9r) approx (+r/2, +r)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS  ; radius (dy)
-    LDB >DRAW_CIRCLE_RADIUS
-    LSRB                ; r/2 (dx)
-    JSR Draw_Line_d
-    
-    ; Segment 5: SW to S (dx=+0.9r, dy=+0.4r) approx (+r, +r/2)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS
-    LSRA                ; r/2 (dy)
-    LDB >DRAW_CIRCLE_RADIUS  ; r (dx)
-    JSR Draw_Line_d
-    
-    ; Segment 6: S to SE (dx=+0.9r, dy=-0.4r) approx (+r, -r/2)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS
-    LSRA                ; r/2
-    NEGA                ; -r/2 (dy)
-    LDB >DRAW_CIRCLE_RADIUS  ; r (dx)
-    JSR Draw_Line_d
-    
-    ; Segment 7: SE to E (dx=+0.4r, dy=-0.9r) approx (+r/2, -r)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS  ; radius
-    NEGA                ; -r (dy)
-    LDB >DRAW_CIRCLE_RADIUS
-    LSRB                ; r/2 (dx)
-    JSR Draw_Line_d
-    
-    ; Segment 8: E to NE (close the loop) (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)
-    CLR Vec_Misc_Count
-    LDA >DRAW_CIRCLE_RADIUS  ; radius
-    NEGA                ; -r (dy)
-    LDB >DRAW_CIRCLE_RADIUS
-    LSRB                ; r/2
-    NEGB                ; -r/2 (dx)
-    JSR Draw_Line_d
-    
-    
-    ; Restore DP to $C8
-    LDA #$C8
-    TFR A,DP
-    RTS
+; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
+; (These are byte variables, use LDB not LDD)
+LDB DRAW_CIRCLE_INTENSITY
+PSHS B                 ; Save intensity on stack
+
+LDB DRAW_CIRCLE_DIAM
+SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
+LSRA                   ; Divide by 2 to get radius
+RORB
+STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit)
+
+LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
+SEX
+STD DRAW_CIRCLE_TEMP+2 ; Save xc
+
+LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
+SEX
+STD DRAW_CIRCLE_TEMP+4 ; Save yc
+
+; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
+LDA #$D0
+TFR A,DP
+JSR Reset0Ref
+LDA #$80
+STA <$04           ; VIA_t1_cnt_lo = $80 (ensure correct scale)
+
+; Set intensity (from stack)
+PULS A                 ; Get intensity from stack
+CMPA #$5F
+BEQ DCR_intensity_5F
+JSR Intensity_a
+BRA DCR_after_intensity
+DCR_intensity_5F:
+JSR Intensity_5F
+DCR_after_intensity:
+
+; Move to start position: (xc + radius, yc)
+; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
+LDD DRAW_CIRCLE_TEMP   ; D = radius
+ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
+TFR B,B                ; Keep X in B (low byte)
+PSHS B                 ; Save X on stack
+LDD DRAW_CIRCLE_TEMP+4 ; Load yc
+TFR B,A                ; Y to A
+PULS B                 ; X to B
+JSR Moveto_d
+
+; Precompute r/4 and 3r/4 for regular octagon segments
+; Radius low byte is at DRAW_CIRCLE_TEMP+1
+LDB DRAW_CIRCLE_TEMP+1 ; Load radius (low byte)
+LSRB
+LSRB                   ; B = r/4
+STB DRAW_CIRCLE_TEMP+6 ; Save r/4 in spare byte
+LDB DRAW_CIRCLE_TEMP+1 ; Load radius
+SUBB DRAW_CIRCLE_TEMP+6 ; B = r - r/4 = 3r/4
+STB DRAW_CIRCLE_TEMP+7 ; Save 3r/4 in spare byte
+
+; Draw 8 unrolled segments - regular octagon inscribed in circle
+; Counterclockwise from rightmost point (xc+r, yc)
+; Draw_Line_d(A=dy, B=dx)
+
+; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
+LDB DRAW_CIRCLE_TEMP+6  ; r/4
+NEGB
+JSR Draw_Line_d
+
+; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+6  ; r/4
+LDB DRAW_CIRCLE_TEMP+7  ; 3r/4
+NEGB
+JSR Draw_Line_d
+
+; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+6  ; r/4
+NEGA
+LDB DRAW_CIRCLE_TEMP+7  ; 3r/4
+NEGB
+JSR Draw_Line_d
+
+; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
+NEGA
+LDB DRAW_CIRCLE_TEMP+6  ; r/4
+NEGB
+JSR Draw_Line_d
+
+; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+7  ; 3r/4
+NEGA
+LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
+JSR Draw_Line_d
+
+; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+6  ; r/4
+NEGA
+LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
+JSR Draw_Line_d
+
+; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
+LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
+JSR Draw_Line_d
+
+; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4
+CLR Vec_Misc_Count
+LDA DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)
+LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)
+JSR Draw_Line_d
+
+LDA #$C8
+TFR A,DP           ; Restore DP=$C8 before return
+RTS
 
 ;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_63531365:
-    FCC "BTN1:"
+PRINT_TEXT_STR_2049397:
+    FCC "BTN1"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_63531396:
-    FCC "BTN2:"
+PRINT_TEXT_STR_2049398:
+    FCC "BTN2"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_63531427:
-    FCC "BTN3:"
+PRINT_TEXT_STR_2049399:
+    FCC "BTN3"
     FCB $80          ; Vectrex string terminator
 
-PRINT_TEXT_STR_63531458:
-    FCC "BTN4:"
+PRINT_TEXT_STR_2049400:
+    FCC "BTN4"
     FCB $80          ; Vectrex string terminator
 

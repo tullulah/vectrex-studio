@@ -57,7 +57,20 @@ The assembler is built-in (no lwasm dependency). The LSP server (`core/src/lsp.r
 - Long branches: LBRA, LBEQ, LBNE, LBLT, LBGT, LBLE, LBGE, LBCS, LBCC, LBMI, LBPL
 - Control: JSR, RTS, BSR, LBSR, JMP, RTI, WAI, NOP
 - Stack: PSHS, PULS, PSHU, PULU
-- Misc: CLR, COM, NEG, INC, DEC, TST, CLRA, CLRB, COMA, COMB, NEGA, NEGB, INCA, INCB, DECA, DECB, TSTA, TSTB, MUL, EXG, TFR
+- **Misc:** CLR, COM, NEG, INC, DEC, TST, CLRA, CLRB, COMA, COMB, NEGA, NEGB, INCA, INCB, DECA, DECB, TSTA, TSTB, MUL, EXG, TFR
+
+**Built-in functions (core):**
+
+| Category | Functions | Status |
+|----------|-----------|--------|
+| Drawing | `DRAW_LINE`, `DRAW_VECTOR`, `DRAW_VECTOR_EX`, `DRAW_RECT`, `DRAW_CIRCLE`, `DRAW_CIRCLE_SEG`, `DRAW_ARC`, `DRAW_SPIRAL`, `DRAW_POLYGON` | ✅ |
+| Positioning | `MOVE` (sets DRAW_LINE origin offset), `SET_INTENSITY`, `SET_ORIGIN` | ✅ |
+| Text | `PRINT_TEXT`, `PRINT_NUMBER` | ✅ |
+| Math | `abs`, `min`, `max`, `clamp`, `MUL_A`, `DIV_A`, `MOD_A` | ✅ |
+| Audio | `PLAY_MUSIC`, `PLAY_SFX`, `STOP_MUSIC` | ✅ |
+| Input | `J1_X`, `J1_Y`, `J1_BUTTON_1–4`, `J2_X`, `J2_Y`, `J2_BUTTON_1–4` | ✅ |
+| Level | `LOAD_LEVEL`, `SHOW_LEVEL`, `UPDATE_LEVEL` | ✅ |
+| Misc | `ASM` (inline assembly), `LEN`, `POKE`, `PEEK` | ✅ |
 - Addressing modes: immediate, direct, extended, indexed (basic: ,X ,Y ,U ,S)
 
 **Asset pipeline:**
@@ -72,6 +85,7 @@ The assembler is built-in (no lwasm dependency). The LSP server (`core/src/lsp.r
 - LEA instructions (LEAX, LEAY, LEAU, LEAS) not implemented
 - PC-relative addressing (`label,PCR`) not implemented
 - No debug symbol (PDB) generation — this was the motivation for buildtools
+- `MOVE` only supports constant arguments (variable x/y not yet implemented)
 
 ---
 

@@ -16,17 +16,17 @@ def loop():
     btn4 = J1_BUTTON_4()
 
     # Display button states
-    PRINT_TEXT(-60, 80, "BTN1:")
-    PRINT_NUMBER(-20, 80, btn1)
+    PRINT_TEXT(-60, 80, "BTN1")
+    PRINT_NUMBER(0, 80, btn1)
 
-    PRINT_TEXT(-60, 70, "BTN2:")
-    PRINT_NUMBER(-20, 70, btn2)
+    PRINT_TEXT(-60, 60, "BTN2")
+    PRINT_NUMBER(0, 60, btn2)
 
-    PRINT_TEXT(-60, 60, "BTN3:")
-    PRINT_NUMBER(-20, 60, btn3)
+    PRINT_TEXT(-60, 40, "BTN3")
+    PRINT_NUMBER(0, 40, btn3)
 
-    PRINT_TEXT(-60, 50, "BTN4:")
-    PRINT_NUMBER(-20, 50, btn4)
+    PRINT_TEXT(-60, 20, "BTN4")
+    PRINT_NUMBER(0, 20, btn4)
 
     # Draw different colors of circles based on buttons pressed
     if btn1 == 1:
