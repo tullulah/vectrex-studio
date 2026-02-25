@@ -102,6 +102,16 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     
     // Math functions
     ("ABS", 1),             // Absolute value
+    ("MATH_ABS", 1),        // Alias
+    ("MIN", 2),             // Minimum of two values
+    ("MATH_MIN", 2),        // Alias
+    ("MAX", 2),             // Maximum of two values
+    ("MATH_MAX", 2),        // Alias
+    ("CLAMP", 3),           // Clamp value: v, lo, hi
+    ("MATH_CLAMP", 3),      // Alias
+    ("MUL_A", 2),           // Multiply
+    ("DIV_A", 2),           // Divide
+    ("MOD_A", 2),           // Modulo
     
     // Array functions
     ("LEN", 1),             // Get array length
