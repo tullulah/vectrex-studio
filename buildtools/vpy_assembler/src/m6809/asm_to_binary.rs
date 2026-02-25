@@ -588,6 +588,7 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
         "RORA" => { emitter.rora(); Ok(()) },
         "RORB" => { emitter.rorb(); Ok(()) },
         "ABX" => { emitter.abx(); Ok(()) },
+        "MUL" => { emitter.mul(); Ok(()) },
         "TSTA" => { emitter.tsta(); Ok(()) },
         "TSTB" => { emitter.tstb(); Ok(()) },
         "TST" => emit_tst(emitter, operand, equates),

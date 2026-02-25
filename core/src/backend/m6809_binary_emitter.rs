@@ -731,6 +731,12 @@ impl BinaryEmitter {
         self.emit(0x3A);
     }
 
+    /// MUL (opcode 0x3D) - Multiply A by B unsigned, result in D (A=hi, B=lo)
+    pub fn mul(&mut self) {
+        self.record_line_mapping();
+        self.emit(0x3D);
+    }
+
     /// SEX (opcode 0x1D) - Sign EXtend B into A
     /// Extends the sign bit of register B into register A
     /// If B is negative (bit 7 = 1), sets A to 0xFF
