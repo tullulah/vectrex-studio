@@ -58,7 +58,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("DRAW_CIRCLE_DIAM", 1, "Circle diameter");
         ram.allocate("DRAW_CIRCLE_INTENSITY", 1, "Circle intensity");
         ram.allocate("DRAW_CIRCLE_RADIUS", 1, "Circle radius (diam/2) - used in segment drawing");
-        ram.allocate("DRAW_CIRCLE_TEMP", 8, "Circle temporary buffer (8 bytes: radius16, xc16, yc16, r/4, 3r/4)");
+        ram.allocate("DRAW_CIRCLE_TEMP", 8, "Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r");
     }
     
     // NOTE: Check both DRAW_RECT and DRAW_RECT_RUNTIME
