@@ -1454,15 +1454,15 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         // lo
     emit_expr(&args[1], out, fctx, string_map, opts);
         out.push_str("    LDD RESULT\n    STD TMPRIGHT\n");
-        // hi -> reuse DIV_A
+        // hi -> use TMPLEFT2
     emit_expr(&args[2], out, fctx, string_map, opts);
-        out.push_str("    LDD RESULT\n    STD DIV_A\n");
+        out.push_str("    LDD RESULT\n    STD TMPLEFT2\n");
         let use_lo = fresh_label("CLAMP_USE_LO");
         let check_hi = fresh_label("CLAMP_CHECK_HI");
         let use_hi = fresh_label("CLAMP_USE_HI");
         let done = fresh_label("CLAMP_DONE");
         out.push_str(&format!(
-            "    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    BRA {}\n{}: LDD TMPRIGHT\n    BRA {}\n{}: LDD TMPLEFT\n    SUBD DIV_A\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD DIV_A\n{}: STD RESULT\n",
+            "    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    BRA {}\n{}: LDD TMPRIGHT\n    BRA {}\n{}: LDD TMPLEFT\n    SUBD TMPLEFT2\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD TMPLEFT2\n{}: STD RESULT\n",
             use_lo, check_hi, use_lo, done, check_hi, use_hi, done, use_hi, done
         ));
         return true;

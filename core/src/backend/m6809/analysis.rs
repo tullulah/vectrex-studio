@@ -339,6 +339,11 @@ pub fn scan_expr_runtime(e: &Expr, usage: &mut RuntimeUsage) {
             if up == "PRINT_NUMBER" {
                 usage.uses_print_number = true;
             }
+            // MIN/MAX/CLAMP: need TMPLEFT/TMPRIGHT temporaries
+            if matches!(up.as_str(), "MIN"|"MATH_MIN"|"MAX"|"MATH_MAX"|"CLAMP"|"MATH_CLAMP") {
+                usage.needs_tmp_left = true;
+                usage.needs_tmp_right = true;
+            }
             for a in &ci.args { scan_expr_runtime(a, usage); }
         }
         Expr::MethodCall(mc) => {
