@@ -771,7 +771,9 @@ DCR_after_intensity:\n\
         out.push_str("    JSR Intensity_a\n");
         out.push_str("    ; Move to start position (y in A, x in B) - use low bytes (8-bit signed -127..+127)\n");
         out.push_str("    LDA >DRAW_LINE_ARGS+2+1  ; Y start (low byte) - EXTENDED addressing\n");
+        out.push_str("    ADDA >VPY_MOVE_Y         ; Add MOVE Y offset\n");
         out.push_str("    LDB >DRAW_LINE_ARGS+0+1  ; X start (low byte) - EXTENDED addressing\n");
+        out.push_str("    ADDB >VPY_MOVE_X         ; Add MOVE X offset\n");
         out.push_str("    JSR Moveto_d\n");
         
         // Compute deltas - USE EXTENDED ADDRESSING (>)

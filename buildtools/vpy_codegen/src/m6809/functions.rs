@@ -86,6 +86,8 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     
     // Initialize global variables with their initial values
     asm.push_str("    ; Initialize global variables\n");
+    asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
+    asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
     let mut array_copy_counter = 0;
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {

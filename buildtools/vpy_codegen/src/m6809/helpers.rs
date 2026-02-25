@@ -40,6 +40,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     ram.allocate("TMPVAL", 2, "Temporary value storage (alias for RESULT)");
     ram.allocate("TMPPTR", 2, "Temporary pointer");
     ram.allocate("TMPPTR2", 2, "Temporary pointer 2");
+    ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
+    ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     ram.allocate("TEMP_YX", 2, "Temporary Y/X coordinate storage");
     
     // Conditional variables based on usage

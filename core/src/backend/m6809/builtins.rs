@@ -30,7 +30,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     let up = name.to_ascii_uppercase();
     let is = matches!(up.as_str(),
         "VECTREX_PRINT_TEXT"|"VECTREX_DEBUG_PRINT"|"VECTREX_DEBUG_PRINT_LABELED"|"VECTREX_POKE"|"VECTREX_PEEK"|"VECTREX_PRINT_NUMBER"|"VECTREX_MOVE_TO"|"VECTREX_DRAW_TO"|"DRAW_LINE_WRAPPER"|"DRAW_LINE_FAST"|"SETUP_DRAW_COMMON"|"VECTREX_DRAW_VL"|"VECTREX_DRAW_VECTORLIST"|"VECTREX_FRAME_BEGIN"|"VECTREX_VECTOR_PHASE_BEGIN"|"VECTREX_SET_ORIGIN"|"VECTREX_SET_INTENSITY"|"VECTREX_WAIT_RECAL"|
-    "VECTREX_PLAY_MUSIC1"|"DRAW_VECTOR"|"DRAW_VECTOR_EX"|"DRAW_VECTOR_LIST"|"DRAW_LINE"|"PLAY_MUSIC"|"PLAY_SFX"|"STOP_MUSIC"|"AUDIO_UPDATE"|"MUSIC_UPDATE"|"SFX_UPDATE"|"ASM"|
+    "VECTREX_PLAY_MUSIC1"|"DRAW_VECTOR"|"DRAW_VECTOR_EX"|"DRAW_VECTOR_LIST"|"DRAW_LINE"|"PLAY_MUSIC"|"PLAY_SFX"|"STOP_MUSIC"|"AUDIO_UPDATE"|"MUSIC_UPDATE"|"SFX_UPDATE"|"ASM"|"MOVE"|
         "J1_X"|"J1_Y"|"UPDATE_BUTTONS"|"J1_BUTTON_1"|"J1_BUTTON_2"|"J1_BUTTON_3"|"J1_BUTTON_4"|
         "J2_X"|"J2_Y"|"J2_BUTTON_1"|"J2_BUTTON_2"|"J2_BUTTON_3"|"J2_BUTTON_4"|
         "LOAD_LEVEL"|"SHOW_LEVEL"|"UPDATE_LEVEL"|
@@ -816,6 +816,27 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
     
+    // MOVE(x, y): store X/Y offset in VPY_MOVE_X/VPY_MOVE_Y RAM bytes
+    if up == "MOVE" && args.len() == 2 {
+        match (&args[0], &args[1]) {
+            (Expr::Number(x), Expr::Number(y)) => {
+                out.push_str(&format!("    LDA #${:02X}  ; MOVE X offset\n", (*x as i8) as u8));
+                out.push_str("    STA VPY_MOVE_X\n");
+                out.push_str(&format!("    LDA #${:02X}  ; MOVE Y offset\n", (*y as i8) as u8));
+                out.push_str("    STA VPY_MOVE_Y\n");
+            }
+            _ => {
+                // Variable args: evaluate and store low byte
+                emit_expr(&args[0], out, fctx, string_map, opts);
+                out.push_str("    STB VPY_MOVE_X  ; MOVE X (low byte)\n");
+                emit_expr(&args[1], out, fctx, string_map, opts);
+                out.push_str("    STB VPY_MOVE_Y  ; MOVE Y (low byte)\n");
+            }
+        }
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
     // DRAW_LINE optimization: when all args are numeric constants, generate inline BIOS calls
     // Reset beam to center, move to (x0,y0), draw delta to (x1,y1)
     if up == "DRAW_LINE" && args.len() == 5 && args.iter().all(|a| matches!(a, Expr::Number(_))) {
@@ -843,8 +864,8 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 } else {
                     out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", *intensity as u8));
                 }
-                // Move to start position (x0, y0)
-                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                // Move to start position (x0, y0) + MOVE offset
+                out.push_str(&format!("    LDA #${:02X}\n    ADDA VPY_MOVE_Y\n    LDB #${:02X}\n    ADDB VPY_MOVE_X\n    JSR Moveto_d\n",
                     (*y0 as i8) as u8, (*x0 as i8) as u8));
                 // Clear Vec_Misc_Count for proper timing
                 out.push_str("    CLR Vec_Misc_Count\n");

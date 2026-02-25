@@ -485,6 +485,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     ram.allocate("TEMP_YX", 2, "Temporary y,x storage");
     ram.allocate("TEMP_X", 1, "Temporary x storage");
     ram.allocate("TEMP_Y", 1, "Temporary y storage");
+    ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
+    ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     
     // 6. PSG Music variables (if music assets exist)
     if has_music_assets {
@@ -856,6 +858,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         // WAIT_RECAL now auto-injected in LOOP_BODY at start of every frame
         out.push_str("    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)\n");
         out.push_str("    LDA #$80\n    STA VIA_t1_cnt_lo\n");
+        out.push_str("    CLR VPY_MOVE_X  ; MOVE offset defaults to 0\n");
+        out.push_str("    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0\n");
         // NOTE: UPDATE_MUSIC_PSG now called at START of LOOP_BODY, not here
         
         // CRITICAL: Initialize global variables even if main() has no content

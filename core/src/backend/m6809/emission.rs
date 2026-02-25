@@ -253,7 +253,9 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
         out.push_str("    JSR Intensity_a\n");
         out.push_str("    ; Move to start position (y in A, x in B)\n");
         out.push_str("    LDA >RESULT+2+1  ; Y start (low byte) - extended addressing\n");
+        out.push_str("    ADDA VPY_MOVE_Y  ; Add MOVE Y offset\n");
         out.push_str("    LDB >RESULT+0+1  ; X start (low byte) - extended addressing\n");
+        out.push_str("    ADDB VPY_MOVE_X  ; Add MOVE X offset\n");
         out.push_str("    JSR Moveto_d\n");
         
         // Compute deltas
