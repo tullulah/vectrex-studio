@@ -21,13 +21,15 @@ pub fn emit_move(args: &[Expr], out: &mut String) {
         return;
     }
     
-    // Check if arguments are constants (optimization)
-    if let (Expr::Number(y), Expr::Number(x)) = (&args[1], &args[0]) {
-        out.push_str(&format!("    LDA #{}                 ; Y coordinate\n", y));
-        out.push_str(&format!("    LDB #{}                 ; X coordinate\n", x));
-        out.push_str("    JSR Moveto_d_7F        ; Move beam\n");
+    // Store MOVE offset in VPY_MOVE_X / VPY_MOVE_Y RAM bytes
+    if let (Expr::Number(x), Expr::Number(y)) = (&args[0], &args[1]) {
+        out.push_str(&format!("    LDA #${:02X}                ; X coordinate\n", (*x as i8) as u8));
+        out.push_str("    STA VPY_MOVE_X\n");
+        out.push_str(&format!("    LDA #${:02X}                ; Y coordinate\n", (*y as i8) as u8));
+        out.push_str("    STA VPY_MOVE_Y\n");
     } else {
-        out.push_str("    ; TODO: Support variable x, y (requires expressions)\n");
+        // Variable args: evaluate each and store low byte
+        out.push_str("    ; TODO: variable MOVE args (store expressions)\n");
     }
     
     out.push_str("    LDD #0\n");

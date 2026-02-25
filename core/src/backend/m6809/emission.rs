@@ -82,6 +82,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
     out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
     out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)\n");
+    out.push_str("    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators\n");
     out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)\n");
     out.push_str("    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)\n");
     out.push_str("    SEX          ; Sign-extend B to D\n");
@@ -95,6 +96,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
     out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
     out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)\n");
+    out.push_str("    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators\n");
     out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)\n");
     out.push_str("    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)\n");
     out.push_str("    SEX          ; Sign-extend B to D\n");
@@ -174,7 +176,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     }
     if w.contains("VECTREX_PRINT_TEXT") {
         let start_line = out.lines().count() + 1;
-        let function_code = "VECTREX_PRINT_TEXT:\n    ; CRITICAL: Print_Str_d requires DP=$D0 and signature is (Y, X, string)\n    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)\n    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n    STA >$D00C     ; VIA_cntl\n    LDA #$D0\n    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n    LDU VAR_ARG2   ; string pointer (ARG2 = third param)\n    LDA VAR_ARG1+1 ; Y (ARG1 = second param)\n    LDB VAR_ARG0+1 ; X (ARG0 = first param)\n    JSR Print_Str_d\n    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)\n    RTS\n";
+        let function_code = "VECTREX_PRINT_TEXT:\n    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)\n    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)\n    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n    LDA #$D0\n    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n    JSR Reset0Ref  ; Reset beam to center for absolute text positioning\n    LDU VAR_ARG2   ; string pointer (ARG2 = third param)\n    LDA VAR_ARG1+1 ; Y (ARG1 = second param)\n    LDB VAR_ARG0+1 ; X (ARG0 = first param)\n    JSR Print_Str_d\n    LDA #$80\n    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)\n    JSR $F1AF      ; DP_to_C8 (restore before return)\n    RTS\n";
         out.push_str(function_code);
         let end_line = out.lines().count();
         
@@ -219,7 +221,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     }
     if w.contains("VECTREX_PRINT_NUMBER") {
         out.push_str(
-            "VECTREX_PRINT_NUMBER:\n    ; Print number at position\n    ; ARG0 = X position, ARG1 = Y position, ARG2 = number value\n    ; Simple implementation: convert number to string and print\n    LDA VAR_ARG1+1   ; Y position\n    LDB VAR_ARG0+1   ; X position\n    JSR Moveto_d     ; Move to position\n    \n    ; Convert number to string (simple: just show low byte as hex)\n    LDA VAR_ARG2+1   ; Load number value\n    \n    ; Convert high nibble to ASCII\n    LSRA\n    LSRA\n    LSRA\n    LSRA\n    ANDA #$0F\n    CMPA #10\n    BLO PN_DIGIT1\n    ADDA #7          ; A-F\nPN_DIGIT1:\n    ADDA #'0'\n    STA NUM_STR      ; Store first digit\n    \n    ; Convert low nibble to ASCII  \n    LDA VAR_ARG2+1\n    ANDA #$0F\n    CMPA #10\n    BLO PN_DIGIT2\n    ADDA #7          ; A-F\nPN_DIGIT2:\n    ADDA #'0'\n    ORA #$80         ; Set high bit for string termination\n    STA NUM_STR+1    ; Store second digit with high bit\n    \n    ; Print the string\n    LDU #NUM_STR     ; Point to our number string\n    JSR Print_Str_d  ; Print using BIOS\n    RTS\n"
+            "VECTREX_PRINT_NUMBER:\n    ; Print signed decimal number (-9999 to 9999)\n    ; ARG0=X, ARG1=Y, ARG2=value\n    ; STEP 1: Convert number to decimal string (DP=$C8)\n    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n    STD >RESULT      ; Save to temp\n    LDX #NUM_STR    ; String buffer pointer\n    ; Check sign: negative values get '-' prefix and are negated\n    CMPD #0\n    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion\n    LDA #'-'\n    STA ,X+          ; Store '-', advance buffer pointer\n    LDD >RESULT\n    COMA\n    COMB\n    ADDD #1          ; Two's complement negation -> absolute value\n    STD >RESULT\n    ; --- 1000s digit ---\n.PN_DIV1000:\n    CLR ,X           ; Counter = 0 (in buffer)\n.PN_L1000:\n    LDD >RESULT\n    SUBD #1000\n    BMI .PN_D1000\n    STD >RESULT\n    INC ,X\n    BRA .PN_L1000\n.PN_D1000:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 100s digit ---\n    CLR ,X\n.PN_L100:\n    LDD >RESULT\n    SUBD #100\n    BMI .PN_D100\n    STD >RESULT\n    INC ,X\n    BRA .PN_L100\n.PN_D100:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 10s digit ---\n    CLR ,X\n.PN_L10:\n    LDD >RESULT\n    SUBD #10\n    BMI .PN_D10\n    STD >RESULT\n    INC ,X\n    BRA .PN_L10\n.PN_D10:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 1s digit (remainder) ---\n    LDD >RESULT\n    ADDB #'0'\n    STB ,X+\n    LDA #$80          ; Terminator (same format as FCC/FCB strings)\n    STA ,X\n.PN_AFTER_CONVERT:\n    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n    LDA #$D0\n    TFR A,DP         ; Set Direct Page to $D0 for BIOS\n    JSR Reset0Ref    ; Reset beam to center for absolute text positioning\n    LDA >VAR_ARG1+1  ; Y coordinate\n    LDB >VAR_ARG0+1  ; X coordinate\n    LDU #NUM_STR     ; String pointer\n    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n    LDA #$80\n    STA >$D004       ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)\n    JSR $F1AF        ; DP_to_C8 - restore DP\n    RTS\n"
         );
     }
     if w.contains("VECTREX_MOVE_TO") {
@@ -236,22 +238,24 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
         // Header and setup
         out.push_str("; DRAW_LINE unified wrapper - handles 16-bit signed coordinates\n");
         out.push_str("; Args: (x0,y0,x1,y1,intensity) as 16-bit words\n");
-        out.push_str("; ALWAYS sets intensity. Does NOT reset origin (allows connected lines).\n");
+        out.push_str("; Resets beam to center, moves to (x0,y0), draws to (x1,y1)\n");
         out.push_str("DRAW_LINE_WRAPPER:\n");
-        out.push_str("    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n");
-        out.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for vector drawing)\n");
-        out.push_str("    STA >$D00C     ; VIA_cntl\n");
         out.push_str("    ; Set DP to hardware registers\n");
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
-        
-        // Set intensity and move to start
-        out.push_str("    ; ALWAYS set intensity (no optimization)\n");
-        out.push_str("    LDA RESULT+8+1  ; intensity (low byte of 16-bit value)\n");
+        out.push_str("    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning\n");
+        out.push_str("    LDA #$80\n");
+        out.push_str("    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)\n");
+
+        // Set intensity and move to start — use extended addressing since DP=$D0
+        out.push_str("    ; Set intensity\n");
+        out.push_str("    LDA >RESULT+8+1  ; intensity (low byte) - extended addressing\n");
         out.push_str("    JSR Intensity_a\n");
-        out.push_str("    ; Move to start ONCE (y in A, x in B) - use low bytes (8-bit signed -127..+127)\n");
-        out.push_str("    LDA RESULT+2+1  ; Y start (low byte of 16-bit value)\n");
-        out.push_str("    LDB RESULT+0+1  ; X start (low byte of 16-bit value)\n");
+        out.push_str("    ; Move to start position (y in A, x in B)\n");
+        out.push_str("    LDA >RESULT+2+1  ; Y start (low byte) - extended addressing\n");
+        out.push_str("    ADDA VPY_MOVE_Y  ; Add MOVE Y offset\n");
+        out.push_str("    LDB >RESULT+0+1  ; X start (low byte) - extended addressing\n");
+        out.push_str("    ADDB VPY_MOVE_X  ; Add MOVE X offset\n");
         out.push_str("    JSR Moveto_d\n");
         
         // Compute deltas
@@ -1290,7 +1294,13 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ; ============================================================================\n\
         ; Follows Draw_Sync_List_At pattern: read params BEFORE DP change\n\
         ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)\n\
-        ; Uses 8 segments (octagon) with lookup table for efficiency\n\
+        ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions\n\
+        ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):\n\
+        ;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2\n\
+        ;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3\n\
+        ;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4\n\
+        ;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5\n\
+        ; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]\n\
         DRAW_CIRCLE_RUNTIME:\n\
         ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)\n\
         ; (These are byte variables, use LDB not LDD)\n\
@@ -1301,20 +1311,22 @@ DSWM_NEXT_NO_NEGATE_X:\n\
         SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)\n\
         LSRA                   ; Divide by 2 to get radius\n\
         RORB\n\
-        STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit)\n\
+        STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)\n\
         \n\
         LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)\n\
         SEX\n\
-        STD DRAW_CIRCLE_TEMP+2 ; Save xc\n\
+        STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)\n\
         \n\
         LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)\n\
         SEX\n\
-        STD DRAW_CIRCLE_TEMP+4 ; Save yc\n\
+        STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)\n\
         \n\
         ; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)\n\
         LDA #$D0\n\
         TFR A,DP\n\
         JSR Reset0Ref\n\
+        LDA #$80\n\
+        STA <$04           ; VIA_t1_cnt_lo = $80 (ensure correct scale)\n\
         \n\
         ; Set intensity (from stack)\n\
         PULS A                 ; Get intensity from stack\n\
@@ -1326,9 +1338,9 @@ DCR_intensity_5F:\n\
         JSR Intensity_5F\n\
 DCR_after_intensity:\n\
         \n\
-        ; Move to start position: (xc + radius, yc)\n\
+        ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]\n\
         ; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4\n\
-        LDD DRAW_CIRCLE_TEMP   ; D = radius\n\
+        LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)\n\
         ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius\n\
         TFR B,B                ; Keep X in B (low byte)\n\
         PSHS B                 ; Save X on stack\n\
@@ -1337,127 +1349,141 @@ DCR_after_intensity:\n\
         PULS B                 ; X to B\n\
         JSR Moveto_d\n\
         \n\
-        ; Loop through 8 segments using lookup table\n\
-        LDX #DCR_DELTA_TABLE   ; Point to delta table\n\
-        LDB #8                 ; 8 segments\n\
-        PSHS B                 ; Save counter on stack\n\
+        ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)\n\
+        ; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)\n\
+        ; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d\n\
+        ; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827\n\
+        MUL                    ; A = floor(0.3828 * r) = a\n\
+        STA DRAW_CIRCLE_TEMP+2 ; Store a\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #83                ; 83/256 = 0.3242 ~ 0.3244\n\
+        MUL                    ; A = b\n\
+        STA DRAW_CIRCLE_TEMP+3 ; Store b\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #56                ; 56/256 = 0.2188 ~ 0.2168\n\
+        MUL                    ; A = c\n\
+        STA DRAW_CIRCLE_TEMP+4 ; Store c\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #19                ; 19/256 = 0.0742 ~ 0.0761\n\
+        MUL                    ; A = d\n\
+        STA DRAW_CIRCLE_TEMP+5 ; Store d\n\
         \n\
-DCR_LOOP:\n\
-        CLR Vec_Misc_Count     ; Relative drawing\n\
+        ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)\n\
+        ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:\n\
+        ;   Q1 (0->90):   (+a,-d), (+b,-c), (+c,-b), (+d,-a)\n\
+        ;   Q2 (90->180): (-d,-a), (-c,-b), (-b,-c), (-a,-d)\n\
+        ;   Q3 (180->270):(-a,+d), (-b,+c), (-c,+b), (-d,+a)\n\
+        ;   Q4 (270->360):(+d,+a), (+c,+b), (+b,+c), (+a,+d)\n\
         \n\
-        ; Load delta multipliers from table\n\
-        LDA ,X+                ; dx multiplier (-1, 0, 1, or 2 for half)\n\
-        LDB ,X+                ; dy multiplier\n\
-        PSHS A,B               ; Save multipliers\n\
-        \n\
-        ; Calculate dy = (dy_mult * radius) / 2 if needed\n\
-        LDD DRAW_CIRCLE_TEMP   ; Load radius\n\
-        PULS A,B               ; Get multipliers (A=dx_mult, B=dy_mult)\n\
-        PSHS A                 ; Save dx_mult\n\
-        \n\
-        ; Process dy_mult\n\
-        TSTB\n\
-        BEQ DCR_dy_zero        ; dy = 0\n\
-        CMPB #2\n\
-        BEQ DCR_dy_half        ; dy = r/2\n\
-        CMPB #$FE              ; -2 (half negative)\n\
-        BEQ DCR_dy_neg_half\n\
-        CMPB #1\n\
-        BEQ DCR_dy_pos         ; dy = r\n\
-        ; dy = -r\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        NEGA\n\
+        ; --- Q1 ---\n\
+        ; Seg 0: dy=+a, dx=-d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d\n\
         NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dy_done\n\
-DCR_dy_zero:\n\
-        LDD #0                 ; Clear both A and B\n\
-        BRA DCR_dy_done\n\
-DCR_dy_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        BRA DCR_dy_done\n\
-DCR_dy_neg_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        NEGA\n\
-        NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dy_done\n\
-DCR_dy_pos:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-DCR_dy_done:\n\
-        TFR B,A                ; Move dy result to A (we only need 8-bit for Vectrex coordinates)\n\
-        PSHS A                 ; Save dy on stack\n\
-        \n\
-        ; Process dx_mult (same logic)\n\
-        LDB 1,S                ; Get dx_mult from stack\n\
-        TSTB\n\
-        BEQ DCR_dx_zero\n\
-        CMPB #2\n\
-        BEQ DCR_dx_half\n\
-        CMPB #$FE\n\
-        BEQ DCR_dx_neg_half\n\
-        CMPB #1\n\
-        BEQ DCR_dx_pos\n\
-        ; dx = -r\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        NEGA\n\
-        NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dx_done\n\
-DCR_dx_zero:\n\
-        LDD #0                 ; Clear both A and B\n\
-        BRA DCR_dx_done\n\
-DCR_dx_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        BRA DCR_dx_done\n\
-DCR_dx_neg_half:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-        LSRA\n\
-        RORB\n\
-        NEGA\n\
-        NEGB\n\
-        SBCA #0\n\
-        BRA DCR_dx_done\n\
-DCR_dx_pos:\n\
-        LDD DRAW_CIRCLE_TEMP\n\
-DCR_dx_done:\n\
-        TFR B,B                ; dx in B\n\
-        PULS A                 ; dy in A\n\
-        LEAS 1,S               ; Drop dx_mult\n\
-        \n\
-        ; Draw line with calculated deltas (preserve X - it points to table)\n\
-        PSHS X                 ; Save table pointer\n\
         JSR Draw_Line_d\n\
-        PULS X                 ; Restore table pointer\n\
+        ; Seg 1: dy=+b, dx=-c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 2: dy=+c, dx=-b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 3: dy=+d, dx=-a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
         \n\
-        ; Loop control\n\
-        DEC ,S                 ; Decrement counter\n\
-        BNE DCR_LOOP\n\
+        ; --- Q2 ---\n\
+        ; Seg 4: dy=-d, dx=-a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 5: dy=-c, dx=-b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 6: dy=-b, dx=-c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 7: dy=-a, dx=-d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
         \n\
-        LEAS 1,S               ; Clean counter from stack\n\
+        ; --- Q3 ---\n\
+        ; Seg 8: dy=-a, dx=+d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 9: dy=-b, dx=+c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 10: dy=-c, dx=+b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 11: dy=-d, dx=+a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        JSR Draw_Line_d\n\
         \n\
-        ; DP is ALREADY $D0 from BIOS, no need to restore (Draw_Sync_List_At doesn't restore either)\n\
+        ; --- Q4 ---\n\
+        ; Seg 12: dy=+d, dx=+a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 13: dy=+c, dx=+b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 14: dy=+b, dx=+c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 15: dy=+a, dx=+d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        LDA #$C8\n\
+        TFR A,DP           ; Restore DP=$C8 before return\n\
         RTS\n\
-        \n\
-        RTS\n\
-        \n\
-        ; Delta multiplier table: 8 segments (dx_mult, dy_mult)\n\
-        ; 0=zero, 1=r, -1=$FF=-r, 2=r/2, -2=$FE=-r/2\n\
-DCR_DELTA_TABLE:\n\
-        FCB 2,2      ; Seg 1: dx=r/2, dy=r/2 (right-up)\n\
-        FCB 0,1      ; Seg 2: dx=0, dy=r (up)\n\
-        FCB $FE,2    ; Seg 3: dx=-r/2, dy=r/2 (left-up)\n\
-        FCB $FF,0    ; Seg 4: dx=-r, dy=0 (left)\n\
-        FCB $FE,$FE  ; Seg 5: dx=-r/2, dy=-r/2 (left-down)\n\
-        FCB 0,$FF    ; Seg 6: dx=0, dy=-r (down)\n\
-        FCB 2,$FE    ; Seg 7: dx=r/2, dy=-r/2 (right-down)\n\
-        FCB 1,0      ; Seg 8: dx=r, dy=0 (right)\n\
         \n"
         );
     }

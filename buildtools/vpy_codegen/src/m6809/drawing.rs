@@ -26,7 +26,7 @@ pub fn emit_draw_circle(
                 }
             }
             
-            let segs = 16; // 16-sided polygon approximation
+            let segs = 16; // 16-sided polygon approximation (use DRAW_CIRCLE_SEG for more)
             let r = (*diam as f64) / 2.0;
             let mut verts: Vec<(i32, i32)> = Vec::new();
             
@@ -43,7 +43,7 @@ pub fn emit_draw_circle(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -58,6 +58,7 @@ pub fn emit_draw_circle(
                 out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
                     dy, dx));
             }
+            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after circle drawing\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }
@@ -102,7 +103,7 @@ pub fn emit_draw_rect(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             // Move to start
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -124,11 +125,12 @@ pub fn emit_draw_rect(
             out.push_str(&format!("    LDA #${:02X}\n    LDB #$00\n    JSR Draw_Line_d\n", 
                 neg_h));  // Up
             
+            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }
     }
-    
+
     // Variables - use runtime helper
     out.push_str("    ; ERROR: DRAW_RECT with variables requires expressions module access\n");
     out.push_str("    ; Use constant values for now\n");
@@ -175,7 +177,7 @@ pub fn emit_draw_polygon(
         } else {
             out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
         }
-        out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+        out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
         
         let (sx, sy) = verts[0];
         out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -237,7 +239,7 @@ pub fn emit_draw_circle_seg(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -303,7 +305,7 @@ pub fn emit_draw_arc(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -359,24 +361,30 @@ pub fn emit_draw_filled_rect(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
-            // Draw horizontal scanlines from top to bottom
-            let num_lines = height.abs().min(64); // Limit scanlines
-            for i in 0..num_lines {
-                let y_offset = if height >= 0 { i } else { -i };
-                let curr_y = (y0 + y_offset) & 0xFF;
-                
-                // Move to start of scanline
-                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
-                    curr_y, (x0 & 0xFF)));
-                
-                // Draw horizontal line
+            // Draw horizontal scanlines using relative Moveto_d between lines
+            // (absolute Moveto_d per line would accumulate position error)
+            let num_lines = height.abs().min(64);
+            // First scanline: absolute position from Reset0Ref origin
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                (y0 & 0xFF), (x0 & 0xFF)));
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+                (width & 0xFF)));
+            // Subsequent scanlines: relative move (dy=±1, dx=-width) from end of previous line
+            let dy_step: i32 = if height >= 0 { 1 } else { -1 };
+            let neg_w = (-(width as i32)) & 0xFF;
+            let dy_byte = (dy_step & 0xFF) as u8;
+            for _ in 1..num_lines {
                 out.push_str("    CLR Vec_Misc_Count\n");
-                out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                    dy_byte, neg_w as u8));
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
                     (width & 0xFF)));
             }
-            
+            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }
@@ -425,7 +433,7 @@ pub fn emit_draw_ellipse(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -471,117 +479,208 @@ pub fn emit_draw_sprite(
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
     // DRAW_CIRCLE_RUNTIME: Draw circle with runtime parameters
     // Uses 8-segment octagon approximation (simple but effective)
+    // Copied verbatim from core/src/backend/m6809/emission.rs
     if needed.contains("DRAW_CIRCLE_RUNTIME") {
-        out.push_str("DRAW_CIRCLE_RUNTIME:\n");
-        out.push_str("    ; Input: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY\n");
-        out.push_str("    ; Draw 8-sided polygon (octagon) approximation\n");
-        out.push_str("    \n");
-        out.push_str("    ; Set DP to $D0 for BIOS calls\n");
-        out.push_str("    LDA #$D0\n");
-        out.push_str("    TFR A,DP\n");
-        out.push_str("    JSR Reset0Ref\n");
-        out.push_str("    \n");
-        out.push_str("    ; Set intensity\n");
-        out.push_str("    LDA >DRAW_CIRCLE_INTENSITY\n");
-        out.push_str("    JSR Intensity_a\n");
-        out.push_str("    \n");
-        out.push_str("    ; Calculate radius = diam / 2 (use B for 8-bit)\n");
-        out.push_str("    LDB >DRAW_CIRCLE_DIAM\n");
-        out.push_str("    LSRB                ; radius = diam / 2\n");
-        out.push_str("    STB >DRAW_CIRCLE_TEMP  ; Save radius\n");
-        out.push_str("    \n");
-        out.push_str("    ; Move to start point: (xc + radius, yc)\n");
-        out.push_str("    ; For octagon, start at rightmost point\n");
-        out.push_str("    LDB >DRAW_CIRCLE_XC\n");
-        out.push_str("    ADDB >DRAW_CIRCLE_TEMP  ; B = xc + radius\n");
-        out.push_str("    LDA >DRAW_CIRCLE_YC     ; A = yc\n");
-        out.push_str("    JSR Moveto_d            ; Move to (yc, xc+r)\n");
-        out.push_str("    \n");
-        out.push_str("    ; Draw 8 segments of octagon\n");
-        out.push_str("    ; Each segment: approximate circle direction with fixed ratios\n");
-        out.push_str("    ; For radius r, segment deltas are approximately:\n");
-        out.push_str("    ; Seg 0: dx=-r*0.41, dy=-r*0.41 (upper right to top)\n");
-        out.push_str("    ; Seg 1: dx=-r*0.41, dy=-r*0.41 (continue)\n");
-        out.push_str("    ; ... etc around the circle\n");
-        out.push_str("    \n");
-        out.push_str("    ; We use simplified ratios: 0.7*r and 0.7*r for diagonal moves\n");
-        out.push_str("    ; And r for straight moves\n");
-        out.push_str("    \n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP  ; B = radius\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 1: NE to N (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    PSHS B              ; Save radius\n");
-        out.push_str("    LSRB                ; B = r/2\n");
-        out.push_str("    NEGB                ; B = -r/2 (dx)\n");
-        out.push_str("    LDA ,S              ; A = radius\n");
-        out.push_str("    NEGA                ; A = -r (dy)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 2: N to NW (dx=-0.9r, dy=-0.4r) approx (-r, -r/2)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S              ; radius\n");
-        out.push_str("    LSRA                ; r/2\n");
-        out.push_str("    NEGA                ; -r/2 (dy)\n");
-        out.push_str("    LDB ,S              ; radius\n");
-        out.push_str("    NEGB                ; -r (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 3: NW to W (dx=-0.4r, dy=+0.9r) approx (-r/2, +r)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S              ; radius\n");
-        out.push_str("    LDB ,S\n");
-        out.push_str("    LSRB                ; r/2\n");
-        out.push_str("    NEGB                ; -r/2 (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 4: W to SW (dx=+0.4r, dy=+0.9r) approx (+r/2, +r)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S              ; radius (dy)\n");
-        out.push_str("    LDB ,S\n");
-        out.push_str("    LSRB                ; r/2 (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 5: SW to S (dx=+0.9r, dy=+0.4r) approx (+r, +r/2)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S\n");
-        out.push_str("    LSRA                ; r/2 (dy)\n");
-        out.push_str("    LDB ,S              ; r (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 6: S to SE (dx=+0.9r, dy=-0.4r) approx (+r, -r/2)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S\n");
-        out.push_str("    LSRA                ; r/2\n");
-        out.push_str("    NEGA                ; -r/2 (dy)\n");
-        out.push_str("    LDB ,S              ; r (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 7: SE to E (dx=+0.4r, dy=-0.9r) approx (+r/2, -r)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S              ; radius\n");
-        out.push_str("    NEGA                ; -r (dy)\n");
-        out.push_str("    LDB ,S\n");
-        out.push_str("    LSRB                ; r/2 (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Segment 8: E to NE (close the loop) (dx=-0.4r, dy=-0.9r) approx (-r/2, -r)\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA ,S              ; radius\n");
-        out.push_str("    NEGA                ; -r (dy)\n");
-        out.push_str("    LDB ,S\n");
-        out.push_str("    LSRB                ; r/2\n");
-        out.push_str("    NEGB                ; -r/2 (dx)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    LEAS 1,S            ; Clean up stack (remove saved radius)\n");
-        out.push_str("    \n");
-        out.push_str("    ; Restore DP to $C8\n");
-        out.push_str("    LDA #$C8\n");
-        out.push_str("    TFR A,DP\n");
-        out.push_str("    RTS\n\n");
+        out.push_str(
+            "; ============================================================================\n\
+        ; DRAW_CIRCLE_RUNTIME - Draw circle with runtime parameters\n\
+        ; ============================================================================\n\
+        ; Follows Draw_Sync_List_At pattern: read params BEFORE DP change\n\
+        ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)\n\
+        ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions\n\
+        ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):\n\
+        ;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2\n\
+        ;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3\n\
+        ;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4\n\
+        ;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5\n\
+        ; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]\n\
+        DRAW_CIRCLE_RUNTIME:\n\
+        ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)\n\
+        ; (These are byte variables, use LDB not LDD)\n\
+        LDB DRAW_CIRCLE_INTENSITY\n\
+        PSHS B                 ; Save intensity on stack\n\
+        \n\
+        LDB DRAW_CIRCLE_DIAM\n\
+        SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)\n\
+        LSRA                   ; Divide by 2 to get radius\n\
+        RORB\n\
+        STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)\n\
+        \n\
+        LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)\n\
+        SEX\n\
+        STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)\n\
+        \n\
+        LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)\n\
+        SEX\n\
+        STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)\n\
+        \n\
+        ; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)\n\
+        LDA #$D0\n\
+        TFR A,DP\n\
+        JSR Reset0Ref\n\
+        LDA #$80\n\
+        STA <$04           ; VIA_t1_cnt_lo = $80 (ensure correct scale)\n\
+        \n\
+        ; Set intensity (from stack)\n\
+        PULS A                 ; Get intensity from stack\n\
+        CMPA #$5F\n\
+        BEQ DCR_intensity_5F\n\
+        JSR Intensity_a\n\
+        BRA DCR_after_intensity\n\
+DCR_intensity_5F:\n\
+        JSR Intensity_5F\n\
+DCR_after_intensity:\n\
+        \n\
+        ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]\n\
+        ; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4\n\
+        LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)\n\
+        ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius\n\
+        TFR B,B                ; Keep X in B (low byte)\n\
+        PSHS B                 ; Save X on stack\n\
+        LDD DRAW_CIRCLE_TEMP+4 ; Load yc\n\
+        TFR B,A                ; Y to A\n\
+        PULS B                 ; X to B\n\
+        JSR Moveto_d\n\
+        \n\
+        ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)\n\
+        ; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)\n\
+        ; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d\n\
+        ; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827\n\
+        MUL                    ; A = floor(0.3828 * r) = a\n\
+        STA DRAW_CIRCLE_TEMP+2 ; Store a\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #83                ; 83/256 = 0.3242 ~ 0.3244\n\
+        MUL                    ; A = b\n\
+        STA DRAW_CIRCLE_TEMP+3 ; Store b\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #56                ; 56/256 = 0.2188 ~ 0.2168\n\
+        MUL                    ; A = c\n\
+        STA DRAW_CIRCLE_TEMP+4 ; Store c\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        LDA #19                ; 19/256 = 0.0742 ~ 0.0761\n\
+        MUL                    ; A = d\n\
+        STA DRAW_CIRCLE_TEMP+5 ; Store d\n\
+        \n\
+        ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)\n\
+        ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:\n\
+        ;   Q1 (0->90):   (+a,-d), (+b,-c), (+c,-b), (+d,-a)\n\
+        ;   Q2 (90->180): (-d,-a), (-c,-b), (-b,-c), (-a,-d)\n\
+        ;   Q3 (180->270):(-a,+d), (-b,+c), (-c,+b), (-d,+a)\n\
+        ;   Q4 (270->360):(+d,+a), (+c,+b), (+b,+c), (+a,+d)\n\
+        \n\
+        ; --- Q1 ---\n\
+        ; Seg 0: dy=+a, dx=-d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 1: dy=+b, dx=-c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 2: dy=+c, dx=-b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 3: dy=+d, dx=-a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; --- Q2 ---\n\
+        ; Seg 4: dy=-d, dx=-a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 5: dy=-c, dx=-b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 6: dy=-b, dx=-c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        ; Seg 7: dy=-a, dx=-d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; --- Q3 ---\n\
+        ; Seg 8: dy=-a, dx=+d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 9: dy=-b, dx=+c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 10: dy=-c, dx=+b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 11: dy=-d, dx=+a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; --- Q4 ---\n\
+        ; Seg 12: dy=+d, dx=+a\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 13: dy=+c, dx=+b\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 14: dy=+b, dx=+c\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        JSR Draw_Line_d\n\
+        ; Seg 15: dy=+a, dx=+d\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        LDA #$C8\n\
+        TFR A,DP           ; Restore DP=$C8 before return\n\
+        RTS\n\
+        \n"
+        );
     }
-    
+
     // DRAW_RECT_RUNTIME: Draw rectangle with runtime parameters
     if needed.contains("DRAW_RECT_RUNTIME") {
         out.push_str("DRAW_RECT_RUNTIME:\n");
@@ -604,6 +703,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
         out.push_str("    JSR Reset0Ref\n");
+        out.push_str("    LDA #$80\n");
+        out.push_str("    STA <$04            ; VIA_t1_cnt_lo = $80 (ensure correct scale)\n");
         out.push_str("    \n");
         out.push_str("    ; Set intensity\n");
         out.push_str("    LDA 4,S             ; intensity\n");
@@ -641,10 +742,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB #0\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
+        out.push_str("    LDA #$C8\n");
+        out.push_str("    TFR A,DP            ; Restore DP=$C8 before return\n");
         out.push_str("    LEAS 5,S            ; Clean stack\n");
         out.push_str("    RTS\n\n");
     }
-    
+
     // DRAW_LINE_WRAPPER: Only emit if DRAW_LINE is used
     // CRITICAL FIX (2026-01-18): Copy exact implementation from core
     // The previous version was missing DP setup ($D0 for BIOS) and VIA_cntl initialization
@@ -653,22 +756,24 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
     if needed.contains("DRAW_LINE_WRAPPER") {
         out.push_str("; DRAW_LINE unified wrapper - handles 16-bit signed coordinates\n");
         out.push_str("; Args: DRAW_LINE_ARGS+0=x0, +2=y0, +4=x1, +6=y1, +8=intensity\n");
-        out.push_str("; ALWAYS sets intensity. Does NOT reset origin (allows connected lines).\n");
+        out.push_str("; Resets beam to center, moves to (x0,y0), draws to (x1,y1)\n");
         out.push_str("DRAW_LINE_WRAPPER:\n");
-        out.push_str("    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n");
-        out.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for vector drawing)\n");
-        out.push_str("    STA >$D00C     ; VIA_cntl\n");
         out.push_str("    ; Set DP to hardware registers\n");
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
-        
+        out.push_str("    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning\n");
+        out.push_str("    LDA #$80\n");
+        out.push_str("    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)\n");
+
         // Set intensity and move to start - USE EXTENDED ADDRESSING (>)
         out.push_str("    ; ALWAYS set intensity (no optimization)\n");
         out.push_str("    LDA >DRAW_LINE_ARGS+8+1  ; intensity (low byte) - EXTENDED addressing\n");
         out.push_str("    JSR Intensity_a\n");
-        out.push_str("    ; Move to start ONCE (y in A, x in B) - use low bytes (8-bit signed -127..+127)\n");
+        out.push_str("    ; Move to start position (y in A, x in B) - use low bytes (8-bit signed -127..+127)\n");
         out.push_str("    LDA >DRAW_LINE_ARGS+2+1  ; Y start (low byte) - EXTENDED addressing\n");
+        out.push_str("    ADDA >VPY_MOVE_Y         ; Add MOVE Y offset\n");
         out.push_str("    LDB >DRAW_LINE_ARGS+0+1  ; X start (low byte) - EXTENDED addressing\n");
+        out.push_str("    ADDB >VPY_MOVE_X         ; Add MOVE X offset\n");
         out.push_str("    JSR Moveto_d\n");
         
         // Compute deltas - USE EXTENDED ADDRESSING (>)

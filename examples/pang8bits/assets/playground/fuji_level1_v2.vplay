@@ -1,0 +1,130 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "fuji_level1_v2",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-01-09"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [
+      {
+        "id": "obj_1767470884207",
+        "type": "enemy",
+        "vectorName": "fuji_bg",
+        "x": 0,
+        "y": 0,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity",
+        "layer": "background"
+      }
+    ],
+    "gameplay": [
+      {
+        "id": "enemy_1",
+        "type": "enemy",
+        "vectorName": "bubble_large",
+        "x": -40,
+        "y": 60,
+        "scale": 1,
+        "rotation": 0,
+        "intensity": 127,
+        "physics": {
+          "type": "dynamic",
+          "gravity": 1,
+          "friction": 0,
+          "bounceDamping": 85,
+          "maxSpeed": 50
+        },
+        "collision": {
+          "enabled": true,
+          "layer": "enemy",
+          "radius": 20,
+          "shape": "circle",
+          "bounceWalls": true,
+          "destroyOnCollision": false
+        },
+        "velocity": {
+          "x": -1,
+          "y": -1
+        },
+        "properties": {
+          "health": 1,
+          "score": 100,
+          "split_count": 2,
+          "next_size": "bubble_medium"
+        },
+        "layer": "gameplay",
+        "spawnDelay": 0,
+        "destroyOffscreen": false,
+        "physicsEnabled": true,
+        "physicsType": "bounce"
+      },
+      {
+        "id": "enemy_2",
+        "type": "enemy",
+        "vectorName": "bubble_large",
+        "x": 40,
+        "y": 60,
+        "scale": 1,
+        "rotation": 0,
+        "intensity": 127,
+        "physics": {
+          "type": "dynamic",
+          "gravity": 1,
+          "friction": 0,
+          "bounceDamping": 85,
+          "maxSpeed": 50
+        },
+        "collision": {
+          "enabled": true,
+          "layer": "enemy",
+          "radius": 20,
+          "shape": "circle",
+          "bounceWalls": true,
+          "destroyOnCollision": false
+        },
+        "velocity": {
+          "x": 1,
+          "y": -1
+        },
+        "properties": {
+          "health": 1,
+          "score": 100,
+          "split_count": 2,
+          "next_size": "bubble_medium"
+        },
+        "layer": "gameplay",
+        "spawnDelay": 60,
+        "destroyOffscreen": false,
+        "physicsEnabled": true,
+        "physicsType": "bounce"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  }
+}

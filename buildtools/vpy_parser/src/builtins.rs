@@ -34,6 +34,7 @@ pub fn is_known_builtin(name: &str) -> bool {
             // Multi-arg builtins
             | "MOVE"
             | "PRINT_TEXT"
+            | "PRINT_NUMBER"
             | "DRAW_TO"
             | "DRAW_LINE"
             | "DEBUG_PRINT"
@@ -50,6 +51,13 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "ASM"
             | "SET_INTENSITY"
             | "DRAW_VECTOR_EX"
+            | "DRAW_RECT"
+            | "DRAW_FILLED_RECT"
+            | "DRAW_CIRCLE"
+            | "DRAW_CIRCLE_SEG"
+            | "DRAW_POLYGON"
+            | "DRAW_ARC"
+            | "DRAW_ELLIPSE"
     )
 }
 
@@ -70,7 +78,7 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         "MOVE" | "DRAW_TO" => Some(2),
 
         // 3-argument builtins
-        "DRAW_LINE" | "PRINT_TEXT" => Some(3),
+        "DRAW_LINE" | "PRINT_TEXT" | "PRINT_NUMBER" => Some(3),
 
         // Variable-argument or context-dependent
         "DEBUG_PRINT" | "DEBUG_PRINT_LABELED" | "DEBUG_PRINT_STR" => None,

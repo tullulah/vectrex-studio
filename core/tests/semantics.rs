@@ -4,7 +4,7 @@ use vectrex_lang::codegen::{DiagnosticCode, emit_asm_with_diagnostics};
 #[test]
 fn semantics_valid_decl_and_use() {
     let module = Module { items: vec![
-        Item::Const { name: "C1".to_string(), value: Expr::Number(5), source_line: 0 },
+        Item::Const { name: "C1".to_string(), value: Expr::Number(5), source_line: 0, type_annotation: None },
         Item::Function(Function { name: "main".to_string(), line: 0, params: vec!["p".to_string()], body: vec![
             Stmt::Let { name: "x".to_string(), value: Expr::Ident(IdentInfo { name: "p".into(), source_line: 0, col: 0 }), source_line: 0 },
             Stmt::Assign { target: AssignTarget::Ident { name: "x".to_string(), source_line: 0, col: 0 }, value: Expr::Binary { op: BinOp::Add, left: Box::new(Expr::Ident(IdentInfo { name:"x".into(), source_line: 0, col: 0 })), right: Box::new(Expr::Ident(IdentInfo { name:"C1".into(), source_line: 0, col: 0 })) }, source_line: 0 },

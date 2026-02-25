@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "name": "test_square",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "square",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -15,
+              "y": -15
+            },
+            {
+              "x": 15,
+              "y": -15
+            },
+            {
+              "x": 15,
+              "y": 15
+            },
+            {
+              "x": -15,
+              "y": 15
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

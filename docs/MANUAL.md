@@ -102,42 +102,58 @@ counter += 1
 
 ## 3. Types and Values
 
-VPy has a single type: **16-bit integer**.
+VPy supports **variable-sized types** (⚠️ **Experimental Phase**) alongside the default 16-bit integer.
 
-- All arithmetic is unsigned 16-bit (values wrap modulo 65536).
+### Default type: 16-bit integer
+
+Untyped variables default to 16-bit signed (`i16`):
+
+```python
+x = 0              # i16: range -32768 to +32767
+counter += 1
+```
+
 - Truthiness: `0` is false, any other value is true.
 - No floating point.
 - No booleans (`True`/`False`) — use `1` and `0` instead.
 
-### Why 16-bit only?
+### ⚠️ Experimental: Variable-Sized Types with Type Hints
 
-VPy currently uses a unified 16-bit type for simplicity — the compiler doesn't need to handle multiple types or conversions. However, this is a notable limitation: **the Vectrex hardware is fundamentally 8-bit** (joystick values, display coordinates, and intensity are all 8-bit), so VPy wastes approximately **20% of available RAM** by storing everything as 16-bit. A typical game loses ~200 bytes of the 970 bytes available.
-
-### Planned: Variable-Sized Types with Type Hints
-
-Future versions of VPy will support explicit type declarations using Python's standard type hint syntax:
+VPy now supports explicit type declarations using Python's standard type hint syntax:
 
 ```python
-x: u8 = 10           # 8-bit unsigned (0–255)
-y: i8 = -5           # 8-bit signed (-128 to 127)
-score: u16 = 1000    # 16-bit unsigned (0–65535)
-pos: i16 = -100      # 16-bit signed (-32768 to 32767)
+x: u8 = 10           # 8-bit unsigned: 0–255
+y: i8 = -5           # 8-bit signed: -128 to +127
+score: u16 = 1000    # 16-bit unsigned: 0–65535
+pos: i16 = -100      # 16-bit signed: -32768 to +32767
 ```
 
-**Type names:**
-- `u8`, `i8` — 8-bit unsigned/signed
-- `u16`, `i16` — 16-bit unsigned/signed (default for untyped variables)
+**Type sizes and ranges:**
 
-**Backward compatibility:** Variables without type hints default to 16-bit, so existing code continues working unchanged.
+| Type | Size | Signed | Range |
+|------|------|--------|-------|
+| `u8` | 1 byte | No | 0–255 |
+| `i8` | 1 byte | Yes | -128 to +127 |
+| `u16` | 2 bytes | No | 0–65535 |
+| `i16` | 2 bytes | Yes | -32768 to +32767 |
 
-**Implicit widening:** Mixed-type operations automatically promote to the wider type:
+**Status:** 🔧 Experimental — fully implemented in Phase 5 codegen, but not all edge cases tested. Use with caution in production games.
+
+**Known limitation:** Const arrays with `u8` type annotation may cause runtime issues in complex games. Workaround: use untyped const arrays (defaults to `i16`).
+
+**Backward compatibility:** Variables without type hints default to 16-bit (`i16`), so all existing code continues working unchanged.
+
+**Performance benefit:** Using smaller types saves approximately **20% of available RAM** (~200 bytes per game).
+
+**Example: Typed game state**
+
 ```python
-a: u8 = 5
-b: u16 = 1000
-result: u16 = a + b  # a is implicitly widened to u16 for the operation
+# Efficient game state using smaller types
+health: u8 = 100        # 0–255 is plenty for health
+direction: i8 = 1       # -1, 0, or +1 for left/idle/right
+score: u16 = 0          # 0–65535 for high scores
+x: i16 = 0              # full -32768 to +32767 range for screen coordinates
 ```
-
-This design saves ~20% RAM (~200 bytes per game) while maintaining Python-like syntax and full backward compatibility.
 
 ### Integer literals
 
@@ -338,14 +354,15 @@ META directives go at the top of the entry file and customize the ROM header:
 META TITLE = "PANG"
 META COPYRIGHT = "g GCE 2025"
 META MUSIC = music1
-META MUSIC = "0"        # disables startup music
 ```
 
 | Directive | Description |
 |-----------|-------------|
 | `META TITLE` | Game title (max 24 chars, auto-uppercased) |
 | `META COPYRIGHT` | Copyright string (default: `g GCE 1998`) |
-| `META MUSIC` | BIOS music symbol played at startup, or `"0"` to disable |
+| `META MUSIC` | BIOS music symbol to play at startup (required to avoid audio glitches) |
+
+> **Important:** Always set `META MUSIC` to a valid music symbol (e.g., `music1`). Omitting it or using invalid values causes audio artifacts during gameplay.
 
 ---
 
@@ -388,7 +405,7 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 |----------|-------------|
 | `PRINT_TEXT(x, y, "text")` | Print a string at screen position |
 | `PRINT_TEXT(x, y, var)` | Print a string variable |
-| `PRINT_NUMBER(x, y, number)` | Print a 16-bit integer value |
+| `PRINT_NUMBER(x, y, number)` | Print a decimal number (range 0–9999, 4 digits with leading zeros) |
 | `DEBUG_PRINT(value)` | Debug output to console (editor only) |
 | `DEBUG_PRINT_LABELED("label", value)` | Debug output with label |
 | `DEBUG_PRINT_STR("text")` | Debug string output |

@@ -20,6 +20,7 @@ pub struct RuntimeUsage {
     pub uses_draw_vector_ex: bool,  // NEW: tracks DRAW_VECTOR_EX usage
     pub uses_draw_circle: bool,      // NEW: tracks DRAW_CIRCLE usage
     pub uses_show_level: bool,       // NEW: tracks SHOW_LEVEL usage
+    pub uses_print_number: bool,     // BUGFIX: track PRINT_NUMBER usage
     pub needs_mul_helper: bool,
     pub needs_div_helper: bool,
     pub needs_tmp_left: bool,
@@ -333,6 +334,19 @@ pub fn scan_expr_runtime(e: &Expr, usage: &mut RuntimeUsage) {
             if up == "DRAW_CIRCLE" {
                 usage.uses_draw_circle = true;
                 usage.wrappers_used.insert("DRAW_CIRCLE_RUNTIME".to_string());
+            }
+            // PRINT_NUMBER: needs NUM_STR buffer
+            if up == "PRINT_NUMBER" {
+                usage.uses_print_number = true;
+            }
+            // MIN/MAX: need TMPLEFT temporary
+            // CLAMP: needs TMPLEFT, TMPRIGHT, TMPLEFT2
+            if matches!(up.as_str(), "MIN"|"MATH_MIN"|"MAX"|"MATH_MAX") {
+                usage.needs_tmp_left = true;
+            }
+            if matches!(up.as_str(), "CLAMP"|"MATH_CLAMP") {
+                usage.needs_tmp_left = true;
+                usage.needs_tmp_right = true;
             }
             for a in &ci.args { scan_expr_runtime(a, usage); }
         }

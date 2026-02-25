@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface Line { id: number; text: string; kind: 'info' | 'warn' | 'error' | 'stdout' | 'stderr' | 'diagnostic' | 'success' | 'phase' | 'critical'; }
 
 export const BuildOutputPanel: React.FC = () => {
+  const { t } = useTranslation(['common']);
   const [lines, setLines] = useState<Line[]>([]);
   const nextId = useRef(1);
   const scrollerRef = useRef<HTMLDivElement|null>(null);
@@ -52,10 +54,10 @@ export const BuildOutputPanel: React.FC = () => {
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%', fontSize:12, fontFamily:'monospace'}}>
       <div style={{padding:'4px 8px', borderBottom:'1px solid #333', display:'flex', gap:12, alignItems:'center'}}>
-        <strong>Build Output</strong>
-        <button onClick={clear} style={btn}>Clear</button>
+        <strong>{t('panel.buildOutput', 'Build Output')}</strong>
+        <button onClick={clear} style={btn}>{t('action.clear', 'Clear')}</button>
         <label style={{display:'flex', alignItems:'center', gap:4}}>
-          <input type='checkbox' defaultChecked onChange={e=>{autoScrollRef.current=e.target.checked;}} /> AutoScroll
+          <input type='checkbox' defaultChecked onChange={e=>{autoScrollRef.current=e.target.checked;}} /> {t('status.autoScroll', 'Auto-scroll')}
         </label>
         <span style={{marginLeft:'auto', opacity:0.6, fontSize:10}}>
           {lines.length} lines | 
@@ -68,7 +70,7 @@ export const BuildOutputPanel: React.FC = () => {
         {lines.map(l => (
           <div key={l.id} style={{whiteSpace:'pre', color: colorFor(l.kind)}}>{l.text}</div>
         ))}
-        {lines.length===0 && <div style={{opacity:0.5}}>No build output yet. Press Run.</div>}
+        {lines.length===0 && <div style={{opacity:0.5}}>{t('message.noBuildOutput', 'No build output yet. Press Run.')}</div>}
       </div>
     </div>
   );

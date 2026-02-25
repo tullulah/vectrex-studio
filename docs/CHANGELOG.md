@@ -13,6 +13,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Indexed addressing with numeric offsets (5,X, -2,Y)
 - Auto-increment/decrement (,X+, ,-X)
 
+---
+
+## [v0.1.1] — 2026-02-25
+
+### Fixed — Core compiler (`vectrexc`)
+
+- **MOVE builtin**: Was completely absent from the builtins list → generated
+  `JSR MOVE` (undefined symbol at link time). Now correctly stores `x → VPY_MOVE_X`,
+  `y → VPY_MOVE_Y` (signed byte RAM vars) and `DRAW_LINE_WRAPPER` adds the offset
+  via `ADDA/ADDB` before `Moveto_d`.
+- **MIN / MAX / CLAMP**: Not in `BUILTIN_ARITIES` (semantic gate) → "Unknown function"
+  error. Added with correct arities (2, 2, 3).
+- **MIN / MAX / CLAMP**: `TMPLEFT`/`TMPRIGHT` RAM slots not allocated because
+  `analyze_runtime_usage()` never scanned for those calls. Added detection.
+- **MIN / MAX**: Used `SUBD + BGT` which produced wrong results (30 returned 70).
+  Replaced with `CMPD + BLE/BGE` (non-destructive comparison) matching buildtools.
+- **ABS / MIN / MAX / CLAMP**: Labels emitted as `LABEL: INSTRUCTION` on one line.
+  The core assembler parses the mnemonic as `"LABEL:"` and silently discards the
+  instruction. Fixed by separating labels onto their own line.
+- **DRAW_CIRCLE runtime path**: Was using an 8-segment octagon. Upgraded to 16-segment
+  polygon (matching the constant-path and buildtools output).
+
+### Fixed — Buildtools compiler (`vpy_cli`)
+
+- **MOVE builtin**: Was calling `Moveto_d_7F` without the required BIOS `DP=$D0` setup,
+  and `DRAW_LINE_WRAPPER`'s `Reset0Ref` call would have cancelled the position anyway.
+  Now uses the same `VPY_MOVE_X/Y` RAM-offset approach as core.
+- **DRAW_CIRCLE runtime path**: Upgraded from 8-segment to 16-segment polygon using
+  MUL-based fixed-point fractions (a=0.3827r, b=0.3244r, c=0.2168r, d=0.0761r).
+
+### Added — Both assemblers
+
+- **MUL instruction** (opcode `0x3D`): Added to both `core` and `buildtools` assemblers.
+  Used by the DRAW_CIRCLE 16-segment path for fixed-point fraction computation.
+
+### Added — Examples / Snippets
+
+New `examples/individual_tests/` projects (each is a self-contained `.vpyproj`):
+
+| Project | Tests |
+|---------|-------|
+| `draw_circle` | DRAW_CIRCLE with various radii |
+| `draw_line` | DRAW_LINE basic and delta tests |
+| `draw_move` | MOVE + DRAW_LINE coordinate offset |
+| `draw_rect` | DRAW_RECT bounding boxes |
+| `draw_vector` | DRAW_VECTOR asset rendering |
+| `joystick_buttons` | J1_BUTTON_1–4 debounce display |
+| `joystick_position` | J1_X / J1_Y analog and digital |
+| `math_functions` | abs, min, max, clamp |
+| `play_music` | PLAY_MUSIC / STOP_MUSIC |
+| `print_number` | PRINT_NUMBER signed decimal |
+| `print_text` | PRINT_TEXT positioning |
+
 ## [November 15, 2025] - Native M6809 Assembler - Massive Implementation 🚀
 
 ### Major Achievement: 23 New MC6809 Instructions

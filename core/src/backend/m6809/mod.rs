@@ -485,6 +485,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     ram.allocate("TEMP_YX", 2, "Temporary y,x storage");
     ram.allocate("TEMP_X", 1, "Temporary x storage");
     ram.allocate("TEMP_Y", 1, "Temporary y storage");
+    ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
+    ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     
     // 6. PSG Music variables (if music assets exist)
     if has_music_assets {
@@ -494,6 +496,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         ram.allocate("PSG_MUSIC_ACTIVE", 1, "Set during UPDATE_MUSIC_PSG");
         ram.allocate("PSG_FRAME_COUNT", 1, "Frame register write count");
         ram.allocate("PSG_DELAY_FRAMES", 1, "Frames to wait before next read");
+        // Always allocate SFX_ACTIVE: AUDIO_UPDATE (emitted for music) unconditionally
+        // references it even when no SFX assets exist.
+        if !has_sfx_assets {
+            ram.allocate("SFX_ACTIVE", 1, "SFX playback flag (always needed by AUDIO_UPDATE)");
+        }
     }
     
     // 7. SFX variables (if SFX assets exist)
@@ -507,7 +514,7 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     
     // 8. PRINT_NUMBER buffer (always allocate if not suppressed)
     if !suppress_runtime {
-        ram.allocate("NUM_STR", 2, "String buffer for PRINT_NUMBER");
+        ram.allocate("NUM_STR", 6, "String buffer for PRINT_NUMBER (5 digits + terminator)");
     }
     
     // 9. DRAW_VECTOR position/mirror variables (used by DRAW_VECTOR, DRAW_VECTOR_EX, and SHOW_LEVEL)
@@ -851,6 +858,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         // WAIT_RECAL now auto-injected in LOOP_BODY at start of every frame
         out.push_str("    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)\n");
         out.push_str("    LDA #$80\n    STA VIA_t1_cnt_lo\n");
+        out.push_str("    CLR VPY_MOVE_X  ; MOVE offset defaults to 0\n");
+        out.push_str("    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0\n");
         // NOTE: UPDATE_MUSIC_PSG now called at START of LOOP_BODY, not here
         
         // CRITICAL: Initialize global variables even if main() has no content
@@ -1170,10 +1179,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     out.push_str(";***************************************************************************\n; DATA SECTION\n;***************************************************************************\n");
     
     // Re-evaluate suppress_runtime now that we know max_args (calculated earlier)
-    let no_runtime_vars_needed = !rt_usage.needs_tmp_left && !rt_usage.needs_tmp_right && 
-                                 !rt_usage.needs_tmp_ptr && 
-                                 !rt_usage.needs_mul_helper && !rt_usage.needs_div_helper && 
+    let no_runtime_vars_needed = !rt_usage.needs_tmp_left && !rt_usage.needs_tmp_right &&
+                                 !rt_usage.needs_tmp_ptr &&
+                                 !rt_usage.needs_mul_helper && !rt_usage.needs_div_helper &&
                                  !rt_usage.needs_line_vars && !rt_usage.needs_vcur_vars &&
+                                 !rt_usage.uses_print_number &&  // BUGFIX: must allocate NUM_STR if PRINT_NUMBER is used
                                  string_map.is_empty() && max_args == 0;
     suppress_runtime = main_inlined || no_runtime_vars_needed;
     

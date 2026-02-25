@@ -193,6 +193,28 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    /// Parse optional type annotation after colon
+    /// Returns Some(type_name) if `: type` is found, None otherwise
+    fn try_parse_type_annotation(&mut self) -> ParseResult<Option<String>> {
+        if self.match_kind(&TokenKind::Colon) {
+            let type_name = self.identifier()?;
+            // Validate that the type name is one of the supported types
+            match type_name.as_str() {
+                "u8" | "i8" | "u16" | "i16" => {
+                    Ok(Some(type_name))
+                }
+                _ => {
+                    self.err_here(&format!(
+                        "Invalid type name '{}'. Supported types: u8, i8, u16, i16",
+                        type_name
+                    ))
+                }
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     // ====== PARSER RULES ======
     // (To be implemented incrementally)
 
@@ -218,11 +240,13 @@ impl<'a> Parser<'a> {
                     self.advance();
                     let const_line = self.current_line();
                     let name = self.identifier()?;
+                    let type_annotation = self.try_parse_type_annotation()?;
                     self.consume(TokenKind::Equal)?;
                     let value = self.expression()?;
                     self.consume(TokenKind::Newline)?;
                     items.push(Item::Const {
                         name,
+                        type_annotation,
                         value,
                         source_line: const_line,
                     });
@@ -302,16 +326,18 @@ impl<'a> Parser<'a> {
                 _ => {}
             }
 
-            // Parse global variable declaration: identifier = expression
+            // Parse global variable declaration: identifier [: type] = expression
             if self.check_identifier() {
                 let checkpoint = self.pos;
                 if let Ok(name) = self.identifier() {
+                    let type_annotation = self.try_parse_type_annotation().ok().flatten();
                     if self.match_kind(&TokenKind::Equal) {
                         let global_line = self.current_line();
                         let value = self.expression()?;
                         self.consume(TokenKind::Newline)?;
                         items.push(Item::GlobalLet {
                             name,
+                            type_annotation,
                             value,
                             source_line: global_line,
                         });
@@ -1278,6 +1304,166 @@ mod tests {
                 panic!("Expected GlobalLet item");
             }
         }
+    }
+
+    // ===== TYPE ANNOTATION TESTS =====
+
+    #[test]
+    fn test_parse_const_with_u8_type() {
+        let code = "const VALUE: u8 = 42\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::Const { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "VALUE");
+                assert_eq!(type_annotation, &Some("u8".to_string()));
+            } else {
+                panic!("Expected Const item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_const_with_i16_type() {
+        let code = "const LIMIT: i16 = 1000\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::Const { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "LIMIT");
+                assert_eq!(type_annotation, &Some("i16".to_string()));
+            } else {
+                panic!("Expected Const item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_const_with_u16_type() {
+        let code = "const SIZE: u16 = 256\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::Const { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "SIZE");
+                assert_eq!(type_annotation, &Some("u16".to_string()));
+            } else {
+                panic!("Expected Const item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_const_with_i8_type() {
+        let code = "const OFFSET: i8 = -10\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::Const { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "OFFSET");
+                assert_eq!(type_annotation, &Some("i8".to_string()));
+            } else {
+                panic!("Expected Const item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_const_without_type() {
+        let code = "const UNTYPED = 100\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::Const { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "UNTYPED");
+                assert_eq!(type_annotation, &None);
+            } else {
+                panic!("Expected Const item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_global_var_with_u8_type() {
+        let code = "player_health: u8 = 100\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::GlobalLet { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "player_health");
+                assert_eq!(type_annotation, &Some("u8".to_string()));
+            } else {
+                panic!("Expected GlobalLet item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_global_var_with_u16_type() {
+        let code = "score: u16 = 5000\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::GlobalLet { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "score");
+                assert_eq!(type_annotation, &Some("u16".to_string()));
+            } else {
+                panic!("Expected GlobalLet item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_global_var_with_i16_type() {
+        let code = "offset: i16 = -500\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::GlobalLet { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "offset");
+                assert_eq!(type_annotation, &Some("i16".to_string()));
+            } else {
+                panic!("Expected GlobalLet item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_global_var_without_type() {
+        let code = "x = 42\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_ok());
+        if let Ok(module) = result {
+            assert_eq!(module.items.len(), 1);
+            if let Item::GlobalLet { name, type_annotation, .. } = &module.items[0] {
+                assert_eq!(name, "x");
+                assert_eq!(type_annotation, &None);
+            } else {
+                panic!("Expected GlobalLet item");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_invalid_type_name() {
+        let code = "const BAD: u32 = 100\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_err(), "Should reject invalid type name u32");
+    }
+
+    #[test]
+    fn test_parse_malformed_type_annotation() {
+        let code = "const BAD: = 100\n";
+        let result = lex_and_parse(code);
+        assert!(result.is_err(), "Should reject missing type name after colon");
     }
 
     #[test]

@@ -261,20 +261,20 @@ export const AiAssistantPanel: React.FC = () => {
   const getContextPreview = () => {
     const context = getCurrentContext();
     const items = [];
-    
+
     if (context.fileName) {
       items.push(`📄 ${context.fileName}`);
     }
-    
+
     if (context.selectedCode) {
-      items.push(`✂️ Selección (${context.selectedCode.length} chars)`);
+      items.push(`✂️ ${t('ai.context.selection', 'Selection')} (${context.selectedCode.length} chars)`);
     }
-    
+
     if (context.manualContext) {
-      items.push(`📎 Contexto manual (${context.manualContext.length} chars)`);
+      items.push(`📎 ${t('ai.context.manual', 'Manual context')} (${context.manualContext.length} chars)`);
     }
-    
-    return items.length > 0 ? items.join(' • ') : 'Sin contexto';
+
+    return items.length > 0 ? items.join(' • ') : t('ai.context.noContext', 'No context');
   };
 
   // Initialize MCP tools on mount
@@ -304,27 +304,29 @@ export const AiAssistantPanel: React.FC = () => {
   useEffect(() => {
     if (messages.length === 0 && !initializedRef.current) {
       initializedRef.current = true; // Mark as initialized
-      const mcpStatus = mcpEnabled ? 
-        '\n\n🔧 **MCP Tools Enabled** - Puedo controlar el IDE directamente' : '';
-      
-      addMessage('system', `🤖 **PyPilot** activado
+      const mcpStatus = mcpEnabled ?
+        `\n\n${t('ai.welcome.mcpEnabled', '🔧 **MCP Tools Enabled** - I can control the IDE directly')}` : '';
 
-Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte con:
+      const welcomeMsg = `${t('ai.welcome.title', '🤖 **PyPilot** activated')}
 
-• 🔧 **Generar código VPy** - Describe lo que quieres crear
-• 🐛 **Analizar errores** - Explica problemas en tu código  
-• 📚 **Explicar sintaxis** - Aprende comandos VPy/Vectrex
-• ⚡ **Optimizar código** - Mejora performance y legibilidad
-• 🎮 **Ideas de juegos** - Sugiere mecánicas para Vectrex${mcpEnabled ? '\n• 🎛️ **Controlar IDE** - Abrir/cerrar proyectos, crear archivos, etc.' : ''}
+${t('ai.welcome.intro', 'I\'m your specialized assistant for **Vectrex VPy development**. I can help you with:')}
 
-**Comandos rápidos:**
-\`/explain\` - Explica el código seleccionado
-\`/fix\` - Sugiere fixes para errores
-\`/generate\` - Genera código desde descripción
-\`/optimize\` - Optimiza código seleccionado
-\`/help\` - Ver todos los comandos${mcpStatus}
+• ${t('ai.welcome.generateCode', '🔧 **Generate VPy code** - Describe what you want to create')}
+• ${t('ai.welcome.analyzeErrors', '🐛 **Analyze errors** - Explain problems in your code')}
+• ${t('ai.welcome.explainSyntax', '📚 **Explain syntax** - Learn VPy/Vectrex commands')}
+• ${t('ai.welcome.optimizeCode', '⚡ **Optimize code** - Improve performance and readability')}
+• ${t('ai.welcome.gameIdeas', '🎮 **Game ideas** - Suggest mechanics for Vectrex')}${mcpEnabled ? '\n• ' + t('ai.welcome.controlIde', '🎛️ **Control IDE** - Open/close projects, create files, etc.') : ''}
 
-¿En qué puedo ayudarte hoy?`);
+${t('ai.welcome.commands', '**Quick commands:**')}
+${t('ai.welcome.explain', '`/explain` - Explain selected code')}
+${t('ai.welcome.fix', '`/fix` - Suggest fixes for errors')}
+${t('ai.welcome.generate', '`/generate` - Generate code from description')}
+${t('ai.welcome.optimize', '`/optimize` - Optimize selected code')}
+${t('ai.welcome.help', '`/help` - See all commands')}${mcpStatus}
+
+${t('ai.welcome.question', 'How can I help you today?')}`;
+
+      addMessage('system', welcomeMsg);
     }
   }, [mcpEnabled, messages.length]); // Only run when mcpEnabled changes OR when messages length changes from 0
 
@@ -439,41 +441,42 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
     
     switch (cmd) {
       case '/help':
-        addMessage('assistant', `📋 **Comandos disponibles:**
+        const helpMsg = `${t('ai.help.title', '📋 **Available commands:**')}
 
-• \`/explain\` - Explica código seleccionado
-• \`/fix\` - Sugiere solución para errores
-• \`/generate [descripción]\` - Genera código VPy
-• \`/optimize\` - Optimiza código seleccionado  
-• \`/vectrex [comando]\` - Info sobre comandos Vectrex
-• \`/assets\` - Guía de uso de .vec y .vmus assets
-• \`/examples\` - Ver ejemplos de código
-• \`/clear\` - Limpiar conversación
-• \`/settings\` - Configurar IA
+• ${t('ai.help.explain', '`/explain` - Explain selected code')}
+• ${t('ai.help.fix', '`/fix` - Suggest solution for errors')}
+• ${t('ai.help.generate', '`/generate [description]` - Generate VPy code')}
+• ${t('ai.help.optimize', '`/optimize` - Optimize selected code')}
+• ${t('ai.help.vectrex', '`/vectrex [command]` - Info about Vectrex commands')}
+• ${t('ai.help.assets', '`/assets` - Guide to using .vec and .vmus assets')}
+• ${t('ai.help.examples', '`/examples` - See code examples')}
+• ${t('ai.help.clear', '`/clear` - Clear conversation')}
+• ${t('ai.help.settings', '`/settings` - Configure AI')}
 
-**Ejemplo de uso:**
-\`/generate una pelota que rebote en los bordes\`
-\`/explain\` (con código seleccionado)
-\`/fix\` (cuando hay errores en el panel)
-\`/assets\` (para aprender sobre vectores y música)`);
+${t('ai.help.examples_header', '**Usage examples:**')}
+${t('ai.help.example1', '`/generate a bouncing ball at screen edges`')}
+${t('ai.help.example2', '`/explain` (with code selected)')}
+${t('ai.help.example3', '`/fix` (when there are errors in the panel)')}
+${t('ai.help.example4', '`/assets` (to learn about vectors and music)')}`;
+        addMessage('assistant', helpMsg);
         break;
         
       case '/clear':
         await clearSessionMessages();
         setTimeout(() => {
-          addMessage('system', '🗑️ Conversación limpiada. ¿En qué puedo ayudarte?');
+          addMessage('system', t('ai.clear.message', '🗑️ Conversation cleared. How can I help you?'));
         }, 100);
         break;
         
       case '/settings':
         setShowSettings(true);
-        addMessage('assistant', '⚙️ Abriendo configuración de IA...');
+        addMessage('assistant', t('ai.settings.opening', '⚙️ Opening AI settings...'));
         break;
         
       case '/generate':
         const description = args.join(' ');
         if (!description) {
-          addMessage('assistant', '❌ Uso: `/generate [descripción]`\n\nEjemplo: `/generate una pelota rebotando`');
+          addMessage('assistant', t('ai.command.generate.usage', '❌ Usage: `/generate [description]`\n\nExample: `/generate a bouncing ball`'));
           return;
         }
         await generateCode(description, context);
@@ -481,7 +484,7 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
         
       case '/explain':
         if (!context.selectedCode) {
-          addMessage('assistant', '⚠️ Selecciona código en el editor primero, luego usa `/explain`');
+          addMessage('assistant', t('ai.command.explain.noCode', '⚠️ Select code in the editor first, then use `/explain`'));
           return;
         }
         await explainCode(context.selectedCode, context);
@@ -493,7 +496,7 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
         
       case '/optimize':
         if (!context.selectedCode) {
-          addMessage('assistant', '⚠️ Selecciona código en el editor primero, luego usa `/optimize`');
+          addMessage('assistant', t('ai.command.optimize.noCode', '⚠️ Select code in the editor first, then use `/optimize`'));
           return;
         }
         await optimizeCode(context.selectedCode, context);
@@ -513,7 +516,7 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
         break;
         
       default:
-        addMessage('assistant', `❌ Comando desconocido: \`${cmd}\`\n\nUsa \`/help\` para ver comandos disponibles.`);
+        addMessage('assistant', t('ai.error.unknownCommand', `❌ Unknown command: \`${cmd}\`\n\nUse \`/help\` to see available commands.`, { cmd }));
     }
   };
 
@@ -587,7 +590,7 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
       addMessage('assistant', response.content);
     } catch (error) {
       logger.error('AI', 'Generate code error:', error);
-      addMessage('assistant', `❌ Error generando código: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      addMessage('assistant', t('ai.error.generating', '❌ Error generating code: {{message}}', { message: error instanceof Error ? error.message : t('ai.error.unknown', 'Unknown error') }));
     }
   };
 
@@ -607,7 +610,7 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
       addMessage('assistant', response.content);
     } catch (error) {
       logger.error('AI', 'Explain code error:', error);
-      addMessage('assistant', `❌ Error explicando código: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      addMessage('assistant', t('ai.error.explaining', '❌ Error explaining code: {{message}}', { message: error instanceof Error ? error.message : t('ai.error.unknown', 'Unknown error') }));
     }
   };
 
@@ -644,7 +647,7 @@ Soy tu asistente especializado en **Vectrex VPy development**. Puedo ayudarte co
       addMessage('assistant', response.content);
     } catch (error) {
       logger.error('AI', 'Optimize code error:', error);
-      addMessage('assistant', `❌ Error optimizando código: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      addMessage('assistant', t('ai.error.optimizing', '❌ Error optimizing code: {{message}}', { message: error instanceof Error ? error.message : t('ai.error.unknown', 'Unknown error') }));
     }
   };
 
@@ -697,7 +700,7 @@ ${commandNames}
   };
 
   const showCodeExamples = () => {
-    addMessage('assistant', `📝 **Ejemplos de código VPy:**
+    addMessage('assistant', `${t('ai.examples.title', '📝 **VPy Code Examples:**')}
 
 **1. Hola Mundo básico:**
 \`\`\`vpy
@@ -723,17 +726,17 @@ def main():
     x = x + 1
     if x > 100:
         x = -100
-    
+
     INTENSITY(255)
     MOVE(x, 0)
     DRAW_CIRCLE(10)
 \`\`\`
 
-¿Quieres ver ejemplos de algo específico?`);
+${t('ai.examples.wantMore', 'Want to see examples of something specific?')}`);
   };
 
   const showAssetsHelp = () => {
-    addMessage('assistant', `🎨 **Usando Assets en VPy**
+    addMessage('assistant', `${t('ai.assets.title', '🎨 **Using Assets in VPy**')}
 
 ## 📁 Estructura de Proyecto
 
@@ -880,7 +883,7 @@ def loop():
           {/* Concise Mode Toggle */}
           <button
             onClick={() => setConciseMode(!conciseMode)}
-            title={conciseMode ? 'Modo conciso activado' : 'Modo conciso desactivado'}
+            title={conciseMode ? t('ai.tooltip.conciseOn', 'Concise mode enabled') : t('ai.tooltip.conciseOff', 'Concise mode disabled')}
             style={{
               background: conciseMode ? '#10b981' : 'transparent',
               border: '1px solid #3c3c3c',
@@ -891,17 +894,17 @@ def loop():
               fontSize: '12px'
             }}
           >
-            ⚡ Conciso
+            {t('ai.ui.conciseButton', '⚡ Concise')}
           </button>
 
           {/* Clear History */}
           <button
             onClick={() => {
-              if (confirm('¿Borrar todo el historial de conversación de esta sesión?')) {
+              if (confirm(t('ai.clearHistoryConfirm', 'Clear all conversation history for this session?'))) {
                 clearSessionMessages();
               }
             }}
-            title="Borrar historial de sesión actual"
+            title={t('ai.clearHistoryTooltip', 'Clear current session history')}
             style={{
               background: 'transparent',
               border: '1px solid #3c3c3c',
@@ -928,7 +931,7 @@ def loop():
               fontSize: '12px'
             }}
           >
-            ⚙️ Config
+            {t('ai.ui.settingsButton', '⚙️ Config')}
           </button>
         </div>
       </div>
@@ -943,7 +946,7 @@ def loop():
           boxSizing: 'border-box',
           overflow: 'hidden'
         }}>
-          <div style={{ marginBottom: '12px', fontWeight: '600' }}>⚙️ Configuración IA</div>
+          <div style={{ marginBottom: '12px', fontWeight: '600' }}>{t('ai.settings.title', '⚙️ AI Settings')}</div>
           
           <div style={{ 
             display: 'flex', 
@@ -954,7 +957,7 @@ def loop():
           }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-              Proveedor:
+              {t('ai.settings.provider', 'Provider:')}
             </label>
             <select 
               value={currentProviderType}
@@ -982,7 +985,7 @@ def loop():
               <option value="groq">Groq (Free & Fast)</option>
               <option value="deepseek">DeepSeek (Free)</option>
               <option value="github">GitHub Models (Copilot)</option>
-              <option value="ollama">🏠 Ollama (Local - Privado)</option>
+              <option value="ollama">{t('ai.ui.ollama', '🏠 Ollama (Local - Private)')}</option>
               <option value="mock">Mock (Testing)</option>
             </select>
           </div>
@@ -992,7 +995,7 @@ def loop():
           {currentProviderType !== 'mock' && currentProviderType !== 'ollama' && (
             <div style={{ marginBottom: '8px' }}>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                API Key:
+                {t('ai.settings.apiKey', 'API Key:')}
               </label>
               <input
                 type="password"
@@ -1046,8 +1049,8 @@ def loop():
           {currentProviderType !== 'mock' && availableModels.length > 0 && (
                 <div style={{ marginBottom: '8px' }}>
                   <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                    Modelo:
-                    {isLoadingModels && <span style={{ color: '#6b7280', marginLeft: '8px' }}>Cargando...</span>}
+                    {t('ai.settings.model', 'Model:')}
+                    {isLoadingModels && <span style={{ color: '#6b7280', marginLeft: '8px' }}>{t('ai.ui.loading', 'Loading...')}</span>}
                   </label>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
                     <select
@@ -1064,15 +1067,15 @@ def loop():
                         opacity: isLoadingModels ? 0.6 : 1
                       }}
                     >
-                      <option value="">Seleccionar modelo...</option>
+                      <option value="">{t('ai.ui.selectModel', 'Select model...')}</option>
                       {availableModels.map(model => (
                         <option key={model} value={model}>
                           {model}
-                          {model.includes('gpt-5') && ' ⭐ (Nuevo)'}
-                          {model.includes('claude-4') && ' ⭐ (Nuevo)'}
-                          {model.includes('gpt-4o') && !model.includes('mini') && ' 🚀 (Recomendado)'}
-                          {model.includes('mini') && ' ⚡ (Rápido)'}
-                          {model.includes('free') && ' 🆓 (Gratis)'}
+                          {model.includes('gpt-5') && ` ${t('ai.badge.new', '⭐ (New)')}`}
+                          {model.includes('claude-4') && ` ${t('ai.badge.new', '⭐ (New)')}`}
+                          {model.includes('gpt-4o') && !model.includes('mini') && ` ${t('ai.badge.recommended', '🚀 (Recommended)')}`}
+                          {model.includes('mini') && ` ${t('ai.badge.fast', '⚡ (Fast)')}`}
+                          {model.includes('free') && ` ${t('ai.badge.free', '🆓 (Free)')}`}
                         </option>
                       ))}
                     </select>
@@ -1104,7 +1107,7 @@ def loop():
                       marginTop: '4px',
                       fontStyle: 'italic'
                     }}>
-                      Modelo seleccionado: {providerConfig.model}
+                      {t('ai.settings.modelSelected', 'Model selected: {{model}}', { model: providerConfig.model })}
                     </div>
                   )}
                   
@@ -1133,7 +1136,7 @@ def loop():
                       opacity: isLoadingModels || (currentProviderType !== 'ollama' && !providerConfig.apiKey) ? 0.5 : 1
                     }}
                   >
-                    🔄 {isLoadingModels ? 'Cargando...' : 'Recargar modelos'}
+                    {isLoadingModels ? t('ai.ui.loading', 'Loading...') : t('ai.ui.reloadModels', '🔄 Reload models')}
                   </button>
                 </div>
               )}
@@ -1156,27 +1159,17 @@ def loop():
                     console.log('Connection test result:', isConnected);
                     
                     if (!isConnected) {
-                      const shouldSave = confirm(`⚠️ Connection test failed for ${currentProviderType}.
+                      const shouldSave = confirm(t('ai.settings.connectionFailed', '⚠️ Connection test failed for {{provider}}.\n\nPossible issues:\n• Check your API key is correct\n• Rate limit exceeded (wait a moment)\n• Service temporarily unavailable\n\nDo you want to save the configuration anyway?\nYou can try sending a message to test if it works.', { provider: currentProviderType }));
 
-Possible issues:
-• Check your API key is correct
-• Rate limit exceeded (wait a moment)
-• Service temporarily unavailable
-
-Do you want to save the configuration anyway?
-You can try sending a message to test if it works.`);
-                      
                       if (!shouldSave) {
                         return;
                       }
                     } else {
-                      alert(`✅ Successfully connected to ${currentProviderType}!`);
+                      alert(t('ai.settings.connectionSuccess', '✅ Successfully connected to {{provider}}!', { provider: currentProviderType }));
                     }
                   } catch (error) {
                     console.error('Connection test error:', error);
-                    const shouldSave = confirm(`⚠️ Error testing connection: ${error}
-
-Do you want to save the configuration anyway?`);
+                    const shouldSave = confirm(t('ai.settings.connectionError', '⚠️ Error testing connection: {{error}}\n\nDo you want to save the configuration anyway?', { error: error instanceof Error ? error.message : String(error) }));
                     
                     if (!shouldSave) {
                       return;
@@ -1196,7 +1189,7 @@ Do you want to save the configuration anyway?`);
                 fontSize: '12px'
               }}
             >
-              Guardar
+              {t('ai.button.save', 'Save')}
             </button>
             <button
               onClick={() => setShowSettings(false)}
@@ -1210,7 +1203,7 @@ Do you want to save the configuration anyway?`);
                 fontSize: '12px'
               }}
             >
-              Cancelar
+              {t('ai.button.cancel', 'Cancel')}
             </button>
           </div>
           </div>
@@ -1312,7 +1305,7 @@ Do you want to save the configuration anyway?`);
               borderRadius: '8px',
               fontSize: '13px'
             }}>
-              <span>🤔 Pensando...</span>
+              <span>{t('ai.ui.thinking', '🤔 Thinking...')}</span>
             </div>
           </div>
         )}
@@ -1335,11 +1328,11 @@ Do you want to save the configuration anyway?`);
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
-          <span>📎 Contexto: {getContextPreview()}</span>
+          <span>{t('ai.context.label', '📎 Context:')} {getContextPreview()}</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
               onClick={() => {
-                const context = prompt('Añadir contexto manual:', manualContext);
+                const context = prompt(t('ai.dialog.addContext', 'Add manual context:'), manualContext);
                 if (context !== null) setManualContext(context);
               }}
               style={{
@@ -1352,7 +1345,7 @@ Do you want to save the configuration anyway?`);
                 cursor: 'pointer'
               }}
             >
-              📎 Adjuntar
+              {t('ai.ui.attach', '📎 Attach')}
             </button>
           </div>
         </div>
@@ -1363,7 +1356,7 @@ Do you want to save the configuration anyway?`);
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Pregunta algo o usa /help para ver comandos..."
+            placeholder={t('ai.ui.inputPlaceholder', 'Ask something or use /help to see commands...')}
             style={{
               flex: 1,
               background: '#1e1e1e',

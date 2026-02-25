@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { logger } from '../../utils/logger.js';
 
 export const CompilerOutputPanel: React.FC = () => {
+  const { t } = useTranslation(['common']);
   const [output, setOutput] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -97,7 +99,7 @@ export const CompilerOutputPanel: React.FC = () => {
         background: '#252526'
       }}>
         <span style={{ fontWeight: 600, color: '#cccccc', fontSize: 12 }}>
-          Compiler Output
+          {t('panel.compilerOutput', 'Compiler Output')}
         </span>
         <button
           onClick={handleClear}
@@ -111,9 +113,9 @@ export const CompilerOutputPanel: React.FC = () => {
             borderRadius: 2,
             cursor: 'pointer'
           }}
-          title="Clear output"
+          title={t('message.noBuildOutput', 'Clear output')}
         >
-          Clear
+          {t('action.clear', 'Clear')}
         </button>
         <button
           onClick={handleCopy}
@@ -126,9 +128,9 @@ export const CompilerOutputPanel: React.FC = () => {
             borderRadius: 2,
             cursor: 'pointer'
           }}
-          title="Copy to clipboard"
+          title={t('action.copy', 'Copy to clipboard')}
         >
-          Copy
+          {t('action.copy', 'Copy')}
         </button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#cccccc' }}>
           <input
@@ -136,7 +138,7 @@ export const CompilerOutputPanel: React.FC = () => {
             checked={autoScroll}
             onChange={e => setAutoScroll(e.target.checked)}
           />
-          Auto-scroll
+          {t('status.autoScroll', 'Auto-scroll')}
         </label>
       </div>
 
@@ -155,7 +157,7 @@ export const CompilerOutputPanel: React.FC = () => {
           wordBreak: 'break-word'
         }}
       >
-        {output || <span style={{ color: '#666' }}>No output yet. Build a project to see compilation logs here.</span>}
+        {output || <span style={{ color: '#666' }}>{t('message.noCompilerOutput', 'No output yet. Build a project to see compilation logs here.')}</span>}
       </div>
     </div>
   );

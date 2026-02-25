@@ -12,6 +12,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Emit code for simple expression (numbers, vars, strings, calls)
+///
+/// CRITICAL CONTRACT: This function MUST return with a balanced stack.
+/// Every PSHS operation must have a corresponding PULS or equivalent pop operation
+/// BEFORE returning to the caller. Violations will cause stack corruption when
+/// expressions are evaluated in branching contexts (if/elif/while conditions).
 pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
     match expr {
         Expr::Number(n) => {
@@ -28,8 +33,22 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         
         Expr::Ident(id) => {
             // Variable references use uppercase labels
-            out.push_str(&format!("    LDD VAR_{}\n", id.name.to_uppercase()));
-            out.push_str("    STD RESULT\n");
+            // Check variable size: use LDB + sign/zero-extend for 8-bit, LDD for 16-bit
+            let size = context::get_var_size(&id.name);
+            if size.bytes == 1 {
+                // 8-bit load: LDB then extend to 16-bit in D (use > for extended addressing)
+                out.push_str(&format!("    LDB >VAR_{}\n", id.name.to_uppercase()));
+                if size.signed {
+                    out.push_str("    SEX             ; Sign-extend B -> D\n");
+                } else {
+                    out.push_str("    CLRA            ; Zero-extend: A=0, B=value\n");
+                }
+                out.push_str("    STD RESULT\n");
+            } else {
+                // 16-bit load: standard LDD (use > for extended addressing)
+                out.push_str(&format!("    LDD >VAR_{}\n", id.name.to_uppercase()));
+                out.push_str("    STD RESULT\n");
+            }
         }
         
         Expr::Call(call) => {
@@ -140,92 +159,101 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
 }
 
 fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
+    // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
+    // The `,S++` addressing mode doesn't properly pop for 16-bit operations.
+    // Instead, save LEFT to TMPVAL, evaluate RIGHT into D, then operate.
+
     // Evaluate left
     emit_simple_expr(left, out, assets);
     out.push_str("    LDD RESULT\n");
-    out.push_str("    PSHS D\n");
-    
+    out.push_str("    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)\n");
+
     // Evaluate right
     emit_simple_expr(right, out, assets);
     out.push_str("    LDD RESULT\n");
-    
+
     // Perform operation
     match op {
         BinOp::Add => {
-            out.push_str("    ADDD ,S++\n");
+            out.push_str("    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)\n");
         }
         BinOp::Sub => {
-            out.push_str("    STD TMPPTR      ; Save right operand\n");
-            out.push_str("    PULS D          ; Get left operand\n");
+            out.push_str("    STD TMPPTR      ; Save right operand to TMPPTR\n");
+            out.push_str("    LDD TMPVAL      ; Get left operand from TMPVAL\n");
             out.push_str("    SUBD TMPPTR     ; Left - Right\n");
         }
         BinOp::Mul => {
-            out.push_str("    PULS X      ; Get left into X\n");
-            out.push_str("    JSR MUL16   ; D = X * D\n");
+            out.push_str("    LDX TMPVAL      ; Get left into X from TMPVAL\n");
+            out.push_str("    JSR MUL16       ; D = X * D\n");
         }
         BinOp::Div | BinOp::FloorDiv => {
-            out.push_str("    PULS X      ; Get left into X\n");
-            out.push_str("    JSR DIV16   ; D = X / D\n");
+            out.push_str("    LDX TMPVAL      ; Get left into X from TMPVAL\n");
+            out.push_str("    JSR DIV16       ; D = X / D\n");
         }
         BinOp::Mod => {
-            out.push_str("    PULS X      ; Get left into X\n");
-            out.push_str("    JSR MOD16   ; D = X % D\n");
+            out.push_str("    LDX TMPVAL      ; Get left into X from TMPVAL\n");
+            out.push_str("    JSR MOD16       ; D = X % D\n");
         }
         BinOp::Shl => {
             // Shift Left: D = Left << Right
+            // LEFT in TMPVAL, RIGHT in D
             let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
             out.push_str("    STD TMPPTR      ; Save shift amount (Right)\n");
-            out.push_str("    PULS D          ; Get value to shift (Left)\n");
+            out.push_str("    LDD TMPVAL      ; Get value to shift (Left)\n");
             out.push_str("    LDX TMPPTR      ; Load shift amount into X\n");
             out.push_str(&format!("    BEQ .SHL_{}_END\n", id)); // Shift 0 -> done
-            
+
             // Limit shift to 16
             out.push_str("    CMPX #16\n");
             out.push_str(&format!("    BLE .SHL_{}_LOOP\n", id));
             out.push_str("    LDX #16\n");
-            
+
             out.push_str(&format!(".SHL_{}_LOOP:\n", id));
             out.push_str("    ASLB\n");
             out.push_str("    ROLA\n");
             out.push_str("    LEAX -1,X\n");
             out.push_str(&format!("    BNE .SHL_{}_LOOP\n", id));
-            
+
             out.push_str(&format!(".SHL_{}_END:\n", id));
         }
         BinOp::Shr => {
             // Shift Right: D = Left >> Right
+            // LEFT in TMPVAL, RIGHT in D
             let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
             out.push_str("    STD TMPPTR      ; Save shift amount\n");
-            out.push_str("    PULS D          ; Get value\n");
+            out.push_str("    LDD TMPVAL      ; Get value to shift (Left)\n");
             out.push_str("    LDX TMPPTR\n");
             out.push_str(&format!("    BEQ .SHR_{}_END\n", id));
-            
+
             out.push_str("    CMPX #16\n");
             out.push_str(&format!("    BLE .SHR_{}_LOOP\n", id));
             out.push_str("    LDX #16\n");
-            
+
             out.push_str(&format!(".SHR_{}_LOOP:\n", id));
             out.push_str("    ASRA\n");
             out.push_str("    RORB\n");
             out.push_str("    LEAX -1,X\n");
             out.push_str(&format!("    BNE .SHR_{}_LOOP\n", id));
-            
+
             out.push_str(&format!(".SHR_{}_END:\n", id));
         }
         BinOp::BitAnd => {
-            out.push_str("    PULS X\n");
-            out.push_str("    ANDA X\n");
-            out.push_str("    ANDB X+1\n");
+            out.push_str("    STD TMPPTR2     ; Save right operand to TMPPTR2\n");
+            out.push_str("    LDD TMPVAL      ; Get left from TMPVAL\n");
+            out.push_str("    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)\n");
+            out.push_str("    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)\n");
         }
         BinOp::BitOr => {
-            out.push_str("    PULS X\n");
-            out.push_str("    ORA X\n");
-            out.push_str("    ORB X+1\n");
+            out.push_str("    STD TMPPTR2     ; Save right operand to TMPPTR2\n");
+            out.push_str("    LDD TMPVAL      ; Get left from TMPVAL\n");
+            out.push_str("    ORA TMPPTR2     ; A OR TMPPTR2+0 (high byte)\n");
+            out.push_str("    ORB TMPPTR2+1   ; B OR TMPPTR2+1 (low byte)\n");
         }
         BinOp::BitXor => {
-            out.push_str("    PULS X\n");
-            out.push_str("    EORA X\n");
-            out.push_str("    EORB X+1\n");
+            out.push_str("    STD TMPPTR2     ; Save right operand to TMPPTR2\n");
+            out.push_str("    LDD TMPVAL      ; Get left from TMPVAL\n");
+            out.push_str("    EORA TMPPTR2    ; A XOR TMPPTR2+0 (high byte)\n");
+            out.push_str("    EORB TMPPTR2+1  ; B XOR TMPPTR2+1 (low byte)\n");
         }
     }
     
@@ -234,18 +262,22 @@ fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[
 
 fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
     let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-    
-    // CRITICAL FIX: Evaluate RIGHT first, push to stack
-    // Then evaluate LEFT, compare D (LEFT) with stack (RIGHT)
-    // CMPD does: D - [S], so we want LEFT - RIGHT
+
+    // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
+    // The `,S++` addressing mode doesn't properly pop for 16-bit comparisons.
+    // Instead, evaluate RIGHT into TMPVAL, evaluate LEFT into D, then CMPD TMPVAL.
+    // This avoids stack corruption from unbalanced PSHS/PULS pairs.
+
+    // Evaluate RIGHT first, save to TMPVAL
     emit_simple_expr(right, out, assets);
     out.push_str("    LDD RESULT\n");
-    out.push_str("    PSHS D\n");          // Push RIGHT to stack
-    
+    out.push_str("    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)\n");
+
+    // Evaluate LEFT
     emit_simple_expr(left, out, assets);
     out.push_str("    LDD RESULT\n");      // D = LEFT
-    out.push_str("    CMPD ,S++\n");       // Compare LEFT - RIGHT (sets flags correctly)
-    
+    out.push_str("    CMPD TMPVAL\n");     // Compare LEFT - RIGHT (using memory temp, not stack)
+
     let branch_true = match op {
         CmpOp::Eq => "LBEQ",
         CmpOp::Ne => "LBNE",
@@ -254,7 +286,7 @@ fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: 
         CmpOp::Gt => "LBGT",
         CmpOp::Ge => "LBGE",
     };
-    
+
     out.push_str(&format!("    {} .CMP_{}_TRUE\n", branch_true, id));
     out.push_str("    LDD #0\n");
     out.push_str(&format!("    LBRA .CMP_{}_END\n", id));
@@ -265,10 +297,26 @@ fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: 
 }
 
 fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]) {
+    // CRITICAL FIX (2026-02-22): Use TMPPTR for array index storage, not TMPVAL
+    // TMPVAL is reserved for comparison operands in conditional expressions
+    // Using TMPVAL here causes overwrites when array access appears in comparisons like:
+    //   joystick1_state[2] == 1  (TMPVAL gets 1, then gets overwritten by index 2)
+    //
+    // Solution: Use TMPPTR to store the index, keeping TMPVAL free for comparisons
+    // This avoids register pressure and maintains expression evaluation safety
+
     // CRITICAL FIX (2026-01-19): Use correct label based on array type
     // Mutable arrays (GlobalLet): VAR_{NAME}_DATA (in RAM)
     // Const arrays: ARRAY_{NAME}_DATA (in ROM)
     // Use context::is_mutable_array() to check which type
+
+    let element_size = if let Expr::Ident(id) = array {
+        context::get_var_size(&id.name).bytes  // Get element size for stride calculation
+    } else {
+        2  // Default to 16-bit if not a simple identifier
+    };
+
+    // Step 1: Load array base into X
     if let Expr::Ident(id) = array {
         let name_upper = id.name.to_uppercase();
         let label = if context::is_mutable_array(&id.name) {
@@ -276,24 +324,40 @@ fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]
         } else {
             format!("ARRAY_{}_DATA", name_upper)  // ROM
         };
-        out.push_str(&format!("    LDX #{}  ; Array data\n", label));
-        out.push_str("    PSHS X\n");  // CRITICAL: Save X before evaluating index
+        out.push_str(&format!("    LDX #{}  ; Array base\n", label));
     } else {
         // Complex array expression - evaluate it
         emit_simple_expr(array, out, assets);
         out.push_str("    LDX RESULT  ; Array base address\n");
-        out.push_str("    PSHS X\n");
     }
-    
-    // Evaluate index
+
+    // Step 2: Evaluate index and save to TMPPTR (NOT TMPVAL - keeps comparison operand safe)
     emit_simple_expr(index, out, assets);
-    out.push_str("    LDD RESULT  ; Index\n");
-    out.push_str("    ASLB        ; Multiply by 2 (16-bit elements)\n");
-    out.push_str("    ROLA\n");
-    
-    // Calculate address
-    out.push_str("    PULS X      ; Array base\n");
-    out.push_str("    LEAX D,X    ; X = base + (index * 2)\n");
-    out.push_str("    LDD ,X      ; Load value\n");
-    out.push_str("    STD RESULT\n");
+    out.push_str("    LDD RESULT  ; Index value\n");
+    out.push_str("    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)\n");
+
+    // Step 3: Calculate stride and adjust X
+    // Stride multiply: only if element_size == 2 (8-bit arrays have stride 1, no multiply needed)
+    if element_size == 2 {
+        out.push_str("    LDD TMPPTR  ; Load index\n");
+        out.push_str("    ASLB        ; Multiply by 2 (16-bit elements)\n");
+        out.push_str("    ROLA\n");
+    } else {
+        out.push_str("    LDD TMPPTR  ; Load index (stride = 1 for 8-bit)\n");
+    }
+
+    // Step 4: Calculate address: X = X + (D = index * element_size)
+    out.push_str("    LEAX D,X    ; X = base + (index * element_size)\n");
+
+    // Step 5: Load element: use correct load instruction based on element type
+    if element_size == 1 {
+        // 8-bit element: LDB then zero-extend (arrays are typically unsigned)
+        out.push_str("    LDB ,X      ; Load 8-bit value\n");
+        out.push_str("    CLRA        ; Zero-extend to 16-bit (arrays are typically unsigned)\n");
+        out.push_str("    STD RESULT\n");
+    } else {
+        // 16-bit element: standard LDD
+        out.push_str("    LDD ,X      ; Load 16-bit value\n");
+        out.push_str("    STD RESULT\n");
+    }
 }

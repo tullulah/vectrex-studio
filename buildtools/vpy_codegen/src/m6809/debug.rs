@@ -15,7 +15,7 @@ static DEBUG_LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn next_label() -> String {
     let count = DEBUG_LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!(".DEBUG_{}", count)
+    format!("DEBUG_SKIP_{}", count)
 }
 
 /// DEBUG_PRINT(value) - Print value to debug output

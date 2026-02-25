@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // Use the backend session type from global window definitions
 type Session = PyPilotSession;
@@ -16,6 +17,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   onSessionChange,
   onNewSession
 }) => {
+  const { t } = useTranslation(['common']);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -58,8 +60,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
   const handleDelete = async (sessionId: number) => {
     if (!window.pypilot) return;
-    
-    if (!confirm('¿Eliminar esta sesión? Se perderá todo el historial.')) {
+
+    if (!confirm(t('session.deleteConfirm', 'Delete this session? All history will be lost.'))) {
       return;
     }
 
@@ -96,7 +98,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       >
         <span style={{ fontSize: '12px', opacity: 0.7 }}>💬</span>
         <span style={{ flex: 1, fontSize: '13px' }}>
-          {currentSession?.name || 'Sin sesión'}
+          {currentSession?.name || t('session.noActive', 'No session')}
         </span>
         <span style={{ fontSize: '10px', opacity: 0.5 }}>▼</span>
       </div>
@@ -104,7 +106,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       {/* New Session Button */}
       <button
         onClick={onNewSession}
-        title="Nueva sesión"
+        title={t('session.newSession', 'New session')}
         style={{
           padding: '6px 12px',
           background: 'var(--vscode-button-background)',
@@ -115,7 +117,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           fontSize: '13px'
         }}
       >
-        + Nueva
+        {t('session.newLabel', '+ New')}
       </button>
 
       {/* Dropdown */}
@@ -152,13 +154,13 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           >
             <div style={{ padding: '8px', borderBottom: '1px solid var(--vscode-input-border)' }}>
               <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '4px' }}>
-                SESIONES DEL PROYECTO
+                {t('session.section', 'PROJECT SESSIONS')}
               </div>
             </div>
 
             {sessions.length === 0 ? (
               <div style={{ padding: '16px', textAlign: 'center', opacity: 0.5, fontSize: '12px' }}>
-                No hay sesiones
+                {t('session.empty', 'No sessions')}
               </div>
             ) : (
               sessions.map(session => (
@@ -199,7 +201,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                         </span>
                         {session.isActive && (
                           <span style={{ fontSize: '10px', background: 'var(--vscode-badge-background)', padding: '2px 6px', borderRadius: '8px' }}>
-                            Activa
+                            {t('session.active', 'Active')}
                           </span>
                         )}
                       </div>
@@ -215,7 +217,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                           }}
                           style={{ fontSize: '11px', padding: '2px 8px' }}
                         >
-                          Renombrar
+                          {t('session.rename', 'Rename')}
                         </button>
                         <button
                           onClick={(e) => {
@@ -224,7 +226,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                           }}
                           style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--vscode-errorForeground)' }}
                         >
-                          Eliminar
+                          {t('session.delete', 'Delete')}
                         </button>
                       </div>
                     </div>

@@ -30,12 +30,16 @@ pub mod error;
 pub mod graph;
 pub mod resolver;
 pub mod scope;
+pub mod type_tracker;
+pub mod types;
 pub mod visitor;
 
 pub use error::{UnifierError, UnifierResult};
 pub use graph::ModuleGraph;
 pub use resolver::SymbolResolver;
 pub use scope::Scope;
+pub use type_tracker::TypeTracker;
+pub use types::VarType;
 pub use visitor::AstVisitor;
 pub use vpy_parser::ast::{Module, Item, ImportDecl};
 
@@ -119,16 +123,18 @@ fn rename_item_symbols(item: &Item, prefix: &str, _resolver: &SymbolResolver) ->
             
             Item::Function(new_func)
         }
-        Item::GlobalLet { name, value, source_line } => {
+        Item::GlobalLet { name, type_annotation, value, source_line } => {
             Item::GlobalLet {
                 name: apply_prefix(prefix, name),
+                type_annotation: type_annotation.clone(),
                 value: value.clone(),
                 source_line: *source_line,
             }
         }
-        Item::Const { name, value, source_line } => {
+        Item::Const { name, type_annotation, value, source_line } => {
             Item::Const {
                 name: apply_prefix(prefix, name),
+                type_annotation: type_annotation.clone(),
                 value: value.clone(),
                 source_line: *source_line,
             }
@@ -229,16 +235,18 @@ fn rewrite_references(items: Vec<Item>, resolver: &SymbolResolver) -> Vec<Item> 
                     .collect();
                 Item::Function(func)
             }
-            Item::GlobalLet { name, value, source_line } => {
+            Item::GlobalLet { name, type_annotation, value, source_line } => {
                 Item::GlobalLet {
                     name,
+                    type_annotation,
                     value: rewrite_expr(value, resolver),
                     source_line,
                 }
             }
-            Item::Const { name, value, source_line } => {
+            Item::Const { name, type_annotation, value, source_line } => {
                 Item::Const {
                     name,
+                    type_annotation,
                     value: rewrite_expr(value, resolver),
                     source_line,
                 }
@@ -302,9 +310,10 @@ fn rewrite_stmt(stmt: vpy_parser::ast::Stmt, resolver: &SymbolResolver) -> vpy_p
         Stmt::Expr(expr, source_line) => {
             Stmt::Expr(rewrite_expr(expr, resolver), source_line)
         }
-        Stmt::Let { name, value, source_line } => {
+        Stmt::Let { name, type_annotation, value, source_line } => {
             Stmt::Let {
                 name,
+                type_annotation,
                 value: rewrite_expr(value, resolver),
                 source_line,
             }

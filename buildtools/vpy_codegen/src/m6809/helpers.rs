@@ -36,13 +36,17 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     
     // Core scratch variables (always needed)
     ram.allocate("RESULT", 2, "Main result temporary");
+    // NOTE: TMPVAL is an alias for RESULT - both use the same memory location for efficiency
+    ram.allocate("TMPVAL", 2, "Temporary value storage (alias for RESULT)");
     ram.allocate("TMPPTR", 2, "Temporary pointer");
     ram.allocate("TMPPTR2", 2, "Temporary pointer 2");
+    ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
+    ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     ram.allocate("TEMP_YX", 2, "Temporary Y/X coordinate storage");
     
     // Conditional variables based on usage
     if needed.contains("PRINT_NUMBER") {
-        ram.allocate("NUM_STR", 2, "Buffer for PRINT_NUMBER hex output");
+        ram.allocate("NUM_STR", 6, "Buffer for PRINT_NUMBER decimal output (5 digits + terminator)");
     }
     if needed.contains("RAND") {
         ram.allocate("RAND_SEED", 2, "Random seed for RAND()");
@@ -55,7 +59,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("DRAW_CIRCLE_YC", 1, "Circle center Y");
         ram.allocate("DRAW_CIRCLE_DIAM", 1, "Circle diameter");
         ram.allocate("DRAW_CIRCLE_INTENSITY", 1, "Circle intensity");
-        ram.allocate("DRAW_CIRCLE_TEMP", 6, "Circle temporary buffer");
+        ram.allocate("DRAW_CIRCLE_RADIUS", 1, "Circle radius (diam/2) - used in segment drawing");
+        ram.allocate("DRAW_CIRCLE_TEMP", 8, "Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r");
     }
     
     // NOTE: Check both DRAW_RECT and DRAW_RECT_RUNTIME
@@ -105,33 +110,36 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("FRAME_COUNTER", 2, "Frame counter for fade effects");
         ram.allocate("CURRENT_INTENSITY", 2, "Current intensity for fade");
     }
-    
-    // Audio system variables (auto-detected)
-    use crate::m6809::functions::has_audio_calls;
-    if has_audio_calls(module) {
-        ram.allocate("PSG_MUSIC_PTR", 2, "PSG music data pointer");
-        ram.allocate("PSG_MUSIC_START", 2, "PSG music start pointer (for loops)");
-        ram.allocate("PSG_MUSIC_ACTIVE", 1, "PSG music active flag");
-        ram.allocate("PSG_IS_PLAYING", 1, "PSG playing flag");
-        ram.allocate("PSG_DELAY_FRAMES", 1, "PSG frame delay counter");
-        ram.allocate("PSG_MUSIC_BANK", 1, "PSG music bank ID (for multibank)");
-        ram.allocate("SFX_PTR", 2, "SFX data pointer");
-        ram.allocate("SFX_ACTIVE", 1, "SFX active flag");
-    }
-    
-    // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address $CFE0
+
+    // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
     // These need to be at a fixed location for cross-bank compatibility
-    ram.allocate_fixed("VAR_ARG0", 0xCFE0, 2, "Function argument 0 (16-bit)");
-    ram.allocate_fixed("VAR_ARG1", 0xCFE2, 2, "Function argument 1 (16-bit)");
-    ram.allocate_fixed("VAR_ARG2", 0xCFE4, 2, "Function argument 2 (16-bit)");
-    ram.allocate_fixed("VAR_ARG3", 0xCFE6, 2, "Function argument 3 (16-bit)");
-    ram.allocate_fixed("VAR_ARG4", 0xCFE8, 2, "Function argument 4 (16-bit)");
-    
+    // CRITICAL: Must be within Vectrex 1KB RAM ($C800-$CBFF) — $CFxx is unmapped!
+    // Placed at $CB80, well below stack ($CBEA grows down, ~106 bytes headroom)
+    ram.allocate_fixed("VAR_ARG0", 0xCB80, 2, "Function argument 0 (16-bit)");
+    ram.allocate_fixed("VAR_ARG1", 0xCB82, 2, "Function argument 1 (16-bit)");
+    ram.allocate_fixed("VAR_ARG2", 0xCB84, 2, "Function argument 2 (16-bit)");
+    ram.allocate_fixed("VAR_ARG3", 0xCB86, 2, "Function argument 3 (16-bit)");
+    ram.allocate_fixed("VAR_ARG4", 0xCB88, 2, "Function argument 4 (16-bit)");
+
     // CRITICAL (2026-01-20): Multibank bank tracking variable
     // Required for cross-bank function calls and bank switching wrappers
     // Must be at fixed address for all banks to access
-    ram.allocate_fixed("CURRENT_ROM_BANK", 0xCFEA, 1, "Current ROM bank ID (multibank tracking)");
-    
+    ram.allocate_fixed("CURRENT_ROM_BANK", 0xCB8A, 1, "Current ROM bank ID (multibank tracking)");
+
+    // Audio system variables at FIXED addresses in upper RAM
+    // These are allocated AFTER VAR_ARG0-4 at $CBEB onwards
+    use crate::m6809::functions::has_audio_calls;
+    if has_audio_calls(module) {
+        ram.allocate_fixed("PSG_MUSIC_PTR", 0xCBEB, 2, "PSG music data pointer");
+        ram.allocate_fixed("PSG_MUSIC_START", 0xCBED, 2, "PSG music start pointer (for loops)");
+        ram.allocate_fixed("PSG_MUSIC_ACTIVE", 0xCBEF, 1, "PSG music active flag");
+        ram.allocate_fixed("PSG_IS_PLAYING", 0xCBF0, 1, "PSG playing flag");
+        ram.allocate_fixed("PSG_DELAY_FRAMES", 0xCBF1, 1, "PSG frame delay counter");
+        ram.allocate_fixed("PSG_MUSIC_BANK", 0xCBF2, 1, "PSG music bank ID (for multibank)");
+        ram.allocate_fixed("SFX_PTR", 0xCBF3, 2, "SFX data pointer");
+        ram.allocate_fixed("SFX_ACTIVE", 0xCBF5, 1, "SFX active flag");
+    }
+
     // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
     // =========================================================================
@@ -212,11 +220,13 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 needed.insert("PRINT_NUMBER".to_string());
             }
             
-            // Drawing helpers: Need runtime if args contain non-constants
-            if name_upper == "DRAW_CIRCLE" && has_variable_args(args) {
+            // Drawing helpers: Always needed when called (even with constant args)
+            if name_upper == "DRAW_CIRCLE" {
+                needed.insert("DRAW_CIRCLE".to_string());
                 needed.insert("DRAW_CIRCLE_RUNTIME".to_string());
             }
-            if name_upper == "DRAW_RECT" && has_variable_args(args) {
+            if name_upper == "DRAW_RECT" {
+                needed.insert("DRAW_RECT".to_string());
                 needed.insert("DRAW_RECT_RUNTIME".to_string());
             }
             if name_upper == "DRAW_LINE" {
@@ -366,7 +376,7 @@ fn get_bios_address(symbol_name: &str, fallback_address: &str) -> String {
     fallback_address.to_string()
 }
 
-pub fn generate_helpers(module: &Module) -> Result<String, String> {
+pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, String> {
     let mut asm = String::new();
 
     // Import has_audio_calls for audio helper detection
@@ -376,7 +386,6 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
     let needed = analyze_module_helpers(module);
     
     // Get BIOS function addresses from VECTREX.I
-    let dp_to_d0 = get_bios_address("DP_to_D0", "$F1AA");
     let dp_to_c8 = get_bios_address("DP_to_C8", "$F1AF");
     
     // NOTE: RAM allocation and EQU definitions are now handled by generate_ram_and_arrays()
@@ -393,16 +402,19 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
         asm.push_str("VECTREX_PRINT_TEXT:\n");
         asm.push_str("    ; VPy signature: PRINT_TEXT(x, y, string)\n");
         asm.push_str("    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n");
-        asm.push_str("    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n");
-        asm.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n");
-        asm.push_str("    STA >$D00C     ; VIA_cntl\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_D0 - set Direct Page for BIOS/VIA access\n", dp_to_d0));
-        asm.push_str("    LDU VAR_ARG2   ; string pointer (third parameter)\n");
-        asm.push_str("    LDA VAR_ARG1+1 ; Y coordinate (second parameter, low byte)\n");
-        asm.push_str("    LDB VAR_ARG0+1 ; X coordinate (first parameter, low byte)\n");
-        asm.push_str("    JSR Print_Str_d ; Print string from U register\n");
-        asm.push_str("    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)\n");
-        asm.push_str("    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state\n");
+        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely\n");
+        asm.push_str("    ;       causing integrators to drift toward joystick DAC value.\n");
+        asm.push_str("    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.\n");
+        asm.push_str("    LDA #$D0\n");
+        asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
+        asm.push_str("    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)\n");
+        asm.push_str("    JSR Reset0Ref   ; Reset beam to center before positioning text\n");
+        asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
+        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
+        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
+        asm.push_str("    JSR Print_Str_d\n");
+        asm.push_str("    LDA #$80\n");
+        asm.push_str("    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale\n");
         asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }
@@ -411,49 +423,88 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
     // Only emit if PRINT_NUMBER is actually used in code
     if needed.contains("PRINT_NUMBER") {
         asm.push_str("VECTREX_PRINT_NUMBER:\n");
-        asm.push_str("    ; VPy signature: PRINT_NUMBER(x, y, num)\n");
-        asm.push_str("    ; Convert number to hex string and print\n");
-        asm.push_str("    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)\n");
-        asm.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n");
-        asm.push_str("    STA >$D00C     ; VIA_cntl\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_D0 - set Direct Page for BIOS/VIA access\n", dp_to_d0));
-        asm.push_str("    LDA VAR_ARG1+1   ; Y position\n");
-        asm.push_str("    LDB VAR_ARG0+1   ; X position\n");
-        asm.push_str("    JSR Moveto_d     ; Move to position\n");
+        asm.push_str("    ; Print signed decimal number (-9999 to 9999)\n");
+        asm.push_str("    ; ARG0=x, ARG1=y, ARG2=value\n");
+        asm.push_str("    ;\n");
+        asm.push_str("    ; STEP 1: Convert number to decimal string (DP=$C8)\n");
+        asm.push_str("    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n");
+        asm.push_str("    STD >TMPVAL      ; Save to temp\n");
+        asm.push_str("    LDX #NUM_STR    ; String buffer pointer\n");
         asm.push_str("    \n");
-        asm.push_str("    ; Convert number to string (show low byte as hex)\n");
-        asm.push_str("    LDA VAR_ARG2+1   ; Load number value\n");
+        asm.push_str("    ; Check sign: negative values get '-' prefix and are negated\n");
+        asm.push_str("    CMPD #0\n");
+        asm.push_str("    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion\n");
+        asm.push_str("    LDA #'-'\n");
+        asm.push_str("    STA ,X+          ; Store '-', advance buffer pointer\n");
+        asm.push_str("    LDD >TMPVAL\n");
+        asm.push_str("    COMA\n");
+        asm.push_str("    COMB\n");
+        asm.push_str("    ADDD #1          ; Two's complement negation -> absolute value\n");
+        asm.push_str("    STD >TMPVAL\n");
         asm.push_str("    \n");
-        asm.push_str("    ; Convert high nibble to ASCII\n");
-        asm.push_str("    LSRA\n");
-        asm.push_str("    LSRA\n");
-        asm.push_str("    LSRA\n");
-        asm.push_str("    LSRA\n");
-        asm.push_str("    ANDA #$0F\n");
-        asm.push_str("    CMPA #10\n");
-        asm.push_str("    BLO PN_DIGIT1\n");
-        asm.push_str("    ADDA #7          ; A-F\n");
-        asm.push_str("PN_DIGIT1:\n");
+        asm.push_str("    ; --- 1000s digit ---\n");
+        asm.push_str(".PN_DIV1000:\n");
+        asm.push_str("    CLR ,X           ; Counter = 0 (in buffer)\n");
+        asm.push_str(".PN_L1000:\n");
+        asm.push_str("    LDD >TMPVAL\n");
+        asm.push_str("    SUBD #1000\n");
+        asm.push_str("    BMI .PN_D1000\n");
+        asm.push_str("    STD >TMPVAL      ; Store reduced value\n");
+        asm.push_str("    INC ,X           ; Increment digit counter\n");
+        asm.push_str("    BRA .PN_L1000\n");
+        asm.push_str(".PN_D1000:\n");
+        asm.push_str("    LDA ,X           ; Get count\n");
+        asm.push_str("    ADDA #'0'        ; Convert to ASCII\n");
+        asm.push_str("    STA ,X+          ; Store and advance\n");
+        asm.push_str("    \n");
+        asm.push_str("    ; --- 100s digit ---\n");
+        asm.push_str("    CLR ,X\n");
+        asm.push_str(".PN_L100:\n");
+        asm.push_str("    LDD >TMPVAL\n");
+        asm.push_str("    SUBD #100\n");
+        asm.push_str("    BMI .PN_D100\n");
+        asm.push_str("    STD >TMPVAL\n");
+        asm.push_str("    INC ,X\n");
+        asm.push_str("    BRA .PN_L100\n");
+        asm.push_str(".PN_D100:\n");
+        asm.push_str("    LDA ,X\n");
         asm.push_str("    ADDA #'0'\n");
-        asm.push_str("    STA NUM_STR      ; Store first digit\n");
+        asm.push_str("    STA ,X+\n");
         asm.push_str("    \n");
-        asm.push_str("    ; Convert low nibble to ASCII  \n");
-        asm.push_str("    LDA VAR_ARG2+1\n");
-        asm.push_str("    ANDA #$0F\n");
-        asm.push_str("    CMPA #10\n");
-        asm.push_str("    BLO PN_DIGIT2\n");
-        asm.push_str("    ADDA #7          ; A-F\n");
-        asm.push_str("PN_DIGIT2:\n");
+        asm.push_str("    ; --- 10s digit ---\n");
+        asm.push_str("    CLR ,X\n");
+        asm.push_str(".PN_L10:\n");
+        asm.push_str("    LDD >TMPVAL\n");
+        asm.push_str("    SUBD #10\n");
+        asm.push_str("    BMI .PN_D10\n");
+        asm.push_str("    STD >TMPVAL\n");
+        asm.push_str("    INC ,X\n");
+        asm.push_str("    BRA .PN_L10\n");
+        asm.push_str(".PN_D10:\n");
+        asm.push_str("    LDA ,X\n");
         asm.push_str("    ADDA #'0'\n");
-        asm.push_str("    ORA #$80         ; Set high bit for string termination\n");
-        asm.push_str("    STA NUM_STR+1    ; Store second digit with high bit\n");
+        asm.push_str("    STA ,X+\n");
         asm.push_str("    \n");
-        asm.push_str("    ; Print the string\n");
-        asm.push_str("    LDU #NUM_STR     ; Point to our number string\n");
-        asm.push_str("    JSR Print_Str_d  ; Print using BIOS\n");
-        asm.push_str("    ; CRITICAL: Reset ALL pen parameters after Print_Str_d (scale, position, etc.)\n");
-        asm.push_str("    JSR Reset_Pen  ; BIOS $F35B - resets scale, intensity, and beam state\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
+        asm.push_str("    ; --- 1s digit (remainder) ---\n");
+        asm.push_str("    LDD >TMPVAL\n");
+        asm.push_str("    ADDB #'0'        ; Low byte = ones digit\n");
+        asm.push_str("    STB ,X+          ; Store digit\n");
+        asm.push_str("    LDA #$80          ; Terminator (same format as FCC/FCB $80 strings)\n");
+        asm.push_str("    STA ,X\n");
+        asm.push_str("    \n");
+        asm.push_str(".PN_AFTER_CONVERT:\n");
+        asm.push_str("    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n");
+        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely\n");
+        asm.push_str("    LDA #$D0\n");
+        asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
+        asm.push_str("    JSR Reset0Ref    ; Reset beam to center before positioning text\n");
+        asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
+        asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
+        asm.push_str("    LDU #NUM_STR     ; String pointer\n");
+        asm.push_str("    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n");
+        asm.push_str("    LDA #$80\n");
+        asm.push_str("    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale\n");
+        asm.push_str(&format!("    JSR {}      ; Restore DP to $C8\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }
     
@@ -472,7 +523,7 @@ pub fn generate_helpers(module: &Module) -> Result<String, String> {
 
     // AUDIO_UPDATE: Auto-inject if PLAY_MUSIC or PLAY_SFX detected
     if has_audio_calls(module) {
-        emit_audio_update_helper(&mut asm);
+        emit_audio_update_helper(&mut asm, is_multibank);
         emit_play_sfx_runtime(&mut asm);
     }
 
@@ -616,34 +667,43 @@ PMr_done:\n\
 /// Emit AUDIO_UPDATE helper for PSG music + SFX playback
 /// Auto-called at end of LOOP_BODY when PLAY_MUSIC/PLAY_SFX detected
 /// Uses Sound_Byte BIOS call for PSG writes (DP=$D0 required)
-fn emit_audio_update_helper(asm: &mut String) {
+fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
+    // Common header (no bank-switch code for single-bank)
     asm.push_str(
         "; ============================================================================\n\
         ; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)\n\
         ; ============================================================================\n\
-        ; Processes both music (channel B) and SFX (channel C) in one pass\n\
         ; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems\n\
         ; Sets DP=$D0 once at entry, restores at exit\n\
-        ; RAM variables: PSG_MUSIC_PTR, PSG_IS_PLAYING, PSG_DELAY_FRAMES\n\
-        ;                PSG_MUSIC_BANK (for multibank: bank ID where music data lives)\n\
-        ;                SFX_PTR, SFX_ACTIVE (defined in SYSTEM RAM VARIABLES)\n\
         \n\
         AUDIO_UPDATE:\n\
         PSHS DP                 ; Save current DP\n\
         LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)\n\
         TFR A,DP\n\
-        \n\
-        ; MULTIBANK: Switch to music's bank before accessing data\n\
-        LDA >CURRENT_ROM_BANK   ; Get current bank\n\
-        PSHS A                  ; Save on stack\n\
-        LDA >PSG_MUSIC_BANK     ; Get music's bank\n\
-        CMPA ,S                 ; Compare with current bank\n\
-        BEQ AU_BANK_OK          ; Skip switch if same\n\
-        STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
-        STA $DF00               ; Switch bank hardware register\n\
-        AU_BANK_OK:\n\
-        \n\
-        ; UPDATE MUSIC (channel B: registers 9, 11-14)\n\
+        \n"
+    );
+
+    // Bank-switch block only for multibank projects.
+    // Single-bank: emitting PSHS A / STA $DF00 every frame causes spurious
+    // bank-switch side-effects in the emulator due to uninitialized RAM data.
+    if is_multibank {
+        asm.push_str(
+            "        ; MULTIBANK: Switch to music's bank before accessing data\n\
+            LDA >CURRENT_ROM_BANK   ; Get current bank\n\
+            PSHS A                  ; Save on stack\n\
+            LDA >PSG_MUSIC_BANK     ; Get music's bank\n\
+            CMPA ,S                 ; Compare with current bank\n\
+            BEQ AU_BANK_OK          ; Skip switch if same\n\
+            STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
+            STA $DF00               ; Switch bank hardware register\n\
+            AU_BANK_OK:\n\
+            \n"
+        );
+    }
+
+    // Music player body (common to both single and multibank)
+    asm.push_str(
+        "        ; UPDATE MUSIC\n\
         LDA >PSG_IS_PLAYING     ; Check if music is playing\n\
         BEQ AU_SKIP_MUSIC       ; Skip if not\n\
         \n\
@@ -691,9 +751,6 @@ fn emit_audio_update_helper(asm: &mut String) {
         AU_MUSIC_PROCESS_WRITES:\n\
         PSHS B                  ; Save count\n\
         \n\
-        ; Mark that next time we should read delay, not count\n\
-        ; (This is implicit - after processing, X points to next delay byte)\n\
-        \n\
         AU_MUSIC_WRITE_LOOP:\n\
         LDA ,X+                 ; Load register number\n\
         LDB ,X+                 ; Load register value\n\
@@ -730,12 +787,21 @@ fn emit_audio_update_helper(asm: &mut String) {
         \n\
         JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)\n\
         \n\
-        AU_DONE:\n\
-        ; MULTIBANK: Restore original bank\n\
-        PULS A                  ; Get saved bank from stack\n\
-        STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
-        STA $DF00               ; Restore bank hardware register\n\
-        PULS DP                 ; Restore original DP\n\
+        AU_DONE:\n"
+    );
+
+    // Bank-restore block only for multibank
+    if is_multibank {
+        asm.push_str(
+            "        ; MULTIBANK: Restore original bank\n\
+            PULS A                  ; Get saved bank from stack\n\
+            STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
+            STA $DF00               ; Restore bank hardware register\n"
+        );
+    }
+
+    asm.push_str(
+        "        PULS DP                 ; Restore original DP\n\
         RTS\n\
         \n"
     );

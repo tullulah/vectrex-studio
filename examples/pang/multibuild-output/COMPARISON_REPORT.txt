@@ -1,0 +1,81 @@
+========================================
+COMPILER COMPARISON REPORT: pang
+Sun Feb 22 20:10:42 CET 2026
+========================================
+
+SUMMARY:
+--------
+❌ START - DIFFERENT
+   First difference:
+7a8,11
+>     ; Initialize SFX variables to prevent random noise on startup
+>     CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)
+>     LDD #$0000
+>     STD >SFX_PTR            ; Clear SFX pointer
+27,30d30
+< VLINE_DX             EQU $C880+$2D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+< VLINE_DY             EQU $C880+$2E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+< VLINE_DY_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+< VLINE_DX_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+
+✅ MAIN - IDENTICAL
+❌ LOOP_BODY - DIFFERENT
+   First difference:
+
+✅ IF_NEXT_3 - IDENTICAL
+✅ IF_END_2 - IDENTICAL
+✅ IF_NEXT_5 - IDENTICAL
+✅ IF_NEXT_6 - IDENTICAL
+✅ IF_NEXT_7 - IDENTICAL
+✅ IF_END_4 - IDENTICAL
+❌ IF_NEXT_1 - DIFFERENT
+   First difference:
+
+✅ IF_NEXT_10 - IDENTICAL
+✅ IF_END_9 - IDENTICAL
+✅ IF_NEXT_12 - IDENTICAL
+✅ IF_END_11 - IDENTICAL
+✅ IF_NEXT_16 - IDENTICAL
+✅ IF_END_15 - IDENTICAL
+✅ IF_NEXT_14 - IDENTICAL
+✅ IF_NEXT_19 - IDENTICAL
+✅ IF_END_18 - IDENTICAL
+✅ IF_NEXT_17 - IDENTICAL
+✅ IF_NEXT_22 - IDENTICAL
+✅ IF_END_21 - IDENTICAL
+✅ IF_NEXT_20 - IDENTICAL
+✅ IF_NEXT_24 - IDENTICAL
+✅ IF_END_23 - IDENTICAL
+✅ IF_END_13 - IDENTICAL
+✅ IF_NEXT_26 - IDENTICAL
+✅ IF_NEXT_27 - IDENTICAL
+✅ IF_NEXT_28 - IDENTICAL
+✅ IF_END_25 - IDENTICAL
+✅ IF_NEXT_8 - IDENTICAL
+✅ IF_NEXT_32 - IDENTICAL
+✅ IF_END_31 - IDENTICAL
+✅ IF_NEXT_30 - IDENTICAL
+✅ IF_NEXT_38 - IDENTICAL
+✅ IF_END_37 - IDENTICAL
+✅ IF_NEXT_36 - IDENTICAL
+✅ IF_END_35 - IDENTICAL
+✅ IF_NEXT_34 - IDENTICAL
+✅ IF_END_33 - IDENTICAL
+✅ IF_NEXT_42 - IDENTICAL
+✅ IF_END_41 - IDENTICAL
+✅ IF_NEXT_40 - IDENTICAL
+✅ IF_END_39 - IDENTICAL
+✅ IF_END_29 - IDENTICAL
+❌ IF_END_0 - DIFFERENT
+   First difference:
+
+✅ IF_NEXT_46 - IDENTICAL
+✅ IF_END_45 - IDENTICAL
+✅ IF_NEXT_44 - IDENTICAL
+✅ IF_NEXT_48 - IDENTICAL
+
+TOTALS:
+  Identical functions:  46
+  Different functions:  4
+
+Use './compare_asm_function.sh pang <function_name>' to examine details.

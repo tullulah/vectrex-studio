@@ -26,6 +26,10 @@ const level_enemy_count = [1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7]
 const level_enemy_speed = [1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5]
 
 joystick1_state = [0,0,0,0,0,0] # X, Y, BTN1, BTN2, BTN3, BTN4
+prev_btn1 = 0  # Track previous button state (use simple vars, not arrays)
+prev_btn2 = 0
+prev_btn3 = 0
+prev_btn4 = 0
 
 const num_locations = 17
 current_location = 0
@@ -77,7 +81,7 @@ const GROUND_Y = -70      # Y position of ground
 
 def main():
     # Called once at startup
-    
+
     # Initialize location selection variables (once at startup)
     current_location = 0
     prev_joy_x = 0
@@ -85,15 +89,22 @@ def main():
     location_glow_intensity = 80
     location_glow_direction = 0
     screen = STATE_TITLE
-    
+
     # Initialize game state variables
     countdown_timer = 0
     countdown_active = 0
-    
+
     # Initialize hook system
     hook_active = 0
     hook_x = 0
     hook_y = -70
+
+    # Initialize button debounce
+    joystick_poll_counter = 0
+    prev_btn1 = 0
+    prev_btn2 = 0
+    prev_btn3 = 0
+    prev_btn4 = 0
 
 def loop():
 
@@ -103,13 +114,26 @@ def loop():
         if (current_music == -1):
             PLAY_MUSIC("pang_theme")
             current_music = 0
-        
+
         draw_title_screen()
 
-        if (joystick1_state[2] == 1 or joystick1_state[3] == 1 or joystick1_state[4] == 1 or joystick1_state[5] == 1):
-            screen = STATE_MAP 
+        # Detect button press (0->1 transition) for debounce using simple vars
+        if joystick1_state[2] == 1 and prev_btn1 == 0:
+            screen = STATE_MAP
             current_music = -1  # Reset music tracker to trigger map_theme
-            PLAY_SFX("laser")
+            #PLAY_SFX("laser")
+        elif joystick1_state[3] == 1 and prev_btn2 == 0:
+            screen = STATE_MAP
+            current_music = -1
+            #PLAY_SFX("laser")
+        elif joystick1_state[4] == 1 and prev_btn3 == 0:
+            screen = STATE_MAP
+            current_music = -1
+            #PLAY_SFX("laser")
+        elif joystick1_state[5] == 1 and prev_btn4 == 0:
+            screen = STATE_MAP
+            current_music = -1
+            #PLAY_SFX("laser")
 
     elif(screen == STATE_MAP):
         if (current_music != 1):
@@ -145,13 +169,28 @@ def loop():
         
         prev_joy_x = joy_x
         prev_joy_y = joy_y
-        
-        if joystick1_state[2] == 1 or joystick1_state[3] == 1 or joystick1_state[4] == 1 or joystick1_state[5] == 1:
-            # Start level - transition to game state
-            PLAY_SFX("laser")
+
+        # Detect button press (0->1 transition) for debounce using simple vars
+        if joystick1_state[2] == 1 and prev_btn1 == 0:
             screen = STATE_GAME
             countdown_active = 1
-            countdown_timer = 180  # 3 seconds at 60fps
+            countdown_timer = 180
+            #PLAY_SFX("laser")
+        elif joystick1_state[3] == 1 and prev_btn2 == 0:
+            screen = STATE_GAME
+            countdown_active = 1
+            countdown_timer = 180
+            #PLAY_SFX("laser")
+        elif joystick1_state[4] == 1 and prev_btn3 == 0:
+            screen = STATE_GAME
+            countdown_active = 1
+            countdown_timer = 180
+            #PLAY_SFX("laser")
+        elif joystick1_state[5] == 1 and prev_btn4 == 0:
+            screen = STATE_GAME
+            countdown_active = 1
+            countdown_timer = 180
+            #PLAY_SFX("laser")
 
         draw_map_screen()
     
@@ -183,7 +222,7 @@ def loop():
                 if (joystick1_state[2] == 1 or joystick1_state[3] == 1 or joystick1_state[4] == 1 or joystick1_state[5] == 1):
                     hook_active = 1
                     hook_y = -70  # Start from ground level (direct signed value)
-                    PLAY_SFX("hit")
+                    #PLAY_SFX("hit")
                     
                     # Capture gun position at fire time
                     hook_gun_x = player_x
@@ -207,6 +246,12 @@ def loop():
                     hook_y = -70
             
             draw_game_level()
+
+    # Update button debounce tracking at end of each frame (using simple vars)
+    prev_btn1 = joystick1_state[2]
+    prev_btn2 = joystick1_state[3]
+    prev_btn3 = joystick1_state[4]
+    prev_btn4 = joystick1_state[5]
 
 def draw_map_screen():
     # Draw background map
@@ -374,9 +419,9 @@ def draw_game_level():
         DRAW_VECTOR_EX("player_walk_5", player_x, player_y, mirror_mode, 80)
     
     # Update and draw enemies
-    update_enemies()
-    draw_enemies()
-    
+    #update_enemies()
+    #draw_enemies()
+
     # Draw hook rope and hook if active
     if hook_active == 1:
         # Draw the rope from the initial gun position (fixed) to the current hook position
@@ -386,14 +431,14 @@ def draw_game_level():
         SET_INTENSITY(100)
 
         DRAW_VECTOR_EX("hook", hook_x, hook_y, 0, 100)
-    
-    # DEBUG: Show enemy count
-    active_count = 0
-    i = 0
-    while i < MAX_ENEMIES:
-        if enemy_active[i] == 1:
-            active_count = active_count + 1
-        i = i + 1
+
+    # # DEBUG: Show enemy count
+    # active_count = 0
+    # i = 0
+    # while i < MAX_ENEMIES:
+    #     if enemy_active[i] == 1:
+    #         active_count = active_count + 1
+    #     i = i + 1
 
 # ===== ENEMY SYSTEM - Simple and Clear =====
 
@@ -401,9 +446,15 @@ def spawn_enemies():
     #"""Spawn enemies for current level - called ONCE when game starts"""
     count = level_enemy_count[current_location]
     speed = level_enemy_speed[current_location]
-    
+
+    # Safety: clamp count to array bounds
+    if count < 1:
+        count = 1
+    if count > MAX_ENEMIES:
+        count = MAX_ENEMIES
+
     i = 0
-    while i < count:
+    while i < count and i < MAX_ENEMIES:
         enemy_active[i] = 1
         enemy_size[i] = 4        # Size 4 (huge bubble, radius 25)
         enemy_x[i] = -80 + (i * 50)  # Spread horizontally
@@ -470,13 +521,13 @@ def draw_hook_rope(start_x, start_y, end_x, end_y):
     DRAW_LINE(start_x, start_y, end_x, end_y, 127)
 
 def read_joystick1_state():
-    
+
     # UPDATE_BUTTONS is now auto-injected at start of loop() by compiler
     # No need to call it explicitly - $C80F is already populated
-    
+
     joystick1_state[0] = J1_X()
     joystick1_state[1] = J1_Y()
-        
+
     # Read cached button states (fast, no BIOS calls)
     joystick1_state[2] = J1_BUTTON_1()
     joystick1_state[3] = J1_BUTTON_2()

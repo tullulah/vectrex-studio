@@ -8,6 +8,7 @@
 
 use vpy_parser::{Module, Function, Stmt, Expr};
 use super::expressions;
+use super::context;
 use super::joystick;
 use crate::AssetInfo;
 use std::collections::HashMap;
@@ -85,6 +86,8 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     
     // Initialize global variables with their initial values
     asm.push_str("    ; Initialize global variables\n");
+    asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
+    asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
     let mut array_copy_counter = 0;
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
@@ -95,7 +98,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
                 let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
                 let ram_label = format!("VAR_{}_DATA", name.to_uppercase());
                 let array_len = elements.len();
-                
+
                 asm.push_str(&format!("    ; Copy array '{}' from ROM to RAM ({} elements)\n", name, array_len));
                 asm.push_str(&format!("    LDX #{}       ; Source: ROM array data\n", rom_label));
                 asm.push_str(&format!("    LDU #{}       ; Dest: RAM array space\n", ram_label));
@@ -105,11 +108,11 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
                 asm.push_str("    STY ,U++        ; Store word to RAM, increment dest\n");
                 asm.push_str("    SUBD #1         ; Decrement counter\n");
                 asm.push_str(&format!("    LBNE .COPY_LOOP_{} ; Loop until done (LBNE for long branch)\n", array_copy_counter));
-                
+
                 // Set VAR_{NAME} pointer to RAM array (not ROM)
                 asm.push_str(&format!("    LDX #{}    ; Array now in RAM\n", ram_label));
                 asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
-                
+
                 array_copy_counter += 1;
             } else {
                 // Non-array initialization
@@ -120,7 +123,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
             }
         }
     }
-    
+
     // CRITICAL: Initialize joystick mux ONCE before any J1_X/J1_Y calls
     // (copied from core/src/backend/m6809/mod.rs lines 834-849)
     joystick::emit_joystick_init(&mut asm);
@@ -141,8 +144,10 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("LOOP_BODY:\n");
         // Inject WAIT_RECAL at the start of every loop
         asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        // Inject Reset0Ref to position beam at center (0,0) before drawing
-        asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref is NOT called here. Each drawing primitive (DRAW_LINE,
+        // DRAW_CIRCLE, etc.) calls Reset0Ref internally before positioning the beam.
+        // Calling it here breaks PRINT_TEXT because it consumes the VIA scale factor
+        // that Wait_Recal sets up ($80), leaving it at a wrong value for Print_Str_d.
         // CRITICAL (2026-01-19): Button reading with proper DP handling
         // This sequence MUST happen before any user code to ensure DP=$C8 for normal RAM access
         asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
@@ -160,7 +165,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // Empty loop if not defined
         asm.push_str("LOOP_BODY:\n");
         asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         // CRITICAL: Button reading with proper DP handling (even if no user code)
         asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
@@ -210,10 +215,18 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     // Simple variable assignment: var = value
                     // 1. Evaluate expression
                     expressions::emit_simple_expr(value, asm, assets);
-                    
-                    // 2. Store to variable (uppercase for consistency)
-                    asm.push_str("    LDD RESULT\n");
-                    asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+
+                    // 2. Store to variable with correct width dispatch
+                    let size = context::get_var_size(name);
+                    if size.bytes == 1 {
+                        // 8-bit store: take low byte from RESULT and store with STB
+                        asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                        asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+                    } else {
+                        // 16-bit store: standard STD
+                        asm.push_str("    LDD RESULT\n");
+                        asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                    }
                 }
                 
                 vpy_parser::AssignTarget::Index { target: array_expr, index, .. } => {
@@ -224,37 +237,53 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     } else {
                         return Err("Complex array expressions not yet supported in assignment".to_string());
                     };
-                    
+
+                    // Get element size for stride calculation
+                    let element_size = context::get_var_size(array_name).bytes;
+
                     // 1. Evaluate index first
                     expressions::emit_simple_expr(index, asm, assets);
                     asm.push_str("    LDD RESULT\n");
-                    asm.push_str("    ASLB            ; Multiply index by 2 (16-bit elements)\n");
-                    asm.push_str("    ROLA\n");
+
+                    // Stride multiply: only if element_size == 2
+                    if element_size == 2 {
+                        asm.push_str("    ASLB            ; Multiply index by 2 (16-bit elements)\n");
+                        asm.push_str("    ROLA\n");
+                    }
+                    // For 8-bit elements, stride is 1, no multiply needed
+
                     asm.push_str("    STD TMPPTR      ; Save offset temporarily\n");
-                    
+
                     // 2. Load array base address (RAM for mutable, ROM for const)
                     // Use context to determine which label to use
                     let name_upper = array_name.to_uppercase();
-                    let label = if super::context::is_mutable_array(array_name) {
+                    let label = if context::is_mutable_array(array_name) {
                         format!("VAR_{}_DATA", name_upper)  // RAM
                     } else {
                         format!("ARRAY_{}_DATA", name_upper)  // ROM
                     };
                     asm.push_str(&format!("    LDD #{}  ; Array data address\n", label));
-                    
+
                     // 3. Add offset to base pointer
                     asm.push_str("    TFR D,X         ; X = array base pointer\n");
                     asm.push_str("    LDD TMPPTR      ; D = offset\n");
                     asm.push_str("    LEAX D,X        ; X = base + offset\n");
                     asm.push_str("    STX TMPPTR2     ; Save computed address\n");
-                    
+
                     // 4. Evaluate value to assign
                     expressions::emit_simple_expr(value, asm, assets);
-                    
-                    // 5. Store value at computed address
+
+                    // 5. Store value at computed address with correct width dispatch
                     asm.push_str("    LDX TMPPTR2     ; Load computed address\n");
-                    asm.push_str("    LDD RESULT      ; Load value\n");
-                    asm.push_str("    STD ,X          ; Store value\n");
+                    if element_size == 1 {
+                        // 8-bit store: take low byte and use STB
+                        asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                        asm.push_str("    STB ,X          ; Store 8-bit value\n");
+                    } else {
+                        // 16-bit store: standard STD
+                        asm.push_str("    LDD RESULT      ; Load value\n");
+                        asm.push_str("    STD ,X          ; Store 16-bit value\n");
+                    }
                 }
                 
                 _ => {
@@ -264,24 +293,29 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
         }
         
         Stmt::CompoundAssign { target, op, value, .. } => {
-            // Load current value
+            // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
+            // Load current value, save to TMPVAL, evaluate right side, perform op
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
-                    // IMPORTANT: Name already comes uppercase from unifier
-                    asm.push_str(&format!("    LDD VAR_{}\n", name));
-                    asm.push_str("    PSHS D\n");
-                    
+                    // IMPORTANT: Convert name to uppercase for consistency with variable allocation
+                    asm.push_str(&format!("    LDD >VAR_{}\n", name.to_uppercase()));
+                    asm.push_str("    STD TMPVAL          ; Save left operand\n");
+
                     // Evaluate right side
                     expressions::emit_simple_expr(value, asm, assets);
                     asm.push_str("    LDD RESULT\n");
-                    
+
                     // Perform operation
                     match op {
-                        vpy_parser::BinOp::Add => asm.push_str("    ADDD ,S++\n"),
-                        vpy_parser::BinOp::Sub => asm.push_str("    SUBD ,S++\n"),
+                        vpy_parser::BinOp::Add => asm.push_str("    ADDD TMPVAL         ; D = D + TMPVAL\n"),
+                        vpy_parser::BinOp::Sub => {
+                            asm.push_str("    STD TMPPTR          ; Save right operand\n");
+                            asm.push_str("    LDD TMPVAL          ; Get left operand\n");
+                            asm.push_str("    SUBD TMPPTR         ; D = left - right\n");
+                        }
                         _ => return Err(format!("Aug-assign {:?} not yet supported", op)),
                     }
-                    
+
                     // Store back (uppercase for consistency)
                     asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
                 }
@@ -289,16 +323,37 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             }
         }
         
+        Stmt::Let { name, value, .. } => {
+            // Local variable assignment: let var = value
+            // 1. Evaluate expression
+            expressions::emit_simple_expr(value, asm, assets);
+
+            // 2. Store to variable with correct width dispatch
+            let size = context::get_var_size(name);
+            if size.bytes == 1 {
+                // 8-bit store: take low byte from RESULT and store with STB
+                asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+            } else {
+                // 16-bit store: standard STD
+                asm.push_str("    LDD RESULT\n");
+                asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+            }
+        }
+
         Stmt::Expr(expr, ..) => {
             expressions::emit_simple_expr(expr, asm, assets);
         }
-        
+
         Stmt::If { cond, body, elifs, else_body, .. } => {
             // Copied from core/src/backend/m6809/statements.rs
             let end = fresh_label("IF_END");
             let mut next = fresh_label("IF_NEXT");
             let simple_if = elifs.is_empty() && else_body.is_none();
             expressions::emit_simple_expr(cond, asm, assets);
+            // NOTE: emit_simple_expr must return with balanced stack. The LDD below loads
+            // the condition result from RESULT. Before branching, ensure any temporary values
+            // left on the stack by complex expressions (like array indexing) are cleaned.
             asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", next));
             for s in body { generate_statement(s, asm, assets)?; }
             asm.push_str(&format!("    LBRA {}\n", end));
@@ -306,6 +361,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                 asm.push_str(&format!("{}:\n", next));
                 let new_next = if i == elifs.len() - 1 && else_body.is_none() { end.clone() } else { fresh_label("IF_NEXT") };
                 expressions::emit_simple_expr(c, asm, assets);
+                // Stack balance check: emit_simple_expr must return with balanced stack before branch
                 asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", new_next));
                 for s in b { generate_statement(s, asm, assets)?; }
                 asm.push_str(&format!("    LBRA {}\n", end));
@@ -328,6 +384,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             let le = fresh_label("WH_END");
             asm.push_str(&format!("{}: ; while start\n", ls));
             expressions::emit_simple_expr(cond, asm, assets);
+            // Stack balance check: emit_simple_expr must return with balanced stack before branch
             asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", le));
             for s in body { generate_statement(s, asm, assets)?; }
             asm.push_str(&format!("    LBRA {}\n{}: ; while end\n", ls, le));
@@ -432,7 +489,7 @@ pub fn generate_functions_by_bank(
     if let Some(loop_fn) = loop_fn {
         bank0_asm.push_str("LOOP_BODY:\n");
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        bank0_asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
         bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
@@ -446,7 +503,7 @@ pub fn generate_functions_by_bank(
     } else {
         bank0_asm.push_str("LOOP_BODY:\n");
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        bank0_asm.push_str("    JSR Reset0Ref    ; Reset beam to center (0,0)\n");
+        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
         bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");

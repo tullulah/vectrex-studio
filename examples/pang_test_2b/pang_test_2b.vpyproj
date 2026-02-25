@@ -1,0 +1,16 @@
+[project]
+name = "pang_test_2b"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/pang_test_2b.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/*.vec"]
+music = ["assets/music/*.mus"]

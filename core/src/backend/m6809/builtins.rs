@@ -30,7 +30,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     let up = name.to_ascii_uppercase();
     let is = matches!(up.as_str(),
         "VECTREX_PRINT_TEXT"|"VECTREX_DEBUG_PRINT"|"VECTREX_DEBUG_PRINT_LABELED"|"VECTREX_POKE"|"VECTREX_PEEK"|"VECTREX_PRINT_NUMBER"|"VECTREX_MOVE_TO"|"VECTREX_DRAW_TO"|"DRAW_LINE_WRAPPER"|"DRAW_LINE_FAST"|"SETUP_DRAW_COMMON"|"VECTREX_DRAW_VL"|"VECTREX_DRAW_VECTORLIST"|"VECTREX_FRAME_BEGIN"|"VECTREX_VECTOR_PHASE_BEGIN"|"VECTREX_SET_ORIGIN"|"VECTREX_SET_INTENSITY"|"VECTREX_WAIT_RECAL"|
-    "VECTREX_PLAY_MUSIC1"|"DRAW_VECTOR"|"DRAW_VECTOR_EX"|"DRAW_VECTOR_LIST"|"DRAW_LINE"|"PLAY_MUSIC"|"PLAY_SFX"|"STOP_MUSIC"|"AUDIO_UPDATE"|"MUSIC_UPDATE"|"SFX_UPDATE"|"ASM"|
+    "VECTREX_PLAY_MUSIC1"|"DRAW_VECTOR"|"DRAW_VECTOR_EX"|"DRAW_VECTOR_LIST"|"DRAW_LINE"|"PLAY_MUSIC"|"PLAY_SFX"|"STOP_MUSIC"|"AUDIO_UPDATE"|"MUSIC_UPDATE"|"SFX_UPDATE"|"ASM"|"MOVE"|
         "J1_X"|"J1_Y"|"UPDATE_BUTTONS"|"J1_BUTTON_1"|"J1_BUTTON_2"|"J1_BUTTON_3"|"J1_BUTTON_4"|
         "J2_X"|"J2_Y"|"J2_BUTTON_1"|"J2_BUTTON_2"|"J2_BUTTON_3"|"J2_BUTTON_4"|
         "LOAD_LEVEL"|"SHOW_LEVEL"|"UPDATE_LEVEL"|
@@ -38,6 +38,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     "ABS"|"MATH_ABS"|"MIN"|"MATH_MIN"|"MAX"|"MATH_MAX"|"CLAMP"|"MATH_CLAMP"|"LEN"|
     "MUL_A"|"DIV_A"|"MOD_A"|
     "DRAW_CIRCLE"|"DRAW_CIRCLE_SEG"|"DRAW_ARC"|"DRAW_SPIRAL"|"DRAW_VECTORLIST"|"DRAW_POLYGON"|
+    "DRAW_RECT"|"DRAW_FILLED_RECT"|
     "DEBUG_PRINT"|"DEBUG_PRINT_LABELED"|"DEBUG_PRINT_STR"
     );
     
@@ -815,15 +816,36 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
     
+    // MOVE(x, y): store X/Y offset in VPY_MOVE_X/VPY_MOVE_Y RAM bytes
+    if up == "MOVE" && args.len() == 2 {
+        match (&args[0], &args[1]) {
+            (Expr::Number(x), Expr::Number(y)) => {
+                out.push_str(&format!("    LDA #${:02X}  ; MOVE X offset\n", (*x as i8) as u8));
+                out.push_str("    STA VPY_MOVE_X\n");
+                out.push_str(&format!("    LDA #${:02X}  ; MOVE Y offset\n", (*y as i8) as u8));
+                out.push_str("    STA VPY_MOVE_Y\n");
+            }
+            _ => {
+                // Variable args: evaluate and store low byte
+                emit_expr(&args[0], out, fctx, string_map, opts);
+                out.push_str("    STB VPY_MOVE_X  ; MOVE X (low byte)\n");
+                emit_expr(&args[1], out, fctx, string_map, opts);
+                out.push_str("    STB VPY_MOVE_Y  ; MOVE Y (low byte)\n");
+            }
+        }
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
     // DRAW_LINE optimization: when all args are numeric constants, generate inline BIOS calls
-    // NO hace Moveto - el usuario debe posicionarse antes con MOVETO si es necesario
+    // Reset beam to center, move to (x0,y0), draw delta to (x1,y1)
     if up == "DRAW_LINE" && args.len() == 5 && args.iter().all(|a| matches!(a, Expr::Number(_))) {
-        if let (Expr::Number(x0), Expr::Number(y0), Expr::Number(x1), Expr::Number(y1), Expr::Number(intensity)) 
+        if let (Expr::Number(x0), Expr::Number(y0), Expr::Number(x1), Expr::Number(y1), Expr::Number(intensity))
             = (&args[0], &args[1], &args[2], &args[3], &args[4]) {
             // Calculate deltas from absolute coordinates
             let dx = (*x1 - *x0) as i32;
             let dy = (*y1 - *y0) as i32;
-            
+
             // If deltas require segmentation (> ±127), use DRAW_LINE_WRAPPER instead
             if dy > 127 || dy < -128 || dx > 127 || dx < -128 {
                 // Fall through to wrapper version
@@ -831,18 +853,24 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 // Deltas fit in 8-bit, use inline BIOS call
                 let dx8 = dx as i8;
                 let dy8 = dy as i8;
-                
-                // Set DP and intensity
+
+                // Set DP=$D0 for BIOS calls, reset beam to center
                 out.push_str("    LDA #$D0\n    TFR A,DP\n");
+                out.push_str("    JSR Reset0Ref\n");
+                out.push_str("    LDA #$80\n    STA <$04\n"); // VIA_t1_cnt_lo = $80
+                // Set intensity
                 if *intensity == 0x5F {
                     out.push_str("    JSR Intensity_5F\n");
                 } else {
                     out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", *intensity as u8));
                 }
+                // Move to start position (x0, y0) + MOVE offset
+                out.push_str(&format!("    LDA #${:02X}\n    ADDA VPY_MOVE_Y\n    LDB #${:02X}\n    ADDB VPY_MOVE_X\n    JSR Moveto_d\n",
+                    (*y0 as i8) as u8, (*x0 as i8) as u8));
                 // Clear Vec_Misc_Count for proper timing
                 out.push_str("    CLR Vec_Misc_Count\n");
                 // Draw line using RELATIVE deltas (A=dy, B=dx)
-                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
                     dy8 as u8, dx8 as u8));
                 // Restore DP after BIOS call
                 out.push_str("    LDA #$C8\n    TFR A,DP\n");
@@ -913,7 +941,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                             // Set intensity once for all edges
                             if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                             // Set DP once for all VIA operations (inline for now)
-                            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                             
                             for i in 0..n {
                                 let (x0,y0)=verts[i];
@@ -949,7 +977,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         if let (Expr::Number(xc),Expr::Number(yc),Expr::Number(diam)) = (&args[0],&args[1],&args[2]) {
                     let mut intensity: i32 = 0x5F;
                     if args.len()==4 { if let Expr::Number(i) = &args[3] { intensity = *i; } }
-                    let segs = 16; // fixed approximation
+                    let segs = 16; // fixed approximation (use DRAW_CIRCLE_SEG for more)
                     let r = (*diam as f64)/2.0;
                     use std::f64::consts::PI;
                     let mut verts: Vec<(i32,i32)> = Vec::new();
@@ -961,7 +989,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                     }
                     // Emit optimized similar to polygon - intensity FIRST, then Reset0Ref
                     if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
-                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                     let (sx,sy)=verts[0];
                     out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF), (sx & 0xFF)));
                     for i in 0..segs {
@@ -1022,7 +1050,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                     use std::f64::consts::PI;
                     let mut verts: Vec<(i32,i32)> = Vec::new();
                     for k in 0..segs { let ang = 2.0*PI*(k as f64)/(segs as f64); let x = (*xc as f64)+r*ang.cos(); let y= (*yc as f64)+r*ang.sin(); verts.push((x.round() as i32,y.round() as i32)); }
-                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                     if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                     let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                     for i in 0..segs { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[((i+1)%segs) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
@@ -1040,7 +1068,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 let steps = segs;
                 let mut verts: Vec<(i32,i32)> = Vec::new();
                 for k in 0..=steps { let t = k as f64 / steps as f64; let ang = start + sweep * t; let mut x= (*xc as f64)+ r*ang.cos(); let mut y= (*yc as f64)+ r*ang.sin(); x = x.clamp(-120.0,120.0); y = y.clamp(-120.0,120.0); verts.push((x.round() as i32,y.round() as i32)); }
-                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                 if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                 let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                 for i in 0..steps { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[(i+1) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
@@ -1062,14 +1090,79 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 let steps = segs;
                 let mut verts: Vec<(i32,i32)> = Vec::new();
                 for k in 0..=steps { let t = k as f64 / steps as f64; let ang = total_ang * t; let r = start_r + (end_r - start_r)*t; let mut x= (*xc as f64)+ r*ang.cos(); let mut y= (*yc as f64)+ r*ang.sin(); x = x.clamp(-120.0,120.0); y = y.clamp(-120.0,120.0); verts.push((x.round() as i32,y.round() as i32)); }
-                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                 if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                 let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                 for i in 0..steps { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[(i+1) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
                 out.push_str("    CLRA\n    CLRB\n    STD RESULT\n"); return true;
         }
     }
-    
+
+    // DRAW_RECT(x, y, width, height[, intensity]) - outlined rectangle (4 sides)
+    if up == "DRAW_RECT" && (args.len() == 4 || args.len() == 5) && args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        if let (Expr::Number(x), Expr::Number(y), Expr::Number(w), Expr::Number(h)) = (&args[0], &args[1], &args[2], &args[3]) {
+            let mut intensity: i32 = 0x5F;
+            if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
+            let (x0, y0, w0, h0) = (*x, *y, *w, *h);
+            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));   // right
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #$00\n    JSR Draw_Line_d\n", (h0 & 0xFF)));   // up
+            out.push_str("    CLR Vec_Misc_Count\n");
+            let neg_w = (-(w0 as i32)) & 0xFF;
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", neg_w));          // left
+            out.push_str("    CLR Vec_Misc_Count\n");
+            let neg_h = (-(h0 as i32)) & 0xFF;
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #$00\n    JSR Draw_Line_d\n", neg_h));          // down
+            out.push_str("    LDA #$C8\n    TFR A,DP\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return true;
+        }
+    }
+    if up == "DRAW_RECT" && (args.len() == 4 || args.len() == 5) {
+        out.push_str("    ; DRAW_RECT with variables not yet implemented in core\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
+    // DRAW_FILLED_RECT(x, y, width, height[, intensity]) - filled with horizontal scanlines
+    // Uses relative Moveto_d between scanlines to avoid accumulation error
+    if up == "DRAW_FILLED_RECT" && (args.len() == 4 || args.len() == 5) && args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        if let (Expr::Number(x), Expr::Number(y), Expr::Number(w), Expr::Number(h)) = (&args[0], &args[1], &args[2], &args[3]) {
+            let mut intensity: i32 = 0x5F;
+            if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
+            let (x0, y0, w0, h0) = (*x, *y, *w, *h);
+            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+            // First scanline: absolute position from (0,0)
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
+            out.push_str("    CLR Vec_Misc_Count\n");
+            out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));
+            // Subsequent scanlines: relative move from end-of-previous-line (dy=+1/-1, dx=-w)
+            let num_lines = h0.abs().min(64);
+            let dy_step: i32 = if h0 >= 0 { 1 } else { -1 };
+            let neg_w = (-(w0 as i32)) & 0xFF;
+            let dy_byte = (dy_step & 0xFF) as u8;
+            for _ in 1..num_lines {
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", dy_byte, neg_w as u8));
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));
+            }
+            out.push_str("    LDA #$C8\n    TFR A,DP\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return true;
+        }
+    }
+    if up == "DRAW_FILLED_RECT" && (args.len() == 4 || args.len() == 5) {
+        out.push_str("    ; DRAW_FILLED_RECT with variables not yet implemented in core\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
     // Check if it's a struct instantiation BEFORE checking builtins
     // Structs are detected by checking if name exists in struct registry
     if let Some(layout) = opts.structs.get(name) {
@@ -1133,7 +1226,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     if matches!(up.as_str(), "ABS"|"MATH_ABS") {
     if let Some(arg) = args.first() { emit_expr(arg, out, fctx, string_map, opts); } else { out.push_str("    LDD #0\n    STD RESULT\n"); return true; }
         let done = fresh_label("ABS_DONE");
-        out.push_str(&format!("    LDD RESULT\n    TSTA\n    BPL {}\n    COMA\n    COMB\n    ADDD #1\n{}: STD RESULT\n", done, done));
+        out.push_str(&format!("    LDD RESULT\n    TSTA\n    BPL {}\n    COMA\n    COMB\n    ADDD #1\n{}:\n    STD RESULT\n", done, done));
         return true;
     }
     
@@ -1328,28 +1421,35 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
     
-    // MIN(a,b)
+    // MIN(a,b) - uses CMPD (doesn't mutate D) to avoid reloading TMPLEFT
     if matches!(up.as_str(), "MIN"|"MATH_MIN") {
         if args.len() < 2 { out.push_str("    LDD #0\n    STD RESULT\n"); return true; }
-    emit_expr(&args[0], out, fctx, string_map, opts);
+        emit_expr(&args[0], out, fctx, string_map, opts);
         out.push_str("    LDD RESULT\n    STD TMPLEFT\n");
-    emit_expr(&args[1], out, fctx, string_map, opts);
-        out.push_str("    LDD RESULT\n    STD TMPRIGHT\n");
-        let use_right = fresh_label("MIN_USE_R");
-        let done = fresh_label("MIN_DONE");
-        out.push_str(&format!("    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD TMPRIGHT\n{}: STD RESULT\n", use_right, done, use_right, done));
+        emit_expr(&args[1], out, fctx, string_map, opts);
+        // RESULT = second arg; D still valid from emit_expr for arg1
+        let first_wins = fresh_label("MIN_FIRST");
+        let done      = fresh_label("MIN_DONE");
+        // Compare TMPLEFT (first) with RESULT (second)
+        out.push_str(&format!(
+            "    LDD TMPLEFT\n    CMPD RESULT\n    BLE {}\n    BRA {}\n{}:\n    STD RESULT\n{}:\n",
+            first_wins, done, first_wins, done
+        ));
         return true;
     }
-    // MAX(a,b)
+    // MAX(a,b) - uses CMPD (doesn't mutate D) to avoid reloading TMPLEFT
     if matches!(up.as_str(), "MAX"|"MATH_MAX") {
         if args.len() < 2 { out.push_str("    LDD #0\n    STD RESULT\n"); return true; }
-    emit_expr(&args[0], out, fctx, string_map, opts);
+        emit_expr(&args[0], out, fctx, string_map, opts);
         out.push_str("    LDD RESULT\n    STD TMPLEFT\n");
-    emit_expr(&args[1], out, fctx, string_map, opts);
-        out.push_str("    LDD RESULT\n    STD TMPRIGHT\n");
-        let use_right = fresh_label("MAX_USE_R");
-        let done = fresh_label("MAX_DONE");
-        out.push_str(&format!("    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD TMPRIGHT\n{}: STD RESULT\n", use_right, done, use_right, done));
+        emit_expr(&args[1], out, fctx, string_map, opts);
+        // RESULT = second arg
+        let first_wins = fresh_label("MAX_FIRST");
+        let done      = fresh_label("MAX_DONE");
+        out.push_str(&format!(
+            "    LDD TMPLEFT\n    CMPD RESULT\n    BGE {}\n    BRA {}\n{}:\n    STD RESULT\n{}:\n",
+            first_wins, done, first_wins, done
+        ));
         return true;
     }
     // CLAMP(v, lo, hi)
@@ -1361,15 +1461,15 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         // lo
     emit_expr(&args[1], out, fctx, string_map, opts);
         out.push_str("    LDD RESULT\n    STD TMPRIGHT\n");
-        // hi -> reuse DIV_A
+        // hi -> use TMPLEFT2
     emit_expr(&args[2], out, fctx, string_map, opts);
-        out.push_str("    LDD RESULT\n    STD DIV_A\n");
+        out.push_str("    LDD RESULT\n    STD TMPLEFT2\n");
         let use_lo = fresh_label("CLAMP_USE_LO");
         let check_hi = fresh_label("CLAMP_CHECK_HI");
         let use_hi = fresh_label("CLAMP_USE_HI");
         let done = fresh_label("CLAMP_DONE");
         out.push_str(&format!(
-            "    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    BRA {}\n{}: LDD TMPRIGHT\n    BRA {}\n{}: LDD TMPLEFT\n    SUBD DIV_A\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD DIV_A\n{}: STD RESULT\n",
+            "    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    BRA {}\n{}:\n    LDD TMPRIGHT\n    BRA {}\n{}:\n    LDD TMPLEFT\n    SUBD TMPLEFT2\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}:\n    LDD TMPLEFT2\n{}:\n    STD RESULT\n",
             use_lo, check_hi, use_lo, done, check_hi, use_hi, done, use_hi, done
         ));
         return true;

@@ -7,10 +7,10 @@
     "name": "Daniel Ferrer",
     "email": "tullulah@gmail.com"
   },
-  "homepage": "https://github.com/tullulah/vectrex-pseudo-python",
+  "homepage": "https://github.com/tullulah/vectrex-studio",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tullulah/vectrex-pseudo-python.git"
+    "url": "https://github.com/tullulah/vectrex-studio.git"
   },
   "license": "MIT",
   "main": "dist/main.js",

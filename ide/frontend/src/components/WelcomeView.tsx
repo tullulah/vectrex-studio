@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useEditorStore } from '../state/editorStore.js';
 import { useProjectStore } from '../state/projectStore.js';
 import type { FileNode } from '../types/models.js';
@@ -16,10 +17,11 @@ export const WelcomeView: React.FC = () => {
 };
 
 const Branding: React.FC = () => {
+  const { t } = useTranslation(['common']);
   return (
     <div className="vpy-welcome-branding">
-      <div className="title">Vectrex Studio</div>
-      <div className="subtitle">Bienvenido al IDE. Abre un workspace, carpeta o crea un archivo nuevo.</div>
+      <div className="title">{t('welcome.title', 'Vectrex Studio')}</div>
+      <div className="subtitle">{t('welcome.subtitle', 'Open a workspace, folder or create a new file.')}</div>
     </div>
   );
 };
@@ -107,14 +109,15 @@ const openWorkspaceDialog = async (setProject: any) => {
 };
 
 const QuickActions: React.FC = () => {
+  const { t } = useTranslation(['common']);
   const { setProject } = useProjectStore();
-  
+
   const newVpyFile = () => {
     try {
       const st = (useEditorStore as any).getState();
       let idx = 1; let uri: string;
       while (true) { uri = `inmemory://untitled-${idx}.vpy`; if (!st.documents.some((d:any)=>d.uri===uri)) break; idx++; }
-      st.openDocument({ uri, language:'vpy', content:'# New VPy file\n\ndef main():\n    # Initialization\n    Set_Intensity(127)\n\ndef loop():\n    # Game loop\n    Wait_Recal()\n', dirty:true, diagnostics:[], lastSavedContent:'' });
+      st.openDocument({ uri, language:'vpy', content:'META MUSIC = music1\n\n# New VPy file\n\ndef main():\n    # Initialization\n    Set_Intensity(127)\n\ndef loop():\n    # Game loop\n    Wait_Recal()\n', dirty:true, diagnostics:[], lastSavedContent:'' });
     } catch {}
   };
 
@@ -172,26 +175,27 @@ const QuickActions: React.FC = () => {
   return (
     <div className="vpy-welcome-actions">
       <div className="vpy-action-group">
-        <div className="group-title">Proyecto</div>
-        <button className="vpy-btn primary" onClick={newProject}>🎮 Nuevo Proyecto...</button>
-        <button className="vpy-btn" onClick={openProject}>📂 Abrir Proyecto...</button>
+        <div className="group-title">{t('welcome.group.project', 'Project')}</div>
+        <button className="vpy-btn primary" onClick={newProject}>🎮 {t('welcome.action.newProject', 'New Project...')}</button>
+        <button className="vpy-btn" onClick={openProject}>📂 {t('welcome.action.openProject', 'Open Project...')}</button>
       </div>
       <div className="vpy-action-group">
-        <div className="group-title">Workspace</div>
-        <button className="vpy-btn" onClick={openWorkspace}>📁 Abrir Carpeta...</button>
+        <div className="group-title">{t('welcome.group.workspace', 'Workspace')}</div>
+        <button className="vpy-btn" onClick={openWorkspace}>📁 {t('welcome.action.openFolder', 'Open Folder...')}</button>
       </div>
       <div className="vpy-action-group">
-        <div className="group-title">Archivo</div>
-        <button className="vpy-btn" onClick={() => { try { (window as any).files?.openFile?.(); } catch {} }}>📄 Abrir archivo...</button>
-        <button className="vpy-btn" onClick={newVpyFile}>✨ Nuevo archivo VPy</button>
-        <button className="vpy-btn" onClick={newVecFile}>🎨 Nuevo archivo Vector</button>
-        <button className="vpy-btn" onClick={newMusicFile}>🎵 Nuevo archivo Música</button>
+        <div className="group-title">{t('welcome.group.file', 'File')}</div>
+        <button className="vpy-btn" onClick={() => { try { (window as any).files?.openFile?.(); } catch {} }}>📄 {t('welcome.action.openFile', 'Open file...')}</button>
+        <button className="vpy-btn" onClick={newVpyFile}>✨ {t('welcome.action.newVpy', 'New VPy file')}</button>
+        <button className="vpy-btn" onClick={newVecFile}>🎨 {t('welcome.action.newVector', 'New Vector file')}</button>
+        <button className="vpy-btn" onClick={newMusicFile}>🎵 {t('welcome.action.newMusic', 'New Music file')}</button>
       </div>
     </div>
   );
 };
 
 const RecentList: React.FC = () => {
+  const { t } = useTranslation(['common']);
   const { recentWorkspaces, setProject, clearRecentWorkspaces } = useProjectStore();
   const [recentFiles, setRecentFiles] = useState<RecentEntry[]>([]);
   
@@ -255,15 +259,15 @@ const RecentList: React.FC = () => {
       {recentWorkspaces.length > 0 && (
         <div className="recent-section">
           <div className="heading">
-            📁 Workspaces Recientes
-            <button 
-              className="clear-history-btn" 
+            📁 {t('welcome.recent.workspaces', 'Recent Workspaces')}
+            <button
+              className="clear-history-btn"
               onClick={() => {
-                if (confirm('¿Estás seguro de que quieres limpiar el historial de workspaces?')) {
+                if (confirm(t('welcome.recent.clearConfirm', 'Are you sure you want to clear the workspace history?'))) {
                   clearRecentWorkspaces();
                 }
               }}
-              title="Limpiar historial"
+              title={t('welcome.recent.clearHistory', 'Clear history')}
             >
               🗑️
             </button>
@@ -286,7 +290,7 @@ const RecentList: React.FC = () => {
       
       {recentFiles.length > 0 && (
         <div className="recent-section">
-          <div className="heading">📄 Archivos Recientes</div>
+          <div className="heading">📄 {t('welcome.recent.files', 'Recent Files')}</div>
           <div className="list">
             {recentFiles.map(r => {
               const parts = r.path.split(/[/\\]/);

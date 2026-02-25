@@ -1,0 +1,2430 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "math_functions.asm",
+  "binary": "math_functions.bin",
+  "entryPoint": "0x0143",
+  "symbols": {
+    "CLAMP_CHECK_HI_6": "0x032A",
+    "CLAMP_USE_HI_7": "0x0337",
+    "J1Y_BUILTIN": "0x0037",
+    "MIN_DONE_2": "0x021F",
+    "START": "0x0143",
+    "VECTREX_PRINT_TEXT": "0x008B",
+    "__Moveto_d": "0x0139",
+    "J1X_BUILTIN": "0x001F",
+    "__Intensity_a": "0x0131",
+    "__Draw_Line_d": "0x013E",
+    "CLAMP_USE_LO_5": "0x0325",
+    "ABS_DONE_0": "0x01A0",
+    "__Reset0Ref": "0x0136",
+    "MAX_FIRST_3": "0x0298",
+    "J1B1_BUILTIN.J1B1_OFF": "0x005A",
+    "STR_3": "0x03BB",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0078",
+    "VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT": "0x0115",
+    "VECTREX_PRINT_NUMBER": "0x00A7",
+    "STR_0": "0x039C",
+    "STR_1": "0x03A5",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0087",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0069",
+    "J1B1_BUILTIN": "0x004F",
+    "MAIN": "0x0154",
+    "VECTREX_PRINT_NUMBER.PN_D10": "0x0104",
+    "VECTREX_PRINT_NUMBER.PN_L100": "0x00DE",
+    "J1B4_BUILTIN": "0x007C",
+    "CLAMP_DONE_8": "0x033A",
+    "VECTREX_PRINT_NUMBER.PN_DIV1000": "0x00C5",
+    "VECTREX_PRINT_NUMBER.PN_L10": "0x00F5",
+    "VECTREX_PRINT_NUMBER.PN_D1000": "0x00D6",
+    "MAX_DONE_4": "0x029B",
+    "STR_2": "0x03B0",
+    "MIN_FIRST_1": "0x021C",
+    "LOOP_BODY": "0x0181",
+    "VECTREX_PRINT_NUMBER.PN_L1000": "0x00C7",
+    "J1B3_BUILTIN": "0x006D",
+    "VECTREX_PRINT_NUMBER.PN_D100": "0x00ED",
+    "J1B2_BUILTIN": "0x005E"
+  },
+  "lineMap": {
+    "18": "0x01FF",
+    "19": "0x0224",
+    "13": "0x018C",
+    "29": "0x0342",
+    "20": "0x0250",
+    "23": "0x027B",
+    "28": "0x02F7",
+    "15": "0x01D4",
+    "14": "0x01A8",
+    "24": "0x02A0",
+    "30": "0x036E",
+    "25": "0x02CC"
+  },
+  "vpyLineMap": {
+    "0x036E": {
+      "file": "main.vpy",
+      "address": "0x036E",
+      "line": 30
+    },
+    "0x01FF": {
+      "file": "main.vpy",
+      "address": "0x01FF",
+      "line": 18
+    },
+    "0x02A0": {
+      "file": "main.vpy",
+      "address": "0x02A0",
+      "line": 24
+    },
+    "0x01D4": {
+      "file": "main.vpy",
+      "address": "0x01D4",
+      "line": 15
+    },
+    "0x02CC": {
+      "file": "main.vpy",
+      "address": "0x02CC",
+      "line": 25
+    },
+    "0x018C": {
+      "file": "main.vpy",
+      "address": "0x018C",
+      "line": 13
+    },
+    "0x01A8": {
+      "file": "main.vpy",
+      "address": "0x01A8",
+      "line": 14
+    },
+    "0x027B": {
+      "file": "main.vpy",
+      "address": "0x027B",
+      "line": 23
+    },
+    "0x0342": {
+      "file": "main.vpy",
+      "address": "0x0342",
+      "line": 29
+    },
+    "0x0224": {
+      "file": "main.vpy",
+      "address": "0x0224",
+      "line": 19
+    },
+    "0x0250": {
+      "file": "main.vpy",
+      "address": "0x0250",
+      "line": 20
+    },
+    "0x02F7": {
+      "file": "main.vpy",
+      "address": "0x02F7",
+      "line": 28
+    }
+  },
+  "asmLineMap": {
+    "0x0147": {
+      "file": "math_functions.asm",
+      "address": "0x0147",
+      "line": 232
+    },
+    "0x0236": {
+      "file": "math_functions.asm",
+      "address": "0x0236",
+      "line": 353
+    },
+    "0x028A": {
+      "file": "math_functions.asm",
+      "address": "0x028A",
+      "line": 390
+    },
+    "0x029B": {
+      "file": "math_functions.asm",
+      "address": "0x029B",
+      "line": 398
+    },
+    "0x0070": {
+      "file": "math_functions.asm",
+      "address": "0x0070",
+      "line": 108
+    },
+    "0x03BB": {
+      "file": "math_functions.asm",
+      "address": "0x03BB",
+      "line": 528
+    },
+    "0x031B": {
+      "file": "math_functions.asm",
+      "address": "0x031B",
+      "line": 453
+    },
+    "0x018F": {
+      "file": "math_functions.asm",
+      "address": "0x018F",
+      "line": 277
+    },
+    "0x024C": {
+      "file": "math_functions.asm",
+      "address": "0x024C",
+      "line": 362
+    },
+    "0x0192": {
+      "file": "math_functions.asm",
+      "address": "0x0192",
+      "line": 278
+    },
+    "0x007F": {
+      "file": "math_functions.asm",
+      "address": "0x007F",
+      "line": 118
+    },
+    "0x016E": {
+      "file": "math_functions.asm",
+      "address": "0x016E",
+      "line": 255
+    },
+    "0x00EB": {
+      "file": "math_functions.asm",
+      "address": "0x00EB",
+      "line": 190
+    },
+    "0x0145": {
+      "file": "math_functions.asm",
+      "address": "0x0145",
+      "line": 11
+    },
+    "0x0224": {
+      "file": "math_functions.asm",
+      "address": "0x0224",
+      "line": 347
+    },
+    "0x0049": {
+      "file": "math_functions.asm",
+      "address": "0x0049",
+      "line": 76
+    },
+    "0x01FF": {
+      "file": "math_functions.asm",
+      "address": "0x01FF",
+      "line": 329
+    },
+    "0x014C": {
+      "file": "math_functions.asm",
+      "address": "0x014C",
+      "line": 14
+    },
+    "0x0173": {
+      "file": "math_functions.asm",
+      "address": "0x0173",
+      "line": 260
+    },
+    "0x0087": {
+      "file": "math_functions.asm",
+      "address": "0x0087",
+      "line": 124
+    },
+    "0x0183": {
+      "file": "math_functions.asm",
+      "address": "0x0183",
+      "line": 44
+    },
+    "0x00E2": {
+      "file": "math_functions.asm",
+      "address": "0x00E2",
+      "line": 183
+    },
+    "0x039D": {
+      "file": "math_functions.asm",
+      "address": "0x039D",
+      "line": 520
+    },
+    "0x02E9": {
+      "file": "math_functions.asm",
+      "address": "0x02E9",
+      "line": 432
+    },
+    "0x010A": {
+      "file": "math_functions.asm",
+      "address": "0x010A",
+      "line": 212
+    },
+    "0x02C4": {
+      "file": "math_functions.asm",
+      "address": "0x02C4",
+      "line": 416
+    },
+    "0x0171": {
+      "file": "math_functions.asm",
+      "address": "0x0171",
+      "line": 36
+    },
+    "0x0383": {
+      "file": "math_functions.asm",
+      "address": "0x0383",
+      "line": 501
+    },
+    "0x02E1": {
+      "file": "math_functions.asm",
+      "address": "0x02E1",
+      "line": 429
+    },
+    "0x0277": {
+      "file": "math_functions.asm",
+      "address": "0x0277",
+      "line": 381
+    },
+    "0x00A7": {
+      "file": "math_functions.asm",
+      "address": "0x00A7",
+      "line": 145
+    },
+    "0x01B1": {
+      "file": "math_functions.asm",
+      "address": "0x01B1",
+      "line": 294
+    },
+    "0x01D0": {
+      "file": "math_functions.asm",
+      "address": "0x01D0",
+      "line": 306
+    },
+    "0x0205": {
+      "file": "math_functions.asm",
+      "address": "0x0205",
+      "line": 331
+    },
+    "0x015C": {
+      "file": "math_functions.asm",
+      "address": "0x015C",
+      "line": 20
+    },
+    "0x00BE": {
+      "file": "math_functions.asm",
+      "address": "0x00BE",
+      "line": 155
+    },
+    "0x01FB": {
+      "file": "math_functions.asm",
+      "address": "0x01FB",
+      "line": 325
+    },
+    "0x0107": {
+      "file": "math_functions.asm",
+      "address": "0x0107",
+      "line": 210
+    },
+    "0x0391": {
+      "file": "math_functions.asm",
+      "address": "0x0391",
+      "line": 507
+    },
+    "0x020B": {
+      "file": "math_functions.asm",
+      "address": "0x020B",
+      "line": 333
+    },
+    "0x008B": {
+      "file": "math_functions.asm",
+      "address": "0x008B",
+      "line": 130
+    },
+    "0x0325": {
+      "file": "math_functions.asm",
+      "address": "0x0325",
+      "line": 458
+    },
+    "0x021F": {
+      "file": "math_functions.asm",
+      "address": "0x021F",
+      "line": 342
+    },
+    "0x02AC": {
+      "file": "math_functions.asm",
+      "address": "0x02AC",
+      "line": 407
+    },
+    "0x01E9": {
+      "file": "math_functions.asm",
+      "address": "0x01E9",
+      "line": 317
+    },
+    "0x0166": {
+      "file": "math_functions.asm",
+      "address": "0x0166",
+      "line": 32
+    },
+    "0x01DA": {
+      "file": "math_functions.asm",
+      "address": "0x01DA",
+      "line": 312
+    },
+    "0x0259": {
+      "file": "math_functions.asm",
+      "address": "0x0259",
+      "line": 369
+    },
+    "0x0256": {
+      "file": "math_functions.asm",
+      "address": "0x0256",
+      "line": 368
+    },
+    "0x0052": {
+      "file": "math_functions.asm",
+      "address": "0x0052",
+      "line": 88
+    },
+    "0x010D": {
+      "file": "math_functions.asm",
+      "address": "0x010D",
+      "line": 213
+    },
+    "0x01BD": {
+      "file": "math_functions.asm",
+      "address": "0x01BD",
+      "line": 298
+    },
+    "0x0265": {
+      "file": "math_functions.asm",
+      "address": "0x0265",
+      "line": 373
+    },
+    "0x01F7": {
+      "file": "math_functions.asm",
+      "address": "0x01F7",
+      "line": 323
+    },
+    "0x0253": {
+      "file": "math_functions.asm",
+      "address": "0x0253",
+      "line": 367
+    },
+    "0x03A5": {
+      "file": "math_functions.asm",
+      "address": "0x03A5",
+      "line": 522
+    },
+    "0x02D5": {
+      "file": "math_functions.asm",
+      "address": "0x02D5",
+      "line": 425
+    },
+    "0x00C7": {
+      "file": "math_functions.asm",
+      "address": "0x00C7",
+      "line": 164
+    },
+    "0x0045": {
+      "file": "math_functions.asm",
+      "address": "0x0045",
+      "line": 74
+    },
+    "0x02BB": {
+      "file": "math_functions.asm",
+      "address": "0x02BB",
+      "line": 412
+    },
+    "0x024B": {
+      "file": "math_functions.asm",
+      "address": "0x024B",
+      "line": 361
+    },
+    "0x0233": {
+      "file": "math_functions.asm",
+      "address": "0x0233",
+      "line": 352
+    },
+    "0x0360": {
+      "file": "math_functions.asm",
+      "address": "0x0360",
+      "line": 485
+    },
+    "0x032A": {
+      "file": "math_functions.asm",
+      "address": "0x032A",
+      "line": 461
+    },
+    "0x00F5": {
+      "file": "math_functions.asm",
+      "address": "0x00F5",
+      "line": 197
+    },
+    "0x01B7": {
+      "file": "math_functions.asm",
+      "address": "0x01B7",
+      "line": 296
+    },
+    "0x00AD": {
+      "file": "math_functions.asm",
+      "address": "0x00AD",
+      "line": 147
+    },
+    "0x029E": {
+      "file": "math_functions.asm",
+      "address": "0x029E",
+      "line": 399
+    },
+    "0x00D9": {
+      "file": "math_functions.asm",
+      "address": "0x00D9",
+      "line": 177
+    },
+    "0x026A": {
+      "file": "math_functions.asm",
+      "address": "0x026A",
+      "line": 375
+    },
+    "0x00E3": {
+      "file": "math_functions.asm",
+      "address": "0x00E3",
+      "line": 184
+    },
+    "0x005A": {
+      "file": "math_functions.asm",
+      "address": "0x005A",
+      "line": 94
+    },
+    "0x0348": {
+      "file": "math_functions.asm",
+      "address": "0x0348",
+      "line": 477
+    },
+    "0x028D": {
+      "file": "math_functions.asm",
+      "address": "0x028D",
+      "line": 391
+    },
+    "0x0039": {
+      "file": "math_functions.asm",
+      "address": "0x0039",
+      "line": 70
+    },
+    "0x0021": {
+      "file": "math_functions.asm",
+      "address": "0x0021",
+      "line": 56
+    },
+    "0x0169": {
+      "file": "math_functions.asm",
+      "address": "0x0169",
+      "line": 33
+    },
+    "0x0086": {
+      "file": "math_functions.asm",
+      "address": "0x0086",
+      "line": 123
+    },
+    "0x005E": {
+      "file": "math_functions.asm",
+      "address": "0x005E",
+      "line": 97
+    },
+    "0x0186": {
+      "file": "math_functions.asm",
+      "address": "0x0186",
+      "line": 45
+    },
+    "0x018C": {
+      "file": "math_functions.asm",
+      "address": "0x018C",
+      "line": 276
+    },
+    "0x0143": {
+      "file": "math_functions.asm",
+      "address": "0x0143",
+      "line": 2
+    },
+    "0x02CC": {
+      "file": "math_functions.asm",
+      "address": "0x02CC",
+      "line": 422
+    },
+    "0x0195": {
+      "file": "math_functions.asm",
+      "address": "0x0195",
+      "line": 279
+    },
+    "0x0054": {
+      "file": "math_functions.asm",
+      "address": "0x0054",
+      "line": 90
+    },
+    "0x030C": {
+      "file": "math_functions.asm",
+      "address": "0x030C",
+      "line": 448
+    },
+    "0x034B": {
+      "file": "math_functions.asm",
+      "address": "0x034B",
+      "line": 478
+    },
+    "0x0104": {
+      "file": "math_functions.asm",
+      "address": "0x0104",
+      "line": 208
+    },
+    "0x032F": {
+      "file": "math_functions.asm",
+      "address": "0x032F",
+      "line": 464
+    },
+    "0x014A": {
+      "file": "math_functions.asm",
+      "address": "0x014A",
+      "line": 13
+    },
+    "0x0179": {
+      "file": "math_functions.asm",
+      "address": "0x0179",
+      "line": 39
+    },
+    "0x00CF": {
+      "file": "math_functions.asm",
+      "address": "0x00CF",
+      "line": 170
+    },
+    "0x03BC": {
+      "file": "math_functions.asm",
+      "address": "0x03BC",
+      "line": 529
+    },
+    "0x0296": {
+      "file": "math_functions.asm",
+      "address": "0x0296",
+      "line": 394
+    },
+    "0x0037": {
+      "file": "math_functions.asm",
+      "address": "0x0037",
+      "line": 69
+    },
+    "0x008F": {
+      "file": "math_functions.asm",
+      "address": "0x008F",
+      "line": 132
+    },
+    "0x02C7": {
+      "file": "math_functions.asm",
+      "address": "0x02C7",
+      "line": 417
+    },
+    "0x0273": {
+      "file": "math_functions.asm",
+      "address": "0x0273",
+      "line": 379
+    },
+    "0x0294": {
+      "file": "math_functions.asm",
+      "address": "0x0294",
+      "line": 393
+    },
+    "0x0063": {
+      "file": "math_functions.asm",
+      "address": "0x0063",
+      "line": 100
+    },
+    "0x02D2": {
+      "file": "math_functions.asm",
+      "address": "0x02D2",
+      "line": 424
+    },
+    "0x0102": {
+      "file": "math_functions.asm",
+      "address": "0x0102",
+      "line": 207
+    },
+    "0x0227": {
+      "file": "math_functions.asm",
+      "address": "0x0227",
+      "line": 348
+    },
+    "0x0312": {
+      "file": "math_functions.asm",
+      "address": "0x0312",
+      "line": 450
+    },
+    "0x0340": {
+      "file": "math_functions.asm",
+      "address": "0x0340",
+      "line": 471
+    },
+    "0x00BD": {
+      "file": "math_functions.asm",
+      "address": "0x00BD",
+      "line": 154
+    },
+    "0x013E": {
+      "file": "math_functions.asm",
+      "address": "0x013E",
+      "line": 227
+    },
+    "0x00E5": {
+      "file": "math_functions.asm",
+      "address": "0x00E5",
+      "line": 186
+    },
+    "0x038E": {
+      "file": "math_functions.asm",
+      "address": "0x038E",
+      "line": 505
+    },
+    "0x023C": {
+      "file": "math_functions.asm",
+      "address": "0x023C",
+      "line": 355
+    },
+    "0x009E": {
+      "file": "math_functions.asm",
+      "address": "0x009E",
+      "line": 137
+    },
+    "0x01C6": {
+      "file": "math_functions.asm",
+      "address": "0x01C6",
+      "line": 301
+    },
+    "0x013B": {
+      "file": "math_functions.asm",
+      "address": "0x013B",
+      "line": 225
+    },
+    "0x00B4": {
+      "file": "math_functions.asm",
+      "address": "0x00B4",
+      "line": 150
+    },
+    "0x0154": {
+      "file": "math_functions.asm",
+      "address": "0x0154",
+      "line": 17
+    },
+    "0x0337": {
+      "file": "math_functions.asm",
+      "address": "0x0337",
+      "line": 467
+    },
+    "0x0306": {
+      "file": "math_functions.asm",
+      "address": "0x0306",
+      "line": 446
+    },
+    "0x00C0": {
+      "file": "math_functions.asm",
+      "address": "0x00C0",
+      "line": 157
+    },
+    "0x01DD": {
+      "file": "math_functions.asm",
+      "address": "0x01DD",
+      "line": 313
+    },
+    "0x02B5": {
+      "file": "math_functions.asm",
+      "address": "0x02B5",
+      "line": 410
+    },
+    "0x009B": {
+      "file": "math_functions.asm",
+      "address": "0x009B",
+      "line": 136
+    },
+    "0x0092": {
+      "file": "math_functions.asm",
+      "address": "0x0092",
+      "line": 133
+    },
+    "0x00CC": {
+      "file": "math_functions.asm",
+      "address": "0x00CC",
+      "line": 167
+    },
+    "0x007C": {
+      "file": "math_functions.asm",
+      "address": "0x007C",
+      "line": 117
+    },
+    "0x019B": {
+      "file": "math_functions.asm",
+      "address": "0x019B",
+      "line": 282
+    },
+    "0x00BF": {
+      "file": "math_functions.asm",
+      "address": "0x00BF",
+      "line": 156
+    },
+    "0x00E1": {
+      "file": "math_functions.asm",
+      "address": "0x00E1",
+      "line": 182
+    },
+    "0x030F": {
+      "file": "math_functions.asm",
+      "address": "0x030F",
+      "line": 449
+    },
+    "0x02C1": {
+      "file": "math_functions.asm",
+      "address": "0x02C1",
+      "line": 414
+    },
+    "0x02A3": {
+      "file": "math_functions.asm",
+      "address": "0x02A3",
+      "line": 404
+    },
+    "0x01A0": {
+      "file": "math_functions.asm",
+      "address": "0x01A0",
+      "line": 285
+    },
+    "0x02E4": {
+      "file": "math_functions.asm",
+      "address": "0x02E4",
+      "line": 430
+    },
+    "0x0081": {
+      "file": "math_functions.asm",
+      "address": "0x0081",
+      "line": 120
+    },
+    "0x019C": {
+      "file": "math_functions.asm",
+      "address": "0x019C",
+      "line": 283
+    },
+    "0x031E": {
+      "file": "math_functions.asm",
+      "address": "0x031E",
+      "line": 454
+    },
+    "0x031F": {
+      "file": "math_functions.asm",
+      "address": "0x031F",
+      "line": 455
+    },
+    "0x0053": {
+      "file": "math_functions.asm",
+      "address": "0x0053",
+      "line": 89
+    },
+    "0x033A": {
+      "file": "math_functions.asm",
+      "address": "0x033A",
+      "line": 469
+    },
+    "0x00DE": {
+      "file": "math_functions.asm",
+      "address": "0x00DE",
+      "line": 180
+    },
+    "0x004A": {
+      "file": "math_functions.asm",
+      "address": "0x004A",
+      "line": 77
+    },
+    "0x036B": {
+      "file": "math_functions.asm",
+      "address": "0x036B",
+      "line": 491
+    },
+    "0x00B0": {
+      "file": "math_functions.asm",
+      "address": "0x00B0",
+      "line": 149
+    },
+    "0x02C9": {
+      "file": "math_functions.asm",
+      "address": "0x02C9",
+      "line": 419
+    },
+    "0x0071": {
+      "file": "math_functions.asm",
+      "address": "0x0071",
+      "line": 109
+    },
+    "0x0072": {
+      "file": "math_functions.asm",
+      "address": "0x0072",
+      "line": 110
+    },
+    "0x0136": {
+      "file": "math_functions.asm",
+      "address": "0x0136",
+      "line": 222
+    },
+    "0x0330": {
+      "file": "math_functions.asm",
+      "address": "0x0330",
+      "line": 465
+    },
+    "0x01E6": {
+      "file": "math_functions.asm",
+      "address": "0x01E6",
+      "line": 316
+    },
+    "0x00FA": {
+      "file": "math_functions.asm",
+      "address": "0x00FA",
+      "line": 201
+    },
+    "0x0222": {
+      "file": "math_functions.asm",
+      "address": "0x0222",
+      "line": 343
+    },
+    "0x0152": {
+      "file": "math_functions.asm",
+      "address": "0x0152",
+      "line": 236
+    },
+    "0x02D8": {
+      "file": "math_functions.asm",
+      "address": "0x02D8",
+      "line": 426
+    },
+    "0x0248": {
+      "file": "math_functions.asm",
+      "address": "0x0248",
+      "line": 360
+    },
+    "0x0371": {
+      "file": "math_functions.asm",
+      "address": "0x0371",
+      "line": 495
+    },
+    "0x00CB": {
+      "file": "math_functions.asm",
+      "address": "0x00CB",
+      "line": 166
+    },
+    "0x0181": {
+      "file": "math_functions.asm",
+      "address": "0x0181",
+      "line": 269
+    },
+    "0x0303": {
+      "file": "math_functions.asm",
+      "address": "0x0303",
+      "line": 445
+    },
+    "0x02A6": {
+      "file": "math_functions.asm",
+      "address": "0x02A6",
+      "line": 405
+    },
+    "0x0374": {
+      "file": "math_functions.asm",
+      "address": "0x0374",
+      "line": 496
+    },
+    "0x0298": {
+      "file": "math_functions.asm",
+      "address": "0x0298",
+      "line": 396
+    },
+    "0x00DA": {
+      "file": "math_functions.asm",
+      "address": "0x00DA",
+      "line": 178
+    },
+    "0x0369": {
+      "file": "math_functions.asm",
+      "address": "0x0369",
+      "line": 489
+    },
+    "0x0189": {
+      "file": "math_functions.asm",
+      "address": "0x0189",
+      "line": 273
+    },
+    "0x003C": {
+      "file": "math_functions.asm",
+      "address": "0x003C",
+      "line": 71
+    },
+    "0x0033": {
+      "file": "math_functions.asm",
+      "address": "0x0033",
+      "line": 64
+    },
+    "0x0176": {
+      "file": "math_functions.asm",
+      "address": "0x0176",
+      "line": 261
+    },
+    "0x0396": {
+      "file": "math_functions.asm",
+      "address": "0x0396",
+      "line": 510
+    },
+    "0x033D": {
+      "file": "math_functions.asm",
+      "address": "0x033D",
+      "line": 470
+    },
+    "0x0290": {
+      "file": "math_functions.asm",
+      "address": "0x0290",
+      "line": 392
+    },
+    "0x00C1": {
+      "file": "math_functions.asm",
+      "address": "0x00C1",
+      "line": 160
+    },
+    "0x01EE": {
+      "file": "math_functions.asm",
+      "address": "0x01EE",
+      "line": 319
+    },
+    "0x0239": {
+      "file": "math_functions.asm",
+      "address": "0x0239",
+      "line": 354
+    },
+    "0x010E": {
+      "file": "math_functions.asm",
+      "address": "0x010E",
+      "line": 214
+    },
+    "0x0218": {
+      "file": "math_functions.asm",
+      "address": "0x0218",
+      "line": 337
+    },
+    "0x02B8": {
+      "file": "math_functions.asm",
+      "address": "0x02B8",
+      "line": 411
+    },
+    "0x00D2": {
+      "file": "math_functions.asm",
+      "address": "0x00D2",
+      "line": 171
+    },
+    "0x00AA": {
+      "file": "math_functions.asm",
+      "address": "0x00AA",
+      "line": 146
+    },
+    "0x0342": {
+      "file": "math_functions.asm",
+      "address": "0x0342",
+      "line": 475
+    },
+    "0x0320": {
+      "file": "math_functions.asm",
+      "address": "0x0320",
+      "line": 456
+    },
+    "0x01F1": {
+      "file": "math_functions.asm",
+      "address": "0x01F1",
+      "line": 320
+    },
+    "0x01AB": {
+      "file": "math_functions.asm",
+      "address": "0x01AB",
+      "line": 292
+    },
+    "0x03A6": {
+      "file": "math_functions.asm",
+      "address": "0x03A6",
+      "line": 523
+    },
+    "0x0140": {
+      "file": "math_functions.asm",
+      "address": "0x0140",
+      "line": 228
+    },
+    "0x01C3": {
+      "file": "math_functions.asm",
+      "address": "0x01C3",
+      "line": 300
+    },
+    "0x0395": {
+      "file": "math_functions.asm",
+      "address": "0x0395",
+      "line": 509
+    },
+    "0x00CE": {
+      "file": "math_functions.asm",
+      "address": "0x00CE",
+      "line": 169
+    },
+    "0x00A3": {
+      "file": "math_functions.asm",
+      "address": "0x00A3",
+      "line": 139
+    },
+    "0x0078": {
+      "file": "math_functions.asm",
+      "address": "0x0078",
+      "line": 114
+    },
+    "0x01E0": {
+      "file": "math_functions.asm",
+      "address": "0x01E0",
+      "line": 314
+    },
+    "0x0074": {
+      "file": "math_functions.asm",
+      "address": "0x0074",
+      "line": 111
+    },
+    "0x01A8": {
+      "file": "math_functions.asm",
+      "address": "0x01A8",
+      "line": 291
+    },
+    "0x00B6": {
+      "file": "math_functions.asm",
+      "address": "0x00B6",
+      "line": 151
+    },
+    "0x01FA": {
+      "file": "math_functions.asm",
+      "address": "0x01FA",
+      "line": 324
+    },
+    "0x02F3": {
+      "file": "math_functions.asm",
+      "address": "0x02F3",
+      "line": 437
+    },
+    "0x0399": {
+      "file": "math_functions.asm",
+      "address": "0x0399",
+      "line": 511
+    },
+    "0x0198": {
+      "file": "math_functions.asm",
+      "address": "0x0198",
+      "line": 280
+    },
+    "0x0208": {
+      "file": "math_functions.asm",
+      "address": "0x0208",
+      "line": 332
+    },
+    "0x00F0": {
+      "file": "math_functions.asm",
+      "address": "0x00F0",
+      "line": 193
+    },
+    "0x00D4": {
+      "file": "math_functions.asm",
+      "address": "0x00D4",
+      "line": 173
+    },
+    "0x00C2": {
+      "file": "math_functions.asm",
+      "address": "0x00C2",
+      "line": 162
+    },
+    "0x0351": {
+      "file": "math_functions.asm",
+      "address": "0x0351",
+      "line": 480
+    },
+    "0x02EC": {
+      "file": "math_functions.asm",
+      "address": "0x02EC",
+      "line": 433
+    },
+    "0x00F8": {
+      "file": "math_functions.asm",
+      "address": "0x00F8",
+      "line": 199
+    },
+    "0x0377": {
+      "file": "math_functions.asm",
+      "address": "0x0377",
+      "line": 497
+    },
+    "0x0202": {
+      "file": "math_functions.asm",
+      "address": "0x0202",
+      "line": 330
+    },
+    "0x021A": {
+      "file": "math_functions.asm",
+      "address": "0x021A",
+      "line": 338
+    },
+    "0x038B": {
+      "file": "math_functions.asm",
+      "address": "0x038B",
+      "line": 504
+    },
+    "0x014F": {
+      "file": "math_functions.asm",
+      "address": "0x014F",
+      "line": 235
+    },
+    "0x00EF": {
+      "file": "math_functions.asm",
+      "address": "0x00EF",
+      "line": 192
+    },
+    "0x0042": {
+      "file": "math_functions.asm",
+      "address": "0x0042",
+      "line": 73
+    },
+    "0x0270": {
+      "file": "math_functions.asm",
+      "address": "0x0270",
+      "line": 377
+    },
+    "0x036A": {
+      "file": "math_functions.asm",
+      "address": "0x036A",
+      "line": 490
+    },
+    "0x0380": {
+      "file": "math_functions.asm",
+      "address": "0x0380",
+      "line": 500
+    },
+    "0x037D": {
+      "file": "math_functions.asm",
+      "address": "0x037D",
+      "line": 499
+    },
+    "0x0388": {
+      "file": "math_functions.asm",
+      "address": "0x0388",
+      "line": 503
+    },
+    "0x01EC": {
+      "file": "math_functions.asm",
+      "address": "0x01EC",
+      "line": 318
+    },
+    "0x0100": {
+      "file": "math_functions.asm",
+      "address": "0x0100",
+      "line": 206
+    },
+    "0x0068": {
+      "file": "math_functions.asm",
+      "address": "0x0068",
+      "line": 103
+    },
+    "0x00F3": {
+      "file": "math_functions.asm",
+      "address": "0x00F3",
+      "line": 196
+    },
+    "0x02DB": {
+      "file": "math_functions.asm",
+      "address": "0x02DB",
+      "line": 427
+    },
+    "0x01CF": {
+      "file": "math_functions.asm",
+      "address": "0x01CF",
+      "line": 305
+    },
+    "0x0281": {
+      "file": "math_functions.asm",
+      "address": "0x0281",
+      "line": 387
+    },
+    "0x0357": {
+      "file": "math_functions.asm",
+      "address": "0x0357",
+      "line": 482
+    },
+    "0x0048": {
+      "file": "math_functions.asm",
+      "address": "0x0048",
+      "line": 75
+    },
+    "0x00DC": {
+      "file": "math_functions.asm",
+      "address": "0x00DC",
+      "line": 179
+    },
+    "0x025C": {
+      "file": "math_functions.asm",
+      "address": "0x025C",
+      "line": 370
+    },
+    "0x00E9": {
+      "file": "math_functions.asm",
+      "address": "0x00E9",
+      "line": 189
+    },
+    "0x0131": {
+      "file": "math_functions.asm",
+      "address": "0x0131",
+      "line": 219
+    },
+    "0x0024": {
+      "file": "math_functions.asm",
+      "address": "0x0024",
+      "line": 57
+    },
+    "0x02EF": {
+      "file": "math_functions.asm",
+      "address": "0x02EF",
+      "line": 435
+    },
+    "0x00F9": {
+      "file": "math_functions.asm",
+      "address": "0x00F9",
+      "line": 200
+    },
+    "0x00F1": {
+      "file": "math_functions.asm",
+      "address": "0x00F1",
+      "line": 195
+    },
+    "0x021C": {
+      "file": "math_functions.asm",
+      "address": "0x021C",
+      "line": 340
+    },
+    "0x02DE": {
+      "file": "math_functions.asm",
+      "address": "0x02DE",
+      "line": 428
+    },
+    "0x017F": {
+      "file": "math_functions.asm",
+      "address": "0x017F",
+      "line": 265
+    },
+    "0x01BA": {
+      "file": "math_functions.asm",
+      "address": "0x01BA",
+      "line": 297
+    },
+    "0x0363": {
+      "file": "math_functions.asm",
+      "address": "0x0363",
+      "line": 486
+    },
+    "0x0214": {
+      "file": "math_functions.asm",
+      "address": "0x0214",
+      "line": 336
+    },
+    "0x02A9": {
+      "file": "math_functions.asm",
+      "address": "0x02A9",
+      "line": 406
+    },
+    "0x003F": {
+      "file": "math_functions.asm",
+      "address": "0x003F",
+      "line": 72
+    },
+    "0x0276": {
+      "file": "math_functions.asm",
+      "address": "0x0276",
+      "line": 380
+    },
+    "0x0278": {
+      "file": "math_functions.asm",
+      "address": "0x0278",
+      "line": 382
+    },
+    "0x0111": {
+      "file": "math_functions.asm",
+      "address": "0x0111",
+      "line": 216
+    },
+    "0x0031": {
+      "file": "math_functions.asm",
+      "address": "0x0031",
+      "line": 62
+    },
+    "0x002D": {
+      "file": "math_functions.asm",
+      "address": "0x002D",
+      "line": 60
+    },
+    "0x00FB": {
+      "file": "math_functions.asm",
+      "address": "0x00FB",
+      "line": 202
+    },
+    "0x017C": {
+      "file": "math_functions.asm",
+      "address": "0x017C",
+      "line": 40
+    },
+    "0x015A": {
+      "file": "math_functions.asm",
+      "address": "0x015A",
+      "line": 19
+    },
+    "0x01CC": {
+      "file": "math_functions.asm",
+      "address": "0x01CC",
+      "line": 304
+    },
+    "0x032D": {
+      "file": "math_functions.asm",
+      "address": "0x032D",
+      "line": 462
+    },
+    "0x0059": {
+      "file": "math_functions.asm",
+      "address": "0x0059",
+      "line": 93
+    },
+    "0x02A0": {
+      "file": "math_functions.asm",
+      "address": "0x02A0",
+      "line": 403
+    },
+    "0x002A": {
+      "file": "math_functions.asm",
+      "address": "0x002A",
+      "line": 59
+    },
+    "0x02F2": {
+      "file": "math_functions.asm",
+      "address": "0x02F2",
+      "line": 436
+    },
+    "0x027E": {
+      "file": "math_functions.asm",
+      "address": "0x027E",
+      "line": 386
+    },
+    "0x01D1": {
+      "file": "math_functions.asm",
+      "address": "0x01D1",
+      "line": 307
+    },
+    "0x0300": {
+      "file": "math_functions.asm",
+      "address": "0x0300",
+      "line": 444
+    },
+    "0x02AF": {
+      "file": "math_functions.asm",
+      "address": "0x02AF",
+      "line": 408
+    },
+    "0x0032": {
+      "file": "math_functions.asm",
+      "address": "0x0032",
+      "line": 63
+    },
+    "0x00E6": {
+      "file": "math_functions.asm",
+      "address": "0x00E6",
+      "line": 188
+    },
+    "0x020E": {
+      "file": "math_functions.asm",
+      "address": "0x020E",
+      "line": 334
+    },
+    "0x00ED": {
+      "file": "math_functions.asm",
+      "address": "0x00ED",
+      "line": 191
+    },
+    "0x00A6": {
+      "file": "math_functions.asm",
+      "address": "0x00A6",
+      "line": 140
+    },
+    "0x01D7": {
+      "file": "math_functions.asm",
+      "address": "0x01D7",
+      "line": 311
+    },
+    "0x032E": {
+      "file": "math_functions.asm",
+      "address": "0x032E",
+      "line": 463
+    },
+    "0x0230": {
+      "file": "math_functions.asm",
+      "address": "0x0230",
+      "line": 351
+    },
+    "0x022A": {
+      "file": "math_functions.asm",
+      "address": "0x022A",
+      "line": 349
+    },
+    "0x01D4": {
+      "file": "math_functions.asm",
+      "address": "0x01D4",
+      "line": 310
+    },
+    "0x0080": {
+      "file": "math_functions.asm",
+      "address": "0x0080",
+      "line": 119
+    },
+    "0x035A": {
+      "file": "math_functions.asm",
+      "address": "0x035A",
+      "line": 483
+    },
+    "0x0250": {
+      "file": "math_functions.asm",
+      "address": "0x0250",
+      "line": 366
+    },
+    "0x0139": {
+      "file": "math_functions.asm",
+      "address": "0x0139",
+      "line": 224
+    },
+    "0x0242": {
+      "file": "math_functions.asm",
+      "address": "0x0242",
+      "line": 357
+    },
+    "0x02FD": {
+      "file": "math_functions.asm",
+      "address": "0x02FD",
+      "line": 443
+    },
+    "0x0061": {
+      "file": "math_functions.asm",
+      "address": "0x0061",
+      "line": 98
+    },
+    "0x01FC": {
+      "file": "math_functions.asm",
+      "address": "0x01FC",
+      "line": 326
+    },
+    "0x037A": {
+      "file": "math_functions.asm",
+      "address": "0x037A",
+      "line": 498
+    },
+    "0x0345": {
+      "file": "math_functions.asm",
+      "address": "0x0345",
+      "line": 476
+    },
+    "0x0268": {
+      "file": "math_functions.asm",
+      "address": "0x0268",
+      "line": 374
+    },
+    "0x004F": {
+      "file": "math_functions.asm",
+      "address": "0x004F",
+      "line": 87
+    },
+    "0x0157": {
+      "file": "math_functions.asm",
+      "address": "0x0157",
+      "line": 246
+    },
+    "0x016B": {
+      "file": "math_functions.asm",
+      "address": "0x016B",
+      "line": 34
+    },
+    "0x036E": {
+      "file": "math_functions.asm",
+      "address": "0x036E",
+      "line": 494
+    },
+    "0x02C8": {
+      "file": "math_functions.asm",
+      "address": "0x02C8",
+      "line": 418
+    },
+    "0x0309": {
+      "file": "math_functions.asm",
+      "address": "0x0309",
+      "line": 447
+    },
+    "0x02F7": {
+      "file": "math_functions.asm",
+      "address": "0x02F7",
+      "line": 441
+    },
+    "0x0366": {
+      "file": "math_functions.asm",
+      "address": "0x0366",
+      "line": 488
+    },
+    "0x00CA": {
+      "file": "math_functions.asm",
+      "address": "0x00CA",
+      "line": 165
+    },
+    "0x0056": {
+      "file": "math_functions.asm",
+      "address": "0x0056",
+      "line": 91
+    },
+    "0x0182": {
+      "file": "math_functions.asm",
+      "address": "0x0182",
+      "line": 43
+    },
+    "0x01AE": {
+      "file": "math_functions.asm",
+      "address": "0x01AE",
+      "line": 293
+    },
+    "0x03B1": {
+      "file": "math_functions.asm",
+      "address": "0x03B1",
+      "line": 526
+    },
+    "0x01B4": {
+      "file": "math_functions.asm",
+      "address": "0x01B4",
+      "line": 295
+    },
+    "0x0318": {
+      "file": "math_functions.asm",
+      "address": "0x0318",
+      "line": 452
+    },
+    "0x02FA": {
+      "file": "math_functions.asm",
+      "address": "0x02FA",
+      "line": 442
+    },
+    "0x0211": {
+      "file": "math_functions.asm",
+      "address": "0x0211",
+      "line": 335
+    },
+    "0x00B8": {
+      "file": "math_functions.asm",
+      "address": "0x00B8",
+      "line": 152
+    },
+    "0x01A3": {
+      "file": "math_functions.asm",
+      "address": "0x01A3",
+      "line": 286
+    },
+    "0x0069": {
+      "file": "math_functions.asm",
+      "address": "0x0069",
+      "line": 104
+    },
+    "0x0098": {
+      "file": "math_functions.asm",
+      "address": "0x0098",
+      "line": 135
+    },
+    "0x01C0": {
+      "file": "math_functions.asm",
+      "address": "0x01C0",
+      "line": 299
+    },
+    "0x0106": {
+      "file": "math_functions.asm",
+      "address": "0x0106",
+      "line": 209
+    },
+    "0x00A0": {
+      "file": "math_functions.asm",
+      "address": "0x00A0",
+      "line": 138
+    },
+    "0x0083": {
+      "file": "math_functions.asm",
+      "address": "0x0083",
+      "line": 121
+    },
+    "0x0095": {
+      "file": "math_functions.asm",
+      "address": "0x0095",
+      "line": 134
+    },
+    "0x0354": {
+      "file": "math_functions.asm",
+      "address": "0x0354",
+      "line": 481
+    },
+    "0x01F4": {
+      "file": "math_functions.asm",
+      "address": "0x01F4",
+      "line": 321
+    },
+    "0x0062": {
+      "file": "math_functions.asm",
+      "address": "0x0062",
+      "line": 99
+    },
+    "0x01E3": {
+      "file": "math_functions.asm",
+      "address": "0x01E3",
+      "line": 315
+    },
+    "0x00D6": {
+      "file": "math_functions.asm",
+      "address": "0x00D6",
+      "line": 175
+    },
+    "0x023F": {
+      "file": "math_functions.asm",
+      "address": "0x023F",
+      "line": 356
+    },
+    "0x00D8": {
+      "file": "math_functions.asm",
+      "address": "0x00D8",
+      "line": 176
+    },
+    "0x027B": {
+      "file": "math_functions.asm",
+      "address": "0x027B",
+      "line": 385
+    },
+    "0x039C": {
+      "file": "math_functions.asm",
+      "address": "0x039C",
+      "line": 519
+    },
+    "0x02BE": {
+      "file": "math_functions.asm",
+      "address": "0x02BE",
+      "line": 413
+    },
+    "0x0394": {
+      "file": "math_functions.asm",
+      "address": "0x0394",
+      "line": 508
+    },
+    "0x0133": {
+      "file": "math_functions.asm",
+      "address": "0x0133",
+      "line": 220
+    },
+    "0x022D": {
+      "file": "math_functions.asm",
+      "address": "0x022D",
+      "line": 350
+    },
+    "0x034E": {
+      "file": "math_functions.asm",
+      "address": "0x034E",
+      "line": 479
+    },
+    "0x035D": {
+      "file": "math_functions.asm",
+      "address": "0x035D",
+      "line": 484
+    },
+    "0x0077": {
+      "file": "math_functions.asm",
+      "address": "0x0077",
+      "line": 113
+    },
+    "0x025F": {
+      "file": "math_functions.asm",
+      "address": "0x025F",
+      "line": 371
+    },
+    "0x01A6": {
+      "file": "math_functions.asm",
+      "address": "0x01A6",
+      "line": 287
+    },
+    "0x0245": {
+      "file": "math_functions.asm",
+      "address": "0x0245",
+      "line": 358
+    },
+    "0x004B": {
+      "file": "math_functions.asm",
+      "address": "0x004B",
+      "line": 78
+    },
+    "0x02CF": {
+      "file": "math_functions.asm",
+      "address": "0x02CF",
+      "line": 423
+    },
+    "0x00FD": {
+      "file": "math_functions.asm",
+      "address": "0x00FD",
+      "line": 203
+    },
+    "0x00C5": {
+      "file": "math_functions.asm",
+      "address": "0x00C5",
+      "line": 163
+    },
+    "0x0284": {
+      "file": "math_functions.asm",
+      "address": "0x0284",
+      "line": 388
+    },
+    "0x0027": {
+      "file": "math_functions.asm",
+      "address": "0x0027",
+      "line": 58
+    },
+    "0x010F": {
+      "file": "math_functions.asm",
+      "address": "0x010F",
+      "line": 215
+    },
+    "0x0199": {
+      "file": "math_functions.asm",
+      "address": "0x0199",
+      "line": 281
+    },
+    "0x02E6": {
+      "file": "math_functions.asm",
+      "address": "0x02E6",
+      "line": 431
+    },
+    "0x0315": {
+      "file": "math_functions.asm",
+      "address": "0x0315",
+      "line": 451
+    },
+    "0x03B0": {
+      "file": "math_functions.asm",
+      "address": "0x03B0",
+      "line": 525
+    },
+    "0x008D": {
+      "file": "math_functions.asm",
+      "address": "0x008D",
+      "line": 131
+    },
+    "0x02F4": {
+      "file": "math_functions.asm",
+      "address": "0x02F4",
+      "line": 438
+    },
+    "0x01C9": {
+      "file": "math_functions.asm",
+      "address": "0x01C9",
+      "line": 302
+    },
+    "0x026D": {
+      "file": "math_functions.asm",
+      "address": "0x026D",
+      "line": 376
+    },
+    "0x00BA": {
+      "file": "math_functions.asm",
+      "address": "0x00BA",
+      "line": 153
+    },
+    "0x0262": {
+      "file": "math_functions.asm",
+      "address": "0x0262",
+      "line": 372
+    },
+    "0x02B2": {
+      "file": "math_functions.asm",
+      "address": "0x02B2",
+      "line": 409
+    },
+    "0x0030": {
+      "file": "math_functions.asm",
+      "address": "0x0030",
+      "line": 61
+    },
+    "0x006D": {
+      "file": "math_functions.asm",
+      "address": "0x006D",
+      "line": 107
+    },
+    "0x0161": {
+      "file": "math_functions.asm",
+      "address": "0x0161",
+      "line": 30
+    },
+    "0x001F": {
+      "file": "math_functions.asm",
+      "address": "0x001F",
+      "line": 55
+    },
+    "0x0065": {
+      "file": "math_functions.asm",
+      "address": "0x0065",
+      "line": 101
+    },
+    "0x0164": {
+      "file": "math_functions.asm",
+      "address": "0x0164",
+      "line": 31
+    },
+    "0x0108": {
+      "file": "math_functions.asm",
+      "address": "0x0108",
+      "line": 211
+    },
+    "0x039A": {
+      "file": "math_functions.asm",
+      "address": "0x039A",
+      "line": 512
+    },
+    "0x0287": {
+      "file": "math_functions.asm",
+      "address": "0x0287",
+      "line": 389
+    },
+    "0x0328": {
+      "file": "math_functions.asm",
+      "address": "0x0328",
+      "line": 459
+    },
+    "0x024D": {
+      "file": "math_functions.asm",
+      "address": "0x024D",
+      "line": 363
+    },
+    "0x015F": {
+      "file": "math_functions.asm",
+      "address": "0x015F",
+      "line": 249
+    },
+    "0x0386": {
+      "file": "math_functions.asm",
+      "address": "0x0386",
+      "line": 502
+    }
+  },
+  "functions": {},
+  "nativeCalls": {
+    "15": "VECTREX_PRINT_NUMBER",
+    "20": "VECTREX_PRINT_NUMBER",
+    "25": "VECTREX_PRINT_NUMBER",
+    "29": "VECTREX_PRINT_TEXT",
+    "14": "VECTREX_PRINT_TEXT",
+    "24": "VECTREX_PRINT_TEXT",
+    "19": "VECTREX_PRINT_TEXT",
+    "30": "VECTREX_PRINT_NUMBER"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "math_functions.asm",
+      "startLine": 126,
+      "endLine": 140,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {
+    "352": "0x0233",
+    "340": "0x021C",
+    "416": "0x02C4",
+    "153": "0x00BA",
+    "486": "0x0363",
+    "93": "0x0059",
+    "508": "0x0394",
+    "287": "0x01A6",
+    "450": "0x0312",
+    "156": "0x00BF",
+    "385": "0x027B",
+    "496": "0x0374",
+    "477": "0x0348",
+    "149": "0x00B0",
+    "325": "0x01FB",
+    "203": "0x00FD",
+    "362": "0x024C",
+    "108": "0x0070",
+    "87": "0x004F",
+    "408": "0x02AF",
+    "264": "0x017C",
+    "35": "0x016E",
+    "38": "0x0176",
+    "330": "0x0202",
+    "470": "0x033D",
+    "313": "0x01DD",
+    "298": "0x01BD",
+    "332": "0x0208",
+    "296": "0x01B7",
+    "418": "0x02C8",
+    "455": "0x031F",
+    "281": "0x0199",
+    "427": "0x02DB",
+    "372": "0x0262",
+    "507": "0x0391",
+    "175": "0x00D6",
+    "176": "0x00D8",
+    "15": "0x014F",
+    "152": "0x00B8",
+    "114": "0x0078",
+    "196": "0x00F3",
+    "155": "0x00BE",
+    "210": "0x0107",
+    "456": "0x0320",
+    "72": "0x003F",
+    "452": "0x0318",
+    "90": "0x0054",
+    "396": "0x0298",
+    "166": "0x00CB",
+    "528": "0x03BB",
+    "343": "0x0222",
+    "262": "0x0179",
+    "319": "0x01EE",
+    "342": "0x021F",
+    "480": "0x0351",
+    "414": "0x02C1",
+    "253": "0x0169",
+    "140": "0x00A6",
+    "59": "0x002A",
+    "379": "0x0273",
+    "89": "0x0053",
+    "305": "0x01CF",
+    "255": "0x016E",
+    "522": "0x03A5",
+    "495": "0x0371",
+    "357": "0x0242",
+    "425": "0x02D5",
+    "150": "0x00B4",
+    "47": "0x0189",
+    "247": "0x015A",
+    "40": "0x017C",
+    "295": "0x01B4",
+    "380": "0x0276",
+    "304": "0x01CC",
+    "135": "0x0098",
+    "503": "0x0388",
+    "78": "0x004B",
+    "163": "0x00C5",
+    "299": "0x01C0",
+    "37": "0x0173",
+    "178": "0x00DA",
+    "16": "0x0152",
+    "41": "0x017F",
+    "33": "0x0169",
+    "231": "0x0145",
+    "376": "0x026D",
+    "485": "0x0360",
+    "310": "0x01D4",
+    "248": "0x015C",
+    "147": "0x00AD",
+    "510": "0x0396",
+    "428": "0x02DE",
+    "449": "0x030F",
+    "497": "0x0377",
+    "146": "0x00AA",
+    "279": "0x0195",
+    "29": "0x015F",
+    "177": "0x00D9",
+    "323": "0x01F7",
+    "512": "0x039A",
+    "374": "0x0268",
+    "164": "0x00C7",
+    "233": "0x014A",
+    "261": "0x0176",
+    "498": "0x037A",
+    "272": "0x0186",
+    "249": "0x015F",
+    "235": "0x014F",
+    "167": "0x00CC",
+    "45": "0x0186",
+    "451": "0x0315",
+    "12": "0x0147",
+    "333": "0x020B",
+    "335": "0x0211",
+    "57": "0x0024",
+    "499": "0x037D",
+    "273": "0x0189",
+    "448": "0x030C",
+    "436": "0x02F2",
+    "130": "0x008B",
+    "250": "0x0161",
+    "348": "0x0227",
+    "183": "0x00E2",
+    "11": "0x0145",
+    "71": "0x003C",
+    "347": "0x0224",
+    "471": "0x0340",
+    "76": "0x0049",
+    "370": "0x025C",
+    "225": "0x013B",
+    "107": "0x006D",
+    "170": "0x00CF",
+    "392": "0x0290",
+    "98": "0x0061",
+    "77": "0x004A",
+    "182": "0x00E1",
+    "244": "0x0154",
+    "315": "0x01E3",
+    "254": "0x016B",
+    "461": "0x032A",
+    "419": "0x02C9",
+    "391": "0x028D",
+    "311": "0x01D7",
+    "489": "0x0369",
+    "286": "0x01A3",
+    "488": "0x0366",
+    "228": "0x0140",
+    "349": "0x022A",
+    "259": "0x0171",
+    "154": "0x00BD",
+    "117": "0x007C",
+    "189": "0x00E9",
+    "297": "0x01BA",
+    "236": "0x0152",
+    "475": "0x0342",
+    "283": "0x019C",
+    "165": "0x00CA",
+    "100": "0x0063",
+    "429": "0x02E1",
+    "336": "0x0214",
+    "432": "0x02E9",
+    "469": "0x033A",
+    "519": "0x039C",
+    "463": "0x032E",
+    "509": "0x0395",
+    "398": "0x029B",
+    "306": "0x01D0",
+    "169": "0x00CE",
+    "6": "0x0143",
+    "138": "0x00A0",
+    "133": "0x0092",
+    "314": "0x01E0",
+    "321": "0x01F4",
+    "351": "0x0230",
+    "75": "0x0048",
+    "30": "0x0161",
+    "388": "0x0284",
+    "446": "0x0306",
+    "435": "0x02EF",
+    "252": "0x0166",
+    "500": "0x0380",
+    "119": "0x0080",
+    "482": "0x0357",
+    "251": "0x0164",
+    "387": "0x0281",
+    "137": "0x009E",
+    "459": "0x0328",
+    "271": "0x0183",
+    "302": "0x01C9",
+    "193": "0x00F0",
+    "260": "0x0173",
+    "502": "0x0386",
+    "212": "0x010A",
+    "423": "0x02CF",
+    "476": "0x0345",
+    "91": "0x0056",
+    "361": "0x024B",
+    "282": "0x019B",
+    "197": "0x00F5",
+    "413": "0x02BE",
+    "13": "0x014A",
+    "491": "0x036B",
+    "454": "0x031E",
+    "132": "0x008F",
+    "213": "0x010D",
+    "520": "0x039D",
+    "110": "0x0072",
+    "441": "0x02F7",
+    "437": "0x02F3",
+    "32": "0x0166",
+    "363": "0x024D",
+    "404": "0x02A3",
+    "458": "0x0325",
+    "111": "0x0074",
+    "478": "0x034B",
+    "55": "0x001F",
+    "73": "0x0042",
+    "56": "0x0021",
+    "208": "0x0104",
+    "34": "0x016B",
+    "453": "0x031B",
+    "209": "0x0106",
+    "438": "0x02F4",
+    "201": "0x00FA",
+    "393": "0x0294",
+    "431": "0x02E6",
+    "42": "0x0181",
+    "410": "0x02B5",
+    "318": "0x01EC",
+    "190": "0x00EB",
+    "407": "0x02AC",
+    "317": "0x01E9",
+    "270": "0x0182",
+    "234": "0x014C",
+    "17": "0x0154",
+    "291": "0x01A8",
+    "329": "0x01FF",
+    "200": "0x00F9",
+    "350": "0x022D",
+    "484": "0x035D",
+    "371": "0x025F",
+    "358": "0x0245",
+    "353": "0x0236",
+    "199": "0x00F8",
+    "139": "0x00A3",
+    "69": "0x0037",
+    "173": "0x00D4",
+    "44": "0x0183",
+    "145": "0x00A7",
+    "18": "0x0157",
+    "312": "0x01DA",
+    "529": "0x03BC",
+    "180": "0x00DE",
+    "276": "0x018C",
+    "121": "0x0083",
+    "74": "0x0045",
+    "64": "0x0033",
+    "192": "0x00EF",
+    "320": "0x01F1",
+    "195": "0x00F1",
+    "39": "0x0179",
+    "60": "0x002D",
+    "269": "0x0181",
+    "206": "0x0100",
+    "293": "0x01AE",
+    "101": "0x0065",
+    "179": "0x00DC",
+    "70": "0x0039",
+    "160": "0x00C1",
+    "14": "0x014C",
+    "285": "0x01A0",
+    "447": "0x0309",
+    "433": "0x02EC",
+    "467": "0x0337",
+    "338": "0x021A",
+    "479": "0x034E",
+    "490": "0x036A",
+    "63": "0x0032",
+    "511": "0x0399",
+    "232": "0x0147",
+    "227": "0x013E",
+    "355": "0x023C",
+    "430": "0x02E4",
+    "265": "0x017F",
+    "360": "0x0248",
+    "464": "0x032F",
+    "131": "0x008D",
+    "171": "0x00D2",
+    "334": "0x020E",
+    "215": "0x010F",
+    "481": "0x0354",
+    "97": "0x005E",
+    "301": "0x01C6",
+    "369": "0x0259",
+    "246": "0x0157",
+    "412": "0x02BB",
+    "367": "0x0253",
+    "422": "0x02CC",
+    "104": "0x0069",
+    "58": "0x0027",
+    "151": "0x00B6",
+    "424": "0x02D2",
+    "373": "0x0265",
+    "211": "0x0108",
+    "188": "0x00E6",
+    "426": "0x02D8",
+    "356": "0x023F",
+    "294": "0x01B1",
+    "184": "0x00E3",
+    "136": "0x009B",
+    "523": "0x03A6",
+    "99": "0x0062",
+    "390": "0x028A",
+    "382": "0x0278",
+    "113": "0x0077",
+    "220": "0x0133",
+    "354": "0x0239",
+    "504": "0x038B",
+    "230": "0x0143",
+    "324": "0x01FA",
+    "31": "0x0164",
+    "277": "0x018F",
+    "278": "0x0192",
+    "2": "0x0143",
+    "368": "0x0256",
+    "444": "0x0300",
+    "162": "0x00C2",
+    "462": "0x032D",
+    "186": "0x00E5",
+    "123": "0x0086",
+    "389": "0x0287",
+    "483": "0x035A",
+    "331": "0x0205",
+    "103": "0x0068",
+    "406": "0x02A9",
+    "501": "0x0383",
+    "381": "0x0277",
+    "62": "0x0031",
+    "292": "0x01AB",
+    "88": "0x0052",
+    "216": "0x0111",
+    "375": "0x026A",
+    "118": "0x007F",
+    "316": "0x01E6",
+    "202": "0x00FB",
+    "157": "0x00C0",
+    "19": "0x015A",
+    "134": "0x0095",
+    "124": "0x0087",
+    "191": "0x00ED",
+    "409": "0x02B2",
+    "442": "0x02FA",
+    "403": "0x02A0",
+    "214": "0x010E",
+    "394": "0x0296",
+    "61": "0x0030",
+    "443": "0x02FD",
+    "399": "0x029E",
+    "207": "0x0102",
+    "377": "0x0270",
+    "366": "0x0250",
+    "494": "0x036E",
+    "337": "0x0218",
+    "386": "0x027E",
+    "465": "0x0330",
+    "411": "0x02B8",
+    "109": "0x0071",
+    "120": "0x0081",
+    "417": "0x02C7",
+    "526": "0x03B1",
+    "222": "0x0136",
+    "405": "0x02A6",
+    "36": "0x0171",
+    "224": "0x0139",
+    "445": "0x0303",
+    "280": "0x0198",
+    "505": "0x038E",
+    "219": "0x0131",
+    "20": "0x015C",
+    "43": "0x0182",
+    "525": "0x03B0",
+    "326": "0x01FC",
+    "307": "0x01D1",
+    "300": "0x01C3",
+    "94": "0x005A"
+  },
+  "variables": {
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC890",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC88E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC89E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC893",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC892",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC89C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC89A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8A0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT": {
+      "name": "TMPLEFT",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC891",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC894",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}
