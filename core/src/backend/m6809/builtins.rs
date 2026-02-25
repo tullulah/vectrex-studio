@@ -1421,28 +1421,35 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
     
-    // MIN(a,b)
+    // MIN(a,b) - uses CMPD (doesn't mutate D) to avoid reloading TMPLEFT
     if matches!(up.as_str(), "MIN"|"MATH_MIN") {
         if args.len() < 2 { out.push_str("    LDD #0\n    STD RESULT\n"); return true; }
-    emit_expr(&args[0], out, fctx, string_map, opts);
+        emit_expr(&args[0], out, fctx, string_map, opts);
         out.push_str("    LDD RESULT\n    STD TMPLEFT\n");
-    emit_expr(&args[1], out, fctx, string_map, opts);
-        out.push_str("    LDD RESULT\n    STD TMPRIGHT\n");
-        let use_right = fresh_label("MIN_USE_R");
-        let done = fresh_label("MIN_DONE");
-        out.push_str(&format!("    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BGT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD TMPRIGHT\n{}: STD RESULT\n", use_right, done, use_right, done));
+        emit_expr(&args[1], out, fctx, string_map, opts);
+        // RESULT = second arg; D still valid from emit_expr for arg1
+        let first_wins = fresh_label("MIN_FIRST");
+        let done      = fresh_label("MIN_DONE");
+        // Compare TMPLEFT (first) with RESULT (second)
+        out.push_str(&format!(
+            "    LDD TMPLEFT\n    CMPD RESULT\n    BLE {}\n    BRA {}\n{}: STD RESULT\n{}: \n",
+            first_wins, done, first_wins, done
+        ));
         return true;
     }
-    // MAX(a,b)
+    // MAX(a,b) - uses CMPD (doesn't mutate D) to avoid reloading TMPLEFT
     if matches!(up.as_str(), "MAX"|"MATH_MAX") {
         if args.len() < 2 { out.push_str("    LDD #0\n    STD RESULT\n"); return true; }
-    emit_expr(&args[0], out, fctx, string_map, opts);
+        emit_expr(&args[0], out, fctx, string_map, opts);
         out.push_str("    LDD RESULT\n    STD TMPLEFT\n");
-    emit_expr(&args[1], out, fctx, string_map, opts);
-        out.push_str("    LDD RESULT\n    STD TMPRIGHT\n");
-        let use_right = fresh_label("MAX_USE_R");
-        let done = fresh_label("MAX_DONE");
-        out.push_str(&format!("    LDD TMPLEFT\n    SUBD TMPRIGHT\n    BLT {}\n    LDD TMPLEFT\n    BRA {}\n{}: LDD TMPRIGHT\n{}: STD RESULT\n", use_right, done, use_right, done));
+        emit_expr(&args[1], out, fctx, string_map, opts);
+        // RESULT = second arg
+        let first_wins = fresh_label("MAX_FIRST");
+        let done      = fresh_label("MAX_DONE");
+        out.push_str(&format!(
+            "    LDD TMPLEFT\n    CMPD RESULT\n    BGE {}\n    BRA {}\n{}: STD RESULT\n{}: \n",
+            first_wins, done, first_wins, done
+        ));
         return true;
     }
     // CLAMP(v, lo, hi)
