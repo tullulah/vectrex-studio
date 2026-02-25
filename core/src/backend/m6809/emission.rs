@@ -176,7 +176,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     }
     if w.contains("VECTREX_PRINT_TEXT") {
         let start_line = out.lines().count() + 1;
-        let function_code = "VECTREX_PRINT_TEXT:\n    ; CRITICAL: Print_Str_d requires DP=$D0 and signature is (Y, X, string)\n    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)\n    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n    ; NOTE: Do NOT set VIA_cntl here - Reset0Int already set $CC (/ZERO active)\n    ;       Setting $98 would release /ZERO prematurely, causing integrators to drift\n    ;       toward joystick DAC value. Let Moveto_d_7F handle VIA_cntl via $CE.\n    LDA #$D0\n    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n    LDU VAR_ARG2   ; string pointer (ARG2 = third param)\n    LDA VAR_ARG1+1 ; Y (ARG1 = second param)\n    LDB VAR_ARG0+1 ; X (ARG0 = first param)\n    JSR Print_Str_d\n    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)\n    RTS\n";
+        let function_code = "VECTREX_PRINT_TEXT:\n    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)\n    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)\n    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n    LDA #$D0\n    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n    JSR Reset0Ref  ; Reset beam to center for absolute text positioning\n    LDU VAR_ARG2   ; string pointer (ARG2 = third param)\n    LDA VAR_ARG1+1 ; Y (ARG1 = second param)\n    LDB VAR_ARG0+1 ; X (ARG0 = first param)\n    JSR Print_Str_d\n    LDA #$80\n    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)\n    JSR $F1AF      ; DP_to_C8 (restore before return)\n    RTS\n";
         out.push_str(function_code);
         let end_line = out.lines().count();
         
@@ -221,7 +221,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     }
     if w.contains("VECTREX_PRINT_NUMBER") {
         out.push_str(
-            "VECTREX_PRINT_NUMBER:\n    ; Print signed decimal number (-9999 to 9999)\n    ; ARG0=X, ARG1=Y, ARG2=value\n    ; STEP 1: Convert number to decimal string (DP=$C8)\n    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n    STD >RESULT      ; Save to temp\n    LDX #NUM_STR    ; String buffer pointer\n    ; Check sign: negative values get '-' prefix and are negated\n    CMPD #0\n    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion\n    LDA #'-'\n    STA ,X+          ; Store '-', advance buffer pointer\n    LDD >RESULT\n    COMA\n    COMB\n    ADDD #1          ; Two's complement negation -> absolute value\n    STD >RESULT\n    ; --- 1000s digit ---\n.PN_DIV1000:\n    CLR ,X           ; Counter = 0 (in buffer)\n.PN_L1000:\n    LDD >RESULT\n    SUBD #1000\n    BMI .PN_D1000\n    STD >RESULT\n    INC ,X\n    BRA .PN_L1000\n.PN_D1000:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 100s digit ---\n    CLR ,X\n.PN_L100:\n    LDD >RESULT\n    SUBD #100\n    BMI .PN_D100\n    STD >RESULT\n    INC ,X\n    BRA .PN_L100\n.PN_D100:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 10s digit ---\n    CLR ,X\n.PN_L10:\n    LDD >RESULT\n    SUBD #10\n    BMI .PN_D10\n    STD >RESULT\n    INC ,X\n    BRA .PN_L10\n.PN_D10:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 1s digit (remainder) ---\n    LDD >RESULT\n    ADDB #'0'\n    STB ,X+\n    LDA #$80          ; Terminator (same format as FCC/FCB strings)\n    STA ,X\n.PN_AFTER_CONVERT:\n    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n    ; NOTE: Do NOT set VIA_cntl=$98 here - would prematurely release /ZERO\n    LDA #$D0\n    TFR A,DP         ; Set Direct Page to $D0 for BIOS\n    LDA >VAR_ARG1+1  ; Y coordinate\n    LDB >VAR_ARG0+1  ; X coordinate\n    LDU #NUM_STR     ; String pointer\n    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n    JSR $F1AF        ; DP_to_C8 - restore DP\n    RTS\n"
+            "VECTREX_PRINT_NUMBER:\n    ; Print signed decimal number (-9999 to 9999)\n    ; ARG0=X, ARG1=Y, ARG2=value\n    ; STEP 1: Convert number to decimal string (DP=$C8)\n    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n    STD >RESULT      ; Save to temp\n    LDX #NUM_STR    ; String buffer pointer\n    ; Check sign: negative values get '-' prefix and are negated\n    CMPD #0\n    BPL .PN_DIV1000  ; D >= 0: go directly to digit conversion\n    LDA #'-'\n    STA ,X+          ; Store '-', advance buffer pointer\n    LDD >RESULT\n    COMA\n    COMB\n    ADDD #1          ; Two's complement negation -> absolute value\n    STD >RESULT\n    ; --- 1000s digit ---\n.PN_DIV1000:\n    CLR ,X           ; Counter = 0 (in buffer)\n.PN_L1000:\n    LDD >RESULT\n    SUBD #1000\n    BMI .PN_D1000\n    STD >RESULT\n    INC ,X\n    BRA .PN_L1000\n.PN_D1000:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 100s digit ---\n    CLR ,X\n.PN_L100:\n    LDD >RESULT\n    SUBD #100\n    BMI .PN_D100\n    STD >RESULT\n    INC ,X\n    BRA .PN_L100\n.PN_D100:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 10s digit ---\n    CLR ,X\n.PN_L10:\n    LDD >RESULT\n    SUBD #10\n    BMI .PN_D10\n    STD >RESULT\n    INC ,X\n    BRA .PN_L10\n.PN_D10:\n    LDA ,X\n    ADDA #'0'\n    STA ,X+\n    ; --- 1s digit (remainder) ---\n    LDD >RESULT\n    ADDB #'0'\n    STB ,X+\n    LDA #$80          ; Terminator (same format as FCC/FCB strings)\n    STA ,X\n.PN_AFTER_CONVERT:\n    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n    LDA #$D0\n    TFR A,DP         ; Set Direct Page to $D0 for BIOS\n    JSR Reset0Ref    ; Reset beam to center for absolute text positioning\n    LDA >VAR_ARG1+1  ; Y coordinate\n    LDB >VAR_ARG0+1  ; X coordinate\n    LDU #NUM_STR     ; String pointer\n    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n    LDA #$80\n    STA >$D004       ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)\n    JSR $F1AF        ; DP_to_C8 - restore DP\n    RTS\n"
         );
     }
     if w.contains("VECTREX_MOVE_TO") {
@@ -244,6 +244,8 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
         out.push_str("    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning\n");
+        out.push_str("    LDA #$80\n");
+        out.push_str("    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)\n");
 
         // Set intensity and move to start — use extended addressing since DP=$D0
         out.push_str("    ; Set intensity\n");
@@ -1315,6 +1317,8 @@ DSWM_NEXT_NO_NEGATE_X:\n\
         LDA #$D0\n\
         TFR A,DP\n\
         JSR Reset0Ref\n\
+        LDA #$80\n\
+        STA <$04           ; VIA_t1_cnt_lo = $80 (ensure correct scale)\n\
         \n\
         ; Set intensity (from stack)\n\
         PULS A                 ; Get intensity from stack\n\
@@ -1407,6 +1411,8 @@ DCR_after_intensity:\n\
         LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
         JSR Draw_Line_d\n\
         \n\
+        LDA #$C8\n\
+        TFR A,DP           ; Restore DP=$C8 before return\n\
         RTS\n\
         \n"
         );

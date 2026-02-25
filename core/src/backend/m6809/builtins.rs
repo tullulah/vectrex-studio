@@ -836,6 +836,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 // Set DP=$D0 for BIOS calls, reset beam to center
                 out.push_str("    LDA #$D0\n    TFR A,DP\n");
                 out.push_str("    JSR Reset0Ref\n");
+                out.push_str("    LDA #$80\n    STA <$04\n"); // VIA_t1_cnt_lo = $80
                 // Set intensity
                 if *intensity == 0x5F {
                     out.push_str("    JSR Intensity_5F\n");
@@ -919,7 +920,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                             // Set intensity once for all edges
                             if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                             // Set DP once for all VIA operations (inline for now)
-                            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                             
                             for i in 0..n {
                                 let (x0,y0)=verts[i];
@@ -967,7 +968,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                     }
                     // Emit optimized similar to polygon - intensity FIRST, then Reset0Ref
                     if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
-                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                     let (sx,sy)=verts[0];
                     out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF), (sx & 0xFF)));
                     for i in 0..segs {
@@ -1028,7 +1029,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                     use std::f64::consts::PI;
                     let mut verts: Vec<(i32,i32)> = Vec::new();
                     for k in 0..segs { let ang = 2.0*PI*(k as f64)/(segs as f64); let x = (*xc as f64)+r*ang.cos(); let y= (*yc as f64)+r*ang.sin(); verts.push((x.round() as i32,y.round() as i32)); }
-                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                     if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                     let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                     for i in 0..segs { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[((i+1)%segs) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
@@ -1046,7 +1047,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 let steps = segs;
                 let mut verts: Vec<(i32,i32)> = Vec::new();
                 for k in 0..=steps { let t = k as f64 / steps as f64; let ang = start + sweep * t; let mut x= (*xc as f64)+ r*ang.cos(); let mut y= (*yc as f64)+ r*ang.sin(); x = x.clamp(-120.0,120.0); y = y.clamp(-120.0,120.0); verts.push((x.round() as i32,y.round() as i32)); }
-                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                 if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                 let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                 for i in 0..steps { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[(i+1) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
@@ -1068,7 +1069,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 let steps = segs;
                 let mut verts: Vec<(i32,i32)> = Vec::new();
                 for k in 0..=steps { let t = k as f64 / steps as f64; let ang = total_ang * t; let r = start_r + (end_r - start_r)*t; let mut x= (*xc as f64)+ r*ang.cos(); let mut y= (*yc as f64)+ r*ang.sin(); x = x.clamp(-120.0,120.0); y = y.clamp(-120.0,120.0); verts.push((x.round() as i32,y.round() as i32)); }
-                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+                out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
                 if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                 let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                 for i in 0..steps { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[(i+1) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
@@ -1083,7 +1084,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
             if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
             let (x0, y0, w0, h0) = (*x, *y, *w, *h);
             if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
             out.push_str("    CLR Vec_Misc_Count\n");
             out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));   // right
@@ -1114,7 +1115,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
             if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
             let (x0, y0, w0, h0) = (*x, *y, *w, *h);
             if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             // First scanline: absolute position from (0,0)
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
             out.push_str("    CLR Vec_Misc_Count\n");

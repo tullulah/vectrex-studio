@@ -43,7 +43,7 @@ pub fn emit_draw_circle(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -102,7 +102,7 @@ pub fn emit_draw_rect(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             // Move to start
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -176,7 +176,7 @@ pub fn emit_draw_polygon(
         } else {
             out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
         }
-        out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+        out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
         
         let (sx, sy) = verts[0];
         out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -238,7 +238,7 @@ pub fn emit_draw_circle_seg(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -304,7 +304,7 @@ pub fn emit_draw_arc(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -360,7 +360,7 @@ pub fn emit_draw_filled_rect(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             // Draw horizontal scanlines using relative Moveto_d between lines
             // (absolute Moveto_d per line would accumulate position error)
@@ -432,7 +432,7 @@ pub fn emit_draw_ellipse(
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n");
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -511,6 +511,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         LDA #$D0\n\
         TFR A,DP\n\
         JSR Reset0Ref\n\
+        LDA #$80\n\
+        STA <$04           ; VIA_t1_cnt_lo = $80 (ensure correct scale)\n\
         \n\
         ; Set intensity (from stack)\n\
         PULS A                 ; Get intensity from stack\n\
@@ -603,11 +605,13 @@ DCR_after_intensity:\n\
         LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
         JSR Draw_Line_d\n\
         \n\
+        LDA #$C8\n\
+        TFR A,DP           ; Restore DP=$C8 before return\n\
         RTS\n\
         \n"
         );
     }
-    
+
     // DRAW_RECT_RUNTIME: Draw rectangle with runtime parameters
     if needed.contains("DRAW_RECT_RUNTIME") {
         out.push_str("DRAW_RECT_RUNTIME:\n");
@@ -630,6 +634,8 @@ DCR_after_intensity:\n\
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
         out.push_str("    JSR Reset0Ref\n");
+        out.push_str("    LDA #$80\n");
+        out.push_str("    STA <$04            ; VIA_t1_cnt_lo = $80 (ensure correct scale)\n");
         out.push_str("    \n");
         out.push_str("    ; Set intensity\n");
         out.push_str("    LDA 4,S             ; intensity\n");
@@ -667,10 +673,12 @@ DCR_after_intensity:\n\
         out.push_str("    LDB #0\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
+        out.push_str("    LDA #$C8\n");
+        out.push_str("    TFR A,DP            ; Restore DP=$C8 before return\n");
         out.push_str("    LEAS 5,S            ; Clean stack\n");
         out.push_str("    RTS\n\n");
     }
-    
+
     // DRAW_LINE_WRAPPER: Only emit if DRAW_LINE is used
     // CRITICAL FIX (2026-01-18): Copy exact implementation from core
     // The previous version was missing DP setup ($D0 for BIOS) and VIA_cntl initialization
@@ -685,6 +693,8 @@ DCR_after_intensity:\n\
         out.push_str("    LDA #$D0\n");
         out.push_str("    TFR A,DP\n");
         out.push_str("    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning\n");
+        out.push_str("    LDA #$80\n");
+        out.push_str("    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)\n");
 
         // Set intensity and move to start - USE EXTENDED ADDRESSING (>)
         out.push_str("    ; ALWAYS set intensity (no optimization)\n");
