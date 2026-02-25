@@ -12609,14 +12609,18 @@ _FUJI_LEVEL1_V2_FG_OBJECTS:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
+    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
+    ;       causing integrators to drift toward joystick DAC value.
+    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
-    LDA VAR_ARG1+1 ; Y coordinate
-    LDB VAR_ARG0+1 ; X coordinate
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
+    LDA #$80
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -12636,45 +12640,95 @@ MUL16:
     RTS
 
 DIV16:
-    ; Divide 16-bit X / D -> D
-    ; Simple implementation
-    PSHS X,D
-    LDD #0         ; Quotient
-.DIV16_LOOP:
-    PSHS D         ; Save quotient
-    LDD 4,S        ; Load dividend (after PSHS D)
-    CMPD 2,S       ; Compare with divisor (after PSHS D)
-    PULS D         ; Restore quotient
-    BLT .DIV16_END
-    ADDD #1        ; Increment quotient
-    LDX 2,S
-    PSHS D
-    LDD 2,S        ; Divisor
-    LEAX D,X       ; Subtract divisor
-    STX 4,S
-    PULS D
-    BRA .DIV16_LOOP
-.DIV16_END:
-    LEAS 4,S
+    ; Signed 16-bit division: D = X / D
+    ; X = dividend (i16), D = divisor (i16) -> D = quotient
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .D16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1 (dividend was negative)
+    BRA .D16_RCHECK
+.D16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.D16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .D16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+    LDA TMPPTR2
+    EORA #1
+    STA TMPPTR2         ; toggle sign flag (XOR with 1)
+.D16_RPOS:
+    LDD #0
+    STD RESULT          ; quotient = 0
+.D16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .D16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    LDD RESULT
+    ADDD #1
+    STD RESULT          ; quotient++
+    BRA .D16_LOOP
+.D16_END:
+    LDD RESULT          ; D = unsigned quotient
+    LDA TMPPTR2
+    BEQ .D16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate for negative result
+.D16_DONE:
     RTS
 
 MOD16:
-    ; Modulo 16-bit X % D -> D
-    PSHS X,D
-.MOD16_LOOP:
-    PSHS D         ; Save D
-    LDD 4,S        ; Load dividend (after PSHS D)
-    CMPD 2,S       ; Compare with divisor (after PSHS D)
-    PULS D         ; Restore D
-    BLT .MOD16_END
-    LDX 2,S
-    LDD ,S
-    LEAX D,X
-    STX 2,S
-    BRA .MOD16_LOOP
-.MOD16_END:
-    LDD 2,S        ; Remainder
-    LEAS 4,S
+    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
+    ; X = dividend (i16), D = divisor (i16) -> D = remainder
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .M16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1
+    BRA .M16_RCHECK
+.M16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.M16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .M16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+.M16_RPOS:
+.M16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .M16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    BRA .M16_LOOP
+.M16_END:
+    LDD TMPVAL          ; D = |remainder|
+    LDA TMPPTR2
+    BEQ .M16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate (same sign as dividend)
+.M16_DONE:
     RTS
 
 ; === JOYSTICK BUILTIN SUBROUTINES ===
@@ -12684,6 +12738,7 @@ J1X_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
     LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -12697,6 +12752,7 @@ J1Y_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
     LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -12712,6 +12768,8 @@ DRAW_LINE_WRAPPER:
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref   ; Reset beam to center (0,0) before positioning
+    LDA #$80
+    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)
     ; ALWAYS set intensity (no optimization)
     LDA >DRAW_LINE_ARGS+8+1  ; intensity (low byte) - EXTENDED addressing
     JSR Intensity_a
