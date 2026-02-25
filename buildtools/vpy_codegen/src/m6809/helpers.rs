@@ -58,7 +58,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("DRAW_CIRCLE_DIAM", 1, "Circle diameter");
         ram.allocate("DRAW_CIRCLE_INTENSITY", 1, "Circle intensity");
         ram.allocate("DRAW_CIRCLE_RADIUS", 1, "Circle radius (diam/2) - used in segment drawing");
-        ram.allocate("DRAW_CIRCLE_TEMP", 6, "Circle temporary buffer");
+        ram.allocate("DRAW_CIRCLE_TEMP", 8, "Circle temporary buffer (8 bytes: radius16, xc16, yc16, r/4, 3r/4)");
     }
     
     // NOTE: Check both DRAW_RECT and DRAW_RECT_RUNTIME
@@ -398,8 +398,9 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("VECTREX_PRINT_TEXT:\n");
         asm.push_str("    ; VPy signature: PRINT_TEXT(x, y, string)\n");
         asm.push_str("    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n");
-        asm.push_str("    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)\n");
-        asm.push_str("    STA >$D00C     ; VIA_cntl\n");
+        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely\n");
+        asm.push_str("    ;       causing integrators to drift toward joystick DAC value.\n");
+        asm.push_str("    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.\n");
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
         asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
@@ -485,8 +486,7 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    \n");
         asm.push_str(".PN_AFTER_CONVERT:\n");
         asm.push_str("    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n");
-        asm.push_str("    LDA #$98\n");
-        asm.push_str("    STA >$D00C       ; VIA_cntl = $98 (DAC mode)\n");
+        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely\n");
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
         asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");

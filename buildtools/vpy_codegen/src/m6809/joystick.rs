@@ -23,7 +23,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
         out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
         out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)\n");
-        out.push_str("    JSR Reset0Int ; Restore integrators to zero (Joy_Analog leaves them at joystick pos)\n");
+        out.push_str("    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators\n");
         out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)\n");
         out.push_str("    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)\n");
         out.push_str("    SEX          ; Sign-extend B to D\n");
@@ -41,7 +41,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
         out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
         out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)\n");
-        out.push_str("    JSR Reset0Int ; Restore integrators to zero (Joy_Analog leaves them at joystick pos)\n");
+        out.push_str("    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators\n");
         out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)\n");
         out.push_str("    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)\n");
         out.push_str("    SEX          ; Sign-extend B to D\n");

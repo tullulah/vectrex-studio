@@ -8,6 +8,8 @@ META MUSIC = music1
 
 x = 0
 y = 0
+circle_x = 0
+circle_y = 0
 
 def main():
     pass
@@ -26,6 +28,6 @@ def loop():
 
     # Draw a circle that follows joystick position (scaled down)
     # This is the critical test: circle must NOT disappear on input
-    # circle_x = x / 2
-    # circle_y = y / 2
-    # DRAW_CIRCLE(circle_x, circle_y, 15, 80)
+    circle_x = x / 2
+    circle_y = y / 2
+    DRAW_CIRCLE(circle_x, circle_y, 15, 80)

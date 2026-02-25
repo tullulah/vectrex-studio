@@ -178,50 +178,105 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    RTS\n\n");
     }
     
-    // DIV16: Divide X / D -> D (quotient)
+    // DIV16: Signed 16-bit division X / D -> D (quotient)
+    // Calling convention: X = dividend (signed), D = divisor (signed)
+    // Uses TMPVAL (|dividend|), TMPPTR (|divisor|), TMPPTR2 (sign flag)
+    // Result returned in D. Also stored in RESULT.
     if needed.contains("DIV16") {
-            out.push_str("DIV16:\n");
-        out.push_str("    ; Divide 16-bit X / D -> D\n");
-        out.push_str("    ; Simple implementation\n");
-        out.push_str("    PSHS X,D\n");
-        out.push_str("    LDD #0         ; Quotient\n");
-        out.push_str(".DIV16_LOOP:\n");
-        out.push_str("    PSHS D         ; Save quotient\n");
-        out.push_str("    LDD 4,S        ; Load dividend (after PSHS D)\n");
-        out.push_str("    CMPD 2,S       ; Compare with divisor (after PSHS D)\n");
-        out.push_str("    PULS D         ; Restore quotient\n");
-        out.push_str("    BLT .DIV16_END\n");
-        out.push_str("    ADDD #1        ; Increment quotient\n");
-        out.push_str("    LDX 2,S\n");
-        out.push_str("    PSHS D\n");
-        out.push_str("    LDD 2,S        ; Divisor\n");
-        out.push_str("    LEAX D,X       ; Subtract divisor\n");
-        out.push_str("    STX 4,S\n");
-        out.push_str("    PULS D\n");
-        out.push_str("    BRA .DIV16_LOOP\n");
-        out.push_str(".DIV16_END:\n");
-        out.push_str("    LEAS 4,S\n");
+        out.push_str("DIV16:\n");
+        out.push_str("    ; Signed 16-bit division: D = X / D\n");
+        out.push_str("    ; X = dividend (i16), D = divisor (i16) -> D = quotient\n");
+        out.push_str("    STD TMPPTR          ; Save divisor\n");
+        out.push_str("    TFR X,D             ; D = dividend (TFR does NOT set flags!)\n");
+        out.push_str("    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte\n");
+        out.push_str("    BPL .D16_DPOS       ; if dividend >= 0, skip negation\n");
+        out.push_str("    COMA\n");
+        out.push_str("    COMB\n");
+        out.push_str("    ADDD #1             ; D = |dividend|\n");
+        out.push_str("    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)\n");
+        out.push_str("    LDA #1\n");
+        out.push_str("    STA TMPPTR2         ; sign_flag = 1 (dividend was negative)\n");
+        out.push_str("    BRA .D16_RCHECK\n");
+        out.push_str(".D16_DPOS:\n");
+        out.push_str("    STD TMPVAL          ; dividend is positive, store as-is\n");
+        out.push_str("    LDA #0\n");
+        out.push_str("    STA TMPPTR2         ; sign_flag = 0 (positive result)\n");
+        out.push_str(".D16_RCHECK:\n");
+        out.push_str("    LDD TMPPTR          ; D = divisor\n");
+        out.push_str("    BPL .D16_RPOS       ; if divisor >= 0, skip negation\n");
+        out.push_str("    COMA\n");
+        out.push_str("    COMB\n");
+        out.push_str("    ADDD #1             ; D = |divisor|\n");
+        out.push_str("    STD TMPPTR          ; TMPPTR = |divisor|\n");
+        out.push_str("    LDA TMPPTR2\n");
+        out.push_str("    EORA #1\n");
+        out.push_str("    STA TMPPTR2         ; toggle sign flag (XOR with 1)\n");
+        out.push_str(".D16_RPOS:\n");
+        out.push_str("    LDD #0\n");
+        out.push_str("    STD RESULT          ; quotient = 0\n");
+        out.push_str(".D16_LOOP:\n");
+        out.push_str("    LDD TMPVAL\n");
+        out.push_str("    SUBD TMPPTR         ; |dividend| - |divisor|\n");
+        out.push_str("    BLO .D16_END        ; if |dividend| < |divisor|, done\n");
+        out.push_str("    STD TMPVAL          ; update remainder\n");
+        out.push_str("    LDD RESULT\n");
+        out.push_str("    ADDD #1\n");
+        out.push_str("    STD RESULT          ; quotient++\n");
+        out.push_str("    BRA .D16_LOOP\n");
+        out.push_str(".D16_END:\n");
+        out.push_str("    LDD RESULT          ; D = unsigned quotient\n");
+        out.push_str("    LDA TMPPTR2\n");
+        out.push_str("    BEQ .D16_DONE       ; zero = positive result\n");
+        out.push_str("    COMA\n");
+        out.push_str("    COMB\n");
+        out.push_str("    ADDD #1             ; negate for negative result\n");
+        out.push_str(".D16_DONE:\n");
         out.push_str("    RTS\n\n");
     }
-    
-    // MOD16: Modulo X % D -> D (remainder) - ALWAYS EMIT (conditional detection broken)
+
+    // MOD16: Signed 16-bit modulo X % D -> D (remainder, same sign as dividend)
+    // Calling convention: X = dividend (signed), D = divisor (signed)
+    // Uses TMPVAL (|dividend|), TMPPTR (|divisor|), TMPPTR2 (sign flag)
     out.push_str("MOD16:\n");
-    out.push_str("    ; Modulo 16-bit X % D -> D\n");
-    out.push_str("    PSHS X,D\n");
-    out.push_str(".MOD16_LOOP:\n");
-    out.push_str("    PSHS D         ; Save D\n");
-    out.push_str("    LDD 4,S        ; Load dividend (after PSHS D)\n");
-    out.push_str("    CMPD 2,S       ; Compare with divisor (after PSHS D)\n");
-    out.push_str("    PULS D         ; Restore D\n");
-    out.push_str("    BLT .MOD16_END\n");
-    out.push_str("    LDX 2,S\n");
-    out.push_str("    LDD ,S\n");
-    out.push_str("    LEAX D,X\n");
-    out.push_str("    STX 2,S\n");
-    out.push_str("    BRA .MOD16_LOOP\n");
-    out.push_str(".MOD16_END:\n");
-    out.push_str("    LDD 2,S        ; Remainder\n");
-    out.push_str("    LEAS 4,S\n");
+    out.push_str("    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)\n");
+    out.push_str("    ; X = dividend (i16), D = divisor (i16) -> D = remainder\n");
+    out.push_str("    STD TMPPTR          ; Save divisor\n");
+    out.push_str("    TFR X,D             ; D = dividend (TFR does NOT set flags!)\n");
+    out.push_str("    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte\n");
+    out.push_str("    BPL .M16_DPOS       ; if dividend >= 0, skip negation\n");
+    out.push_str("    COMA\n");
+    out.push_str("    COMB\n");
+    out.push_str("    ADDD #1             ; D = |dividend|\n");
+    out.push_str("    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)\n");
+    out.push_str("    LDA #1\n");
+    out.push_str("    STA TMPPTR2         ; sign_flag = 1\n");
+    out.push_str("    BRA .M16_RCHECK\n");
+    out.push_str(".M16_DPOS:\n");
+    out.push_str("    STD TMPVAL          ; dividend is positive, store as-is\n");
+    out.push_str("    LDA #0\n");
+    out.push_str("    STA TMPPTR2         ; sign_flag = 0 (positive result)\n");
+    out.push_str(".M16_RCHECK:\n");
+    out.push_str("    LDD TMPPTR          ; D = divisor\n");
+    out.push_str("    BPL .M16_RPOS       ; if divisor >= 0, skip negation\n");
+    out.push_str("    COMA\n");
+    out.push_str("    COMB\n");
+    out.push_str("    ADDD #1             ; D = |divisor|\n");
+    out.push_str("    STD TMPPTR          ; TMPPTR = |divisor|\n");
+    out.push_str(".M16_RPOS:\n");
+    out.push_str(".M16_LOOP:\n");
+    out.push_str("    LDD TMPVAL\n");
+    out.push_str("    SUBD TMPPTR         ; |dividend| - |divisor|\n");
+    out.push_str("    BLO .M16_END        ; if |dividend| < |divisor|, done\n");
+    out.push_str("    STD TMPVAL          ; update remainder\n");
+    out.push_str("    BRA .M16_LOOP\n");
+    out.push_str(".M16_END:\n");
+    out.push_str("    LDD TMPVAL          ; D = |remainder|\n");
+    out.push_str("    LDA TMPPTR2\n");
+    out.push_str("    BEQ .M16_DONE       ; zero = positive result\n");
+    out.push_str("    COMA\n");
+    out.push_str("    COMB\n");
+    out.push_str("    ADDD #1             ; negate (same sign as dividend)\n");
+    out.push_str(".M16_DONE:\n");
     out.push_str("    RTS\n\n");
     
     // SQRT_HELPER: Square root (Newton-Raphson with DIV16)

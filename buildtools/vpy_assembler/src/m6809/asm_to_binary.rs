@@ -1618,6 +1618,22 @@ fn emit_addb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
             emitter.emit(off as u8);
         }
         Ok(())
+    } else if operand.starts_with('>') {
+        // Forced extended mode (lwasm compatibility)
+        let operand_without_prefix = &operand[1..];
+        match resolve_address(operand_without_prefix, equates) {
+            Ok(addr) => {
+                emitter.emit(0xFB); // ADDB extended opcode
+                emitter.emit_word(addr);
+                Ok(())
+            },
+            Err(e) if e.starts_with("SYMBOL:") => {
+                let (symbol, addend) = parse_symbol_and_addend(&e)?;
+                emitter.emit_extended_symbol_ref(0xFB, &symbol, addend); // ADDB extended
+                Ok(())
+            },
+            Err(e) => Err(e),
+        }
     } else {
         match evaluate_expression(operand, equates) {
             Ok(addr) => {
@@ -1757,6 +1773,22 @@ fn emit_subb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
             emitter.emit(off as u8);
         }
         Ok(())
+    } else if operand.starts_with('>') {
+        // Forced extended mode (lwasm compatibility)
+        let operand_without_prefix = &operand[1..];
+        match resolve_address(operand_without_prefix, equates) {
+            Ok(addr) => {
+                emitter.emit(0xF0); // SUBB extended opcode
+                emitter.emit_word(addr);
+                Ok(())
+            },
+            Err(e) if e.starts_with("SYMBOL:") => {
+                let (symbol, addend) = parse_symbol_and_addend(&e)?;
+                emitter.emit_extended_symbol_ref(0xF0, &symbol, addend); // SUBB extended
+                Ok(())
+            },
+            Err(e) => Err(e),
+        }
     } else {
         match evaluate_expression(operand, equates) {
             Ok(addr) => {

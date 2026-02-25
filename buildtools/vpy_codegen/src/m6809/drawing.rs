@@ -478,108 +478,134 @@ pub fn emit_draw_sprite(
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
     // DRAW_CIRCLE_RUNTIME: Draw circle with runtime parameters
     // Uses 8-segment octagon approximation (simple but effective)
+    // Copied verbatim from core/src/backend/m6809/emission.rs
     if needed.contains("DRAW_CIRCLE_RUNTIME") {
-        out.push_str("DRAW_CIRCLE_RUNTIME:\n");
-        out.push_str("    ; Input: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY\n");
-        out.push_str("    ; Draw 8-sided polygon (octagon) approximation\n");
-        out.push_str("    \n");
-        out.push_str("    ; Set DP to $D0 for BIOS calls\n");
-        out.push_str("    LDA #$D0\n");
-        out.push_str("    TFR A,DP\n");
-        out.push_str("    JSR Reset0Ref\n");
-        out.push_str("    \n");
-        out.push_str("    ; Set intensity\n");
-        out.push_str("    LDA >DRAW_CIRCLE_INTENSITY\n");
-        out.push_str("    JSR Intensity_a\n");
-        out.push_str("    \n");
-        out.push_str("    ; Calculate radius = diam / 2 (use B for 8-bit)\n");
-        out.push_str("    LDB >DRAW_CIRCLE_DIAM\n");
-        out.push_str("    LSRB                ; radius = diam / 2\n");
-        out.push_str("    STB >DRAW_CIRCLE_TEMP  ; Save radius\n");
-        out.push_str("    \n");
-        out.push_str("    ; Move to start point: (xc + radius, yc)\n");
-        out.push_str("    ; For octagon, start at rightmost point\n");
-        out.push_str("    LDB >DRAW_CIRCLE_XC\n");
-        out.push_str("    ADDB >DRAW_CIRCLE_TEMP  ; B = xc + radius\n");
-        out.push_str("    LDA >DRAW_CIRCLE_YC     ; A = yc\n");
-        out.push_str("    JSR Moveto_d            ; Move to (yc, xc+r)\n");
-        out.push_str("    \n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP  ; B = radius\n");
-        out.push_str("    STB >DRAW_CIRCLE_RADIUS  ; Save radius in RAM\n");
-        out.push_str("    \n");
-        out.push_str("    ; Precompute r/4 and 3r/4 for regular octagon segments\n");
-        out.push_str("    LDB >DRAW_CIRCLE_RADIUS  ; B = r\n");
-        out.push_str("    LSRB\n");
-        out.push_str("    LSRB                ; B = r/4\n");
-        out.push_str("    STB >DRAW_CIRCLE_TEMP    ; Save r/4\n");
-        out.push_str("    LDB >DRAW_CIRCLE_RADIUS  ; B = r\n");
-        out.push_str("    SUBB >DRAW_CIRCLE_TEMP   ; B = r - r/4 = 3r/4\n");
-        out.push_str("    STB >DRAW_CIRCLE_TEMP+1  ; Save 3r/4\n");
-        out.push_str("    \n");
-        out.push_str("    ; Draw 8 unrolled segments - regular octagon inscribed in circle\n");
-        out.push_str("    ; Counterclockwise from rightmost point (xc+r, yc)\n");
-        out.push_str("    ; Draw_Line_d(A=dy, B=dx)\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP    ; r/4\n");
-        out.push_str("    NEGB\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP    ; r/4\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4\n");
-        out.push_str("    NEGB\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP    ; r/4\n");
-        out.push_str("    NEGA\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4\n");
-        out.push_str("    NEGB\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4\n");
-        out.push_str("    NEGA\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP    ; r/4\n");
-        out.push_str("    NEGB\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4\n");
-        out.push_str("    NEGA\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP    ; r/4 (positive)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP    ; r/4\n");
-        out.push_str("    NEGA\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4 (positive)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP    ; r/4 (positive)\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP+1  ; 3r/4 (positive)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4\n");
-        out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA >DRAW_CIRCLE_TEMP+1  ; 3r/4 (positive)\n");
-        out.push_str("    LDB >DRAW_CIRCLE_TEMP    ; r/4 (positive)\n");
-        out.push_str("    JSR Draw_Line_d\n");
-        out.push_str("    \n");
-        out.push_str("    ; Restore DP to $C8\n");
-        out.push_str("    LDA #$C8\n");
-        out.push_str("    TFR A,DP\n");
-        out.push_str("    RTS\n\n");
+        out.push_str(
+            "; ============================================================================\n\
+        ; DRAW_CIRCLE_RUNTIME - Draw circle with runtime parameters\n\
+        ; ============================================================================\n\
+        ; Follows Draw_Sync_List_At pattern: read params BEFORE DP change\n\
+        ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)\n\
+        ; Uses 8 segments (regular octagon inscribed in circle) with unrolled loop\n\
+        DRAW_CIRCLE_RUNTIME:\n\
+        ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)\n\
+        ; (These are byte variables, use LDB not LDD)\n\
+        LDB DRAW_CIRCLE_INTENSITY\n\
+        PSHS B                 ; Save intensity on stack\n\
+        \n\
+        LDB DRAW_CIRCLE_DIAM\n\
+        SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)\n\
+        LSRA                   ; Divide by 2 to get radius\n\
+        RORB\n\
+        STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit)\n\
+        \n\
+        LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)\n\
+        SEX\n\
+        STD DRAW_CIRCLE_TEMP+2 ; Save xc\n\
+        \n\
+        LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)\n\
+        SEX\n\
+        STD DRAW_CIRCLE_TEMP+4 ; Save yc\n\
+        \n\
+        ; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)\n\
+        LDA #$D0\n\
+        TFR A,DP\n\
+        JSR Reset0Ref\n\
+        \n\
+        ; Set intensity (from stack)\n\
+        PULS A                 ; Get intensity from stack\n\
+        CMPA #$5F\n\
+        BEQ DCR_intensity_5F\n\
+        JSR Intensity_a\n\
+        BRA DCR_after_intensity\n\
+DCR_intensity_5F:\n\
+        JSR Intensity_5F\n\
+DCR_after_intensity:\n\
+        \n\
+        ; Move to start position: (xc + radius, yc)\n\
+        ; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4\n\
+        LDD DRAW_CIRCLE_TEMP   ; D = radius\n\
+        ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius\n\
+        TFR B,B                ; Keep X in B (low byte)\n\
+        PSHS B                 ; Save X on stack\n\
+        LDD DRAW_CIRCLE_TEMP+4 ; Load yc\n\
+        TFR B,A                ; Y to A\n\
+        PULS B                 ; X to B\n\
+        JSR Moveto_d\n\
+        \n\
+        ; Precompute r/4 and 3r/4 for regular octagon segments\n\
+        ; Radius low byte is at DRAW_CIRCLE_TEMP+1\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; Load radius (low byte)\n\
+        LSRB\n\
+        LSRB                   ; B = r/4\n\
+        STB DRAW_CIRCLE_TEMP+6 ; Save r/4 in spare byte\n\
+        LDB DRAW_CIRCLE_TEMP+1 ; Load radius\n\
+        SUBB DRAW_CIRCLE_TEMP+6 ; B = r - r/4 = 3r/4\n\
+        STB DRAW_CIRCLE_TEMP+7 ; Save 3r/4 in spare byte\n\
+        \n\
+        ; Draw 8 unrolled segments - regular octagon inscribed in circle\n\
+        ; Counterclockwise from rightmost point (xc+r, yc)\n\
+        ; Draw_Line_d(A=dy, B=dx)\n\
+        \n\
+        ; Seg 0 (0->45 deg): dy=+3r/4, dx=-r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 1 (45->90 deg): dy=+r/4, dx=-3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 2 (90->135 deg): dy=-r/4, dx=-3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 3 (135->180 deg): dy=-3r/4, dx=-r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGB\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 4 (180->225 deg): dy=-3r/4, dx=+r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 5 (225->270 deg): dy=-r/4, dx=+3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4\n\
+        NEGA\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 6 (270->315 deg): dy=+r/4, dx=+3r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        ; Seg 7 (315->360 deg): dy=+3r/4, dx=+r/4\n\
+        CLR Vec_Misc_Count\n\
+        LDA DRAW_CIRCLE_TEMP+7  ; 3r/4 (positive)\n\
+        LDB DRAW_CIRCLE_TEMP+6  ; r/4 (positive)\n\
+        JSR Draw_Line_d\n\
+        \n\
+        RTS\n\
+        \n"
+        );
     }
     
     // DRAW_RECT_RUNTIME: Draw rectangle with runtime parameters
