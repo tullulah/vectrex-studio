@@ -26,7 +26,7 @@ pub fn emit_draw_circle(
                 }
             }
             
-            let segs = 16; // 16-sided polygon approximation
+            let segs = 8; // 8-sided polygon approximation (use DRAW_CIRCLE_SEG for more)
             let r = (*diam as f64) / 2.0;
             let mut verts: Vec<(i32, i32)> = Vec::new();
             

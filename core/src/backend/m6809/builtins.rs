@@ -956,7 +956,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         if let (Expr::Number(xc),Expr::Number(yc),Expr::Number(diam)) = (&args[0],&args[1],&args[2]) {
                     let mut intensity: i32 = 0x5F;
                     if args.len()==4 { if let Expr::Number(i) = &args[3] { intensity = *i; } }
-                    let segs = 16; // fixed approximation
+                    let segs = 8; // fixed approximation (use DRAW_CIRCLE_SEG for more)
                     let r = (*diam as f64)/2.0;
                     use std::f64::consts::PI;
                     let mut verts: Vec<(i32,i32)> = Vec::new();
