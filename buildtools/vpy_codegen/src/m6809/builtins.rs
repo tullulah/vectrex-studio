@@ -1071,13 +1071,19 @@ fn collect_strings_from_expr(expr: &Expr, strings: &mut std::collections::BTreeM
 }
 
 /// DRAW_CIRCLE with full variable support
-/// Uses DRAW_CIRCLE_RUNTIME helper and expressions evaluation
+/// Uses inline 16-gon for constant args (matching core), DRAW_CIRCLE_RUNTIME for variables
 fn emit_draw_circle_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     if args.len() != 3 && args.len() != 4 {
         out.push_str("    ; ERROR: DRAW_CIRCLE requires 3 or 4 arguments\n");
         return;
     }
-    
+
+    // All-constant path: emit inline 16-gon (same as core compiler)
+    if args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        drawing::emit_draw_circle(args, out);
+        return;
+    }
+
     out.push_str("    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter\n");
     
     // Evaluate xc and store in DRAW_CIRCLE_XC
