@@ -109,31 +109,33 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("CURRENT_INTENSITY", 2, "Current intensity for fade");
     }
 
-    // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address $CFE0
+    // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
     // These need to be at a fixed location for cross-bank compatibility
-    ram.allocate_fixed("VAR_ARG0", 0xCFE0, 2, "Function argument 0 (16-bit)");
-    ram.allocate_fixed("VAR_ARG1", 0xCFE2, 2, "Function argument 1 (16-bit)");
-    ram.allocate_fixed("VAR_ARG2", 0xCFE4, 2, "Function argument 2 (16-bit)");
-    ram.allocate_fixed("VAR_ARG3", 0xCFE6, 2, "Function argument 3 (16-bit)");
-    ram.allocate_fixed("VAR_ARG4", 0xCFE8, 2, "Function argument 4 (16-bit)");
-    
+    // CRITICAL: Must be within Vectrex 1KB RAM ($C800-$CBFF) — $CFxx is unmapped!
+    // Placed at $CB80, well below stack ($CBEA grows down, ~106 bytes headroom)
+    ram.allocate_fixed("VAR_ARG0", 0xCB80, 2, "Function argument 0 (16-bit)");
+    ram.allocate_fixed("VAR_ARG1", 0xCB82, 2, "Function argument 1 (16-bit)");
+    ram.allocate_fixed("VAR_ARG2", 0xCB84, 2, "Function argument 2 (16-bit)");
+    ram.allocate_fixed("VAR_ARG3", 0xCB86, 2, "Function argument 3 (16-bit)");
+    ram.allocate_fixed("VAR_ARG4", 0xCB88, 2, "Function argument 4 (16-bit)");
+
     // CRITICAL (2026-01-20): Multibank bank tracking variable
     // Required for cross-bank function calls and bank switching wrappers
     // Must be at fixed address for all banks to access
-    ram.allocate_fixed("CURRENT_ROM_BANK", 0xCFEA, 1, "Current ROM bank ID (multibank tracking)");
+    ram.allocate_fixed("CURRENT_ROM_BANK", 0xCB8A, 1, "Current ROM bank ID (multibank tracking)");
 
-    // Audio system variables at FIXED addresses (don't corrupt user RAM)
-    // These are allocated AFTER VAR_ARG0-4 at 0xCFEB onwards (high end of RAM)
+    // Audio system variables at FIXED addresses in upper RAM
+    // These are allocated AFTER VAR_ARG0-4 at $CBEB onwards
     use crate::m6809::functions::has_audio_calls;
     if has_audio_calls(module) {
-        ram.allocate_fixed("PSG_MUSIC_PTR", 0xCFEB, 2, "PSG music data pointer");
-        ram.allocate_fixed("PSG_MUSIC_START", 0xCFED, 2, "PSG music start pointer (for loops)");
-        ram.allocate_fixed("PSG_MUSIC_ACTIVE", 0xCFEF, 1, "PSG music active flag");
-        ram.allocate_fixed("PSG_IS_PLAYING", 0xCFF0, 1, "PSG playing flag");
-        ram.allocate_fixed("PSG_DELAY_FRAMES", 0xCFF1, 1, "PSG frame delay counter");
-        ram.allocate_fixed("PSG_MUSIC_BANK", 0xCFF2, 1, "PSG music bank ID (for multibank)");
-        ram.allocate_fixed("SFX_PTR", 0xCFF3, 2, "SFX data pointer");
-        ram.allocate_fixed("SFX_ACTIVE", 0xCFF5, 1, "SFX active flag");
+        ram.allocate_fixed("PSG_MUSIC_PTR", 0xCBEB, 2, "PSG music data pointer");
+        ram.allocate_fixed("PSG_MUSIC_START", 0xCBED, 2, "PSG music start pointer (for loops)");
+        ram.allocate_fixed("PSG_MUSIC_ACTIVE", 0xCBEF, 1, "PSG music active flag");
+        ram.allocate_fixed("PSG_IS_PLAYING", 0xCBF0, 1, "PSG playing flag");
+        ram.allocate_fixed("PSG_DELAY_FRAMES", 0xCBF1, 1, "PSG frame delay counter");
+        ram.allocate_fixed("PSG_MUSIC_BANK", 0xCBF2, 1, "PSG music bank ID (for multibank)");
+        ram.allocate_fixed("SFX_PTR", 0xCBF3, 2, "SFX data pointer");
+        ram.allocate_fixed("SFX_ACTIVE", 0xCBF5, 1, "SFX active flag");
     }
 
     // =========================================================================
