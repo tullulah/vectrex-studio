@@ -25,20 +25,22 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 28 bytes
+; Total RAM used: 30 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
 TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
 TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
 TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
 TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
-NUM_STR              EQU $C880+$0A   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-VAR_ARG0             EQU $C880+$10   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$12   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$14   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$16   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$18   ; Function argument 4 (2 bytes)
-VAR_ARG5             EQU $C880+$1A   ; Function argument 5 (2 bytes)
+VPY_MOVE_X           EQU $C880+$0A   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$0B   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+NUM_STR              EQU $C880+$0C   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+VAR_ARG0             EQU $C880+$12   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$14   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$16   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$18   ; Function argument 3 (2 bytes)
+VAR_ARG4             EQU $C880+$1A   ; Function argument 4 (2 bytes)
+VAR_ARG5             EQU $C880+$1C   ; Function argument 5 (2 bytes)
 
     JMP START
 
@@ -163,6 +165,8 @@ MAIN:
     ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
     LDA #$80
     STA VIA_t1_cnt_lo
+    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
     ; *** Call loop() as subroutine (executed every frame)
     JSR LOOP_BODY
     BRA MAIN

@@ -48,7 +48,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     if needed.contains("PRINT_NUMBER") {
         ram.allocate("NUM_STR", 6, "Buffer for PRINT_NUMBER decimal output (5 digits + terminator)");
     }
-    if needed.contains("RAND") {
+    if needed.contains("RAND") || needed.contains("RAND_HELPER") {
         ram.allocate("RAND_SEED", 2, "Random seed for RAND()");
     }
     
@@ -98,7 +98,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     ram.allocate("VLINE_DX_REMAINING", 2, "DRAW_LINE remaining dx for segment 2 (16-bit)");
     
     // Level system variables
-    if needed.contains("SHOW_LEVEL") || needed.contains("LOAD_LEVEL") {
+    if needed.contains("SHOW_LEVEL") || needed.contains("SHOW_LEVEL_RUNTIME") || needed.contains("LOAD_LEVEL") {
         ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level data");
         ram.allocate("LEVEL_WIDTH", 1, "Level width");
         ram.allocate("LEVEL_HEIGHT", 1, "Level height");
@@ -106,7 +106,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     }
     
     // Fade effects variables
-    if needed.contains("FADE_IN") || needed.contains("FADE_OUT") {
+    if needed.contains("FADE_IN") || needed.contains("FADE_OUT") || needed.contains("FADE_IN_RUNTIME") || needed.contains("FADE_OUT_RUNTIME") {
         ram.allocate("FRAME_COUNTER", 2, "Frame counter for fade effects");
         ram.allocate("CURRENT_INTENSITY", 2, "Current intensity for fade");
     }
@@ -1050,50 +1050,46 @@ fn emit_play_sfx_runtime(asm: &mut String) {
             LDA #$0A               ; Register 10 (volume C)\n\
             JSR Sound_Byte         ; Write to PSG\n\
         \n\
-        sfx_checktonedisable:\n\
-            LDB ,U                 ; Reload flag byte\n\
-            BITB #$10              ; Bit 4: disable tone?\n\
-            BEQ sfx_enabletone\n\
-        sfx_disabletone:\n\
-            LDB $C807              ; Read mixer shadow (MUST be B register)\n\
-            ORB #$04               ; Set bit 2 (disable tone C)\n\
-            LDA #$07               ; Register 7 (mixer)\n\
-            JSR Sound_Byte         ; Write to PSG\n\
-            BRA sfx_checknoisedisable  ; Continue to noise check\n\
-        \n\
-        sfx_enabletone:\n\
-            LDB $C807              ; Read mixer shadow (MUST be B register)\n\
+        ; Combined mixer update: read shadow once, apply tone+noise, write once\n\
+        sfx_updatemixer:\n\
+            LDB $C807              ; Read mixer shadow ONCE\n\
+            LDA ,U                 ; Load flag byte into A\n\
+            ; Handle tone (flag bit 4 → mixer bit 2)\n\
+            BITA #$10              ; Bit 4: disable tone?\n\
+            BNE sfx_m_tonedis\n\
             ANDB #$FB              ; Clear bit 2 (enable tone C)\n\
-            LDA #$07               ; Register 7 (mixer)\n\
-            JSR Sound_Byte         ; Write to PSG\n\
-        \n\
-        sfx_checknoisedisable:\n\
-            LDB ,U                 ; Reload flag byte\n\
-            BITB #$80              ; Bit 7: disable noise?\n\
-            BEQ sfx_enablenoise\n\
-        sfx_disablenoise:\n\
-            LDB $C807              ; Read mixer shadow (MUST be B register)\n\
-            ORB #$20               ; Set bit 5 (disable noise C)\n\
-            LDA #$07               ; Register 7 (mixer)\n\
-            JSR Sound_Byte         ; Write to PSG\n\
-            BRA sfx_nextframe      ; Done, update pointer\n\
-        \n\
-        sfx_enablenoise:\n\
-            LDB $C807              ; Read mixer shadow (MUST be B register)\n\
+            BRA sfx_m_noise\n\
+        sfx_m_tonedis:\n\
+            ORB #$04               ; Set bit 2 (disable tone C)\n\
+        sfx_m_noise:\n\
+            ; Handle noise (flag bit 7 → mixer bit 5)\n\
+            BITA #$80              ; Bit 7: disable noise?\n\
+            BNE sfx_m_noisedis\n\
             ANDB #$DF              ; Clear bit 5 (enable noise C)\n\
+            BRA sfx_m_write\n\
+        sfx_m_noisedis:\n\
+            ORB #$20               ; Set bit 5 (disable noise C)\n\
+        sfx_m_write:\n\
+            STB $C807              ; Update mixer shadow\n\
             LDA #$07               ; Register 7 (mixer)\n\
-            JSR Sound_Byte         ; Write to PSG\n\
+            JSR Sound_Byte         ; Single write to PSG\n\
         \n\
         sfx_nextframe:\n\
             STY >SFX_PTR            ; Update pointer for next frame\n\
             RTS\n\
         \n\
         sfx_endofeffect:\n\
-            ; Stop SFX - set volume to 0\n\
+            ; Stop SFX - silence channel C and restore mixer\n\
             CLR >SFX_ACTIVE         ; Mark as inactive\n\
             LDA #$0A                ; Register 10 (volume C)\n\
             LDB #$00                ; Volume = 0\n\
             JSR Sound_Byte\n\
+            ; Restore mixer: disable tone+noise on channel C\n\
+            LDB $C807              ; Read mixer shadow\n\
+            ORB #$24               ; Set bits 2+5 (disable tone C + noise C)\n\
+            STB $C807              ; Update shadow\n\
+            LDA #$07               ; Register 7\n\
+            JSR Sound_Byte         ; Write mixer\n\
             LDD #$0000\n\
             STD >SFX_PTR            ; Clear pointer\n\
             RTS\n\

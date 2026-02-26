@@ -671,22 +671,23 @@ PSG_update_done:\n\
             ; PLAY_SFX_RUNTIME - Start SFX playback\n\
             ; Input: X = pointer to AYFX data\n\
             PLAY_SFX_RUNTIME:\n\
-                STX SFX_PTR            ; Store pointer\n\
+                STX >SFX_PTR           ; Store pointer (force extended)\n\
                 LDA #$01\n\
-                STA SFX_ACTIVE         ; Mark as active\n\
+                STA >SFX_ACTIVE        ; Mark as active\n\
                 RTS\n\
             \n\
             ; SFX_UPDATE - Process one AYFX frame (call once per frame in loop)\n\
             SFX_UPDATE:\n\
-                LDA SFX_ACTIVE         ; Check if active\n\
+                LDA >SFX_ACTIVE        ; Check if active\n\
                 BEQ noay               ; Not active, skip\n\
                 JSR sfx_doframe        ; Process one frame\n\
             noay:\n\
                 RTS\n\
             \n\
-            ; sfx_doframe - AYFX frame parser (Richard Chadd original)\n\
+            ; sfx_doframe - AYFX frame parser\n\
+            ; Runs with DP=$D0 (inside AUDIO_UPDATE)\n\
             sfx_doframe:\n\
-                LDU SFX_PTR            ; Get current frame pointer\n\
+                LDU SFX_PTR            ; Get current frame pointer (LDU has no direct mode)\n\
                 LDB ,U                 ; Read flag byte (NO auto-increment)\n\
                 CMPB #$D0              ; Check end marker (first byte)\n\
                 BNE sfx_checktonefreq  ; Not end, continue\n\
@@ -696,7 +697,7 @@ PSG_update_done:\n\
             \n\
             sfx_checktonefreq:\n\
                 LEAY 1,U               ; Y = pointer to tone/noise data\n\
-                LDB ,U                 ; Reload flag byte (Sound_Byte corrupts B)\n\
+                LDB ,U                 ; Reload flag byte\n\
                 BITB #$20              ; Bit 5: tone data present?\n\
                 BEQ sfx_checknoisefreq ; No, skip tone\n\
                 ; Set tone frequency (channel C = reg 4/5)\n\
@@ -723,52 +724,48 @@ PSG_update_done:\n\
                 LDA #$0A               ; Register 10 (volume C)\n\
                 JSR Sound_Byte         ; Write to PSG\n\
             \n\
-            sfx_checktonedisable:\n\
-                LDB ,U                 ; Reload flag byte\n\
-                BITB #$10              ; Bit 4: disable tone?\n\
-                BEQ sfx_enabletone\n\
-            sfx_disabletone:\n\
-                LDB $C807              ; Read mixer shadow (MUST be B register)\n\
-                ORB #$04               ; Set bit 2 (disable tone C)\n\
-                LDA #$07               ; Register 7 (mixer)\n\
-                JSR Sound_Byte         ; Write to PSG\n\
-                BRA sfx_checknoisedisable  ; Continue to noise check\n\
-            \n\
-            sfx_enabletone:\n\
-                LDB $C807              ; Read mixer shadow (MUST be B register)\n\
+            ; Combined mixer update: read shadow once, apply tone+noise, write once\n\
+            sfx_updatemixer:\n\
+                LDB $C807              ; Read mixer shadow ONCE\n\
+                LDA ,U                 ; Load flag byte into A\n\
+                ; Handle tone (flag bit 4 -> mixer bit 2)\n\
+                BITA #$10              ; Bit 4: disable tone?\n\
+                BNE sfx_m_tonedis\n\
                 ANDB #$FB              ; Clear bit 2 (enable tone C)\n\
-                LDA #$07               ; Register 7 (mixer)\n\
-                JSR Sound_Byte         ; Write to PSG\n\
-            \n\
-            sfx_checknoisedisable:\n\
-                LDB ,U                 ; Reload flag byte\n\
-                BITB #$80              ; Bit 7: disable noise?\n\
-                BEQ sfx_enablenoise\n\
-            sfx_disablenoise:\n\
-                LDB $C807              ; Read mixer shadow (MUST be B register)\n\
-                ORB #$20               ; Set bit 5 (disable noise C)\n\
-                LDA #$07               ; Register 7 (mixer)\n\
-                JSR Sound_Byte         ; Write to PSG\n\
-                BRA sfx_nextframe      ; Done, update pointer\n\
-            \n\
-            sfx_enablenoise:\n\
-                LDB $C807              ; Read mixer shadow (MUST be B register)\n\
+                BRA sfx_m_noise\n\
+            sfx_m_tonedis:\n\
+                ORB #$04               ; Set bit 2 (disable tone C)\n\
+            sfx_m_noise:\n\
+                ; Handle noise (flag bit 7 -> mixer bit 5)\n\
+                BITA #$80              ; Bit 7: disable noise?\n\
+                BNE sfx_m_noisedis\n\
                 ANDB #$DF              ; Clear bit 5 (enable noise C)\n\
+                BRA sfx_m_write\n\
+            sfx_m_noisedis:\n\
+                ORB #$20               ; Set bit 5 (disable noise C)\n\
+            sfx_m_write:\n\
+                STB $C807              ; Update mixer shadow\n\
                 LDA #$07               ; Register 7 (mixer)\n\
-                JSR Sound_Byte         ; Write to PSG\n\
+                JSR Sound_Byte         ; Single write to PSG\n\
             \n\
             sfx_nextframe:\n\
-                STY SFX_PTR            ; Update pointer for next frame\n\
+                STY SFX_PTR            ; Update pointer (STY has no direct mode)\n\
                 RTS\n\
             \n\
             sfx_endofeffect:\n\
-                ; Stop SFX - set volume to 0\n\
-                CLR SFX_ACTIVE         ; Mark as inactive\n\
+                ; Stop SFX - silence channel C and restore mixer\n\
+                CLR >SFX_ACTIVE        ; Mark as inactive (force extended)\n\
                 LDA #$0A               ; Register 10 (volume C)\n\
                 LDB #$00               ; Volume = 0\n\
                 JSR Sound_Byte\n\
+                ; Restore mixer: disable tone+noise on channel C\n\
+                LDB $C807              ; Read mixer shadow\n\
+                ORB #$24               ; Set bits 2+5 (disable tone C + noise C)\n\
+                STB $C807              ; Update shadow\n\
+                LDA #$07               ; Register 7\n\
+                JSR Sound_Byte         ; Write mixer\n\
                 LDD #$0000\n\
-                STD SFX_PTR            ; Clear pointer\n\
+                STD >SFX_PTR           ; Clear pointer (force extended)\n\
                 RTS\n\
             \n"
         );

@@ -25,7 +25,7 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 48 bytes
+; Total RAM used: 50 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
 TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
@@ -36,18 +36,20 @@ TMPPTR2              EQU $C880+$0C   ; Pointer temp 2 (for nested array operatio
 TEMP_YX              EQU $C880+$0E   ; Temporary y,x storage (2 bytes)
 TEMP_X               EQU $C880+$10   ; Temporary x storage (1 bytes)
 TEMP_Y               EQU $C880+$11   ; Temporary y storage (1 bytes)
-NUM_STR              EQU $C880+$12   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$18   ; Circle center X (byte) (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$19   ; Circle center Y (byte) (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$1A   ; Circle diameter (byte) (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$1B   ; Circle intensity (byte) (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$1C   ; Circle drawing temporaries (radius=2, xc=2, yc=2, spare=2) (8 bytes)
-VAR_RADIUS           EQU $C880+$24   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$26   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$28   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$2A   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$2C   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$2E   ; Function argument 4 (2 bytes)
+VPY_MOVE_X           EQU $C880+$12   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$13   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+NUM_STR              EQU $C880+$14   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$1A   ; Circle center X (byte) (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$1B   ; Circle center Y (byte) (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$1C   ; Circle diameter (byte) (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$1D   ; Circle intensity (byte) (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$1E   ; Circle drawing temporaries (radius=2, xc=2, yc=2, spare=2) (8 bytes)
+VAR_RADIUS           EQU $C880+$26   ; User variable (2 bytes)
+VAR_ARG0             EQU $C880+$28   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$2A   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$2C   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$2E   ; Function argument 3 (2 bytes)
+VAR_ARG4             EQU $C880+$30   ; Function argument 4 (2 bytes)
 
     JMP START
 
@@ -376,6 +378,8 @@ MAIN:
     ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
     LDA #$80
     STA VIA_t1_cnt_lo
+    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
     ; *** Call loop() as subroutine (executed every frame)
     JSR LOOP_BODY
     BRA MAIN
@@ -462,6 +466,8 @@ LOOP_BODY:
     LDA #$06
     LDB #$01
     JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
     ; DEBUG: Statement 1 - Discriminant(8)
@@ -540,6 +546,8 @@ LOOP_BODY:
     LDA #$04
     LDB #$01
     JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
     ; DEBUG: Statement 2 - Discriminant(8)
@@ -639,6 +647,8 @@ LOOP_BODY:
     LDA #$03
     LDB #$01
     JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
     ; DEBUG: Statement 4 - Discriminant(0)

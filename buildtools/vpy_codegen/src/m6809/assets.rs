@@ -329,7 +329,7 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Sfx)) {
         match crate::sfxres::SfxResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                let asm_code = resource.compile_to_asm();
+                let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
                 let binary_size = estimate_asm_size(&asm_code);
                 sized_assets.push(SizedAsset {
                     info: asset.clone(),
@@ -342,7 +342,7 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
             }
         }
     }
-    
+
     // Sort by size descending (best for bin-packing)
     sized_assets.sort_by(|a, b| b.binary_size.cmp(&a.binary_size));
     
@@ -496,7 +496,7 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Sfx)) {
         match crate::sfxres::SfxResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                out.push_str(&resource.compile_to_asm());
+                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load SFX asset '{}': {}", asset.name, e);

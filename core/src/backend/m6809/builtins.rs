@@ -965,6 +965,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                                     out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (second_dy & 0xFF), (second_dx & 0xFF)));
                                 }
                             }
+                            out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after polygon drawing\n");
                             out.push_str("    LDD #0\n    STD RESULT\n");
                             return true;
                         }
@@ -1000,11 +1001,12 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                         out.push_str("    CLR Vec_Misc_Count\n");
                         out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx));
                     }
+                    out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after circle drawing\n");
                     out.push_str("    LDD #0\n    STD RESULT\n");
                     return true;
         }
     }
-    
+
     // DRAW_CIRCLE with variables - runtime version (follows DRAW_VECTOR pattern)
     // DRAW_CIRCLE(xc, yc, diam) or DRAW_CIRCLE(xc, yc, diam, intensity)
     if up == "DRAW_CIRCLE" && (args.len() == 3 || args.len() == 4) {
@@ -1054,6 +1056,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                     if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                     let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                     for i in 0..segs { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[((i+1)%segs) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
+                    out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after circle_seg drawing\n");
                     out.push_str("    CLRA\n    CLRB\n    STD RESULT\n"); return true;
         }
     }
@@ -1072,6 +1075,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                 let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                 for i in 0..steps { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[(i+1) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
+                out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after arc drawing\n");
                 out.push_str("    CLRA\n    CLRB\n    STD RESULT\n"); return true;
         }
     }
@@ -1094,6 +1098,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                 if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                 let (sx,sy)=verts[0]; out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF),(sx & 0xFF)));
                 for i in 0..steps { let (x0,y0)=verts[i as usize]; let (x1,y1)=verts[(i+1) as usize]; let dx=(x1-x0)&0xFF; let dy=(y1-y0)&0xFF; out.push_str("    CLR Vec_Misc_Count\n"); out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx)); }
+                out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8 after spiral drawing\n");
                 out.push_str("    CLRA\n    CLRB\n    STD RESULT\n"); return true;
         }
     }

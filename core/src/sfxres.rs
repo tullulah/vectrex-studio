@@ -453,25 +453,39 @@ impl SfxResource {
         }
     }
     
-    /// Compile to ASM data for embedding in ROM
+    /// Compile to ASM data for embedding in ROM (uses internal name for label)
     pub fn compile_to_asm(&self) -> String {
-        let label = format!("_{}_SFX", self.name.to_uppercase().replace(" ", "_").replace("-", "_"));
-        
+        self.compile_to_asm_with_name(None)
+    }
+
+    /// Compile to ASM data for embedding in ROM.
+    /// If override_name is provided, use it for the label instead of self.name.
+    pub fn compile_to_asm_with_name(&self, override_name: Option<&str>) -> String {
+        let name = override_name.unwrap_or(&self.name);
+        let label = format!("_{}_SFX", name.to_uppercase().replace(" ", "_").replace("-", "_"));
+
         // Calculate PSG period from frequency
-        // PSG clock = 1.5 MHz, period = clock / (32 * freq)
+        // AY-3-8910: f = clock / (16 * TP), so TP = clock / (16 * f)
+        // Vectrex PSG clock = 1.5 MHz
         let base_period = if self.oscillator.frequency > 0 {
-            (1_500_000u32 / (32 * self.oscillator.frequency as u32)).min(4095) as u16
+            (1_500_000u32 / (16 * self.oscillator.frequency as u32)).min(4095) as u16
         } else {
-            440 // Default to A4 (440Hz) = period 106
+            213 // Default to A4 (440Hz) = period 213
         };
-        
+
         // Duration in frames (50 FPS for Vectrex)
         let total_frames = (self.duration_ms as u32 * 50 / 1000).max(1) as usize;
-        
-        // Envelope timing
-        let attack_frames = ((self.envelope.attack as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize;
-        let decay_frames = ((self.envelope.decay as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize;
-        let release_frames = ((self.envelope.release as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize;
+
+        // Envelope timing (0ms = instant, no forced minimum)
+        let attack_frames = if self.envelope.attack == 0 { 0 } else {
+            ((self.envelope.attack as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+        };
+        let decay_frames = if self.envelope.decay == 0 { 0 } else {
+            ((self.envelope.decay as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+        };
+        let release_frames = if self.envelope.release == 0 { 0 } else {
+            ((self.envelope.release as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+        };
         let sustain_frames = total_frames.saturating_sub(attack_frames + decay_frames + release_frames);
         
         let mut asm = String::new();
@@ -523,14 +537,14 @@ impl SfxResource {
                 // Solve for midi_note: midi_note = 69 + 12 * log2(frequency / 440)
                 let base_freq = self.oscillator.frequency as f32;
                 let base_midi_note = 69.0 + 12.0 * (base_freq / 440.0).log2();
-                // Apply note offset, then lower by one octave (12 semitones)
-                let current_midi = (base_midi_note + note_offset as f32 - 12.0).round() as i32;
-                
+                // Apply note offset
+                let current_midi = (base_midi_note + note_offset as f32).round() as i32;
+
                 // Convert MIDI note to PSG period
                 // freq = 440 * 2^((midi - 69) / 12)
-                // period = 1_500_000 / (32 * freq)
+                // TP = 1_500_000 / (16 * freq)
                 let frequency = 440.0 * 2.0_f32.powf((current_midi - 69) as f32 / 12.0);
-                current_period = (1_500_000.0 / (32.0 * frequency)).round() as u16;
+                current_period = (1_500_000.0 / (16.0 * frequency)).round() as u16;
                 current_period = current_period.max(1).min(4095);
             } else if self.pitch.enabled && total_frames > 1 {
                 // PITCH SWEEP: smooth frequency change
@@ -544,8 +558,6 @@ impl SfxResource {
                 let mult = self.pitch.start_mult + (self.pitch.end_mult - self.pitch.start_mult) * t_adjusted;
 
                 current_period = ((base_period as f32) * mult) as u16;
-                // Lower by one octave: multiply period by 2 (halves the frequency)
-                current_period = (current_period as u32 * 2) as u16;
                 current_period = current_period.max(1).min(4095);
             }
             

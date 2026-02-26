@@ -488,8 +488,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
     ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     
-    // 6. PSG Music variables (if music assets exist)
-    if has_music_assets {
+    // 6. PSG Music variables (needed by AUDIO_UPDATE which is emitted for music OR sfx)
+    if has_music_assets || has_sfx_assets {
         ram.allocate("PSG_MUSIC_PTR", 2, "Current music position pointer");
         ram.allocate("PSG_MUSIC_START", 2, "Music start pointer (for loops)");
         ram.allocate("PSG_IS_PLAYING", 1, "Playing flag ($00=stopped, $01=playing)");
@@ -744,9 +744,15 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         // CRITICAL: Initialize SFX system variables to prevent garbage data interference
         if has_sfx_calls {
             out.push_str("    ; Initialize SFX variables to prevent random noise on startup\n");
-            out.push_str("    CLR SFX_ACTIVE         ; Mark SFX as inactive (0=off)\n");
+            out.push_str("    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)\n");
             out.push_str("    LDD #$0000\n");
-            out.push_str("    STD SFX_PTR            ; Clear SFX pointer\n");
+            out.push_str("    STD >SFX_PTR            ; Clear SFX pointer\n");
+            // Also init music variables (AUDIO_UPDATE checks them even for SFX-only)
+            if !has_music_calls {
+                out.push_str("    CLR >PSG_IS_PLAYING    ; No music - ensure music player is off\n");
+                out.push_str("    STD >PSG_MUSIC_PTR     ; Clear music pointer\n");
+                out.push_str("    CLR >PSG_DELAY_FRAMES  ; Clear music delay\n");
+            }
         }
         
         out.push_str("\n");
@@ -1264,8 +1270,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
                                 out.push_str(&format!("; SFX Asset: {} (from {})\n", asset.name, asset.path));
                                 out.push_str(&format!("; ========================================\n"));
                                 
-                                // SfxResource::compile_to_asm() generates full label and data
-                                let asm = resource.compile_to_asm();
+                                // Use asset filename for label (not JSON internal name)
+                                let asm = resource.compile_to_asm_with_name(Some(&asset.name));
                                 out.push_str(&asm);
                                 out.push_str("\n");
                             },

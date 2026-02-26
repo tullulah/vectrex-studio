@@ -457,8 +457,45 @@ pub fn emit_builtin(
             true
         }
         "PLAY_SFX" => {
-            out.push_str("    ; PLAY_SFX: Play sound effect\n");
-            out.push_str("    JSR PLAY_SFX_RUNTIME\n");
+            // PLAY_SFX("asset_name") - Load SFX pointer and start playback
+            if args.len() != 1 {
+                out.push_str("    ; ERROR: PLAY_SFX requires 1 argument (SFX asset name)\n");
+            } else if let Expr::StringLit(asset_name) = &args[0] {
+                // Check if asset exists
+                let asset_exists = assets.iter().any(|a| {
+                    a.name == *asset_name && matches!(a.asset_type, AssetType::Sfx)
+                });
+
+                if asset_exists {
+                    // Find asset index for multibank lookup
+                    let sfx_assets: Vec<_> = assets.iter()
+                        .filter(|a| matches!(a.asset_type, AssetType::Sfx))
+                        .collect();
+
+                    let asset_index = sfx_assets.iter()
+                        .position(|a| a.name == *asset_name)
+                        .unwrap_or(0);
+
+                    let symbol = format!("_{}_SFX", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
+                    out.push_str(&format!("    ; PLAY_SFX(\"{}\") - play SFX asset (index={})\n", asset_name, asset_index));
+
+                    if use_banked_assets() {
+                        // MULTIBANK MODE: Use banked access via lookup tables
+                        out.push_str(&format!("    LDX #{}        ; SFX asset index for lookup\n", asset_index));
+                        out.push_str("    JSR PLAY_SFX_BANKED  ; Play with automatic bank switching\n");
+                    } else {
+                        // SINGLE-BANK MODE: Direct access to asset label
+                        out.push_str(&format!("    LDX #{}  ; Load SFX data pointer\n", symbol));
+                        out.push_str("    JSR PLAY_SFX_RUNTIME\n");
+                    }
+                } else {
+                    out.push_str(&format!("    ; ERROR: SFX asset '{}' not found\n", asset_name));
+                    out.push_str(&format!("    ; Available SFX assets: {:?}\n",
+                        assets.iter().filter(|a| matches!(a.asset_type, AssetType::Sfx)).map(|a| &a.name).collect::<Vec<_>>()));
+                }
+            } else {
+                out.push_str("    ; ERROR: PLAY_SFX first argument must be string literal\n");
+            }
             out.push_str("    LDD #0\n");
             out.push_str("    STD RESULT\n");
             true
