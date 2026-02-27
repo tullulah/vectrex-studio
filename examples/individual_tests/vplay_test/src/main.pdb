@@ -1,0 +1,385 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "main.asm",
+  "binary": "main.bin",
+  "entryPoint": "0x0000",
+  "symbols": {},
+  "lineMap": {},
+  "vpyLineMap": {},
+  "asmLineMap": {},
+  "functions": {},
+  "nativeCalls": {
+    "11": "VECTREX_PRINT_TEXT",
+    "12": "UPDATE_LEVEL"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "main.asm",
+      "startLine": 148,
+      "endLine": 163,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {},
+  "variables": {
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC925",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "MIRROR_X": {
+      "name": "MIRROR_X",
+      "address": "0xC89E",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_COIN_CENTER_Y": {
+      "name": "_COIN_CENTER_Y",
+      "address": "0x0003",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_PLATFORM_WIDTH": {
+      "name": "_PLATFORM_WIDTH",
+      "address": "0x003C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC896",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "UGPC_INNER_IDX": {
+      "name": "UGPC_INNER_IDX",
+      "address": "0xC916",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_PLATFORM_CENTER_X": {
+      "name": "_PLATFORM_CENTER_X",
+      "address": "0x0000",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "UGFC_DY": {
+      "name": "UGFC_DY",
+      "address": "0xC91E",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC88C",
+      "size": 10,
+      "type": "unknown",
+      "declLine": null
+    },
+    "UGPC_DIST": {
+      "name": "UGPC_DIST",
+      "address": "0xC919",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_FG_ROM_PTR": {
+      "name": "LEVEL_FG_ROM_PTR",
+      "address": "0xC8B0",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "UGFC_DX": {
+      "name": "UGFC_DX",
+      "address": "0xC91D",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_GP_PTR": {
+      "name": "LEVEL_GP_PTR",
+      "address": "0xC8A8",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "DRAW_VEC_X": {
+      "name": "DRAW_VEC_X",
+      "address": "0xC89C",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "UGPC_OUTER_IDX": {
+      "name": "UGPC_OUTER_IDX",
+      "address": "0xC914",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_SPAWN_CENTER_Y": {
+      "name": "_SPAWN_CENTER_Y",
+      "address": "0x0008",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC91F",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC88A",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_GP_COUNT": {
+      "name": "LEVEL_GP_COUNT",
+      "address": "0xC8A4",
+      "size": 1,
+      "type": "system",
+      "declLine": null
+    },
+    "UGFC_FG_COUNT": {
+      "name": "UGFC_FG_COUNT",
+      "address": "0xC91C",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_BG_ROM_PTR": {
+      "name": "LEVEL_BG_ROM_PTR",
+      "address": "0xC8AC",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "_PLATFORM_CENTER_Y": {
+      "name": "_PLATFORM_CENTER_Y",
+      "address": "0x0002",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC921",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "UGPC_DX": {
+      "name": "UGPC_DX",
+      "address": "0xC917",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_BALL_CENTER_Y": {
+      "name": "_BALL_CENTER_Y",
+      "address": "0x0000",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_PTR": {
+      "name": "LEVEL_PTR",
+      "address": "0xC8A1",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "UGFC_GP_IDX": {
+      "name": "UGFC_GP_IDX",
+      "address": "0xC91B",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "MIRROR_Y": {
+      "name": "MIRROR_Y",
+      "address": "0xC89F",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC88B",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_BALL_CENTER_X": {
+      "name": "_BALL_CENTER_X",
+      "address": "0x0000",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_VEC_INTENSITY": {
+      "name": "DRAW_VEC_INTENSITY",
+      "address": "0xC8A0",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_COIN_WIDTH": {
+      "name": "_COIN_WIDTH",
+      "address": "0x0011",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "_BALL_WIDTH": {
+      "name": "_BALL_WIDTH",
+      "address": "0x0020",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_FG_PTR": {
+      "name": "LEVEL_FG_PTR",
+      "address": "0xC8AA",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "LEVEL_GP_ROM_PTR": {
+      "name": "LEVEL_GP_ROM_PTR",
+      "address": "0xC8AE",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC923",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_FG_COUNT": {
+      "name": "LEVEL_FG_COUNT",
+      "address": "0xC8A5",
+      "size": 1,
+      "type": "system",
+      "declLine": null
+    },
+    "_SPAWN_WIDTH": {
+      "name": "_SPAWN_WIDTH",
+      "address": "0x0017",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_BG_COUNT": {
+      "name": "LEVEL_BG_COUNT",
+      "address": "0xC8A3",
+      "size": 1,
+      "type": "system",
+      "declLine": null
+    },
+    "_SPAWN_CENTER_X": {
+      "name": "_SPAWN_CENTER_X",
+      "address": "0x0000",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_VEC_Y": {
+      "name": "DRAW_VEC_Y",
+      "address": "0xC89D",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_BG_PTR": {
+      "name": "LEVEL_BG_PTR",
+      "address": "0xC8A6",
+      "size": 2,
+      "type": "system",
+      "declLine": null
+    },
+    "UGPC_OUTER_MAX": {
+      "name": "UGPC_OUTER_MAX",
+      "address": "0xC915",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "LEVEL_GP_BUFFER": {
+      "name": "LEVEL_GP_BUFFER",
+      "address": "0xC8B2",
+      "size": 98,
+      "type": "system",
+      "declLine": null
+    },
+    "_COIN_CENTER_X": {
+      "name": "_COIN_CENTER_X",
+      "address": "0x0000",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC888",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC889",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

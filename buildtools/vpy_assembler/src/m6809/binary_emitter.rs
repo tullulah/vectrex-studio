@@ -455,6 +455,34 @@ impl BinaryEmitter {
         self.emit_word(addr);
     }
 
+    /// ADCA #immediate (opcode 0x89)
+    pub fn adca_immediate(&mut self, value: u8) {
+        self.record_line_mapping();
+        self.emit(0x89);
+        self.emit(value);
+    }
+
+    /// ADCA direct (opcode 0x99)
+    pub fn adca_direct(&mut self, addr: u8) {
+        self.record_line_mapping();
+        self.emit(0x99);
+        self.emit(addr);
+    }
+
+    /// ADCA indexed (opcode 0xA9)
+    pub fn adca_indexed(&mut self, postbyte: u8) {
+        self.record_line_mapping();
+        self.emit(0xA9);
+        self.emit(postbyte);
+    }
+
+    /// ADCA extended (opcode 0xB9)
+    pub fn adca_extended(&mut self, addr: u16) {
+        self.record_line_mapping();
+        self.emit(0xB9);
+        self.emit_word(addr);
+    }
+
     /// ADDB #immediate (opcode 0xCB)
     pub fn addb_immediate(&mut self, value: u8) {
         self.record_line_mapping();

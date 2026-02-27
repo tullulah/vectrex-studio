@@ -44,16 +44,18 @@ RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
 TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
 TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
-TEMP_YX              EQU $C880+$08   ; Temporary Y/X coordinate storage (2 bytes)
-NUM_STR              EQU $C880+$0A   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$10   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$1A   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$1C   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$1E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$1F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_COUNTER          EQU $C880+$24   ; User variable: COUNTER (2 bytes)
+VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
+NUM_STR              EQU $C880+$0C   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_LINE_ARGS       EQU $C880+$12   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1C   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$1E   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$20   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$21   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_COUNTER          EQU $C880+$26   ; User variable: COUNTER (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -68,6 +70,8 @@ CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 b
 
 MAIN:
     ; Initialize global variables
+    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
     LDD #0
     STD VAR_COUNTER
     ; === Initialize Joystick (one-time setup) ===
@@ -184,6 +188,7 @@ VECTREX_PRINT_TEXT:
     ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
     LDA >VAR_ARG1+1 ; Y coordinate

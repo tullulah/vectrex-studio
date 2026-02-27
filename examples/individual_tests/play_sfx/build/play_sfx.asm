@@ -178,13 +178,13 @@ LOOP_BODY:
     JSR PLAY_SFX_RUNTIME
     LDD #0
     STD RESULT
-    LDA #$64
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$64
+    JSR Intensity_a
     LDA #$EC
     LDB #$08
     JSR Moveto_d
@@ -275,13 +275,13 @@ IF_END_0:
     JSR PLAY_SFX_RUNTIME
     LDD #0
     STD RESULT
-    LDA #$64
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$64
+    JSR Intensity_a
     LDA #$EC
     LDB #$0F
     JSR Moveto_d
@@ -356,13 +356,13 @@ IF_END_0:
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
-    LDA #$28
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$28
+    JSR Intensity_a
     LDA #$EC
     LDB #$03
     JSR Moveto_d
@@ -906,10 +906,23 @@ RTS
 ; STOP_MUSIC_RUNTIME - Stop music playback
 ; ============================================================================
 STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING     ; Clear playing flag (extended - var at 0xC8A0)
-CLR >PSG_MUSIC_PTR      ; Clear pointer high byte (force extended)
-CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte (force extended)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
+CLR >PSG_IS_PLAYING     ; Clear playing flag
+CLR >PSG_MUSIC_PTR      ; Clear pointer high byte
+CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte
+; Mute all PSG channels so the last note doesn't keep sounding
+PSHS DP
+LDA #$D0
+TFR A,DP                ; Set DP=$D0 for Sound_Byte
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
+PULS DP
 RTS
 
 ; ============================================================================

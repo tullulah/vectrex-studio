@@ -587,6 +587,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
             ram.allocate("UGPC_INNER_IDX", 1, "Inner loop index for collision detection");
             ram.allocate("UGPC_DX", 2, "Distance X temporary (16-bit)");
             ram.allocate("UGPC_DIST", 2, "Manhattan distance temporary (16-bit)");
+            // GP-FG collision temps
+            ram.allocate("UGFC_GP_IDX", 1, "GP-FG outer loop: GP object index");
+            ram.allocate("UGFC_FG_COUNT", 1, "GP-FG inner loop: FG count copy");
+            ram.allocate("UGFC_DX", 1, "GP-FG collision: |dx|");
+            ram.allocate("UGFC_DY", 1, "GP-FG collision: |dy|");
         }
     }
     

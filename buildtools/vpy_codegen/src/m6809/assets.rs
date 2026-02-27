@@ -10,15 +10,37 @@ use vpy_parser::{Module, Item, Stmt, Expr};
 /// Filter assets to only those actually used in the code
 pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
     let mut used_names = HashSet::new();
-    
+
     // Scan all statements for asset references
     collect_asset_names(&module.items, &mut used_names);
-    
-    // Filter assets to only those referenced in code
+
+    // Also scan any used level files to include the vectors they reference
+    let level_names: Vec<String> = used_names.iter().cloned().collect();
+    for level_name in &level_names {
+        if let Some(level_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Level) && &a.name == level_name
+        }) {
+            collect_level_vector_names(&level_asset.path, &mut used_names);
+        }
+    }
+
+    // Filter assets to only those referenced in code (or used by levels)
     assets.iter()
         .filter(|asset| used_names.contains(&asset.name))
         .cloned()
         .collect()
+}
+
+/// Scan a .vplay JSON file and add the vectorName of every object to used_names.
+fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>) {
+    let Ok(content) = fs::read_to_string(level_path) else { return };
+    let Ok(level) = serde_json::from_str::<crate::levelres::VPlayLevel>(&content) else { return };
+    for obj in level.layers.background.iter()
+        .chain(level.layers.gameplay.iter())
+        .chain(level.layers.foreground.iter())
+    {
+        used_names.insert(obj.vector_name.clone());
+    }
 }
 
 /// Recursively collect asset names from statements

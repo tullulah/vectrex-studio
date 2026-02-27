@@ -97,12 +97,47 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     ram.allocate("VLINE_DY_REMAINING", 2, "DRAW_LINE remaining dy for segment 2 (16-bit)");
     ram.allocate("VLINE_DX_REMAINING", 2, "DRAW_LINE remaining dx for segment 2 (16-bit)");
     
-    // Level system variables
-    if needed.contains("SHOW_LEVEL") || needed.contains("SHOW_LEVEL_RUNTIME") || needed.contains("LOAD_LEVEL") {
-        ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level data");
-        ram.allocate("LEVEL_WIDTH", 1, "Level width");
-        ram.allocate("LEVEL_HEIGHT", 1, "Level height");
-        ram.allocate("LEVEL_TILE_SIZE", 1, "Tile size");
+    // Level system variables (vplay-aware)
+    if needed.contains("SHOW_LEVEL") || needed.contains("SHOW_LEVEL_RUNTIME")
+        || needed.contains("LOAD_LEVEL") || needed.contains("LOAD_LEVEL_RUNTIME")
+        || needed.contains("UPDATE_LEVEL_RUNTIME")
+    {
+        ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level header");
+        // Legacy tile-based vars (kept for backward compat / GET_LEVEL_WIDTH etc.)
+        ram.allocate("LEVEL_WIDTH", 1, "Level width (legacy tile API)");
+        ram.allocate("LEVEL_HEIGHT", 1, "Level height (legacy tile API)");
+        ram.allocate("LEVEL_TILE_SIZE", 1, "Tile size (legacy tile API)");
+        ram.allocate("LEVEL_Y_IDX", 1, "SHOW_LEVEL row counter (legacy)");
+        ram.allocate("LEVEL_X_IDX", 1, "SHOW_LEVEL column counter (legacy)");
+        ram.allocate("LEVEL_TEMP", 1, "SHOW_LEVEL temporary byte (legacy)");
+        // vplay layer counts and ROM pointers
+        ram.allocate("LEVEL_BG_COUNT", 1, "BG object count");
+        ram.allocate("LEVEL_GP_COUNT", 1, "GP object count");
+        ram.allocate("LEVEL_FG_COUNT", 1, "FG object count");
+        ram.allocate("LEVEL_BG_ROM_PTR", 2, "BG layer ROM pointer");
+        ram.allocate("LEVEL_GP_ROM_PTR", 2, "GP layer ROM pointer");
+        ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");
+        ram.allocate("LEVEL_GP_PTR", 2, "GP active pointer (RAM buffer after LOAD_LEVEL)");
+        // SHOW_LEVEL_RUNTIME draw temps (shared with DRAW_VECTOR if not already allocated)
+        if !needed.contains("DRAW_VECTOR") && !needed.contains("DRAW_VECTOR_EX") {
+            ram.allocate("DRAW_VEC_X", 1, "SHOW_LEVEL: vector draw X");
+            ram.allocate("DRAW_VEC_Y", 1, "SHOW_LEVEL: vector draw Y");
+            ram.allocate("MIRROR_X", 1, "SHOW_LEVEL: mirror X flag");
+            ram.allocate("MIRROR_Y", 1, "SHOW_LEVEL: mirror Y flag");
+            ram.allocate("DRAW_VEC_INTENSITY", 1, "SHOW_LEVEL: intensity override");
+        }
+        // GP objects RAM buffer (max 8 objects × 14 bytes)
+        ram.allocate("LEVEL_GP_BUFFER", 8 * 14, "GP objects RAM buffer (max 8 objects × 14 bytes)");
+        // Physics / collision temporaries
+        ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
+        ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
+        ram.allocate("UGPC_INNER_IDX", 1, "GP-GP inner loop index");
+        ram.allocate("UGPC_DX", 2, "GP-GP |dx| (16-bit)");
+        ram.allocate("UGPC_DIST", 2, "GP-GP Manhattan distance (16-bit)");
+        ram.allocate("UGFC_GP_IDX", 1, "GP-FG outer loop GP index");
+        ram.allocate("UGFC_FG_COUNT", 1, "GP-FG inner loop FG count");
+        ram.allocate("UGFC_DX", 1, "GP-FG |dx|");
+        ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
     }
     
 // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
@@ -254,9 +289,16 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             // Level system helpers
             if name_upper == "SHOW_LEVEL" {
                 needed.insert("SHOW_LEVEL_RUNTIME".to_string());
+                // SHOW_LEVEL_RUNTIME calls Draw_Sync_List_At_With_Mirrors,
+                // which is emitted in drawing.rs when DRAW_VECTOR is in needed.
+                needed.insert("DRAW_VECTOR".to_string());
             }
             if name_upper == "LOAD_LEVEL" {
                 needed.insert("LOAD_LEVEL".to_string());
+                needed.insert("LOAD_LEVEL_RUNTIME".to_string());
+            }
+            if name_upper == "UPDATE_LEVEL" {
+                needed.insert("UPDATE_LEVEL_RUNTIME".to_string());
             }
             
 // Math helpers: Need runtime if operands contain variables
@@ -853,36 +895,36 @@ DSWM_NO_NEGATE_X:\n\
             LDA #$CC\n\
             STA VIA_cntl\n\
             CLR VIA_port_a\n\
-            LDA #$82\n\
-            STA VIA_port_b\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            LDA #$83\n\
-            STA VIA_port_b\n\
-            ; Move sequence\n\
+            LDA #$03\n\
+            STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; repeat\n\
+            LDA #$01\n\
+            STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+            ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
             LDD TEMP_YX\n\
-            STB VIA_port_a          ; y to DAC\n\
-            PSHS A                  ; Save x\n\
+            STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+            PSHS A                  ; ~4 cycle settling delay for Y\n\
             LDA #$CE\n\
-            STA VIA_cntl\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
-            PULS A                  ; Restore x\n\
-            STA VIA_port_a          ; x to DAC\n\
+            STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+            CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
+            PULS A                  ; Restore X\n\
+            STA VIA_port_a          ; X to DAC\n\
             ; Timing setup\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
-            ; Wait for move to complete\n\
+            ; Wait for move to complete (PB=1 on exit)\n\
             DSWM_W1:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W1\n\
+            ; PB stays 1 — draw loop begins with PB=1\n\
             ; Loop de dibujo (conditional mirrors)\n\
             DSWM_LOOP:\n\
             LDA ,X+                 ; Read flag\n\
@@ -903,22 +945,23 @@ DSWM_NO_NEGATE_DY:\n\
             BEQ DSWM_NO_NEGATE_DX\n\
             NEGA                    ; ← Negate dx if flag set\n\
 DSWM_NO_NEGATE_DX:\n\
-            PSHS A                  ; Save final dx\n\
-            STB VIA_port_a          ; dy (possibly negated) to DAC\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
-            PULS A                  ; Restore final dx\n\
-            STA VIA_port_a          ; dx (possibly negated) to DAC\n\
-            CLR VIA_t1_cnt_hi\n\
+            ; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)\n\
+            STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction\n\
+            NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)\n\
+            NOP                     ; settling 2\n\
+            NOP                     ; settling 3\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at DY\n\
+            STA VIA_port_a          ; DX to DAC\n\
             LDA #$FF\n\
-            STA VIA_shift_reg\n\
+            STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)\n\
+            CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)\n\
             ; Wait for line draw\n\
             DSWM_W2:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
-            CLR VIA_shift_reg\n\
+            CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\
@@ -956,36 +999,35 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             LDA #$CC\n\
             STA VIA_cntl\n\
             CLR VIA_port_a\n\
-            LDA #$82\n\
-            STA VIA_port_b\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            LDA #$83\n\
-            STA VIA_port_b\n\
-            ; Move to new start position\n\
+            LDA #$03\n\
+            STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; repeat\n\
+            LDA #$01\n\
+            STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+            ; Moveto new start position (BIOS Moveto_d order)\n\
             LDD TEMP_YX\n\
-            STB VIA_port_a\n\
-            PSHS A\n\
+            STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+            PSHS A                  ; ~4 cycle settling delay for Y\n\
             LDA #$CE\n\
-            STA VIA_cntl\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
+            STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+            CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
-            STA VIA_port_a\n\
+            STA VIA_port_a          ; X to DAC\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
-            ; Wait for move\n\
+            ; Wait for move (PB=1 on exit)\n\
             DSWM_W3:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W3\n\
-            CLR VIA_shift_reg\n\
+            ; PB stays 1 — draw loop continues with PB=1\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             DSWM_DONE:\n\
             RTS\n"

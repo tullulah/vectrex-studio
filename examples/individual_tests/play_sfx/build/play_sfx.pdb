@@ -3,89 +3,5000 @@
   "source": "main.vpy",
   "asm": "play_sfx.asm",
   "binary": "play_sfx.bin",
-  "entryPoint": "0x0000",
-  "symbols": {},
-  "lineMap": {},
-  "vpyLineMap": {},
-  "asmLineMap": {},
+  "entryPoint": "0x039C",
+  "symbols": {
+    "AU_MUSIC_LOOP": "0x019C",
+    "IF_END_2": "0x0636",
+    "AU_MUSIC_DONE": "0x0192",
+    "AU_MUSIC_HAS_DELAY": "0x0173",
+    "AU_MUSIC_PROCESS_WRITES": "0x017C",
+    "J1B3_BUILTIN": "0x006C",
+    "J1X_BUILTIN": "0x001E",
+    "SFX_UPDATE": "0x01BC",
+    "sfx_m_write": "0x021D",
+    "PSG_music_ended": "0x0104",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0086",
+    "noay": "0x01C4",
+    "AU_MUSIC_WRITE_LOOP": "0x017E",
+    "PLAY_MUSIC_RUNTIME": "0x00A9",
+    "IF_END_0": "0x0559",
+    "J1B4_BUILTIN": "0x007B",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0068",
+    "sfx_endofeffect": "0x022A",
+    "PSG_update_done": "0x0110",
+    "sfx_m_noise": "0x0213",
+    "sfx_checknoisefreq": "0x01EC",
+    "MAIN": "0x03BF",
+    "STR_1": "0x076E",
+    "IF_NEXT_3": "0x0636",
+    "_JUMP_SFX": "0x06FB",
+    "PSG_write_loop": "0x00D1",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0077",
+    "J1B1_BUILTIN": "0x004E",
+    "__Moveto_d": "0x0250",
+    "DRAW_CIRCLE_RUNTIME": "0x025A",
+    "AU_MUSIC_READ_COUNT": "0x0169",
+    "AU_MUSIC_READ": "0x015A",
+    "sfx_checkvolume": "0x01FB",
+    "DCR_intensity_5F": "0x028C",
+    "AU_MUSIC_NO_DELAY": "0x0169",
+    "IF_NEXT_1": "0x0559",
+    "STOP_MUSIC_RUNTIME": "0x0114",
+    "PSG_frame_done": "0x00FF",
+    "LOOP_BODY": "0x03EC",
+    "sfx_updatemixer": "0x0204",
+    "__Draw_Line_d": "0x0255",
+    "AUDIO_UPDATE": "0x013B",
+    "J1B1_BUILTIN.J1B1_OFF": "0x0059",
+    "sfx_checktonefreq": "0x01D4",
+    "AU_SKIP_MUSIC": "0x01A6",
+    "_EXPLOSION_SFX": "0x071E",
+    "sfx_nextframe": "0x0225",
+    "J1Y_BUILTIN": "0x0036",
+    "START": "0x039C",
+    "AU_MUSIC_ENDED": "0x0197",
+    "sfx_m_noisedis": "0x021B",
+    "sfx_m_tonedis": "0x0211",
+    "J1B2_BUILTIN": "0x005D",
+    "STR_0": "0x0764",
+    "sfx_doframe": "0x01C5",
+    "STR_2": "0x0778",
+    "PLAY_SFX_RUNTIME": "0x01B3",
+    "UPDATE_MUSIC_PSG": "0x00B8",
+    "VECTREX_PRINT_TEXT": "0x008A",
+    "AU_UPDATE_SFX": "0x01A8",
+    "AU_DONE": "0x01B0",
+    "__Reset0Ref": "0x024D",
+    "DCR_after_intensity": "0x028F",
+    "__Intensity_a": "0x0248",
+    "PSG_music_loop": "0x0109"
+  },
+  "lineMap": {
+    "12": "0x03F8",
+    "16": "0x047C",
+    "18": "0x0492",
+    "21": "0x0565",
+    "20": "0x0559",
+    "13": "0x0424",
+    "14": "0x0450",
+    "25": "0x0636",
+    "17": "0x0488",
+    "22": "0x056F"
+  },
+  "vpyLineMap": {
+    "0x03F8": {
+      "file": "main.vpy",
+      "address": "0x03F8",
+      "line": 12
+    },
+    "0x0636": {
+      "file": "main.vpy",
+      "address": "0x0636",
+      "line": 25
+    },
+    "0x0492": {
+      "file": "main.vpy",
+      "address": "0x0492",
+      "line": 18
+    },
+    "0x056F": {
+      "file": "main.vpy",
+      "address": "0x056F",
+      "line": 22
+    },
+    "0x0488": {
+      "file": "main.vpy",
+      "address": "0x0488",
+      "line": 17
+    },
+    "0x0424": {
+      "file": "main.vpy",
+      "address": "0x0424",
+      "line": 13
+    },
+    "0x047C": {
+      "file": "main.vpy",
+      "address": "0x047C",
+      "line": 16
+    },
+    "0x0450": {
+      "file": "main.vpy",
+      "address": "0x0450",
+      "line": 14
+    },
+    "0x0559": {
+      "file": "main.vpy",
+      "address": "0x0559",
+      "line": 20
+    },
+    "0x0565": {
+      "file": "main.vpy",
+      "address": "0x0565",
+      "line": 21
+    }
+  },
+  "asmLineMap": {
+    "0x04BD": {
+      "file": "play_sfx.asm",
+      "address": "0x04BD",
+      "line": 862
+    },
+    "0x0257": {
+      "file": "play_sfx.asm",
+      "address": "0x0257",
+      "line": 521
+    },
+    "0x06E6": {
+      "file": "play_sfx.asm",
+      "address": "0x06E6",
+      "line": 1093
+    },
+    "0x0598": {
+      "file": "play_sfx.asm",
+      "address": "0x0598",
+      "line": 956
+    },
+    "0x02F4": {
+      "file": "play_sfx.asm",
+      "address": "0x02F4",
+      "line": 634
+    },
+    "0x0488": {
+      "file": "play_sfx.asm",
+      "address": "0x0488",
+      "line": 838
+    },
+    "0x02F8": {
+      "file": "play_sfx.asm",
+      "address": "0x02F8",
+      "line": 639
+    },
+    "0x05DC": {
+      "file": "play_sfx.asm",
+      "address": "0x05DC",
+      "line": 983
+    },
+    "0x01D4": {
+      "file": "play_sfx.asm",
+      "address": "0x01D4",
+      "line": 438
+    },
+    "0x06CF": {
+      "file": "play_sfx.asm",
+      "address": "0x06CF",
+      "line": 1084
+    },
+    "0x0664": {
+      "file": "play_sfx.asm",
+      "address": "0x0664",
+      "line": 1041
+    },
+    "0x0222": {
+      "file": "play_sfx.asm",
+      "address": "0x0222",
+      "line": 488
+    },
+    "0x0200": {
+      "file": "play_sfx.asm",
+      "address": "0x0200",
+      "line": 464
+    },
+    "0x0397": {
+      "file": "play_sfx.asm",
+      "address": "0x0397",
+      "line": 716
+    },
+    "0x0180": {
+      "file": "play_sfx.asm",
+      "address": "0x0180",
+      "line": 361
+    },
+    "0x0740": {
+      "file": "play_sfx.asm",
+      "address": "0x0740",
+      "line": 1170
+    },
+    "0x01D6": {
+      "file": "play_sfx.asm",
+      "address": "0x01D6",
+      "line": 440
+    },
+    "0x02DE": {
+      "file": "play_sfx.asm",
+      "address": "0x02DE",
+      "line": 625
+    },
+    "0x03E4": {
+      "file": "play_sfx.asm",
+      "address": "0x03E4",
+      "line": 758
+    },
+    "0x06C5": {
+      "file": "play_sfx.asm",
+      "address": "0x06C5",
+      "line": 1080
+    },
+    "0x0749": {
+      "file": "play_sfx.asm",
+      "address": "0x0749",
+      "line": 1176
+    },
+    "0x043C": {
+      "file": "play_sfx.asm",
+      "address": "0x043C",
+      "line": 800
+    },
+    "0x0768": {
+      "file": "play_sfx.asm",
+      "address": "0x0768",
+      "line": 1198
+    },
+    "0x0220": {
+      "file": "play_sfx.asm",
+      "address": "0x0220",
+      "line": 487
+    },
+    "0x01F2": {
+      "file": "play_sfx.asm",
+      "address": "0x01F2",
+      "line": 456
+    },
+    "0x05ED": {
+      "file": "play_sfx.asm",
+      "address": "0x05ED",
+      "line": 990
+    },
+    "0x0456": {
+      "file": "play_sfx.asm",
+      "address": "0x0456",
+      "line": 814
+    },
+    "0x0719": {
+      "file": "play_sfx.asm",
+      "address": "0x0719",
+      "line": 1135
+    },
+    "0x01D5": {
+      "file": "play_sfx.asm",
+      "address": "0x01D5",
+      "line": 439
+    },
+    "0x066B": {
+      "file": "play_sfx.asm",
+      "address": "0x066B",
+      "line": 1044
+    },
+    "0x00BA": {
+      "file": "play_sfx.asm",
+      "address": "0x00BA",
+      "line": 206
+    },
+    "0x0204": {
+      "file": "play_sfx.asm",
+      "address": "0x0204",
+      "line": 468
+    },
+    "0x0068": {
+      "file": "play_sfx.asm",
+      "address": "0x0068",
+      "line": 123
+    },
+    "0x05E6": {
+      "file": "play_sfx.asm",
+      "address": "0x05E6",
+      "line": 987
+    },
+    "0x038B": {
+      "file": "play_sfx.asm",
+      "address": "0x038B",
+      "line": 711
+    },
+    "0x02D1": {
+      "file": "play_sfx.asm",
+      "address": "0x02D1",
+      "line": 619
+    },
+    "0x076E": {
+      "file": "play_sfx.asm",
+      "address": "0x076E",
+      "line": 1207
+    },
+    "0x02E4": {
+      "file": "play_sfx.asm",
+      "address": "0x02E4",
+      "line": 627
+    },
+    "0x0698": {
+      "file": "play_sfx.asm",
+      "address": "0x0698",
+      "line": 1062
+    },
+    "0x0734": {
+      "file": "play_sfx.asm",
+      "address": "0x0734",
+      "line": 1161
+    },
+    "0x0672": {
+      "file": "play_sfx.asm",
+      "address": "0x0672",
+      "line": 1047
+    },
+    "0x0778": {
+      "file": "play_sfx.asm",
+      "address": "0x0778",
+      "line": 1210
+    },
+    "0x0107": {
+      "file": "play_sfx.asm",
+      "address": "0x0107",
+      "line": 258
+    },
+    "0x0718": {
+      "file": "play_sfx.asm",
+      "address": "0x0718",
+      "line": 1134
+    },
+    "0x065C": {
+      "file": "play_sfx.asm",
+      "address": "0x065C",
+      "line": 1038
+    },
+    "0x0689": {
+      "file": "play_sfx.asm",
+      "address": "0x0689",
+      "line": 1056
+    },
+    "0x051D": {
+      "file": "play_sfx.asm",
+      "address": "0x051D",
+      "line": 900
+    },
+    "0x0268": {
+      "file": "play_sfx.asm",
+      "address": "0x0268",
+      "line": 546
+    },
+    "0x0322": {
+      "file": "play_sfx.asm",
+      "address": "0x0322",
+      "line": 660
+    },
+    "0x0529": {
+      "file": "play_sfx.asm",
+      "address": "0x0529",
+      "line": 905
+    },
+    "0x04E5": {
+      "file": "play_sfx.asm",
+      "address": "0x04E5",
+      "line": 878
+    },
+    "0x01A8": {
+      "file": "play_sfx.asm",
+      "address": "0x01A8",
+      "line": 390
+    },
+    "0x0336": {
+      "file": "play_sfx.asm",
+      "address": "0x0336",
+      "line": 671
+    },
+    "0x0760": {
+      "file": "play_sfx.asm",
+      "address": "0x0760",
+      "line": 1191
+    },
+    "0x0314": {
+      "file": "play_sfx.asm",
+      "address": "0x0314",
+      "line": 653
+    },
+    "0x028C": {
+      "file": "play_sfx.asm",
+      "address": "0x028C",
+      "line": 568
+    },
+    "0x026B": {
+      "file": "play_sfx.asm",
+      "address": "0x026B",
+      "line": 547
+    },
+    "0x0641": {
+      "file": "play_sfx.asm",
+      "address": "0x0641",
+      "line": 1027
+    },
+    "0x0272": {
+      "file": "play_sfx.asm",
+      "address": "0x0272",
+      "line": 551
+    },
+    "0x0133": {
+      "file": "play_sfx.asm",
+      "address": "0x0133",
+      "line": 290
+    },
+    "0x0606": {
+      "file": "play_sfx.asm",
+      "address": "0x0606",
+      "line": 1000
+    },
+    "0x04C7": {
+      "file": "play_sfx.asm",
+      "address": "0x04C7",
+      "line": 866
+    },
+    "0x06C8": {
+      "file": "play_sfx.asm",
+      "address": "0x06C8",
+      "line": 1081
+    },
+    "0x04DB": {
+      "file": "play_sfx.asm",
+      "address": "0x04DB",
+      "line": 874
+    },
+    "0x0294": {
+      "file": "play_sfx.asm",
+      "address": "0x0294",
+      "line": 576
+    },
+    "0x0361": {
+      "file": "play_sfx.asm",
+      "address": "0x0361",
+      "line": 694
+    },
+    "0x06AC": {
+      "file": "play_sfx.asm",
+      "address": "0x06AC",
+      "line": 1070
+    },
+    "0x0234": {
+      "file": "play_sfx.asm",
+      "address": "0x0234",
+      "line": 501
+    },
+    "0x039E": {
+      "file": "play_sfx.asm",
+      "address": "0x039E",
+      "line": 11
+    },
+    "0x06A4": {
+      "file": "play_sfx.asm",
+      "address": "0x06A4",
+      "line": 1067
+    },
+    "0x070C": {
+      "file": "play_sfx.asm",
+      "address": "0x070C",
+      "line": 1126
+    },
+    "0x04D9": {
+      "file": "play_sfx.asm",
+      "address": "0x04D9",
+      "line": 873
+    },
+    "0x043F": {
+      "file": "play_sfx.asm",
+      "address": "0x043F",
+      "line": 801
+    },
+    "0x047C": {
+      "file": "play_sfx.asm",
+      "address": "0x047C",
+      "line": 832
+    },
+    "0x0722": {
+      "file": "play_sfx.asm",
+      "address": "0x0722",
+      "line": 1151
+    },
+    "0x057F": {
+      "file": "play_sfx.asm",
+      "address": "0x057F",
+      "line": 946
+    },
+    "0x0151": {
+      "file": "play_sfx.asm",
+      "address": "0x0151",
+      "line": 321
+    },
+    "0x00D3": {
+      "file": "play_sfx.asm",
+      "address": "0x00D3",
+      "line": 225
+    },
+    "0x0721": {
+      "file": "play_sfx.asm",
+      "address": "0x0721",
+      "line": 1150
+    },
+    "0x070B": {
+      "file": "play_sfx.asm",
+      "address": "0x070B",
+      "line": 1125
+    },
+    "0x05C8": {
+      "file": "play_sfx.asm",
+      "address": "0x05C8",
+      "line": 975
+    },
+    "0x0328": {
+      "file": "play_sfx.asm",
+      "address": "0x0328",
+      "line": 662
+    },
+    "0x03FB": {
+      "file": "play_sfx.asm",
+      "address": "0x03FB",
+      "line": 773
+    },
+    "0x01E3": {
+      "file": "play_sfx.asm",
+      "address": "0x01E3",
+      "line": 447
+    },
+    "0x03FE": {
+      "file": "play_sfx.asm",
+      "address": "0x03FE",
+      "line": 54
+    },
+    "0x06A2": {
+      "file": "play_sfx.asm",
+      "address": "0x06A2",
+      "line": 1066
+    },
+    "0x0572": {
+      "file": "play_sfx.asm",
+      "address": "0x0572",
+      "line": 939
+    },
+    "0x05CF": {
+      "file": "play_sfx.asm",
+      "address": "0x05CF",
+      "line": 978
+    },
+    "0x0062": {
+      "file": "play_sfx.asm",
+      "address": "0x0062",
+      "line": 119
+    },
+    "0x0754": {
+      "file": "play_sfx.asm",
+      "address": "0x0754",
+      "line": 1183
+    },
+    "0x0618": {
+      "file": "play_sfx.asm",
+      "address": "0x0618",
+      "line": 1007
+    },
+    "0x0712": {
+      "file": "play_sfx.asm",
+      "address": "0x0712",
+      "line": 1130
+    },
+    "0x06B8": {
+      "file": "play_sfx.asm",
+      "address": "0x06B8",
+      "line": 1075
+    },
+    "0x067F": {
+      "file": "play_sfx.asm",
+      "address": "0x067F",
+      "line": 1052
+    },
+    "0x004A": {
+      "file": "play_sfx.asm",
+      "address": "0x004A",
+      "line": 97
+    },
+    "0x0478": {
+      "file": "play_sfx.asm",
+      "address": "0x0478",
+      "line": 827
+    },
+    "0x03E1": {
+      "file": "play_sfx.asm",
+      "address": "0x03E1",
+      "line": 757
+    },
+    "0x05FC": {
+      "file": "play_sfx.asm",
+      "address": "0x05FC",
+      "line": 996
+    },
+    "0x030C": {
+      "file": "play_sfx.asm",
+      "address": "0x030C",
+      "line": 648
+    },
+    "0x0064": {
+      "file": "play_sfx.asm",
+      "address": "0x0064",
+      "line": 120
+    },
+    "0x04C5": {
+      "file": "play_sfx.asm",
+      "address": "0x04C5",
+      "line": 865
+    },
+    "0x00C2": {
+      "file": "play_sfx.asm",
+      "address": "0x00C2",
+      "line": 210
+    },
+    "0x06EF": {
+      "file": "play_sfx.asm",
+      "address": "0x06EF",
+      "line": 1097
+    },
+    "0x03C7": {
+      "file": "play_sfx.asm",
+      "address": "0x03C7",
+      "line": 744
+    },
+    "0x0542": {
+      "file": "play_sfx.asm",
+      "address": "0x0542",
+      "line": 915
+    },
+    "0x0187": {
+      "file": "play_sfx.asm",
+      "address": "0x0187",
+      "line": 364
+    },
+    "0x064A": {
+      "file": "play_sfx.asm",
+      "address": "0x064A",
+      "line": 1031
+    },
+    "0x019E": {
+      "file": "play_sfx.asm",
+      "address": "0x019E",
+      "line": 381
+    },
+    "0x0404": {
+      "file": "play_sfx.asm",
+      "address": "0x0404",
+      "line": 56
+    },
+    "0x01EF": {
+      "file": "play_sfx.asm",
+      "address": "0x01EF",
+      "line": 454
+    },
+    "0x049C": {
+      "file": "play_sfx.asm",
+      "address": "0x049C",
+      "line": 847
+    },
+    "0x068E": {
+      "file": "play_sfx.asm",
+      "address": "0x068E",
+      "line": 1058
+    },
+    "0x05BB": {
+      "file": "play_sfx.asm",
+      "address": "0x05BB",
+      "line": 970
+    },
+    "0x0255": {
+      "file": "play_sfx.asm",
+      "address": "0x0255",
+      "line": 520
+    },
+    "0x0601": {
+      "file": "play_sfx.asm",
+      "address": "0x0601",
+      "line": 998
+    },
+    "0x057D": {
+      "file": "play_sfx.asm",
+      "address": "0x057D",
+      "line": 945
+    },
+    "0x0741": {
+      "file": "play_sfx.asm",
+      "address": "0x0741",
+      "line": 1171
+    },
+    "0x0086": {
+      "file": "play_sfx.asm",
+      "address": "0x0086",
+      "line": 143
+    },
+    "0x01A6": {
+      "file": "play_sfx.asm",
+      "address": "0x01A6",
+      "line": 386
+    },
+    "0x0347": {
+      "file": "play_sfx.asm",
+      "address": "0x0347",
+      "line": 680
+    },
+    "0x041C": {
+      "file": "play_sfx.asm",
+      "address": "0x041C",
+      "line": 64
+    },
+    "0x00B7": {
+      "file": "play_sfx.asm",
+      "address": "0x00B7",
+      "line": 195
+    },
+    "0x0565": {
+      "file": "play_sfx.asm",
+      "address": "0x0565",
+      "line": 933
+    },
+    "0x03CF": {
+      "file": "play_sfx.asm",
+      "address": "0x03CF",
+      "line": 37
+    },
+    "0x035D": {
+      "file": "play_sfx.asm",
+      "address": "0x035D",
+      "line": 689
+    },
+    "0x0263": {
+      "file": "play_sfx.asm",
+      "address": "0x0263",
+      "line": 542
+    },
+    "0x0264": {
+      "file": "play_sfx.asm",
+      "address": "0x0264",
+      "line": 543
+    },
+    "0x04D1": {
+      "file": "play_sfx.asm",
+      "address": "0x04D1",
+      "line": 870
+    },
+    "0x0276": {
+      "file": "play_sfx.asm",
+      "address": "0x0276",
+      "line": 555
+    },
+    "0x061C": {
+      "file": "play_sfx.asm",
+      "address": "0x061C",
+      "line": 1009
+    },
+    "0x0114": {
+      "file": "play_sfx.asm",
+      "address": "0x0114",
+      "line": 276
+    },
+    "0x05D4": {
+      "file": "play_sfx.asm",
+      "address": "0x05D4",
+      "line": 980
+    },
+    "0x01FD": {
+      "file": "play_sfx.asm",
+      "address": "0x01FD",
+      "line": 462
+    },
+    "0x04EF": {
+      "file": "play_sfx.asm",
+      "address": "0x04EF",
+      "line": 882
+    },
+    "0x009A": {
+      "file": "play_sfx.asm",
+      "address": "0x009A",
+      "line": 155
+    },
+    "0x0744": {
+      "file": "play_sfx.asm",
+      "address": "0x0744",
+      "line": 1173
+    },
+    "0x0364": {
+      "file": "play_sfx.asm",
+      "address": "0x0364",
+      "line": 695
+    },
+    "0x051A": {
+      "file": "play_sfx.asm",
+      "address": "0x051A",
+      "line": 899
+    },
+    "0x06FD": {
+      "file": "play_sfx.asm",
+      "address": "0x06FD",
+      "line": 1118
+    },
+    "0x04E3": {
+      "file": "play_sfx.asm",
+      "address": "0x04E3",
+      "line": 877
+    },
+    "0x0231": {
+      "file": "play_sfx.asm",
+      "address": "0x0231",
+      "line": 499
+    },
+    "0x0085": {
+      "file": "play_sfx.asm",
+      "address": "0x0085",
+      "line": 142
+    },
+    "0x00DA": {
+      "file": "play_sfx.asm",
+      "address": "0x00DA",
+      "line": 230
+    },
+    "0x02E7": {
+      "file": "play_sfx.asm",
+      "address": "0x02E7",
+      "line": 628
+    },
+    "0x0082": {
+      "file": "play_sfx.asm",
+      "address": "0x0082",
+      "line": 140
+    },
+    "0x0756": {
+      "file": "play_sfx.asm",
+      "address": "0x0756",
+      "line": 1185
+    },
+    "0x0184": {
+      "file": "play_sfx.asm",
+      "address": "0x0184",
+      "line": 363
+    },
+    "0x00C7": {
+      "file": "play_sfx.asm",
+      "address": "0x00C7",
+      "line": 214
+    },
+    "0x06ED": {
+      "file": "play_sfx.asm",
+      "address": "0x06ED",
+      "line": 1096
+    },
+    "0x0309": {
+      "file": "play_sfx.asm",
+      "address": "0x0309",
+      "line": 647
+    },
+    "0x0559": {
+      "file": "play_sfx.asm",
+      "address": "0x0559",
+      "line": 927
+    },
+    "0x0217": {
+      "file": "play_sfx.asm",
+      "address": "0x0217",
+      "line": 482
+    },
+    "0x0121": {
+      "file": "play_sfx.asm",
+      "address": "0x0121",
+      "line": 282
+    },
+    "0x05D2": {
+      "file": "play_sfx.asm",
+      "address": "0x05D2",
+      "line": 979
+    },
+    "0x03A3": {
+      "file": "play_sfx.asm",
+      "address": "0x03A3",
+      "line": 722
+    },
+    "0x00F4": {
+      "file": "play_sfx.asm",
+      "address": "0x00F4",
+      "line": 241
+    },
+    "0x015D": {
+      "file": "play_sfx.asm",
+      "address": "0x015D",
+      "line": 327
+    },
+    "0x06D6": {
+      "file": "play_sfx.asm",
+      "address": "0x06D6",
+      "line": 1087
+    },
+    "0x0123": {
+      "file": "play_sfx.asm",
+      "address": "0x0123",
+      "line": 283
+    },
+    "0x0761": {
+      "file": "play_sfx.asm",
+      "address": "0x0761",
+      "line": 1192
+    },
+    "0x00FF": {
+      "file": "play_sfx.asm",
+      "address": "0x00FF",
+      "line": 251
+    },
+    "0x02D4": {
+      "file": "play_sfx.asm",
+      "address": "0x02D4",
+      "line": 620
+    },
+    "0x0023": {
+      "file": "play_sfx.asm",
+      "address": "0x0023",
+      "line": 76
+    },
+    "0x009D": {
+      "file": "play_sfx.asm",
+      "address": "0x009D",
+      "line": 156
+    },
+    "0x037F": {
+      "file": "play_sfx.asm",
+      "address": "0x037F",
+      "line": 706
+    },
+    "0x02D0": {
+      "file": "play_sfx.asm",
+      "address": "0x02D0",
+      "line": 618
+    },
+    "0x03AB": {
+      "file": "play_sfx.asm",
+      "address": "0x03AB",
+      "line": 725
+    },
+    "0x06BE": {
+      "file": "play_sfx.asm",
+      "address": "0x06BE",
+      "line": 1077
+    },
+    "0x039C": {
+      "file": "play_sfx.asm",
+      "address": "0x039C",
+      "line": 2
+    },
+    "0x0076": {
+      "file": "play_sfx.asm",
+      "address": "0x0076",
+      "line": 132
+    },
+    "0x0353": {
+      "file": "play_sfx.asm",
+      "address": "0x0353",
+      "line": 684
+    },
+    "0x0515": {
+      "file": "play_sfx.asm",
+      "address": "0x0515",
+      "line": 897
+    },
+    "0x007E": {
+      "file": "play_sfx.asm",
+      "address": "0x007E",
+      "line": 137
+    },
+    "0x01A1": {
+      "file": "play_sfx.asm",
+      "address": "0x01A1",
+      "line": 382
+    },
+    "0x02BE": {
+      "file": "play_sfx.asm",
+      "address": "0x02BE",
+      "line": 600
+    },
+    "0x0730": {
+      "file": "play_sfx.asm",
+      "address": "0x0730",
+      "line": 1159
+    },
+    "0x06FB": {
+      "file": "play_sfx.asm",
+      "address": "0x06FB",
+      "line": 1117
+    },
+    "0x02D7": {
+      "file": "play_sfx.asm",
+      "address": "0x02D7",
+      "line": 621
+    },
+    "0x0492": {
+      "file": "play_sfx.asm",
+      "address": "0x0492",
+      "line": 843
+    },
+    "0x0610": {
+      "file": "play_sfx.asm",
+      "address": "0x0610",
+      "line": 1004
+    },
+    "0x00A0": {
+      "file": "play_sfx.asm",
+      "address": "0x00A0",
+      "line": 157
+    },
+    "0x0471": {
+      "file": "play_sfx.asm",
+      "address": "0x0471",
+      "line": 823
+    },
+    "0x0020": {
+      "file": "play_sfx.asm",
+      "address": "0x0020",
+      "line": 75
+    },
+    "0x005D": {
+      "file": "play_sfx.asm",
+      "address": "0x005D",
+      "line": 116
+    },
+    "0x04A0": {
+      "file": "play_sfx.asm",
+      "address": "0x04A0",
+      "line": 850
+    },
+    "0x05F0": {
+      "file": "play_sfx.asm",
+      "address": "0x05F0",
+      "line": 991
+    },
+    "0x072A": {
+      "file": "play_sfx.asm",
+      "address": "0x072A",
+      "line": 1156
+    },
+    "0x006C": {
+      "file": "play_sfx.asm",
+      "address": "0x006C",
+      "line": 126
+    },
+    "0x02B2": {
+      "file": "play_sfx.asm",
+      "address": "0x02B2",
+      "line": 595
+    },
+    "0x071E": {
+      "file": "play_sfx.asm",
+      "address": "0x071E",
+      "line": 1137
+    },
+    "0x0715": {
+      "file": "play_sfx.asm",
+      "address": "0x0715",
+      "line": 1132
+    },
+    "0x0436": {
+      "file": "play_sfx.asm",
+      "address": "0x0436",
+      "line": 798
+    },
+    "0x013F": {
+      "file": "play_sfx.asm",
+      "address": "0x013F",
+      "line": 306
+    },
+    "0x02A9": {
+      "file": "play_sfx.asm",
+      "address": "0x02A9",
+      "line": 591
+    },
+    "0x04AF": {
+      "file": "play_sfx.asm",
+      "address": "0x04AF",
+      "line": 856
+    },
+    "0x0214": {
+      "file": "play_sfx.asm",
+      "address": "0x0214",
+      "line": 480
+    },
+    "0x01F6": {
+      "file": "play_sfx.asm",
+      "address": "0x01F6",
+      "line": 458
+    },
+    "0x03F2": {
+      "file": "play_sfx.asm",
+      "address": "0x03F2",
+      "line": 767
+    },
+    "0x05F7": {
+      "file": "play_sfx.asm",
+      "address": "0x05F7",
+      "line": 994
+    },
+    "0x038E": {
+      "file": "play_sfx.asm",
+      "address": "0x038E",
+      "line": 712
+    },
+    "0x045F": {
+      "file": "play_sfx.asm",
+      "address": "0x045F",
+      "line": 817
+    },
+    "0x06DE": {
+      "file": "play_sfx.asm",
+      "address": "0x06DE",
+      "line": 1090
+    },
+    "0x00D1": {
+      "file": "play_sfx.asm",
+      "address": "0x00D1",
+      "line": 224
+    },
+    "0x06A7": {
+      "file": "play_sfx.asm",
+      "address": "0x06A7",
+      "line": 1068
+    },
+    "0x0442": {
+      "file": "play_sfx.asm",
+      "address": "0x0442",
+      "line": 802
+    },
+    "0x032B": {
+      "file": "play_sfx.asm",
+      "address": "0x032B",
+      "line": 663
+    },
+    "0x071B": {
+      "file": "play_sfx.asm",
+      "address": "0x071B",
+      "line": 1136
+    },
+    "0x00C0": {
+      "file": "play_sfx.asm",
+      "address": "0x00C0",
+      "line": 208
+    },
+    "0x0041": {
+      "file": "play_sfx.asm",
+      "address": "0x0041",
+      "line": 92
+    },
+    "0x0354": {
+      "file": "play_sfx.asm",
+      "address": "0x0354",
+      "line": 686
+    },
+    "0x072C": {
+      "file": "play_sfx.asm",
+      "address": "0x072C",
+      "line": 1157
+    },
+    "0x00F9": {
+      "file": "play_sfx.asm",
+      "address": "0x00F9",
+      "line": 244
+    },
+    "0x0701": {
+      "file": "play_sfx.asm",
+      "address": "0x0701",
+      "line": 1121
+    },
+    "0x018C": {
+      "file": "play_sfx.asm",
+      "address": "0x018C",
+      "line": 367
+    },
+    "0x05FA": {
+      "file": "play_sfx.asm",
+      "address": "0x05FA",
+      "line": 995
+    },
+    "0x01B3": {
+      "file": "play_sfx.asm",
+      "address": "0x01B3",
+      "line": 413
+    },
+    "0x069A": {
+      "file": "play_sfx.asm",
+      "address": "0x069A",
+      "line": 1063
+    },
+    "0x033D": {
+      "file": "play_sfx.asm",
+      "address": "0x033D",
+      "line": 675
+    },
+    "0x0524": {
+      "file": "play_sfx.asm",
+      "address": "0x0524",
+      "line": 903
+    },
+    "0x04E8": {
+      "file": "play_sfx.asm",
+      "address": "0x04E8",
+      "line": 879
+    },
+    "0x00A9": {
+      "file": "play_sfx.asm",
+      "address": "0x00A9",
+      "line": 190
+    },
+    "0x0693": {
+      "file": "play_sfx.asm",
+      "address": "0x0693",
+      "line": 1060
+    },
+    "0x02C7": {
+      "file": "play_sfx.asm",
+      "address": "0x02C7",
+      "line": 614
+    },
+    "0x0350": {
+      "file": "play_sfx.asm",
+      "address": "0x0350",
+      "line": 683
+    },
+    "0x0373": {
+      "file": "play_sfx.asm",
+      "address": "0x0373",
+      "line": 701
+    },
+    "0x05A2": {
+      "file": "play_sfx.asm",
+      "address": "0x05A2",
+      "line": 960
+    },
+    "0x04F7": {
+      "file": "play_sfx.asm",
+      "address": "0x04F7",
+      "line": 885
+    },
+    "0x04A7": {
+      "file": "play_sfx.asm",
+      "address": "0x04A7",
+      "line": 853
+    },
+    "0x0574": {
+      "file": "play_sfx.asm",
+      "address": "0x0574",
+      "line": 940
+    },
+    "0x0657": {
+      "file": "play_sfx.asm",
+      "address": "0x0657",
+      "line": 1036
+    },
+    "0x01FE": {
+      "file": "play_sfx.asm",
+      "address": "0x01FE",
+      "line": 463
+    },
+    "0x02C1": {
+      "file": "play_sfx.asm",
+      "address": "0x02C1",
+      "line": 601
+    },
+    "0x0643": {
+      "file": "play_sfx.asm",
+      "address": "0x0643",
+      "line": 1028
+    },
+    "0x0238": {
+      "file": "play_sfx.asm",
+      "address": "0x0238",
+      "line": 503
+    },
+    "0x0077": {
+      "file": "play_sfx.asm",
+      "address": "0x0077",
+      "line": 133
+    },
+    "0x06F7": {
+      "file": "play_sfx.asm",
+      "address": "0x06F7",
+      "line": 1100
+    },
+    "0x076F": {
+      "file": "play_sfx.asm",
+      "address": "0x076F",
+      "line": 1208
+    },
+    "0x06B1": {
+      "file": "play_sfx.asm",
+      "address": "0x06B1",
+      "line": 1072
+    },
+    "0x02AC": {
+      "file": "play_sfx.asm",
+      "address": "0x02AC",
+      "line": 592
+    },
+    "0x074A": {
+      "file": "play_sfx.asm",
+      "address": "0x074A",
+      "line": 1177
+    },
+    "0x0376": {
+      "file": "play_sfx.asm",
+      "address": "0x0376",
+      "line": 702
+    },
+    "0x0700": {
+      "file": "play_sfx.asm",
+      "address": "0x0700",
+      "line": 1120
+    },
+    "0x04B6": {
+      "file": "play_sfx.asm",
+      "address": "0x04B6",
+      "line": 859
+    },
+    "0x0367": {
+      "file": "play_sfx.asm",
+      "address": "0x0367",
+      "line": 696
+    },
+    "0x020E": {
+      "file": "play_sfx.asm",
+      "address": "0x020E",
+      "line": 474
+    },
+    "0x0047": {
+      "file": "play_sfx.asm",
+      "address": "0x0047",
+      "line": 94
+    },
+    "0x0061": {
+      "file": "play_sfx.asm",
+      "address": "0x0061",
+      "line": 118
+    },
+    "0x0517": {
+      "file": "play_sfx.asm",
+      "address": "0x0517",
+      "line": 898
+    },
+    "0x03AD": {
+      "file": "play_sfx.asm",
+      "address": "0x03AD",
+      "line": 727
+    },
+    "0x04F5": {
+      "file": "play_sfx.asm",
+      "address": "0x04F5",
+      "line": 884
+    },
+    "0x0748": {
+      "file": "play_sfx.asm",
+      "address": "0x0748",
+      "line": 1175
+    },
+    "0x06C2": {
+      "file": "play_sfx.asm",
+      "address": "0x06C2",
+      "line": 1079
+    },
+    "0x05E8": {
+      "file": "play_sfx.asm",
+      "address": "0x05E8",
+      "line": 988
+    },
+    "0x05A0": {
+      "file": "play_sfx.asm",
+      "address": "0x05A0",
+      "line": 959
+    },
+    "0x06B4": {
+      "file": "play_sfx.asm",
+      "address": "0x06B4",
+      "line": 1073
+    },
+    "0x01F0": {
+      "file": "play_sfx.asm",
+      "address": "0x01F0",
+      "line": 455
+    },
+    "0x02F1": {
+      "file": "play_sfx.asm",
+      "address": "0x02F1",
+      "line": 633
+    },
+    "0x0248": {
+      "file": "play_sfx.asm",
+      "address": "0x0248",
+      "line": 512
+    },
+    "0x0070": {
+      "file": "play_sfx.asm",
+      "address": "0x0070",
+      "line": 128
+    },
+    "0x0102": {
+      "file": "play_sfx.asm",
+      "address": "0x0102",
+      "line": 252
+    },
+    "0x0763": {
+      "file": "play_sfx.asm",
+      "address": "0x0763",
+      "line": 1194
+    },
+    "0x016B": {
+      "file": "play_sfx.asm",
+      "address": "0x016B",
+      "line": 341
+    },
+    "0x0547": {
+      "file": "play_sfx.asm",
+      "address": "0x0547",
+      "line": 917
+    },
+    "0x06E8": {
+      "file": "play_sfx.asm",
+      "address": "0x06E8",
+      "line": 1094
+    },
+    "0x01EE": {
+      "file": "play_sfx.asm",
+      "address": "0x01EE",
+      "line": 453
+    },
+    "0x0622": {
+      "file": "play_sfx.asm",
+      "address": "0x0622",
+      "line": 1011
+    },
+    "0x03C5": {
+      "file": "play_sfx.asm",
+      "address": "0x03C5",
+      "line": 33
+    },
+    "0x0648": {
+      "file": "play_sfx.asm",
+      "address": "0x0648",
+      "line": 1030
+    },
+    "0x02BB": {
+      "file": "play_sfx.asm",
+      "address": "0x02BB",
+      "line": 599
+    },
+    "0x075C": {
+      "file": "play_sfx.asm",
+      "address": "0x075C",
+      "line": 1189
+    },
+    "0x0767": {
+      "file": "play_sfx.asm",
+      "address": "0x0767",
+      "line": 1197
+    },
+    "0x0150": {
+      "file": "play_sfx.asm",
+      "address": "0x0150",
+      "line": 318
+    },
+    "0x03B6": {
+      "file": "play_sfx.asm",
+      "address": "0x03B6",
+      "line": 20
+    },
+    "0x0459": {
+      "file": "play_sfx.asm",
+      "address": "0x0459",
+      "line": 815
+    },
+    "0x04D7": {
+      "file": "play_sfx.asm",
+      "address": "0x04D7",
+      "line": 872
+    },
+    "0x0682": {
+      "file": "play_sfx.asm",
+      "address": "0x0682",
+      "line": 1053
+    },
+    "0x0207": {
+      "file": "play_sfx.asm",
+      "address": "0x0207",
+      "line": 469
+    },
+    "0x05DE": {
+      "file": "play_sfx.asm",
+      "address": "0x05DE",
+      "line": 984
+    },
+    "0x0612": {
+      "file": "play_sfx.asm",
+      "address": "0x0612",
+      "line": 1005
+    },
+    "0x023A": {
+      "file": "play_sfx.asm",
+      "address": "0x023A",
+      "line": 504
+    },
+    "0x01B0": {
+      "file": "play_sfx.asm",
+      "address": "0x01B0",
+      "line": 396
+    },
+    "0x0569": {
+      "file": "play_sfx.asm",
+      "address": "0x0569",
+      "line": 935
+    },
+    "0x02EA": {
+      "file": "play_sfx.asm",
+      "address": "0x02EA",
+      "line": 630
+    },
+    "0x0161": {
+      "file": "play_sfx.asm",
+      "address": "0x0161",
+      "line": 332
+    },
+    "0x059A": {
+      "file": "play_sfx.asm",
+      "address": "0x059A",
+      "line": 957
+    },
+    "0x0732": {
+      "file": "play_sfx.asm",
+      "address": "0x0732",
+      "line": 1160
+    },
+    "0x0135": {
+      "file": "play_sfx.asm",
+      "address": "0x0135",
+      "line": 291
+    },
+    "0x003B": {
+      "file": "play_sfx.asm",
+      "address": "0x003B",
+      "line": 90
+    },
+    "0x0509": {
+      "file": "play_sfx.asm",
+      "address": "0x0509",
+      "line": 892
+    },
+    "0x0146": {
+      "file": "play_sfx.asm",
+      "address": "0x0146",
+      "line": 313
+    },
+    "0x0285": {
+      "file": "play_sfx.asm",
+      "address": "0x0285",
+      "line": 566
+    },
+    "0x023B": {
+      "file": "play_sfx.asm",
+      "address": "0x023B",
+      "line": 505
+    },
+    "0x017C": {
+      "file": "play_sfx.asm",
+      "address": "0x017C",
+      "line": 354
+    },
+    "0x008C": {
+      "file": "play_sfx.asm",
+      "address": "0x008C",
+      "line": 150
+    },
+    "0x05F2": {
+      "file": "play_sfx.asm",
+      "address": "0x05F2",
+      "line": 992
+    },
+    "0x0703": {
+      "file": "play_sfx.asm",
+      "address": "0x0703",
+      "line": 1122
+    },
+    "0x0295": {
+      "file": "play_sfx.asm",
+      "address": "0x0295",
+      "line": 577
+    },
+    "0x06FE": {
+      "file": "play_sfx.asm",
+      "address": "0x06FE",
+      "line": 1119
+    },
+    "0x0445": {
+      "file": "play_sfx.asm",
+      "address": "0x0445",
+      "line": 803
+    },
+    "0x0497": {
+      "file": "play_sfx.asm",
+      "address": "0x0497",
+      "line": 845
+    },
+    "0x06AE": {
+      "file": "play_sfx.asm",
+      "address": "0x06AE",
+      "line": 1071
+    },
+    "0x01C4": {
+      "file": "play_sfx.asm",
+      "address": "0x01C4",
+      "line": 424
+    },
+    "0x058E": {
+      "file": "play_sfx.asm",
+      "address": "0x058E",
+      "line": 952
+    },
+    "0x0652": {
+      "file": "play_sfx.asm",
+      "address": "0x0652",
+      "line": 1034
+    },
+    "0x0031": {
+      "file": "play_sfx.asm",
+      "address": "0x0031",
+      "line": 82
+    },
+    "0x05C0": {
+      "file": "play_sfx.asm",
+      "address": "0x05C0",
+      "line": 972
+    },
+    "0x0430": {
+      "file": "play_sfx.asm",
+      "address": "0x0430",
+      "line": 796
+    },
+    "0x00F6": {
+      "file": "play_sfx.asm",
+      "address": "0x00F6",
+      "line": 242
+    },
+    "0x019A": {
+      "file": "play_sfx.asm",
+      "address": "0x019A",
+      "line": 377
+    },
+    "0x0317": {
+      "file": "play_sfx.asm",
+      "address": "0x0317",
+      "line": 654
+    },
+    "0x040D": {
+      "file": "play_sfx.asm",
+      "address": "0x040D",
+      "line": 59
+    },
+    "0x045C": {
+      "file": "play_sfx.asm",
+      "address": "0x045C",
+      "line": 816
+    },
+    "0x0310": {
+      "file": "play_sfx.asm",
+      "address": "0x0310",
+      "line": 650
+    },
+    "0x033A": {
+      "file": "play_sfx.asm",
+      "address": "0x033A",
+      "line": 674
+    },
+    "0x037C": {
+      "file": "play_sfx.asm",
+      "address": "0x037C",
+      "line": 705
+    },
+    "0x008E": {
+      "file": "play_sfx.asm",
+      "address": "0x008E",
+      "line": 151
+    },
+    "0x06CA": {
+      "file": "play_sfx.asm",
+      "address": "0x06CA",
+      "line": 1082
+    },
+    "0x05B1": {
+      "file": "play_sfx.asm",
+      "address": "0x05B1",
+      "line": 966
+    },
+    "0x0138": {
+      "file": "play_sfx.asm",
+      "address": "0x0138",
+      "line": 292
+    },
+    "0x0503": {
+      "file": "play_sfx.asm",
+      "address": "0x0503",
+      "line": 890
+    },
+    "0x05B4": {
+      "file": "play_sfx.asm",
+      "address": "0x05B4",
+      "line": 967
+    },
+    "0x044B": {
+      "file": "play_sfx.asm",
+      "address": "0x044B",
+      "line": 806
+    },
+    "0x0661": {
+      "file": "play_sfx.asm",
+      "address": "0x0661",
+      "line": 1040
+    },
+    "0x0049": {
+      "file": "play_sfx.asm",
+      "address": "0x0049",
+      "line": 96
+    },
+    "0x02DA": {
+      "file": "play_sfx.asm",
+      "address": "0x02DA",
+      "line": 622
+    },
+    "0x061F": {
+      "file": "play_sfx.asm",
+      "address": "0x061F",
+      "line": 1010
+    },
+    "0x0527": {
+      "file": "play_sfx.asm",
+      "address": "0x0527",
+      "line": 904
+    },
+    "0x0283": {
+      "file": "play_sfx.asm",
+      "address": "0x0283",
+      "line": 564
+    },
+    "0x042A": {
+      "file": "play_sfx.asm",
+      "address": "0x042A",
+      "line": 794
+    },
+    "0x025F": {
+      "file": "play_sfx.asm",
+      "address": "0x025F",
+      "line": 540
+    },
+    "0x0453": {
+      "file": "play_sfx.asm",
+      "address": "0x0453",
+      "line": 813
+    },
+    "0x03DE": {
+      "file": "play_sfx.asm",
+      "address": "0x03DE",
+      "line": 43
+    },
+    "0x058C": {
+      "file": "play_sfx.asm",
+      "address": "0x058C",
+      "line": 951
+    },
+    "0x056C": {
+      "file": "play_sfx.asm",
+      "address": "0x056C",
+      "line": 936
+    },
+    "0x0166": {
+      "file": "play_sfx.asm",
+      "address": "0x0166",
+      "line": 335
+    },
+    "0x03A0": {
+      "file": "play_sfx.asm",
+      "address": "0x03A0",
+      "line": 721
+    },
+    "0x01DE": {
+      "file": "play_sfx.asm",
+      "address": "0x01DE",
+      "line": 445
+    },
+    "0x04F9": {
+      "file": "play_sfx.asm",
+      "address": "0x04F9",
+      "line": 886
+    },
+    "0x0262": {
+      "file": "play_sfx.asm",
+      "address": "0x0262",
+      "line": 541
+    },
+    "0x0566": {
+      "file": "play_sfx.asm",
+      "address": "0x0566",
+      "line": 934
+    },
+    "0x04B1": {
+      "file": "play_sfx.asm",
+      "address": "0x04B1",
+      "line": 857
+    },
+    "0x02AF": {
+      "file": "play_sfx.asm",
+      "address": "0x02AF",
+      "line": 593
+    },
+    "0x0297": {
+      "file": "play_sfx.asm",
+      "address": "0x0297",
+      "line": 578
+    },
+    "0x00EC": {
+      "file": "play_sfx.asm",
+      "address": "0x00EC",
+      "line": 237
+    },
+    "0x0479": {
+      "file": "play_sfx.asm",
+      "address": "0x0479",
+      "line": 828
+    },
+    "0x0153": {
+      "file": "play_sfx.asm",
+      "address": "0x0153",
+      "line": 322
+    },
+    "0x063D": {
+      "file": "play_sfx.asm",
+      "address": "0x063D",
+      "line": 1024
+    },
+    "0x00F1": {
+      "file": "play_sfx.asm",
+      "address": "0x00F1",
+      "line": 239
+    },
+    "0x01E7": {
+      "file": "play_sfx.asm",
+      "address": "0x01E7",
+      "line": 449
+    },
+    "0x0686": {
+      "file": "play_sfx.asm",
+      "address": "0x0686",
+      "line": 1055
+    },
+    "0x012E": {
+      "file": "play_sfx.asm",
+      "address": "0x012E",
+      "line": 288
+    },
+    "0x0305": {
+      "file": "play_sfx.asm",
+      "address": "0x0305",
+      "line": 645
+    },
+    "0x0640": {
+      "file": "play_sfx.asm",
+      "address": "0x0640",
+      "line": 1026
+    },
+    "0x040A": {
+      "file": "play_sfx.asm",
+      "address": "0x040A",
+      "line": 58
+    },
+    "0x014F": {
+      "file": "play_sfx.asm",
+      "address": "0x014F",
+      "line": 317
+    },
+    "0x02B1": {
+      "file": "play_sfx.asm",
+      "address": "0x02B1",
+      "line": 594
+    },
+    "0x04AC": {
+      "file": "play_sfx.asm",
+      "address": "0x04AC",
+      "line": 855
+    },
+    "0x0385": {
+      "file": "play_sfx.asm",
+      "address": "0x0385",
+      "line": 709
+    },
+    "0x053D": {
+      "file": "play_sfx.asm",
+      "address": "0x053D",
+      "line": 913
+    },
+    "0x061A": {
+      "file": "play_sfx.asm",
+      "address": "0x061A",
+      "line": 1008
+    },
+    "0x0044": {
+      "file": "play_sfx.asm",
+      "address": "0x0044",
+      "line": 93
+    },
+    "0x04ED": {
+      "file": "play_sfx.asm",
+      "address": "0x04ED",
+      "line": 881
+    },
+    "0x0333": {
+      "file": "play_sfx.asm",
+      "address": "0x0333",
+      "line": 670
+    },
+    "0x03CA": {
+      "file": "play_sfx.asm",
+      "address": "0x03CA",
+      "line": 35
+    },
+    "0x063A": {
+      "file": "play_sfx.asm",
+      "address": "0x063A",
+      "line": 1023
+    },
+    "0x0301": {
+      "file": "play_sfx.asm",
+      "address": "0x0301",
+      "line": 642
+    },
+    "0x01A4": {
+      "file": "play_sfx.asm",
+      "address": "0x01A4",
+      "line": 383
+    },
+    "0x02FB": {
+      "file": "play_sfx.asm",
+      "address": "0x02FB",
+      "line": 640
+    },
+    "0x020A": {
+      "file": "play_sfx.asm",
+      "address": "0x020A",
+      "line": 472
+    },
+    "0x03BC": {
+      "file": "play_sfx.asm",
+      "address": "0x03BC",
+      "line": 732
+    },
+    "0x0513": {
+      "file": "play_sfx.asm",
+      "address": "0x0513",
+      "line": 896
+    },
+    "0x0416": {
+      "file": "play_sfx.asm",
+      "address": "0x0416",
+      "line": 62
+    },
+    "0x057B": {
+      "file": "play_sfx.asm",
+      "address": "0x057B",
+      "line": 943
+    },
+    "0x06EA": {
+      "file": "play_sfx.asm",
+      "address": "0x06EA",
+      "line": 1095
+    },
+    "0x0182": {
+      "file": "play_sfx.asm",
+      "address": "0x0182",
+      "line": 362
+    },
+    "0x0273": {
+      "file": "play_sfx.asm",
+      "address": "0x0273",
+      "line": 552
+    },
+    "0x00FD": {
+      "file": "play_sfx.asm",
+      "address": "0x00FD",
+      "line": 246
+    },
+    "0x0038": {
+      "file": "play_sfx.asm",
+      "address": "0x0038",
+      "line": 89
+    },
+    "0x03B9": {
+      "file": "play_sfx.asm",
+      "address": "0x03B9",
+      "line": 29
+    },
+    "0x02A3": {
+      "file": "play_sfx.asm",
+      "address": "0x02A3",
+      "line": 588
+    },
+    "0x0506": {
+      "file": "play_sfx.asm",
+      "address": "0x0506",
+      "line": 891
+    },
+    "0x0765": {
+      "file": "play_sfx.asm",
+      "address": "0x0765",
+      "line": 1195
+    },
+    "0x0424": {
+      "file": "play_sfx.asm",
+      "address": "0x0424",
+      "line": 792
+    },
+    "0x00EF": {
+      "file": "play_sfx.asm",
+      "address": "0x00EF",
+      "line": 238
+    },
+    "0x011F": {
+      "file": "play_sfx.asm",
+      "address": "0x011F",
+      "line": 281
+    },
+    "0x025A": {
+      "file": "play_sfx.asm",
+      "address": "0x025A",
+      "line": 537
+    },
+    "0x02C3": {
+      "file": "play_sfx.asm",
+      "address": "0x02C3",
+      "line": 612
+    },
+    "0x0169": {
+      "file": "play_sfx.asm",
+      "address": "0x0169",
+      "line": 340
+    },
+    "0x0388": {
+      "file": "play_sfx.asm",
+      "address": "0x0388",
+      "line": 710
+    },
+    "0x04A9": {
+      "file": "play_sfx.asm",
+      "address": "0x04A9",
+      "line": 854
+    },
+    "0x00F8": {
+      "file": "play_sfx.asm",
+      "address": "0x00F8",
+      "line": 243
+    },
+    "0x0615": {
+      "file": "play_sfx.asm",
+      "address": "0x0615",
+      "line": 1006
+    },
+    "0x03CC": {
+      "file": "play_sfx.asm",
+      "address": "0x03CC",
+      "line": 36
+    },
+    "0x00C9": {
+      "file": "play_sfx.asm",
+      "address": "0x00C9",
+      "line": 215
+    },
+    "0x075E": {
+      "file": "play_sfx.asm",
+      "address": "0x075E",
+      "line": 1190
+    },
+    "0x02A0": {
+      "file": "play_sfx.asm",
+      "address": "0x02A0",
+      "line": 587
+    },
+    "0x0144": {
+      "file": "play_sfx.asm",
+      "address": "0x0144",
+      "line": 310
+    },
+    "0x0030": {
+      "file": "play_sfx.asm",
+      "address": "0x0030",
+      "line": 81
+    },
+    "0x0127": {
+      "file": "play_sfx.asm",
+      "address": "0x0127",
+      "line": 285
+    },
+    "0x0109": {
+      "file": "play_sfx.asm",
+      "address": "0x0109",
+      "line": 263
+    },
+    "0x00FB": {
+      "file": "play_sfx.asm",
+      "address": "0x00FB",
+      "line": 245
+    },
+    "0x0666": {
+      "file": "play_sfx.asm",
+      "address": "0x0666",
+      "line": 1042
+    },
+    "0x0413": {
+      "file": "play_sfx.asm",
+      "address": "0x0413",
+      "line": 61
+    },
+    "0x018E": {
+      "file": "play_sfx.asm",
+      "address": "0x018E",
+      "line": 368
+    },
+    "0x008A": {
+      "file": "play_sfx.asm",
+      "address": "0x008A",
+      "line": 149
+    },
+    "0x0032": {
+      "file": "play_sfx.asm",
+      "address": "0x0032",
+      "line": 83
+    },
+    "0x0094": {
+      "file": "play_sfx.asm",
+      "address": "0x0094",
+      "line": 153
+    },
+    "0x0026": {
+      "file": "play_sfx.asm",
+      "address": "0x0026",
+      "line": 77
+    },
+    "0x00CB": {
+      "file": "play_sfx.asm",
+      "address": "0x00CB",
+      "line": 216
+    },
+    "0x0048": {
+      "file": "play_sfx.asm",
+      "address": "0x0048",
+      "line": 95
+    },
+    "0x0067": {
+      "file": "play_sfx.asm",
+      "address": "0x0067",
+      "line": 122
+    },
+    "0x019C": {
+      "file": "play_sfx.asm",
+      "address": "0x019C",
+      "line": 380
+    },
+    "0x053F": {
+      "file": "play_sfx.asm",
+      "address": "0x053F",
+      "line": 914
+    },
+    "0x0624": {
+      "file": "play_sfx.asm",
+      "address": "0x0624",
+      "line": 1012
+    },
+    "0x02A8": {
+      "file": "play_sfx.asm",
+      "address": "0x02A8",
+      "line": 590
+    },
+    "0x0339": {
+      "file": "play_sfx.asm",
+      "address": "0x0339",
+      "line": 672
+    },
+    "0x0343": {
+      "file": "play_sfx.asm",
+      "address": "0x0343",
+      "line": 677
+    },
+    "0x042D": {
+      "file": "play_sfx.asm",
+      "address": "0x042D",
+      "line": 795
+    },
+    "0x0650": {
+      "file": "play_sfx.asm",
+      "address": "0x0650",
+      "line": 1033
+    },
+    "0x0421": {
+      "file": "play_sfx.asm",
+      "address": "0x0421",
+      "line": 788
+    },
+    "0x065A": {
+      "file": "play_sfx.asm",
+      "address": "0x065A",
+      "line": 1037
+    },
+    "0x0576": {
+      "file": "play_sfx.asm",
+      "address": "0x0576",
+      "line": 941
+    },
+    "0x06C0": {
+      "file": "play_sfx.asm",
+      "address": "0x06C0",
+      "line": 1078
+    },
+    "0x0284": {
+      "file": "play_sfx.asm",
+      "address": "0x0284",
+      "line": 565
+    },
+    "0x03F5": {
+      "file": "play_sfx.asm",
+      "address": "0x03F5",
+      "line": 51
+    },
+    "0x05A7": {
+      "file": "play_sfx.asm",
+      "address": "0x05A7",
+      "line": 962
+    },
+    "0x031D": {
+      "file": "play_sfx.asm",
+      "address": "0x031D",
+      "line": 656
+    },
+    "0x06F1": {
+      "file": "play_sfx.asm",
+      "address": "0x06F1",
+      "line": 1098
+    },
+    "0x03EA": {
+      "file": "play_sfx.asm",
+      "address": "0x03EA",
+      "line": 761
+    },
+    "0x03D4": {
+      "file": "play_sfx.asm",
+      "address": "0x03D4",
+      "line": 39
+    },
+    "0x04F2": {
+      "file": "play_sfx.asm",
+      "address": "0x04F2",
+      "line": 883
+    },
+    "0x03EC": {
+      "file": "play_sfx.asm",
+      "address": "0x03EC",
+      "line": 765
+    },
+    "0x00CC": {
+      "file": "play_sfx.asm",
+      "address": "0x00CC",
+      "line": 217
+    },
+    "0x007B": {
+      "file": "play_sfx.asm",
+      "address": "0x007B",
+      "line": 136
+    },
+    "0x0562": {
+      "file": "play_sfx.asm",
+      "address": "0x0562",
+      "line": 930
+    },
+    "0x0195": {
+      "file": "play_sfx.asm",
+      "address": "0x0195",
+      "line": 373
+    },
+    "0x02B8": {
+      "file": "play_sfx.asm",
+      "address": "0x02B8",
+      "line": 597
+    },
+    "0x0736": {
+      "file": "play_sfx.asm",
+      "address": "0x0736",
+      "line": 1163
+    },
+    "0x06D2": {
+      "file": "play_sfx.asm",
+      "address": "0x06D2",
+      "line": 1085
+    },
+    "0x026C": {
+      "file": "play_sfx.asm",
+      "address": "0x026C",
+      "line": 548
+    },
+    "0x049E": {
+      "file": "play_sfx.asm",
+      "address": "0x049E",
+      "line": 848
+    },
+    "0x0117": {
+      "file": "play_sfx.asm",
+      "address": "0x0117",
+      "line": 277
+    },
+    "0x0762": {
+      "file": "play_sfx.asm",
+      "address": "0x0762",
+      "line": 1193
+    },
+    "0x0477": {
+      "file": "play_sfx.asm",
+      "address": "0x0477",
+      "line": 826
+    },
+    "0x066E": {
+      "file": "play_sfx.asm",
+      "address": "0x066E",
+      "line": 1045
+    },
+    "0x05AC": {
+      "file": "play_sfx.asm",
+      "address": "0x05AC",
+      "line": 964
+    },
+    "0x0604": {
+      "file": "play_sfx.asm",
+      "address": "0x0604",
+      "line": 999
+    },
+    "0x0535": {
+      "file": "play_sfx.asm",
+      "address": "0x0535",
+      "line": 910
+    },
+    "0x02FE": {
+      "file": "play_sfx.asm",
+      "address": "0x02FE",
+      "line": 641
+    },
+    "0x011D": {
+      "file": "play_sfx.asm",
+      "address": "0x011D",
+      "line": 280
+    },
+    "0x0174": {
+      "file": "play_sfx.asm",
+      "address": "0x0174",
+      "line": 349
+    },
+    "0x030F": {
+      "file": "play_sfx.asm",
+      "address": "0x030F",
+      "line": 649
+    },
+    "0x0450": {
+      "file": "play_sfx.asm",
+      "address": "0x0450",
+      "line": 812
+    },
+    "0x010E": {
+      "file": "play_sfx.asm",
+      "address": "0x010E",
+      "line": 266
+    },
+    "0x0531": {
+      "file": "play_sfx.asm",
+      "address": "0x0531",
+      "line": 908
+    },
+    "0x04D4": {
+      "file": "play_sfx.asm",
+      "address": "0x04D4",
+      "line": 871
+    },
+    "0x03B0": {
+      "file": "play_sfx.asm",
+      "address": "0x03B0",
+      "line": 728
+    },
+    "0x01DB": {
+      "file": "play_sfx.asm",
+      "address": "0x01DB",
+      "line": 444
+    },
+    "0x014B": {
+      "file": "play_sfx.asm",
+      "address": "0x014B",
+      "line": 315
+    },
+    "0x0097": {
+      "file": "play_sfx.asm",
+      "address": "0x0097",
+      "line": 154
+    },
+    "0x022F": {
+      "file": "play_sfx.asm",
+      "address": "0x022F",
+      "line": 498
+    },
+    "0x06DC": {
+      "file": "play_sfx.asm",
+      "address": "0x06DC",
+      "line": 1089
+    },
+    "0x013B": {
+      "file": "play_sfx.asm",
+      "address": "0x013B",
+      "line": 304
+    },
+    "0x0055": {
+      "file": "play_sfx.asm",
+      "address": "0x0055",
+      "line": 110
+    },
+    "0x00EA": {
+      "file": "play_sfx.asm",
+      "address": "0x00EA",
+      "line": 236
+    },
+    "0x0550": {
+      "file": "play_sfx.asm",
+      "address": "0x0550",
+      "line": 921
+    },
+    "0x06A0": {
+      "file": "play_sfx.asm",
+      "address": "0x06A0",
+      "line": 1065
+    },
+    "0x027D": {
+      "file": "play_sfx.asm",
+      "address": "0x027D",
+      "line": 558
+    },
+    "0x036A": {
+      "file": "play_sfx.asm",
+      "address": "0x036A",
+      "line": 697
+    },
+    "0x0538": {
+      "file": "play_sfx.asm",
+      "address": "0x0538",
+      "line": 911
+    },
+    "0x072F": {
+      "file": "play_sfx.asm",
+      "address": "0x072F",
+      "line": 1158
+    },
+    "0x0433": {
+      "file": "play_sfx.asm",
+      "address": "0x0433",
+      "line": 797
+    },
+    "0x02E1": {
+      "file": "play_sfx.asm",
+      "address": "0x02E1",
+      "line": 626
+    },
+    "0x04E1": {
+      "file": "play_sfx.asm",
+      "address": "0x04E1",
+      "line": 876
+    },
+    "0x050B": {
+      "file": "play_sfx.asm",
+      "address": "0x050B",
+      "line": 893
+    },
+    "0x0549": {
+      "file": "play_sfx.asm",
+      "address": "0x0549",
+      "line": 918
+    },
+    "0x01B8": {
+      "file": "play_sfx.asm",
+      "address": "0x01B8",
+      "line": 415
+    },
+    "0x0726": {
+      "file": "play_sfx.asm",
+      "address": "0x0726",
+      "line": 1153
+    },
+    "0x069D": {
+      "file": "play_sfx.asm",
+      "address": "0x069D",
+      "line": 1064
+    },
+    "0x0156": {
+      "file": "play_sfx.asm",
+      "address": "0x0156",
+      "line": 323
+    },
+    "0x013D": {
+      "file": "play_sfx.asm",
+      "address": "0x013D",
+      "line": 305
+    },
+    "0x0750": {
+      "file": "play_sfx.asm",
+      "address": "0x0750",
+      "line": 1181
+    },
+    "0x02EB": {
+      "file": "play_sfx.asm",
+      "address": "0x02EB",
+      "line": 631
+    },
+    "0x04FC": {
+      "file": "play_sfx.asm",
+      "address": "0x04FC",
+      "line": 887
+    },
+    "0x00E4": {
+      "file": "play_sfx.asm",
+      "address": "0x00E4",
+      "line": 234
+    },
+    "0x022A": {
+      "file": "play_sfx.asm",
+      "address": "0x022A",
+      "line": 496
+    },
+    "0x03D9": {
+      "file": "play_sfx.asm",
+      "address": "0x03D9",
+      "line": 41
+    },
+    "0x01C5": {
+      "file": "play_sfx.asm",
+      "address": "0x01C5",
+      "line": 429
+    },
+    "0x0071": {
+      "file": "play_sfx.asm",
+      "address": "0x0071",
+      "line": 129
+    },
+    "0x0325": {
+      "file": "play_sfx.asm",
+      "address": "0x0325",
+      "line": 661
+    },
+    "0x0462": {
+      "file": "play_sfx.asm",
+      "address": "0x0462",
+      "line": 818
+    },
+    "0x03C2": {
+      "file": "play_sfx.asm",
+      "address": "0x03C2",
+      "line": 32
+    },
+    "0x056F": {
+      "file": "play_sfx.asm",
+      "address": "0x056F",
+      "line": 938
+    },
+    "0x0292": {
+      "file": "play_sfx.asm",
+      "address": "0x0292",
+      "line": 574
+    },
+    "0x06E3": {
+      "file": "play_sfx.asm",
+      "address": "0x06E3",
+      "line": 1092
+    },
+    "0x06E0": {
+      "file": "play_sfx.asm",
+      "address": "0x06E0",
+      "line": 1091
+    },
+    "0x0211": {
+      "file": "play_sfx.asm",
+      "address": "0x0211",
+      "line": 476
+    },
+    "0x06B6": {
+      "file": "play_sfx.asm",
+      "address": "0x06B6",
+      "line": 1074
+    },
+    "0x057C": {
+      "file": "play_sfx.asm",
+      "address": "0x057C",
+      "line": 944
+    },
+    "0x0690": {
+      "file": "play_sfx.asm",
+      "address": "0x0690",
+      "line": 1059
+    },
+    "0x04B9": {
+      "file": "play_sfx.asm",
+      "address": "0x04B9",
+      "line": 860
+    },
+    "0x0029": {
+      "file": "play_sfx.asm",
+      "address": "0x0029",
+      "line": 78
+    },
+    "0x04C3": {
+      "file": "play_sfx.asm",
+      "address": "0x04C3",
+      "line": 864
+    },
+    "0x03D6": {
+      "file": "play_sfx.asm",
+      "address": "0x03D6",
+      "line": 750
+    },
+    "0x032C": {
+      "file": "play_sfx.asm",
+      "address": "0x032C",
+      "line": 664
+    },
+    "0x006F": {
+      "file": "play_sfx.asm",
+      "address": "0x006F",
+      "line": 127
+    },
+    "0x0582": {
+      "file": "play_sfx.asm",
+      "address": "0x0582",
+      "line": 947
+    },
+    "0x047F": {
+      "file": "play_sfx.asm",
+      "address": "0x047F",
+      "line": 833
+    },
+    "0x0499": {
+      "file": "play_sfx.asm",
+      "address": "0x0499",
+      "line": 846
+    },
+    "0x0654": {
+      "file": "play_sfx.asm",
+      "address": "0x0654",
+      "line": 1035
+    },
+    "0x031A": {
+      "file": "play_sfx.asm",
+      "address": "0x031A",
+      "line": 655
+    },
+    "0x03DC": {
+      "file": "play_sfx.asm",
+      "address": "0x03DC",
+      "line": 755
+    },
+    "0x00D5": {
+      "file": "play_sfx.asm",
+      "address": "0x00D5",
+      "line": 226
+    },
+    "0x05EA": {
+      "file": "play_sfx.asm",
+      "address": "0x05EA",
+      "line": 989
+    },
+    "0x0501": {
+      "file": "play_sfx.asm",
+      "address": "0x0501",
+      "line": 889
+    },
+    "0x02EE": {
+      "file": "play_sfx.asm",
+      "address": "0x02EE",
+      "line": 632
+    },
+    "0x00C5": {
+      "file": "play_sfx.asm",
+      "address": "0x00C5",
+      "line": 211
+    },
+    "0x01C8": {
+      "file": "play_sfx.asm",
+      "address": "0x01C8",
+      "line": 430
+    },
+    "0x004E": {
+      "file": "play_sfx.asm",
+      "address": "0x004E",
+      "line": 106
+    },
+    "0x05E0": {
+      "file": "play_sfx.asm",
+      "address": "0x05E0",
+      "line": 985
+    },
+    "0x0764": {
+      "file": "play_sfx.asm",
+      "address": "0x0764",
+      "line": 1204
+    },
+    "0x00BD": {
+      "file": "play_sfx.asm",
+      "address": "0x00BD",
+      "line": 207
+    },
+    "0x060B": {
+      "file": "play_sfx.asm",
+      "address": "0x060B",
+      "line": 1002
+    },
+    "0x0758": {
+      "file": "play_sfx.asm",
+      "address": "0x0758",
+      "line": 1186
+    },
+    "0x055F": {
+      "file": "play_sfx.asm",
+      "address": "0x055F",
+      "line": 929
+    },
+    "0x0278": {
+      "file": "play_sfx.asm",
+      "address": "0x0278",
+      "line": 556
+    },
+    "0x023C": {
+      "file": "play_sfx.asm",
+      "address": "0x023C",
+      "line": 506
+    },
+    "0x0113": {
+      "file": "play_sfx.asm",
+      "address": "0x0113",
+      "line": 270
+    },
+    "0x023E": {
+      "file": "play_sfx.asm",
+      "address": "0x023E",
+      "line": 507
+    },
+    "0x0596": {
+      "file": "play_sfx.asm",
+      "address": "0x0596",
+      "line": 955
+    },
+    "0x0330": {
+      "file": "play_sfx.asm",
+      "address": "0x0330",
+      "line": 669
+    },
+    "0x0141": {
+      "file": "play_sfx.asm",
+      "address": "0x0141",
+      "line": 309
+    },
+    "0x026F": {
+      "file": "play_sfx.asm",
+      "address": "0x026F",
+      "line": 550
+    },
+    "0x0280": {
+      "file": "play_sfx.asm",
+      "address": "0x0280",
+      "line": 562
+    },
+    "0x0110": {
+      "file": "play_sfx.asm",
+      "address": "0x0110",
+      "line": 269
+    },
+    "0x064D": {
+      "file": "play_sfx.asm",
+      "address": "0x064D",
+      "line": 1032
+    },
+    "0x03A8": {
+      "file": "play_sfx.asm",
+      "address": "0x03A8",
+      "line": 15
+    },
+    "0x0391": {
+      "file": "play_sfx.asm",
+      "address": "0x0391",
+      "line": 714
+    },
+    "0x0626": {
+      "file": "play_sfx.asm",
+      "address": "0x0626",
+      "line": 1013
+    },
+    "0x06D9": {
+      "file": "play_sfx.asm",
+      "address": "0x06D9",
+      "line": 1088
+    },
+    "0x029C": {
+      "file": "play_sfx.asm",
+      "address": "0x029C",
+      "line": 580
+    },
+    "0x0533": {
+      "file": "play_sfx.asm",
+      "address": "0x0533",
+      "line": 909
+    },
+    "0x0407": {
+      "file": "play_sfx.asm",
+      "address": "0x0407",
+      "line": 777
+    },
+    "0x01AB": {
+      "file": "play_sfx.asm",
+      "address": "0x01AB",
+      "line": 391
+    },
+    "0x02C4": {
+      "file": "play_sfx.asm",
+      "address": "0x02C4",
+      "line": 613
+    },
+    "0x0340": {
+      "file": "play_sfx.asm",
+      "address": "0x0340",
+      "line": 676
+    },
+    "0x05C2": {
+      "file": "play_sfx.asm",
+      "address": "0x05C2",
+      "line": 973
+    },
+    "0x0608": {
+      "file": "play_sfx.asm",
+      "address": "0x0608",
+      "line": 1001
+    },
+    "0x0545": {
+      "file": "play_sfx.asm",
+      "address": "0x0545",
+      "line": 916
+    },
+    "0x035A": {
+      "file": "play_sfx.asm",
+      "address": "0x035A",
+      "line": 688
+    },
+    "0x06D4": {
+      "file": "play_sfx.asm",
+      "address": "0x06D4",
+      "line": 1086
+    },
+    "0x0769": {
+      "file": "play_sfx.asm",
+      "address": "0x0769",
+      "line": 1199
+    },
+    "0x073D": {
+      "file": "play_sfx.asm",
+      "address": "0x073D",
+      "line": 1168
+    },
+    "0x00AF": {
+      "file": "play_sfx.asm",
+      "address": "0x00AF",
+      "line": 192
+    },
+    "0x01CC": {
+      "file": "play_sfx.asm",
+      "address": "0x01CC",
+      "line": 433
+    },
+    "0x0589": {
+      "file": "play_sfx.asm",
+      "address": "0x0589",
+      "line": 950
+    },
+    "0x0149": {
+      "file": "play_sfx.asm",
+      "address": "0x0149",
+      "line": 314
+    },
+    "0x022D": {
+      "file": "play_sfx.asm",
+      "address": "0x022D",
+      "line": 497
+    },
+    "0x0646": {
+      "file": "play_sfx.asm",
+      "address": "0x0646",
+      "line": 1029
+    },
+    "0x044D": {
+      "file": "play_sfx.asm",
+      "address": "0x044D",
+      "line": 808
+    },
+    "0x002C": {
+      "file": "play_sfx.asm",
+      "address": "0x002C",
+      "line": 79
+    },
+    "0x020D": {
+      "file": "play_sfx.asm",
+      "address": "0x020D",
+      "line": 473
+    },
+    "0x01D9": {
+      "file": "play_sfx.asm",
+      "address": "0x01D9",
+      "line": 443
+    },
+    "0x01C1": {
+      "file": "play_sfx.asm",
+      "address": "0x01C1",
+      "line": 422
+    },
+    "0x073E": {
+      "file": "play_sfx.asm",
+      "address": "0x073E",
+      "line": 1169
+    },
+    "0x0738": {
+      "file": "play_sfx.asm",
+      "address": "0x0738",
+      "line": 1164
+    },
+    "0x02DD": {
+      "file": "play_sfx.asm",
+      "address": "0x02DD",
+      "line": 624
+    },
+    "0x04A5": {
+      "file": "play_sfx.asm",
+      "address": "0x04A5",
+      "line": 852
+    },
+    "0x04FF": {
+      "file": "play_sfx.asm",
+      "address": "0x04FF",
+      "line": 888
+    },
+    "0x0746": {
+      "file": "play_sfx.asm",
+      "address": "0x0746",
+      "line": 1174
+    },
+    "0x0162": {
+      "file": "play_sfx.asm",
+      "address": "0x0162",
+      "line": 333
+    },
+    "0x06F4": {
+      "file": "play_sfx.asm",
+      "address": "0x06F4",
+      "line": 1099
+    },
+    "0x0670": {
+      "file": "play_sfx.asm",
+      "address": "0x0670",
+      "line": 1046
+    },
+    "0x0190": {
+      "file": "play_sfx.asm",
+      "address": "0x0190",
+      "line": 369
+    },
+    "0x011A": {
+      "file": "play_sfx.asm",
+      "address": "0x011A",
+      "line": 278
+    },
+    "0x0419": {
+      "file": "play_sfx.asm",
+      "address": "0x0419",
+      "line": 783
+    },
+    "0x0709": {
+      "file": "play_sfx.asm",
+      "address": "0x0709",
+      "line": 1124
+    },
+    "0x0696": {
+      "file": "play_sfx.asm",
+      "address": "0x0696",
+      "line": 1061
+    },
+    "0x021B": {
+      "file": "play_sfx.asm",
+      "address": "0x021B",
+      "line": 484
+    },
+    "0x0752": {
+      "file": "play_sfx.asm",
+      "address": "0x0752",
+      "line": 1182
+    },
+    "0x00DF": {
+      "file": "play_sfx.asm",
+      "address": "0x00DF",
+      "line": 232
+    },
+    "0x0485": {
+      "file": "play_sfx.asm",
+      "address": "0x0485",
+      "line": 835
+    },
+    "0x073C": {
+      "file": "play_sfx.asm",
+      "address": "0x073C",
+      "line": 1167
+    },
+    "0x02F7": {
+      "file": "play_sfx.asm",
+      "address": "0x02F7",
+      "line": 638
+    },
+    "0x00D7": {
+      "file": "play_sfx.asm",
+      "address": "0x00D7",
+      "line": 229
+    },
+    "0x0521": {
+      "file": "play_sfx.asm",
+      "address": "0x0521",
+      "line": 902
+    },
+    "0x0197": {
+      "file": "play_sfx.asm",
+      "address": "0x0197",
+      "line": 376
+    },
+    "0x03A5": {
+      "file": "play_sfx.asm",
+      "address": "0x03A5",
+      "line": 14
+    },
+    "0x0299": {
+      "file": "play_sfx.asm",
+      "address": "0x0299",
+      "line": 579
+    },
+    "0x06AA": {
+      "file": "play_sfx.asm",
+      "address": "0x06AA",
+      "line": 1069
+    },
+    "0x04DE": {
+      "file": "play_sfx.asm",
+      "address": "0x04DE",
+      "line": 875
+    },
+    "0x074D": {
+      "file": "play_sfx.asm",
+      "address": "0x074D",
+      "line": 1179
+    },
+    "0x00E7": {
+      "file": "play_sfx.asm",
+      "address": "0x00E7",
+      "line": 235
+    },
+    "0x0053": {
+      "file": "play_sfx.asm",
+      "address": "0x0053",
+      "line": 109
+    },
+    "0x0590": {
+      "file": "play_sfx.asm",
+      "address": "0x0590",
+      "line": 953
+    },
+    "0x070F": {
+      "file": "play_sfx.asm",
+      "address": "0x070F",
+      "line": 1128
+    },
+    "0x0104": {
+      "file": "play_sfx.asm",
+      "address": "0x0104",
+      "line": 255
+    },
+    "0x01B2": {
+      "file": "play_sfx.asm",
+      "address": "0x01B2",
+      "line": 397
+    },
+    "0x054E": {
+      "file": "play_sfx.asm",
+      "address": "0x054E",
+      "line": 920
+    },
+    "0x04A2": {
+      "file": "play_sfx.asm",
+      "address": "0x04A2",
+      "line": 851
+    },
+    "0x04CD": {
+      "file": "play_sfx.asm",
+      "address": "0x04CD",
+      "line": 868
+    },
+    "0x0638": {
+      "file": "play_sfx.asm",
+      "address": "0x0638",
+      "line": 1022
+    },
+    "0x05B8": {
+      "file": "play_sfx.asm",
+      "address": "0x05B8",
+      "line": 969
+    },
+    "0x0171": {
+      "file": "play_sfx.asm",
+      "address": "0x0171",
+      "line": 344
+    },
+    "0x0293": {
+      "file": "play_sfx.asm",
+      "address": "0x0293",
+      "line": 575
+    },
+    "0x0177": {
+      "file": "play_sfx.asm",
+      "address": "0x0177",
+      "line": 350
+    },
+    "0x065E": {
+      "file": "play_sfx.asm",
+      "address": "0x065E",
+      "line": 1039
+    },
+    "0x03B3": {
+      "file": "play_sfx.asm",
+      "address": "0x03B3",
+      "line": 19
+    },
+    "0x02B5": {
+      "file": "play_sfx.asm",
+      "address": "0x02B5",
+      "line": 596
+    },
+    "0x00B2": {
+      "file": "play_sfx.asm",
+      "address": "0x00B2",
+      "line": 193
+    },
+    "0x0586": {
+      "file": "play_sfx.asm",
+      "address": "0x0586",
+      "line": 949
+    },
+    "0x052E": {
+      "file": "play_sfx.asm",
+      "address": "0x052E",
+      "line": 907
+    },
+    "0x0052": {
+      "file": "play_sfx.asm",
+      "address": "0x0052",
+      "line": 108
+    },
+    "0x010B": {
+      "file": "play_sfx.asm",
+      "address": "0x010B",
+      "line": 264
+    },
+    "0x0711": {
+      "file": "play_sfx.asm",
+      "address": "0x0711",
+      "line": 1129
+    },
+    "0x028F": {
+      "file": "play_sfx.asm",
+      "address": "0x028F",
+      "line": 573
+    },
+    "0x021D": {
+      "file": "play_sfx.asm",
+      "address": "0x021D",
+      "line": 486
+    },
+    "0x027A": {
+      "file": "play_sfx.asm",
+      "address": "0x027A",
+      "line": 557
+    },
+    "0x0131": {
+      "file": "play_sfx.asm",
+      "address": "0x0131",
+      "line": 289
+    },
+    "0x05D9": {
+      "file": "play_sfx.asm",
+      "address": "0x05D9",
+      "line": 982
+    },
+    "0x0213": {
+      "file": "play_sfx.asm",
+      "address": "0x0213",
+      "line": 479
+    },
+    "0x0382": {
+      "file": "play_sfx.asm",
+      "address": "0x0382",
+      "line": 707
+    },
+    "0x01E0": {
+      "file": "play_sfx.asm",
+      "address": "0x01E0",
+      "line": 446
+    },
+    "0x0357": {
+      "file": "play_sfx.asm",
+      "address": "0x0357",
+      "line": 687
+    },
+    "0x0410": {
+      "file": "play_sfx.asm",
+      "address": "0x0410",
+      "line": 780
+    },
+    "0x016D": {
+      "file": "play_sfx.asm",
+      "address": "0x016D",
+      "line": 342
+    },
+    "0x0636": {
+      "file": "play_sfx.asm",
+      "address": "0x0636",
+      "line": 1021
+    },
+    "0x025D": {
+      "file": "play_sfx.asm",
+      "address": "0x025D",
+      "line": 538
+    },
+    "0x0346": {
+      "file": "play_sfx.asm",
+      "address": "0x0346",
+      "line": 678
+    },
+    "0x0755": {
+      "file": "play_sfx.asm",
+      "address": "0x0755",
+      "line": 1184
+    },
+    "0x0192": {
+      "file": "play_sfx.asm",
+      "address": "0x0192",
+      "line": 372
+    },
+    "0x018B": {
+      "file": "play_sfx.asm",
+      "address": "0x018B",
+      "line": 366
+    },
+    "0x0302": {
+      "file": "play_sfx.asm",
+      "address": "0x0302",
+      "line": 643
+    },
+    "0x05BE": {
+      "file": "play_sfx.asm",
+      "address": "0x05BE",
+      "line": 971
+    },
+    "0x03E7": {
+      "file": "play_sfx.asm",
+      "address": "0x03E7",
+      "line": 760
+    },
+    "0x0228": {
+      "file": "play_sfx.asm",
+      "address": "0x0228",
+      "line": 492
+    },
+    "0x0495": {
+      "file": "play_sfx.asm",
+      "address": "0x0495",
+      "line": 844
+    },
+    "0x054C": {
+      "file": "play_sfx.asm",
+      "address": "0x054C",
+      "line": 919
+    },
+    "0x04B3": {
+      "file": "play_sfx.asm",
+      "address": "0x04B3",
+      "line": 858
+    },
+    "0x036D": {
+      "file": "play_sfx.asm",
+      "address": "0x036D",
+      "line": 699
+    },
+    "0x0401": {
+      "file": "play_sfx.asm",
+      "address": "0x0401",
+      "line": 775
+    },
+    "0x0091": {
+      "file": "play_sfx.asm",
+      "address": "0x0091",
+      "line": 152
+    },
+    "0x003E": {
+      "file": "play_sfx.asm",
+      "address": "0x003E",
+      "line": 91
+    },
+    "0x0474": {
+      "file": "play_sfx.asm",
+      "address": "0x0474",
+      "line": 825
+    },
+    "0x0360": {
+      "file": "play_sfx.asm",
+      "address": "0x0360",
+      "line": 690
+    },
+    "0x0735": {
+      "file": "play_sfx.asm",
+      "address": "0x0735",
+      "line": 1162
+    },
+    "0x0739": {
+      "file": "play_sfx.asm",
+      "address": "0x0739",
+      "line": 1165
+    },
+    "0x0427": {
+      "file": "play_sfx.asm",
+      "address": "0x0427",
+      "line": 793
+    },
+    "0x062D": {
+      "file": "play_sfx.asm",
+      "address": "0x062D",
+      "line": 1016
+    },
+    "0x051F": {
+      "file": "play_sfx.asm",
+      "address": "0x051F",
+      "line": 901
+    },
+    "0x0252": {
+      "file": "play_sfx.asm",
+      "address": "0x0252",
+      "line": 518
+    },
+    "0x032F": {
+      "file": "play_sfx.asm",
+      "address": "0x032F",
+      "line": 668
+    },
+    "0x0759": {
+      "file": "play_sfx.asm",
+      "address": "0x0759",
+      "line": 1187
+    },
+    "0x044C": {
+      "file": "play_sfx.asm",
+      "address": "0x044C",
+      "line": 807
+    },
+    "0x00E1": {
+      "file": "play_sfx.asm",
+      "address": "0x00E1",
+      "line": 233
+    },
+    "0x0684": {
+      "file": "play_sfx.asm",
+      "address": "0x0684",
+      "line": 1054
+    },
+    "0x0766": {
+      "file": "play_sfx.asm",
+      "address": "0x0766",
+      "line": 1196
+    },
+    "0x01AD": {
+      "file": "play_sfx.asm",
+      "address": "0x01AD",
+      "line": 393
+    },
+    "0x00B4": {
+      "file": "play_sfx.asm",
+      "address": "0x00B4",
+      "line": 194
+    },
+    "0x055C": {
+      "file": "play_sfx.asm",
+      "address": "0x055C",
+      "line": 928
+    },
+    "0x060E": {
+      "file": "play_sfx.asm",
+      "address": "0x060E",
+      "line": 1003
+    },
+    "0x0173": {
+      "file": "play_sfx.asm",
+      "address": "0x0173",
+      "line": 348
+    },
+    "0x0073": {
+      "file": "play_sfx.asm",
+      "address": "0x0073",
+      "line": 130
+    },
+    "0x0675": {
+      "file": "play_sfx.asm",
+      "address": "0x0675",
+      "line": 1048
+    },
+    "0x0779": {
+      "file": "play_sfx.asm",
+      "address": "0x0779",
+      "line": 1211
+    },
+    "0x013A": {
+      "file": "play_sfx.asm",
+      "address": "0x013A",
+      "line": 293
+    },
+    "0x0668": {
+      "file": "play_sfx.asm",
+      "address": "0x0668",
+      "line": 1043
+    },
+    "0x00DC": {
+      "file": "play_sfx.asm",
+      "address": "0x00DC",
+      "line": 231
+    },
+    "0x063F": {
+      "file": "play_sfx.asm",
+      "address": "0x063F",
+      "line": 1025
+    },
+    "0x074C": {
+      "file": "play_sfx.asm",
+      "address": "0x074C",
+      "line": 1178
+    },
+    "0x06CC": {
+      "file": "play_sfx.asm",
+      "address": "0x06CC",
+      "line": 1083
+    },
+    "0x05B6": {
+      "file": "play_sfx.asm",
+      "address": "0x05B6",
+      "line": 968
+    },
+    "0x017E": {
+      "file": "play_sfx.asm",
+      "address": "0x017E",
+      "line": 360
+    },
+    "0x007F": {
+      "file": "play_sfx.asm",
+      "address": "0x007F",
+      "line": 138
+    },
+    "0x01E5": {
+      "file": "play_sfx.asm",
+      "address": "0x01E5",
+      "line": 448
+    },
+    "0x029E": {
+      "file": "play_sfx.asm",
+      "address": "0x029E",
+      "line": 586
+    },
+    "0x0448": {
+      "file": "play_sfx.asm",
+      "address": "0x0448",
+      "line": 805
+    },
+    "0x050D": {
+      "file": "play_sfx.asm",
+      "address": "0x050D",
+      "line": 894
+    },
+    "0x053B": {
+      "file": "play_sfx.asm",
+      "address": "0x053B",
+      "line": 912
+    },
+    "0x015A": {
+      "file": "play_sfx.asm",
+      "address": "0x015A",
+      "line": 326
+    },
+    "0x04CF": {
+      "file": "play_sfx.asm",
+      "address": "0x04CF",
+      "line": 869
+    },
+    "0x0706": {
+      "file": "play_sfx.asm",
+      "address": "0x0706",
+      "line": 1123
+    },
+    "0x00CF": {
+      "file": "play_sfx.asm",
+      "address": "0x00CF",
+      "line": 220
+    },
+    "0x06BB": {
+      "file": "play_sfx.asm",
+      "address": "0x06BB",
+      "line": 1076
+    },
+    "0x03BF": {
+      "file": "play_sfx.asm",
+      "address": "0x03BF",
+      "line": 740
+    },
+    "0x00B8": {
+      "file": "play_sfx.asm",
+      "address": "0x00B8",
+      "line": 205
+    },
+    "0x01D8": {
+      "file": "play_sfx.asm",
+      "address": "0x01D8",
+      "line": 441
+    },
+    "0x0678": {
+      "file": "play_sfx.asm",
+      "address": "0x0678",
+      "line": 1049
+    },
+    "0x070E": {
+      "file": "play_sfx.asm",
+      "address": "0x070E",
+      "line": 1127
+    },
+    "0x048F": {
+      "file": "play_sfx.asm",
+      "address": "0x048F",
+      "line": 841
+    },
+    "0x01CE": {
+      "file": "play_sfx.asm",
+      "address": "0x01CE",
+      "line": 434
+    },
+    "0x031E": {
+      "file": "play_sfx.asm",
+      "address": "0x031E",
+      "line": 657
+    },
+    "0x05CA": {
+      "file": "play_sfx.asm",
+      "address": "0x05CA",
+      "line": 976
+    },
+    "0x0059": {
+      "file": "play_sfx.asm",
+      "address": "0x0059",
+      "line": 113
+    },
+    "0x03F8": {
+      "file": "play_sfx.asm",
+      "address": "0x03F8",
+      "line": 52
+    },
+    "0x0468": {
+      "file": "play_sfx.asm",
+      "address": "0x0468",
+      "line": 820
+    },
+    "0x0420": {
+      "file": "play_sfx.asm",
+      "address": "0x0420",
+      "line": 787
+    },
+    "0x014C": {
+      "file": "play_sfx.asm",
+      "address": "0x014C",
+      "line": 316
+    },
+    "0x0058": {
+      "file": "play_sfx.asm",
+      "address": "0x0058",
+      "line": 112
+    },
+    "0x05AA": {
+      "file": "play_sfx.asm",
+      "address": "0x05AA",
+      "line": 963
+    },
+    "0x0379": {
+      "file": "play_sfx.asm",
+      "address": "0x0379",
+      "line": 704
+    },
+    "0x04BB": {
+      "file": "play_sfx.asm",
+      "address": "0x04BB",
+      "line": 861
+    },
+    "0x0189": {
+      "file": "play_sfx.asm",
+      "address": "0x0189",
+      "line": 365
+    },
+    "0x0370": {
+      "file": "play_sfx.asm",
+      "address": "0x0370",
+      "line": 700
+    },
+    "0x0482": {
+      "file": "play_sfx.asm",
+      "address": "0x0482",
+      "line": 834
+    },
+    "0x01EC": {
+      "file": "play_sfx.asm",
+      "address": "0x01EC",
+      "line": 452
+    },
+    "0x012A": {
+      "file": "play_sfx.asm",
+      "address": "0x012A",
+      "line": 286
+    },
+    "0x00A8": {
+      "file": "play_sfx.asm",
+      "address": "0x00A8",
+      "line": 160
+    },
+    "0x02A6": {
+      "file": "play_sfx.asm",
+      "address": "0x02A6",
+      "line": 589
+    },
+    "0x0724": {
+      "file": "play_sfx.asm",
+      "address": "0x0724",
+      "line": 1152
+    },
+    "0x0209": {
+      "file": "play_sfx.asm",
+      "address": "0x0209",
+      "line": 471
+    },
+    "0x0060": {
+      "file": "play_sfx.asm",
+      "address": "0x0060",
+      "line": 117
+    },
+    "0x01F4": {
+      "file": "play_sfx.asm",
+      "address": "0x01F4",
+      "line": 457
+    },
+    "0x062B": {
+      "file": "play_sfx.asm",
+      "address": "0x062B",
+      "line": 1015
+    },
+    "0x05CC": {
+      "file": "play_sfx.asm",
+      "address": "0x05CC",
+      "line": 977
+    },
+    "0x0250": {
+      "file": "play_sfx.asm",
+      "address": "0x0250",
+      "line": 517
+    },
+    "0x0714": {
+      "file": "play_sfx.asm",
+      "address": "0x0714",
+      "line": 1131
+    },
+    "0x0125": {
+      "file": "play_sfx.asm",
+      "address": "0x0125",
+      "line": 284
+    },
+    "0x0629": {
+      "file": "play_sfx.asm",
+      "address": "0x0629",
+      "line": 1014
+    },
+    "0x067A": {
+      "file": "play_sfx.asm",
+      "address": "0x067A",
+      "line": 1050
+    },
+    "0x0265": {
+      "file": "play_sfx.asm",
+      "address": "0x0265",
+      "line": 544
+    },
+    "0x067C": {
+      "file": "play_sfx.asm",
+      "address": "0x067C",
+      "line": 1051
+    },
+    "0x0313": {
+      "file": "play_sfx.asm",
+      "address": "0x0313",
+      "line": 652
+    },
+    "0x001E": {
+      "file": "play_sfx.asm",
+      "address": "0x001E",
+      "line": 74
+    },
+    "0x012C": {
+      "file": "play_sfx.asm",
+      "address": "0x012C",
+      "line": 287
+    },
+    "0x03D1": {
+      "file": "play_sfx.asm",
+      "address": "0x03D1",
+      "line": 748
+    },
+    "0x05A4": {
+      "file": "play_sfx.asm",
+      "address": "0x05A4",
+      "line": 961
+    },
+    "0x05E3": {
+      "file": "play_sfx.asm",
+      "address": "0x05E3",
+      "line": 986
+    },
+    "0x0051": {
+      "file": "play_sfx.asm",
+      "address": "0x0051",
+      "line": 107
+    },
+    "0x046E": {
+      "file": "play_sfx.asm",
+      "address": "0x046E",
+      "line": 822
+    },
+    "0x073A": {
+      "file": "play_sfx.asm",
+      "address": "0x073A",
+      "line": 1166
+    },
+    "0x02CA": {
+      "file": "play_sfx.asm",
+      "address": "0x02CA",
+      "line": 615
+    },
+    "0x0241": {
+      "file": "play_sfx.asm",
+      "address": "0x0241",
+      "line": 508
+    },
+    "0x015F": {
+      "file": "play_sfx.asm",
+      "address": "0x015F",
+      "line": 331
+    },
+    "0x075A": {
+      "file": "play_sfx.asm",
+      "address": "0x075A",
+      "line": 1188
+    },
+    "0x027F": {
+      "file": "play_sfx.asm",
+      "address": "0x027F",
+      "line": 559
+    },
+    "0x034D": {
+      "file": "play_sfx.asm",
+      "address": "0x034D",
+      "line": 682
+    },
+    "0x0742": {
+      "file": "play_sfx.asm",
+      "address": "0x0742",
+      "line": 1172
+    },
+    "0x04EB": {
+      "file": "play_sfx.asm",
+      "address": "0x04EB",
+      "line": 880
+    },
+    "0x0584": {
+      "file": "play_sfx.asm",
+      "address": "0x0584",
+      "line": 948
+    },
+    "0x0215": {
+      "file": "play_sfx.asm",
+      "address": "0x0215",
+      "line": 481
+    },
+    "0x01BB": {
+      "file": "play_sfx.asm",
+      "address": "0x01BB",
+      "line": 416
+    },
+    "0x00A2": {
+      "file": "play_sfx.asm",
+      "address": "0x00A2",
+      "line": 158
+    },
+    "0x0593": {
+      "file": "play_sfx.asm",
+      "address": "0x0593",
+      "line": 954
+    },
+    "0x052B": {
+      "file": "play_sfx.asm",
+      "address": "0x052B",
+      "line": 906
+    },
+    "0x024D": {
+      "file": "play_sfx.asm",
+      "address": "0x024D",
+      "line": 515
+    },
+    "0x02CD": {
+      "file": "play_sfx.asm",
+      "address": "0x02CD",
+      "line": 616
+    },
+    "0x0237": {
+      "file": "play_sfx.asm",
+      "address": "0x0237",
+      "line": 502
+    },
+    "0x0306": {
+      "file": "play_sfx.asm",
+      "address": "0x0306",
+      "line": 646
+    },
+    "0x0225": {
+      "file": "play_sfx.asm",
+      "address": "0x0225",
+      "line": 491
+    },
+    "0x01CA": {
+      "file": "play_sfx.asm",
+      "address": "0x01CA",
+      "line": 431
+    },
+    "0x05C5": {
+      "file": "play_sfx.asm",
+      "address": "0x05C5",
+      "line": 974
+    },
+    "0x0165": {
+      "file": "play_sfx.asm",
+      "address": "0x0165",
+      "line": 334
+    },
+    "0x04C0": {
+      "file": "play_sfx.asm",
+      "address": "0x04C0",
+      "line": 863
+    },
+    "0x05D6": {
+      "file": "play_sfx.asm",
+      "address": "0x05D6",
+      "line": 981
+    },
+    "0x016E": {
+      "file": "play_sfx.asm",
+      "address": "0x016E",
+      "line": 343
+    },
+    "0x041F": {
+      "file": "play_sfx.asm",
+      "address": "0x041F",
+      "line": 66
+    },
+    "0x0036": {
+      "file": "play_sfx.asm",
+      "address": "0x0036",
+      "line": 88
+    },
+    "0x017A": {
+      "file": "play_sfx.asm",
+      "address": "0x017A",
+      "line": 351
+    },
+    "0x0281": {
+      "file": "play_sfx.asm",
+      "address": "0x0281",
+      "line": 563
+    },
+    "0x048C": {
+      "file": "play_sfx.asm",
+      "address": "0x048C",
+      "line": 840
+    },
+    "0x01FB": {
+      "file": "play_sfx.asm",
+      "address": "0x01FB",
+      "line": 461
+    },
+    "0x068C": {
+      "file": "play_sfx.asm",
+      "address": "0x068C",
+      "line": 1057
+    },
+    "0x0394": {
+      "file": "play_sfx.asm",
+      "address": "0x0394",
+      "line": 715
+    },
+    "0x059D": {
+      "file": "play_sfx.asm",
+      "address": "0x059D",
+      "line": 958
+    },
+    "0x0465": {
+      "file": "play_sfx.asm",
+      "address": "0x0465",
+      "line": 819
+    },
+    "0x0579": {
+      "file": "play_sfx.asm",
+      "address": "0x0579",
+      "line": 942
+    },
+    "0x0729": {
+      "file": "play_sfx.asm",
+      "address": "0x0729",
+      "line": 1155
+    },
+    "0x00A5": {
+      "file": "play_sfx.asm",
+      "address": "0x00A5",
+      "line": 159
+    },
+    "0x03EF": {
+      "file": "play_sfx.asm",
+      "address": "0x03EF",
+      "line": 49
+    },
+    "0x0720": {
+      "file": "play_sfx.asm",
+      "address": "0x0720",
+      "line": 1138
+    },
+    "0x002F": {
+      "file": "play_sfx.asm",
+      "address": "0x002F",
+      "line": 80
+    },
+    "0x01B6": {
+      "file": "play_sfx.asm",
+      "address": "0x01B6",
+      "line": 414
+    },
+    "0x05AE": {
+      "file": "play_sfx.asm",
+      "address": "0x05AE",
+      "line": 965
+    },
+    "0x0728": {
+      "file": "play_sfx.asm",
+      "address": "0x0728",
+      "line": 1154
+    },
+    "0x0510": {
+      "file": "play_sfx.asm",
+      "address": "0x0510",
+      "line": 895
+    },
+    "0x0080": {
+      "file": "play_sfx.asm",
+      "address": "0x0080",
+      "line": 139
+    },
+    "0x0716": {
+      "file": "play_sfx.asm",
+      "address": "0x0716",
+      "line": 1133
+    },
+    "0x00AC": {
+      "file": "play_sfx.asm",
+      "address": "0x00AC",
+      "line": 191
+    },
+    "0x04CA": {
+      "file": "play_sfx.asm",
+      "address": "0x04CA",
+      "line": 867
+    },
+    "0x0489": {
+      "file": "play_sfx.asm",
+      "address": "0x0489",
+      "line": 839
+    },
+    "0x0439": {
+      "file": "play_sfx.asm",
+      "address": "0x0439",
+      "line": 799
+    },
+    "0x01BF": {
+      "file": "play_sfx.asm",
+      "address": "0x01BF",
+      "line": 421
+    },
+    "0x05F4": {
+      "file": "play_sfx.asm",
+      "address": "0x05F4",
+      "line": 993
+    },
+    "0x05FE": {
+      "file": "play_sfx.asm",
+      "address": "0x05FE",
+      "line": 997
+    },
+    "0x046B": {
+      "file": "play_sfx.asm",
+      "address": "0x046B",
+      "line": 821
+    },
+    "0x01D0": {
+      "file": "play_sfx.asm",
+      "address": "0x01D0",
+      "line": 435
+    },
+    "0x049F": {
+      "file": "play_sfx.asm",
+      "address": "0x049F",
+      "line": 849
+    },
+    "0x02BA": {
+      "file": "play_sfx.asm",
+      "address": "0x02BA",
+      "line": 598
+    },
+    "0x01BC": {
+      "file": "play_sfx.asm",
+      "address": "0x01BC",
+      "line": 420
+    },
+    "0x074E": {
+      "file": "play_sfx.asm",
+      "address": "0x074E",
+      "line": 1180
+    },
+    "0x0321": {
+      "file": "play_sfx.asm",
+      "address": "0x0321",
+      "line": 659
+    },
+    "0x024A": {
+      "file": "play_sfx.asm",
+      "address": "0x024A",
+      "line": 513
+    },
+    "0x034A": {
+      "file": "play_sfx.asm",
+      "address": "0x034A",
+      "line": 681
+    },
+    "0x01CB": {
+      "file": "play_sfx.asm",
+      "address": "0x01CB",
+      "line": 432
+    }
+  },
   "functions": {},
   "nativeCalls": {
-    "14": "VECTREX_PRINT_TEXT",
-    "16": "J1_BUTTON_1",
-    "20": "J1_BUTTON_2",
     "13": "VECTREX_PRINT_TEXT",
-    "12": "VECTREX_PRINT_TEXT"
+    "14": "VECTREX_PRINT_TEXT",
+    "12": "VECTREX_PRINT_TEXT",
+    "16": "J1_BUTTON_1",
+    "20": "J1_BUTTON_2"
   },
   "asmFunctions": {
     "VECTREX_PRINT_TEXT": {
       "name": "VECTREX_PRINT_TEXT",
       "file": "play_sfx.asm",
-      "startLine": 144,
-      "endLine": 158,
+      "startLine": 145,
+      "endLine": 160,
       "type": "native"
     }
   },
-  "asmAddressMap": {},
+  "asmAddressMap": {
+    "643": "0x0302",
+    "941": "0x0576",
+    "283": "0x0123",
+    "1043": "0x0668",
+    "862": "0x04BD",
+    "969": "0x05B8",
+    "557": "0x027A",
+    "316": "0x014C",
+    "48": "0x03EC",
+    "293": "0x013A",
+    "1045": "0x066E",
+    "136": "0x007B",
+    "689": "0x035D",
+    "1087": "0x06D6",
+    "846": "0x0499",
+    "343": "0x016E",
+    "1199": "0x0769",
+    "724": "0x03A8",
+    "799": "0x0439",
+    "815": "0x0459",
+    "282": "0x0121",
+    "117": "0x0060",
+    "122": "0x0067",
+    "6": "0x039C",
+    "210": "0x00C2",
+    "1197": "0x0767",
+    "613": "0x02C4",
+    "277": "0x0117",
+    "1006": "0x0615",
+    "362": "0x0182",
+    "544": "0x0265",
+    "1156": "0x072A",
+    "1177": "0x074A",
+    "1181": "0x0750",
+    "245": "0x00FB",
+    "918": "0x0549",
+    "782": "0x0416",
+    "317": "0x014F",
+    "1149": "0x0720",
+    "1164": "0x0738",
+    "447": "0x01E3",
+    "235": "0x00E7",
+    "1191": "0x0760",
+    "1155": "0x0729",
+    "835": "0x0485",
+    "845": "0x0497",
+    "540": "0x025F",
+    "449": "0x01E7",
+    "803": "0x0445",
+    "866": "0x04C7",
+    "1064": "0x069D",
+    "946": "0x057F",
+    "31": "0x03BF",
+    "1063": "0x069A",
+    "700": "0x0370",
+    "60": "0x0410",
+    "1092": "0x06E3",
+    "512": "0x0248",
+    "238": "0x00EF",
+    "237": "0x00EC",
+    "537": "0x025A",
+    "88": "0x0036",
+    "334": "0x0165",
+    "1059": "0x0690",
+    "95": "0x0048",
+    "914": "0x053F",
+    "1057": "0x068C",
+    "1040": "0x0661",
+    "1042": "0x0666",
+    "127": "0x006F",
+    "113": "0x0059",
+    "1039": "0x065E",
+    "878": "0x04E5",
+    "920": "0x054E",
+    "547": "0x026B",
+    "641": "0x02FE",
+    "453": "0x01EE",
+    "224": "0x00D1",
+    "441": "0x01D8",
+    "421": "0x01BF",
+    "860": "0x04B9",
+    "792": "0x0424",
+    "1081": "0x06C8",
+    "206": "0x00BA",
+    "354": "0x017C",
+    "1211": "0x0779",
+    "907": "0x052E",
+    "191": "0x00AC",
+    "1117": "0x06FB",
+    "391": "0x01AB",
+    "772": "0x03F8",
+    "598": "0x02BA",
+    "333": "0x0162",
+    "702": "0x0376",
+    "91": "0x003E",
+    "1131": "0x0714",
+    "214": "0x00C7",
+    "621": "0x02D7",
+    "574": "0x0292",
+    "675": "0x033D",
+    "664": "0x032C",
+    "230": "0x00DA",
+    "774": "0x03FE",
+    "263": "0x0109",
+    "1034": "0x0652",
+    "367": "0x018C",
+    "576": "0x0294",
+    "430": "0x01C8",
+    "142": "0x0085",
+    "874": "0x04DB",
+    "241": "0x00F4",
+    "382": "0x01A1",
+    "1035": "0x0654",
+    "630": "0x02EA",
+    "44": "0x03E1",
+    "628": "0x02E7",
+    "335": "0x0166",
+    "90": "0x003B",
+    "745": "0x03CA",
+    "497": "0x022D",
+    "50": "0x03F2",
+    "433": "0x01CC",
+    "40": "0x03D6",
+    "386": "0x01A6",
+    "17": "0x03AD",
+    "1051": "0x067C",
+    "601": "0x02C1",
+    "899": "0x051A",
+    "1001": "0x0608",
+    "486": "0x021D",
+    "655": "0x031A",
+    "445": "0x01DE",
+    "123": "0x0068",
+    "855": "0x04AC",
+    "234": "0x00E4",
+    "904": "0x0527",
+    "715": "0x0394",
+    "517": "0x0250",
+    "119": "0x0062",
+    "1077": "0x06BE",
+    "414": "0x01B6",
+    "1099": "0x06F4",
+    "1183": "0x0754",
+    "997": "0x05FE",
+    "720": "0x039E",
+    "318": "0x0150",
+    "373": "0x0195",
+    "30": "0x03BC",
+    "457": "0x01F4",
+    "731": "0x03B9",
+    "989": "0x05EA",
+    "506": "0x023C",
+    "79": "0x002C",
+    "859": "0x04B6",
+    "747": "0x03CF",
+    "1129": "0x0711",
+    "150": "0x008C",
+    "541": "0x0262",
+    "482": "0x0217",
+    "270": "0x0113",
+    "781": "0x0413",
+    "139": "0x0080",
+    "496": "0x022A",
+    "913": "0x053D",
+    "468": "0x0204",
+    "140": "0x0082",
+    "793": "0x0427",
+    "672": "0x0339",
+    "1182": "0x0752",
+    "674": "0x033A",
+    "443": "0x01D9",
+    "966": "0x05B1",
+    "947": "0x0582",
+    "1024": "0x063D",
+    "881": "0x04ED",
+    "952": "0x058E",
+    "563": "0x0281",
+    "776": "0x0404",
+    "652": "0x0313",
+    "1075": "0x06B8",
+    "1056": "0x0689",
+    "332": "0x0161",
+    "1123": "0x0706",
+    "1120": "0x0700",
+    "766": "0x03EF",
+    "543": "0x0264",
+    "1038": "0x065C",
+    "695": "0x0364",
+    "342": "0x016D",
+    "331": "0x015F",
+    "548": "0x026C",
+    "1187": "0x0759",
+    "948": "0x0584",
+    "1134": "0x0718",
+    "1207": "0x076E",
+    "996": "0x05FC",
+    "813": "0x0453",
+    "130": "0x0073",
+    "1012": "0x0624",
+    "915": "0x0542",
+    "1174": "0x0746",
+    "292": "0x0138",
+    "106": "0x004E",
+    "507": "0x023E",
+    "696": "0x0367",
+    "481": "0x0215",
+    "18": "0x03B0",
+    "896": "0x0513",
+    "15": "0x03A8",
+    "901": "0x051F",
+    "1167": "0x073C",
+    "349": "0x0174",
+    "709": "0x0385",
+    "564": "0x0283",
+    "474": "0x020E",
+    "1176": "0x0749",
+    "444": "0x01DB",
+    "816": "0x045C",
+    "906": "0x052B",
+    "415": "0x01B8",
+    "950": "0x0589",
+    "1050": "0x067A",
+    "429": "0x01C5",
+    "559": "0x027F",
+    "1138": "0x0720",
+    "288": "0x012E",
+    "620": "0x02D4",
+    "856": "0x04AF",
+    "1094": "0x06E8",
+    "858": "0x04B3",
+    "786": "0x041F",
+    "971": "0x05BE",
+    "1173": "0x0744",
+    "455": "0x01F0",
+    "89": "0x0038",
+    "687": "0x0357",
+    "843": "0x0492",
+    "49": "0x03EF",
+    "968": "0x05B6",
+    "542": "0x0263",
+    "850": "0x04A0",
+    "883": "0x04F2",
+    "78": "0x0029",
+    "730": "0x03B6",
+    "632": "0x02EE",
+    "573": "0x028F",
+    "1118": "0x06FD",
+    "992": "0x05F2",
+    "244": "0x00F9",
+    "220": "0x00CF",
+    "849": "0x049F",
+    "42": "0x03DC",
+    "12": "0x03A0",
+    "62": "0x0416",
+    "53": "0x03FB",
+    "1041": "0x0664",
+    "590": "0x02A8",
+    "159": "0x00A5",
+    "817": "0x045F",
+    "780": "0x0410",
+    "1015": "0x062B",
+    "479": "0x0213",
+    "128": "0x0070",
+    "1054": "0x0684",
+    "863": "0x04C0",
+    "368": "0x018E",
+    "990": "0x05ED",
+    "1196": "0x0766",
+    "1170": "0x0740",
+    "393": "0x01AD",
+    "1030": "0x0648",
+    "361": "0x0180",
+    "721": "0x03A0",
+    "432": "0x01CB",
+    "280": "0x011D",
+    "454": "0x01EF",
+    "756": "0x03DE",
+    "1185": "0x0756",
+    "597": "0x02B8",
+    "116": "0x005D",
+    "994": "0x05F7",
+    "63": "0x0419",
+    "1037": "0x065A",
+    "1021": "0x0636",
+    "1194": "0x0763",
+    "794": "0x042A",
+    "638": "0x02F7",
+    "518": "0x0252",
+    "152": "0x0091",
+    "983": "0x05DC",
+    "877": "0x04E3",
+    "1158": "0x072F",
+    "160": "0x00A8",
+    "618": "0x02D0",
+    "600": "0x02BE",
+    "1159": "0x0730",
+    "867": "0x04CA",
+    "670": "0x0333",
+    "884": "0x04F5",
+    "795": "0x042D",
+    "1130": "0x0712",
+    "390": "0x01A8",
+    "340": "0x0169",
+    "927": "0x0559",
+    "1062": "0x0698",
+    "487": "0x0220",
+    "515": "0x024D",
+    "642": "0x0301",
+    "963": "0x05AA",
+    "1023": "0x063A",
+    "1189": "0x075C",
+    "820": "0x0468",
+    "631": "0x02EB",
+    "462": "0x01FD",
+    "886": "0x04F9",
+    "1122": "0x0703",
+    "694": "0x0361",
+    "416": "0x01BB",
+    "1007": "0x0618",
+    "1052": "0x067F",
+    "13": "0x03A3",
+    "284": "0x0125",
+    "1066": "0x06A2",
+    "944": "0x057C",
+    "1004": "0x0610",
+    "16": "0x03AB",
+    "226": "0x00D5",
+    "360": "0x017E",
+    "1078": "0x06C0",
+    "650": "0x0310",
+    "380": "0x019C",
+    "1091": "0x06E0",
+    "157": "0x00A0",
+    "1072": "0x06B1",
+    "1162": "0x0735",
+    "469": "0x0207",
+    "231": "0x00DC",
+    "645": "0x0305",
+    "434": "0x01CE",
+    "158": "0x00A2",
+    "77": "0x0026",
+    "688": "0x035A",
+    "1071": "0x06AE",
+    "707": "0x0382",
+    "452": "0x01EC",
+    "1027": "0x0641",
+    "832": "0x047C",
+    "981": "0x05D6",
+    "96": "0x0049",
+    "1139": "0x0721",
+    "1016": "0x062D",
+    "825": "0x0474",
+    "903": "0x0524",
+    "431": "0x01CA",
+    "499": "0x0231",
+    "800": "0x043C",
+    "132": "0x0076",
+    "1025": "0x063F",
+    "439": "0x01D5",
+    "962": "0x05A7",
+    "38": "0x03D1",
+    "653": "0x0314",
+    "281": "0x011F",
+    "987": "0x05E6",
+    "193": "0x00B2",
+    "889": "0x0501",
+    "1011": "0x0622",
+    "97": "0x004A",
+    "729": "0x03B3",
+    "839": "0x0489",
+    "646": "0x0306",
+    "742": "0x03C2",
+    "787": "0x0420",
+    "714": "0x0391",
+    "1148": "0x071E",
+    "1150": "0x0721",
+    "934": "0x0566",
+    "743": "0x03C5",
+    "677": "0x0343",
+    "942": "0x0579",
+    "1186": "0x0758",
+    "290": "0x0133",
+    "1044": "0x066B",
+    "305": "0x013D",
+    "94": "0x0047",
+    "217": "0x00CC",
+    "939": "0x0572",
+    "864": "0x04C3",
+    "565": "0x0284",
+    "34": "0x03C7",
+    "1029": "0x0646",
+    "1000": "0x0606",
+    "258": "0x0107",
+    "377": "0x019A",
+    "33": "0x03C5",
+    "911": "0x0538",
+    "993": "0x05F4",
+    "440": "0x01D6",
+    "291": "0x0135",
+    "208": "0x00C0",
+    "1010": "0x061F",
+    "211": "0x00C5",
+    "81": "0x0030",
+    "74": "0x001E",
+    "498": "0x022F",
+    "834": "0x0482",
+    "773": "0x03FB",
+    "870": "0x04D1",
+    "972": "0x05C0",
+    "929": "0x055F",
+    "11": "0x039E",
+    "902": "0x0521",
+    "1085": "0x06D2",
+    "928": "0x055C",
+    "930": "0x0562",
+    "505": "0x023B",
+    "1152": "0x0724",
+    "1125": "0x070B",
+    "1157": "0x072C",
+    "422": "0x01C1",
+    "472": "0x020A",
+    "501": "0x0234",
+    "783": "0x0419",
+    "19": "0x03B3",
+    "577": "0x0295",
+    "562": "0x0280",
+    "57": "0x0407",
+    "341": "0x016B",
+    "232": "0x00DF",
+    "627": "0x02E4",
+    "229": "0x00D7",
+    "746": "0x03CC",
+    "757": "0x03E1",
+    "1067": "0x06A4",
+    "649": "0x030F",
+    "1005": "0x0612",
+    "1128": "0x070F",
+    "458": "0x01F6",
+    "446": "0x01E0",
+    "955": "0x0596",
+    "1033": "0x0650",
+    "748": "0x03D1",
+    "905": "0x0529",
+    "413": "0x01B3",
+    "314": "0x0149",
+    "1093": "0x06E6",
+    "1084": "0x06CF",
+    "555": "0x0276",
+    "768": "0x03F5",
+    "285": "0x0127",
+    "55": "0x0401",
+    "943": "0x057B",
+    "612": "0x02C3",
+    "480": "0x0214",
+    "376": "0x0197",
+    "938": "0x056F",
+    "798": "0x0436",
+    "659": "0x0321",
+    "827": "0x0478",
+    "252": "0x0102",
+    "80": "0x002F",
+    "556": "0x0278",
+    "363": "0x0184",
+    "491": "0x0225",
+    "732": "0x03BC",
+    "880": "0x04EB",
+    "1058": "0x068E",
+    "107": "0x0051",
+    "958": "0x059D",
+    "788": "0x0421",
+    "552": "0x0273",
+    "765": "0x03EC",
+    "838": "0x0488",
+    "895": "0x0510",
+    "348": "0x0173",
+    "1179": "0x074D",
+    "814": "0x0456",
+    "750": "0x03D6",
+    "956": "0x0598",
+    "669": "0x0330",
+    "740": "0x03BF",
+    "43": "0x03DE",
+    "1032": "0x064D",
+    "1008": "0x061A",
+    "661": "0x0325",
+    "861": "0x04BB",
+    "242": "0x00F6",
+    "614": "0x02C7",
+    "321": "0x0151",
+    "46": "0x03E7",
+    "725": "0x03AB",
+    "1036": "0x0657",
+    "66": "0x041F",
+    "818": "0x0462",
+    "315": "0x014B",
+    "640": "0x02FB",
+    "1055": "0x0686",
+    "940": "0x0574",
+    "710": "0x0388",
+    "82": "0x0031",
+    "853": "0x04A7",
+    "207": "0x00BD",
+    "47": "0x03EA",
+    "917": "0x0547",
+    "1188": "0x075A",
+    "76": "0x0023",
+    "690": "0x0360",
+    "32": "0x03C2",
+    "775": "0x0401",
+    "110": "0x0055",
+    "995": "0x05FA",
+    "255": "0x0104",
+    "900": "0x051D",
+    "882": "0x04EF",
+    "778": "0x040A",
+    "1126": "0x070C",
+    "812": "0x0450",
+    "289": "0x0131",
+    "701": "0x0373",
+    "716": "0x0397",
+    "364": "0x0187",
+    "488": "0x0222",
+    "1178": "0x074C",
+    "785": "0x041C",
+    "965": "0x05AE",
+    "588": "0x02A3",
+    "648": "0x030C",
+    "823": "0x0471",
+    "951": "0x058C",
+    "37": "0x03CF",
+    "149": "0x008A",
+    "711": "0x038B",
+    "705": "0x037C",
+    "1193": "0x0762",
+    "1127": "0x070E",
+    "873": "0x04D9",
+    "879": "0x04E8",
+    "671": "0x0336",
+    "138": "0x007F",
+    "656": "0x031D",
+    "369": "0x0190",
+    "520": "0x0255",
+    "513": "0x024A",
+    "957": "0x059A",
+    "1096": "0x06ED",
+    "840": "0x048C",
+    "586": "0x029E",
+    "1210": "0x0778",
+    "1065": "0x06A0",
+    "326": "0x015A",
+    "133": "0x0077",
+    "118": "0x0061",
+    "647": "0x0309",
+    "964": "0x05AC",
+    "633": "0x02F1",
+    "1028": "0x0643",
+    "365": "0x0189",
+    "979": "0x05D2",
+    "719": "0x039C",
+    "93": "0x0044",
+    "828": "0x0479",
+    "1119": "0x06FE",
+    "622": "0x02DA",
+    "266": "0x010E",
+    "558": "0x027D",
+    "808": "0x044D",
+    "233": "0x00E1",
+    "686": "0x0354",
+    "1153": "0x0726",
+    "1074": "0x06B6",
+    "287": "0x012C",
+    "1163": "0x0736",
+    "619": "0x02D1",
+    "626": "0x02E1",
+    "751": "0x03D9",
+    "75": "0x0020",
+    "351": "0x017A",
+    "1083": "0x06CC",
+    "492": "0x0228",
+    "959": "0x05A0",
+    "1169": "0x073E",
+    "847": "0x049C",
+    "912": "0x053B",
+    "599": "0x02BB",
+    "1013": "0x0626",
+    "508": "0x0241",
+    "1031": "0x064A",
+    "264": "0x010B",
+    "848": "0x049E",
+    "872": "0x04D7",
+    "991": "0x05F0",
+    "960": "0x05A2",
+    "868": "0x04CD",
+    "974": "0x05C5",
+    "916": "0x0545",
+    "1049": "0x0678",
+    "844": "0x0495",
+    "484": "0x021B",
+    "681": "0x034A",
+    "538": "0x025D",
+    "225": "0x00D3",
+    "676": "0x0340",
+    "192": "0x00AF",
+    "970": "0x05BB",
+    "898": "0x0517",
+    "154": "0x0097",
+    "897": "0x0515",
+    "1061": "0x0696",
+    "126": "0x006C",
+    "885": "0x04F7",
+    "723": "0x03A5",
+    "14": "0x03A5",
+    "1076": "0x06BB",
+    "998": "0x0601",
+    "1151": "0x0722",
+    "894": "0x050D",
+    "985": "0x05E0",
+    "826": "0x0477",
+    "851": "0x04A2",
+    "366": "0x018B",
+    "909": "0x0533",
+    "1090": "0x06DE",
+    "999": "0x0604",
+    "448": "0x01E5",
+    "236": "0x00EA",
+    "1022": "0x0638",
+    "1026": "0x0640",
+    "728": "0x03B0",
+    "982": "0x05D9",
+    "662": "0x0328",
+    "1165": "0x0739",
+    "1088": "0x06D9",
+    "833": "0x047F",
+    "684": "0x0353",
+    "246": "0x00FD",
+    "424": "0x01C4",
+    "639": "0x02F8",
+    "327": "0x015D",
+    "1098": "0x06F1",
+    "683": "0x0350",
+    "1175": "0x0748",
+    "1009": "0x061C",
+    "1136": "0x071B",
+    "56": "0x0404",
+    "1133": "0x0716",
+    "35": "0x03CA",
+    "461": "0x01FB",
+    "153": "0x0094",
+    "120": "0x0064",
+    "36": "0x03CC",
+    "712": "0x038E",
+    "805": "0x0448",
+    "20": "0x03B6",
+    "194": "0x00B4",
+    "435": "0x01D0",
+    "1073": "0x06B4",
+    "977": "0x05CC",
+    "821": "0x046B",
+    "1003": "0x060E",
+    "857": "0x04B1",
+    "216": "0x00CB",
+    "592": "0x02AC",
+    "1048": "0x0675",
+    "797": "0x0433",
+    "888": "0x04FF",
+    "309": "0x0141",
+    "269": "0x0110",
+    "722": "0x03A3",
+    "760": "0x03E7",
+    "463": "0x01FE",
+    "875": "0x04DE",
+    "205": "0x00B8",
+    "580": "0x029C",
+    "476": "0x0211",
+    "397": "0x01B2",
+    "1192": "0x0761",
+    "383": "0x01A4",
+    "807": "0x044C",
+    "663": "0x032B",
+    "869": "0x04CF",
+    "961": "0x05A4",
+    "551": "0x0272",
+    "41": "0x03D9",
+    "550": "0x026F",
+    "2": "0x039C",
+    "438": "0x01D4",
+    "546": "0x0268",
+    "660": "0x0322",
+    "1095": "0x06EA",
+    "83": "0x0032",
+    "593": "0x02AF",
+    "908": "0x0531",
+    "595": "0x02B2",
+    "251": "0x00FF",
+    "1053": "0x0682",
+    "1204": "0x0764",
+    "420": "0x01BC",
+    "156": "0x009D",
+    "624": "0x02DD",
+    "568": "0x028C",
+    "749": "0x03D4",
+    "986": "0x05E3",
+    "1089": "0x06DC",
+    "129": "0x0071",
+    "1208": "0x076F",
+    "1154": "0x0728",
+    "1002": "0x060B",
+    "854": "0x04A9",
+    "1014": "0x0629",
+    "1137": "0x071E",
+    "949": "0x0586",
+    "678": "0x0346",
+    "578": "0x0297",
+    "243": "0x00F8",
+    "954": "0x0593",
+    "978": "0x05CF",
+    "344": "0x0171",
+    "29": "0x03B9",
+    "456": "0x01F2",
+    "64": "0x041C",
+    "323": "0x0156",
+    "45": "0x03E4",
+    "1132": "0x0715",
+    "108": "0x0052",
+    "945": "0x057D",
+    "758": "0x03E4",
+    "616": "0x02CD",
+    "473": "0x020D",
+    "657": "0x031E",
+    "155": "0x009A",
+    "503": "0x0238",
+    "589": "0x02A6",
+    "921": "0x0550",
+    "1160": "0x0732",
+    "744": "0x03C7",
+    "58": "0x040A",
+    "306": "0x013F",
+    "1184": "0x0755",
+    "1161": "0x0734",
+    "276": "0x0114",
+    "910": "0x0535",
+    "984": "0x05DE",
+    "195": "0x00B7",
+    "61": "0x0413",
+    "876": "0x04E1",
+    "1100": "0x06F7",
+    "215": "0x00C9",
+    "579": "0x0299",
+    "654": "0x0317",
+    "1198": "0x0768",
+    "190": "0x00A9",
+    "819": "0x0465",
+    "801": "0x043F",
+    "1190": "0x075E",
+    "1068": "0x06A7",
+    "1180": "0x074E",
+    "112": "0x0058",
+    "1047": "0x0672",
+    "919": "0x054C",
+    "706": "0x037F",
+    "699": "0x036D",
+    "871": "0x04D4",
+    "1079": "0x06C2",
+    "1080": "0x06C5",
+    "1046": "0x0670",
+    "504": "0x023A",
+    "682": "0x034D",
+    "936": "0x056C",
+    "893": "0x050B",
+    "396": "0x01B0",
+    "587": "0x02A0",
+    "727": "0x03AD",
+    "575": "0x0293",
+    "777": "0x0407",
+    "767": "0x03F2",
+    "892": "0x0509",
+    "471": "0x0209",
+    "313": "0x0146",
+    "92": "0x0041",
+    "322": "0x0153",
+    "802": "0x0442",
+    "988": "0x05E8",
+    "841": "0x048F",
+    "286": "0x012A",
+    "239": "0x00F1",
+    "634": "0x02F4",
+    "566": "0x0285",
+    "796": "0x0430",
+    "594": "0x02B1",
+    "521": "0x0257",
+    "1135": "0x0719",
+    "953": "0x0590",
+    "1172": "0x0742",
+    "1086": "0x06D4",
+    "976": "0x05CA",
+    "591": "0x02A9",
+    "980": "0x05D4",
+    "278": "0x011A",
+    "1069": "0x06AA",
+    "464": "0x0200",
+    "779": "0x040D",
+    "865": "0x04C5",
+    "704": "0x0379",
+    "1171": "0x0741",
+    "890": "0x0503",
+    "1060": "0x0693",
+    "109": "0x0053",
+    "1205": "0x0765",
+    "137": "0x007E",
+    "1082": "0x06CA",
+    "822": "0x046E",
+    "1097": "0x06EF",
+    "372": "0x0192",
+    "381": "0x019E",
+    "806": "0x044B",
+    "1124": "0x0709",
+    "1121": "0x0701",
+    "39": "0x03D4",
+    "1195": "0x0765",
+    "761": "0x03EA",
+    "967": "0x05B4",
+    "350": "0x0177",
+    "668": "0x032F",
+    "935": "0x0569",
+    "304": "0x013B",
+    "1070": "0x06AC",
+    "887": "0x04FC",
+    "975": "0x05C8",
+    "59": "0x040D",
+    "1168": "0x073D",
+    "54": "0x03FE",
+    "1166": "0x073A",
+    "625": "0x02DE",
+    "973": "0x05C2",
+    "596": "0x02B5",
+    "51": "0x03F5",
+    "933": "0x0565",
+    "697": "0x036A",
+    "143": "0x0086",
+    "852": "0x04A5",
+    "52": "0x03F8",
+    "680": "0x0347",
+    "755": "0x03DC",
+    "891": "0x0506",
+    "502": "0x0237",
+    "151": "0x008E",
+    "310": "0x0144",
+    "615": "0x02CA"
+  },
   "variables": {
-    "DRAW_CIRCLE_DIAM": {
-      "name": "DRAW_CIRCLE_DIAM",
-      "address": "0xC8A3",
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC8AC",
       "size": 1,
       "type": "unknown",
       "declLine": null
     },
-    "SFX_TICK": {
-      "name": "SFX_TICK",
-      "address": "0xC896",
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8B9",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_PHASE_DP": {
-      "name": "SFX_PHASE_DP",
-      "address": "0x0019",
-      "size": 2,
-      "type": "audio",
-      "declLine": null
-    },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC889",
-      "size": 1,
       "type": "unknown",
       "declLine": null
     },
     "VPY_MOVE_Y": {
       "name": "VPY_MOVE_Y",
       "address": "0xC88B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_TEMP": {
-      "name": "DRAW_CIRCLE_TEMP",
-      "address": "0xC8A5",
-      "size": 8,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_TICK_DP": {
-      "name": "SFX_TICK_DP",
-      "address": "0x0016",
-      "size": 2,
-      "type": "audio",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_XC": {
-      "name": "DRAW_CIRCLE_XC",
-      "address": "0xC8A1",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_ACTIVE": {
-      "name": "SFX_ACTIVE",
-      "address": "0xC898",
       "size": 1,
       "type": "unknown",
       "declLine": null
@@ -97,25 +5008,18 @@
       "type": "unknown",
       "declLine": null
     },
-    "PSG_MUSIC_ACTIVE": {
-      "name": "PSG_MUSIC_ACTIVE",
-      "address": "0xC891",
-      "size": 1,
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8AF",
+      "size": 8,
       "type": "unknown",
       "declLine": null
     },
-    "SFX_PTR_DP": {
-      "name": "SFX_PTR_DP",
-      "address": "0x0014",
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8B7",
       "size": 2,
-      "type": "audio",
-      "declLine": null
-    },
-    "SFX_VOL_DP": {
-      "name": "SFX_VOL_DP",
-      "address": "0x001A",
-      "size": 2,
-      "type": "audio",
+      "type": "unknown",
       "declLine": null
     },
     "TEMP_YX": {
@@ -125,128 +5029,9 @@
       "type": "unknown",
       "declLine": null
     },
-    "PSG_FRAME_COUNT": {
-      "name": "PSG_FRAME_COUNT",
-      "address": "0xC892",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_VOL": {
-      "name": "SFX_VOL",
-      "address": "0xC89A",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC882",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC89B",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_PTR": {
-      "name": "SFX_PTR",
-      "address": "0xC894",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg3": {
-      "name": "arg3",
-      "address": "0xC8B3",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_INTENSITY": {
-      "name": "DRAW_CIRCLE_INTENSITY",
-      "address": "0xC8A4",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg0": {
-      "name": "arg0",
-      "address": "0xC8AD",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_YC": {
-      "name": "DRAW_CIRCLE_YC",
-      "address": "0xC8A2",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg1": {
-      "name": "arg1",
-      "address": "0xC8AF",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_MUSIC_START": {
-      "name": "PSG_MUSIC_START",
-      "address": "0xC88E",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC884",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_IS_PLAYING": {
-      "name": "PSG_IS_PLAYING",
-      "address": "0xC890",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_ACTIVE_DP": {
-      "name": "SFX_ACTIVE_DP",
-      "address": "0x0018",
-      "size": 2,
-      "type": "audio",
-      "declLine": null
-    },
-    "PSG_MUSIC_PTR": {
-      "name": "PSG_MUSIC_PTR",
-      "address": "0xC88C",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_PHASE": {
-      "name": "SFX_PHASE",
-      "address": "0xC899",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_DELAY_FRAMES": {
-      "name": "PSG_DELAY_FRAMES",
-      "address": "0xC893",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
     "arg4": {
       "name": "arg4",
-      "address": "0xC8B5",
+      "address": "0xC8BF",
       "size": 2,
       "type": "unknown",
       "declLine": null
@@ -258,10 +5043,52 @@
       "type": "unknown",
       "declLine": null
     },
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC8B1",
+    "PSG_MUSIC_START": {
+      "name": "PSG_MUSIC_START",
+      "address": "0xC898",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_PTR_DP": {
+      "name": "SFX_PTR_DP",
+      "address": "0x001E",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC88C",
+      "size": 10,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_ACTIVE": {
+      "name": "SFX_ACTIVE",
+      "address": "0xC8A2",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_ACTIVE": {
+      "name": "PSG_MUSIC_ACTIVE",
+      "address": "0xC89B",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_DELAY_FRAMES": {
+      "name": "PSG_DELAY_FRAMES",
+      "address": "0xC89D",
+      "size": 1,
       "type": "unknown",
       "declLine": null
     },
@@ -270,6 +5097,139 @@
       "address": "0xC88A",
       "size": 1,
       "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_PTR": {
+      "name": "PSG_MUSIC_PTR",
+      "address": "0xC896",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_TICK": {
+      "name": "SFX_TICK",
+      "address": "0xC8A0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8AD",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8BB",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8BD",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC8A5",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_PTR": {
+      "name": "SFX_PTR",
+      "address": "0xC89E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8AE",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_PHASE_DP": {
+      "name": "SFX_PHASE_DP",
+      "address": "0x0023",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC889",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_FRAME_COUNT": {
+      "name": "PSG_FRAME_COUNT",
+      "address": "0xC89C",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC8AB",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_VOL_DP": {
+      "name": "SFX_VOL_DP",
+      "address": "0x0024",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "SFX_VOL": {
+      "name": "SFX_VOL",
+      "address": "0xC8A4",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_IS_PLAYING": {
+      "name": "PSG_IS_PLAYING",
+      "address": "0xC89A",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_ACTIVE_DP": {
+      "name": "SFX_ACTIVE_DP",
+      "address": "0x0022",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "SFX_PHASE": {
+      "name": "SFX_PHASE",
+      "address": "0xC8A3",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_TICK_DP": {
+      "name": "SFX_TICK_DP",
+      "address": "0x0020",
+      "size": 2,
+      "type": "audio",
       "declLine": null
     }
   }

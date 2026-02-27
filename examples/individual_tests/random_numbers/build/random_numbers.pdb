@@ -3,1357 +3,2132 @@
   "source": "main.vpy",
   "asm": "random_numbers.asm",
   "binary": "random_numbers.bin",
-  "entryPoint": "0x0233",
+  "entryPoint": "0x0236",
   "symbols": {
-    "DRAW_CIRCLE_RUNTIME": "0x00B4",
-    "__Reset0Ref": "0x00A7",
-    "DCR_after_intensity": "0x00E9",
-    "J1B4_BUILTIN": "0x0077",
-    "LOOP_BODY": "0x02FB",
-    "J1B3_BUILTIN": "0x0068",
-    "START": "0x0233",
-    "J1B1_BUILTIN": "0x004A",
-    "RAND_RANGE_HELPER": "0x0214",
-    "J1B4_BUILTIN.J1B4_OFF": "0x0082",
-    "STR_0": "0x04AE",
-    "RAND_HELPER": "0x01F6",
-    "__Moveto_d": "0x00AA",
-    "J1B2_BUILTIN.J1B2_OFF": "0x0064",
-    "RAND_MUL_DONE": "0x0209",
-    "RAND_MUL_LOOP": "0x0201",
-    "VECTREX_PRINT_TEXT": "0x0086",
-    "J1X_BUILTIN": "0x001A",
-    "MAIN": "0x02CE",
-    "J1B2_BUILTIN": "0x0059",
-    "DCR_intensity_5F": "0x00E6",
-    "J1B3_BUILTIN.J1B3_OFF": "0x0073",
-    "__Draw_Line_d": "0x00AF",
-    "RRH_MOD": "0x0227",
-    "J1B1_BUILTIN.J1B1_OFF": "0x0055",
+    "RRH_MOD": "0x022A",
+    "START": "0x0236",
+    "DCR_intensity_5F": "0x00E9",
     "J1Y_BUILTIN": "0x0032",
-    "__Intensity_a": "0x00A2"
+    "LOOP_BODY": "0x02FE",
+    "J1B1_BUILTIN.J1B1_OFF": "0x0055",
+    "__Intensity_a": "0x00A5",
+    "J1B1_BUILTIN": "0x004A",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0082",
+    "DCR_after_intensity": "0x00EC",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0073",
+    "STR_0": "0x04B1",
+    "DRAW_CIRCLE_RUNTIME": "0x00B7",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0064",
+    "J1B2_BUILTIN": "0x0059",
+    "RAND_RANGE_HELPER": "0x0217",
+    "J1B4_BUILTIN": "0x0077",
+    "__Draw_Line_d": "0x00B2",
+    "VECTREX_PRINT_TEXT": "0x0086",
+    "__Reset0Ref": "0x00AA",
+    "RAND_HELPER": "0x01F9",
+    "__Moveto_d": "0x00AD",
+    "MAIN": "0x02D1",
+    "J1B3_BUILTIN": "0x0068",
+    "RAND_MUL_DONE": "0x020C",
+    "J1X_BUILTIN": "0x001A",
+    "RAND_MUL_LOOP": "0x0204"
   },
   "lineMap": {
-    "36": "0x0451",
-    "32": "0x03D2",
-    "9": "0x024A",
-    "28": "0x0353",
-    "19": "0x029B",
-    "12": "0x025C",
-    "31": "0x03AE",
-    "35": "0x042D",
-    "37": "0x046E",
-    "27": "0x0331",
-    "17": "0x0279",
-    "21": "0x02BD",
-    "18": "0x028A",
-    "20": "0x02AC",
-    "24": "0x0303",
-    "8": "0x0244",
-    "16": "0x0268",
-    "11": "0x0256",
-    "13": "0x0262",
-    "29": "0x0376",
-    "33": "0x03F5",
-    "10": "0x0250"
+    "10": "0x0253",
+    "29": "0x0379",
+    "31": "0x03B1",
+    "20": "0x02AF",
+    "36": "0x0454",
+    "37": "0x0471",
+    "19": "0x029E",
+    "16": "0x026B",
+    "28": "0x0356",
+    "35": "0x0430",
+    "33": "0x03F8",
+    "8": "0x0247",
+    "11": "0x0259",
+    "32": "0x03D5",
+    "21": "0x02C0",
+    "27": "0x0334",
+    "18": "0x028D",
+    "9": "0x024D",
+    "24": "0x0306",
+    "13": "0x0265",
+    "17": "0x027C",
+    "12": "0x025F"
   },
   "vpyLineMap": {
-    "0x024A": {
+    "0x024D": {
       "file": "main.vpy",
-      "address": "0x024A",
+      "address": "0x024D",
       "line": 9
     },
-    "0x025C": {
+    "0x0253": {
       "file": "main.vpy",
-      "address": "0x025C",
-      "line": 12
-    },
-    "0x0256": {
-      "file": "main.vpy",
-      "address": "0x0256",
-      "line": 11
-    },
-    "0x02BD": {
-      "file": "main.vpy",
-      "address": "0x02BD",
-      "line": 21
-    },
-    "0x0451": {
-      "file": "main.vpy",
-      "address": "0x0451",
-      "line": 36
-    },
-    "0x0331": {
-      "file": "main.vpy",
-      "address": "0x0331",
-      "line": 27
-    },
-    "0x0303": {
-      "file": "main.vpy",
-      "address": "0x0303",
-      "line": 24
-    },
-    "0x042D": {
-      "file": "main.vpy",
-      "address": "0x042D",
-      "line": 35
-    },
-    "0x02AC": {
-      "file": "main.vpy",
-      "address": "0x02AC",
-      "line": 20
-    },
-    "0x03D2": {
-      "file": "main.vpy",
-      "address": "0x03D2",
-      "line": 32
-    },
-    "0x0268": {
-      "file": "main.vpy",
-      "address": "0x0268",
-      "line": 16
-    },
-    "0x0262": {
-      "file": "main.vpy",
-      "address": "0x0262",
-      "line": 13
-    },
-    "0x03AE": {
-      "file": "main.vpy",
-      "address": "0x03AE",
-      "line": 31
-    },
-    "0x0250": {
-      "file": "main.vpy",
-      "address": "0x0250",
+      "address": "0x0253",
       "line": 10
     },
-    "0x029B": {
+    "0x0259": {
       "file": "main.vpy",
-      "address": "0x029B",
+      "address": "0x0259",
+      "line": 11
+    },
+    "0x026B": {
+      "file": "main.vpy",
+      "address": "0x026B",
+      "line": 16
+    },
+    "0x03B1": {
+      "file": "main.vpy",
+      "address": "0x03B1",
+      "line": 31
+    },
+    "0x029E": {
+      "file": "main.vpy",
+      "address": "0x029E",
       "line": 19
     },
-    "0x046E": {
+    "0x0247": {
       "file": "main.vpy",
-      "address": "0x046E",
-      "line": 37
-    },
-    "0x0279": {
-      "file": "main.vpy",
-      "address": "0x0279",
-      "line": 17
-    },
-    "0x0353": {
-      "file": "main.vpy",
-      "address": "0x0353",
-      "line": 28
-    },
-    "0x03F5": {
-      "file": "main.vpy",
-      "address": "0x03F5",
-      "line": 33
-    },
-    "0x0244": {
-      "file": "main.vpy",
-      "address": "0x0244",
+      "address": "0x0247",
       "line": 8
     },
-    "0x028A": {
+    "0x0356": {
       "file": "main.vpy",
-      "address": "0x028A",
+      "address": "0x0356",
+      "line": 28
+    },
+    "0x02AF": {
+      "file": "main.vpy",
+      "address": "0x02AF",
+      "line": 20
+    },
+    "0x0454": {
+      "file": "main.vpy",
+      "address": "0x0454",
+      "line": 36
+    },
+    "0x0334": {
+      "file": "main.vpy",
+      "address": "0x0334",
+      "line": 27
+    },
+    "0x0306": {
+      "file": "main.vpy",
+      "address": "0x0306",
+      "line": 24
+    },
+    "0x0379": {
+      "file": "main.vpy",
+      "address": "0x0379",
+      "line": 29
+    },
+    "0x03F8": {
+      "file": "main.vpy",
+      "address": "0x03F8",
+      "line": 33
+    },
+    "0x027C": {
+      "file": "main.vpy",
+      "address": "0x027C",
+      "line": 17
+    },
+    "0x028D": {
+      "file": "main.vpy",
+      "address": "0x028D",
       "line": 18
     },
-    "0x0376": {
+    "0x0471": {
       "file": "main.vpy",
-      "address": "0x0376",
-      "line": 29
+      "address": "0x0471",
+      "line": 37
+    },
+    "0x025F": {
+      "file": "main.vpy",
+      "address": "0x025F",
+      "line": 12
+    },
+    "0x0265": {
+      "file": "main.vpy",
+      "address": "0x0265",
+      "line": 13
+    },
+    "0x03D5": {
+      "file": "main.vpy",
+      "address": "0x03D5",
+      "line": 32
+    },
+    "0x0430": {
+      "file": "main.vpy",
+      "address": "0x0430",
+      "line": 35
+    },
+    "0x02C0": {
+      "file": "main.vpy",
+      "address": "0x02C0",
+      "line": 21
     }
   },
   "asmLineMap": {
-    "0x00F6": {
+    "0x031E": {
       "file": "random_numbers.asm",
-      "address": "0x00F6",
-      "line": 221
-    },
-    "0x01C1": {
-      "file": "random_numbers.asm",
-      "address": "0x01C1",
-      "line": 337
-    },
-    "0x01E2": {
-      "file": "random_numbers.asm",
-      "address": "0x01E2",
-      "line": 351
-    },
-    "0x002E": {
-      "file": "random_numbers.asm",
-      "address": "0x002E",
-      "line": 74
-    },
-    "0x01DC": {
-      "file": "random_numbers.asm",
-      "address": "0x01DC",
-      "line": 348
-    },
-    "0x02D4": {
-      "file": "random_numbers.asm",
-      "address": "0x02D4",
-      "line": 473
-    },
-    "0x03C6": {
-      "file": "random_numbers.asm",
-      "address": "0x03C6",
-      "line": 582
-    },
-    "0x03FA": {
-      "file": "random_numbers.asm",
-      "address": "0x03FA",
-      "line": 605
-    },
-    "0x0025": {
-      "file": "random_numbers.asm",
-      "address": "0x0025",
-      "line": 69
-    },
-    "0x034A": {
-      "file": "random_numbers.asm",
-      "address": "0x034A",
-      "line": 532
-    },
-    "0x0367": {
-      "file": "random_numbers.asm",
-      "address": "0x0367",
-      "line": 545
-    },
-    "0x010C": {
-      "file": "random_numbers.asm",
-      "address": "0x010C",
-      "line": 236
-    },
-    "0x0044": {
-      "file": "random_numbers.asm",
-      "address": "0x0044",
-      "line": 86
-    },
-    "0x036D": {
-      "file": "random_numbers.asm",
-      "address": "0x036D",
-      "line": 547
-    },
-    "0x02FB": {
-      "file": "random_numbers.asm",
-      "address": "0x02FB",
-      "line": 495
-    },
-    "0x006B": {
-      "file": "random_numbers.asm",
-      "address": "0x006B",
-      "line": 118
-    },
-    "0x02CE": {
-      "file": "random_numbers.asm",
-      "address": "0x02CE",
-      "line": 470
-    },
-    "0x0032": {
-      "file": "random_numbers.asm",
-      "address": "0x0032",
-      "line": 79
-    },
-    "0x01DF": {
-      "file": "random_numbers.asm",
-      "address": "0x01DF",
-      "line": 350
-    },
-    "0x0106": {
-      "file": "random_numbers.asm",
-      "address": "0x0106",
-      "line": 233
-    },
-    "0x015C": {
-      "file": "random_numbers.asm",
-      "address": "0x015C",
-      "line": 284
-    },
-    "0x045C": {
-      "file": "random_numbers.asm",
-      "address": "0x045C",
-      "line": 644
-    },
-    "0x02DB": {
-      "file": "random_numbers.asm",
-      "address": "0x02DB",
-      "line": 476
-    },
-    "0x0309": {
-      "file": "random_numbers.asm",
-      "address": "0x0309",
-      "line": 505
-    },
-    "0x0219": {
-      "file": "random_numbers.asm",
-      "address": "0x0219",
-      "line": 385
-    },
-    "0x0045": {
-      "file": "random_numbers.asm",
-      "address": "0x0045",
-      "line": 87
-    },
-    "0x01FE": {
-      "file": "random_numbers.asm",
-      "address": "0x01FE",
-      "line": 366
-    },
-    "0x026E": {
-      "file": "random_numbers.asm",
-      "address": "0x026E",
-      "line": 39
-    },
-    "0x0253": {
-      "file": "random_numbers.asm",
-      "address": "0x0253",
-      "line": 416
+      "address": "0x031E",
+      "line": 512
     },
     "0x01A7": {
       "file": "random_numbers.asm",
       "address": "0x01A7",
       "line": 323
     },
-    "0x0496": {
-      "file": "random_numbers.asm",
-      "address": "0x0496",
-      "line": 666
-    },
-    "0x0262": {
-      "file": "random_numbers.asm",
-      "address": "0x0262",
-      "line": 424
-    },
-    "0x029B": {
-      "file": "random_numbers.asm",
-      "address": "0x029B",
-      "line": 448
-    },
-    "0x03AB": {
-      "file": "random_numbers.asm",
-      "address": "0x03AB",
-      "line": 570
-    },
-    "0x006D": {
-      "file": "random_numbers.asm",
-      "address": "0x006D",
-      "line": 120
-    },
-    "0x033E": {
-      "file": "random_numbers.asm",
-      "address": "0x033E",
-      "line": 528
-    },
-    "0x0406": {
-      "file": "random_numbers.asm",
-      "address": "0x0406",
-      "line": 609
-    },
-    "0x01E8": {
-      "file": "random_numbers.asm",
-      "address": "0x01E8",
-      "line": 353
-    },
-    "0x04A8": {
-      "file": "random_numbers.asm",
-      "address": "0x04A8",
-      "line": 672
-    },
-    "0x01E5": {
-      "file": "random_numbers.asm",
-      "address": "0x01E5",
-      "line": 352
-    },
-    "0x0141": {
-      "file": "random_numbers.asm",
-      "address": "0x0141",
-      "line": 269
-    },
-    "0x02D9": {
-      "file": "random_numbers.asm",
-      "address": "0x02D9",
-      "line": 475
-    },
-    "0x01A0": {
-      "file": "random_numbers.asm",
-      "address": "0x01A0",
-      "line": 319
-    },
-    "0x016D": {
-      "file": "random_numbers.asm",
-      "address": "0x016D",
-      "line": 293
-    },
-    "0x021C": {
-      "file": "random_numbers.asm",
-      "address": "0x021C",
-      "line": 386
-    },
-    "0x0487": {
-      "file": "random_numbers.asm",
-      "address": "0x0487",
-      "line": 661
-    },
-    "0x0465": {
-      "file": "random_numbers.asm",
-      "address": "0x0465",
-      "line": 647
-    },
-    "0x007B": {
-      "file": "random_numbers.asm",
-      "address": "0x007B",
-      "line": 129
-    },
-    "0x03C0": {
-      "file": "random_numbers.asm",
-      "address": "0x03C0",
-      "line": 580
-    },
-    "0x00F1": {
-      "file": "random_numbers.asm",
-      "address": "0x00F1",
-      "line": 219
-    },
-    "0x0335": {
-      "file": "random_numbers.asm",
-      "address": "0x0335",
-      "line": 525
-    },
-    "0x0043": {
-      "file": "random_numbers.asm",
-      "address": "0x0043",
-      "line": 85
-    },
-    "0x0454": {
-      "file": "random_numbers.asm",
-      "address": "0x0454",
-      "line": 641
-    },
-    "0x020A": {
-      "file": "random_numbers.asm",
-      "address": "0x020A",
-      "line": 374
-    },
-    "0x03EF": {
-      "file": "random_numbers.asm",
-      "address": "0x03EF",
-      "line": 599
-    },
-    "0x01BB": {
-      "file": "random_numbers.asm",
-      "address": "0x01BB",
-      "line": 335
-    },
-    "0x03B1": {
-      "file": "random_numbers.asm",
-      "address": "0x03B1",
-      "line": 575
-    },
-    "0x013B": {
-      "file": "random_numbers.asm",
-      "address": "0x013B",
-      "line": 267
-    },
-    "0x024D": {
-      "file": "random_numbers.asm",
-      "address": "0x024D",
-      "line": 20
-    },
-    "0x01CA": {
-      "file": "random_numbers.asm",
-      "address": "0x01CA",
-      "line": 341
-    },
-    "0x043C": {
-      "file": "random_numbers.asm",
-      "address": "0x043C",
-      "line": 630
-    },
-    "0x00DF": {
-      "file": "random_numbers.asm",
-      "address": "0x00DF",
-      "line": 207
-    },
-    "0x00BC": {
-      "file": "random_numbers.asm",
-      "address": "0x00BC",
-      "line": 182
-    },
-    "0x0121": {
-      "file": "random_numbers.asm",
-      "address": "0x0121",
-      "line": 255
-    },
-    "0x02AC": {
-      "file": "random_numbers.asm",
-      "address": "0x02AC",
-      "line": 455
-    },
-    "0x03A5": {
-      "file": "random_numbers.asm",
-      "address": "0x03A5",
-      "line": 568
-    },
-    "0x0103": {
-      "file": "random_numbers.asm",
-      "address": "0x0103",
-      "line": 232
-    },
-    "0x03B4": {
-      "file": "random_numbers.asm",
-      "address": "0x03B4",
-      "line": 576
-    },
-    "0x0197": {
-      "file": "random_numbers.asm",
-      "address": "0x0197",
-      "line": 316
-    },
-    "0x0204": {
-      "file": "random_numbers.asm",
-      "address": "0x0204",
-      "line": 370
-    },
-    "0x0481": {
-      "file": "random_numbers.asm",
-      "address": "0x0481",
-      "line": 659
-    },
-    "0x020C": {
-      "file": "random_numbers.asm",
-      "address": "0x020C",
-      "line": 375
-    },
-    "0x026B": {
-      "file": "random_numbers.asm",
-      "address": "0x026B",
-      "line": 38
-    },
-    "0x00B4": {
-      "file": "random_numbers.asm",
-      "address": "0x00B4",
-      "line": 178
-    },
-    "0x0088": {
-      "file": "random_numbers.asm",
-      "address": "0x0088",
-      "line": 141
-    },
-    "0x03BD": {
-      "file": "random_numbers.asm",
-      "address": "0x03BD",
-      "line": 579
-    },
-    "0x0473": {
-      "file": "random_numbers.asm",
-      "address": "0x0473",
-      "line": 654
-    },
-    "0x02C9": {
-      "file": "random_numbers.asm",
-      "address": "0x02C9",
-      "line": 466
-    },
-    "0x004F": {
-      "file": "random_numbers.asm",
-      "address": "0x004F",
-      "line": 100
-    },
-    "0x034D": {
-      "file": "random_numbers.asm",
-      "address": "0x034D",
-      "line": 533
-    },
-    "0x0201": {
-      "file": "random_numbers.asm",
-      "address": "0x0201",
-      "line": 368
-    },
-    "0x0171": {
-      "file": "random_numbers.asm",
-      "address": "0x0171",
-      "line": 295
-    },
-    "0x0115": {
-      "file": "random_numbers.asm",
-      "address": "0x0115",
-      "line": 240
-    },
-    "0x02E8": {
-      "file": "random_numbers.asm",
-      "address": "0x02E8",
-      "line": 481
-    },
-    "0x0064": {
-      "file": "random_numbers.asm",
-      "address": "0x0064",
-      "line": 114
-    },
-    "0x023F": {
-      "file": "random_numbers.asm",
-      "address": "0x023F",
-      "line": 15
-    },
-    "0x0356": {
-      "file": "random_numbers.asm",
-      "address": "0x0356",
-      "line": 539
-    },
-    "0x006C": {
-      "file": "random_numbers.asm",
-      "address": "0x006C",
-      "line": 119
-    },
-    "0x0327": {
-      "file": "random_numbers.asm",
-      "address": "0x0327",
-      "line": 516
-    },
-    "0x0237": {
-      "file": "random_numbers.asm",
-      "address": "0x0237",
-      "line": 12
-    },
-    "0x0063": {
-      "file": "random_numbers.asm",
-      "address": "0x0063",
-      "line": 113
-    },
-    "0x03F5": {
-      "file": "random_numbers.asm",
-      "address": "0x03F5",
-      "line": 603
-    },
-    "0x028D": {
-      "file": "random_numbers.asm",
-      "address": "0x028D",
-      "line": 442
-    },
-    "0x0102": {
-      "file": "random_numbers.asm",
-      "address": "0x0102",
-      "line": 231
-    },
-    "0x0177": {
-      "file": "random_numbers.asm",
-      "address": "0x0177",
-      "line": 297
-    },
-    "0x003A": {
-      "file": "random_numbers.asm",
-      "address": "0x003A",
-      "line": 82
-    },
-    "0x023A": {
-      "file": "random_numbers.asm",
-      "address": "0x023A",
-      "line": 401
-    },
-    "0x0155": {
-      "file": "random_numbers.asm",
-      "address": "0x0155",
-      "line": 281
-    },
-    "0x0109": {
-      "file": "random_numbers.asm",
-      "address": "0x0109",
-      "line": 234
-    },
-    "0x0279": {
-      "file": "random_numbers.asm",
-      "address": "0x0279",
-      "line": 43
-    },
-    "0x00C6": {
-      "file": "random_numbers.asm",
-      "address": "0x00C6",
-      "line": 189
-    },
-    "0x013E": {
-      "file": "random_numbers.asm",
-      "address": "0x013E",
-      "line": 268
-    },
-    "0x0144": {
-      "file": "random_numbers.asm",
-      "address": "0x0144",
-      "line": 271
-    },
-    "0x007C": {
-      "file": "random_numbers.asm",
-      "address": "0x007C",
-      "line": 130
-    },
-    "0x00EE": {
-      "file": "random_numbers.asm",
-      "address": "0x00EE",
-      "line": 217
-    },
-    "0x010B": {
-      "file": "random_numbers.asm",
-      "address": "0x010B",
-      "line": 235
-    },
-    "0x00FD": {
-      "file": "random_numbers.asm",
-      "address": "0x00FD",
-      "line": 229
-    },
-    "0x0028": {
-      "file": "random_numbers.asm",
-      "address": "0x0028",
-      "line": 70
-    },
-    "0x0445": {
-      "file": "random_numbers.asm",
-      "address": "0x0445",
-      "line": 633
-    },
     "0x01AD": {
       "file": "random_numbers.asm",
       "address": "0x01AD",
       "line": 325
     },
-    "0x025F": {
+    "0x001F": {
       "file": "random_numbers.asm",
-      "address": "0x025F",
-      "line": 422
-    },
-    "0x01CD": {
-      "file": "random_numbers.asm",
-      "address": "0x01CD",
-      "line": 342
-    },
-    "0x039C": {
-      "file": "random_numbers.asm",
-      "address": "0x039C",
-      "line": 565
-    },
-    "0x02E5": {
-      "file": "random_numbers.asm",
-      "address": "0x02E5",
-      "line": 480
-    },
-    "0x01BA": {
-      "file": "random_numbers.asm",
-      "address": "0x01BA",
-      "line": 331
-    },
-    "0x03D2": {
-      "file": "random_numbers.asm",
-      "address": "0x03D2",
-      "line": 589
-    },
-    "0x0166": {
-      "file": "random_numbers.asm",
-      "address": "0x0166",
-      "line": 289
-    },
-    "0x03EC": {
-      "file": "random_numbers.asm",
-      "address": "0x03EC",
-      "line": 598
-    },
-    "0x04AF": {
-      "file": "random_numbers.asm",
-      "address": "0x04AF",
-      "line": 680
-    },
-    "0x032D": {
-      "file": "random_numbers.asm",
-      "address": "0x032D",
-      "line": 518
-    },
-    "0x0081": {
-      "file": "random_numbers.asm",
-      "address": "0x0081",
-      "line": 133
-    },
-    "0x046B": {
-      "file": "random_numbers.asm",
-      "address": "0x046B",
-      "line": 649
-    },
-    "0x0321": {
-      "file": "random_numbers.asm",
-      "address": "0x0321",
-      "line": 513
-    },
-    "0x0433": {
-      "file": "random_numbers.asm",
-      "address": "0x0433",
-      "line": 627
-    },
-    "0x02FF": {
-      "file": "random_numbers.asm",
-      "address": "0x02FF",
-      "line": 498
-    },
-    "0x0331": {
-      "file": "random_numbers.asm",
-      "address": "0x0331",
-      "line": 523
-    },
-    "0x0370": {
-      "file": "random_numbers.asm",
-      "address": "0x0370",
-      "line": 548
-    },
-    "0x02A4": {
-      "file": "random_numbers.asm",
-      "address": "0x02A4",
-      "line": 451
-    },
-    "0x00A4": {
-      "file": "random_numbers.asm",
-      "address": "0x00A4",
-      "line": 154
-    },
-    "0x0324": {
-      "file": "random_numbers.asm",
-      "address": "0x0324",
-      "line": 514
-    },
-    "0x043F": {
-      "file": "random_numbers.asm",
-      "address": "0x043F",
-      "line": 631
-    },
-    "0x040F": {
-      "file": "random_numbers.asm",
-      "address": "0x040F",
-      "line": 612
-    },
-    "0x030C": {
-      "file": "random_numbers.asm",
-      "address": "0x030C",
-      "line": 506
-    },
-    "0x0174": {
-      "file": "random_numbers.asm",
-      "address": "0x0174",
-      "line": 296
-    },
-    "0x0077": {
-      "file": "random_numbers.asm",
-      "address": "0x0077",
-      "line": 127
-    },
-    "0x041E": {
-      "file": "random_numbers.asm",
-      "address": "0x041E",
-      "line": 617
-    },
-    "0x049C": {
-      "file": "random_numbers.asm",
-      "address": "0x049C",
-      "line": 668
-    },
-    "0x009E": {
-      "file": "random_numbers.asm",
-      "address": "0x009E",
-      "line": 149
-    },
-    "0x0214": {
-      "file": "random_numbers.asm",
-      "address": "0x0214",
-      "line": 383
-    },
-    "0x00BE": {
-      "file": "random_numbers.asm",
-      "address": "0x00BE",
-      "line": 184
-    },
-    "0x014E": {
-      "file": "random_numbers.asm",
-      "address": "0x014E",
-      "line": 275
-    },
-    "0x00DA": {
-      "file": "random_numbers.asm",
-      "address": "0x00DA",
-      "line": 203
-    },
-    "0x042A": {
-      "file": "random_numbers.asm",
-      "address": "0x042A",
-      "line": 621
-    },
-    "0x001C": {
-      "file": "random_numbers.asm",
-      "address": "0x001C",
-      "line": 66
-    },
-    "0x02E0": {
-      "file": "random_numbers.asm",
-      "address": "0x02E0",
-      "line": 478
-    },
-    "0x02EB": {
-      "file": "random_numbers.asm",
-      "address": "0x02EB",
-      "line": 485
-    },
-    "0x0268": {
-      "file": "random_numbers.asm",
-      "address": "0x0268",
-      "line": 37
-    },
-    "0x00D0": {
-      "file": "random_numbers.asm",
-      "address": "0x00D0",
-      "line": 196
-    },
-    "0x0379": {
-      "file": "random_numbers.asm",
-      "address": "0x0379",
-      "line": 553
-    },
-    "0x04AE": {
-      "file": "random_numbers.asm",
-      "address": "0x04AE",
-      "line": 679
-    },
-    "0x01D0": {
-      "file": "random_numbers.asm",
-      "address": "0x01D0",
-      "line": 343
-    },
-    "0x008D": {
-      "file": "random_numbers.asm",
-      "address": "0x008D",
-      "line": 143
-    },
-    "0x011E": {
-      "file": "random_numbers.asm",
-      "address": "0x011E",
-      "line": 254
-    },
-    "0x0490": {
-      "file": "random_numbers.asm",
-      "address": "0x0490",
-      "line": 664
-    },
-    "0x01B1": {
-      "file": "random_numbers.asm",
-      "address": "0x01B1",
-      "line": 328
-    },
-    "0x02DE": {
-      "file": "random_numbers.asm",
-      "address": "0x02DE",
-      "line": 477
-    },
-    "0x02FC": {
-      "file": "random_numbers.asm",
-      "address": "0x02FC",
-      "line": 496
-    },
-    "0x00B9": {
-      "file": "random_numbers.asm",
-      "address": "0x00B9",
-      "line": 181
-    },
-    "0x00BD": {
-      "file": "random_numbers.asm",
-      "address": "0x00BD",
-      "line": 183
-    },
-    "0x010F": {
-      "file": "random_numbers.asm",
-      "address": "0x010F",
-      "line": 237
-    },
-    "0x0229": {
-      "file": "random_numbers.asm",
-      "address": "0x0229",
-      "line": 393
-    },
-    "0x003D": {
-      "file": "random_numbers.asm",
-      "address": "0x003D",
-      "line": 83
-    },
-    "0x021D": {
-      "file": "random_numbers.asm",
-      "address": "0x021D",
-      "line": 387
-    },
-    "0x0090": {
-      "file": "random_numbers.asm",
-      "address": "0x0090",
-      "line": 144
-    },
-    "0x0242": {
-      "file": "random_numbers.asm",
-      "address": "0x0242",
-      "line": 404
-    },
-    "0x009B": {
-      "file": "random_numbers.asm",
-      "address": "0x009B",
-      "line": 148
-    },
-    "0x0376": {
-      "file": "random_numbers.asm",
-      "address": "0x0376",
-      "line": 552
-    },
-    "0x038A": {
-      "file": "random_numbers.asm",
-      "address": "0x038A",
-      "line": 559
-    },
-    "0x035E": {
-      "file": "random_numbers.asm",
-      "address": "0x035E",
-      "line": 542
-    },
-    "0x02B5": {
-      "file": "random_numbers.asm",
-      "address": "0x02B5",
-      "line": 458
-    },
-    "0x0112": {
-      "file": "random_numbers.asm",
-      "address": "0x0112",
-      "line": 238
-    },
-    "0x0415": {
-      "file": "random_numbers.asm",
-      "address": "0x0415",
-      "line": 614
-    },
-    "0x023C": {
-      "file": "random_numbers.asm",
-      "address": "0x023C",
-      "line": 402
-    },
-    "0x03A2": {
-      "file": "random_numbers.asm",
-      "address": "0x03A2",
-      "line": 567
-    },
-    "0x03E6": {
-      "file": "random_numbers.asm",
-      "address": "0x03E6",
-      "line": 596
-    },
-    "0x03C9": {
-      "file": "random_numbers.asm",
-      "address": "0x03C9",
-      "line": 583
-    },
-    "0x0300": {
-      "file": "random_numbers.asm",
-      "address": "0x0300",
-      "line": 499
-    },
-    "0x0471": {
-      "file": "random_numbers.asm",
-      "address": "0x0471",
-      "line": 653
-    },
-    "0x00F0": {
-      "file": "random_numbers.asm",
-      "address": "0x00F0",
-      "line": 218
-    },
-    "0x03CC": {
-      "file": "random_numbers.asm",
-      "address": "0x03CC",
-      "line": 584
-    },
-    "0x032A": {
-      "file": "random_numbers.asm",
-      "address": "0x032A",
-      "line": 517
-    },
-    "0x01C7": {
-      "file": "random_numbers.asm",
-      "address": "0x01C7",
-      "line": 340
-    },
-    "0x00A2": {
-      "file": "random_numbers.asm",
-      "address": "0x00A2",
-      "line": 153
-    },
-    "0x005C": {
-      "file": "random_numbers.asm",
-      "address": "0x005C",
-      "line": 108
-    },
-    "0x01D3": {
-      "file": "random_numbers.asm",
-      "address": "0x01D3",
-      "line": 345
-    },
-    "0x0400": {
-      "file": "random_numbers.asm",
-      "address": "0x0400",
-      "line": 607
-    },
-    "0x0158": {
-      "file": "random_numbers.asm",
-      "address": "0x0158",
-      "line": 282
-    },
-    "0x02ED": {
-      "file": "random_numbers.asm",
-      "address": "0x02ED",
-      "line": 486
-    },
-    "0x03E9": {
-      "file": "random_numbers.asm",
-      "address": "0x03E9",
-      "line": 597
-    },
-    "0x02C6": {
-      "file": "random_numbers.asm",
-      "address": "0x02C6",
-      "line": 465
-    },
-    "0x01EE": {
-      "file": "random_numbers.asm",
-      "address": "0x01EE",
-      "line": 356
-    },
-    "0x040C": {
-      "file": "random_numbers.asm",
-      "address": "0x040C",
-      "line": 611
-    },
-    "0x02C3": {
-      "file": "random_numbers.asm",
-      "address": "0x02C3",
-      "line": 464
-    },
-    "0x00DB": {
-      "file": "random_numbers.asm",
-      "address": "0x00DB",
-      "line": 204
+      "address": "0x001F",
+      "line": 67
     },
     "0x01AA": {
       "file": "random_numbers.asm",
       "address": "0x01AA",
       "line": 324
     },
-    "0x0277": {
+    "0x0484": {
       "file": "random_numbers.asm",
-      "address": "0x0277",
-      "line": 432
+      "address": "0x0484",
+      "line": 660
     },
-    "0x0082": {
+    "0x01B0": {
       "file": "random_numbers.asm",
-      "address": "0x0082",
-      "line": 134
+      "address": "0x01B0",
+      "line": 326
     },
-    "0x0265": {
+    "0x0090": {
       "file": "random_numbers.asm",
-      "address": "0x0265",
-      "line": 425
+      "address": "0x0090",
+      "line": 144
     },
-    "0x00DD": {
+    "0x03B7": {
       "file": "random_numbers.asm",
-      "address": "0x00DD",
-      "line": 205
+      "address": "0x03B7",
+      "line": 577
     },
-    "0x033B": {
+    "0x02A4": {
       "file": "random_numbers.asm",
-      "address": "0x033B",
-      "line": 527
+      "address": "0x02A4",
+      "line": 451
     },
-    "0x002C": {
+    "0x0148": {
       "file": "random_numbers.asm",
-      "address": "0x002C",
-      "line": 72
-    },
-    "0x008A": {
-      "file": "random_numbers.asm",
-      "address": "0x008A",
-      "line": 142
-    },
-    "0x03E3": {
-      "file": "random_numbers.asm",
-      "address": "0x03E3",
-      "line": 595
-    },
-    "0x0228": {
-      "file": "random_numbers.asm",
-      "address": "0x0228",
-      "line": 392
-    },
-    "0x00AC": {
-      "file": "random_numbers.asm",
-      "address": "0x00AC",
-      "line": 159
-    },
-    "0x02F3": {
-      "file": "random_numbers.asm",
-      "address": "0x02F3",
-      "line": 488
-    },
-    "0x0131": {
-      "file": "random_numbers.asm",
-      "address": "0x0131",
-      "line": 262
-    },
-    "0x03DD": {
-      "file": "random_numbers.asm",
-      "address": "0x03DD",
-      "line": 593
-    },
-    "0x0073": {
-      "file": "random_numbers.asm",
-      "address": "0x0073",
-      "line": 124
-    },
-    "0x0456": {
-      "file": "random_numbers.asm",
-      "address": "0x0456",
-      "line": 642
-    },
-    "0x035B": {
-      "file": "random_numbers.asm",
-      "address": "0x035B",
-      "line": 541
-    },
-    "0x0353": {
-      "file": "random_numbers.asm",
-      "address": "0x0353",
-      "line": 538
-    },
-    "0x0046": {
-      "file": "random_numbers.asm",
-      "address": "0x0046",
-      "line": 88
-    },
-    "0x0318": {
-      "file": "random_numbers.asm",
-      "address": "0x0318",
-      "line": 510
-    },
-    "0x017F": {
-      "file": "random_numbers.asm",
-      "address": "0x017F",
-      "line": 302
-    },
-    "0x0096": {
-      "file": "random_numbers.asm",
-      "address": "0x0096",
-      "line": 146
-    },
-    "0x0178": {
-      "file": "random_numbers.asm",
-      "address": "0x0178",
-      "line": 298
-    },
-    "0x0114": {
-      "file": "random_numbers.asm",
-      "address": "0x0114",
-      "line": 239
-    },
-    "0x01FC": {
-      "file": "random_numbers.asm",
-      "address": "0x01FC",
-      "line": 365
-    },
-    "0x0347": {
-      "file": "random_numbers.asm",
-      "address": "0x0347",
-      "line": 531
-    },
-    "0x046E": {
-      "file": "random_numbers.asm",
-      "address": "0x046E",
-      "line": 652
-    },
-    "0x0330": {
-      "file": "random_numbers.asm",
-      "address": "0x0330",
-      "line": 519
-    },
-    "0x018D": {
-      "file": "random_numbers.asm",
-      "address": "0x018D",
-      "line": 311
+      "address": "0x0148",
+      "line": 273
     },
     "0x03F2": {
       "file": "random_numbers.asm",
       "address": "0x03F2",
       "line": 600
     },
+    "0x0390": {
+      "file": "random_numbers.asm",
+      "address": "0x0390",
+      "line": 561
+    },
+    "0x03CF": {
+      "file": "random_numbers.asm",
+      "address": "0x03CF",
+      "line": 585
+    },
+    "0x02F3": {
+      "file": "random_numbers.asm",
+      "address": "0x02F3",
+      "line": 488
+    },
+    "0x0028": {
+      "file": "random_numbers.asm",
+      "address": "0x0028",
+      "line": 70
+    },
+    "0x0196": {
+      "file": "random_numbers.asm",
+      "address": "0x0196",
+      "line": 314
+    },
+    "0x03EF": {
+      "file": "random_numbers.asm",
+      "address": "0x03EF",
+      "line": 599
+    },
+    "0x007C": {
+      "file": "random_numbers.asm",
+      "address": "0x007C",
+      "line": 130
+    },
+    "0x01EB": {
+      "file": "random_numbers.asm",
+      "address": "0x01EB",
+      "line": 354
+    },
+    "0x0353": {
+      "file": "random_numbers.asm",
+      "address": "0x0353",
+      "line": 535
+    },
+    "0x020C": {
+      "file": "random_numbers.asm",
+      "address": "0x020C",
+      "line": 374
+    },
     "0x005D": {
       "file": "random_numbers.asm",
       "address": "0x005D",
       "line": 109
     },
-    "0x031B": {
+    "0x040F": {
       "file": "random_numbers.asm",
-      "address": "0x031B",
-      "line": 511
+      "address": "0x040F",
+      "line": 612
     },
-    "0x0430": {
+    "0x0045": {
       "file": "random_numbers.asm",
-      "address": "0x0430",
-      "line": 626
+      "address": "0x0045",
+      "line": 87
+    },
+    "0x03C6": {
+      "file": "random_numbers.asm",
+      "address": "0x03C6",
+      "line": 582
+    },
+    "0x008D": {
+      "file": "random_numbers.asm",
+      "address": "0x008D",
+      "line": 143
+    },
+    "0x018D": {
+      "file": "random_numbers.asm",
+      "address": "0x018D",
+      "line": 311
+    },
+    "0x0318": {
+      "file": "random_numbers.asm",
+      "address": "0x0318",
+      "line": 510
+    },
+    "0x036D": {
+      "file": "random_numbers.asm",
+      "address": "0x036D",
+      "line": 547
+    },
+    "0x040C": {
+      "file": "random_numbers.asm",
+      "address": "0x040C",
+      "line": 611
+    },
+    "0x00FB": {
+      "file": "random_numbers.asm",
+      "address": "0x00FB",
+      "line": 228
+    },
+    "0x00F1": {
+      "file": "random_numbers.asm",
+      "address": "0x00F1",
+      "line": 218
+    },
+    "0x0144": {
+      "file": "random_numbers.asm",
+      "address": "0x0144",
+      "line": 270
+    },
+    "0x0299": {
+      "file": "random_numbers.asm",
+      "address": "0x0299",
+      "line": 446
+    },
+    "0x013E": {
+      "file": "random_numbers.asm",
+      "address": "0x013E",
+      "line": 268
+    },
+    "0x027A": {
+      "file": "random_numbers.asm",
+      "address": "0x027A",
+      "line": 433
+    },
+    "0x0088": {
+      "file": "random_numbers.asm",
+      "address": "0x0088",
+      "line": 141
+    },
+    "0x00BC": {
+      "file": "random_numbers.asm",
+      "address": "0x00BC",
+      "line": 182
+    },
+    "0x00E9": {
+      "file": "random_numbers.asm",
+      "address": "0x00E9",
+      "line": 210
+    },
+    "0x021C": {
+      "file": "random_numbers.asm",
+      "address": "0x021C",
+      "line": 386
+    },
+    "0x03D2": {
+      "file": "random_numbers.asm",
+      "address": "0x03D2",
+      "line": 586
+    },
+    "0x034A": {
+      "file": "random_numbers.asm",
+      "address": "0x034A",
+      "line": 532
+    },
+    "0x01C1": {
+      "file": "random_numbers.asm",
+      "address": "0x01C1",
+      "line": 337
+    },
+    "0x01B1": {
+      "file": "random_numbers.asm",
+      "address": "0x01B1",
+      "line": 328
+    },
+    "0x0236": {
+      "file": "random_numbers.asm",
+      "address": "0x0236",
+      "line": 2
+    },
+    "0x017E": {
+      "file": "random_numbers.asm",
+      "address": "0x017E",
+      "line": 301
+    },
+    "0x048A": {
+      "file": "random_numbers.asm",
+      "address": "0x048A",
+      "line": 662
+    },
+    "0x017F": {
+      "file": "random_numbers.asm",
+      "address": "0x017F",
+      "line": 302
+    },
+    "0x0034": {
+      "file": "random_numbers.asm",
+      "address": "0x0034",
+      "line": 80
+    },
+    "0x001C": {
+      "file": "random_numbers.asm",
+      "address": "0x001C",
+      "line": 66
+    },
+    "0x0409": {
+      "file": "random_numbers.asm",
+      "address": "0x0409",
+      "line": 610
+    },
+    "0x02FE": {
+      "file": "random_numbers.asm",
+      "address": "0x02FE",
+      "line": 496
+    },
+    "0x041E": {
+      "file": "random_numbers.asm",
+      "address": "0x041E",
+      "line": 617
+    },
+    "0x02B5": {
+      "file": "random_numbers.asm",
+      "address": "0x02B5",
+      "line": 458
+    },
+    "0x0384": {
+      "file": "random_numbers.asm",
+      "address": "0x0384",
+      "line": 557
+    },
+    "0x03E0": {
+      "file": "random_numbers.asm",
+      "address": "0x03E0",
+      "line": 594
+    },
+    "0x035B": {
+      "file": "random_numbers.asm",
+      "address": "0x035B",
+      "line": 541
+    },
+    "0x0124": {
+      "file": "random_numbers.asm",
+      "address": "0x0124",
+      "line": 256
+    },
+    "0x01E8": {
+      "file": "random_numbers.asm",
+      "address": "0x01E8",
+      "line": 353
+    },
+    "0x038D": {
+      "file": "random_numbers.asm",
+      "address": "0x038D",
+      "line": 560
+    },
+    "0x015E": {
+      "file": "random_numbers.asm",
+      "address": "0x015E",
+      "line": 284
+    },
+    "0x0247": {
+      "file": "random_numbers.asm",
+      "address": "0x0247",
+      "line": 410
+    },
+    "0x0217": {
+      "file": "random_numbers.asm",
+      "address": "0x0217",
+      "line": 384
+    },
+    "0x002B": {
+      "file": "random_numbers.asm",
+      "address": "0x002B",
+      "line": 71
+    },
+    "0x02E1": {
+      "file": "random_numbers.asm",
+      "address": "0x02E1",
+      "line": 478
+    },
+    "0x00DC": {
+      "file": "random_numbers.asm",
+      "address": "0x00DC",
+      "line": 201
+    },
+    "0x00AA": {
+      "file": "random_numbers.asm",
+      "address": "0x00AA",
+      "line": 157
+    },
+    "0x014E": {
+      "file": "random_numbers.asm",
+      "address": "0x014E",
+      "line": 275
     },
     "0x04A5": {
       "file": "random_numbers.asm",
       "address": "0x04A5",
       "line": 671
     },
-    "0x031E": {
+    "0x0121": {
       "file": "random_numbers.asm",
-      "address": "0x031E",
-      "line": 512
+      "address": "0x0121",
+      "line": 255
+    },
+    "0x00BA": {
+      "file": "random_numbers.asm",
+      "address": "0x00BA",
+      "line": 180
+    },
+    "0x0171": {
+      "file": "random_numbers.asm",
+      "address": "0x0171",
+      "line": 295
+    },
+    "0x02C0": {
+      "file": "random_numbers.asm",
+      "address": "0x02C0",
+      "line": 463
+    },
+    "0x022A": {
+      "file": "random_numbers.asm",
+      "address": "0x022A",
+      "line": 392
+    },
+    "0x008A": {
+      "file": "random_numbers.asm",
+      "address": "0x008A",
+      "line": 142
+    },
+    "0x0418": {
+      "file": "random_numbers.asm",
+      "address": "0x0418",
+      "line": 615
+    },
+    "0x01EE": {
+      "file": "random_numbers.asm",
+      "address": "0x01EE",
+      "line": 356
+    },
+    "0x02FF": {
+      "file": "random_numbers.asm",
+      "address": "0x02FF",
+      "line": 497
+    },
+    "0x01BA": {
+      "file": "random_numbers.asm",
+      "address": "0x01BA",
+      "line": 331
+    },
+    "0x012E": {
+      "file": "random_numbers.asm",
+      "address": "0x012E",
+      "line": 261
+    },
+    "0x0373": {
+      "file": "random_numbers.asm",
+      "address": "0x0373",
+      "line": 549
+    },
+    "0x0109": {
+      "file": "random_numbers.asm",
+      "address": "0x0109",
+      "line": 234
+    },
+    "0x03A2": {
+      "file": "random_numbers.asm",
+      "address": "0x03A2",
+      "line": 567
+    },
+    "0x0350": {
+      "file": "random_numbers.asm",
+      "address": "0x0350",
+      "line": 534
+    },
+    "0x03A5": {
+      "file": "random_numbers.asm",
+      "address": "0x03A5",
+      "line": 568
+    },
+    "0x0093": {
+      "file": "random_numbers.asm",
+      "address": "0x0093",
+      "line": 145
+    },
+    "0x01DF": {
+      "file": "random_numbers.asm",
+      "address": "0x01DF",
+      "line": 349
+    },
+    "0x0201": {
+      "file": "random_numbers.asm",
+      "address": "0x0201",
+      "line": 367
+    },
+    "0x045C": {
+      "file": "random_numbers.asm",
+      "address": "0x045C",
+      "line": 644
+    },
+    "0x0427": {
+      "file": "random_numbers.asm",
+      "address": "0x0427",
+      "line": 620
+    },
+    "0x00EF": {
+      "file": "random_numbers.asm",
+      "address": "0x00EF",
+      "line": 216
+    },
+    "0x0262": {
+      "file": "random_numbers.asm",
+      "address": "0x0262",
+      "line": 34
+    },
+    "0x01A4": {
+      "file": "random_numbers.asm",
+      "address": "0x01A4",
+      "line": 322
+    },
+    "0x00BF": {
+      "file": "random_numbers.asm",
+      "address": "0x00BF",
+      "line": 183
+    },
+    "0x019A": {
+      "file": "random_numbers.asm",
+      "address": "0x019A",
+      "line": 317
+    },
+    "0x02F6": {
+      "file": "random_numbers.asm",
+      "address": "0x02F6",
+      "line": 489
+    },
+    "0x0479": {
+      "file": "random_numbers.asm",
+      "address": "0x0479",
+      "line": 656
+    },
+    "0x006B": {
+      "file": "random_numbers.asm",
+      "address": "0x006B",
+      "line": 118
+    },
+    "0x01FC": {
+      "file": "random_numbers.asm",
+      "address": "0x01FC",
+      "line": 364
+    },
+    "0x0068": {
+      "file": "random_numbers.asm",
+      "address": "0x0068",
+      "line": 117
+    },
+    "0x0185": {
+      "file": "random_numbers.asm",
+      "address": "0x0185",
+      "line": 304
+    },
+    "0x01CD": {
+      "file": "random_numbers.asm",
+      "address": "0x01CD",
+      "line": 342
+    },
+    "0x00C1": {
+      "file": "random_numbers.asm",
+      "address": "0x00C1",
+      "line": 185
+    },
+    "0x00A5": {
+      "file": "random_numbers.asm",
+      "address": "0x00A5",
+      "line": 154
+    },
+    "0x0141": {
+      "file": "random_numbers.asm",
+      "address": "0x0141",
+      "line": 269
+    },
+    "0x00A7": {
+      "file": "random_numbers.asm",
+      "address": "0x00A7",
+      "line": 155
+    },
+    "0x0436": {
+      "file": "random_numbers.asm",
+      "address": "0x0436",
+      "line": 628
+    },
+    "0x00A4": {
+      "file": "random_numbers.asm",
+      "address": "0x00A4",
+      "line": 151
+    },
+    "0x0335": {
+      "file": "random_numbers.asm",
+      "address": "0x0335",
+      "line": 525
+    },
+    "0x00CC": {
+      "file": "random_numbers.asm",
+      "address": "0x00CC",
+      "line": 192
+    },
+    "0x0082": {
+      "file": "random_numbers.asm",
+      "address": "0x0082",
+      "line": 134
+    },
+    "0x02F9": {
+      "file": "random_numbers.asm",
+      "address": "0x02F9",
+      "line": 491
+    },
+    "0x0105": {
+      "file": "random_numbers.asm",
+      "address": "0x0105",
+      "line": 232
+    },
+    "0x010E": {
+      "file": "random_numbers.asm",
+      "address": "0x010E",
+      "line": 236
+    },
+    "0x006C": {
+      "file": "random_numbers.asm",
+      "address": "0x006C",
+      "line": 119
+    },
+    "0x03A8": {
+      "file": "random_numbers.asm",
+      "address": "0x03A8",
+      "line": 569
+    },
+    "0x00AF": {
+      "file": "random_numbers.asm",
+      "address": "0x00AF",
+      "line": 160
+    },
+    "0x0462": {
+      "file": "random_numbers.asm",
+      "address": "0x0462",
+      "line": 646
+    },
+    "0x00F0": {
+      "file": "random_numbers.asm",
+      "address": "0x00F0",
+      "line": 217
     },
     "0x0424": {
       "file": "random_numbers.asm",
       "address": "0x0424",
       "line": 619
     },
-    "0x00FA": {
+    "0x02D9": {
       "file": "random_numbers.asm",
-      "address": "0x00FA",
-      "line": 228
+      "address": "0x02D9",
+      "line": 475
     },
-    "0x004A": {
+    "0x01E2": {
       "file": "random_numbers.asm",
-      "address": "0x004A",
-      "line": 97
+      "address": "0x01E2",
+      "line": 351
     },
-    "0x025C": {
+    "0x03E6": {
       "file": "random_numbers.asm",
-      "address": "0x025C",
-      "line": 421
+      "address": "0x03E6",
+      "line": 596
     },
-    "0x011D": {
+    "0x02BB": {
       "file": "random_numbers.asm",
-      "address": "0x011D",
-      "line": 253
+      "address": "0x02BB",
+      "line": 460
     },
-    "0x015F": {
+    "0x0081": {
       "file": "random_numbers.asm",
-      "address": "0x015F",
-      "line": 286
+      "address": "0x0081",
+      "line": 133
+    },
+    "0x01D0": {
+      "file": "random_numbers.asm",
+      "address": "0x01D0",
+      "line": 343
+    },
+    "0x0112": {
+      "file": "random_numbers.asm",
+      "address": "0x0112",
+      "line": 238
+    },
+    "0x0073": {
+      "file": "random_numbers.asm",
+      "address": "0x0073",
+      "line": 124
+    },
+    "0x0155": {
+      "file": "random_numbers.asm",
+      "address": "0x0155",
+      "line": 281
+    },
+    "0x0197": {
+      "file": "random_numbers.asm",
+      "address": "0x0197",
+      "line": 316
+    },
+    "0x00EC": {
+      "file": "random_numbers.asm",
+      "address": "0x00EC",
+      "line": 215
+    },
+    "0x0496": {
+      "file": "random_numbers.asm",
+      "address": "0x0496",
+      "line": 666
+    },
+    "0x00C2": {
+      "file": "random_numbers.asm",
+      "address": "0x00C2",
+      "line": 186
+    },
+    "0x0271": {
+      "file": "random_numbers.asm",
+      "address": "0x0271",
+      "line": 430
+    },
+    "0x0147": {
+      "file": "random_numbers.asm",
+      "address": "0x0147",
+      "line": 272
+    },
+    "0x0064": {
+      "file": "random_numbers.asm",
+      "address": "0x0064",
+      "line": 114
+    },
+    "0x01D6": {
+      "file": "random_numbers.asm",
+      "address": "0x01D6",
+      "line": 346
+    },
+    "0x0430": {
+      "file": "random_numbers.asm",
+      "address": "0x0430",
+      "line": 626
     },
     "0x044B": {
       "file": "random_numbers.asm",
       "address": "0x044B",
       "line": 635
     },
-    "0x001F": {
+    "0x01CA": {
       "file": "random_numbers.asm",
-      "address": "0x001F",
-      "line": 67
+      "address": "0x01CA",
+      "line": 341
+    },
+    "0x02D1": {
+      "file": "random_numbers.asm",
+      "address": "0x02D1",
+      "line": 471
+    },
+    "0x01F1": {
+      "file": "random_numbers.asm",
+      "address": "0x01F1",
+      "line": 357
+    },
+    "0x013A": {
+      "file": "random_numbers.asm",
+      "address": "0x013A",
+      "line": 266
+    },
+    "0x02CC": {
+      "file": "random_numbers.asm",
+      "address": "0x02CC",
+      "line": 467
+    },
+    "0x02C6": {
+      "file": "random_numbers.asm",
+      "address": "0x02C6",
+      "line": 465
+    },
+    "0x0324": {
+      "file": "random_numbers.asm",
+      "address": "0x0324",
+      "line": 514
+    },
+    "0x018C": {
+      "file": "random_numbers.asm",
+      "address": "0x018C",
+      "line": 310
+    },
+    "0x01D3": {
+      "file": "random_numbers.asm",
+      "address": "0x01D3",
+      "line": 344
+    },
+    "0x04A2": {
+      "file": "random_numbers.asm",
+      "address": "0x04A2",
+      "line": 670
+    },
+    "0x045F": {
+      "file": "random_numbers.asm",
+      "address": "0x045F",
+      "line": 645
+    },
+    "0x015F": {
+      "file": "random_numbers.asm",
+      "address": "0x015F",
+      "line": 285
+    },
+    "0x030C": {
+      "file": "random_numbers.asm",
+      "address": "0x030C",
+      "line": 506
+    },
+    "0x01A0": {
+      "file": "random_numbers.asm",
+      "address": "0x01A0",
+      "line": 319
+    },
+    "0x0379": {
+      "file": "random_numbers.asm",
+      "address": "0x0379",
+      "line": 553
+    },
+    "0x0182": {
+      "file": "random_numbers.asm",
+      "address": "0x0182",
+      "line": 303
+    },
+    "0x0459": {
+      "file": "random_numbers.asm",
+      "address": "0x0459",
+      "line": 643
+    },
+    "0x0293": {
+      "file": "random_numbers.asm",
+      "address": "0x0293",
+      "line": 51
+    },
+    "0x0245": {
+      "file": "random_numbers.asm",
+      "address": "0x0245",
+      "line": 405
+    },
+    "0x03E9": {
+      "file": "random_numbers.asm",
+      "address": "0x03E9",
+      "line": 597
+    },
+    "0x0285": {
+      "file": "random_numbers.asm",
+      "address": "0x0285",
+      "line": 438
+    },
+    "0x031B": {
+      "file": "random_numbers.asm",
+      "address": "0x031B",
+      "line": 511
+    },
+    "0x023A": {
+      "file": "random_numbers.asm",
+      "address": "0x023A",
+      "line": 12
+    },
+    "0x00DA": {
+      "file": "random_numbers.asm",
+      "address": "0x00DA",
+      "line": 200
+    },
+    "0x0099": {
+      "file": "random_numbers.asm",
+      "address": "0x0099",
+      "line": 147
+    },
+    "0x0193": {
+      "file": "random_numbers.asm",
+      "address": "0x0193",
+      "line": 313
+    },
+    "0x0468": {
+      "file": "random_numbers.asm",
+      "address": "0x0468",
+      "line": 648
+    },
+    "0x003A": {
+      "file": "random_numbers.asm",
+      "address": "0x003A",
+      "line": 82
+    },
+    "0x00F6": {
+      "file": "random_numbers.asm",
+      "address": "0x00F6",
+      "line": 221
+    },
+    "0x00C8": {
+      "file": "random_numbers.asm",
+      "address": "0x00C8",
+      "line": 189
+    },
+    "0x01BD": {
+      "file": "random_numbers.asm",
+      "address": "0x01BD",
+      "line": 332
+    },
+    "0x02AD": {
+      "file": "random_numbers.asm",
+      "address": "0x02AD",
+      "line": 454
+    },
+    "0x03B1": {
+      "file": "random_numbers.asm",
+      "address": "0x03B1",
+      "line": 575
+    },
+    "0x0451": {
+      "file": "random_numbers.asm",
+      "address": "0x0451",
+      "line": 637
+    },
+    "0x0490": {
+      "file": "random_numbers.asm",
+      "address": "0x0490",
+      "line": 664
+    },
+    "0x002E": {
+      "file": "random_numbers.asm",
+      "address": "0x002E",
+      "line": 74
+    },
+    "0x0103": {
+      "file": "random_numbers.asm",
+      "address": "0x0103",
+      "line": 231
+    },
+    "0x0207": {
+      "file": "random_numbers.asm",
+      "address": "0x0207",
+      "line": 371
+    },
+    "0x02E6": {
+      "file": "random_numbers.asm",
+      "address": "0x02E6",
+      "line": 480
+    },
+    "0x0059": {
+      "file": "random_numbers.asm",
+      "address": "0x0059",
+      "line": 107
+    },
+    "0x0465": {
+      "file": "random_numbers.asm",
+      "address": "0x0465",
+      "line": 647
+    },
+    "0x00B7": {
+      "file": "random_numbers.asm",
+      "address": "0x00B7",
+      "line": 179
+    },
+    "0x03F8": {
+      "file": "random_numbers.asm",
+      "address": "0x03F8",
+      "line": 604
+    },
+    "0x03FD": {
+      "file": "random_numbers.asm",
+      "address": "0x03FD",
+      "line": 606
+    },
+    "0x00C0": {
+      "file": "random_numbers.asm",
+      "address": "0x00C0",
+      "line": 184
+    },
+    "0x02B8": {
+      "file": "random_numbers.asm",
+      "address": "0x02B8",
+      "line": 459
+    },
+    "0x0403": {
+      "file": "random_numbers.asm",
+      "address": "0x0403",
+      "line": 608
+    },
+    "0x0117": {
+      "file": "random_numbers.asm",
+      "address": "0x0117",
+      "line": 240
+    },
+    "0x046E": {
+      "file": "random_numbers.asm",
+      "address": "0x046E",
+      "line": 650
+    },
+    "0x0063": {
+      "file": "random_numbers.asm",
+      "address": "0x0063",
+      "line": 113
+    },
+    "0x0046": {
+      "file": "random_numbers.asm",
+      "address": "0x0046",
+      "line": 88
+    },
+    "0x0106": {
+      "file": "random_numbers.asm",
+      "address": "0x0106",
+      "line": 233
+    },
+    "0x0154": {
+      "file": "random_numbers.asm",
+      "address": "0x0154",
+      "line": 280
+    },
+    "0x02DE": {
+      "file": "random_numbers.asm",
+      "address": "0x02DE",
+      "line": 477
+    },
+    "0x03DD": {
+      "file": "random_numbers.asm",
+      "address": "0x03DD",
+      "line": 593
+    },
+    "0x033E": {
+      "file": "random_numbers.asm",
+      "address": "0x033E",
+      "line": 528
+    },
+    "0x0433": {
+      "file": "random_numbers.asm",
+      "address": "0x0433",
+      "line": 627
+    },
+    "0x029C": {
+      "file": "random_numbers.asm",
+      "address": "0x029C",
+      "line": 447
+    },
+    "0x0421": {
+      "file": "random_numbers.asm",
+      "address": "0x0421",
+      "line": 618
+    },
+    "0x049F": {
+      "file": "random_numbers.asm",
+      "address": "0x049F",
+      "line": 669
+    },
+    "0x027F": {
+      "file": "random_numbers.asm",
+      "address": "0x027F",
+      "line": 436
+    },
+    "0x041B": {
+      "file": "random_numbers.asm",
+      "address": "0x041B",
+      "line": 616
+    },
+    "0x009C": {
+      "file": "random_numbers.asm",
+      "address": "0x009C",
+      "line": 148
+    },
+    "0x02A1": {
+      "file": "random_numbers.asm",
+      "address": "0x02A1",
+      "line": 450
+    },
+    "0x0321": {
+      "file": "random_numbers.asm",
+      "address": "0x0321",
+      "line": 513
+    },
+    "0x017B": {
+      "file": "random_numbers.asm",
+      "address": "0x017B",
+      "line": 299
+    },
+    "0x024A": {
+      "file": "random_numbers.asm",
+      "address": "0x024A",
+      "line": 18
+    },
+    "0x0222": {
+      "file": "random_numbers.asm",
+      "address": "0x0222",
+      "line": 390
+    },
+    "0x03E3": {
+      "file": "random_numbers.asm",
+      "address": "0x03E3",
+      "line": 595
+    },
+    "0x0100": {
+      "file": "random_numbers.asm",
+      "address": "0x0100",
+      "line": 230
+    },
+    "0x0415": {
+      "file": "random_numbers.asm",
+      "address": "0x0415",
+      "line": 614
+    },
+    "0x019D": {
+      "file": "random_numbers.asm",
+      "address": "0x019D",
+      "line": 318
+    },
+    "0x0457": {
+      "file": "random_numbers.asm",
+      "address": "0x0457",
+      "line": 642
+    },
+    "0x02E3": {
+      "file": "random_numbers.asm",
+      "address": "0x02E3",
+      "line": 479
+    },
+    "0x02DC": {
+      "file": "random_numbers.asm",
+      "address": "0x02DC",
+      "line": 476
+    },
+    "0x00F4": {
+      "file": "random_numbers.asm",
+      "address": "0x00F4",
+      "line": 220
+    },
+    "0x0361": {
+      "file": "random_numbers.asm",
+      "address": "0x0361",
+      "line": 543
+    },
+    "0x0330": {
+      "file": "random_numbers.asm",
+      "address": "0x0330",
+      "line": 519
+    },
+    "0x0204": {
+      "file": "random_numbers.asm",
+      "address": "0x0204",
+      "line": 369
+    },
+    "0x00D7": {
+      "file": "random_numbers.asm",
+      "address": "0x00D7",
+      "line": 199
+    },
+    "0x0051": {
+      "file": "random_numbers.asm",
+      "address": "0x0051",
+      "line": 101
+    },
+    "0x0296": {
+      "file": "random_numbers.asm",
+      "address": "0x0296",
+      "line": 445
+    },
+    "0x007A": {
+      "file": "random_numbers.asm",
+      "address": "0x007A",
+      "line": 128
+    },
+    "0x00C9": {
+      "file": "random_numbers.asm",
+      "address": "0x00C9",
+      "line": 190
+    },
+    "0x0242": {
+      "file": "random_numbers.asm",
+      "address": "0x0242",
+      "line": 15
+    },
+    "0x0055": {
+      "file": "random_numbers.asm",
+      "address": "0x0055",
+      "line": 104
+    },
+    "0x0166": {
+      "file": "random_numbers.asm",
+      "address": "0x0166",
+      "line": 289
+    },
+    "0x00C5": {
+      "file": "random_numbers.asm",
+      "address": "0x00C5",
+      "line": 188
+    },
+    "0x00F9": {
+      "file": "random_numbers.asm",
+      "address": "0x00F9",
+      "line": 222
+    },
+    "0x047F": {
+      "file": "random_numbers.asm",
+      "address": "0x047F",
+      "line": 658
+    },
+    "0x0476": {
+      "file": "random_numbers.asm",
+      "address": "0x0476",
+      "line": 655
+    },
+    "0x0250": {
+      "file": "random_numbers.asm",
+      "address": "0x0250",
+      "line": 20
+    },
+    "0x01B7": {
+      "file": "random_numbers.asm",
+      "address": "0x01B7",
+      "line": 330
+    },
+    "0x03AE": {
+      "file": "random_numbers.asm",
+      "address": "0x03AE",
+      "line": 571
+    },
+    "0x0221": {
+      "file": "random_numbers.asm",
+      "address": "0x0221",
+      "line": 389
+    },
+    "0x0454": {
+      "file": "random_numbers.asm",
+      "address": "0x0454",
+      "line": 641
+    },
+    "0x02EE": {
+      "file": "random_numbers.asm",
+      "address": "0x02EE",
+      "line": 486
+    },
+    "0x0189": {
+      "file": "random_numbers.asm",
+      "address": "0x0189",
+      "line": 306
+    },
+    "0x032D": {
+      "file": "random_numbers.asm",
+      "address": "0x032D",
+      "line": 518
+    },
+    "0x0096": {
+      "file": "random_numbers.asm",
+      "address": "0x0096",
+      "line": 146
+    },
+    "0x036A": {
+      "file": "random_numbers.asm",
+      "address": "0x036A",
+      "line": 546
+    },
+    "0x0170": {
+      "file": "random_numbers.asm",
+      "address": "0x0170",
+      "line": 294
+    },
+    "0x0406": {
+      "file": "random_numbers.asm",
+      "address": "0x0406",
+      "line": 609
+    },
+    "0x004A": {
+      "file": "random_numbers.asm",
+      "address": "0x004A",
+      "line": 97
+    },
+    "0x011E": {
+      "file": "random_numbers.asm",
+      "address": "0x011E",
+      "line": 243
+    },
+    "0x01B4": {
+      "file": "random_numbers.asm",
+      "address": "0x01B4",
+      "line": 329
+    },
+    "0x02EB": {
+      "file": "random_numbers.asm",
+      "address": "0x02EB",
+      "line": 482
+    },
+    "0x043C": {
+      "file": "random_numbers.asm",
+      "address": "0x043C",
+      "line": 630
+    },
+    "0x01E5": {
+      "file": "random_numbers.asm",
+      "address": "0x01E5",
+      "line": 352
+    },
+    "0x030F": {
+      "file": "random_numbers.asm",
+      "address": "0x030F",
+      "line": 507
+    },
+    "0x0306": {
+      "file": "random_numbers.asm",
+      "address": "0x0306",
+      "line": 504
+    },
+    "0x01C7": {
+      "file": "random_numbers.asm",
+      "address": "0x01C7",
+      "line": 339
+    },
+    "0x005E": {
+      "file": "random_numbers.asm",
+      "address": "0x005E",
+      "line": 110
+    },
+    "0x0072": {
+      "file": "random_numbers.asm",
+      "address": "0x0072",
+      "line": 123
+    },
+    "0x0134": {
+      "file": "random_numbers.asm",
+      "address": "0x0134",
+      "line": 263
+    },
+    "0x01F9": {
+      "file": "random_numbers.asm",
+      "address": "0x01F9",
+      "line": 363
+    },
+    "0x03C0": {
+      "file": "random_numbers.asm",
+      "address": "0x03C0",
+      "line": 580
+    },
+    "0x025F": {
+      "file": "random_numbers.asm",
+      "address": "0x025F",
+      "line": 33
+    },
+    "0x0312": {
+      "file": "random_numbers.asm",
+      "address": "0x0312",
+      "line": 508
+    },
+    "0x0439": {
+      "file": "random_numbers.asm",
+      "address": "0x0439",
+      "line": 629
+    },
+    "0x0238": {
+      "file": "random_numbers.asm",
+      "address": "0x0238",
+      "line": 400
+    },
+    "0x0367": {
+      "file": "random_numbers.asm",
+      "address": "0x0367",
+      "line": 545
+    },
+    "0x03C9": {
+      "file": "random_numbers.asm",
+      "address": "0x03C9",
+      "line": 583
+    },
+    "0x0327": {
+      "file": "random_numbers.asm",
+      "address": "0x0327",
+      "line": 515
+    },
+    "0x00F3": {
+      "file": "random_numbers.asm",
+      "address": "0x00F3",
+      "line": 219
+    },
+    "0x039F": {
+      "file": "random_numbers.asm",
+      "address": "0x039F",
+      "line": 566
+    },
+    "0x0381": {
+      "file": "random_numbers.asm",
+      "address": "0x0381",
+      "line": 556
+    },
+    "0x010C": {
+      "file": "random_numbers.asm",
+      "address": "0x010C",
+      "line": 235
+    },
+    "0x010F": {
+      "file": "random_numbers.asm",
+      "address": "0x010F",
+      "line": 237
+    },
+    "0x01D9": {
+      "file": "random_numbers.asm",
+      "address": "0x01D9",
+      "line": 347
+    },
+    "0x0190": {
+      "file": "random_numbers.asm",
+      "address": "0x0190",
+      "line": 312
+    },
+    "0x028B": {
+      "file": "random_numbers.asm",
+      "address": "0x028B",
+      "line": 440
+    },
+    "0x016D": {
+      "file": "random_numbers.asm",
+      "address": "0x016D",
+      "line": 292
+    },
+    "0x02FC": {
+      "file": "random_numbers.asm",
+      "address": "0x02FC",
+      "line": 492
+    },
+    "0x0211": {
+      "file": "random_numbers.asm",
+      "address": "0x0211",
+      "line": 378
+    },
+    "0x03AB": {
+      "file": "random_numbers.asm",
+      "address": "0x03AB",
+      "line": 570
+    },
+    "0x004F": {
+      "file": "random_numbers.asm",
+      "address": "0x004F",
+      "line": 100
+    },
+    "0x0043": {
+      "file": "random_numbers.asm",
+      "address": "0x0043",
+      "line": 85
+    },
+    "0x016C": {
+      "file": "random_numbers.asm",
+      "address": "0x016C",
+      "line": 291
+    },
+    "0x0205": {
+      "file": "random_numbers.asm",
+      "address": "0x0205",
+      "line": 370
+    },
+    "0x020F": {
+      "file": "random_numbers.asm",
+      "address": "0x020F",
+      "line": 376
+    },
+    "0x023F": {
+      "file": "random_numbers.asm",
+      "address": "0x023F",
+      "line": 403
+    },
+    "0x02F0": {
+      "file": "random_numbers.asm",
+      "address": "0x02F0",
+      "line": 487
+    },
+    "0x01C4": {
+      "file": "random_numbers.asm",
+      "address": "0x01C4",
+      "line": 338
+    },
+    "0x004E": {
+      "file": "random_numbers.asm",
+      "address": "0x004E",
+      "line": 99
+    },
+    "0x0356": {
+      "file": "random_numbers.asm",
+      "address": "0x0356",
+      "line": 539
+    },
+    "0x00D3": {
+      "file": "random_numbers.asm",
+      "address": "0x00D3",
+      "line": 197
+    },
+    "0x0338": {
+      "file": "random_numbers.asm",
+      "address": "0x0338",
+      "line": 526
+    },
+    "0x0120": {
+      "file": "random_numbers.asm",
+      "address": "0x0120",
+      "line": 254
+    },
+    "0x0347": {
+      "file": "random_numbers.asm",
+      "address": "0x0347",
+      "line": 531
+    },
+    "0x0493": {
+      "file": "random_numbers.asm",
+      "address": "0x0493",
+      "line": 665
+    },
+    "0x042D": {
+      "file": "random_numbers.asm",
+      "address": "0x042D",
+      "line": 622
+    },
+    "0x02B2": {
+      "file": "random_numbers.asm",
+      "address": "0x02B2",
+      "line": 457
+    },
+    "0x02C3": {
+      "file": "random_numbers.asm",
+      "address": "0x02C3",
+      "line": 464
+    },
+    "0x042A": {
+      "file": "random_numbers.asm",
+      "address": "0x042A",
+      "line": 621
+    },
+    "0x0265": {
+      "file": "random_numbers.asm",
+      "address": "0x0265",
+      "line": 35
+    },
+    "0x023D": {
+      "file": "random_numbers.asm",
+      "address": "0x023D",
+      "line": 13
+    },
+    "0x03EC": {
+      "file": "random_numbers.asm",
+      "address": "0x03EC",
+      "line": 598
+    },
+    "0x0309": {
+      "file": "random_numbers.asm",
+      "address": "0x0309",
+      "line": 505
+    },
+    "0x0370": {
+      "file": "random_numbers.asm",
+      "address": "0x0370",
+      "line": 548
+    },
+    "0x025C": {
+      "file": "random_numbers.asm",
+      "address": "0x025C",
+      "line": 32
+    },
+    "0x0162": {
+      "file": "random_numbers.asm",
+      "address": "0x0162",
+      "line": 287
+    },
+    "0x0445": {
+      "file": "random_numbers.asm",
+      "address": "0x0445",
+      "line": 633
+    },
+    "0x028D": {
+      "file": "random_numbers.asm",
+      "address": "0x028D",
+      "line": 49
+    },
+    "0x0396": {
+      "file": "random_numbers.asm",
+      "address": "0x0396",
+      "line": 563
+    },
+    "0x006F": {
+      "file": "random_numbers.asm",
+      "address": "0x006F",
+      "line": 121
+    },
+    "0x0393": {
+      "file": "random_numbers.asm",
+      "address": "0x0393",
+      "line": 562
+    },
+    "0x034D": {
+      "file": "random_numbers.asm",
+      "address": "0x034D",
+      "line": 533
+    },
+    "0x0169": {
+      "file": "random_numbers.asm",
+      "address": "0x0169",
+      "line": 290
+    },
+    "0x0303": {
+      "file": "random_numbers.asm",
+      "address": "0x0303",
+      "line": 500
+    },
+    "0x03F5": {
+      "file": "random_numbers.asm",
+      "address": "0x03F5",
+      "line": 601
+    },
+    "0x0032": {
+      "file": "random_numbers.asm",
+      "address": "0x0032",
+      "line": 79
+    },
+    "0x0442": {
+      "file": "random_numbers.asm",
+      "address": "0x0442",
+      "line": 632
+    },
+    "0x048D": {
+      "file": "random_numbers.asm",
+      "address": "0x048D",
+      "line": 663
+    },
+    "0x0288": {
+      "file": "random_numbers.asm",
+      "address": "0x0288",
+      "line": 47
+    },
+    "0x03BA": {
+      "file": "random_numbers.asm",
+      "address": "0x03BA",
+      "line": 578
+    },
+    "0x0301": {
+      "file": "random_numbers.asm",
+      "address": "0x0301",
+      "line": 498
+    },
+    "0x01A3": {
+      "file": "random_numbers.asm",
+      "address": "0x01A3",
+      "line": 320
+    },
+    "0x0077": {
+      "file": "random_numbers.asm",
+      "address": "0x0077",
+      "line": 127
+    },
+    "0x03CC": {
+      "file": "random_numbers.asm",
+      "address": "0x03CC",
+      "line": 584
+    },
+    "0x044E": {
+      "file": "random_numbers.asm",
+      "address": "0x044E",
+      "line": 636
+    },
+    "0x00B4": {
+      "file": "random_numbers.asm",
+      "address": "0x00B4",
+      "line": 163
+    },
+    "0x046B": {
+      "file": "random_numbers.asm",
+      "address": "0x046B",
+      "line": 649
+    },
+    "0x020D": {
+      "file": "random_numbers.asm",
+      "address": "0x020D",
+      "line": 375
+    },
+    "0x0277": {
+      "file": "random_numbers.asm",
+      "address": "0x0277",
+      "line": 41
+    },
+    "0x00DD": {
+      "file": "random_numbers.asm",
+      "address": "0x00DD",
+      "line": 204
+    },
+    "0x032A": {
+      "file": "random_numbers.asm",
+      "address": "0x032A",
+      "line": 517
+    },
+    "0x02E8": {
+      "file": "random_numbers.asm",
+      "address": "0x02E8",
+      "line": 481
+    },
+    "0x007B": {
+      "file": "random_numbers.asm",
+      "address": "0x007B",
+      "line": 129
+    },
+    "0x022B": {
+      "file": "random_numbers.asm",
+      "address": "0x022B",
+      "line": 393
+    },
+    "0x012D": {
+      "file": "random_numbers.asm",
+      "address": "0x012D",
+      "line": 260
+    },
+    "0x03BD": {
+      "file": "random_numbers.asm",
+      "address": "0x03BD",
+      "line": 579
+    },
+    "0x022D": {
+      "file": "random_numbers.asm",
+      "address": "0x022D",
+      "line": 395
+    },
+    "0x0115": {
+      "file": "random_numbers.asm",
+      "address": "0x0115",
+      "line": 239
+    },
+    "0x0158": {
+      "file": "random_numbers.asm",
+      "address": "0x0158",
+      "line": 282
+    },
+    "0x011B": {
+      "file": "random_numbers.asm",
+      "address": "0x011B",
+      "line": 242
+    },
+    "0x0253": {
+      "file": "random_numbers.asm",
+      "address": "0x0253",
+      "line": 29
+    },
+    "0x0359": {
+      "file": "random_numbers.asm",
+      "address": "0x0359",
+      "line": 540
+    },
+    "0x0188": {
+      "file": "random_numbers.asm",
+      "address": "0x0188",
+      "line": 305
+    },
+    "0x022F": {
+      "file": "random_numbers.asm",
+      "address": "0x022F",
+      "line": 396
+    },
+    "0x026E": {
+      "file": "random_numbers.asm",
+      "address": "0x026E",
+      "line": 429
+    },
+    "0x0487": {
+      "file": "random_numbers.asm",
+      "address": "0x0487",
+      "line": 661
+    },
+    "0x0220": {
+      "file": "random_numbers.asm",
+      "address": "0x0220",
+      "line": 388
+    },
+    "0x0163": {
+      "file": "random_numbers.asm",
+      "address": "0x0163",
+      "line": 288
+    },
+    "0x02AF": {
+      "file": "random_numbers.asm",
+      "address": "0x02AF",
+      "line": 456
+    },
+    "0x02D7": {
+      "file": "random_numbers.asm",
+      "address": "0x02D7",
+      "line": 474
+    },
+    "0x0315": {
+      "file": "random_numbers.asm",
+      "address": "0x0315",
+      "line": 509
+    },
+    "0x014B": {
+      "file": "random_numbers.asm",
+      "address": "0x014B",
+      "line": 274
+    },
+    "0x00CF": {
+      "file": "random_numbers.asm",
+      "address": "0x00CF",
+      "line": 193
+    },
+    "0x00DE": {
+      "file": "random_numbers.asm",
+      "address": "0x00DE",
+      "line": 205
+    },
+    "0x0256": {
+      "file": "random_numbers.asm",
+      "address": "0x0256",
+      "line": 30
+    },
+    "0x021A": {
+      "file": "random_numbers.asm",
+      "address": "0x021A",
+      "line": 385
+    },
+    "0x0259": {
+      "file": "random_numbers.asm",
+      "address": "0x0259",
+      "line": 419
+    },
+    "0x0040": {
+      "file": "random_numbers.asm",
+      "address": "0x0040",
+      "line": 84
+    },
+    "0x039C": {
+      "file": "random_numbers.asm",
+      "address": "0x039C",
+      "line": 565
+    },
+    "0x01FF": {
+      "file": "random_numbers.asm",
+      "address": "0x01FF",
+      "line": 366
+    },
+    "0x00B2": {
+      "file": "random_numbers.asm",
+      "address": "0x00B2",
+      "line": 162
+    },
+    "0x001A": {
+      "file": "random_numbers.asm",
+      "address": "0x001A",
+      "line": 65
+    },
+    "0x026B": {
+      "file": "random_numbers.asm",
+      "address": "0x026B",
+      "line": 428
+    },
+    "0x0333": {
+      "file": "random_numbers.asm",
+      "address": "0x0333",
+      "line": 520
+    },
+    "0x02BE": {
+      "file": "random_numbers.asm",
+      "address": "0x02BE",
+      "line": 461
+    },
+    "0x0282": {
+      "file": "random_numbers.asm",
+      "address": "0x0282",
+      "line": 437
+    },
+    "0x04B2": {
+      "file": "random_numbers.asm",
+      "address": "0x04B2",
+      "line": 681
+    },
+    "0x029E": {
+      "file": "random_numbers.asm",
+      "address": "0x029E",
+      "line": 449
+    },
+    "0x0210": {
+      "file": "random_numbers.asm",
+      "address": "0x0210",
+      "line": 377
+    },
+    "0x02CF": {
+      "file": "random_numbers.asm",
+      "address": "0x02CF",
+      "line": 468
+    },
+    "0x0499": {
+      "file": "random_numbers.asm",
+      "address": "0x0499",
+      "line": 667
+    },
+    "0x0137": {
+      "file": "random_numbers.asm",
+      "address": "0x0137",
+      "line": 264
+    },
+    "0x0376": {
+      "file": "random_numbers.asm",
+      "address": "0x0376",
+      "line": 550
+    },
+    "0x0448": {
+      "file": "random_numbers.asm",
+      "address": "0x0448",
+      "line": 634
+    },
+    "0x0268": {
+      "file": "random_numbers.asm",
+      "address": "0x0268",
+      "line": 426
+    },
+    "0x0177": {
+      "file": "random_numbers.asm",
+      "address": "0x0177",
+      "line": 297
+    },
+    "0x038A": {
+      "file": "random_numbers.asm",
+      "address": "0x038A",
+      "line": 559
+    },
+    "0x0400": {
+      "file": "random_numbers.asm",
+      "address": "0x0400",
+      "line": 607
+    },
+    "0x01DC": {
+      "file": "random_numbers.asm",
+      "address": "0x01DC",
+      "line": 348
+    },
+    "0x0131": {
+      "file": "random_numbers.asm",
+      "address": "0x0131",
+      "line": 262
+    },
+    "0x03D5": {
+      "file": "random_numbers.asm",
+      "address": "0x03D5",
+      "line": 590
+    },
+    "0x0208": {
+      "file": "random_numbers.asm",
+      "address": "0x0208",
+      "line": 372
+    },
+    "0x0174": {
+      "file": "random_numbers.asm",
+      "address": "0x0174",
+      "line": 296
+    },
+    "0x00E0": {
+      "file": "random_numbers.asm",
+      "address": "0x00E0",
+      "line": 206
+    },
+    "0x0482": {
+      "file": "random_numbers.asm",
+      "address": "0x0482",
+      "line": 659
+    },
+    "0x049C": {
+      "file": "random_numbers.asm",
+      "address": "0x049C",
+      "line": 668
+    },
+    "0x0274": {
+      "file": "random_numbers.asm",
+      "address": "0x0274",
+      "line": 40
+    },
+    "0x021F": {
+      "file": "random_numbers.asm",
+      "address": "0x021F",
+      "line": 387
+    },
+    "0x043F": {
+      "file": "random_numbers.asm",
+      "address": "0x043F",
+      "line": 631
+    },
+    "0x017A": {
+      "file": "random_numbers.asm",
+      "address": "0x017A",
+      "line": 298
+    },
+    "0x03DA": {
+      "file": "random_numbers.asm",
+      "address": "0x03DA",
+      "line": 592
+    },
+    "0x0086": {
+      "file": "random_numbers.asm",
+      "address": "0x0086",
+      "line": 140
+    },
+    "0x005C": {
+      "file": "random_numbers.asm",
+      "address": "0x005C",
+      "line": 108
+    },
+    "0x00A1": {
+      "file": "random_numbers.asm",
+      "address": "0x00A1",
+      "line": 150
+    },
+    "0x002D": {
+      "file": "random_numbers.asm",
+      "address": "0x002D",
+      "line": 73
+    },
+    "0x037E": {
+      "file": "random_numbers.asm",
+      "address": "0x037E",
+      "line": 555
     },
     "0x0412": {
       "file": "random_numbers.asm",
@@ -1363,1042 +2138,272 @@
     "0x012A": {
       "file": "random_numbers.asm",
       "address": "0x012A",
-      "line": 259
+      "line": 258
     },
-    "0x0051": {
+    "0x003D": {
       "file": "random_numbers.asm",
-      "address": "0x0051",
-      "line": 101
-    },
-    "0x00B7": {
-      "file": "random_numbers.asm",
-      "address": "0x00B7",
-      "line": 179
-    },
-    "0x0202": {
-      "file": "random_numbers.asm",
-      "address": "0x0202",
-      "line": 369
-    },
-    "0x0059": {
-      "file": "random_numbers.asm",
-      "address": "0x0059",
-      "line": 107
-    },
-    "0x02D6": {
-      "file": "random_numbers.asm",
-      "address": "0x02D6",
-      "line": 474
-    },
-    "0x03B7": {
-      "file": "random_numbers.asm",
-      "address": "0x03B7",
-      "line": 577
-    },
-    "0x0194": {
-      "file": "random_numbers.asm",
-      "address": "0x0194",
-      "line": 315
-    },
-    "0x0293": {
-      "file": "random_numbers.asm",
-      "address": "0x0293",
-      "line": 444
-    },
-    "0x00D4": {
-      "file": "random_numbers.asm",
-      "address": "0x00D4",
-      "line": 198
-    },
-    "0x048D": {
-      "file": "random_numbers.asm",
-      "address": "0x048D",
-      "line": 663
-    },
-    "0x0332": {
-      "file": "random_numbers.asm",
-      "address": "0x0332",
-      "line": 524
-    },
-    "0x030F": {
-      "file": "random_numbers.asm",
-      "address": "0x030F",
-      "line": 507
-    },
-    "0x0448": {
-      "file": "random_numbers.asm",
-      "address": "0x0448",
-      "line": 634
-    },
-    "0x03D5": {
-      "file": "random_numbers.asm",
-      "address": "0x03D5",
-      "line": 590
-    },
-    "0x02A1": {
-      "file": "random_numbers.asm",
-      "address": "0x02A1",
-      "line": 450
-    },
-    "0x00EC": {
-      "file": "random_numbers.asm",
-      "address": "0x00EC",
-      "line": 215
-    },
-    "0x0235": {
-      "file": "random_numbers.asm",
-      "address": "0x0235",
-      "line": 399
-    },
-    "0x0418": {
-      "file": "random_numbers.asm",
-      "address": "0x0418",
-      "line": 615
-    },
-    "0x0072": {
-      "file": "random_numbers.asm",
-      "address": "0x0072",
-      "line": 123
-    },
-    "0x0442": {
-      "file": "random_numbers.asm",
-      "address": "0x0442",
-      "line": 632
-    },
-    "0x038D": {
-      "file": "random_numbers.asm",
-      "address": "0x038D",
-      "line": 560
-    },
-    "0x0182": {
-      "file": "random_numbers.asm",
-      "address": "0x0182",
-      "line": 303
-    },
-    "0x01A4": {
-      "file": "random_numbers.asm",
-      "address": "0x01A4",
-      "line": 322
-    },
-    "0x0244": {
-      "file": "random_numbers.asm",
-      "address": "0x0244",
-      "line": 409
-    },
-    "0x0205": {
-      "file": "random_numbers.asm",
-      "address": "0x0205",
-      "line": 371
-    },
-    "0x0189": {
-      "file": "random_numbers.asm",
-      "address": "0x0189",
-      "line": 309
-    },
-    "0x0399": {
-      "file": "random_numbers.asm",
-      "address": "0x0399",
-      "line": 564
-    },
-    "0x011B": {
-      "file": "random_numbers.asm",
-      "address": "0x011B",
-      "line": 242
-    },
-    "0x02B8": {
-      "file": "random_numbers.asm",
-      "address": "0x02B8",
-      "line": 459
-    },
-    "0x0138": {
-      "file": "random_numbers.asm",
-      "address": "0x0138",
-      "line": 266
-    },
-    "0x00F3": {
-      "file": "random_numbers.asm",
-      "address": "0x00F3",
-      "line": 220
-    },
-    "0x0427": {
-      "file": "random_numbers.asm",
-      "address": "0x0427",
-      "line": 620
-    },
-    "0x0186": {
-      "file": "random_numbers.asm",
-      "address": "0x0186",
-      "line": 305
-    },
-    "0x0124": {
-      "file": "random_numbers.asm",
-      "address": "0x0124",
-      "line": 256
-    },
-    "0x00D9": {
-      "file": "random_numbers.asm",
-      "address": "0x00D9",
-      "line": 200
-    },
-    "0x01B4": {
-      "file": "random_numbers.asm",
-      "address": "0x01B4",
-      "line": 329
-    },
-    "0x02F0": {
-      "file": "random_numbers.asm",
-      "address": "0x02F0",
-      "line": 487
-    },
-    "0x0169": {
-      "file": "random_numbers.asm",
-      "address": "0x0169",
-      "line": 290
-    },
-    "0x0022": {
-      "file": "random_numbers.asm",
-      "address": "0x0022",
-      "line": 68
-    },
-    "0x0358": {
-      "file": "random_numbers.asm",
-      "address": "0x0358",
-      "line": 540
-    },
-    "0x012E": {
-      "file": "random_numbers.asm",
-      "address": "0x012E",
-      "line": 261
-    },
-    "0x019A": {
-      "file": "random_numbers.asm",
-      "address": "0x019A",
-      "line": 317
-    },
-    "0x0499": {
-      "file": "random_numbers.asm",
-      "address": "0x0499",
-      "line": 667
-    },
-    "0x020E": {
-      "file": "random_numbers.asm",
-      "address": "0x020E",
-      "line": 377
-    },
-    "0x0493": {
-      "file": "random_numbers.asm",
-      "address": "0x0493",
-      "line": 665
-    },
-    "0x005E": {
-      "file": "random_numbers.asm",
-      "address": "0x005E",
-      "line": 110
-    },
-    "0x0193": {
-      "file": "random_numbers.asm",
-      "address": "0x0193",
-      "line": 313
-    },
-    "0x02F9": {
-      "file": "random_numbers.asm",
-      "address": "0x02F9",
-      "line": 491
-    },
-    "0x0068": {
-      "file": "random_numbers.asm",
-      "address": "0x0068",
-      "line": 117
-    },
-    "0x01D6": {
-      "file": "random_numbers.asm",
-      "address": "0x01D6",
-      "line": 346
-    },
-    "0x037B": {
-      "file": "random_numbers.asm",
-      "address": "0x037B",
-      "line": 554
-    },
-    "0x0409": {
-      "file": "random_numbers.asm",
-      "address": "0x0409",
-      "line": 610
-    },
-    "0x041B": {
-      "file": "random_numbers.asm",
-      "address": "0x041B",
-      "line": 616
-    },
-    "0x0350": {
-      "file": "random_numbers.asm",
-      "address": "0x0350",
-      "line": 534
-    },
-    "0x0290": {
-      "file": "random_numbers.asm",
-      "address": "0x0290",
-      "line": 443
-    },
-    "0x047C": {
-      "file": "random_numbers.asm",
-      "address": "0x047C",
-      "line": 657
-    },
-    "0x03AE": {
-      "file": "random_numbers.asm",
-      "address": "0x03AE",
-      "line": 574
-    },
-    "0x027F": {
-      "file": "random_numbers.asm",
-      "address": "0x027F",
-      "line": 45
-    },
-    "0x02FE": {
-      "file": "random_numbers.asm",
-      "address": "0x02FE",
-      "line": 497
-    },
-    "0x0127": {
-      "file": "random_numbers.asm",
-      "address": "0x0127",
-      "line": 257
-    },
-    "0x036A": {
-      "file": "random_numbers.asm",
-      "address": "0x036A",
-      "line": 546
-    },
-    "0x0163": {
-      "file": "random_numbers.asm",
-      "address": "0x0163",
-      "line": 288
-    },
-    "0x022C": {
-      "file": "random_numbers.asm",
-      "address": "0x022C",
-      "line": 395
-    },
-    "0x00A7": {
-      "file": "random_numbers.asm",
-      "address": "0x00A7",
-      "line": 156
-    },
-    "0x02CC": {
-      "file": "random_numbers.asm",
-      "address": "0x02CC",
-      "line": 467
-    },
-    "0x00C5": {
-      "file": "random_numbers.asm",
-      "address": "0x00C5",
-      "line": 188
-    },
-    "0x0209": {
-      "file": "random_numbers.asm",
-      "address": "0x0209",
-      "line": 373
-    },
-    "0x0361": {
-      "file": "random_numbers.asm",
-      "address": "0x0361",
-      "line": 543
-    },
-    "0x015B": {
-      "file": "random_numbers.asm",
-      "address": "0x015B",
-      "line": 283
-    },
-    "0x03F8": {
-      "file": "random_numbers.asm",
-      "address": "0x03F8",
-      "line": 604
-    },
-    "0x0403": {
-      "file": "random_numbers.asm",
-      "address": "0x0403",
-      "line": 608
-    },
-    "0x01F6": {
-      "file": "random_numbers.asm",
-      "address": "0x01F6",
-      "line": 362
-    },
-    "0x016A": {
-      "file": "random_numbers.asm",
-      "address": "0x016A",
-      "line": 291
-    },
-    "0x049F": {
-      "file": "random_numbers.asm",
-      "address": "0x049F",
-      "line": 669
-    },
-    "0x0312": {
-      "file": "random_numbers.asm",
-      "address": "0x0312",
-      "line": 508
-    },
-    "0x00BF": {
-      "file": "random_numbers.asm",
-      "address": "0x00BF",
-      "line": 185
-    },
-    "0x0479": {
-      "file": "random_numbers.asm",
-      "address": "0x0479",
-      "line": 656
-    },
-    "0x022A": {
-      "file": "random_numbers.asm",
-      "address": "0x022A",
-      "line": 394
-    },
-    "0x00E9": {
-      "file": "random_numbers.asm",
-      "address": "0x00E9",
-      "line": 214
-    },
-    "0x02AF": {
-      "file": "random_numbers.asm",
-      "address": "0x02AF",
-      "line": 456
-    },
-    "0x02BD": {
-      "file": "random_numbers.asm",
-      "address": "0x02BD",
-      "line": 462
-    },
-    "0x0151": {
-      "file": "random_numbers.asm",
-      "address": "0x0151",
-      "line": 279
-    },
-    "0x0247": {
-      "file": "random_numbers.asm",
-      "address": "0x0247",
-      "line": 18
-    },
-    "0x00F8": {
-      "file": "random_numbers.asm",
-      "address": "0x00F8",
-      "line": 227
-    },
-    "0x03D7": {
-      "file": "random_numbers.asm",
-      "address": "0x03D7",
-      "line": 591
-    },
-    "0x0303": {
-      "file": "random_numbers.asm",
-      "address": "0x0303",
-      "line": 503
-    },
-    "0x01EB": {
-      "file": "random_numbers.asm",
-      "address": "0x01EB",
-      "line": 355
-    },
-    "0x0034": {
-      "file": "random_numbers.asm",
-      "address": "0x0034",
-      "line": 80
+      "address": "0x003D",
+      "line": 83
     },
     "0x0341": {
       "file": "random_numbers.asm",
       "address": "0x0341",
       "line": 529
     },
-    "0x02F6": {
+    "0x03C3": {
       "file": "random_numbers.asm",
-      "address": "0x02F6",
-      "line": 490
+      "address": "0x03C3",
+      "line": 581
     },
-    "0x029E": {
+    "0x027C": {
       "file": "random_numbers.asm",
-      "address": "0x029E",
-      "line": 57
+      "address": "0x027C",
+      "line": 435
     },
-    "0x0086": {
+    "0x009E": {
       "file": "random_numbers.asm",
-      "address": "0x0086",
-      "line": 140
+      "address": "0x009E",
+      "line": 149
     },
-    "0x01AE": {
+    "0x0151": {
       "file": "random_numbers.asm",
-      "address": "0x01AE",
-      "line": 327
+      "address": "0x0151",
+      "line": 276
     },
-    "0x0190": {
+    "0x00FD": {
       "file": "random_numbers.asm",
-      "address": "0x0190",
-      "line": 312
+      "address": "0x00FD",
+      "line": 229
     },
-    "0x00A1": {
+    "0x033B": {
       "file": "random_numbers.asm",
-      "address": "0x00A1",
-      "line": 150
+      "address": "0x033B",
+      "line": 527
     },
-    "0x02D1": {
+    "0x00D5": {
       "file": "random_numbers.asm",
-      "address": "0x02D1",
-      "line": 472
-    },
-    "0x0271": {
-      "file": "random_numbers.asm",
-      "address": "0x0271",
-      "line": 430
-    },
-    "0x00D7": {
-      "file": "random_numbers.asm",
-      "address": "0x00D7",
-      "line": 199
-    },
-    "0x04A2": {
-      "file": "random_numbers.asm",
-      "address": "0x04A2",
-      "line": 670
-    },
-    "0x03E0": {
-      "file": "random_numbers.asm",
-      "address": "0x03E0",
-      "line": 594
-    },
-    "0x01F9": {
-      "file": "random_numbers.asm",
-      "address": "0x01F9",
-      "line": 363
-    },
-    "0x004E": {
-      "file": "random_numbers.asm",
-      "address": "0x004E",
-      "line": 99
-    },
-    "0x0462": {
-      "file": "random_numbers.asm",
-      "address": "0x0462",
-      "line": 646
-    },
-    "0x0306": {
-      "file": "random_numbers.asm",
-      "address": "0x0306",
-      "line": 504
-    },
-    "0x0233": {
-      "file": "random_numbers.asm",
-      "address": "0x0233",
-      "line": 398
-    },
-    "0x007E": {
-      "file": "random_numbers.asm",
-      "address": "0x007E",
-      "line": 131
-    },
-    "0x044E": {
-      "file": "random_numbers.asm",
-      "address": "0x044E",
-      "line": 636
-    },
-    "0x00ED": {
-      "file": "random_numbers.asm",
-      "address": "0x00ED",
-      "line": 216
-    },
-    "0x0152": {
-      "file": "random_numbers.asm",
-      "address": "0x0152",
-      "line": 280
-    },
-    "0x00DE": {
-      "file": "random_numbers.asm",
-      "address": "0x00DE",
-      "line": 206
-    },
-    "0x016E": {
-      "file": "random_numbers.asm",
-      "address": "0x016E",
-      "line": 294
-    },
-    "0x03CF": {
-      "file": "random_numbers.asm",
-      "address": "0x03CF",
-      "line": 585
-    },
-    "0x01C4": {
-      "file": "random_numbers.asm",
-      "address": "0x01C4",
-      "line": 338
-    },
-    "0x0344": {
-      "file": "random_numbers.asm",
-      "address": "0x0344",
-      "line": 530
-    },
-    "0x0390": {
-      "file": "random_numbers.asm",
-      "address": "0x0390",
-      "line": 561
-    },
-    "0x017B": {
-      "file": "random_numbers.asm",
-      "address": "0x017B",
-      "line": 300
-    },
-    "0x00CC": {
-      "file": "random_numbers.asm",
-      "address": "0x00CC",
-      "line": 192
-    },
-    "0x0439": {
-      "file": "random_numbers.asm",
-      "address": "0x0439",
-      "line": 629
-    },
-    "0x01B7": {
-      "file": "random_numbers.asm",
-      "address": "0x01B7",
-      "line": 330
-    },
-    "0x0160": {
-      "file": "random_numbers.asm",
-      "address": "0x0160",
-      "line": 287
-    },
-    "0x00B1": {
-      "file": "random_numbers.asm",
-      "address": "0x00B1",
-      "line": 162
-    },
-    "0x012B": {
-      "file": "random_numbers.asm",
-      "address": "0x012B",
-      "line": 260
-    },
-    "0x0315": {
-      "file": "random_numbers.asm",
-      "address": "0x0315",
-      "line": 509
-    },
-    "0x0393": {
-      "file": "random_numbers.asm",
-      "address": "0x0393",
-      "line": 562
-    },
-    "0x01D9": {
-      "file": "random_numbers.asm",
-      "address": "0x01D9",
-      "line": 347
-    },
-    "0x00C2": {
-      "file": "random_numbers.asm",
-      "address": "0x00C2",
-      "line": 187
-    },
-    "0x0037": {
-      "file": "random_numbers.asm",
-      "address": "0x0037",
-      "line": 81
-    },
-    "0x0285": {
-      "file": "random_numbers.asm",
-      "address": "0x0285",
-      "line": 438
-    },
-    "0x01BE": {
-      "file": "random_numbers.asm",
-      "address": "0x01BE",
-      "line": 336
-    },
-    "0x02AA": {
-      "file": "random_numbers.asm",
-      "address": "0x02AA",
-      "line": 453
-    },
-    "0x042D": {
-      "file": "random_numbers.asm",
-      "address": "0x042D",
-      "line": 625
-    },
-    "0x0185": {
-      "file": "random_numbers.asm",
-      "address": "0x0185",
-      "line": 304
-    },
-    "0x0137": {
-      "file": "random_numbers.asm",
-      "address": "0x0137",
-      "line": 265
-    },
-    "0x0436": {
-      "file": "random_numbers.asm",
-      "address": "0x0436",
-      "line": 628
-    },
-    "0x0148": {
-      "file": "random_numbers.asm",
-      "address": "0x0148",
-      "line": 273
-    },
-    "0x020D": {
-      "file": "random_numbers.asm",
-      "address": "0x020D",
-      "line": 376
-    },
-    "0x0250": {
-      "file": "random_numbers.asm",
-      "address": "0x0250",
-      "line": 415
+      "address": "0x00D5",
+      "line": 198
     },
     "0x004D": {
       "file": "random_numbers.asm",
       "address": "0x004D",
       "line": 98
     },
-    "0x0373": {
+    "0x04B1": {
       "file": "random_numbers.asm",
-      "address": "0x0373",
-      "line": 549
+      "address": "0x04B1",
+      "line": 680
     },
-    "0x019D": {
+    "0x00D0": {
       "file": "random_numbers.asm",
-      "address": "0x019D",
-      "line": 318
+      "address": "0x00D0",
+      "line": 194
     },
-    "0x045F": {
+    "0x01BE": {
       "file": "random_numbers.asm",
-      "address": "0x045F",
-      "line": 645
+      "address": "0x01BE",
+      "line": 336
     },
-    "0x00E6": {
+    "0x015B": {
       "file": "random_numbers.asm",
-      "address": "0x00E6",
-      "line": 209
+      "address": "0x015B",
+      "line": 283
     },
-    "0x039F": {
+    "0x0044": {
       "file": "random_numbers.asm",
-      "address": "0x039F",
-      "line": 566
+      "address": "0x0044",
+      "line": 86
+    },
+    "0x035E": {
+      "file": "random_numbers.asm",
+      "address": "0x035E",
+      "line": 542
+    },
+    "0x03D8": {
+      "file": "random_numbers.asm",
+      "address": "0x03D8",
+      "line": 591
     },
     "0x0060": {
       "file": "random_numbers.asm",
       "address": "0x0060",
       "line": 111
     },
-    "0x01F1": {
+    "0x0025": {
       "file": "random_numbers.asm",
-      "address": "0x01F1",
-      "line": 357
+      "address": "0x0025",
+      "line": 69
     },
-    "0x02E3": {
+    "0x024D": {
       "file": "random_numbers.asm",
-      "address": "0x02E3",
-      "line": 479
-    },
-    "0x02BB": {
-      "file": "random_numbers.asm",
-      "address": "0x02BB",
-      "line": 460
-    },
-    "0x002D": {
-      "file": "random_numbers.asm",
-      "address": "0x002D",
-      "line": 73
-    },
-    "0x01A1": {
-      "file": "random_numbers.asm",
-      "address": "0x01A1",
-      "line": 321
-    },
-    "0x0259": {
-      "file": "random_numbers.asm",
-      "address": "0x0259",
-      "line": 32
-    },
-    "0x0338": {
-      "file": "random_numbers.asm",
-      "address": "0x0338",
-      "line": 526
-    },
-    "0x0134": {
-      "file": "random_numbers.asm",
-      "address": "0x0134",
-      "line": 263
-    },
-    "0x03A8": {
-      "file": "random_numbers.asm",
-      "address": "0x03A8",
-      "line": 569
-    },
-    "0x002B": {
-      "file": "random_numbers.asm",
-      "address": "0x002B",
-      "line": 71
-    },
-    "0x03C3": {
-      "file": "random_numbers.asm",
-      "address": "0x03C3",
-      "line": 581
-    },
-    "0x0145": {
-      "file": "random_numbers.asm",
-      "address": "0x0145",
-      "line": 272
-    },
-    "0x048A": {
-      "file": "random_numbers.asm",
-      "address": "0x048A",
-      "line": 662
-    },
-    "0x02B2": {
-      "file": "random_numbers.asm",
-      "address": "0x02B2",
-      "line": 457
-    },
-    "0x027C": {
-      "file": "random_numbers.asm",
-      "address": "0x027C",
-      "line": 44
-    },
-    "0x021F": {
-      "file": "random_numbers.asm",
-      "address": "0x021F",
-      "line": 389
-    },
-    "0x024A": {
-      "file": "random_numbers.asm",
-      "address": "0x024A",
+      "address": "0x024D",
       "line": 19
     },
-    "0x03DA": {
+    "0x022C": {
       "file": "random_numbers.asm",
-      "address": "0x03DA",
-      "line": 592
-    },
-    "0x007A": {
-      "file": "random_numbers.asm",
-      "address": "0x007A",
-      "line": 128
-    },
-    "0x0299": {
-      "file": "random_numbers.asm",
-      "address": "0x0299",
-      "line": 446
-    },
-    "0x0118": {
-      "file": "random_numbers.asm",
-      "address": "0x0118",
-      "line": 241
-    },
-    "0x0381": {
-      "file": "random_numbers.asm",
-      "address": "0x0381",
-      "line": 556
-    },
-    "0x00AA": {
-      "file": "random_numbers.asm",
-      "address": "0x00AA",
-      "line": 158
-    },
-    "0x0396": {
-      "file": "random_numbers.asm",
-      "address": "0x0396",
-      "line": 563
-    },
-    "0x0100": {
-      "file": "random_numbers.asm",
-      "address": "0x0100",
-      "line": 230
-    },
-    "0x0384": {
-      "file": "random_numbers.asm",
-      "address": "0x0384",
-      "line": 557
-    },
-    "0x0217": {
-      "file": "random_numbers.asm",
-      "address": "0x0217",
-      "line": 384
-    },
-    "0x028A": {
-      "file": "random_numbers.asm",
-      "address": "0x028A",
-      "line": 49
-    },
-    "0x0468": {
-      "file": "random_numbers.asm",
-      "address": "0x0468",
-      "line": 648
-    },
-    "0x0421": {
-      "file": "random_numbers.asm",
-      "address": "0x0421",
-      "line": 618
+      "address": "0x022C",
+      "line": 394
     },
     "0x02A7": {
       "file": "random_numbers.asm",
       "address": "0x02A7",
       "line": 452
     },
-    "0x0476": {
-      "file": "random_numbers.asm",
-      "address": "0x0476",
-      "line": 655
-    },
-    "0x0282": {
-      "file": "random_numbers.asm",
-      "address": "0x0282",
-      "line": 46
-    },
-    "0x0274": {
-      "file": "random_numbers.asm",
-      "address": "0x0274",
-      "line": 431
-    },
-    "0x018A": {
-      "file": "random_numbers.asm",
-      "address": "0x018A",
-      "line": 310
-    },
-    "0x0054": {
-      "file": "random_numbers.asm",
-      "address": "0x0054",
-      "line": 103
-    },
     "0x0387": {
       "file": "random_numbers.asm",
       "address": "0x0387",
       "line": 558
     },
-    "0x0055": {
+    "0x0037": {
       "file": "random_numbers.asm",
-      "address": "0x0055",
-      "line": 104
+      "address": "0x0037",
+      "line": 81
     },
-    "0x00CD": {
+    "0x0290": {
       "file": "random_numbers.asm",
-      "address": "0x00CD",
-      "line": 193
+      "address": "0x0290",
+      "line": 50
     },
-    "0x0256": {
+    "0x04A8": {
       "file": "random_numbers.asm",
-      "address": "0x0256",
-      "line": 418
+      "address": "0x04A8",
+      "line": 672
     },
     "0x0364": {
       "file": "random_numbers.asm",
       "address": "0x0364",
       "line": 544
     },
-    "0x00D2": {
+    "0x01F4": {
       "file": "random_numbers.asm",
-      "address": "0x00D2",
-      "line": 197
+      "address": "0x01F4",
+      "line": 358
     },
-    "0x017C": {
+    "0x0471": {
       "file": "random_numbers.asm",
-      "address": "0x017C",
-      "line": 301
+      "address": "0x0471",
+      "line": 653
     },
-    "0x0451": {
+    "0x00E1": {
       "file": "random_numbers.asm",
-      "address": "0x0451",
-      "line": 640
+      "address": "0x00E1",
+      "line": 207
     },
-    "0x021E": {
+    "0x03FB": {
       "file": "random_numbers.asm",
-      "address": "0x021E",
-      "line": 388
+      "address": "0x03FB",
+      "line": 605
     },
-    "0x0227": {
+    "0x0344": {
       "file": "random_numbers.asm",
-      "address": "0x0227",
-      "line": 391
+      "address": "0x0344",
+      "line": 530
     },
-    "0x00C9": {
+    "0x006D": {
       "file": "random_numbers.asm",
-      "address": "0x00C9",
-      "line": 191
+      "address": "0x006D",
+      "line": 120
     },
-    "0x006F": {
+    "0x0474": {
       "file": "random_numbers.asm",
-      "address": "0x006F",
-      "line": 121
+      "address": "0x0474",
+      "line": 654
     },
-    "0x0296": {
+    "0x04AB": {
       "file": "random_numbers.asm",
-      "address": "0x0296",
-      "line": 53
+      "address": "0x04AB",
+      "line": 673
     },
-    "0x0040": {
+    "0x00E2": {
       "file": "random_numbers.asm",
-      "address": "0x0040",
-      "line": 84
+      "address": "0x00E2",
+      "line": 208
     },
-    "0x03BA": {
+    "0x037C": {
       "file": "random_numbers.asm",
-      "address": "0x03BA",
-      "line": 578
+      "address": "0x037C",
+      "line": 554
     },
-    "0x014B": {
+    "0x013B": {
       "file": "random_numbers.asm",
-      "address": "0x014B",
-      "line": 274
+      "address": "0x013B",
+      "line": 267
     },
-    "0x0459": {
+    "0x047C": {
       "file": "random_numbers.asm",
-      "address": "0x0459",
-      "line": 643
+      "address": "0x047C",
+      "line": 657
     },
-    "0x0099": {
+    "0x02C9": {
       "file": "random_numbers.asm",
-      "address": "0x0099",
-      "line": 147
+      "address": "0x02C9",
+      "line": 466
     },
-    "0x0288": {
+    "0x0127": {
       "file": "random_numbers.asm",
-      "address": "0x0288",
-      "line": 439
+      "address": "0x0127",
+      "line": 257
     },
-    "0x02C0": {
+    "0x007E": {
       "file": "random_numbers.asm",
-      "address": "0x02C0",
-      "line": 463
+      "address": "0x007E",
+      "line": 131
     },
-    "0x0093": {
+    "0x002C": {
       "file": "random_numbers.asm",
-      "address": "0x0093",
-      "line": 145
+      "address": "0x002C",
+      "line": 72
     },
-    "0x03FD": {
+    "0x00AD": {
       "file": "random_numbers.asm",
-      "address": "0x03FD",
-      "line": 606
+      "address": "0x00AD",
+      "line": 159
     },
-    "0x037E": {
+    "0x02D4": {
       "file": "random_numbers.asm",
-      "address": "0x037E",
-      "line": 555
+      "address": "0x02D4",
+      "line": 473
     },
-    "0x047F": {
+    "0x03B4": {
       "file": "random_numbers.asm",
-      "address": "0x047F",
-      "line": 658
+      "address": "0x03B4",
+      "line": 576
     },
-    "0x00AF": {
+    "0x0022": {
       "file": "random_numbers.asm",
-      "address": "0x00AF",
-      "line": 161
+      "address": "0x0022",
+      "line": 68
     },
-    "0x0484": {
+    "0x0399": {
       "file": "random_numbers.asm",
-      "address": "0x0484",
-      "line": 660
+      "address": "0x0399",
+      "line": 564
     },
-    "0x001A": {
+    "0x02AA": {
       "file": "random_numbers.asm",
-      "address": "0x001A",
-      "line": 65
+      "address": "0x02AA",
+      "line": 453
+    },
+    "0x0054": {
+      "file": "random_numbers.asm",
+      "address": "0x0054",
+      "line": 103
+    },
+    "0x0302": {
+      "file": "random_numbers.asm",
+      "address": "0x0302",
+      "line": 499
+    },
+    "0x0334": {
+      "file": "random_numbers.asm",
+      "address": "0x0334",
+      "line": 524
+    },
+    "0x0118": {
+      "file": "random_numbers.asm",
+      "address": "0x0118",
+      "line": 241
     }
   },
   "functions": {},
@@ -2410,590 +2415,500 @@
       "name": "VECTREX_PRINT_TEXT",
       "file": "random_numbers.asm",
       "startLine": 136,
-      "endLine": 150,
+      "endLine": 151,
       "type": "native"
     }
   },
   "asmAddressMap": {
-    "389": "0x021F",
-    "434": "0x0279",
-    "284": "0x015C",
-    "143": "0x008D",
-    "627": "0x0433",
-    "42": "0x0277",
-    "6": "0x0233",
-    "518": "0x032D",
-    "200": "0x00D9",
-    "495": "0x02FB",
-    "322": "0x01A4",
-    "412": "0x024A",
-    "325": "0x01AD",
-    "558": "0x0387",
-    "220": "0x00F3",
-    "450": "0x02A1",
-    "436": "0x027F",
-    "257": "0x0127",
-    "649": "0x046B",
-    "43": "0x0279",
-    "594": "0x03E0",
-    "580": "0x03C0",
-    "472": "0x02D1",
-    "290": "0x0169",
-    "598": "0x03EC",
-    "240": "0x0115",
-    "394": "0x022A",
-    "607": "0x0400",
-    "316": "0x0197",
-    "428": "0x026B",
-    "658": "0x047F",
-    "328": "0x01B1",
-    "17": "0x0244",
-    "371": "0x0205",
-    "616": "0x041B",
-    "667": "0x0499",
-    "504": "0x0306",
-    "365": "0x01FC",
-    "641": "0x0454",
-    "400": "0x0237",
-    "655": "0x0476",
-    "628": "0x0436",
-    "295": "0x0171",
-    "183": "0x00BD",
-    "123": "0x0072",
-    "530": "0x0344",
-    "554": "0x037B",
-    "555": "0x037E",
-    "204": "0x00DB",
-    "182": "0x00BC",
-    "47": "0x0285",
-    "513": "0x0321",
-    "565": "0x039C",
-    "120": "0x006D",
-    "52": "0x0293",
-    "342": "0x01CD",
-    "419": "0x0259",
-    "74": "0x002E",
-    "410": "0x0247",
-    "618": "0x0421",
-    "647": "0x0465",
-    "604": "0x03F8",
-    "635": "0x044B",
-    "584": "0x03CC",
-    "2": "0x0233",
-    "614": "0x0415",
-    "100": "0x004F",
-    "255": "0x0121",
-    "150": "0x00A1",
-    "228": "0x00FA",
-    "219": "0x00F1",
-    "187": "0x00C2",
-    "205": "0x00DD",
-    "36": "0x0265",
-    "452": "0x02A7",
-    "69": "0x0025",
-    "338": "0x01C4",
-    "497": "0x02FE",
-    "576": "0x03B4",
-    "97": "0x004A",
-    "350": "0x01DF",
-    "235": "0x010B",
-    "312": "0x0190",
-    "191": "0x00C9",
-    "214": "0x00E9",
-    "549": "0x0373",
-    "455": "0x02AC",
-    "351": "0x01E2",
-    "262": "0x0131",
-    "198": "0x00D4",
-    "617": "0x041E",
-    "375": "0x020C",
-    "79": "0x0032",
-    "532": "0x034A",
-    "81": "0x0037",
-    "545": "0x0367",
-    "192": "0x00CC",
-    "596": "0x03E6",
-    "585": "0x03CF",
-    "315": "0x0194",
-    "11": "0x0235",
-    "486": "0x02ED",
-    "368": "0x0201",
-    "475": "0x02D9",
-    "525": "0x0335",
-    "464": "0x02C3",
-    "85": "0x0043",
-    "287": "0x0160",
-    "313": "0x0193",
-    "30": "0x0253",
-    "645": "0x045F",
-    "149": "0x009E",
-    "595": "0x03E3",
-    "329": "0x01B4",
-    "269": "0x0141",
-    "343": "0x01D0",
-    "582": "0x03C6",
-    "162": "0x00B1",
-    "429": "0x026E",
-    "574": "0x03AE",
-    "48": "0x0288",
-    "479": "0x02E3",
-    "84": "0x0040",
-    "374": "0x020A",
-    "449": "0x029E",
-    "599": "0x03EF",
-    "553": "0x0379",
-    "13": "0x023A",
-    "569": "0x03A8",
-    "72": "0x002C",
-    "663": "0x048D",
-    "666": "0x0496",
-    "401": "0x023A",
-    "263": "0x0134",
-    "71": "0x002B",
-    "221": "0x00F6",
-    "671": "0x04A5",
-    "664": "0x0490",
-    "437": "0x0282",
-    "510": "0x0318",
-    "425": "0x0265",
-    "281": "0x0155",
-    "534": "0x0350",
-    "597": "0x03E9",
-    "327": "0x01AE",
-    "523": "0x0331",
     "546": "0x036A",
-    "104": "0x0055",
-    "193": "0x00CD",
-    "398": "0x0233",
-    "305": "0x0186",
-    "570": "0x03AB",
-    "519": "0x0330",
-    "498": "0x02FF",
-    "40": "0x0271",
-    "153": "0x00A2",
-    "231": "0x0102",
-    "511": "0x031B",
-    "57": "0x029E",
-    "199": "0x00D7",
-    "127": "0x0077",
-    "35": "0x0262",
-    "131": "0x007E",
-    "457": "0x02B2",
-    "524": "0x0332",
-    "636": "0x044E",
-    "453": "0x02AA",
-    "642": "0x0456",
-    "564": "0x0399",
-    "465": "0x02C6",
-    "477": "0x02DE",
-    "124": "0x0073",
-    "481": "0x02E8",
-    "31": "0x0256",
-    "413": "0x024D",
-    "19": "0x024A",
-    "563": "0x0396",
-    "288": "0x0163",
-    "133": "0x0081",
-    "438": "0x0285",
-    "34": "0x025F",
-    "539": "0x0356",
-    "111": "0x0060",
-    "215": "0x00EC",
-    "229": "0x00FD",
-    "330": "0x01B7",
-    "335": "0x01BB",
-    "318": "0x019D",
-    "331": "0x01BA",
-    "589": "0x03D2",
-    "259": "0x012A",
-    "234": "0x0109",
-    "348": "0x01DC",
-    "432": "0x0277",
-    "323": "0x01A7",
-    "12": "0x0237",
-    "579": "0x03BD",
-    "575": "0x03B1",
-    "439": "0x0288",
-    "592": "0x03DA",
-    "118": "0x006B",
-    "189": "0x00C6",
-    "544": "0x0364",
-    "485": "0x02EB",
-    "107": "0x0059",
-    "196": "0x00D0",
-    "289": "0x0166",
-    "590": "0x03D5",
-    "581": "0x03C3",
-    "129": "0x007B",
-    "38": "0x026B",
-    "377": "0x020E",
-    "341": "0x01CA",
-    "517": "0x032A",
-    "487": "0x02F0",
-    "54": "0x0299",
-    "609": "0x0406",
-    "445": "0x0296",
-    "161": "0x00AF",
-    "142": "0x008A",
-    "144": "0x0090",
-    "267": "0x013B",
-    "505": "0x0309",
-    "80": "0x0034",
-    "418": "0x0256",
-    "506": "0x030C",
-    "82": "0x003A",
-    "670": "0x04A2",
-    "577": "0x03B7",
-    "512": "0x031E",
-    "548": "0x0370",
-    "387": "0x021D",
-    "260": "0x012B",
-    "567": "0x03A2",
-    "238": "0x0112",
-    "216": "0x00ED",
-    "70": "0x0028",
-    "656": "0x0479",
-    "631": "0x043F",
-    "543": "0x0361",
-    "286": "0x015F",
-    "600": "0x03F2",
-    "46": "0x0282",
-    "311": "0x018D",
-    "526": "0x0338",
-    "296": "0x0174",
-    "630": "0x043C",
-    "395": "0x022C",
-    "256": "0x0124",
-    "87": "0x0045",
-    "527": "0x033B",
-    "282": "0x0158",
-    "32": "0x0259",
-    "156": "0x00A7",
-    "14": "0x023C",
-    "241": "0x0118",
-    "293": "0x016D",
-    "660": "0x0484",
-    "403": "0x023F",
-    "467": "0x02CC",
-    "128": "0x007A",
-    "578": "0x03BA",
-    "230": "0x0100",
-    "272": "0x0145",
-    "556": "0x0381",
-    "50": "0x028D",
-    "383": "0x0214",
-    "393": "0x0229",
-    "83": "0x003D",
-    "478": "0x02E0",
-    "271": "0x0144",
-    "446": "0x0299",
-    "336": "0x01BE",
-    "391": "0x0227",
-    "561": "0x0390",
-    "88": "0x0046",
-    "499": "0x0300",
-    "509": "0x0315",
-    "460": "0x02BB",
-    "53": "0x0296",
-    "67": "0x001F",
-    "444": "0x0293",
-    "392": "0x0228",
-    "280": "0x0152",
-    "337": "0x01C1",
-    "559": "0x038A",
-    "427": "0x0268",
-    "363": "0x01F9",
-    "491": "0x02F9",
-    "346": "0x01D6",
+    "339": "0x01C7",
+    "54": "0x029C",
     "507": "0x030F",
-    "110": "0x005E",
-    "300": "0x017B",
-    "16": "0x0242",
-    "528": "0x033E",
-    "653": "0x0471",
-    "458": "0x02B5",
-    "459": "0x02B8",
-    "593": "0x03DD",
-    "662": "0x048A",
-    "568": "0x03A5",
-    "148": "0x009B",
-    "37": "0x0268",
-    "476": "0x02DB",
-    "552": "0x0376",
-    "496": "0x02FC",
-    "55": "0x029B",
-    "232": "0x0103",
-    "370": "0x0204",
-    "98": "0x004D",
-    "466": "0x02C9",
-    "435": "0x027C",
-    "121": "0x006F",
-    "209": "0x00E6",
-    "557": "0x0384",
-    "140": "0x0086",
-    "353": "0x01E8",
-    "680": "0x04AF",
-    "615": "0x0418",
-    "619": "0x0424",
-    "239": "0x0114",
-    "404": "0x0242",
-    "376": "0x020D",
-    "279": "0x0151",
-    "672": "0x04A8",
-    "625": "0x042D",
-    "643": "0x0459",
-    "612": "0x040F",
-    "233": "0x0106",
-    "610": "0x0409",
-    "51": "0x0290",
-    "303": "0x0182",
-    "317": "0x019A",
-    "179": "0x00B7",
-    "237": "0x010F",
-    "451": "0x02A4",
-    "18": "0x0247",
-    "356": "0x01EE",
-    "668": "0x049C",
-    "207": "0x00DF",
-    "197": "0x00D2",
-    "268": "0x013E",
-    "634": "0x0448",
-    "130": "0x007C",
-    "109": "0x005D",
-    "29": "0x0250",
-    "113": "0x0063",
-    "531": "0x0347",
-    "304": "0x0185",
-    "659": "0x0481",
-    "620": "0x0427",
-    "119": "0x006C",
-    "369": "0x0202",
-    "355": "0x01EB",
-    "274": "0x014B",
-    "181": "0x00B9",
-    "399": "0x0235",
-    "188": "0x00C5",
-    "562": "0x0393",
-    "542": "0x035E",
-    "158": "0x00AA",
-    "302": "0x017F",
-    "415": "0x0250",
-    "86": "0x0044",
-    "386": "0x021C",
-    "301": "0x017C",
-    "629": "0x0439",
-    "373": "0x0209",
-    "159": "0x00AC",
-    "443": "0x0290",
-    "657": "0x047C",
-    "41": "0x0274",
-    "490": "0x02F6",
-    "409": "0x0244",
-    "298": "0x0178",
-    "384": "0x0217",
-    "652": "0x046E",
-    "65": "0x001A",
-    "488": "0x02F3",
-    "203": "0x00DA",
-    "669": "0x049F",
-    "424": "0x0262",
-    "431": "0x0274",
-    "227": "0x00F8",
-    "154": "0x00A4",
-    "366": "0x01FE",
-    "613": "0x0412",
-    "321": "0x01A1",
-    "218": "0x00F0",
-    "206": "0x00DE",
-    "679": "0x04AE",
-    "456": "0x02AF",
-    "654": "0x0473",
-    "352": "0x01E5",
-    "605": "0x03FA",
-    "345": "0x01D3",
-    "319": "0x01A0",
-    "147": "0x0099",
-    "261": "0x012E",
-    "541": "0x035B",
-    "44": "0x027C",
-    "117": "0x0068",
-    "566": "0x039F",
-    "402": "0x023C",
-    "265": "0x0137",
-    "583": "0x03C9",
-    "508": "0x0312",
-    "33": "0x025C",
-    "283": "0x015B",
-    "291": "0x016A",
-    "608": "0x0403",
-    "294": "0x016E",
-    "646": "0x0462",
-    "640": "0x0451",
-    "611": "0x040C",
-    "178": "0x00B4",
-    "462": "0x02BD",
-    "39": "0x026E",
-    "217": "0x00EE",
     "99": "0x004E",
-    "15": "0x023F",
-    "273": "0x0148",
-    "514": "0x0324",
-    "324": "0x01AA",
-    "141": "0x0088",
-    "114": "0x0064",
-    "340": "0x01C7",
-    "538": "0x0353",
-    "236": "0x010C",
-    "297": "0x0177",
-    "347": "0x01D9",
-    "529": "0x0341",
-    "310": "0x018A",
-    "621": "0x042A",
-    "45": "0x027F",
-    "540": "0x0358",
-    "416": "0x0253",
-    "309": "0x0189",
-    "533": "0x034D",
-    "473": "0x02D4",
-    "362": "0x01F6",
-    "103": "0x0054",
-    "184": "0x00BE",
-    "68": "0x0022",
-    "101": "0x0051",
-    "591": "0x03D7",
-    "463": "0x02C0",
-    "516": "0x0327",
-    "388": "0x021E",
-    "626": "0x0430",
-    "441": "0x028A",
-    "661": "0x0487",
-    "254": "0x011E",
-    "644": "0x045C",
-    "73": "0x002D",
+    "599": "0x03EF",
+    "611": "0x040C",
+    "417": "0x0256",
+    "609": "0x0406",
+    "432": "0x0277",
+    "336": "0x01BE",
+    "74": "0x002E",
+    "179": "0x00B7",
+    "620": "0x0427",
+    "618": "0x0421",
+    "607": "0x0400",
+    "610": "0x0409",
+    "230": "0x0100",
+    "577": "0x03B7",
+    "11": "0x0238",
+    "107": "0x0059",
     "632": "0x0442",
-    "385": "0x0219",
-    "145": "0x0093",
-    "448": "0x029B",
-    "242": "0x011B",
-    "648": "0x0468",
-    "430": "0x0271",
-    "275": "0x014E",
-    "560": "0x038D",
+    "30": "0x0256",
+    "312": "0x0190",
+    "36": "0x0268",
+    "614": "0x0415",
+    "431": "0x0274",
+    "425": "0x0265",
+    "534": "0x0350",
+    "520": "0x0333",
+    "604": "0x03F8",
+    "100": "0x004F",
+    "45": "0x0282",
+    "301": "0x017E",
+    "576": "0x03B4",
+    "188": "0x00C5",
+    "570": "0x03AB",
+    "215": "0x00EC",
+    "338": "0x01C4",
+    "593": "0x03DD",
+    "130": "0x007C",
+    "384": "0x0217",
+    "514": "0x0324",
+    "420": "0x025C",
+    "17": "0x0247",
+    "261": "0x012E",
+    "371": "0x0207",
+    "205": "0x00DE",
+    "349": "0x01DF",
+    "463": "0x02C0",
+    "460": "0x02BB",
+    "55": "0x029E",
+    "597": "0x03E9",
+    "568": "0x03A5",
+    "411": "0x024A",
+    "666": "0x0496",
+    "238": "0x0112",
+    "131": "0x007E",
+    "302": "0x017F",
+    "98": "0x004D",
+    "605": "0x03FB",
+    "404": "0x0242",
+    "454": "0x02AD",
+    "669": "0x049F",
+    "46": "0x0285",
+    "467": "0x02CC",
+    "461": "0x02BE",
+    "478": "0x02E1",
+    "344": "0x01D3",
+    "16": "0x0245",
+    "351": "0x01E2",
+    "621": "0x042A",
+    "299": "0x017B",
+    "67": "0x001F",
+    "517": "0x032A",
+    "83": "0x003D",
+    "322": "0x01A4",
+    "504": "0x0306",
+    "346": "0x01D6",
+    "585": "0x03CF",
+    "479": "0x02E3",
+    "127": "0x0077",
+    "555": "0x037E",
+    "444": "0x0293",
+    "85": "0x0043",
+    "325": "0x01AD",
+    "155": "0x00A7",
+    "103": "0x0054",
+    "41": "0x0277",
+    "561": "0x0390",
+    "235": "0x010C",
+    "305": "0x0188",
+    "591": "0x03D8",
+    "111": "0x0060",
+    "613": "0x0412",
+    "464": "0x02C3",
+    "232": "0x0105",
+    "636": "0x044E",
+    "42": "0x027A",
+    "364": "0x01FC",
+    "222": "0x00F9",
+    "147": "0x0099",
+    "498": "0x0301",
+    "311": "0x018D",
+    "385": "0x021A",
+    "207": "0x00E1",
+    "324": "0x01AA",
+    "303": "0x0182",
+    "220": "0x00F4",
+    "208": "0x00E2",
+    "453": "0x02AA",
+    "658": "0x047F",
+    "580": "0x03C0",
+    "37": "0x026B",
     "108": "0x005C",
-    "474": "0x02D6",
-    "266": "0x0138",
-    "470": "0x02CE",
-    "134": "0x0082",
-    "547": "0x036D",
-    "442": "0x028D",
-    "253": "0x011D",
-    "357": "0x01F1",
-    "606": "0x03FD",
-    "66": "0x001C",
+    "57": "0x02A1",
+    "387": "0x021F",
+    "450": "0x02A1",
+    "304": "0x0185",
+    "647": "0x0465",
+    "97": "0x004A",
+    "242": "0x011B",
+    "284": "0x015E",
+    "628": "0x0436",
+    "255": "0x0121",
+    "535": "0x0353",
+    "236": "0x010E",
+    "428": "0x026B",
+    "556": "0x0381",
+    "43": "0x027C",
+    "51": "0x0293",
+    "269": "0x0141",
+    "337": "0x01C1",
+    "264": "0x0137",
+    "529": "0x0341",
+    "673": "0x04AB",
+    "526": "0x0338",
+    "53": "0x0299",
+    "310": "0x018C",
+    "316": "0x0197",
+    "433": "0x027A",
+    "216": "0x00EF",
+    "31": "0x0259",
+    "377": "0x0210",
+    "402": "0x023D",
+    "550": "0x0376",
+    "201": "0x00DC",
+    "186": "0x00C2",
+    "44": "0x027F",
+    "347": "0x01D9",
+    "670": "0x04A2",
+    "123": "0x0072",
+    "617": "0x041E",
+    "267": "0x013B",
+    "558": "0x0387",
+    "598": "0x03EC",
+    "157": "0x00AA",
+    "133": "0x0081",
+    "543": "0x0361",
+    "129": "0x007B",
+    "648": "0x0468",
+    "583": "0x03C9",
+    "549": "0x0373",
+    "565": "0x039C",
+    "151": "0x00A4",
+    "14": "0x023F",
+    "449": "0x029E",
+    "545": "0x0367",
+    "231": "0x0103",
+    "401": "0x023A",
+    "539": "0x0356",
+    "121": "0x006F",
+    "185": "0x00C1",
+    "183": "0x00BF",
+    "631": "0x043F",
+    "13": "0x023D",
+    "287": "0x0162",
+    "243": "0x011E",
+    "124": "0x0073",
+    "439": "0x0288",
+    "210": "0x00E9",
+    "667": "0x0499",
+    "317": "0x019A",
+    "70": "0x0028",
+    "12": "0x023A",
+    "142": "0x008A",
+    "84": "0x0040",
+    "262": "0x0131",
+    "6": "0x0236",
+    "641": "0x0454",
+    "660": "0x0484",
+    "491": "0x02F9",
+    "443": "0x0290",
+    "466": "0x02C9",
+    "515": "0x0327",
+    "511": "0x031B",
+    "306": "0x0189",
+    "257": "0x0127",
+    "569": "0x03A8",
+    "294": "0x0170",
+    "38": "0x026E",
+    "154": "0x00A5",
     "633": "0x0445",
-    "503": "0x0303",
-    "603": "0x03F5",
-    "20": "0x024D",
-    "49": "0x028A",
-    "665": "0x0493",
-    "421": "0x025C",
-    "146": "0x0096",
-    "185": "0x00BF",
     "422": "0x025F",
-    "480": "0x02E5"
+    "200": "0x00DA",
+    "197": "0x00D3",
+    "163": "0x00B4",
+    "645": "0x045F",
+    "66": "0x001C",
+    "254": "0x0120",
+    "557": "0x0384",
+    "357": "0x01F1",
+    "282": "0x0158",
+    "313": "0x0193",
+    "32": "0x025C",
+    "289": "0x0166",
+    "562": "0x0393",
+    "419": "0x0259",
+    "612": "0x040F",
+    "649": "0x046B",
+    "291": "0x016C",
+    "581": "0x03C3",
+    "268": "0x013E",
+    "329": "0x01B4",
+    "199": "0x00D7",
+    "275": "0x014E",
+    "564": "0x0399",
+    "241": "0x0118",
+    "435": "0x027C",
+    "69": "0x0025",
+    "426": "0x0268",
+    "80": "0x0034",
+    "655": "0x0476",
+    "519": "0x0330",
+    "233": "0x0106",
+    "414": "0x0250",
+    "547": "0x036D",
+    "459": "0x02B8",
+    "584": "0x03CC",
+    "476": "0x02DC",
+    "148": "0x009C",
+    "499": "0x0302",
+    "601": "0x03F5",
+    "442": "0x028D",
+    "487": "0x02F0",
+    "392": "0x022A",
+    "659": "0x0482",
+    "110": "0x005E",
+    "82": "0x003A",
+    "263": "0x0134",
+    "619": "0x0424",
+    "606": "0x03FD",
+    "663": "0x048D",
+    "280": "0x0154",
+    "369": "0x0204",
+    "626": "0x0430",
+    "141": "0x0088",
+    "393": "0x022B",
+    "524": "0x0334",
+    "518": "0x032D",
+    "471": "0x02D1",
+    "219": "0x00F3",
+    "258": "0x012A",
+    "326": "0x01B0",
+    "486": "0x02EE",
+    "525": "0x0335",
+    "114": "0x0064",
+    "72": "0x002C",
+    "661": "0x0487",
+    "437": "0x0282",
+    "35": "0x0265",
+    "298": "0x017A",
+    "182": "0x00BC",
+    "672": "0x04A8",
+    "477": "0x02DE",
+    "615": "0x0418",
+    "512": "0x031E",
+    "446": "0x0299",
+    "354": "0x01EB",
+    "192": "0x00CC",
+    "184": "0x00C0",
+    "323": "0x01A7",
+    "150": "0x00A1",
+    "482": "0x02EB",
+    "366": "0x01FF",
+    "87": "0x0045",
+    "429": "0x026E",
+    "533": "0x034D",
+    "634": "0x0448",
+    "159": "0x00AD",
+    "395": "0x022D",
+    "113": "0x0063",
+    "532": "0x034A",
+    "128": "0x007A",
+    "505": "0x0309",
+    "144": "0x0090",
+    "272": "0x0147",
+    "48": "0x028B",
+    "240": "0x0117",
+    "134": "0x0082",
+    "616": "0x041B",
+    "88": "0x0046",
+    "436": "0x027F",
+    "473": "0x02D4",
+    "386": "0x021C",
+    "671": "0x04A5",
+    "458": "0x02B5",
+    "405": "0x0245",
+    "563": "0x0396",
+    "73": "0x002D",
+    "451": "0x02A4",
+    "586": "0x03D2",
+    "578": "0x03BA",
+    "270": "0x0144",
+    "423": "0x0262",
+    "273": "0x0148",
+    "528": "0x033E",
+    "47": "0x0288",
+    "374": "0x020C",
+    "149": "0x009E",
+    "15": "0x0242",
+    "162": "0x00B2",
+    "590": "0x03D5",
+    "49": "0x028D",
+    "531": "0x0347",
+    "530": "0x0344",
+    "297": "0x0177",
+    "390": "0x0222",
+    "228": "0x00FB",
+    "375": "0x020D",
+    "413": "0x024D",
+    "559": "0x038A",
+    "119": "0x006C",
+    "39": "0x0271",
+    "399": "0x0236",
+    "396": "0x022F",
+    "292": "0x016D",
+    "68": "0x0022",
+    "290": "0x0169",
+    "218": "0x00F1",
+    "318": "0x019D",
+    "400": "0x0238",
+    "447": "0x029C",
+    "328": "0x01B1",
+    "206": "0x00E0",
+    "630": "0x043C",
+    "217": "0x00F0",
+    "229": "0x00FD",
+    "430": "0x0271",
+    "489": "0x02F6",
+    "388": "0x0220",
+    "635": "0x044B",
+    "403": "0x023F",
+    "117": "0x0068",
+    "662": "0x048A",
+    "320": "0x01A3",
+    "260": "0x012D",
+    "646": "0x0462",
+    "410": "0x0247",
+    "370": "0x0205",
+    "180": "0x00BA",
+    "657": "0x047C",
+    "295": "0x0171",
+    "665": "0x0493",
+    "394": "0x022C",
+    "146": "0x0096",
+    "194": "0x00D0",
+    "376": "0x020F",
+    "109": "0x005D",
+    "330": "0x01B7",
+    "600": "0x03F2",
+    "438": "0x0285",
+    "356": "0x01EE",
+    "627": "0x0433",
+    "283": "0x015B",
+    "266": "0x013A",
+    "160": "0x00AF",
+    "548": "0x0370",
+    "20": "0x0250",
+    "71": "0x002B",
+    "101": "0x0051",
+    "65": "0x001A",
+    "465": "0x02C6",
+    "140": "0x0086",
+    "2": "0x0236",
+    "352": "0x01E5",
+    "281": "0x0155",
+    "86": "0x0044",
+    "680": "0x04B1",
+    "341": "0x01CA",
+    "500": "0x0303",
+    "204": "0x00DD",
+    "276": "0x0151",
+    "288": "0x0163",
+    "513": "0x0321",
+    "452": "0x02A7",
+    "440": "0x028B",
+    "34": "0x0262",
+    "348": "0x01DC",
+    "145": "0x0093",
+    "527": "0x033B",
+    "506": "0x030C",
+    "475": "0x02D9",
+    "79": "0x0032",
+    "508": "0x0312",
+    "367": "0x0201",
+    "319": "0x01A0",
+    "554": "0x037C",
+    "553": "0x0379",
+    "566": "0x039F",
+    "481": "0x02E8",
+    "237": "0x010F",
+    "579": "0x03BD",
+    "488": "0x02F3",
+    "510": "0x0318",
+    "596": "0x03E6",
+    "456": "0x02AF",
+    "474": "0x02D7",
+    "120": "0x006D",
+    "582": "0x03C6",
+    "104": "0x0055",
+    "239": "0x0115",
+    "18": "0x024A",
+    "594": "0x03E0",
+    "389": "0x0221",
+    "480": "0x02E6",
+    "681": "0x04B2",
+    "571": "0x03AE",
+    "314": "0x0196",
+    "656": "0x0479",
+    "416": "0x0253",
+    "353": "0x01E8",
+    "40": "0x0274",
+    "592": "0x03DA",
+    "221": "0x00F6",
+    "509": "0x0315",
+    "542": "0x035E",
+    "342": "0x01CD",
+    "629": "0x0439",
+    "372": "0x0208",
+    "274": "0x014B",
+    "358": "0x01F4",
+    "81": "0x0037",
+    "654": "0x0474",
+    "189": "0x00C8",
+    "622": "0x042D",
+    "143": "0x008D",
+    "332": "0x01BD",
+    "575": "0x03B1",
+    "457": "0x02B2",
+    "29": "0x0253",
+    "19": "0x024D",
+    "497": "0x02FF",
+    "50": "0x0290",
+    "363": "0x01F9",
+    "540": "0x0359",
+    "544": "0x0364",
+    "468": "0x02CF",
+    "118": "0x006B",
+    "595": "0x03E3",
+    "541": "0x035B",
+    "608": "0x0403",
+    "296": "0x0174",
+    "643": "0x0459",
+    "664": "0x0490",
+    "331": "0x01BA",
+    "52": "0x0296",
+    "234": "0x0109",
+    "496": "0x02FE",
+    "642": "0x0457",
+    "285": "0x015F",
+    "256": "0x0124",
+    "492": "0x02FC",
+    "190": "0x00C9",
+    "445": "0x0296",
+    "668": "0x049C",
+    "560": "0x038D",
+    "193": "0x00CF",
+    "644": "0x045C",
+    "343": "0x01D0",
+    "653": "0x0471",
+    "33": "0x025F",
+    "637": "0x0451",
+    "378": "0x0211",
+    "567": "0x03A2",
+    "198": "0x00D5",
+    "650": "0x046E"
   },
   "variables": {
-    "ry4": {
-      "name": "ry4",
-      "address": "0xC8B4",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC898",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC889",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_TEMP": {
-      "name": "DRAW_CIRCLE_TEMP",
-      "address": "0xC8A2",
-      "size": 8,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_INTENSITY": {
-      "name": "DRAW_CIRCLE_INTENSITY",
-      "address": "0xC8A1",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg1": {
-      "name": "arg1",
-      "address": "0xC8B8",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_XC": {
-      "name": "DRAW_CIRCLE_XC",
-      "address": "0xC89E",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_YX": {
-      "name": "TEMP_YX",
-      "address": "0xC886",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "rx3": {
-      "name": "rx3",
-      "address": "0xC8B2",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_YC": {
-      "name": "DRAW_CIRCLE_YC",
-      "address": "0xC89F",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_X": {
-      "name": "TEMP_X",
-      "address": "0xC888",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "RESULT": {
-      "name": "RESULT",
-      "address": "0xC880",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_DIAM": {
-      "name": "DRAW_CIRCLE_DIAM",
-      "address": "0xC8A0",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
     "DRAW_LINE_ARGS": {
       "name": "DRAW_LINE_ARGS",
       "address": "0xC88C",
@@ -3001,30 +2916,9 @@
       "type": "unknown",
       "declLine": null
     },
-    "RAND_SEED": {
-      "name": "RAND_SEED",
-      "address": "0xC896",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
     "ry2": {
       "name": "ry2",
       "address": "0xC8B0",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC8BA",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "ry1": {
-      "name": "ry1",
-      "address": "0xC8AC",
       "size": 2,
       "type": "unknown",
       "declLine": null
@@ -3036,38 +2930,10 @@
       "type": "unknown",
       "declLine": null
     },
-    "VPY_MOVE_Y": {
-      "name": "VPY_MOVE_Y",
-      "address": "0xC88B",
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC89E",
       "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC882",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_X": {
-      "name": "VPY_MOVE_X",
-      "address": "0xC88A",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg0": {
-      "name": "arg0",
-      "address": "0xC8B6",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg4": {
-      "name": "arg4",
-      "address": "0xC8BE",
-      "size": 2,
       "type": "unknown",
       "declLine": null
     },
@@ -3085,9 +2951,149 @@
       "type": "unknown",
       "declLine": null
     },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8B6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC888",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC898",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC88B",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC89F",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RAND_SEED": {
+      "name": "RAND_SEED",
+      "address": "0xC896",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8A1",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8BE",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC88A",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "rx3": {
+      "name": "rx3",
+      "address": "0xC8B2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
     "rx1": {
       "name": "rx1",
       "address": "0xC8AA",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "ry1": {
+      "name": "ry1",
+      "address": "0xC8AC",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8A2",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8A0",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8B8",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "ry4": {
+      "name": "ry4",
+      "address": "0xC8B4",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC889",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8BA",
       "size": 2,
       "type": "unknown",
       "declLine": null

@@ -1,165 +1,406 @@
-; --- Motorola 6809 backend (Vectrex) title='RAND' origin=$0000 ---
-        ORG $0000
+; VPy M6809 Assembly (Vectrex)
+; ROM: 32768 bytes
+
+
+    ORG $0000
+
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
     INCLUDE "VECTREX.I"
 
 ;***************************************************************************
-; HEADER SECTION
+; CARTRIDGE HEADER
 ;***************************************************************************
-    FCC "g GCE 1982"
-    FCB $80
-    FDB music1
-    FCB $F8
-    FCB $50
-    FCB $20
-    FCB $BB
+    FCC "g GCE 2025"
+    FCB $80                 ; String terminator
+    FDB music1              ; Music pointer
+    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
     FCC "RAND"
-    FCB $80
-    FCB 0
+    FCB $80                 ; String terminator
+    FCB 0                   ; End of header
 
 ;***************************************************************************
 ; CODE SECTION
 ;***************************************************************************
 
-; === RAM VARIABLE DEFINITIONS (EQU) ===
-; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 64 bytes
+START:
+    LDA #$D0
+    TFR A,DP        ; Set Direct Page for BIOS
+    CLR $C80E        ; Initialize Vec_Prev_Btns
+    LDA #$80
+    STA VIA_t1_cnt_lo
+    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
+    TFR X,S
+    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
+    LDA #0
+    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
+    JMP MAIN
+
+;***************************************************************************
+; === RAM VARIABLE DEFINITIONS ===
+;***************************************************************************
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
-TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
-VPY_MOVE_X           EQU $C880+$0A   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$0B   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$0C   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity as i16x5) (10 bytes)
-RAND_SEED            EQU $C880+$16   ; Random seed for RAND() LCG (2 bytes)
-NUM_STR              EQU $C880+$18   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$1E   ; Circle center X (byte) (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$1F   ; Circle center Y (byte) (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$20   ; Circle diameter (byte) (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$21   ; Circle intensity (byte) (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$22   ; Circle drawing temporaries (radius=2, xc=2, yc=2, spare=2) (8 bytes)
-VAR_RX1              EQU $C880+$2A   ; User variable (2 bytes)
-VAR_RY1              EQU $C880+$2C   ; User variable (2 bytes)
-VAR_RX2              EQU $C880+$2E   ; User variable (2 bytes)
-VAR_RY2              EQU $C880+$30   ; User variable (2 bytes)
-VAR_RX3              EQU $C880+$32   ; User variable (2 bytes)
-VAR_RY4              EQU $C880+$34   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$36   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$38   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$3A   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$3C   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$3E   ; Function argument 4 (2 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
+RAND_SEED            EQU $C880+$0C   ; Random seed for RAND() (2 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$0E   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$0F   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$10   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$11   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$12   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$13   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$25   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$27   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$29   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_RX1              EQU $C880+$2F   ; User variable: RX1 (2 bytes)
+VAR_RY1              EQU $C880+$31   ; User variable: RY1 (2 bytes)
+VAR_RX2              EQU $C880+$33   ; User variable: RX2 (2 bytes)
+VAR_RY2              EQU $C880+$35   ; User variable: RY2 (2 bytes)
+VAR_RX3              EQU $C880+$37   ; User variable: RX3 (2 bytes)
+VAR_RY4              EQU $C880+$39   ; User variable: RY4 (2 bytes)
+VAR_RY3              EQU $C880+$3B   ; User variable: RY3 (2 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
-    JMP START
 
-;**** CONST DECLARATIONS (NUMBER-ONLY) ****
+;***************************************************************************
+; MAIN PROGRAM
+;***************************************************************************
 
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
-J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
-J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; === BUTTON SYSTEM - BIOS TRANSITIONS ===
-; J1_BUTTON_1-4() - Read transition bits from $C811
-; Read_Btns (auto-injected) calculates: ~(new) OR Vec_Prev_Btns
-; Result: bit=1 ONLY on rising edge (0→1 transition)
-; Returns: D = 1 (just pressed), 0 (not pressed or still held)
-
-J1B1_BUILTIN:
-    LDA $C811      ; Read transition bits (Vec_Button_1_1)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    BEQ .J1B1_OFF
-    LDD #1         ; Return pressed (rising edge)
-    RTS
-.J1B1_OFF:
-    LDD #0         ; Return not pressed
-    RTS
-
-J1B2_BUILTIN:
-    LDA $C811
-    ANDA #$02      ; Test bit 1 (Button 2)
-    BEQ .J1B2_OFF
-    LDD #1
-    RTS
-.J1B2_OFF:
+MAIN:
+    ; Initialize global variables
+    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
     LDD #0
+    STD VAR_RX1
+    LDD #0
+    STD VAR_RY1
+    LDD #0
+    STD VAR_RX2
+    LDD #0
+    STD VAR_RY2
+    LDD #0
+    STD VAR_RX3
+    LDD #0
+    STD VAR_RY4
+    ; === Initialize Joystick (one-time setup) ===
+    JSR $F1AF    ; DP_to_C8 (required for RAM access)
+    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
+    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
+    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
+    LDA #$01
+    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
+    LDA #$03
+    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
+    LDA #$00
+    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
+    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
+    ; Mux configured - J1_X()/J1_Y() can now be called
+
+    ; Call main() for initialization
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_RX1
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_RY1
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_RX2
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_RY2
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_RX3
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_RY4
+
+.MAIN_LOOP:
+    JSR LOOP_BODY
+    LBRA .MAIN_LOOP   ; Use long branch for multibank support
+
+LOOP_BODY:
+    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
+    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
+    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
+    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    ; PRINT_TEXT: Print text at position
+    LDD #-50
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #90
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2410010819      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #-80
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR     ; Save min
+    LDD #80
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDD RESULT
+    STD VAR_RX1
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR     ; Save min
+    LDD #60
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDD RESULT
+    STD VAR_RY1
+    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
+    LDD >VAR_RX1
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_XC
+    LDD >VAR_RY1
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_YC
+    LDD #20
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_DIAM
+    LDD #100
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_INTENSITY
+    JSR DRAW_CIRCLE_RUNTIME
+    LDD #0
+    STD RESULT
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #-80
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR     ; Save min
+    LDD #80
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDD RESULT
+    STD VAR_RX2
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR     ; Save min
+    LDD #60
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDD RESULT
+    STD VAR_RY2
+    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
+    LDD >VAR_RX2
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_XC
+    LDD >VAR_RY2
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_YC
+    LDD #20
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_DIAM
+    LDD #80
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_INTENSITY
+    JSR DRAW_CIRCLE_RUNTIME
+    LDD #0
+    STD RESULT
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #-80
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR     ; Save min
+    LDD #80
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDD RESULT
+    STD VAR_RX3
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR     ; Save min
+    LDD #60
+    STD RESULT
+    LDD RESULT
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDD RESULT
+    STD VAR_RY3
+    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
+    LDD >VAR_RX3
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_XC
+    LDD >VAR_RY3
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_YC
+    LDD #20
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_DIAM
+    LDD #60
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_INTENSITY
+    JSR DRAW_CIRCLE_RUNTIME
+    LDD #0
+    STD RESULT
     RTS
 
-J1B3_BUILTIN:
-    LDA $C811
-    ANDA #$04      ; Test bit 2 (Button 3)
-    BEQ .J1B3_OFF
-    LDD #1
-    RTS
-.J1B3_OFF:
-    LDD #0
-    RTS
-
-J1B4_BUILTIN:
-    LDA $C811
-    ANDA #$08      ; Test bit 3 (Button 4)
-    BEQ .J1B4_OFF
-    LDD #1
-    RTS
-.J1B4_OFF:
-    LDD #0
-    RTS
+;***************************************************************************
+; RUNTIME HELPERS
+;***************************************************************************
 
 VECTREX_PRINT_TEXT:
-    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)
-    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
+    ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
+    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
+    ;       causing integrators to drift toward joystick DAC value.
+    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Reset0Ref  ; Reset beam to center for absolute text positioning
-    LDU VAR_ARG2   ; string pointer (ARG2 = third param)
-    LDA VAR_ARG1+1 ; Y (ARG1 = second param)
-    LDB VAR_ARG0+1 ; X (ARG0 = first param)
+    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
+    JSR Reset0Ref   ; Reset beam to center before positioning text
+    LDU VAR_ARG2   ; string pointer
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
     LDA #$80
-    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)
-    JSR $F1AF      ; DP_to_C8 (restore before return)
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
-; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
-__Intensity_a:
-TFR B,A         ; Move B to A (BIOS expects intensity in A)
-JMP Intensity_a ; JMP (not JSR) - BIOS returns to original caller
-__Reset0Ref:
-JMP Reset0Ref   ; JMP (not JSR) - BIOS returns to original caller
-__Moveto_d:
-LDA 2,S         ; Get Y from stack (after return address)
-JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
-__Draw_Line_d:
-LDA 2,S         ; Get dy from stack (after return address)
-JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
+
+MOD16:
+    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
+    ; X = dividend (i16), D = divisor (i16) -> D = remainder
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .M16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1
+    BRA .M16_RCHECK
+.M16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.M16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .M16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+.M16_RPOS:
+.M16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .M16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    BRA .M16_LOOP
+.M16_END:
+    LDD TMPVAL          ; D = |remainder|
+    LDA TMPPTR2
+    BEQ .M16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate (same sign as dividend)
+.M16_DONE:
+    RTS
+
+RAND_HELPER:
+    ; LCG: seed = (seed * 1103515245 + 12345) & 0x7FFF
+    ; Simplified for 6809: seed = (seed * 25 + 13) & 0x7FFF
+    LDD RAND_SEED
+    LDX #26
+    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)
+    PSHS D
+    LDD #0
+RAND_MUL_LOOP:
+    LEAX -1,X
+    BEQ RAND_MUL_DONE
+    ADDD ,S
+    BRA RAND_MUL_LOOP
+RAND_MUL_DONE:
+    LEAS 2,S
+    ADDD #13       ; Add constant c=13 (odd, Hull-Dobell ok)
+    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output
+    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)
+    RTS
+
+RAND_RANGE_HELPER:
+    ; Input: TMPPTR = min (i16), TMPPTR2 = max (i16)
+    ; Returns: D = min + (rand % (max - min + 1))
+    JSR RAND_HELPER        ; D = rand (0..$7FFF)
+    PSHS D                 ; Save rand
+    LDD TMPPTR2            ; max
+    SUBD TMPPTR            ; D = max - min
+    ADDD #1                ; D = inclusive range
+    STD TMPPTR2            ; TMPPTR2 = range
+    PULS D                 ; Restore rand
+RRH_MOD:
+    SUBD TMPPTR2           ; D -= range
+    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting
+    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range
+    ADDD TMPPTR            ; Add min -> D in [min, max]
+    RTS
+
 ; ============================================================================
 ; DRAW_CIRCLE_RUNTIME - Draw circle with runtime parameters
 ; ============================================================================
@@ -356,325 +597,8 @@ LDA #$C8
 TFR A,DP           ; Restore DP=$C8 before return
 RTS
 
-; === RAND_HELPER - LCG random number generator ===
-; Returns D = random value 0..$7FFF
-RAND_HELPER:
-    LDD RAND_SEED
-    LDX #26
-    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)
-    PSHS D
-    LDD #0
-RAND_MUL_LOOP:
-    LEAX -1,X
-    BEQ RAND_MUL_DONE
-    ADDD ,S
-    BRA RAND_MUL_LOOP
-RAND_MUL_DONE:
-    LEAS 2,S
-    ADDD #13
-    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output
-    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)
-    RTS
-
-; === RAND_RANGE_HELPER - Random in [min, max] ===
-; Inputs: TMPPTR = min (i16), TMPPTR2 = max (i16)
-; Returns: D = min + (rand % (max - min + 1))
-RAND_RANGE_HELPER:
-    JSR RAND_HELPER        ; D = rand (0..$7FFF)
-    PSHS D                 ; Save rand
-    LDD TMPPTR2            ; max
-    SUBD TMPPTR            ; D = max - min
-    ADDD #1                ; D = inclusive range
-    STD TMPPTR2            ; TMPPTR2 = range
-    PULS D                 ; Restore rand
-RRH_MOD:
-    SUBD TMPPTR2           ; D -= range
-    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting
-    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range
-    ADDD TMPPTR            ; Add min -> D in [min, max]
-    RTS
-
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
-    CLR $C80E        ; Initialize Vec_Prev_Btns to 0 for Read_Btns debounce
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk
-    TFR X,S
-
-    ; *** DEBUG *** main() function code inline (initialization)
-    ; VPy_LINE:15
-    ; VPy_LINE:8
-    LDD #0
-    STD VAR_RX1
-    ; VPy_LINE:9
-    LDD #0
-    STD VAR_RY1
-    ; VPy_LINE:10
-    LDD #0
-    STD VAR_RX2
-    ; VPy_LINE:11
-    LDD #0
-    STD VAR_RY2
-    ; VPy_LINE:12
-    LDD #0
-    STD VAR_RX3
-    ; VPy_LINE:13
-    LDD #0
-    STD VAR_RY4
-    ; VPy_LINE:16
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RX1
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:17
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RY1
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:18
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RX2
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:19
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RY2
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:20
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RX3
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:21
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RY4
-    STU TMPPTR
-    STX ,U
-
-MAIN:
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    ; === Initialize Joystick (one-time setup) ===
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
-    ; *** Call loop() as subroutine (executed every frame)
-    JSR LOOP_BODY
-    BRA MAIN
-
-    ; VPy_LINE:23
-LOOP_BODY:
-    LEAS -2,S ; allocate locals
-    JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:24
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #90
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_0
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 24
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(0)
-    ; VPy_LINE:27
-    ; RAND_RANGE(min, max)
-    LDD #-80
-    STD RESULT
-    STD TMPPTR
-    LDD #80
-    STD RESULT
-    STD TMPPTR2
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RX1
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 2 - Discriminant(0)
-    ; VPy_LINE:28
-    ; RAND_RANGE(min, max)
-    LDD #-60
-    STD RESULT
-    STD TMPPTR
-    LDD #60
-    STD RESULT
-    STD TMPPTR2
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RY1
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 3 - Discriminant(8)
-    ; VPy_LINE:29
-    LDD VAR_RX1
-    STD RESULT
-    LDB RESULT+1  ; xc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_XC
-    LDD VAR_RY1
-    STD RESULT
-    LDB RESULT+1  ; yc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_YC
-    LDD #20
-    STD RESULT
-    LDB RESULT+1  ; diameter (low byte, 0..255)
-    STB DRAW_CIRCLE_DIAM
-    LDD #100
-    STD RESULT
-    LDB RESULT+1  ; intensity (low byte, 0..127)
-    STB DRAW_CIRCLE_INTENSITY
-    JSR DRAW_CIRCLE_RUNTIME
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 4 - Discriminant(0)
-    ; VPy_LINE:31
-    ; RAND_RANGE(min, max)
-    LDD #-80
-    STD RESULT
-    STD TMPPTR
-    LDD #80
-    STD RESULT
-    STD TMPPTR2
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RX2
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 5 - Discriminant(0)
-    ; VPy_LINE:32
-    ; RAND_RANGE(min, max)
-    LDD #-60
-    STD RESULT
-    STD TMPPTR
-    LDD #60
-    STD RESULT
-    STD TMPPTR2
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RY2
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 6 - Discriminant(8)
-    ; VPy_LINE:33
-    LDD VAR_RX2
-    STD RESULT
-    LDB RESULT+1  ; xc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_XC
-    LDD VAR_RY2
-    STD RESULT
-    LDB RESULT+1  ; yc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_YC
-    LDD #20
-    STD RESULT
-    LDB RESULT+1  ; diameter (low byte, 0..255)
-    STB DRAW_CIRCLE_DIAM
-    LDD #80
-    STD RESULT
-    LDB RESULT+1  ; intensity (low byte, 0..127)
-    STB DRAW_CIRCLE_INTENSITY
-    JSR DRAW_CIRCLE_RUNTIME
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 7 - Discriminant(0)
-    ; VPy_LINE:35
-    ; RAND_RANGE(min, max)
-    LDD #-80
-    STD RESULT
-    STD TMPPTR
-    LDD #80
-    STD RESULT
-    STD TMPPTR2
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_RX3
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 8 - Discriminant(0)
-    ; VPy_LINE:36
-    ; RAND_RANGE(min, max)
-    LDD #-60
-    STD RESULT
-    STD TMPPTR
-    LDD #60
-    STD RESULT
-    STD TMPPTR2
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    LDX RESULT
-    STX 0 ,S
-    ; DEBUG: Statement 9 - Discriminant(8)
-    ; VPy_LINE:37
-    LDD VAR_RX3
-    STD RESULT
-    LDB RESULT+1  ; xc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_XC
-    LDD 0 ,S
-    STD RESULT
-    LDB RESULT+1  ; yc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_YC
-    LDD #20
-    STD RESULT
-    LDB RESULT+1  ; diameter (low byte, 0..255)
-    STB DRAW_CIRCLE_DIAM
-    LDD #60
-    STD RESULT
-    LDB RESULT+1  ; intensity (low byte, 0..127)
-    STB DRAW_CIRCLE_INTENSITY
-    JSR DRAW_CIRCLE_RUNTIME
-    LDD #0
-    STD RESULT
-    LEAS 2,S ; free locals
-    RTS
-
-;***************************************************************************
-; DATA SECTION
-;***************************************************************************
-; String literals (classic FCC + $80 terminator)
-STR_0:
+;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_2410010819:
     FCC "RANDOM"
-    FCB $80
+    FCB $80          ; Vectrex string terminator
+

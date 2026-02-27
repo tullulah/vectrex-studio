@@ -20,9 +20,3 @@ def loop():
     DRAW_LINE(-35, -49, 35, -49, 80)
     DRAW_LINE(35, -49, 57, 19, 80)
     DRAW_LINE(57, 19, 0, 60, 80)
-
-    #PRINT_TEXT( -60, 0, "TEST")    
-    #PRINT_NUMBER(0, 0, 123) 
-   
-
- 

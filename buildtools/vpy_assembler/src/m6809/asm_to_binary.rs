@@ -550,6 +550,7 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
         
         // === ARITHMETIC ===
         "ADDA" => emit_adda(emitter, operand, equates),
+        "ADCA" => emit_adca(emitter, operand, equates),
         "ADDB" => emit_addb(emitter, operand, equates),
         "ADDD" => emit_addd(emitter, operand, equates),
         "SUBA" => emit_suba(emitter, operand, equates),
@@ -1596,6 +1597,43 @@ fn emit_adda(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
                 if msg.starts_with("SYMBOL:") {
                     let (symbol, addend) = parse_symbol_and_addend(&msg)?;
                     emitter.emit_extended_symbol_ref(0xBB, &symbol, addend); // ADDA extended
+                    Ok(())
+                } else {
+                    Err(msg)
+                }
+            }
+        }
+    }
+}
+
+fn emit_adca(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
+    if operand.starts_with('#') {
+        let val = parse_immediate(&operand[1..])?;
+        emitter.adca_immediate(val);
+        Ok(())
+    } else if operand.contains(',') {
+        // Indexed mode: ADCA ,X  ADCA 5,Y  etc.
+        let (postbyte, offset) = parse_indexed_mode(operand)?;
+        emitter.adca_indexed(postbyte);
+        if let Some(off) = offset {
+            emitter.emit(off as u8);
+        }
+        Ok(())
+    } else if operand.starts_with('<') {
+        // Forced direct page (lwasm compatibility)
+        let addr = resolve_address(&operand[1..], equates)?;
+        emitter.adca_direct((addr & 0xFF) as u8);
+        Ok(())
+    } else {
+        match evaluate_expression(operand, equates) {
+            Ok(addr) => {
+                emitter.adca_extended(addr);
+                Ok(())
+            }
+            Err(msg) => {
+                if msg.starts_with("SYMBOL:") {
+                    let (symbol, addend) = parse_symbol_and_addend(&msg)?;
+                    emitter.emit_extended_symbol_ref(0xB9, &symbol, addend); // ADCA extended
                     Ok(())
                 } else {
                     Err(msg)

@@ -284,8 +284,8 @@ impl VPlayLevel {
                 // All physicsType options enable physics (bit 0)
                 physics_flags |= 0x01; // Bit 0: physics enabled
                 
-                // Check if gravity is enabled
-                if physics_type == "gravity" || physics_type == "projectile" {
+                // Check if gravity is enabled via physicsType or gravity field
+                if physics_type == "gravity" || physics_type == "projectile" || obj.gravity != 0.0 {
                     physics_flags |= 0x02; // Bit 1: gravity enabled
                 }
             }
@@ -311,18 +311,15 @@ impl VPlayLevel {
         }
         
         // CRITICAL: Also check flat Playground format (can coexist with nested collision)
+        // NOTE: collidable=true applies even when physics_enabled=false (static collision walls/platforms)
+        if obj.collidable {
+            collision_flags |= 0x01; // Bit 0: collision enabled
+        }
         if obj.physics_enabled {
-            // Playground flat format
-            if obj.collidable {
-                collision_flags |= 0x01; // Bit 0: collision enabled
-            }
-            
             // Check physicsType for bounce behavior
-            // All physics types with collision should bounce on world bounds
             if let Some(ref physics_type) = obj.physics_type {
                 if physics_type == "bounce" || physics_type == "gravity" || physics_type == "projectile" {
                     collision_flags |= 0x02; // Bit 1: bounce on Y walls (top/bottom)
-                    // Bit 3 NOT set = also bounce on X walls (left/right)
                 }
             }
         }

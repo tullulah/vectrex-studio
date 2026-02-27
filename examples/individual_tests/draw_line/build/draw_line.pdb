@@ -3,108 +3,578 @@
   "source": "main.vpy",
   "asm": "draw_line.asm",
   "binary": "draw_line.bin",
-  "entryPoint": "0x0143",
+  "entryPoint": "0x0146",
   "symbols": {
-    "VECTREX_PRINT_NUMBER.PN_L1000": "0x00C7",
     "J1B3_BUILTIN": "0x006D",
-    "J1X_BUILTIN": "0x001F",
-    "VECTREX_PRINT_NUMBER.PN_D10": "0x0104",
-    "VECTREX_PRINT_NUMBER.PN_L10": "0x00F5",
-    "LOOP_BODY": "0x0181",
-    "__Reset0Ref": "0x0136",
-    "J1B4_BUILTIN": "0x007C",
-    "__Intensity_a": "0x0131",
     "J1Y_BUILTIN": "0x0037",
-    "__Moveto_d": "0x0139",
-    "J1B4_BUILTIN.J1B4_OFF": "0x0087",
-    "STR_0": "0x02DB",
-    "J1B2_BUILTIN.J1B2_OFF": "0x0069",
-    "__Draw_Line_d": "0x013E",
-    "J1B3_BUILTIN.J1B3_OFF": "0x0078",
-    "VECTREX_PRINT_NUMBER.PN_D100": "0x00ED",
-    "J1B2_BUILTIN": "0x005E",
-    "J1B1_BUILTIN": "0x004F",
-    "VECTREX_PRINT_NUMBER.PN_D1000": "0x00D6",
-    "MAIN": "0x0154",
-    "VECTREX_PRINT_NUMBER.PN_DIV1000": "0x00C5",
+    "MAIN": "0x0157",
+    "VECTREX_PRINT_NUMBER.PN_D1000": "0x00D9",
+    "VECTREX_PRINT_NUMBER": "0x00AA",
+    "__Intensity_a": "0x0134",
     "VECTREX_PRINT_TEXT": "0x008B",
-    "VECTREX_PRINT_NUMBER.PN_L100": "0x00DE",
-    "VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT": "0x0115",
+    "LOOP_BODY": "0x0184",
+    "VECTREX_PRINT_NUMBER.PN_D100": "0x00F0",
+    "VECTREX_PRINT_NUMBER.PN_DIV1000": "0x00C8",
+    "J1B2_BUILTIN": "0x005E",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0078",
+    "VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT": "0x0118",
+    "__Moveto_d": "0x013C",
+    "VECTREX_PRINT_NUMBER.PN_L100": "0x00E1",
+    "START": "0x0146",
+    "J1X_BUILTIN": "0x001F",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0069",
     "J1B1_BUILTIN.J1B1_OFF": "0x005A",
-    "START": "0x0143",
-    "VECTREX_PRINT_NUMBER": "0x00A7"
+    "J1B1_BUILTIN": "0x004F",
+    "VECTREX_PRINT_NUMBER.PN_L1000": "0x00CA",
+    "VECTREX_PRINT_NUMBER.PN_L10": "0x00F8",
+    "__Draw_Line_d": "0x0141",
+    "VECTREX_PRINT_NUMBER.PN_D10": "0x0107",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0087",
+    "STR_0": "0x02DE",
+    "J1B4_BUILTIN": "0x007C",
+    "__Reset0Ref": "0x0139"
   },
   "lineMap": {
-    "15": "0x018D",
-    "19": "0x0209",
-    "20": "0x022F",
-    "21": "0x025A",
-    "22": "0x0282",
-    "16": "0x01B9",
-    "18": "0x01E5"
+    "19": "0x020C",
+    "22": "0x0285",
+    "21": "0x025D",
+    "15": "0x0190",
+    "20": "0x0232",
+    "18": "0x01E8",
+    "16": "0x01BC"
   },
   "vpyLineMap": {
-    "0x022F": {
+    "0x0190": {
       "file": "main.vpy",
-      "address": "0x022F",
-      "line": 20
-    },
-    "0x025A": {
-      "file": "main.vpy",
-      "address": "0x025A",
-      "line": 21
-    },
-    "0x0282": {
-      "file": "main.vpy",
-      "address": "0x0282",
-      "line": 22
-    },
-    "0x018D": {
-      "file": "main.vpy",
-      "address": "0x018D",
+      "address": "0x0190",
       "line": 15
     },
-    "0x01B9": {
+    "0x0232": {
       "file": "main.vpy",
-      "address": "0x01B9",
+      "address": "0x0232",
+      "line": 20
+    },
+    "0x01BC": {
+      "file": "main.vpy",
+      "address": "0x01BC",
       "line": 16
     },
-    "0x01E5": {
+    "0x020C": {
       "file": "main.vpy",
-      "address": "0x01E5",
+      "address": "0x020C",
+      "line": 19
+    },
+    "0x0285": {
+      "file": "main.vpy",
+      "address": "0x0285",
+      "line": 22
+    },
+    "0x01E8": {
+      "file": "main.vpy",
+      "address": "0x01E8",
       "line": 18
     },
-    "0x0209": {
+    "0x025D": {
       "file": "main.vpy",
-      "address": "0x0209",
-      "line": 19
+      "address": "0x025D",
+      "line": 21
     }
   },
   "asmLineMap": {
-    "0x017C": {
+    "0x0141": {
       "file": "draw_line.asm",
-      "address": "0x017C",
-      "line": 40
+      "address": "0x0141",
+      "line": 225
     },
-    "0x010F": {
+    "0x0219": {
       "file": "draw_line.asm",
-      "address": "0x010F",
+      "address": "0x0219",
+      "line": 339
+    },
+    "0x0105": {
+      "file": "draw_line.asm",
+      "address": "0x0105",
+      "line": 205
+    },
+    "0x0148": {
+      "file": "draw_line.asm",
+      "address": "0x0148",
+      "line": 11
+    },
+    "0x029D": {
+      "file": "draw_line.asm",
+      "address": "0x029D",
+      "line": 414
+    },
+    "0x0292": {
+      "file": "draw_line.asm",
+      "address": "0x0292",
+      "line": 408
+    },
+    "0x0027": {
+      "file": "draw_line.asm",
+      "address": "0x0027",
+      "line": 55
+    },
+    "0x0253": {
+      "file": "draw_line.asm",
+      "address": "0x0253",
+      "line": 370
+    },
+    "0x008B": {
+      "file": "draw_line.asm",
+      "address": "0x008B",
+      "line": 127
+    },
+    "0x00F8": {
+      "file": "draw_line.asm",
+      "address": "0x00F8",
+      "line": 195
+    },
+    "0x021D": {
+      "file": "draw_line.asm",
+      "address": "0x021D",
+      "line": 341
+    },
+    "0x0068": {
+      "file": "draw_line.asm",
+      "address": "0x0068",
+      "line": 100
+    },
+    "0x022E": {
+      "file": "draw_line.asm",
+      "address": "0x022E",
+      "line": 351
+    },
+    "0x00FC": {
+      "file": "draw_line.asm",
+      "address": "0x00FC",
+      "line": 198
+    },
+    "0x0103": {
+      "file": "draw_line.asm",
+      "address": "0x0103",
+      "line": 204
+    },
+    "0x027B": {
+      "file": "draw_line.asm",
+      "address": "0x027B",
+      "line": 393
+    },
+    "0x01A2": {
+      "file": "draw_line.asm",
+      "address": "0x01A2",
+      "line": 280
+    },
+    "0x024C": {
+      "file": "draw_line.asm",
+      "address": "0x024C",
+      "line": 367
+    },
+    "0x002A": {
+      "file": "draw_line.asm",
+      "address": "0x002A",
+      "line": 56
+    },
+    "0x01FF": {
+      "file": "draw_line.asm",
+      "address": "0x01FF",
+      "line": 325
+    },
+    "0x01E4": {
+      "file": "draw_line.asm",
+      "address": "0x01E4",
+      "line": 308
+    },
+    "0x0152": {
+      "file": "draw_line.asm",
+      "address": "0x0152",
+      "line": 233
+    },
+    "0x00FB": {
+      "file": "draw_line.asm",
+      "address": "0x00FB",
+      "line": 197
+    },
+    "0x01CB": {
+      "file": "draw_line.asm",
+      "address": "0x01CB",
+      "line": 298
+    },
+    "0x007F": {
+      "file": "draw_line.asm",
+      "address": "0x007F",
+      "line": 115
+    },
+    "0x0222": {
+      "file": "draw_line.asm",
+      "address": "0x0222",
+      "line": 343
+    },
+    "0x00F2": {
+      "file": "draw_line.asm",
+      "address": "0x00F2",
+      "line": 190
+    },
+    "0x0164": {
+      "file": "draw_line.asm",
+      "address": "0x0164",
+      "line": 248
+    },
+    "0x0092": {
+      "file": "draw_line.asm",
+      "address": "0x0092",
+      "line": 130
+    },
+    "0x002D": {
+      "file": "draw_line.asm",
+      "address": "0x002D",
+      "line": 57
+    },
+    "0x01FD": {
+      "file": "draw_line.asm",
+      "address": "0x01FD",
+      "line": 324
+    },
+    "0x00C2": {
+      "file": "draw_line.asm",
+      "address": "0x00C2",
+      "line": 154
+    },
+    "0x0070": {
+      "file": "draw_line.asm",
+      "address": "0x0070",
+      "line": 105
+    },
+    "0x0193": {
+      "file": "draw_line.asm",
+      "address": "0x0193",
+      "line": 275
+    },
+    "0x009E": {
+      "file": "draw_line.asm",
+      "address": "0x009E",
+      "line": 134
+    },
+    "0x0077": {
+      "file": "draw_line.asm",
+      "address": "0x0077",
+      "line": 110
+    },
+    "0x00E1": {
+      "file": "draw_line.asm",
+      "address": "0x00E1",
+      "line": 178
+    },
+    "0x01C2": {
+      "file": "draw_line.asm",
+      "address": "0x01C2",
+      "line": 295
+    },
+    "0x01EC": {
+      "file": "draw_line.asm",
+      "address": "0x01EC",
+      "line": 314
+    },
+    "0x01DA": {
+      "file": "draw_line.asm",
+      "address": "0x01DA",
+      "line": 303
+    },
+    "0x0202": {
+      "file": "draw_line.asm",
+      "address": "0x0202",
+      "line": 328
+    },
+    "0x018D": {
+      "file": "draw_line.asm",
+      "address": "0x018D",
+      "line": 270
+    },
+    "0x023B": {
+      "file": "draw_line.asm",
+      "address": "0x023B",
+      "line": 360
+    },
+    "0x026A": {
+      "file": "draw_line.asm",
+      "address": "0x026A",
+      "line": 386
+    },
+    "0x001F": {
+      "file": "draw_line.asm",
+      "address": "0x001F",
+      "line": 52
+    },
+    "0x0200": {
+      "file": "draw_line.asm",
+      "address": "0x0200",
+      "line": 326
+    },
+    "0x00E4": {
+      "file": "draw_line.asm",
+      "address": "0x00E4",
+      "line": 180
+    },
+    "0x0275": {
+      "file": "draw_line.asm",
+      "address": "0x0275",
+      "line": 391
+    },
+    "0x0111": {
+      "file": "draw_line.asm",
+      "address": "0x0111",
       "line": 212
     },
-    "0x0281": {
+    "0x00CA": {
       "file": "draw_line.asm",
-      "address": "0x0281",
-      "line": 396
+      "address": "0x00CA",
+      "line": 162
     },
-    "0x0252": {
+    "0x0257": {
       "file": "draw_line.asm",
-      "address": "0x0252",
-      "line": 371
+      "address": "0x0257",
+      "line": 373
     },
-    "0x00AA": {
+    "0x0054": {
       "file": "draw_line.asm",
-      "address": "0x00AA",
-      "line": 143
+      "address": "0x0054",
+      "line": 87
+    },
+    "0x0247": {
+      "file": "draw_line.asm",
+      "address": "0x0247",
+      "line": 365
+    },
+    "0x026C": {
+      "file": "draw_line.asm",
+      "address": "0x026C",
+      "line": 387
+    },
+    "0x004B": {
+      "file": "draw_line.asm",
+      "address": "0x004B",
+      "line": 75
+    },
+    "0x0098": {
+      "file": "draw_line.asm",
+      "address": "0x0098",
+      "line": 132
+    },
+    "0x01EF": {
+      "file": "draw_line.asm",
+      "address": "0x01EF",
+      "line": 315
+    },
+    "0x0273": {
+      "file": "draw_line.asm",
+      "address": "0x0273",
+      "line": 390
+    },
+    "0x013C": {
+      "file": "draw_line.asm",
+      "address": "0x013C",
+      "line": 222
+    },
+    "0x0139": {
+      "file": "draw_line.asm",
+      "address": "0x0139",
+      "line": 220
+    },
+    "0x00E9": {
+      "file": "draw_line.asm",
+      "address": "0x00E9",
+      "line": 186
+    },
+    "0x0293": {
+      "file": "draw_line.asm",
+      "address": "0x0293",
+      "line": 409
+    },
+    "0x0261": {
+      "file": "draw_line.asm",
+      "address": "0x0261",
+      "line": 381
+    },
+    "0x0071": {
+      "file": "draw_line.asm",
+      "address": "0x0071",
+      "line": 106
+    },
+    "0x022D": {
+      "file": "draw_line.asm",
+      "address": "0x022D",
+      "line": 350
+    },
+    "0x02A6": {
+      "file": "draw_line.asm",
+      "address": "0x02A6",
+      "line": 418
+    },
+    "0x0042": {
+      "file": "draw_line.asm",
+      "address": "0x0042",
+      "line": 70
+    },
+    "0x028E": {
+      "file": "draw_line.asm",
+      "address": "0x028E",
+      "line": 405
+    },
+    "0x0208": {
+      "file": "draw_line.asm",
+      "address": "0x0208",
+      "line": 330
+    },
+    "0x0169": {
+      "file": "draw_line.asm",
+      "address": "0x0169",
+      "line": 32
+    },
+    "0x0284": {
+      "file": "draw_line.asm",
+      "address": "0x0284",
+      "line": 397
+    },
+    "0x0255": {
+      "file": "draw_line.asm",
+      "address": "0x0255",
+      "line": 372
+    },
+    "0x0213": {
+      "file": "draw_line.asm",
+      "address": "0x0213",
+      "line": 337
+    },
+    "0x01B9": {
+      "file": "draw_line.asm",
+      "address": "0x01B9",
+      "line": 290
+    },
+    "0x0229": {
+      "file": "draw_line.asm",
+      "address": "0x0229",
+      "line": 347
+    },
+    "0x0171": {
+      "file": "draw_line.asm",
+      "address": "0x0171",
+      "line": 253
+    },
+    "0x0072": {
+      "file": "draw_line.asm",
+      "address": "0x0072",
+      "line": 107
+    },
+    "0x00E6": {
+      "file": "draw_line.asm",
+      "address": "0x00E6",
+      "line": 182
+    },
+    "0x00DD": {
+      "file": "draw_line.asm",
+      "address": "0x00DD",
+      "line": 176
+    },
+    "0x00A9": {
+      "file": "draw_line.asm",
+      "address": "0x00A9",
+      "line": 138
+    },
+    "0x028D": {
+      "file": "draw_line.asm",
+      "address": "0x028D",
+      "line": 404
+    },
+    "0x0230": {
+      "file": "draw_line.asm",
+      "address": "0x0230",
+      "line": 352
+    },
+    "0x01B4": {
+      "file": "draw_line.asm",
+      "address": "0x01B4",
+      "line": 287
+    },
+    "0x00A1": {
+      "file": "draw_line.asm",
+      "address": "0x00A1",
+      "line": 135
+    },
+    "0x0182": {
+      "file": "draw_line.asm",
+      "address": "0x0182",
+      "line": 263
+    },
+    "0x015A": {
+      "file": "draw_line.asm",
+      "address": "0x015A",
+      "line": 244
+    },
+    "0x025C": {
+      "file": "draw_line.asm",
+      "address": "0x025C",
+      "line": 375
+    },
+    "0x0155": {
+      "file": "draw_line.asm",
+      "address": "0x0155",
+      "line": 16
+    },
+    "0x00C0": {
+      "file": "draw_line.asm",
+      "address": "0x00C0",
+      "line": 152
+    },
+    "0x0288": {
+      "file": "draw_line.asm",
+      "address": "0x0288",
+      "line": 402
+    },
+    "0x0231": {
+      "file": "draw_line.asm",
+      "address": "0x0231",
+      "line": 353
+    },
+    "0x01E3": {
+      "file": "draw_line.asm",
+      "address": "0x01E3",
+      "line": 307
+    },
+    "0x0295": {
+      "file": "draw_line.asm",
+      "address": "0x0295",
+      "line": 411
+    },
+    "0x026E": {
+      "file": "draw_line.asm",
+      "address": "0x026E",
+      "line": 388
+    },
+    "0x01EA": {
+      "file": "draw_line.asm",
+      "address": "0x01EA",
+      "line": 313
+    },
+    "0x0239": {
+      "file": "draw_line.asm",
+      "address": "0x0239",
+      "line": 359
+    },
+    "0x00FD": {
+      "file": "draw_line.asm",
+      "address": "0x00FD",
+      "line": 199
+    },
+    "0x00BB": {
+      "file": "draw_line.asm",
+      "address": "0x00BB",
+      "line": 150
+    },
+    "0x00A3": {
+      "file": "draw_line.asm",
+      "address": "0x00A3",
+      "line": 136
     },
     "0x0024": {
       "file": "draw_line.asm",
@@ -116,1405 +586,940 @@
       "address": "0x0052",
       "line": 85
     },
-    "0x027F": {
+    "0x027D": {
       "file": "draw_line.asm",
-      "address": "0x027F",
-      "line": 395
+      "address": "0x027D",
+      "line": 394
     },
-    "0x026B": {
+    "0x025D": {
       "file": "draw_line.asm",
-      "address": "0x026B",
-      "line": 387
+      "address": "0x025D",
+      "line": 378
     },
-    "0x0071": {
+    "0x0240": {
       "file": "draw_line.asm",
-      "address": "0x0071",
-      "line": 106
-    },
-    "0x0145": {
-      "file": "draw_line.asm",
-      "address": "0x0145",
-      "line": 228
-    },
-    "0x00CB": {
-      "file": "draw_line.asm",
-      "address": "0x00CB",
-      "line": 163
-    },
-    "0x028F": {
-      "file": "draw_line.asm",
-      "address": "0x028F",
-      "line": 407
-    },
-    "0x0161": {
-      "file": "draw_line.asm",
-      "address": "0x0161",
-      "line": 30
-    },
-    "0x029F": {
-      "file": "draw_line.asm",
-      "address": "0x029F",
-      "line": 415
-    },
-    "0x00F8": {
-      "file": "draw_line.asm",
-      "address": "0x00F8",
-      "line": 196
-    },
-    "0x00E5": {
-      "file": "draw_line.asm",
-      "address": "0x00E5",
-      "line": 183
-    },
-    "0x0261": {
-      "file": "draw_line.asm",
-      "address": "0x0261",
-      "line": 383
-    },
-    "0x0164": {
-      "file": "draw_line.asm",
-      "address": "0x0164",
-      "line": 31
-    },
-    "0x0213": {
-      "file": "draw_line.asm",
-      "address": "0x0213",
-      "line": 337
-    },
-    "0x024E": {
-      "file": "draw_line.asm",
-      "address": "0x024E",
-      "line": 368
-    },
-    "0x0104": {
-      "file": "draw_line.asm",
-      "address": "0x0104",
-      "line": 205
-    },
-    "0x0077": {
-      "file": "draw_line.asm",
-      "address": "0x0077",
-      "line": 110
-    },
-    "0x01FE": {
-      "file": "draw_line.asm",
-      "address": "0x01FE",
-      "line": 326
-    },
-    "0x0053": {
-      "file": "draw_line.asm",
-      "address": "0x0053",
-      "line": 86
-    },
-    "0x029C": {
-      "file": "draw_line.asm",
-      "address": "0x029C",
-      "line": 414
-    },
-    "0x0049": {
-      "file": "draw_line.asm",
-      "address": "0x0049",
-      "line": 73
-    },
-    "0x01D1": {
-      "file": "draw_line.asm",
-      "address": "0x01D1",
-      "line": 300
-    },
-    "0x015C": {
-      "file": "draw_line.asm",
-      "address": "0x015C",
-      "line": 20
-    },
-    "0x00E2": {
-      "file": "draw_line.asm",
-      "address": "0x00E2",
-      "line": 180
-    },
-    "0x010A": {
-      "file": "draw_line.asm",
-      "address": "0x010A",
-      "line": 209
-    },
-    "0x009E": {
-      "file": "draw_line.asm",
-      "address": "0x009E",
-      "line": 134
-    },
-    "0x01CE": {
-      "file": "draw_line.asm",
-      "address": "0x01CE",
-      "line": 299
-    },
-    "0x0070": {
-      "file": "draw_line.asm",
-      "address": "0x0070",
-      "line": 105
-    },
-    "0x0233": {
-      "file": "draw_line.asm",
-      "address": "0x0233",
-      "line": 357
-    },
-    "0x01AB": {
-      "file": "draw_line.asm",
-      "address": "0x01AB",
-      "line": 283
-    },
-    "0x01FD": {
-      "file": "draw_line.asm",
-      "address": "0x01FD",
-      "line": 325
-    },
-    "0x00D9": {
-      "file": "draw_line.asm",
-      "address": "0x00D9",
-      "line": 174
+      "address": "0x0240",
+      "line": 362
     },
     "0x019C": {
       "file": "draw_line.asm",
       "address": "0x019C",
       "line": 278
     },
-    "0x01F5": {
+    "0x01FC": {
       "file": "draw_line.asm",
-      "address": "0x01F5",
-      "line": 319
+      "address": "0x01FC",
+      "line": 323
     },
-    "0x00A7": {
+    "0x0285": {
       "file": "draw_line.asm",
-      "address": "0x00A7",
-      "line": 142
-    },
-    "0x00A3": {
-      "file": "draw_line.asm",
-      "address": "0x00A3",
-      "line": 136
-    },
-    "0x00BE": {
-      "file": "draw_line.asm",
-      "address": "0x00BE",
-      "line": 152
-    },
-    "0x0139": {
-      "file": "draw_line.asm",
-      "address": "0x0139",
-      "line": 221
-    },
-    "0x00D4": {
-      "file": "draw_line.asm",
-      "address": "0x00D4",
-      "line": 170
-    },
-    "0x0092": {
-      "file": "draw_line.asm",
-      "address": "0x0092",
-      "line": 130
-    },
-    "0x00B4": {
-      "file": "draw_line.asm",
-      "address": "0x00B4",
-      "line": 147
-    },
-    "0x01F0": {
-      "file": "draw_line.asm",
-      "address": "0x01F0",
-      "line": 317
-    },
-    "0x022B": {
-      "file": "draw_line.asm",
-      "address": "0x022B",
-      "line": 350
+      "address": "0x0285",
+      "line": 400
     },
     "0x0298": {
       "file": "draw_line.asm",
       "address": "0x0298",
       "line": 412
     },
-    "0x00D2": {
+    "0x0049": {
       "file": "draw_line.asm",
-      "address": "0x00D2",
-      "line": 168
+      "address": "0x0049",
+      "line": 73
     },
-    "0x014A": {
+    "0x01E8": {
       "file": "draw_line.asm",
-      "address": "0x014A",
-      "line": 13
-    },
-    "0x027A": {
-      "file": "draw_line.asm",
-      "address": "0x027A",
-      "line": 393
-    },
-    "0x0181": {
-      "file": "draw_line.asm",
-      "address": "0x0181",
-      "line": 42
-    },
-    "0x0285": {
-      "file": "draw_line.asm",
-      "address": "0x0285",
-      "line": 401
-    },
-    "0x00E6": {
-      "file": "draw_line.asm",
-      "address": "0x00E6",
-      "line": 185
-    },
-    "0x00EB": {
-      "file": "draw_line.asm",
-      "address": "0x00EB",
-      "line": 187
-    },
-    "0x0207": {
-      "file": "draw_line.asm",
-      "address": "0x0207",
-      "line": 330
-    },
-    "0x00F3": {
-      "file": "draw_line.asm",
-      "address": "0x00F3",
-      "line": 193
-    },
-    "0x02A3": {
-      "file": "draw_line.asm",
-      "address": "0x02A3",
-      "line": 417
-    },
-    "0x02DC": {
-      "file": "draw_line.asm",
-      "address": "0x02DC",
-      "line": 427
-    },
-    "0x003C": {
-      "file": "draw_line.asm",
-      "address": "0x003C",
-      "line": 68
-    },
-    "0x0107": {
-      "file": "draw_line.asm",
-      "address": "0x0107",
-      "line": 207
-    },
-    "0x0074": {
-      "file": "draw_line.asm",
-      "address": "0x0074",
-      "line": 108
-    },
-    "0x021F": {
-      "file": "draw_line.asm",
-      "address": "0x021F",
-      "line": 342
-    },
-    "0x0196": {
-      "file": "draw_line.asm",
-      "address": "0x0196",
-      "line": 276
-    },
-    "0x013B": {
-      "file": "draw_line.asm",
-      "address": "0x013B",
-      "line": 222
-    },
-    "0x0275": {
-      "file": "draw_line.asm",
-      "address": "0x0275",
-      "line": 391
-    },
-    "0x02DB": {
-      "file": "draw_line.asm",
-      "address": "0x02DB",
-      "line": 426
-    },
-    "0x0238": {
-      "file": "draw_line.asm",
-      "address": "0x0238",
-      "line": 359
-    },
-    "0x023A": {
-      "file": "draw_line.asm",
-      "address": "0x023A",
-      "line": 360
-    },
-    "0x01D4": {
-      "file": "draw_line.asm",
-      "address": "0x01D4",
-      "line": 301
-    },
-    "0x00F5": {
-      "file": "draw_line.asm",
-      "address": "0x00F5",
-      "line": 194
-    },
-    "0x00C5": {
-      "file": "draw_line.asm",
-      "address": "0x00C5",
-      "line": 160
-    },
-    "0x006D": {
-      "file": "draw_line.asm",
-      "address": "0x006D",
-      "line": 104
-    },
-    "0x029A": {
-      "file": "draw_line.asm",
-      "address": "0x029A",
-      "line": 413
-    },
-    "0x0030": {
-      "file": "draw_line.asm",
-      "address": "0x0030",
-      "line": 58
-    },
-    "0x0236": {
-      "file": "draw_line.asm",
-      "address": "0x0236",
-      "line": 358
-    },
-    "0x0056": {
-      "file": "draw_line.asm",
-      "address": "0x0056",
-      "line": 88
-    },
-    "0x00D8": {
-      "file": "draw_line.asm",
-      "address": "0x00D8",
-      "line": 173
-    },
-    "0x01FA": {
-      "file": "draw_line.asm",
-      "address": "0x01FA",
-      "line": 323
-    },
-    "0x01FC": {
-      "file": "draw_line.asm",
-      "address": "0x01FC",
-      "line": 324
-    },
-    "0x010D": {
-      "file": "draw_line.asm",
-      "address": "0x010D",
-      "line": 210
-    },
-    "0x01FF": {
-      "file": "draw_line.asm",
-      "address": "0x01FF",
-      "line": 327
-    },
-    "0x025E": {
-      "file": "draw_line.asm",
-      "address": "0x025E",
-      "line": 380
-    },
-    "0x0108": {
-      "file": "draw_line.asm",
-      "address": "0x0108",
-      "line": 208
-    },
-    "0x0140": {
-      "file": "draw_line.asm",
-      "address": "0x0140",
-      "line": 225
-    },
-    "0x020C": {
-      "file": "draw_line.asm",
-      "address": "0x020C",
-      "line": 334
-    },
-    "0x0048": {
-      "file": "draw_line.asm",
-      "address": "0x0048",
-      "line": 72
-    },
-    "0x0288": {
-      "file": "draw_line.asm",
-      "address": "0x0288",
-      "line": 402
-    },
-    "0x001F": {
-      "file": "draw_line.asm",
-      "address": "0x001F",
-      "line": 52
-    },
-    "0x00C7": {
-      "file": "draw_line.asm",
-      "address": "0x00C7",
-      "line": 161
-    },
-    "0x028B": {
-      "file": "draw_line.asm",
-      "address": "0x028B",
-      "line": 404
-    },
-    "0x00B6": {
-      "file": "draw_line.asm",
-      "address": "0x00B6",
-      "line": 148
-    },
-    "0x01A5": {
-      "file": "draw_line.asm",
-      "address": "0x01A5",
-      "line": 281
-    },
-    "0x01A2": {
-      "file": "draw_line.asm",
-      "address": "0x01A2",
-      "line": 280
-    },
-    "0x0216": {
-      "file": "draw_line.asm",
-      "address": "0x0216",
-      "line": 338
-    },
-    "0x0244": {
-      "file": "draw_line.asm",
-      "address": "0x0244",
-      "line": 364
-    },
-    "0x021A": {
-      "file": "draw_line.asm",
-      "address": "0x021A",
-      "line": 340
-    },
-    "0x00DC": {
-      "file": "draw_line.asm",
-      "address": "0x00DC",
-      "line": 176
-    },
-    "0x0143": {
-      "file": "draw_line.asm",
-      "address": "0x0143",
-      "line": 227
-    },
-    "0x01EF": {
-      "file": "draw_line.asm",
-      "address": "0x01EF",
-      "line": 316
-    },
-    "0x025B": {
-      "file": "draw_line.asm",
-      "address": "0x025B",
-      "line": 378
-    },
-    "0x00EF": {
-      "file": "draw_line.asm",
-      "address": "0x00EF",
-      "line": 189
-    },
-    "0x0131": {
-      "file": "draw_line.asm",
-      "address": "0x0131",
-      "line": 216
-    },
-    "0x00E1": {
-      "file": "draw_line.asm",
-      "address": "0x00E1",
-      "line": 179
-    },
-    "0x00ED": {
-      "file": "draw_line.asm",
-      "address": "0x00ED",
-      "line": 188
-    },
-    "0x01F7": {
-      "file": "draw_line.asm",
-      "address": "0x01F7",
-      "line": 320
-    },
-    "0x0264": {
-      "file": "draw_line.asm",
-      "address": "0x0264",
-      "line": 384
-    },
-    "0x01C2": {
-      "file": "draw_line.asm",
-      "address": "0x01C2",
-      "line": 295
-    },
-    "0x02A9": {
-      "file": "draw_line.asm",
-      "address": "0x02A9",
-      "line": 419
-    },
-    "0x0202": {
-      "file": "draw_line.asm",
-      "address": "0x0202",
-      "line": 328
-    },
-    "0x0241": {
-      "file": "draw_line.asm",
-      "address": "0x0241",
-      "line": 363
-    },
-    "0x0218": {
-      "file": "draw_line.asm",
-      "address": "0x0218",
-      "line": 339
-    },
-    "0x0247": {
-      "file": "draw_line.asm",
-      "address": "0x0247",
-      "line": 365
-    },
-    "0x009B": {
-      "file": "draw_line.asm",
-      "address": "0x009B",
-      "line": 133
-    },
-    "0x023F": {
-      "file": "draw_line.asm",
-      "address": "0x023F",
-      "line": 362
-    },
-    "0x00C0": {
-      "file": "draw_line.asm",
-      "address": "0x00C0",
-      "line": 154
-    },
-    "0x025C": {
-      "file": "draw_line.asm",
-      "address": "0x025C",
-      "line": 379
-    },
-    "0x008D": {
-      "file": "draw_line.asm",
-      "address": "0x008D",
-      "line": 128
-    },
-    "0x0154": {
-      "file": "draw_line.asm",
-      "address": "0x0154",
-      "line": 241
-    },
-    "0x0147": {
-      "file": "draw_line.asm",
-      "address": "0x0147",
-      "line": 12
-    },
-    "0x0249": {
-      "file": "draw_line.asm",
-      "address": "0x0249",
-      "line": 366
-    },
-    "0x02A1": {
-      "file": "draw_line.asm",
-      "address": "0x02A1",
-      "line": 416
-    },
-    "0x01B6": {
-      "file": "draw_line.asm",
-      "address": "0x01B6",
-      "line": 289
-    },
-    "0x00C1": {
-      "file": "draw_line.asm",
-      "address": "0x00C1",
-      "line": 157
-    },
-    "0x00C2": {
-      "file": "draw_line.asm",
-      "address": "0x00C2",
-      "line": 159
-    },
-    "0x00D6": {
-      "file": "draw_line.asm",
-      "address": "0x00D6",
-      "line": 172
-    },
-    "0x00BF": {
-      "file": "draw_line.asm",
-      "address": "0x00BF",
-      "line": 153
-    },
-    "0x00DE": {
-      "file": "draw_line.asm",
-      "address": "0x00DE",
-      "line": 177
-    },
-    "0x0190": {
-      "file": "draw_line.asm",
-      "address": "0x0190",
-      "line": 274
-    },
-    "0x0257": {
-      "file": "draw_line.asm",
-      "address": "0x0257",
-      "line": 373
-    },
-    "0x0283": {
-      "file": "draw_line.asm",
-      "address": "0x0283",
-      "line": 400
-    },
-    "0x024B": {
-      "file": "draw_line.asm",
-      "address": "0x024B",
-      "line": 367
-    },
-    "0x00F0": {
-      "file": "draw_line.asm",
-      "address": "0x00F0",
-      "line": 190
-    },
-    "0x01E7": {
-      "file": "draw_line.asm",
-      "address": "0x01E7",
+      "address": "0x01E8",
       "line": 312
     },
-    "0x00B8": {
+    "0x010B": {
       "file": "draw_line.asm",
-      "address": "0x00B8",
-      "line": 149
-    },
-    "0x002A": {
-      "file": "draw_line.asm",
-      "address": "0x002A",
-      "line": 56
-    },
-    "0x01BC": {
-      "file": "draw_line.asm",
-      "address": "0x01BC",
-      "line": 293
-    },
-    "0x021D": {
-      "file": "draw_line.asm",
-      "address": "0x021D",
-      "line": 341
-    },
-    "0x01B5": {
-      "file": "draw_line.asm",
-      "address": "0x01B5",
-      "line": 288
-    },
-    "0x0223": {
-      "file": "draw_line.asm",
-      "address": "0x0223",
-      "line": 345
-    },
-    "0x01EE": {
-      "file": "draw_line.asm",
-      "address": "0x01EE",
-      "line": 315
-    },
-    "0x0220": {
-      "file": "draw_line.asm",
-      "address": "0x0220",
-      "line": 343
-    },
-    "0x0157": {
-      "file": "draw_line.asm",
-      "address": "0x0157",
-      "line": 243
-    },
-    "0x0260": {
-      "file": "draw_line.asm",
-      "address": "0x0260",
-      "line": 382
-    },
-    "0x01CB": {
-      "file": "draw_line.asm",
-      "address": "0x01CB",
-      "line": 298
-    },
-    "0x014C": {
-      "file": "draw_line.asm",
-      "address": "0x014C",
-      "line": 14
-    },
-    "0x017F": {
-      "file": "draw_line.asm",
-      "address": "0x017F",
-      "line": 262
-    },
-    "0x027C": {
-      "file": "draw_line.asm",
-      "address": "0x027C",
-      "line": 394
-    },
-    "0x0021": {
-      "file": "draw_line.asm",
-      "address": "0x0021",
-      "line": 53
-    },
-    "0x0037": {
-      "file": "draw_line.asm",
-      "address": "0x0037",
-      "line": 66
-    },
-    "0x0069": {
-      "file": "draw_line.asm",
-      "address": "0x0069",
-      "line": 101
-    },
-    "0x0292": {
-      "file": "draw_line.asm",
-      "address": "0x0292",
-      "line": 410
-    },
-    "0x0106": {
-      "file": "draw_line.asm",
-      "address": "0x0106",
-      "line": 206
-    },
-    "0x00BD": {
-      "file": "draw_line.asm",
-      "address": "0x00BD",
-      "line": 151
-    },
-    "0x0230": {
-      "file": "draw_line.asm",
-      "address": "0x0230",
-      "line": 356
-    },
-    "0x00B0": {
-      "file": "draw_line.asm",
-      "address": "0x00B0",
-      "line": 146
-    },
-    "0x0027": {
-      "file": "draw_line.asm",
-      "address": "0x0027",
-      "line": 55
-    },
-    "0x0095": {
-      "file": "draw_line.asm",
-      "address": "0x0095",
-      "line": 131
-    },
-    "0x00F9": {
-      "file": "draw_line.asm",
-      "address": "0x00F9",
-      "line": 197
-    },
-    "0x028A": {
-      "file": "draw_line.asm",
-      "address": "0x028A",
-      "line": 403
-    },
-    "0x004B": {
-      "file": "draw_line.asm",
-      "address": "0x004B",
-      "line": 75
-    },
-    "0x0193": {
-      "file": "draw_line.asm",
-      "address": "0x0193",
-      "line": 275
-    },
-    "0x0083": {
-      "file": "draw_line.asm",
-      "address": "0x0083",
-      "line": 118
-    },
-    "0x00A0": {
-      "file": "draw_line.asm",
-      "address": "0x00A0",
-      "line": 135
-    },
-    "0x00A6": {
-      "file": "draw_line.asm",
-      "address": "0x00A6",
-      "line": 137
-    },
-    "0x0259": {
-      "file": "draw_line.asm",
-      "address": "0x0259",
-      "line": 374
-    },
-    "0x00FB": {
-      "file": "draw_line.asm",
-      "address": "0x00FB",
-      "line": 199
-    },
-    "0x0290": {
-      "file": "draw_line.asm",
-      "address": "0x0290",
-      "line": 408
-    },
-    "0x0062": {
-      "file": "draw_line.asm",
-      "address": "0x0062",
-      "line": 96
-    },
-    "0x025A": {
-      "file": "draw_line.asm",
-      "address": "0x025A",
-      "line": 377
-    },
-    "0x0059": {
-      "file": "draw_line.asm",
-      "address": "0x0059",
-      "line": 90
-    },
-    "0x014F": {
-      "file": "draw_line.asm",
-      "address": "0x014F",
-      "line": 15
-    },
-    "0x01EC": {
-      "file": "draw_line.asm",
-      "address": "0x01EC",
-      "line": 314
-    },
-    "0x004F": {
-      "file": "draw_line.asm",
-      "address": "0x004F",
-      "line": 84
-    },
-    "0x016E": {
-      "file": "draw_line.asm",
-      "address": "0x016E",
-      "line": 35
-    },
-    "0x0171": {
-      "file": "draw_line.asm",
-      "address": "0x0171",
-      "line": 36
-    },
-    "0x01B9": {
-      "file": "draw_line.asm",
-      "address": "0x01B9",
-      "line": 292
-    },
-    "0x0269": {
-      "file": "draw_line.asm",
-      "address": "0x0269",
-      "line": 386
-    },
-    "0x00FA": {
-      "file": "draw_line.asm",
-      "address": "0x00FA",
-      "line": 198
-    },
-    "0x008F": {
-      "file": "draw_line.asm",
-      "address": "0x008F",
-      "line": 129
-    },
-    "0x028C": {
-      "file": "draw_line.asm",
-      "address": "0x028C",
-      "line": 405
-    },
-    "0x0272": {
-      "file": "draw_line.asm",
-      "address": "0x0272",
-      "line": 390
-    },
-    "0x0031": {
-      "file": "draw_line.asm",
-      "address": "0x0031",
-      "line": 59
-    },
-    "0x0187": {
-      "file": "draw_line.asm",
-      "address": "0x0187",
-      "line": 268
-    },
-    "0x002D": {
-      "file": "draw_line.asm",
-      "address": "0x002D",
-      "line": 57
-    },
-    "0x01B1": {
-      "file": "draw_line.asm",
-      "address": "0x01B1",
-      "line": 286
-    },
-    "0x0136": {
-      "file": "draw_line.asm",
-      "address": "0x0136",
-      "line": 219
-    },
-    "0x0081": {
-      "file": "draw_line.asm",
-      "address": "0x0081",
-      "line": 117
-    },
-    "0x0100": {
-      "file": "draw_line.asm",
-      "address": "0x0100",
-      "line": 203
-    },
-    "0x00E3": {
-      "file": "draw_line.asm",
-      "address": "0x00E3",
-      "line": 181
-    },
-    "0x022E": {
-      "file": "draw_line.asm",
-      "address": "0x022E",
-      "line": 352
-    },
-    "0x018D": {
-      "file": "draw_line.asm",
-      "address": "0x018D",
-      "line": 273
-    },
-    "0x0291": {
-      "file": "draw_line.asm",
-      "address": "0x0291",
-      "line": 409
-    },
-    "0x004A": {
-      "file": "draw_line.asm",
-      "address": "0x004A",
-      "line": 74
-    },
-    "0x025F": {
-      "file": "draw_line.asm",
-      "address": "0x025F",
-      "line": 381
-    },
-    "0x0080": {
-      "file": "draw_line.asm",
-      "address": "0x0080",
-      "line": 116
-    },
-    "0x0254": {
-      "file": "draw_line.asm",
-      "address": "0x0254",
-      "line": 372
-    },
-    "0x01E0": {
-      "file": "draw_line.asm",
-      "address": "0x01E0",
-      "line": 306
-    },
-    "0x01DD": {
-      "file": "draw_line.asm",
-      "address": "0x01DD",
-      "line": 305
-    },
-    "0x015A": {
-      "file": "draw_line.asm",
-      "address": "0x015A",
-      "line": 244
-    },
-    "0x00FD": {
-      "file": "draw_line.asm",
-      "address": "0x00FD",
-      "line": 200
-    },
-    "0x0068": {
-      "file": "draw_line.asm",
-      "address": "0x0068",
-      "line": 100
-    },
-    "0x022A": {
-      "file": "draw_line.asm",
-      "address": "0x022A",
-      "line": 349
-    },
-    "0x019F": {
-      "file": "draw_line.asm",
-      "address": "0x019F",
-      "line": 279
-    },
-    "0x00E9": {
-      "file": "draw_line.asm",
-      "address": "0x00E9",
-      "line": 186
-    },
-    "0x01AE": {
-      "file": "draw_line.asm",
-      "address": "0x01AE",
-      "line": 284
-    },
-    "0x01E2": {
-      "file": "draw_line.asm",
-      "address": "0x01E2",
-      "line": 308
-    },
-    "0x01C8": {
-      "file": "draw_line.asm",
-      "address": "0x01C8",
-      "line": 297
-    },
-    "0x0111": {
-      "file": "draw_line.asm",
-      "address": "0x0111",
-      "line": 213
-    },
-    "0x0166": {
-      "file": "draw_line.asm",
-      "address": "0x0166",
-      "line": 249
-    },
-    "0x0133": {
-      "file": "draw_line.asm",
-      "address": "0x0133",
-      "line": 217
+      "address": "0x010B",
+      "line": 209
     },
     "0x0087": {
       "file": "draw_line.asm",
       "address": "0x0087",
       "line": 121
     },
-    "0x0229": {
+    "0x020C": {
       "file": "draw_line.asm",
-      "address": "0x0229",
-      "line": 348
+      "address": "0x020C",
+      "line": 334
     },
-    "0x015F": {
+    "0x006D": {
       "file": "draw_line.asm",
-      "address": "0x015F",
-      "line": 29
+      "address": "0x006D",
+      "line": 104
     },
-    "0x00CE": {
+    "0x01F2": {
       "file": "draw_line.asm",
-      "address": "0x00CE",
-      "line": 166
-    },
-    "0x013E": {
-      "file": "draw_line.asm",
-      "address": "0x013E",
-      "line": 224
-    },
-    "0x010E": {
-      "file": "draw_line.asm",
-      "address": "0x010E",
-      "line": 211
-    },
-    "0x0226": {
-      "file": "draw_line.asm",
-      "address": "0x0226",
-      "line": 346
-    },
-    "0x01D7": {
-      "file": "draw_line.asm",
-      "address": "0x01D7",
-      "line": 302
+      "address": "0x01F2",
+      "line": 317
     },
     "0x003F": {
       "file": "draw_line.asm",
       "address": "0x003F",
       "line": 69
     },
-    "0x0282": {
+    "0x01F1": {
       "file": "draw_line.asm",
-      "address": "0x0282",
-      "line": 399
+      "address": "0x01F1",
+      "line": 316
     },
-    "0x0173": {
+    "0x0262": {
       "file": "draw_line.asm",
-      "address": "0x0173",
-      "line": 37
+      "address": "0x0262",
+      "line": 382
     },
-    "0x0098": {
+    "0x004F": {
       "file": "draw_line.asm",
-      "address": "0x0098",
-      "line": 132
+      "address": "0x004F",
+      "line": 84
     },
-    "0x00BA": {
+    "0x017F": {
       "file": "draw_line.asm",
-      "address": "0x00BA",
-      "line": 150
+      "address": "0x017F",
+      "line": 40
     },
-    "0x028D": {
+    "0x0187": {
       "file": "draw_line.asm",
-      "address": "0x028D",
-      "line": 406
+      "address": "0x0187",
+      "line": 268
     },
-    "0x0061": {
+    "0x025F": {
       "file": "draw_line.asm",
-      "address": "0x0061",
-      "line": 95
+      "address": "0x025F",
+      "line": 380
     },
-    "0x0045": {
+    "0x01F5": {
       "file": "draw_line.asm",
-      "address": "0x0045",
-      "line": 71
+      "address": "0x01F5",
+      "line": 319
     },
-    "0x016B": {
+    "0x0083": {
       "file": "draw_line.asm",
-      "address": "0x016B",
-      "line": 251
+      "address": "0x0083",
+      "line": 118
     },
-    "0x0184": {
+    "0x003C": {
       "file": "draw_line.asm",
-      "address": "0x0184",
-      "line": 267
+      "address": "0x003C",
+      "line": 68
     },
-    "0x0063": {
+    "0x00F6": {
       "file": "draw_line.asm",
-      "address": "0x0063",
-      "line": 97
+      "address": "0x00F6",
+      "line": 194
     },
-    "0x0179": {
+    "0x0242": {
       "file": "draw_line.asm",
-      "address": "0x0179",
-      "line": 259
+      "address": "0x0242",
+      "line": 363
     },
-    "0x0209": {
+    "0x01CE": {
       "file": "draw_line.asm",
-      "address": "0x0209",
-      "line": 333
+      "address": "0x01CE",
+      "line": 299
     },
-    "0x008B": {
+    "0x00F3": {
       "file": "draw_line.asm",
-      "address": "0x008B",
-      "line": 127
+      "address": "0x00F3",
+      "line": 191
     },
-    "0x0270": {
+    "0x00D9": {
       "file": "draw_line.asm",
-      "address": "0x0270",
+      "address": "0x00D9",
+      "line": 173
+    },
+    "0x0271": {
+      "file": "draw_line.asm",
+      "address": "0x0271",
       "line": 389
     },
-    "0x01F8": {
+    "0x0232": {
       "file": "draw_line.asm",
-      "address": "0x01F8",
-      "line": 321
+      "address": "0x0232",
+      "line": 356
     },
-    "0x0278": {
+    "0x025E": {
       "file": "draw_line.asm",
-      "address": "0x0278",
-      "line": 392
+      "address": "0x025E",
+      "line": 379
     },
-    "0x018A": {
+    "0x029B": {
       "file": "draw_line.asm",
-      "address": "0x018A",
-      "line": 269
-    },
-    "0x022F": {
-      "file": "draw_line.asm",
-      "address": "0x022F",
-      "line": 355
-    },
-    "0x0250": {
-      "file": "draw_line.asm",
-      "address": "0x0250",
-      "line": 369
-    },
-    "0x0102": {
-      "file": "draw_line.asm",
-      "address": "0x0102",
-      "line": 204
-    },
-    "0x0072": {
-      "file": "draw_line.asm",
-      "address": "0x0072",
-      "line": 107
-    },
-    "0x0267": {
-      "file": "draw_line.asm",
-      "address": "0x0267",
-      "line": 385
-    },
-    "0x0221": {
-      "file": "draw_line.asm",
-      "address": "0x0221",
-      "line": 344
-    },
-    "0x022D": {
-      "file": "draw_line.asm",
-      "address": "0x022D",
-      "line": 351
-    },
-    "0x0295": {
-      "file": "draw_line.asm",
-      "address": "0x0295",
-      "line": 411
-    },
-    "0x005E": {
-      "file": "draw_line.asm",
-      "address": "0x005E",
-      "line": 94
-    },
-    "0x01F9": {
-      "file": "draw_line.asm",
-      "address": "0x01F9",
-      "line": 322
-    },
-    "0x007F": {
-      "file": "draw_line.asm",
-      "address": "0x007F",
-      "line": 115
-    },
-    "0x023D": {
-      "file": "draw_line.asm",
-      "address": "0x023D",
-      "line": 361
-    },
-    "0x0228": {
-      "file": "draw_line.asm",
-      "address": "0x0228",
-      "line": 347
-    },
-    "0x01E1": {
-      "file": "draw_line.asm",
-      "address": "0x01E1",
-      "line": 307
-    },
-    "0x0176": {
-      "file": "draw_line.asm",
-      "address": "0x0176",
-      "line": 258
-    },
-    "0x00CF": {
-      "file": "draw_line.asm",
-      "address": "0x00CF",
-      "line": 167
-    },
-    "0x0169": {
-      "file": "draw_line.asm",
-      "address": "0x0169",
-      "line": 250
-    },
-    "0x0251": {
-      "file": "draw_line.asm",
-      "address": "0x0251",
-      "line": 370
-    },
-    "0x0033": {
-      "file": "draw_line.asm",
-      "address": "0x0033",
-      "line": 61
-    },
-    "0x01B4": {
-      "file": "draw_line.asm",
-      "address": "0x01B4",
-      "line": 287
-    },
-    "0x0199": {
-      "file": "draw_line.asm",
-      "address": "0x0199",
-      "line": 277
-    },
-    "0x0086": {
-      "file": "draw_line.asm",
-      "address": "0x0086",
-      "line": 120
-    },
-    "0x0078": {
-      "file": "draw_line.asm",
-      "address": "0x0078",
-      "line": 111
-    },
-    "0x0042": {
-      "file": "draw_line.asm",
-      "address": "0x0042",
-      "line": 70
-    },
-    "0x0032": {
-      "file": "draw_line.asm",
-      "address": "0x0032",
-      "line": 60
-    },
-    "0x020E": {
-      "file": "draw_line.asm",
-      "address": "0x020E",
-      "line": 335
-    },
-    "0x00DA": {
-      "file": "draw_line.asm",
-      "address": "0x00DA",
-      "line": 175
-    },
-    "0x01A8": {
-      "file": "draw_line.asm",
-      "address": "0x01A8",
-      "line": 282
-    },
-    "0x0054": {
-      "file": "draw_line.asm",
-      "address": "0x0054",
-      "line": 87
-    },
-    "0x01DA": {
-      "file": "draw_line.asm",
-      "address": "0x01DA",
-      "line": 303
-    },
-    "0x01C5": {
-      "file": "draw_line.asm",
-      "address": "0x01C5",
-      "line": 296
-    },
-    "0x01BF": {
-      "file": "draw_line.asm",
-      "address": "0x01BF",
-      "line": 294
-    },
-    "0x00F1": {
-      "file": "draw_line.asm",
-      "address": "0x00F1",
-      "line": 192
-    },
-    "0x0039": {
-      "file": "draw_line.asm",
-      "address": "0x0039",
-      "line": 67
+      "address": "0x029B",
+      "line": 413
     },
     "0x007C": {
       "file": "draw_line.asm",
       "address": "0x007C",
       "line": 114
     },
-    "0x026E": {
+    "0x02AC": {
       "file": "draw_line.asm",
-      "address": "0x026E",
-      "line": 388
+      "address": "0x02AC",
+      "line": 420
     },
-    "0x00CC": {
+    "0x00AA": {
       "file": "draw_line.asm",
-      "address": "0x00CC",
-      "line": 164
+      "address": "0x00AA",
+      "line": 143
     },
-    "0x02A6": {
+    "0x028F": {
       "file": "draw_line.asm",
-      "address": "0x02A6",
-      "line": 418
+      "address": "0x028F",
+      "line": 406
     },
-    "0x00AD": {
+    "0x00D7": {
       "file": "draw_line.asm",
-      "address": "0x00AD",
-      "line": 144
+      "address": "0x00D7",
+      "line": 171
     },
-    "0x01E9": {
+    "0x0110": {
       "file": "draw_line.asm",
-      "address": "0x01E9",
-      "line": 313
+      "address": "0x0110",
+      "line": 211
     },
-    "0x01E5": {
+    "0x023D": {
       "file": "draw_line.asm",
-      "address": "0x01E5",
-      "line": 311
+      "address": "0x023D",
+      "line": 361
+    },
+    "0x0039": {
+      "file": "draw_line.asm",
+      "address": "0x0039",
+      "line": 67
+    },
+    "0x00FE": {
+      "file": "draw_line.asm",
+      "address": "0x00FE",
+      "line": 200
+    },
+    "0x01B8": {
+      "file": "draw_line.asm",
+      "address": "0x01B8",
+      "line": 289
+    },
+    "0x0294": {
+      "file": "draw_line.asm",
+      "address": "0x0294",
+      "line": 410
+    },
+    "0x0220": {
+      "file": "draw_line.asm",
+      "address": "0x0220",
+      "line": 342
+    },
+    "0x020A": {
+      "file": "draw_line.asm",
+      "address": "0x020A",
+      "line": 331
+    },
+    "0x01A5": {
+      "file": "draw_line.asm",
+      "address": "0x01A5",
+      "line": 281
+    },
+    "0x00C3": {
+      "file": "draw_line.asm",
+      "address": "0x00C3",
+      "line": 155
+    },
+    "0x02A2": {
+      "file": "draw_line.asm",
+      "address": "0x02A2",
+      "line": 416
+    },
+    "0x014D": {
+      "file": "draw_line.asm",
+      "address": "0x014D",
+      "line": 13
+    },
+    "0x01A8": {
+      "file": "draw_line.asm",
+      "address": "0x01A8",
+      "line": 282
+    },
+    "0x0162": {
+      "file": "draw_line.asm",
+      "address": "0x0162",
+      "line": 247
+    },
+    "0x0263": {
+      "file": "draw_line.asm",
+      "address": "0x0263",
+      "line": 383
+    },
+    "0x00BD": {
+      "file": "draw_line.asm",
+      "address": "0x00BD",
+      "line": 151
+    },
+    "0x00C8": {
+      "file": "draw_line.asm",
+      "address": "0x00C8",
+      "line": 161
+    },
+    "0x0143": {
+      "file": "draw_line.asm",
+      "address": "0x0143",
+      "line": 226
+    },
+    "0x02DE": {
+      "file": "draw_line.asm",
+      "address": "0x02DE",
+      "line": 427
+    },
+    "0x005E": {
+      "file": "draw_line.asm",
+      "address": "0x005E",
+      "line": 94
+    },
+    "0x0226": {
+      "file": "draw_line.asm",
+      "address": "0x0226",
+      "line": 346
+    },
+    "0x01AE": {
+      "file": "draw_line.asm",
+      "address": "0x01AE",
+      "line": 284
+    },
+    "0x0081": {
+      "file": "draw_line.asm",
+      "address": "0x0081",
+      "line": 117
+    },
+    "0x0286": {
+      "file": "draw_line.asm",
+      "address": "0x0286",
+      "line": 401
+    },
+    "0x008F": {
+      "file": "draw_line.asm",
+      "address": "0x008F",
+      "line": 129
+    },
+    "0x0233": {
+      "file": "draw_line.asm",
+      "address": "0x0233",
+      "line": 357
+    },
+    "0x0278": {
+      "file": "draw_line.asm",
+      "address": "0x0278",
+      "line": 392
+    },
+    "0x0167": {
+      "file": "draw_line.asm",
+      "address": "0x0167",
+      "line": 31
+    },
+    "0x009B": {
+      "file": "draw_line.asm",
+      "address": "0x009B",
+      "line": 133
+    },
+    "0x0078": {
+      "file": "draw_line.asm",
+      "address": "0x0078",
+      "line": 111
+    },
+    "0x00EC": {
+      "file": "draw_line.asm",
+      "address": "0x00EC",
+      "line": 187
+    },
+    "0x015F": {
+      "file": "draw_line.asm",
+      "address": "0x015F",
+      "line": 20
+    },
+    "0x0290": {
+      "file": "draw_line.asm",
+      "address": "0x0290",
+      "line": 407
+    },
+    "0x00B0": {
+      "file": "draw_line.asm",
+      "address": "0x00B0",
+      "line": 145
     },
     "0x0205": {
       "file": "draw_line.asm",
       "address": "0x0205",
       "line": 329
     },
+    "0x0216": {
+      "file": "draw_line.asm",
+      "address": "0x0216",
+      "line": 338
+    },
+    "0x00C5": {
+      "file": "draw_line.asm",
+      "address": "0x00C5",
+      "line": 160
+    },
+    "0x00C4": {
+      "file": "draw_line.asm",
+      "address": "0x00C4",
+      "line": 158
+    },
+    "0x0059": {
+      "file": "draw_line.asm",
+      "address": "0x0059",
+      "line": 90
+    },
     "0x005A": {
       "file": "draw_line.asm",
       "address": "0x005A",
       "line": 91
     },
-    "0x01F2": {
+    "0x018A": {
       "file": "draw_line.asm",
-      "address": "0x01F2",
-      "line": 318
+      "address": "0x018A",
+      "line": 269
     },
-    "0x0210": {
+    "0x0021": {
       "file": "draw_line.asm",
-      "address": "0x0210",
+      "address": "0x0021",
+      "line": 53
+    },
+    "0x01D1": {
+      "file": "draw_line.asm",
+      "address": "0x01D1",
+      "line": 300
+    },
+    "0x00D5": {
+      "file": "draw_line.asm",
+      "address": "0x00D5",
+      "line": 169
+    },
+    "0x0109": {
+      "file": "draw_line.asm",
+      "address": "0x0109",
+      "line": 207
+    },
+    "0x0061": {
+      "file": "draw_line.asm",
+      "address": "0x0061",
+      "line": 95
+    },
+    "0x004A": {
+      "file": "draw_line.asm",
+      "address": "0x004A",
+      "line": 74
+    },
+    "0x0157": {
+      "file": "draw_line.asm",
+      "address": "0x0157",
+      "line": 242
+    },
+    "0x0134": {
+      "file": "draw_line.asm",
+      "address": "0x0134",
+      "line": 217
+    },
+    "0x0032": {
+      "file": "draw_line.asm",
+      "address": "0x0032",
+      "line": 60
+    },
+    "0x01C5": {
+      "file": "draw_line.asm",
+      "address": "0x01C5",
+      "line": 296
+    },
+    "0x014A": {
+      "file": "draw_line.asm",
+      "address": "0x014A",
+      "line": 230
+    },
+    "0x00CF": {
+      "file": "draw_line.asm",
+      "address": "0x00CF",
+      "line": 165
+    },
+    "0x0080": {
+      "file": "draw_line.asm",
+      "address": "0x0080",
+      "line": 116
+    },
+    "0x00DB": {
+      "file": "draw_line.asm",
+      "address": "0x00DB",
+      "line": 174
+    },
+    "0x028B": {
+      "file": "draw_line.asm",
+      "address": "0x028B",
+      "line": 403
+    },
+    "0x01AB": {
+      "file": "draw_line.asm",
+      "address": "0x01AB",
+      "line": 283
+    },
+    "0x00CD": {
+      "file": "draw_line.asm",
+      "address": "0x00CD",
+      "line": 163
+    },
+    "0x02A9": {
+      "file": "draw_line.asm",
+      "address": "0x02A9",
+      "line": 419
+    },
+    "0x0031": {
+      "file": "draw_line.asm",
+      "address": "0x0031",
+      "line": 59
+    },
+    "0x00B9": {
+      "file": "draw_line.asm",
+      "address": "0x00B9",
+      "line": 149
+    },
+    "0x008D": {
+      "file": "draw_line.asm",
+      "address": "0x008D",
+      "line": 128
+    },
+    "0x0107": {
+      "file": "draw_line.asm",
+      "address": "0x0107",
+      "line": 206
+    },
+    "0x0264": {
+      "file": "draw_line.asm",
+      "address": "0x0264",
+      "line": 384
+    },
+    "0x0114": {
+      "file": "draw_line.asm",
+      "address": "0x0114",
+      "line": 214
+    },
+    "0x016C": {
+      "file": "draw_line.asm",
+      "address": "0x016C",
+      "line": 251
+    },
+    "0x022C": {
+      "file": "draw_line.asm",
+      "address": "0x022C",
+      "line": 349
+    },
+    "0x01BF": {
+      "file": "draw_line.asm",
+      "address": "0x01BF",
+      "line": 294
+    },
+    "0x0069": {
+      "file": "draw_line.asm",
+      "address": "0x0069",
+      "line": 101
+    },
+    "0x017C": {
+      "file": "draw_line.asm",
+      "address": "0x017C",
+      "line": 260
+    },
+    "0x0282": {
+      "file": "draw_line.asm",
+      "address": "0x0282",
+      "line": 396
+    },
+    "0x0196": {
+      "file": "draw_line.asm",
+      "address": "0x0196",
+      "line": 276
+    },
+    "0x0190": {
+      "file": "draw_line.asm",
+      "address": "0x0190",
+      "line": 274
+    },
+    "0x025A": {
+      "file": "draw_line.asm",
+      "address": "0x025A",
+      "line": 374
+    },
+    "0x024A": {
+      "file": "draw_line.asm",
+      "address": "0x024A",
+      "line": 366
+    },
+    "0x00E8": {
+      "file": "draw_line.asm",
+      "address": "0x00E8",
+      "line": 184
+    },
+    "0x0100": {
+      "file": "draw_line.asm",
+      "address": "0x0100",
+      "line": 201
+    },
+    "0x021B": {
+      "file": "draw_line.asm",
+      "address": "0x021B",
+      "line": 340
+    },
+    "0x00F4": {
+      "file": "draw_line.asm",
+      "address": "0x00F4",
+      "line": 193
+    },
+    "0x0201": {
+      "file": "draw_line.asm",
+      "address": "0x0201",
+      "line": 327
+    },
+    "0x0045": {
+      "file": "draw_line.asm",
+      "address": "0x0045",
+      "line": 71
+    },
+    "0x010D": {
+      "file": "draw_line.asm",
+      "address": "0x010D",
+      "line": 210
+    },
+    "0x016E": {
+      "file": "draw_line.asm",
+      "address": "0x016E",
+      "line": 252
+    },
+    "0x00D2": {
+      "file": "draw_line.asm",
+      "address": "0x00D2",
+      "line": 168
+    },
+    "0x0211": {
+      "file": "draw_line.asm",
+      "address": "0x0211",
       "line": 336
     },
-    "0x0152": {
+    "0x019F": {
       "file": "draw_line.asm",
-      "address": "0x0152",
-      "line": 233
+      "address": "0x019F",
+      "line": 279
     },
-    "0x00CA": {
+    "0x00EE": {
       "file": "draw_line.asm",
-      "address": "0x00CA",
-      "line": 162
+      "address": "0x00EE",
+      "line": 188
+    },
+    "0x00C1": {
+      "file": "draw_line.asm",
+      "address": "0x00C1",
+      "line": 153
+    },
+    "0x0074": {
+      "file": "draw_line.asm",
+      "address": "0x0074",
+      "line": 108
+    },
+    "0x0053": {
+      "file": "draw_line.asm",
+      "address": "0x0053",
+      "line": 86
+    },
+    "0x0063": {
+      "file": "draw_line.asm",
+      "address": "0x0063",
+      "line": 97
+    },
+    "0x0223": {
+      "file": "draw_line.asm",
+      "address": "0x0223",
+      "line": 344
+    },
+    "0x020F": {
+      "file": "draw_line.asm",
+      "address": "0x020F",
+      "line": 335
+    },
+    "0x00DC": {
+      "file": "draw_line.asm",
+      "address": "0x00DC",
+      "line": 175
+    },
+    "0x0236": {
+      "file": "draw_line.asm",
+      "address": "0x0236",
+      "line": 358
+    },
+    "0x010A": {
+      "file": "draw_line.asm",
+      "address": "0x010A",
+      "line": 208
+    },
+    "0x0030": {
+      "file": "draw_line.asm",
+      "address": "0x0030",
+      "line": 58
+    },
+    "0x0086": {
+      "file": "draw_line.asm",
+      "address": "0x0086",
+      "line": 120
+    },
+    "0x013E": {
+      "file": "draw_line.asm",
+      "address": "0x013E",
+      "line": 223
+    },
+    "0x02A4": {
+      "file": "draw_line.asm",
+      "address": "0x02A4",
+      "line": 417
+    },
+    "0x00D1": {
+      "file": "draw_line.asm",
+      "address": "0x00D1",
+      "line": 167
+    },
+    "0x01DD": {
+      "file": "draw_line.asm",
+      "address": "0x01DD",
+      "line": 304
+    },
+    "0x015D": {
+      "file": "draw_line.asm",
+      "address": "0x015D",
+      "line": 245
+    },
+    "0x00A6": {
+      "file": "draw_line.asm",
+      "address": "0x00A6",
+      "line": 137
+    },
+    "0x0224": {
+      "file": "draw_line.asm",
+      "address": "0x0224",
+      "line": 345
+    },
+    "0x0062": {
+      "file": "draw_line.asm",
+      "address": "0x0062",
+      "line": 96
+    },
+    "0x0199": {
+      "file": "draw_line.asm",
+      "address": "0x0199",
+      "line": 277
+    },
+    "0x01E0": {
+      "file": "draw_line.asm",
+      "address": "0x01E0",
+      "line": 306
+    },
+    "0x0033": {
+      "file": "draw_line.asm",
+      "address": "0x0033",
+      "line": 61
+    },
+    "0x0254": {
+      "file": "draw_line.asm",
+      "address": "0x0254",
+      "line": 371
+    },
+    "0x01B1": {
+      "file": "draw_line.asm",
+      "address": "0x01B1",
+      "line": 285
+    },
+    "0x0267": {
+      "file": "draw_line.asm",
+      "address": "0x0267",
+      "line": 385
+    },
+    "0x01F3": {
+      "file": "draw_line.asm",
+      "address": "0x01F3",
+      "line": 318
+    },
+    "0x0095": {
+      "file": "draw_line.asm",
+      "address": "0x0095",
+      "line": 131
+    },
+    "0x0176": {
+      "file": "draw_line.asm",
+      "address": "0x0176",
+      "line": 37
+    },
+    "0x0244": {
+      "file": "draw_line.asm",
+      "address": "0x0244",
+      "line": 364
+    },
+    "0x024E": {
+      "file": "draw_line.asm",
+      "address": "0x024E",
+      "line": 368
+    },
+    "0x014F": {
+      "file": "draw_line.asm",
+      "address": "0x014F",
+      "line": 232
+    },
+    "0x0037": {
+      "file": "draw_line.asm",
+      "address": "0x0037",
+      "line": 66
+    },
+    "0x01D7": {
+      "file": "draw_line.asm",
+      "address": "0x01D7",
+      "line": 302
+    },
+    "0x0056": {
+      "file": "draw_line.asm",
+      "address": "0x0056",
+      "line": 88
+    },
+    "0x022B": {
+      "file": "draw_line.asm",
+      "address": "0x022B",
+      "line": 348
+    },
+    "0x0174": {
+      "file": "draw_line.asm",
+      "address": "0x0174",
+      "line": 257
+    },
+    "0x00DF": {
+      "file": "draw_line.asm",
+      "address": "0x00DF",
+      "line": 177
+    },
+    "0x01FB": {
+      "file": "draw_line.asm",
+      "address": "0x01FB",
+      "line": 322
+    },
+    "0x01FA": {
+      "file": "draw_line.asm",
+      "address": "0x01FA",
+      "line": 321
+    },
+    "0x0136": {
+      "file": "draw_line.asm",
+      "address": "0x0136",
+      "line": 218
+    },
+    "0x01F8": {
+      "file": "draw_line.asm",
+      "address": "0x01F8",
+      "line": 320
+    },
+    "0x01E5": {
+      "file": "draw_line.asm",
+      "address": "0x01E5",
+      "line": 309
+    },
+    "0x0251": {
+      "file": "draw_line.asm",
+      "address": "0x0251",
+      "line": 369
+    },
+    "0x01BC": {
+      "file": "draw_line.asm",
+      "address": "0x01BC",
+      "line": 293
+    },
+    "0x00E5": {
+      "file": "draw_line.asm",
+      "address": "0x00E5",
+      "line": 181
+    },
+    "0x00B7": {
+      "file": "draw_line.asm",
+      "address": "0x00B7",
+      "line": 148
+    },
+    "0x0146": {
+      "file": "draw_line.asm",
+      "address": "0x0146",
+      "line": 228
+    },
+    "0x00B3": {
+      "file": "draw_line.asm",
+      "address": "0x00B3",
+      "line": 147
+    },
+    "0x01C8": {
+      "file": "draw_line.asm",
+      "address": "0x01C8",
+      "line": 297
+    },
+    "0x00CE": {
+      "file": "draw_line.asm",
+      "address": "0x00CE",
+      "line": 164
+    },
+    "0x0048": {
+      "file": "draw_line.asm",
+      "address": "0x0048",
+      "line": 72
+    },
+    "0x029F": {
+      "file": "draw_line.asm",
+      "address": "0x029F",
+      "line": 415
+    },
+    "0x00F0": {
+      "file": "draw_line.asm",
+      "address": "0x00F0",
+      "line": 189
+    },
+    "0x0112": {
+      "file": "draw_line.asm",
+      "address": "0x0112",
+      "line": 213
+    },
+    "0x00AD": {
+      "file": "draw_line.asm",
+      "address": "0x00AD",
+      "line": 144
+    },
+    "0x02DF": {
+      "file": "draw_line.asm",
+      "address": "0x02DF",
+      "line": 428
+    },
+    "0x027F": {
+      "file": "draw_line.asm",
+      "address": "0x027F",
+      "line": 395
+    },
+    "0x0184": {
+      "file": "draw_line.asm",
+      "address": "0x0184",
+      "line": 42
+    },
+    "0x0179": {
+      "file": "draw_line.asm",
+      "address": "0x0179",
+      "line": 38
+    },
+    "0x01B7": {
+      "file": "draw_line.asm",
+      "address": "0x01B7",
+      "line": 288
     },
     "0x0065": {
       "file": "draw_line.asm",
       "address": "0x0065",
       "line": 98
+    },
+    "0x01D4": {
+      "file": "draw_line.asm",
+      "address": "0x01D4",
+      "line": 301
     }
   },
   "functions": {},
@@ -1527,330 +1532,345 @@
       "name": "VECTREX_PRINT_TEXT",
       "file": "draw_line.asm",
       "startLine": 123,
-      "endLine": 137,
+      "endLine": 138,
       "type": "native"
     }
   },
   "asmAddressMap": {
-    "248": "0x0164",
-    "326": "0x01FE",
-    "44": "0x0184",
-    "367": "0x024B",
-    "75": "0x004B",
-    "400": "0x0283",
-    "154": "0x00C0",
-    "59": "0x0031",
-    "296": "0x01C5",
-    "163": "0x00CB",
-    "335": "0x020E",
-    "394": "0x027C",
-    "409": "0x0291",
-    "377": "0x025A",
-    "417": "0x02A3",
-    "170": "0x00D4",
-    "324": "0x01FC",
-    "359": "0x0238",
-    "337": "0x0213",
-    "282": "0x01A8",
-    "408": "0x0290",
-    "189": "0x00EF",
-    "393": "0x027A",
-    "41": "0x017F",
-    "190": "0x00F0",
-    "101": "0x0069",
-    "382": "0x0260",
-    "378": "0x025B",
-    "322": "0x01F9",
-    "142": "0x00A7",
-    "269": "0x018A",
-    "351": "0x022D",
-    "98": "0x0065",
-    "294": "0x01BF",
-    "200": "0x00FD",
-    "177": "0x00DE",
-    "358": "0x0236",
-    "111": "0x0078",
-    "247": "0x0161",
-    "407": "0x028F",
-    "96": "0x0062",
-    "144": "0x00AD",
-    "262": "0x017F",
-    "299": "0x01CE",
+    "428": "0x02DF",
+    "17": "0x0157",
     "295": "0x01C2",
-    "68": "0x003C",
-    "212": "0x010F",
-    "318": "0x01F2",
-    "302": "0x01D7",
-    "412": "0x0298",
-    "427": "0x02DC",
-    "381": "0x025F",
-    "180": "0x00E2",
-    "360": "0x023A",
-    "266": "0x0181",
-    "192": "0x00F1",
-    "107": "0x0072",
-    "362": "0x023F",
-    "284": "0x01AE",
-    "321": "0x01F8",
-    "176": "0x00DC",
-    "289": "0x01B6",
-    "349": "0x022A",
-    "56": "0x002A",
-    "114": "0x007C",
-    "311": "0x01E5",
-    "132": "0x0098",
-    "330": "0x0207",
-    "84": "0x004F",
-    "357": "0x0233",
-    "348": "0x0229",
-    "34": "0x016B",
-    "88": "0x0056",
-    "38": "0x0176",
-    "147": "0x00B4",
-    "374": "0x0259",
-    "258": "0x0176",
-    "67": "0x0039",
-    "313": "0x01E9",
-    "245": "0x015C",
-    "31": "0x0164",
-    "319": "0x01F5",
-    "53": "0x0021",
-    "380": "0x025E",
-    "252": "0x016E",
-    "317": "0x01F0",
-    "100": "0x0068",
-    "257": "0x0173",
-    "413": "0x029A",
-    "339": "0x0218",
-    "94": "0x005E",
-    "389": "0x0270",
-    "401": "0x0285",
-    "16": "0x0152",
-    "152": "0x00BE",
-    "261": "0x017C",
-    "186": "0x00E9",
-    "415": "0x029F",
-    "160": "0x00C5",
-    "325": "0x01FD",
-    "168": "0x00D2",
-    "372": "0x0254",
-    "411": "0x0295",
-    "219": "0x0136",
-    "150": "0x00BA",
-    "52": "0x001F",
-    "345": "0x0223",
-    "35": "0x016E",
-    "306": "0x01E0",
-    "406": "0x028D",
-    "179": "0x00E1",
-    "2": "0x0143",
-    "188": "0x00ED",
-    "229": "0x0147",
-    "246": "0x015F",
-    "71": "0x0045",
-    "54": "0x0024",
-    "286": "0x01B1",
-    "130": "0x0092",
-    "97": "0x0063",
-    "287": "0x01B4",
-    "307": "0x01E1",
-    "153": "0x00BF",
-    "396": "0x0281",
-    "343": "0x0220",
-    "86": "0x0053",
-    "368": "0x024E",
-    "341": "0x021D",
-    "32": "0x0166",
-    "303": "0x01DA",
-    "334": "0x020C",
-    "366": "0x0249",
-    "19": "0x015A",
-    "173": "0x00D8",
-    "90": "0x0059",
-    "69": "0x003F",
-    "233": "0x0152",
-    "268": "0x0187",
-    "20": "0x015C",
-    "384": "0x0264",
-    "162": "0x00CA",
-    "416": "0x02A1",
-    "388": "0x026E",
-    "292": "0x01B9",
-    "18": "0x0157",
-    "231": "0x014C",
-    "136": "0x00A3",
-    "129": "0x008F",
-    "161": "0x00C7",
-    "159": "0x00C2",
-    "185": "0x00E6",
-    "174": "0x00D9",
-    "320": "0x01F7",
-    "61": "0x0033",
-    "183": "0x00E5",
-    "157": "0x00C1",
-    "230": "0x014A",
-    "211": "0x010E",
-    "336": "0x0210",
-    "33": "0x0169",
-    "37": "0x0173",
-    "365": "0x0247",
-    "133": "0x009B",
-    "278": "0x019C",
-    "193": "0x00F3",
-    "316": "0x01EF",
-    "149": "0x00B8",
-    "151": "0x00BD",
-    "57": "0x002D",
-    "288": "0x01B5",
-    "196": "0x00F8",
-    "118": "0x0083",
-    "135": "0x00A0",
-    "66": "0x0037",
-    "117": "0x0081",
-    "13": "0x014A",
-    "95": "0x0061",
-    "148": "0x00B6",
-    "315": "0x01EE",
-    "87": "0x0054",
-    "17": "0x0154",
-    "131": "0x0095",
-    "199": "0x00FB",
-    "209": "0x010A",
-    "383": "0x0261",
-    "385": "0x0267",
-    "197": "0x00F9",
-    "232": "0x014F",
-    "175": "0x00DA",
-    "308": "0x01E2",
-    "403": "0x028A",
-    "379": "0x025C",
-    "241": "0x0154",
-    "361": "0x023D",
-    "373": "0x0257",
-    "120": "0x0086",
-    "207": "0x0107",
-    "386": "0x0269",
-    "208": "0x0108",
-    "273": "0x018D",
-    "410": "0x0292",
-    "203": "0x0100",
-    "11": "0x0145",
-    "395": "0x027F",
-    "198": "0x00FA",
-    "104": "0x006D",
-    "256": "0x0171",
-    "194": "0x00F5",
-    "204": "0x0102",
-    "314": "0x01EC",
-    "225": "0x0140",
-    "275": "0x0193",
-    "251": "0x016B",
-    "216": "0x0131",
-    "419": "0x02A9",
-    "222": "0x013B",
-    "298": "0x01CB",
-    "323": "0x01FA",
-    "55": "0x0027",
-    "342": "0x021F",
-    "300": "0x01D1",
-    "121": "0x0087",
-    "399": "0x0282",
-    "85": "0x0052",
-    "243": "0x0157",
-    "187": "0x00EB",
-    "390": "0x0272",
-    "391": "0x0275",
-    "206": "0x0106",
-    "217": "0x0133",
-    "346": "0x0226",
-    "338": "0x0216",
-    "110": "0x0077",
-    "74": "0x004A",
-    "305": "0x01DD",
-    "414": "0x029C",
+    "153": "0x00C1",
+    "165": "0x00CF",
+    "234": "0x0155",
     "301": "0x01D4",
-    "70": "0x0042",
-    "72": "0x0048",
-    "293": "0x01BC",
-    "250": "0x0169",
-    "6": "0x0143",
-    "60": "0x0032",
-    "227": "0x0143",
-    "58": "0x0030",
-    "116": "0x0080",
-    "39": "0x0179",
-    "213": "0x0111",
-    "15": "0x014F",
-    "355": "0x022F",
-    "370": "0x0251",
-    "228": "0x0145",
-    "115": "0x007F",
-    "426": "0x02DB",
-    "36": "0x0171",
-    "350": "0x022B",
-    "344": "0x0221",
-    "259": "0x0179",
-    "371": "0x0252",
-    "352": "0x022E",
-    "143": "0x00AA",
-    "12": "0x0147",
-    "283": "0x01AB",
-    "244": "0x015A",
-    "312": "0x01E7",
-    "356": "0x0230",
-    "333": "0x0209",
-    "364": "0x0244",
-    "40": "0x017C",
-    "166": "0x00CE",
-    "297": "0x01C8",
-    "402": "0x0288",
-    "369": "0x0250",
-    "172": "0x00D6",
-    "249": "0x0166",
-    "42": "0x0181",
-    "127": "0x008B",
-    "328": "0x0202",
-    "274": "0x0190",
-    "267": "0x0184",
-    "105": "0x0070",
-    "164": "0x00CC",
-    "404": "0x028B",
-    "363": "0x0241",
+    "197": "0x00FB",
+    "322": "0x01FB",
+    "388": "0x026E",
+    "149": "0x00B9",
+    "75": "0x004B",
+    "110": "0x0077",
     "91": "0x005A",
-    "392": "0x0278",
-    "276": "0x0196",
-    "108": "0x0074",
-    "29": "0x015F",
-    "14": "0x014C",
-    "340": "0x021A",
-    "205": "0x0104",
-    "30": "0x0161",
-    "210": "0x010D",
-    "224": "0x013E",
-    "387": "0x026B",
-    "281": "0x01A5",
-    "137": "0x00A6",
-    "134": "0x009E",
+    "15": "0x0152",
+    "111": "0x0078",
+    "363": "0x0242",
+    "161": "0x00C8",
+    "200": "0x00FE",
+    "358": "0x0236",
+    "44": "0x0187",
+    "223": "0x013E",
+    "189": "0x00F0",
+    "19": "0x015D",
+    "294": "0x01BF",
+    "400": "0x0285",
+    "364": "0x0244",
+    "117": "0x0081",
+    "226": "0x0143",
+    "34": "0x016E",
+    "402": "0x0288",
+    "246": "0x015F",
+    "415": "0x029F",
+    "339": "0x0219",
+    "341": "0x021D",
+    "296": "0x01C5",
+    "348": "0x022B",
+    "321": "0x01FA",
+    "29": "0x0162",
+    "361": "0x023D",
+    "205": "0x0105",
+    "97": "0x0063",
+    "327": "0x0201",
     "73": "0x0049",
-    "106": "0x0071",
-    "181": "0x00E3",
+    "209": "0x010B",
+    "191": "0x00F3",
+    "90": "0x0059",
+    "41": "0x0182",
+    "300": "0x01D1",
+    "16": "0x0155",
+    "171": "0x00D7",
+    "144": "0x00AD",
+    "88": "0x0056",
+    "385": "0x0267",
+    "229": "0x0148",
+    "410": "0x0294",
+    "218": "0x0136",
+    "389": "0x0271",
+    "18": "0x015A",
+    "33": "0x016C",
+    "344": "0x0223",
+    "115": "0x007F",
+    "131": "0x0095",
+    "283": "0x01AB",
+    "20": "0x015F",
+    "320": "0x01F8",
+    "386": "0x026A",
+    "98": "0x0065",
+    "317": "0x01F2",
+    "383": "0x0263",
+    "367": "0x024C",
+    "211": "0x0110",
     "329": "0x0205",
-    "327": "0x01FF",
+    "281": "0x01A5",
+    "360": "0x023B",
+    "349": "0x022C",
+    "323": "0x01FC",
+    "104": "0x006D",
+    "337": "0x0213",
+    "416": "0x02A2",
+    "186": "0x00E9",
+    "412": "0x0298",
+    "309": "0x01E5",
+    "35": "0x0171",
+    "174": "0x00DB",
+    "163": "0x00CD",
+    "342": "0x0220",
+    "369": "0x0251",
+    "245": "0x015D",
+    "61": "0x0033",
+    "178": "0x00E1",
+    "409": "0x0293",
+    "372": "0x0255",
+    "176": "0x00DD",
+    "85": "0x0052",
+    "290": "0x01B9",
+    "380": "0x025F",
+    "213": "0x0112",
+    "262": "0x017F",
+    "71": "0x0045",
+    "391": "0x0275",
+    "335": "0x020F",
+    "6": "0x0146",
+    "199": "0x00FD",
+    "133": "0x009B",
+    "11": "0x0148",
+    "217": "0x0134",
+    "66": "0x0037",
+    "374": "0x025A",
+    "378": "0x025D",
+    "118": "0x0083",
+    "190": "0x00F2",
+    "114": "0x007C",
+    "297": "0x01C8",
+    "137": "0x00A6",
     "279": "0x019F",
-    "277": "0x0199",
-    "418": "0x02A6",
-    "146": "0x00B0",
-    "167": "0x00CF",
-    "221": "0x0139",
+    "2": "0x0146",
+    "274": "0x0190",
+    "127": "0x008B",
+    "222": "0x013C",
+    "258": "0x0176",
+    "120": "0x0086",
+    "406": "0x028F",
+    "353": "0x0231",
+    "331": "0x020A",
+    "67": "0x0039",
+    "162": "0x00CA",
+    "351": "0x022E",
+    "318": "0x01F3",
+    "201": "0x0100",
+    "138": "0x00A9",
+    "306": "0x01E0",
+    "70": "0x0042",
+    "175": "0x00DC",
+    "252": "0x016E",
+    "188": "0x00EE",
+    "167": "0x00D1",
+    "392": "0x0278",
+    "278": "0x019C",
+    "208": "0x010A",
+    "231": "0x014D",
+    "135": "0x00A1",
+    "293": "0x01BC",
+    "96": "0x0062",
+    "181": "0x00E5",
+    "328": "0x0202",
+    "233": "0x0152",
+    "108": "0x0074",
+    "55": "0x0027",
+    "152": "0x00C0",
+    "225": "0x0141",
+    "390": "0x0273",
+    "347": "0x0229",
+    "330": "0x0208",
+    "84": "0x004F",
+    "250": "0x0169",
+    "68": "0x003C",
+    "343": "0x0222",
+    "32": "0x0169",
+    "375": "0x025C",
+    "130": "0x0092",
+    "52": "0x001F",
+    "324": "0x01FD",
+    "150": "0x00BB",
+    "30": "0x0164",
+    "365": "0x0247",
+    "359": "0x0239",
+    "187": "0x00EC",
+    "325": "0x01FF",
+    "198": "0x00FC",
+    "346": "0x0226",
+    "414": "0x029D",
     "128": "0x008D",
-    "405": "0x028C",
-    "347": "0x0228",
-    "280": "0x01A2"
+    "313": "0x01EA",
+    "356": "0x0232",
+    "248": "0x0164",
+    "195": "0x00F8",
+    "12": "0x014A",
+    "87": "0x0054",
+    "420": "0x02AC",
+    "101": "0x0069",
+    "304": "0x01DD",
+    "121": "0x0087",
+    "404": "0x028D",
+    "314": "0x01EC",
+    "193": "0x00F4",
+    "370": "0x0253",
+    "312": "0x01E8",
+    "316": "0x01F1",
+    "59": "0x0031",
+    "57": "0x002D",
+    "280": "0x01A2",
+    "345": "0x0224",
+    "276": "0x0196",
+    "419": "0x02A9",
+    "350": "0x022D",
+    "14": "0x014F",
+    "129": "0x008F",
+    "13": "0x014D",
+    "69": "0x003F",
+    "220": "0x0139",
+    "206": "0x0107",
+    "151": "0x00BD",
+    "427": "0x02DE",
+    "116": "0x0080",
+    "403": "0x028B",
+    "285": "0x01B1",
+    "336": "0x0211",
+    "384": "0x0264",
+    "53": "0x0021",
+    "284": "0x01AE",
+    "136": "0x00A3",
+    "371": "0x0254",
+    "54": "0x0024",
+    "259": "0x0179",
+    "40": "0x017F",
+    "145": "0x00B0",
+    "86": "0x0053",
+    "352": "0x0230",
+    "401": "0x0286",
+    "277": "0x0199",
+    "326": "0x0200",
+    "394": "0x027D",
+    "194": "0x00F6",
+    "302": "0x01D7",
+    "307": "0x01E3",
+    "74": "0x004A",
+    "173": "0x00D9",
+    "381": "0x0261",
+    "143": "0x00AA",
+    "338": "0x0216",
+    "184": "0x00E8",
+    "94": "0x005E",
+    "308": "0x01E4",
+    "289": "0x01B8",
+    "405": "0x028E",
+    "107": "0x0072",
+    "132": "0x0098",
+    "411": "0x0295",
+    "169": "0x00D5",
+    "395": "0x027F",
+    "72": "0x0048",
+    "251": "0x016C",
+    "212": "0x0111",
+    "299": "0x01CE",
+    "214": "0x0114",
+    "36": "0x0174",
+    "56": "0x002A",
+    "58": "0x0030",
+    "158": "0x00C4",
+    "288": "0x01B7",
+    "147": "0x00B3",
+    "387": "0x026C",
+    "362": "0x0240",
+    "269": "0x018A",
+    "180": "0x00E4",
+    "408": "0x0292",
+    "417": "0x02A4",
+    "334": "0x020C",
+    "154": "0x00C2",
+    "263": "0x0182",
+    "382": "0x0262",
+    "275": "0x0193",
+    "267": "0x0184",
+    "182": "0x00E6",
+    "148": "0x00B7",
+    "100": "0x0068",
+    "160": "0x00C5",
+    "282": "0x01A8",
+    "418": "0x02A6",
+    "249": "0x0167",
+    "315": "0x01EF",
+    "253": "0x0171",
+    "257": "0x0174",
+    "38": "0x0179",
+    "60": "0x0032",
+    "39": "0x017C",
+    "37": "0x0176",
+    "232": "0x014F",
+    "228": "0x0146",
+    "244": "0x015A",
+    "210": "0x010D",
+    "368": "0x024E",
+    "319": "0x01F5",
+    "204": "0x0103",
+    "42": "0x0184",
+    "207": "0x0109",
+    "366": "0x024A",
+    "242": "0x0157",
+    "298": "0x01CB",
+    "106": "0x0071",
+    "413": "0x029B",
+    "268": "0x0187",
+    "164": "0x00CE",
+    "260": "0x017C",
+    "357": "0x0233",
+    "230": "0x014A",
+    "287": "0x01B4",
+    "134": "0x009E",
+    "95": "0x0061",
+    "105": "0x0070",
+    "397": "0x0284",
+    "303": "0x01DA",
+    "155": "0x00C3",
+    "270": "0x018D",
+    "379": "0x025E",
+    "177": "0x00DF",
+    "168": "0x00D2",
+    "407": "0x0290",
+    "373": "0x0257",
+    "31": "0x0167",
+    "396": "0x0282",
+    "340": "0x021B",
+    "393": "0x027B",
+    "247": "0x0162"
   },
   "variables": {
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC8A0",
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC896",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC89E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC89C",
       "size": 2,
       "type": "unknown",
       "declLine": null
@@ -1862,24 +1882,10 @@
       "type": "unknown",
       "declLine": null
     },
-    "VPY_MOVE_Y": {
-      "name": "VPY_MOVE_Y",
-      "address": "0xC88B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
     "RESULT": {
       "name": "RESULT",
       "address": "0xC880",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC896",
-      "size": 6,
       "type": "unknown",
       "declLine": null
     },
@@ -1890,17 +1896,31 @@
       "type": "unknown",
       "declLine": null
     },
-    "arg0": {
-      "name": "arg0",
-      "address": "0xC89C",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
     "arg3": {
       "name": "arg3",
       "address": "0xC8A2",
       "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8A0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC88C",
+      "size": 10,
       "type": "unknown",
       "declLine": null
     },
@@ -1918,13 +1938,6 @@
       "type": "unknown",
       "declLine": null
     },
-    "DRAW_LINE_ARGS": {
-      "name": "DRAW_LINE_ARGS",
-      "address": "0xC88C",
-      "size": 10,
-      "type": "unknown",
-      "declLine": null
-    },
     "TEMP_YX": {
       "name": "TEMP_YX",
       "address": "0xC886",
@@ -1932,17 +1945,10 @@
       "type": "unknown",
       "declLine": null
     },
-    "arg1": {
-      "name": "arg1",
-      "address": "0xC89E",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC884",
-      "size": 2,
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC88B",
+      "size": 1,
       "type": "unknown",
       "declLine": null
     }

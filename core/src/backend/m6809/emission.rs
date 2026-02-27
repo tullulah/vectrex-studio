@@ -310,25 +310,35 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
         out.push_str("    LDB VLINE_DX\n");
         out.push_str("    JSR Draw_Line_d ; Beam moves automatically\n");
         
-        // Check if we need segment 2 - for BOTH dy > 127 AND dy < -128
-        out.push_str("    ; Check if we need SEGMENT 2 (dy outside ±127 range)\n");
+        // Check if we need segment 2 - for dy OR dx outside ±127/±128 range
+        out.push_str("    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)\n");
         out.push_str("    LDD VLINE_DY_16 ; Reload original dy\n");
         out.push_str("    CMPD #127\n");
         out.push_str("    BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2\n");
         out.push_str("    CMPD #-128\n");
         out.push_str("    BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2\n");
-        out.push_str("    BRA DLW_DONE       ; dy in range ±127: no segment 2\n");
+        out.push_str("    LDD VLINE_DX_16 ; Also check dx\n");
+        out.push_str("    CMPD #127\n");
+        out.push_str("    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2\n");
+        out.push_str("    CMPD #-128\n");
+        out.push_str("    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2\n");
+        out.push_str("    BRA DLW_DONE       ; both dy and dx in range: no segment 2\n");
         out.push_str("DLW_NEED_SEG2:\n");
-        
+
         // SEGMENT 2: Handle remaining dy AND dx
         out.push_str("    ; SEGMENT 2: Draw remaining dy and dx\n");
         out.push_str("    ; Calculate remaining dy\n");
         out.push_str("    LDD VLINE_DY_16 ; Load original full dy\n");
         out.push_str("    CMPD #127\n");
-        out.push_str("    BGT DLW_SEG2_DY_POS  ; dy > 127\n");
+        out.push_str("    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127\n");
+        out.push_str("    CMPD #-128\n");
+        out.push_str("    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy\n");
         out.push_str("    ; dy < -128, so we drew -128 in segment 1\n");
         out.push_str("    ; remaining = dy - (-128) = dy + 128\n");
         out.push_str("    ADDD #128       ; Add back the -128 we already drew\n");
+        out.push_str("    BRA DLW_SEG2_DY_DONE\n");
+        out.push_str("DLW_SEG2_DY_NO_REMAIN:\n");
+        out.push_str("    LDD #0          ; dy in range: no remaining\n");
         out.push_str("    BRA DLW_SEG2_DY_DONE\n");
         out.push_str("DLW_SEG2_DY_POS:\n");
         out.push_str("    ; dy > 127, so we drew 127 in segment 1\n");
@@ -858,24 +868,23 @@ sfx_doframe:
         LDA #$CC\n\
         STA VIA_cntl\n\
         CLR VIA_port_a\n\
-        LDA #$82\n\
-        STA VIA_port_b\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        LDA #$83\n\
-        STA VIA_port_b\n\
-        ; Move sequence\n\
+        LDA #$03\n\
+        STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; repeat\n\
+        LDA #$01\n\
+        STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+        ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
         LDD TEMP_YX             ; Recuperar y,x\n\
-        STB VIA_port_a          ; y to DAC\n\
-        PSHS A                  ; Save x\n\
+        STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+        CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+        PSHS A                  ; ~4 cycle settling delay for Y\n\
         LDA #$CE\n\
-        STA VIA_cntl\n\
-        CLR VIA_port_b\n\
-        LDA #1\n\
-        STA VIA_port_b\n\
+        STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+        CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+        INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
         PULS A                  ; Restore x\n\
         STA VIA_port_a          ; x to DAC\n\
         ; Timing setup\n\
@@ -883,11 +892,12 @@ sfx_doframe:
         STA VIA_t1_cnt_lo\n\
         CLR VIA_t1_cnt_hi\n\
         LEAX 2,X                ; Skip next_y, next_x\n\
-        ; Wait for move to complete\n\
+        ; Wait for move to complete (PB=1 on exit)\n\
         DSL_W1:\n\
         LDA VIA_int_flags\n\
         ANDA #$40\n\
         BEQ DSL_W1\n\
+        ; PB stays 1 — draw loop begins with PB=1\n\
         ; Loop de dibujo\n\
         DSL_LOOP:\n\
         LDA ,X+                 ; Read flag\n\
@@ -899,22 +909,23 @@ sfx_doframe:
         CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)\n\
         LDB ,X+                 ; dy\n\
         LDA ,X+                 ; dx\n\
-        PSHS A                  ; Save dx\n\
-        STB VIA_port_a          ; dy to DAC\n\
-        CLR VIA_port_b\n\
-        LDA #1\n\
-        STA VIA_port_b\n\
-        PULS A                  ; Restore dx\n\
-        STA VIA_port_a          ; dx to DAC\n\
-        CLR VIA_t1_cnt_hi\n\
+        ; B=DY, A=DX, PB=1 on entry (from moveto or previous segment)\n\
+        STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)\n\
+        CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction\n\
+        NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)\n\
+        NOP                     ; settling 2\n\
+        NOP                     ; settling 3\n\
+        INC VIA_port_b          ; PB=1: disable mux, lock direction at DY\n\
+        STA VIA_port_a          ; DX to DAC\n\
         LDA #$FF\n\
-        STA VIA_shift_reg\n\
+        STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)\n\
+        CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)\n\
         ; Wait for line draw\n\
         DSL_W2:\n\
         LDA VIA_int_flags\n\
         ANDA #$40\n\
         BEQ DSL_W2\n\
-        CLR VIA_shift_reg\n\
+        CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
         LBRA DSL_LOOP            ; Long branch back to loop start\n\
         ; Next path: read new intensity and header, then continue drawing\n\
         DSL_NEXT_PATH:\n\
@@ -941,36 +952,35 @@ sfx_doframe:
         LDA #$CC\n\
         STA VIA_cntl\n\
         CLR VIA_port_a\n\
-        LDA #$82\n\
-        STA VIA_port_b\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        LDA #$83\n\
-        STA VIA_port_b\n\
-        ; Move to new start position\n\
+        LDA #$03\n\
+        STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; repeat\n\
+        LDA #$01\n\
+        STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+        ; Moveto new start position (BIOS Moveto_d order)\n\
         LDD TEMP_YX\n\
-        STB VIA_port_a          ; y to DAC\n\
-        PSHS A\n\
+        STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+        CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+        PSHS A                  ; ~4 cycle settling delay for Y\n\
         LDA #$CE\n\
-        STA VIA_cntl\n\
-        CLR VIA_port_b\n\
-        LDA #1\n\
-        STA VIA_port_b\n\
+        STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+        CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+        INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
         PULS A\n\
         STA VIA_port_a          ; x to DAC\n\
         LDA #$7F\n\
         STA VIA_t1_cnt_lo\n\
         CLR VIA_t1_cnt_hi\n\
         LEAX 2,X                ; Skip next_y, next_x\n\
-        ; Wait for move\n\
+        ; Wait for move (PB=1 on exit)\n\
         DSL_W3:\n\
         LDA VIA_int_flags\n\
         ANDA #$40\n\
         BEQ DSL_W3\n\
-        CLR VIA_shift_reg       ; Clear before continuing\n\
+        ; PB stays 1 — draw loop continues with PB=1\n\
         LBRA DSL_LOOP            ; Continue drawing - LONG BRANCH\n\
         DSL_DONE:\n\
         RTS\n"
@@ -1001,24 +1011,23 @@ sfx_doframe:
         LDA #$CC\n\
         STA VIA_cntl\n\
         CLR VIA_port_a\n\
-        LDA #$82\n\
-        STA VIA_port_b\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        LDA #$83\n\
-        STA VIA_port_b\n\
-        ; Move sequence\n\
+        LDA #$03\n\
+        STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; repeat\n\
+        LDA #$01\n\
+        STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+        ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
         LDD TEMP_YX             ; Recuperar y,x ajustado\n\
-        STB VIA_port_a          ; y to DAC\n\
-        PSHS A                  ; Save x\n\
+        STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+        CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+        PSHS A                  ; ~4 cycle settling delay for Y\n\
         LDA #$CE\n\
-        STA VIA_cntl\n\
-        CLR VIA_port_b\n\
-        LDA #1\n\
-        STA VIA_port_b\n\
+        STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+        CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+        INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
         PULS A                  ; Restore x\n\
         STA VIA_port_a          ; x to DAC\n\
         ; Timing setup\n\
@@ -1026,11 +1035,12 @@ sfx_doframe:
         STA VIA_t1_cnt_lo\n\
         CLR VIA_t1_cnt_hi\n\
         LEAX 2,X                ; Skip next_y, next_x\n\
-        ; Wait for move to complete\n\
+        ; Wait for move to complete (PB=1 on exit)\n\
         DSLA_W1:\n\
         LDA VIA_int_flags\n\
         ANDA #$40\n\
         BEQ DSLA_W1\n\
+        ; PB stays 1 — draw loop begins with PB=1\n\
         ; Loop de dibujo (same as Draw_Sync_List)\n\
         DSLA_LOOP:\n\
         LDA ,X+                 ; Read flag\n\
@@ -1042,22 +1052,23 @@ sfx_doframe:
         CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)\n\
         LDB ,X+                 ; dy\n\
         LDA ,X+                 ; dx\n\
-        PSHS A                  ; Save dx\n\
-        STB VIA_port_a          ; dy to DAC\n\
-        CLR VIA_port_b\n\
-        LDA #1\n\
-        STA VIA_port_b\n\
-        PULS A                  ; Restore dx\n\
-        STA VIA_port_a          ; dx to DAC\n\
-        CLR VIA_t1_cnt_hi\n\
+        ; B=DY, A=DX, PB=1 on entry (from moveto or previous segment)\n\
+        STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)\n\
+        CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction\n\
+        NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)\n\
+        NOP                     ; settling 2\n\
+        NOP                     ; settling 3\n\
+        INC VIA_port_b          ; PB=1: disable mux, lock direction at DY\n\
+        STA VIA_port_a          ; DX to DAC\n\
         LDA #$FF\n\
-        STA VIA_shift_reg\n\
+        STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)\n\
+        CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)\n\
         ; Wait for line draw\n\
         DSLA_W2:\n\
         LDA VIA_int_flags\n\
         ANDA #$40\n\
         BEQ DSLA_W2\n\
-        CLR VIA_shift_reg\n\
+        CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
         LBRA DSLA_LOOP           ; Long branch\n\
         ; Next path: add offset to new coordinates too\n\
         DSLA_NEXT_PATH:\n\
@@ -1080,36 +1091,35 @@ sfx_doframe:
         LDA #$CC\n\
         STA VIA_cntl\n\
         CLR VIA_port_a\n\
-        LDA #$82\n\
-        STA VIA_port_b\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        NOP\n\
-        LDA #$83\n\
-        STA VIA_port_b\n\
-        ; Move to new start position (already offset-adjusted)\n\
+        LDA #$03\n\
+        STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+        LDA #$02\n\
+        STA VIA_port_b          ; repeat\n\
+        LDA #$01\n\
+        STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+        ; Moveto new start position (Moveto_d order, offset-adjusted)\n\
         LDD TEMP_YX\n\
-        STB VIA_port_a\n\
-        PSHS A\n\
+        STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+        CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+        PSHS A                  ; ~4 cycle settling delay for Y\n\
         LDA #$CE\n\
-        STA VIA_cntl\n\
-        CLR VIA_port_b\n\
-        LDA #1\n\
-        STA VIA_port_b\n\
+        STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+        CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+        INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
         PULS A\n\
-        STA VIA_port_a\n\
+        STA VIA_port_a          ; X to DAC\n\
         LDA #$7F\n\
         STA VIA_t1_cnt_lo\n\
         CLR VIA_t1_cnt_hi\n\
         LEAX 2,X\n\
-        ; Wait for move\n\
+        ; Wait for move (PB=1 on exit)\n\
         DSLA_W3:\n\
         LDA VIA_int_flags\n\
         ANDA #$40\n\
         BEQ DSLA_W3\n\
-        CLR VIA_shift_reg\n\
+        ; PB stays 1 — draw loop continues with PB=1\n\
         LBRA DSLA_LOOP           ; Long branch\n\
         DSLA_DONE:\n\
         RTS\n"
@@ -1157,24 +1167,23 @@ DSWM_NO_NEGATE_X:\n\
             LDA #$CC\n\
             STA VIA_cntl\n\
             CLR VIA_port_a\n\
-            LDA #$82\n\
-            STA VIA_port_b\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            LDA #$83\n\
-            STA VIA_port_b\n\
-            ; Move sequence\n\
+            LDA #$03\n\
+            STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; repeat\n\
+            LDA #$01\n\
+            STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+            ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
             LDD TEMP_YX\n\
-            STB VIA_port_a          ; y to DAC\n\
-            PSHS A                  ; Save x\n\
+            STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+            PSHS A                  ; ~4 cycle settling delay for Y\n\
             LDA #$CE\n\
-            STA VIA_cntl\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
+            STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+            CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore x\n\
             STA VIA_port_a          ; x to DAC\n\
             ; Timing setup\n\
@@ -1182,11 +1191,12 @@ DSWM_NO_NEGATE_X:\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
-            ; Wait for move to complete\n\
+            ; Wait for move to complete (PB=1 on exit)\n\
             DSWM_W1:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W1\n\
+            ; PB stays 1 — draw loop begins with PB=1\n\
             ; Loop de dibujo (conditional mirrors)\n\
             DSWM_LOOP:\n\
             LDA ,X+                 ; Read flag\n\
@@ -1207,22 +1217,23 @@ DSWM_NO_NEGATE_DY:\n\
             BEQ DSWM_NO_NEGATE_DX\n\
             NEGA                    ; ← Negate dx if flag set\n\
 DSWM_NO_NEGATE_DX:\n\
-            PSHS A                  ; Save final dx\n\
-            STB VIA_port_a          ; dy (possibly negated) to DAC\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
-            PULS A                  ; Restore final dx\n\
-            STA VIA_port_a          ; dx (possibly negated) to DAC\n\
-            CLR VIA_t1_cnt_hi\n\
+            ; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)\n\
+            STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction\n\
+            NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)\n\
+            NOP                     ; settling 2\n\
+            NOP                     ; settling 3\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at DY\n\
+            STA VIA_port_a          ; DX to DAC\n\
             LDA #$FF\n\
-            STA VIA_shift_reg\n\
+            STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)\n\
+            CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)\n\
             ; Wait for line draw\n\
             DSWM_W2:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
-            CLR VIA_shift_reg\n\
+            CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\
@@ -1260,36 +1271,35 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             LDA #$CC\n\
             STA VIA_cntl\n\
             CLR VIA_port_a\n\
-            LDA #$82\n\
-            STA VIA_port_b\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            LDA #$83\n\
-            STA VIA_port_b\n\
-            ; Move to new start position\n\
+            LDA #$03\n\
+            STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; repeat\n\
+            LDA #$01\n\
+            STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+            ; Moveto new start position (BIOS Moveto_d order)\n\
             LDD TEMP_YX\n\
-            STB VIA_port_a\n\
-            PSHS A\n\
+            STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+            PSHS A                  ; ~4 cycle settling delay for Y\n\
             LDA #$CE\n\
-            STA VIA_cntl\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
+            STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+            CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
-            STA VIA_port_a\n\
+            STA VIA_port_a          ; X to DAC\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
-            ; Wait for move\n\
+            ; Wait for move (PB=1 on exit)\n\
             DSWM_W3:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W3\n\
-            CLR VIA_shift_reg\n\
+            ; PB stays 1 — draw loop continues with PB=1\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             DSWM_DONE:\n\
             RTS\n"
@@ -1793,25 +1803,21 @@ DCR_after_intensity:\n\
         out.push_str("    CMPA #20\n");
         out.push_str("    BEQ SLR_ROM_OFFSETS\n");
         out.push_str("    \n");
-        out.push_str("    ; RAM offsets (18 bytes, no 'type' or 'intensity')\n");
-        out.push_str("    ; Need to calculate ROM address for intensity: ROM_PTR + (objIndex * 20) + 8\n");
-        out.push_str("    ; objIndex = (X - LEVEL_GP_BUFFER) / 18\n");
+        out.push_str("    ; RAM offsets (14 bytes, no 'type' or 'intensity')\n");
+        out.push_str("    ; Calculate ROM address for intensity: ROM_PTR + (objIndex * 20) + 8\n");
+        out.push_str("    ; objIndex = totalCount - currentCounter\n");
+        out.push_str("    ; FIX: use X (not D) to walk ROM addresses — avoids LDB clobbering D\n");
         out.push_str("    PSHS X           ; Save RAM object pointer\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
-        out.push_str("    SUBB 2,S         ; objIndex = totalCount - currentCounter\n");
-        out.push_str("    ; Multiply objIndex by 20 using loop (B * 20)\n");
-        out.push_str("    PSHS B           ; Save objIndex for loop counter\n");
-        out.push_str("    LDD >LEVEL_GP_ROM_PTR ; D = ROM base\n");
-        out.push_str("SLR_RAM_INTENSITY_LOOP:\n");
-        out.push_str("    LDB ,S           ; Load counter\n");
-        out.push_str("    BEQ SLR_RAM_INTENSITY_DONE  ; Exit if 0\n");
-        out.push_str("    ADDD #20         ; D += 20\n");
-        out.push_str("    DEC ,S           ; Decrement counter on stack\n");
-        out.push_str("    LBRA SLR_RAM_INTENSITY_LOOP\n");
-        out.push_str("SLR_RAM_INTENSITY_DONE:\n");
-        out.push_str("    LEAS 1,S         ; Clean objIndex from stack\n");
-        out.push_str("    TFR D,Y          ; Y = ROM object address\n");
-        out.push_str("    LDA 8,Y          ; intensity at ROM +8\n");
+        out.push_str("    SUBB 2,S         ; B = objIndex = totalCount - currentCounter\n");
+        out.push_str("    LDX >LEVEL_GP_ROM_PTR ; X = ROM base (index 0)\n");
+        out.push_str("SLR_ROM_ADDR_LOOP:\n");
+        out.push_str("    BEQ SLR_INTENSITY_READ  ; Exit if index=0 (X already at correct ROM obj)\n");
+        out.push_str("    LEAX 20,X        ; X += ROM stride (20 bytes per object)\n");
+        out.push_str("    DECB             ; Decrement index counter\n");
+        out.push_str("    BRA SLR_ROM_ADDR_LOOP\n");
+        out.push_str("SLR_INTENSITY_READ:\n");
+        out.push_str("    LDA 8,X          ; intensity at ROM +8\n");
         out.push_str("    STA DRAW_VEC_INTENSITY\n");
         out.push_str("    PULS X           ; Restore RAM object pointer\n");
         out.push_str("    \n");
@@ -1901,10 +1907,9 @@ DCR_after_intensity:\n\
         if opts.buffer_requirements.as_ref().map(|r| r.needs_buffer).unwrap_or(false) {
             out.push_str("    ; === Object-to-Object Collisions (GAMEPLAY only) ===\n");
             out.push_str("    JSR ULR_GAMEPLAY_COLLISIONS  ; Use JSR for long distance\n");
+            out.push_str("    ; === GP vs FG (static collidable objects) ===\n");
+            out.push_str("    JSR ULR_GP_FG_COLLISIONS\n");
         }
-        out.push_str("    \n");
-        out.push_str("    ; === Skip Foreground (static, no updates) ===\n");
-        out.push_str("    ; FG objects are read directly from ROM - no physics processing needed\n");
         out.push_str("    \n");
         out.push_str("ULR_EXIT:\n");
         out.push_str("    PULS D,Y,X,U  ; Restore registers\n");
@@ -1947,7 +1952,7 @@ DCR_after_intensity:\n\
         out.push_str("    LBEQ ULR_NO_GRAVITY  ; Long branch\n");
         out.push_str("\n");
         out.push_str("    ; Apply gravity: velocity_y -= 1\n");
-        out.push_str("    LDB 8,U       ; Read velocity_y\n");
+        out.push_str("    LDB 5,U       ; Read velocity_y (offset +5 in RAM buffer)\n");
         out.push_str("    DECB          ; Subtract gravity\n");
         out.push_str("    ; Clamp to -15..+15 (max velocity)\n");
         out.push_str("    CMPB #$F1     ; Compare with -15\n");
@@ -1957,19 +1962,42 @@ DCR_after_intensity:\n\
         out.push_str("    STB 5,U       ; Store updated velocity_y\n");
         out.push_str("\n");
         out.push_str("ULR_NO_GRAVITY:\n");
-        out.push_str("    ; Apply velocity to position (8-bit arithmetic)\n");
+        out.push_str("    ; Apply velocity to position (16-bit to avoid 8-bit wraparound)\n");
         out.push_str("    ; x += velocity_x\n");
-        out.push_str("    LDA 0,U       ; Load x (8-bit at offset +0)\n");
-        out.push_str("    LDB 4,U       ; Load velocity_x (signed 8-bit)\n");
-        out.push_str("    PSHS A        ; Save original x\n");
-        out.push_str("    ADDA 4,U      ; A = x + velocity_x\n");
-        out.push_str("    STA 0,U       ; Store new x\n");
-        out.push_str("    PULS A        ; Clean stack\n");
+        out.push_str("    LDB 0,U       ; x (8-bit signed)\n");
+        out.push_str("    SEX           ; D = sign-extended x\n");
+        out.push_str("    TFR D,Y       ; Y = x (16-bit)\n");
+        out.push_str("    LDB 4,U       ; velocity_x (8-bit signed)\n");
+        out.push_str("    SEX           ; D = sign-extended velocity_x\n");
+        out.push_str("    LEAY D,Y      ; Y = x + velocity_x (16-bit addition)\n");
+        out.push_str("    TFR Y,D       ; D = 16-bit result\n");
+        out.push_str("    CMPD #127     ; Clamp to i8 max\n");
+        out.push_str("    BLE ULR_X_NOT_MAX\n");
+        out.push_str("    LDD #127\n");
+        out.push_str("ULR_X_NOT_MAX:\n");
+        out.push_str("    CMPD #-128    ; Clamp to i8 min\n");
+        out.push_str("    BGE ULR_X_NOT_MIN\n");
+        out.push_str("    LDD #-128\n");
+        out.push_str("ULR_X_NOT_MIN:\n");
+        out.push_str("    STB 0,U       ; Store clamped x\n");
         out.push_str("\n");
         out.push_str("    ; y += velocity_y\n");
-        out.push_str("    LDA 1,U       ; Load y (8-bit at offset +1)\n");
-        out.push_str("    ADDA 5,U      ; A = y + velocity_y\n");
-        out.push_str("    STA 1,U       ; Store new y\n");
+        out.push_str("    LDB 1,U       ; y (8-bit signed)\n");
+        out.push_str("    SEX           ; D = sign-extended y\n");
+        out.push_str("    TFR D,Y       ; Y = y (16-bit)\n");
+        out.push_str("    LDB 5,U       ; velocity_y (8-bit signed)\n");
+        out.push_str("    SEX           ; D = sign-extended velocity_y\n");
+        out.push_str("    LEAY D,Y      ; Y = y + velocity_y (16-bit addition)\n");
+        out.push_str("    TFR Y,D       ; D = 16-bit result\n");
+        out.push_str("    CMPD #127     ; Clamp to i8 max\n");
+        out.push_str("    BLE ULR_Y_NOT_MAX\n");
+        out.push_str("    LDD #127\n");
+        out.push_str("ULR_Y_NOT_MAX:\n");
+        out.push_str("    CMPD #-128    ; Clamp to i8 min\n");
+        out.push_str("    BGE ULR_Y_NOT_MIN\n");
+        out.push_str("    LDD #-128\n");
+        out.push_str("ULR_Y_NOT_MIN:\n");
+        out.push_str("    STB 1,U       ; Store clamped y\n");
         out.push_str("\n");
         out.push_str("    ; === Check World Bounds (Wall Collisions) ===\n");
         out.push_str("    LDB 7,U      ; Load collision_flags\n");
@@ -2229,6 +2257,146 @@ DCR_after_intensity:\n\
         out.push_str("UGPC_EXIT:\n");
         out.push_str("    RTS\n");
         out.push_str("    \n");
+
+        // GP-FG collision: each GP object vs each static FG (ROM) collidable object
+        // GP RAM layout: +0=x, +1=y, +4=vx, +5=vy, +7=collision_flags, +8=collision_size
+        // FG ROM layout: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags, +13=collision_size
+        out.push_str("; === ULR_GP_FG_COLLISIONS - GP objects vs static FG collidables ===\n");
+        out.push_str("; Checks each physics-enabled GP object against each collidable FG ROM object.\n");
+        out.push_str("; Axis-split bounce: if |dy|>|dx| → negate vy; else → negate vx.\n");
+        out.push_str("ULR_GP_FG_COLLISIONS:\n");
+        out.push_str("    ; Skip if no FG objects\n");
+        out.push_str("    LDA >LEVEL_FG_COUNT\n");
+        out.push_str("    LBEQ UGFC_EXIT\n");
+        out.push_str("    STA UGFC_FG_COUNT   ; Cache FG count for inner loop\n");
+        out.push_str("    ; Skip if no GP objects\n");
+        out.push_str("    LDA >LEVEL_GP_COUNT\n");
+        out.push_str("    LBEQ UGFC_EXIT\n");
+        out.push_str("    CLR UGFC_GP_IDX\n");
+        out.push_str("\n");
+        out.push_str("UGFC_GP_LOOP:\n");
+        out.push_str("    ; U = LEVEL_GP_BUFFER + GP_IDX * 14\n");
+        out.push_str("    LDU #LEVEL_GP_BUFFER\n");
+        out.push_str("    LDB UGFC_GP_IDX\n");
+        out.push_str("    BEQ UGFC_GP_ADDR_DONE\n");
+        out.push_str("UGFC_GP_MUL:\n");
+        out.push_str("    LEAU 14,U\n");
+        out.push_str("    DECB\n");
+        out.push_str("    BNE UGFC_GP_MUL\n");
+        out.push_str("UGFC_GP_ADDR_DONE:\n");
+        out.push_str("    ; Check GP collision enabled (collision_flags bit 0)\n");
+        out.push_str("    LDB 7,U\n");
+        out.push_str("    BITB #$01\n");
+        out.push_str("    LBEQ UGFC_NEXT_GP\n");
+        out.push_str("\n");
+        out.push_str("    ; Inner loop: walk FG ROM objects\n");
+        out.push_str("    LDX >LEVEL_FG_ROM_PTR\n");
+        out.push_str("    LDB UGFC_FG_COUNT\n");
+        out.push_str("\n");
+        out.push_str("UGFC_FG_LOOP:\n");
+        out.push_str("    CMPB #0\n");
+        out.push_str("    LBEQ UGFC_NEXT_GP\n");
+        out.push_str("    ; Check FG collision enabled (ROM +12)\n");
+        out.push_str("    LDA 12,X\n");
+        out.push_str("    BITA #$01\n");
+        out.push_str("    LBEQ UGFC_NEXT_FG\n");
+        out.push_str("\n");
+        out.push_str("    ; |dx| = |GP.x - FG.x_lo|  (FG ROM +2 = low byte of FDB x)\n");
+        out.push_str("    LDA 0,U          ; GP x (RAM +0, 8-bit signed)\n");
+        out.push_str("    SUBA 2,X         ; A = GP.x - FG.x_lo\n");
+        out.push_str("    BPL UGFC_DX_POS\n");
+        out.push_str("    NEGA\n");
+        out.push_str("UGFC_DX_POS:\n");
+        out.push_str("    STA UGFC_DX\n");
+        out.push_str("\n");
+        out.push_str("    ; |dy| = |GP.y - FG.y_lo|  (FG ROM +4 = low byte of FDB y)\n");
+        out.push_str("    LDA 1,U          ; GP y (RAM +1)\n");
+        out.push_str("    SUBA 4,X         ; A = GP.y - FG.y_lo\n");
+        out.push_str("    BPL UGFC_DY_POS\n");
+        out.push_str("    NEGA\n");
+        out.push_str("UGFC_DY_POS:\n");
+        out.push_str("    STA UGFC_DY\n");
+        out.push_str("\n");
+        out.push_str("    ; sum_r = GP.collision_size + FG.collision_size\n");
+        out.push_str("    LDA 8,U          ; GP collision_size (RAM +8)\n");
+        out.push_str("    ADDA 13,X        ; + FG collision_size (ROM +13)\n");
+        out.push_str("\n");
+        out.push_str("    ; collision if |dx| + |dy| < sum_r\n");
+        out.push_str("    PSHS A           ; Save sum_r\n");
+        out.push_str("    LDA UGFC_DX\n");
+        out.push_str("    ADDA UGFC_DY\n");
+        out.push_str("    CMPA ,S+         ; Compare distance with sum_r (pop stack)\n");
+        out.push_str("    LBHS UGFC_NEXT_FG ; No collision\n");
+        out.push_str("\n");
+        out.push_str("    ; COLLISION! Axis-split by velocity: |vy|>|vx| → vert bounce, else horiz bounce\n");
+        out.push_str("    LDA 5,U          ; velocity_y\n");
+        out.push_str("    BPL UGFC_VY_ABS\n");
+        out.push_str("    NEGA\n");
+        out.push_str("UGFC_VY_ABS:\n");
+        out.push_str("    STA UGFC_DY      ; |vy|\n");
+        out.push_str("    LDA 4,U          ; velocity_x\n");
+        out.push_str("    BPL UGFC_VX_ABS\n");
+        out.push_str("    NEGA\n");
+        out.push_str("UGFC_VX_ABS:\n");
+        out.push_str("    CMPA UGFC_DY     ; |vx| vs |vy|\n");
+        out.push_str("    LBLT UGFC_VERT_BOUNCE ; |vx| < |vy| → vert bounce\n");
+        out.push_str("\n");
+        out.push_str("UGFC_HORIZ_BOUNCE:\n");
+        out.push_str("    LDA 4,U          ; velocity_x (RAM +4)\n");
+        out.push_str("    NEGA\n");
+        out.push_str("    STA 4,U\n");
+        out.push_str("    ; position correction: push GP away from FG on X axis\n");
+        out.push_str("    LDA 8,U          ; GP collision_size\n");
+        out.push_str("    ADDA 13,X        ; + FG collision_size = separation\n");
+        out.push_str("    PSHS A           ; save separation\n");
+        out.push_str("    LDA 0,U          ; GP.x\n");
+        out.push_str("    CMPA 2,X         ; compare with FG.x_lo\n");
+        out.push_str("    BLT UGFC_PUSH_LEFT\n");
+        out.push_str("    LDA 2,X\n");
+        out.push_str("    ADDA ,S+         ; FG.x + separation\n");
+        out.push_str("    STA 0,U\n");
+        out.push_str("    LBRA UGFC_NEXT_FG\n");
+        out.push_str("UGFC_PUSH_LEFT:\n");
+        out.push_str("    LDA 2,X\n");
+        out.push_str("    SUBA ,S+         ; FG.x - separation\n");
+        out.push_str("    STA 0,U\n");
+        out.push_str("    LBRA UGFC_NEXT_FG\n");
+        out.push_str("\n");
+        out.push_str("UGFC_VERT_BOUNCE:\n");
+        out.push_str("    LDA 5,U          ; velocity_y (RAM +5)\n");
+        out.push_str("    NEGA\n");
+        out.push_str("    STA 5,U\n");
+        out.push_str("    ; position correction: push GP above/below FG on Y axis\n");
+        out.push_str("    LDA 8,U          ; GP collision_size\n");
+        out.push_str("    ADDA 13,X        ; + FG collision_size = separation\n");
+        out.push_str("    PSHS A           ; save separation\n");
+        out.push_str("    LDA 1,U          ; GP.y\n");
+        out.push_str("    CMPA 4,X         ; compare with FG.y_lo\n");
+        out.push_str("    BLT UGFC_PUSH_DOWN\n");
+        out.push_str("    LDA 4,X\n");
+        out.push_str("    ADDA ,S+         ; FG.y + separation\n");
+        out.push_str("    STA 1,U\n");
+        out.push_str("    LBRA UGFC_NEXT_FG\n");
+        out.push_str("UGFC_PUSH_DOWN:\n");
+        out.push_str("    LDA 4,X\n");
+        out.push_str("    SUBA ,S+         ; FG.y - separation\n");
+        out.push_str("    STA 1,U\n");
+        out.push_str("\n");
+        out.push_str("UGFC_NEXT_FG:\n");
+        out.push_str("    LEAX 20,X        ; Next FG object (ROM stride 20)\n");
+        out.push_str("    DECB\n");
+        out.push_str("    LBRA UGFC_FG_LOOP\n");
+        out.push_str("\n");
+        out.push_str("UGFC_NEXT_GP:\n");
+        out.push_str("    INC UGFC_GP_IDX\n");
+        out.push_str("    LDA UGFC_GP_IDX\n");
+        out.push_str("    CMPA >LEVEL_GP_COUNT\n");
+        out.push_str("    LBLO UGFC_GP_LOOP\n");
+        out.push_str("\n");
+        out.push_str("UGFC_EXIT:\n");
+        out.push_str("    RTS\n");
+        out.push_str("\n");
+
         } // End conditional ULR_GAMEPLAY_COLLISIONS
     }
 

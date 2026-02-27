@@ -244,13 +244,13 @@ LOOP_BODY:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_1
-    LDA #$64
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$64
+    JSR Intensity_a
     LDA #$C4
     LDB #$D6
     JSR Moveto_d
@@ -325,13 +325,13 @@ LOOP_BODY:
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
-    LDA #$1E
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$1E
+    JSR Intensity_a
     LDA #$C4
     LDB #$D6
     JSR Moveto_d
@@ -414,13 +414,13 @@ IF_END_0:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_3
-    LDA #$64
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$64
+    JSR Intensity_a
     LDA #$C4
     LDB #$F4
     JSR Moveto_d
@@ -495,13 +495,13 @@ IF_END_0:
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
-    LDA #$1E
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$1E
+    JSR Intensity_a
     LDA #$C4
     LDB #$F4
     JSR Moveto_d
@@ -584,13 +584,13 @@ IF_END_2:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_5
-    LDA #$64
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$64
+    JSR Intensity_a
     LDA #$C4
     LDB #$12
     JSR Moveto_d
@@ -665,13 +665,13 @@ IF_END_2:
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
-    LDA #$1E
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$1E
+    JSR Intensity_a
     LDA #$C4
     LDB #$12
     JSR Moveto_d
@@ -754,13 +754,13 @@ IF_END_4:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_7
-    LDA #$64
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$64
+    JSR Intensity_a
     LDA #$C4
     LDB #$30
     JSR Moveto_d
@@ -835,13 +835,13 @@ IF_END_4:
     LBRA IF_END_6
 IF_NEXT_7:
 IF_END_6:
-    LDA #$1E
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$1E
+    JSR Intensity_a
     LDA #$C4
     LDB #$30
     JSR Moveto_d

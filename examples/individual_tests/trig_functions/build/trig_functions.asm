@@ -1,166 +1,471 @@
-; --- Motorola 6809 backend (Vectrex) title='TRIG' origin=$0000 ---
-        ORG $0000
+; VPy M6809 Assembly (Vectrex)
+; ROM: 32768 bytes
+
+
+    ORG $0000
+
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
     INCLUDE "VECTREX.I"
 
 ;***************************************************************************
-; HEADER SECTION
+; CARTRIDGE HEADER
 ;***************************************************************************
-    FCC "g GCE 1982"
-    FCB $80
-    FDB music1
-    FCB $F8
-    FCB $50
-    FCB $20
-    FCB $BB
+    FCC "g GCE 2025"
+    FCB $80                 ; String terminator
+    FDB music1              ; Music pointer
+    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
     FCC "TRIG"
-    FCB $80
-    FCB 0
+    FCB $80                 ; String terminator
+    FCB 0                   ; End of header
 
 ;***************************************************************************
 ; CODE SECTION
 ;***************************************************************************
 
-; === RAM VARIABLE DEFINITIONS (EQU) ===
-; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 58 bytes
+START:
+    LDA #$D0
+    TFR A,DP        ; Set Direct Page for BIOS
+    CLR $C80E        ; Initialize Vec_Prev_Btns
+    LDA #$80
+    STA VIA_t1_cnt_lo
+    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
+    TFR X,S
+    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
+    LDA #0
+    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
+    JMP MAIN
+
+;***************************************************************************
+; === RAM VARIABLE DEFINITIONS ===
+;***************************************************************************
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
-TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
-TMPRIGHT             EQU $C880+$06   ; Right operand temp (2 bytes)
-TMPRIGHT2            EQU $C880+$08   ; Right operand temp 2 (for nested operations) (2 bytes)
-TMPPTR               EQU $C880+$0A   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$0C   ; Pointer temp 2 (for nested array operations) (2 bytes)
-DIV_A                EQU $C880+$0E   ; Dividend (2 bytes)
-DIV_B                EQU $C880+$10   ; Divisor (2 bytes)
-DIV_Q                EQU $C880+$12   ; Quotient (2 bytes)
-DIV_R                EQU $C880+$14   ; Remainder (2 bytes)
-TEMP_YX              EQU $C880+$16   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$18   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$19   ; Temporary y storage (1 bytes)
-VPY_MOVE_X           EQU $C880+$1A   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$1B   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-NUM_STR              EQU $C880+$1C   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$22   ; Circle center X (byte) (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$23   ; Circle center Y (byte) (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$24   ; Circle diameter (byte) (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$25   ; Circle intensity (byte) (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$26   ; Circle drawing temporaries (radius=2, xc=2, yc=2, spare=2) (8 bytes)
-VAR_ANGLE            EQU $C880+$2E   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$30   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$32   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$34   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$36   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$38   ; Function argument 4 (2 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$0C   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$0D   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$0E   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$0F   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$10   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$11   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_LINE_ARGS       EQU $C880+$19   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$23   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$25   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$27   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$28   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$29   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_ANGLE            EQU $C880+$2D   ; User variable: ANGLE (2 bytes)
+VAR_PX               EQU $C880+$2F   ; User variable: PX (2 bytes)
+VAR_PY               EQU $C880+$31   ; User variable: PY (2 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
-    JMP START
 
-;**** CONST DECLARATIONS (NUMBER-ONLY) ****
+;***************************************************************************
+; MAIN PROGRAM
+;***************************************************************************
 
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
-J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
-J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; === BUTTON SYSTEM - BIOS TRANSITIONS ===
-; J1_BUTTON_1-4() - Read transition bits from $C811
-; Read_Btns (auto-injected) calculates: ~(new) OR Vec_Prev_Btns
-; Result: bit=1 ONLY on rising edge (0→1 transition)
-; Returns: D = 1 (just pressed), 0 (not pressed or still held)
-
-J1B1_BUILTIN:
-    LDA $C811      ; Read transition bits (Vec_Button_1_1)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    BEQ .J1B1_OFF
-    LDD #1         ; Return pressed (rising edge)
-    RTS
-.J1B1_OFF:
-    LDD #0         ; Return not pressed
-    RTS
-
-J1B2_BUILTIN:
-    LDA $C811
-    ANDA #$02      ; Test bit 1 (Button 2)
-    BEQ .J1B2_OFF
-    LDD #1
-    RTS
-.J1B2_OFF:
+MAIN:
+    ; Initialize global variables
+    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
     LDD #0
+    STD VAR_ANGLE
+    ; === Initialize Joystick (one-time setup) ===
+    JSR $F1AF    ; DP_to_C8 (required for RAM access)
+    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
+    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
+    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
+    LDA #$01
+    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
+    LDA #$03
+    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
+    LDA #$00
+    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
+    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
+    ; Mux configured - J1_X()/J1_Y() can now be called
+
+    ; Call main() for initialization
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ANGLE
+
+.MAIN_LOOP:
+    JSR LOOP_BODY
+    LBRA .MAIN_LOOP   ; Use long branch for multibank support
+
+LOOP_BODY:
+    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
+    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
+    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
+    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    ; PRINT_TEXT: Print text at position
+    LDD #-50
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #90
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_75826235280      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; COS: Cosine lookup
+    LDD >VAR_ANGLE
+    STD RESULT
+    LDD RESULT
+    ANDB #$7F
+    CLRA
+    ASLB
+    ROLA
+    LDX #COS_TABLE
+    ABX
+    LDD ,X
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #3
+    STD RESULT
+    LDD RESULT
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR DIV16       ; D = X / D
+    STD RESULT
+    LDD RESULT
+    STD VAR_PX
+    ; SIN: Sine lookup
+    LDD >VAR_ANGLE
+    STD RESULT
+    LDD RESULT
+    ANDB #$7F      ; Mask to 0-127
+    CLRA           ; Clear high byte
+    ASLB
+    ROLA
+    LDX #SIN_TABLE
+    ABX            ; Add offset to table base
+    LDD ,X         ; Load 16-bit value
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #3
+    STD RESULT
+    LDD RESULT
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR DIV16       ; D = X / D
+    STD RESULT
+    LDD RESULT
+    STD VAR_PY
+    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
+    LDD >VAR_PX
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_XC
+    LDD >VAR_PY
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_YC
+    LDD #30
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_DIAM
+    LDD #100
+    STD RESULT
+    LDA RESULT+1
+    STA DRAW_CIRCLE_INTENSITY
+    JSR DRAW_CIRCLE_RUNTIME
+    LDD #0
+    STD RESULT
+    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+0    ; x0
+    LDD #-5
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+2    ; y0
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+4    ; x1
+    LDD #5
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+6    ; y1
+    LDD #40
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+8    ; intensity
+    JSR DRAW_LINE_WRAPPER
+    LDD #0
+    STD RESULT
+    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
+    LDD #-5
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+0    ; x0
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+2    ; y0
+    LDD #5
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+4    ; x1
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+6    ; y1
+    LDD #40
+    STD RESULT
+    LDD RESULT
+    STD DRAW_LINE_ARGS+8    ; intensity
+    JSR DRAW_LINE_WRAPPER
+    LDD #0
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$00
+    LDB #$15
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$08
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$F9
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$F8
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$F8
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$F9
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F9
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F8
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F8
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F9
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$08
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$08
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$08
+    LDB #$02
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP    ; Restore DP=$C8 after circle drawing
+    LDD #0
+    STD RESULT
+    LDD >VAR_ANGLE
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD RESULT
+    LDD RESULT
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD RESULT
+    LDD RESULT
+    STD VAR_ANGLE
+    LDD #127
+    STD RESULT
+    LDD RESULT
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ANGLE
+    STD RESULT
+    LDD RESULT
+    CMPD TMPVAL
+    LBGT .CMP_0_TRUE
+    LDD #0
+    LBRA .CMP_0_END
+.CMP_0_TRUE:
+    LDD #1
+.CMP_0_END:
+    STD RESULT
+    LDD RESULT
+    LBEQ IF_NEXT_1
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ANGLE
+    LBRA IF_END_0
+IF_NEXT_1:
+IF_END_0:
     RTS
 
-J1B3_BUILTIN:
-    LDA $C811
-    ANDA #$04      ; Test bit 2 (Button 3)
-    BEQ .J1B3_OFF
-    LDD #1
-    RTS
-.J1B3_OFF:
-    LDD #0
-    RTS
-
-J1B4_BUILTIN:
-    LDA $C811
-    ANDA #$08      ; Test bit 3 (Button 4)
-    BEQ .J1B4_OFF
-    LDD #1
-    RTS
-.J1B4_OFF:
-    LDD #0
-    RTS
+;***************************************************************************
+; RUNTIME HELPERS
+;***************************************************************************
 
 VECTREX_PRINT_TEXT:
-    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)
-    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
+    ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
+    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
+    ;       causing integrators to drift toward joystick DAC value.
+    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Reset0Ref  ; Reset beam to center for absolute text positioning
-    LDU VAR_ARG2   ; string pointer (ARG2 = third param)
-    LDA VAR_ARG1+1 ; Y (ARG1 = second param)
-    LDB VAR_ARG0+1 ; X (ARG0 = first param)
+    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
+    JSR Reset0Ref   ; Reset beam to center before positioning text
+    LDU VAR_ARG2   ; string pointer
+    LDA >VAR_ARG1+1 ; Y coordinate
+    LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
     LDA #$80
-    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)
-    JSR $F1AF      ; DP_to_C8 (restore before return)
+    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
-; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
-__Intensity_a:
-TFR B,A         ; Move B to A (BIOS expects intensity in A)
-JMP Intensity_a ; JMP (not JSR) - BIOS returns to original caller
-__Reset0Ref:
-JMP Reset0Ref   ; JMP (not JSR) - BIOS returns to original caller
-__Moveto_d:
-LDA 2,S         ; Get Y from stack (after return address)
-JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
-__Draw_Line_d:
-LDA 2,S         ; Get dy from stack (after return address)
-JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
+
+DIV16:
+    ; Signed 16-bit division: D = X / D
+    ; X = dividend (i16), D = divisor (i16) -> D = quotient
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .D16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1 (dividend was negative)
+    BRA .D16_RCHECK
+.D16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.D16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .D16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+    LDA TMPPTR2
+    EORA #1
+    STA TMPPTR2         ; toggle sign flag (XOR with 1)
+.D16_RPOS:
+    LDD #0
+    STD RESULT          ; quotient = 0
+.D16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .D16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    LDD RESULT
+    ADDD #1
+    STD RESULT          ; quotient++
+    BRA .D16_LOOP
+.D16_END:
+    LDD RESULT          ; D = unsigned quotient
+    LDA TMPPTR2
+    BEQ .D16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate for negative result
+.D16_DONE:
+    RTS
+
+MOD16:
+    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
+    ; X = dividend (i16), D = divisor (i16) -> D = remainder
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .M16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1
+    BRA .M16_RCHECK
+.M16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.M16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .M16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+.M16_RPOS:
+.M16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .M16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    BRA .M16_LOOP
+.M16_END:
+    LDD TMPVAL          ; D = |remainder|
+    LDA TMPPTR2
+    BEQ .M16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate (same sign as dividend)
+.M16_DONE:
+    RTS
+
 ; ============================================================================
 ; DRAW_CIRCLE_RUNTIME - Draw circle with runtime parameters
 ; ============================================================================
@@ -357,780 +662,516 @@ LDA #$C8
 TFR A,DP           ; Restore DP=$C8 before return
 RTS
 
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
-    CLR $C80E        ; Initialize Vec_Prev_Btns to 0 for Read_Btns debounce
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk
-    TFR X,S
-
-    ; *** DEBUG *** main() function code inline (initialization)
-    ; VPy_LINE:11
-    ; VPy_LINE:9
-    LDD #0
-    STD VAR_ANGLE
-    ; VPy_LINE:12
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_ANGLE
-    STU TMPPTR
-    STX ,U
-
-MAIN:
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    ; === Initialize Joystick (one-time setup) ===
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
-    ; *** Call loop() as subroutine (executed every frame)
-    JSR LOOP_BODY
-    BRA MAIN
-
-    ; VPy_LINE:14
-LOOP_BODY:
-    LEAS -4,S ; allocate locals
-    JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:15
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #90
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_0
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 15
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(0)
-    ; VPy_LINE:19
-    LDD VAR_ANGLE
-    STD RESULT
-    LDD RESULT
-    ANDB #$7F
-    CLRA
-    ASLB
-    ROLA
-    LDX #SIN_TABLE
-    LDX #COS_TABLE
-    ABX
-    LDD ,X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #3
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    STD DIV_A
-    LDD TMPRIGHT
-    STD DIV_B
-    JSR DIV16
-    LDX RESULT
-    STX 0 ,S
-    ; DEBUG: Statement 2 - Discriminant(0)
-    ; VPy_LINE:20
-    LDD VAR_ANGLE
-    STD RESULT
-    LDD RESULT
-    ANDB #$7F
-    CLRA
-    ASLB
-    ROLA
-    LDX #SIN_TABLE
-    ABX
-    LDD ,X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #3
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    STD DIV_A
-    LDD TMPRIGHT
-    STD DIV_B
-    JSR DIV16
-    LDX RESULT
-    STX 2 ,S
-    ; DEBUG: Statement 3 - Discriminant(8)
-    ; VPy_LINE:23
-    LDD 0 ,S
-    STD RESULT
-    LDB RESULT+1  ; xc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_XC
-    LDD 2 ,S
-    STD RESULT
-    LDB RESULT+1  ; yc (low byte, signed -128..127)
-    STB DRAW_CIRCLE_YC
-    LDD #30
-    STD RESULT
-    LDB RESULT+1  ; diameter (low byte, 0..255)
-    STB DRAW_CIRCLE_DIAM
-    LDD #100
-    STD RESULT
-    LDB RESULT+1  ; intensity (low byte, 0..127)
-    STB DRAW_CIRCLE_INTENSITY
-    JSR DRAW_CIRCLE_RUNTIME
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 4 - Discriminant(8)
-    ; VPy_LINE:26
+; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
+; Args: DRAW_LINE_ARGS+0=x0, +2=y0, +4=x1, +6=y1, +8=intensity
+; Resets beam to center, moves to (x0,y0), draws to (x1,y1)
+DRAW_LINE_WRAPPER:
+    ; Set DP to hardware registers
     LDA #$D0
     TFR A,DP
-    JSR Reset0Ref
+    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning
     LDA #$80
-    STA <$04
-    LDA #$28
+    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)
+    ; ALWAYS set intensity (no optimization)
+    LDA >DRAW_LINE_ARGS+8+1  ; intensity (low byte) - EXTENDED addressing
     JSR Intensity_a
-    LDA #$FB
-    ADDA VPY_MOVE_Y
-    LDB #$00
-    ADDB VPY_MOVE_X
+    ; Move to start position (y in A, x in B) - use low bytes (8-bit signed -127..+127)
+    LDA >DRAW_LINE_ARGS+2+1  ; Y start (low byte) - EXTENDED addressing
+    ADDA >VPY_MOVE_Y         ; Add MOVE Y offset
+    LDB >DRAW_LINE_ARGS+0+1  ; X start (low byte) - EXTENDED addressing
+    ADDB >VPY_MOVE_X         ; Add MOVE X offset
     JSR Moveto_d
+    ; Compute deltas using 16-bit arithmetic
+    ; dx = x1 - x0 (treating as signed 16-bit)
+    LDD >DRAW_LINE_ARGS+4    ; x1 (16-bit) - EXTENDED
+    SUBD >DRAW_LINE_ARGS+0   ; subtract x0 (16-bit) - EXTENDED
+    STD >VLINE_DX_16 ; Store full 16-bit dx - EXTENDED
+    ; dy = y1 - y0 (treating as signed 16-bit)
+    LDD >DRAW_LINE_ARGS+6    ; y1 (16-bit) - EXTENDED
+    SUBD >DRAW_LINE_ARGS+2   ; subtract y0 (16-bit) - EXTENDED
+    STD >VLINE_DY_16 ; Store full 16-bit dy - EXTENDED
+    ; SEGMENT 1: Clamp dy to ±127 and draw
+    LDD >VLINE_DY_16 ; Load full dy - EXTENDED
+    CMPD #127
+    BLE DLW_SEG1_DY_LO
+    LDA #127        ; dy > 127: use 127
+    BRA DLW_SEG1_DY_READY
+DLW_SEG1_DY_LO:
+    CMPD #-128
+    BGE DLW_SEG1_DY_NO_CLAMP  ; -128 <= dy <= 127: use original (sign-extended)
+    LDA #$80        ; dy < -128: use -128
+    BRA DLW_SEG1_DY_READY
+DLW_SEG1_DY_NO_CLAMP:
+    LDA >VLINE_DY_16+1  ; Use original low byte - EXTENDED
+DLW_SEG1_DY_READY:
+    STA >VLINE_DY    ; Save clamped dy for segment 1 - EXTENDED
+    ; Clamp dx to ±127
+    LDD >VLINE_DX_16  ; EXTENDED
+    CMPD #127
+    BLE DLW_SEG1_DX_LO
+    LDB #127        ; dx > 127: use 127
+    BRA DLW_SEG1_DX_READY
+DLW_SEG1_DX_LO:
+    CMPD #-128
+    BGE DLW_SEG1_DX_NO_CLAMP  ; -128 <= dx <= 127: use original (sign-extended)
+    LDB #$80        ; dx < -128: use -128
+    BRA DLW_SEG1_DX_READY
+DLW_SEG1_DX_NO_CLAMP:
+    LDB >VLINE_DX_16+1  ; Use original low byte - EXTENDED
+DLW_SEG1_DX_READY:
+    STB >VLINE_DX    ; Save clamped dx for segment 1 - EXTENDED
+    ; Draw segment 1
     CLR Vec_Misc_Count
-    LDA #$0A
-    LDB #$00
-    JSR Draw_Line_d
-    LDA #$C8
+    LDA >VLINE_DY  ; EXTENDED
+    LDB >VLINE_DX  ; EXTENDED
+    JSR Draw_Line_d ; Beam moves automatically
+    ; Check if we need SEGMENT 2 (dy outside ±127 range)
+    LDD >VLINE_DY_16 ; Reload original dy - EXTENDED
+    CMPD #127
+    BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
+    CMPD #-128
+    BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
+    BRA DLW_DONE       ; dy in range ±127: no segment 2
+DLW_NEED_SEG2:
+    ; SEGMENT 2: Draw remaining dy and dx
+    ; Calculate remaining dy
+    LDD >VLINE_DY_16 ; Load original full dy - EXTENDED
+    CMPD #127
+    BGT DLW_SEG2_DY_POS  ; dy > 127
+    ; dy < -128, so we drew -128 in segment 1
+    ; remaining = dy - (-128) = dy + 128
+    ADDD #128       ; Add back the -128 we already drew
+    BRA DLW_SEG2_DY_DONE
+DLW_SEG2_DY_POS:
+    ; dy > 127, so we drew 127 in segment 1
+    ; remaining = dy - 127
+    SUBD #127       ; Subtract 127 we already drew
+DLW_SEG2_DY_DONE:
+    STD >VLINE_DY_REMAINING  ; Store remaining dy (16-bit) - EXTENDED
+    ; Calculate remaining dx
+    LDD >VLINE_DX_16 ; Load original full dx - EXTENDED
+    CMPD #127
+    BLE DLW_SEG2_DX_CHECK_NEG
+    ; dx > 127, so we drew 127 in segment 1
+    ; remaining = dx - 127
+    SUBD #127
+    BRA DLW_SEG2_DX_DONE
+DLW_SEG2_DX_CHECK_NEG:
+    CMPD #-128
+    BGE DLW_SEG2_DX_NO_REMAIN  ; -128 <= dx <= 127: no remaining dx
+    ; dx < -128, so we drew -128 in segment 1
+    ; remaining = dx - (-128) = dx + 128
+    ADDD #128
+    BRA DLW_SEG2_DX_DONE
+DLW_SEG2_DX_NO_REMAIN:
+    LDD #0          ; No remaining dx
+DLW_SEG2_DX_DONE:
+    STD >VLINE_DX_REMAINING  ; Store remaining dx (16-bit) - EXTENDED
+    ; Setup for Draw_Line_d: A=dy, B=dx (CRITICAL: order matters!)
+    LDA >VLINE_DY_REMAINING+1  ; Low byte of remaining dy - EXTENDED
+    LDB >VLINE_DX_REMAINING+1  ; Low byte of remaining dx - EXTENDED
+    CLR Vec_Misc_Count
+    JSR Draw_Line_d ; Beam continues from segment 1 endpoint
+DLW_DONE:
+    LDA #$C8       ; CRITICAL: Restore DP to $C8 for our code
     TFR A,DP
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 5 - Discriminant(8)
-    ; VPy_LINE:27
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    LDA #$80
-    STA <$04
-    LDA #$28
-    JSR Intensity_a
-    LDA #$00
-    ADDA VPY_MOVE_Y
-    LDB #$FB
-    ADDB VPY_MOVE_X
-    JSR Moveto_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$0A
-    JSR Draw_Line_d
-    LDA #$C8
-    TFR A,DP
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 6 - Discriminant(8)
-    ; VPy_LINE:30
-    LDA #$50
-    JSR Intensity_a
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    LDA #$80
-    STA <$04
-    LDA #$00
-    LDB #$15
-    JSR Moveto_d
-    CLR Vec_Misc_Count
-    LDA #$08
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$07
-    LDB #$FC
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$04
-    LDB #$F9
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$F8
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$F8
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FC
-    LDB #$F9
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$F9
-    LDB #$FC
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$F8
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$F8
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$F9
-    LDB #$04
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FC
-    LDB #$07
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$08
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$08
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$04
-    LDB #$07
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$07
-    LDB #$04
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$08
-    LDB #$02
-    JSR Draw_Line_d
-    LDA #$C8
-    TFR A,DP    ; Restore DP=$C8 after circle drawing
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 7 - Discriminant(0)
-    ; VPy_LINE:33
-    LDD VAR_ANGLE
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_ANGLE
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 8 - Discriminant(9)
-    ; VPy_LINE:34
-    LDD VAR_ANGLE
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #127
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_2
-    LDD #0
-    STD RESULT
-    BRA CE_3
-CT_2:
-    LDD #1
-    STD RESULT
-CE_3:
-    LDD RESULT
-    LBEQ IF_NEXT_1
-    ; VPy_LINE:35
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_ANGLE
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-    LEAS 4,S ; free locals
-    RTS
-
-DIV16:
-    LDD #0
-    STD DIV_Q
-    LDD DIV_A
-    BPL DIV16_DPOS
-    COMA
-    COMB
-    ADDD #1
-    STD DIV_R
-    LDA #1
-    STA TMPPTR2+1
-    BRA DIV16_RCHECK
-DIV16_DPOS:
-    STD DIV_R
-    LDA #0
-    STA TMPPTR2+1
-DIV16_RCHECK:
-    LDD DIV_B
-    BEQ DIV16_DONE
-    BPL DIV16_RPOS
-    COMA
-    COMB
-    ADDD #1
-    STD TMPPTR
-    LDA TMPPTR2+1
-    EORA #1
-    STA TMPPTR2+1
-    BRA DIV16_LOOP
-DIV16_RPOS:
-    STD TMPPTR
-DIV16_LOOP:
-    LDD DIV_R
-    SUBD TMPPTR
-    BLO DIV16_DONE
-    STD DIV_R
-    LDD DIV_Q
-    ADDD #1
-    STD DIV_Q
-    BRA DIV16_LOOP
-DIV16_DONE:
-    LDD DIV_Q
-    LDA TMPPTR2+1
-    BEQ DIV16_STORE
-    COMA
-    COMB
-    ADDD #1
-DIV16_STORE:
-    STD RESULT
     RTS
 
 ;***************************************************************************
-; DATA SECTION
+; TRIGONOMETRY LOOKUP TABLES (128 entries each)
 ;***************************************************************************
-; String literals (classic FCC + $80 terminator)
-STR_0:
-    FCC "SIN/COS"
-    FCB $80
-; Trig tables (shared)
 SIN_TABLE:
-    FDB 0
-    FDB 6
-    FDB 12
-    FDB 19
-    FDB 25
-    FDB 31
-    FDB 37
-    FDB 43
-    FDB 49
-    FDB 54
-    FDB 60
-    FDB 65
-    FDB 71
-    FDB 76
-    FDB 81
-    FDB 85
-    FDB 90
-    FDB 94
-    FDB 98
-    FDB 102
-    FDB 106
-    FDB 109
-    FDB 112
-    FDB 115
-    FDB 117
-    FDB 120
-    FDB 122
-    FDB 123
-    FDB 125
-    FDB 126
-    FDB 126
-    FDB 127
-    FDB 127
-    FDB 127
-    FDB 126
-    FDB 126
-    FDB 125
-    FDB 123
-    FDB 122
-    FDB 120
-    FDB 117
-    FDB 115
-    FDB 112
-    FDB 109
-    FDB 106
-    FDB 102
-    FDB 98
-    FDB 94
-    FDB 90
-    FDB 85
-    FDB 81
-    FDB 76
-    FDB 71
-    FDB 65
-    FDB 60
-    FDB 54
-    FDB 49
-    FDB 43
-    FDB 37
-    FDB 31
-    FDB 25
-    FDB 19
-    FDB 12
-    FDB 6
-    FDB 0
-    FDB -6
-    FDB -12
-    FDB -19
-    FDB -25
-    FDB -31
-    FDB -37
-    FDB -43
-    FDB -49
-    FDB -54
-    FDB -60
-    FDB -65
-    FDB -71
-    FDB -76
-    FDB -81
-    FDB -85
-    FDB -90
-    FDB -94
-    FDB -98
-    FDB -102
-    FDB -106
-    FDB -109
-    FDB -112
-    FDB -115
-    FDB -117
-    FDB -120
-    FDB -122
-    FDB -123
-    FDB -125
-    FDB -126
-    FDB -126
-    FDB -127
-    FDB -127
-    FDB -127
-    FDB -126
-    FDB -126
-    FDB -125
-    FDB -123
-    FDB -122
-    FDB -120
-    FDB -117
-    FDB -115
-    FDB -112
-    FDB -109
-    FDB -106
-    FDB -102
-    FDB -98
-    FDB -94
-    FDB -90
-    FDB -85
-    FDB -81
-    FDB -76
-    FDB -71
-    FDB -65
-    FDB -60
-    FDB -54
-    FDB -49
-    FDB -43
-    FDB -37
-    FDB -31
-    FDB -25
-    FDB -19
-    FDB -12
-    FDB -6
+    FDB 0    ; angle 0
+    FDB 6    ; angle 1
+    FDB 12    ; angle 2
+    FDB 19    ; angle 3
+    FDB 25    ; angle 4
+    FDB 31    ; angle 5
+    FDB 37    ; angle 6
+    FDB 43    ; angle 7
+    FDB 49    ; angle 8
+    FDB 54    ; angle 9
+    FDB 60    ; angle 10
+    FDB 65    ; angle 11
+    FDB 71    ; angle 12
+    FDB 76    ; angle 13
+    FDB 81    ; angle 14
+    FDB 85    ; angle 15
+    FDB 90    ; angle 16
+    FDB 94    ; angle 17
+    FDB 98    ; angle 18
+    FDB 102    ; angle 19
+    FDB 106    ; angle 20
+    FDB 109    ; angle 21
+    FDB 112    ; angle 22
+    FDB 115    ; angle 23
+    FDB 117    ; angle 24
+    FDB 120    ; angle 25
+    FDB 122    ; angle 26
+    FDB 123    ; angle 27
+    FDB 125    ; angle 28
+    FDB 126    ; angle 29
+    FDB 126    ; angle 30
+    FDB 127    ; angle 31
+    FDB 127    ; angle 32
+    FDB 127    ; angle 33
+    FDB 126    ; angle 34
+    FDB 126    ; angle 35
+    FDB 125    ; angle 36
+    FDB 123    ; angle 37
+    FDB 122    ; angle 38
+    FDB 120    ; angle 39
+    FDB 117    ; angle 40
+    FDB 115    ; angle 41
+    FDB 112    ; angle 42
+    FDB 109    ; angle 43
+    FDB 106    ; angle 44
+    FDB 102    ; angle 45
+    FDB 98    ; angle 46
+    FDB 94    ; angle 47
+    FDB 90    ; angle 48
+    FDB 85    ; angle 49
+    FDB 81    ; angle 50
+    FDB 76    ; angle 51
+    FDB 71    ; angle 52
+    FDB 65    ; angle 53
+    FDB 60    ; angle 54
+    FDB 54    ; angle 55
+    FDB 49    ; angle 56
+    FDB 43    ; angle 57
+    FDB 37    ; angle 58
+    FDB 31    ; angle 59
+    FDB 25    ; angle 60
+    FDB 19    ; angle 61
+    FDB 12    ; angle 62
+    FDB 6    ; angle 63
+    FDB 0    ; angle 64
+    FDB -6    ; angle 65
+    FDB -12    ; angle 66
+    FDB -19    ; angle 67
+    FDB -25    ; angle 68
+    FDB -31    ; angle 69
+    FDB -37    ; angle 70
+    FDB -43    ; angle 71
+    FDB -49    ; angle 72
+    FDB -54    ; angle 73
+    FDB -60    ; angle 74
+    FDB -65    ; angle 75
+    FDB -71    ; angle 76
+    FDB -76    ; angle 77
+    FDB -81    ; angle 78
+    FDB -85    ; angle 79
+    FDB -90    ; angle 80
+    FDB -94    ; angle 81
+    FDB -98    ; angle 82
+    FDB -102    ; angle 83
+    FDB -106    ; angle 84
+    FDB -109    ; angle 85
+    FDB -112    ; angle 86
+    FDB -115    ; angle 87
+    FDB -117    ; angle 88
+    FDB -120    ; angle 89
+    FDB -122    ; angle 90
+    FDB -123    ; angle 91
+    FDB -125    ; angle 92
+    FDB -126    ; angle 93
+    FDB -126    ; angle 94
+    FDB -127    ; angle 95
+    FDB -127    ; angle 96
+    FDB -127    ; angle 97
+    FDB -126    ; angle 98
+    FDB -126    ; angle 99
+    FDB -125    ; angle 100
+    FDB -123    ; angle 101
+    FDB -122    ; angle 102
+    FDB -120    ; angle 103
+    FDB -117    ; angle 104
+    FDB -115    ; angle 105
+    FDB -112    ; angle 106
+    FDB -109    ; angle 107
+    FDB -106    ; angle 108
+    FDB -102    ; angle 109
+    FDB -98    ; angle 110
+    FDB -94    ; angle 111
+    FDB -90    ; angle 112
+    FDB -85    ; angle 113
+    FDB -81    ; angle 114
+    FDB -76    ; angle 115
+    FDB -71    ; angle 116
+    FDB -65    ; angle 117
+    FDB -60    ; angle 118
+    FDB -54    ; angle 119
+    FDB -49    ; angle 120
+    FDB -43    ; angle 121
+    FDB -37    ; angle 122
+    FDB -31    ; angle 123
+    FDB -25    ; angle 124
+    FDB -19    ; angle 125
+    FDB -12    ; angle 126
+    FDB -6    ; angle 127
+
 COS_TABLE:
-    FDB 127
-    FDB 127
-    FDB 126
-    FDB 126
-    FDB 125
-    FDB 123
-    FDB 122
-    FDB 120
-    FDB 117
-    FDB 115
-    FDB 112
-    FDB 109
-    FDB 106
-    FDB 102
-    FDB 98
-    FDB 94
-    FDB 90
-    FDB 85
-    FDB 81
-    FDB 76
-    FDB 71
-    FDB 65
-    FDB 60
-    FDB 54
-    FDB 49
-    FDB 43
-    FDB 37
-    FDB 31
-    FDB 25
-    FDB 19
-    FDB 12
-    FDB 6
-    FDB 0
-    FDB -6
-    FDB -12
-    FDB -19
-    FDB -25
-    FDB -31
-    FDB -37
-    FDB -43
-    FDB -49
-    FDB -54
-    FDB -60
-    FDB -65
-    FDB -71
-    FDB -76
-    FDB -81
-    FDB -85
-    FDB -90
-    FDB -94
-    FDB -98
-    FDB -102
-    FDB -106
-    FDB -109
-    FDB -112
-    FDB -115
-    FDB -117
-    FDB -120
-    FDB -122
-    FDB -123
-    FDB -125
-    FDB -126
-    FDB -126
-    FDB -127
-    FDB -127
-    FDB -127
-    FDB -126
-    FDB -126
-    FDB -125
-    FDB -123
-    FDB -122
-    FDB -120
-    FDB -117
-    FDB -115
-    FDB -112
-    FDB -109
-    FDB -106
-    FDB -102
-    FDB -98
-    FDB -94
-    FDB -90
-    FDB -85
-    FDB -81
-    FDB -76
-    FDB -71
-    FDB -65
-    FDB -60
-    FDB -54
-    FDB -49
-    FDB -43
-    FDB -37
-    FDB -31
-    FDB -25
-    FDB -19
-    FDB -12
-    FDB -6
-    FDB 0
-    FDB 6
-    FDB 12
-    FDB 19
-    FDB 25
-    FDB 31
-    FDB 37
-    FDB 43
-    FDB 49
-    FDB 54
-    FDB 60
-    FDB 65
-    FDB 71
-    FDB 76
-    FDB 81
-    FDB 85
-    FDB 90
-    FDB 94
-    FDB 98
-    FDB 102
-    FDB 106
-    FDB 109
-    FDB 112
-    FDB 115
-    FDB 117
-    FDB 120
-    FDB 122
-    FDB 123
-    FDB 125
-    FDB 126
-    FDB 126
-    FDB 127
+    FDB 127    ; angle 0
+    FDB 127    ; angle 1
+    FDB 126    ; angle 2
+    FDB 126    ; angle 3
+    FDB 125    ; angle 4
+    FDB 123    ; angle 5
+    FDB 122    ; angle 6
+    FDB 120    ; angle 7
+    FDB 117    ; angle 8
+    FDB 115    ; angle 9
+    FDB 112    ; angle 10
+    FDB 109    ; angle 11
+    FDB 106    ; angle 12
+    FDB 102    ; angle 13
+    FDB 98    ; angle 14
+    FDB 94    ; angle 15
+    FDB 90    ; angle 16
+    FDB 85    ; angle 17
+    FDB 81    ; angle 18
+    FDB 76    ; angle 19
+    FDB 71    ; angle 20
+    FDB 65    ; angle 21
+    FDB 60    ; angle 22
+    FDB 54    ; angle 23
+    FDB 49    ; angle 24
+    FDB 43    ; angle 25
+    FDB 37    ; angle 26
+    FDB 31    ; angle 27
+    FDB 25    ; angle 28
+    FDB 19    ; angle 29
+    FDB 12    ; angle 30
+    FDB 6    ; angle 31
+    FDB 0    ; angle 32
+    FDB -6    ; angle 33
+    FDB -12    ; angle 34
+    FDB -19    ; angle 35
+    FDB -25    ; angle 36
+    FDB -31    ; angle 37
+    FDB -37    ; angle 38
+    FDB -43    ; angle 39
+    FDB -49    ; angle 40
+    FDB -54    ; angle 41
+    FDB -60    ; angle 42
+    FDB -65    ; angle 43
+    FDB -71    ; angle 44
+    FDB -76    ; angle 45
+    FDB -81    ; angle 46
+    FDB -85    ; angle 47
+    FDB -90    ; angle 48
+    FDB -94    ; angle 49
+    FDB -98    ; angle 50
+    FDB -102    ; angle 51
+    FDB -106    ; angle 52
+    FDB -109    ; angle 53
+    FDB -112    ; angle 54
+    FDB -115    ; angle 55
+    FDB -117    ; angle 56
+    FDB -120    ; angle 57
+    FDB -122    ; angle 58
+    FDB -123    ; angle 59
+    FDB -125    ; angle 60
+    FDB -126    ; angle 61
+    FDB -126    ; angle 62
+    FDB -127    ; angle 63
+    FDB -127    ; angle 64
+    FDB -127    ; angle 65
+    FDB -126    ; angle 66
+    FDB -126    ; angle 67
+    FDB -125    ; angle 68
+    FDB -123    ; angle 69
+    FDB -122    ; angle 70
+    FDB -120    ; angle 71
+    FDB -117    ; angle 72
+    FDB -115    ; angle 73
+    FDB -112    ; angle 74
+    FDB -109    ; angle 75
+    FDB -106    ; angle 76
+    FDB -102    ; angle 77
+    FDB -98    ; angle 78
+    FDB -94    ; angle 79
+    FDB -90    ; angle 80
+    FDB -85    ; angle 81
+    FDB -81    ; angle 82
+    FDB -76    ; angle 83
+    FDB -71    ; angle 84
+    FDB -65    ; angle 85
+    FDB -60    ; angle 86
+    FDB -54    ; angle 87
+    FDB -49    ; angle 88
+    FDB -43    ; angle 89
+    FDB -37    ; angle 90
+    FDB -31    ; angle 91
+    FDB -25    ; angle 92
+    FDB -19    ; angle 93
+    FDB -12    ; angle 94
+    FDB -6    ; angle 95
+    FDB 0    ; angle 96
+    FDB 6    ; angle 97
+    FDB 12    ; angle 98
+    FDB 19    ; angle 99
+    FDB 25    ; angle 100
+    FDB 31    ; angle 101
+    FDB 37    ; angle 102
+    FDB 43    ; angle 103
+    FDB 49    ; angle 104
+    FDB 54    ; angle 105
+    FDB 60    ; angle 106
+    FDB 65    ; angle 107
+    FDB 71    ; angle 108
+    FDB 76    ; angle 109
+    FDB 81    ; angle 110
+    FDB 85    ; angle 111
+    FDB 90    ; angle 112
+    FDB 94    ; angle 113
+    FDB 98    ; angle 114
+    FDB 102    ; angle 115
+    FDB 106    ; angle 116
+    FDB 109    ; angle 117
+    FDB 112    ; angle 118
+    FDB 115    ; angle 119
+    FDB 117    ; angle 120
+    FDB 120    ; angle 121
+    FDB 122    ; angle 122
+    FDB 123    ; angle 123
+    FDB 125    ; angle 124
+    FDB 126    ; angle 125
+    FDB 126    ; angle 126
+    FDB 127    ; angle 127
+
 TAN_TABLE:
-    FDB 0
-    FDB 1
-    FDB 2
-    FDB 3
-    FDB 4
-    FDB 5
-    FDB 6
-    FDB 7
-    FDB 8
-    FDB 9
-    FDB 11
-    FDB 12
-    FDB 13
-    FDB 15
-    FDB 16
-    FDB 18
-    FDB 20
-    FDB 22
-    FDB 24
-    FDB 27
-    FDB 30
-    FDB 33
-    FDB 37
-    FDB 42
-    FDB 48
-    FDB 56
-    FDB 66
-    FDB 80
-    FDB 101
-    FDB 120
-    FDB 120
-    FDB 120
-    FDB -120
-    FDB -120
-    FDB -120
-    FDB -120
-    FDB -101
-    FDB -80
-    FDB -66
-    FDB -56
-    FDB -48
-    FDB -42
-    FDB -37
-    FDB -33
-    FDB -30
-    FDB -27
-    FDB -24
-    FDB -22
-    FDB -20
-    FDB -18
-    FDB -16
-    FDB -15
-    FDB -13
-    FDB -12
-    FDB -11
-    FDB -9
-    FDB -8
-    FDB -7
-    FDB -6
-    FDB -5
-    FDB -4
-    FDB -3
-    FDB -2
-    FDB -1
-    FDB 0
-    FDB 1
-    FDB 2
-    FDB 3
-    FDB 4
-    FDB 5
-    FDB 6
-    FDB 7
-    FDB 8
-    FDB 9
-    FDB 11
-    FDB 12
-    FDB 13
-    FDB 15
-    FDB 16
-    FDB 18
-    FDB 20
-    FDB 22
-    FDB 24
-    FDB 27
-    FDB 30
-    FDB 33
-    FDB 37
-    FDB 42
-    FDB 48
-    FDB 56
-    FDB 66
-    FDB 80
-    FDB 101
-    FDB 120
-    FDB 120
-    FDB 120
-    FDB -120
-    FDB -120
-    FDB -120
-    FDB -120
-    FDB -101
-    FDB -80
-    FDB -66
-    FDB -56
-    FDB -48
-    FDB -42
-    FDB -37
-    FDB -33
-    FDB -30
-    FDB -27
-    FDB -24
-    FDB -22
-    FDB -20
-    FDB -18
-    FDB -16
-    FDB -15
-    FDB -13
-    FDB -12
-    FDB -11
-    FDB -9
-    FDB -8
-    FDB -7
-    FDB -6
-    FDB -5
-    FDB -4
-    FDB -3
-    FDB -2
-    FDB -1
+    FDB 0    ; angle 0
+    FDB 1    ; angle 1
+    FDB 2    ; angle 2
+    FDB 3    ; angle 3
+    FDB 4    ; angle 4
+    FDB 5    ; angle 5
+    FDB 6    ; angle 6
+    FDB 7    ; angle 7
+    FDB 8    ; angle 8
+    FDB 9    ; angle 9
+    FDB 11    ; angle 10
+    FDB 12    ; angle 11
+    FDB 13    ; angle 12
+    FDB 15    ; angle 13
+    FDB 16    ; angle 14
+    FDB 18    ; angle 15
+    FDB 20    ; angle 16
+    FDB 22    ; angle 17
+    FDB 24    ; angle 18
+    FDB 27    ; angle 19
+    FDB 30    ; angle 20
+    FDB 33    ; angle 21
+    FDB 37    ; angle 22
+    FDB 42    ; angle 23
+    FDB 48    ; angle 24
+    FDB 56    ; angle 25
+    FDB 66    ; angle 26
+    FDB 80    ; angle 27
+    FDB 101    ; angle 28
+    FDB 120    ; angle 29
+    FDB 120    ; angle 30
+    FDB 120    ; angle 31
+    FDB -120    ; angle 32
+    FDB -120    ; angle 33
+    FDB -120    ; angle 34
+    FDB -120    ; angle 35
+    FDB -101    ; angle 36
+    FDB -80    ; angle 37
+    FDB -66    ; angle 38
+    FDB -56    ; angle 39
+    FDB -48    ; angle 40
+    FDB -42    ; angle 41
+    FDB -37    ; angle 42
+    FDB -33    ; angle 43
+    FDB -30    ; angle 44
+    FDB -27    ; angle 45
+    FDB -24    ; angle 46
+    FDB -22    ; angle 47
+    FDB -20    ; angle 48
+    FDB -18    ; angle 49
+    FDB -16    ; angle 50
+    FDB -15    ; angle 51
+    FDB -13    ; angle 52
+    FDB -12    ; angle 53
+    FDB -11    ; angle 54
+    FDB -9    ; angle 55
+    FDB -8    ; angle 56
+    FDB -7    ; angle 57
+    FDB -6    ; angle 58
+    FDB -5    ; angle 59
+    FDB -4    ; angle 60
+    FDB -3    ; angle 61
+    FDB -2    ; angle 62
+    FDB -1    ; angle 63
+    FDB 0    ; angle 64
+    FDB 1    ; angle 65
+    FDB 2    ; angle 66
+    FDB 3    ; angle 67
+    FDB 4    ; angle 68
+    FDB 5    ; angle 69
+    FDB 6    ; angle 70
+    FDB 7    ; angle 71
+    FDB 8    ; angle 72
+    FDB 9    ; angle 73
+    FDB 11    ; angle 74
+    FDB 12    ; angle 75
+    FDB 13    ; angle 76
+    FDB 15    ; angle 77
+    FDB 16    ; angle 78
+    FDB 18    ; angle 79
+    FDB 20    ; angle 80
+    FDB 22    ; angle 81
+    FDB 24    ; angle 82
+    FDB 27    ; angle 83
+    FDB 30    ; angle 84
+    FDB 33    ; angle 85
+    FDB 37    ; angle 86
+    FDB 42    ; angle 87
+    FDB 48    ; angle 88
+    FDB 56    ; angle 89
+    FDB 66    ; angle 90
+    FDB 80    ; angle 91
+    FDB 101    ; angle 92
+    FDB 120    ; angle 93
+    FDB 120    ; angle 94
+    FDB 120    ; angle 95
+    FDB -120    ; angle 96
+    FDB -120    ; angle 97
+    FDB -120    ; angle 98
+    FDB -120    ; angle 99
+    FDB -101    ; angle 100
+    FDB -80    ; angle 101
+    FDB -66    ; angle 102
+    FDB -56    ; angle 103
+    FDB -48    ; angle 104
+    FDB -42    ; angle 105
+    FDB -37    ; angle 106
+    FDB -33    ; angle 107
+    FDB -30    ; angle 108
+    FDB -27    ; angle 109
+    FDB -24    ; angle 110
+    FDB -22    ; angle 111
+    FDB -20    ; angle 112
+    FDB -18    ; angle 113
+    FDB -16    ; angle 114
+    FDB -15    ; angle 115
+    FDB -13    ; angle 116
+    FDB -12    ; angle 117
+    FDB -11    ; angle 118
+    FDB -9    ; angle 119
+    FDB -8    ; angle 120
+    FDB -7    ; angle 121
+    FDB -6    ; angle 122
+    FDB -5    ; angle 123
+    FDB -4    ; angle 124
+    FDB -3    ; angle 125
+    FDB -2    ; angle 126
+    FDB -1    ; angle 127
+
+;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_75826235280:
+    FCC "SIN/COS"
+    FCB $80          ; Vectrex string terminator
+

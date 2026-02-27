@@ -345,28 +345,22 @@ impl VecResource {
                 Self::format_byte(y0_relative), Self::format_byte(x0_relative), path_idx, y0_relative, x0_relative));
             
             // Generate lines: flag=$FF (draw), dy, dx
-            // Deltas stay the same (already relative between points)
+            // Segments longer than 127 units are split into multiple sub-segments
             for j in 0..path.points.len()-1 {
                 let p_from = &path.points[j];
                 let p_to = &path.points[j + 1];
-                
-                let dx = (p_to.x - p_from.x).clamp(-127, 127) as i8;
-                let dy = (p_to.y - p_from.y).clamp(-127, 127) as i8;
-                
-                asm.push_str(&format!("    FCB $FF,{},{}          ; line {}: flag=-1, dy={}, dx={}\n", 
-                    Self::format_byte(dy), Self::format_byte(dx), j, dy, dx));
+                let dx = p_to.x - p_from.x;
+                let dy = p_to.y - p_from.y;
+                Self::emit_split_segment(&mut asm, dx, dy, &format!("line {}", j));
             }
-            
+
             // If closed path, add closing line back to first point
             if path.closed && path.points.len() > 2 {
                 let p_from = &path.points[path.points.len() - 1];
                 let p_to = &path.points[0];
-                
-                let dx = (p_to.x - p_from.x).clamp(-127, 127) as i8;
-                let dy = (p_to.y - p_from.y).clamp(-127, 127) as i8;
-                
-                asm.push_str(&format!("    FCB $FF,{},{}          ; closing line: flag=-1, dy={}, dx={}\n", 
-                    Self::format_byte(dy), Self::format_byte(dx), dy, dx));
+                let dx = p_to.x - p_from.x;
+                let dy = p_to.y - p_from.y;
+                Self::emit_split_segment(&mut asm, dx, dy, "closing line");
             }
             
             // End of path marker - FCB 2 terminates this individual path
@@ -380,6 +374,31 @@ impl VecResource {
         asm
     }
     
+    /// Split a long segment (|dx| or |dy| > 127) into multiple FCB $FF sub-segments.
+    /// Each sub-segment stays within the ±127 Vectrex beam range.
+    fn emit_split_segment(asm: &mut String, dx: i16, dy: i16, label: &str) {
+        let dx = dx as i32;
+        let dy = dy as i32;
+        let max_delta = (dx.abs()).max(dy.abs());
+        let n = if max_delta == 0 { 1 } else { (max_delta + 126) / 127 };
+        let mut rem_dx = dx;
+        let mut rem_dy = dy;
+        for i in 0..n {
+            let steps_left = n - i;
+            let sub_dx = rem_dx / steps_left;
+            let sub_dy = rem_dy / steps_left;
+            rem_dx -= sub_dx;
+            rem_dy -= sub_dy;
+            let comment = if n == 1 {
+                format!("flag=-1, dy={}, dx={}", sub_dy, sub_dx)
+            } else {
+                format!("sub-seg {}/{} of {}: dy={}, dx={}", i + 1, n, label, sub_dy, sub_dx)
+            };
+            asm.push_str(&format!("    FCB $FF,{},{}          ; {}\n",
+                Self::format_byte(sub_dy as i8), Self::format_byte(sub_dx as i8), comment));
+        }
+    }
+
     /// Compile to binary vectorlist format
     #[allow(dead_code)]
     pub fn compile_to_binary(&self) -> Vec<u8> {

@@ -852,14 +852,19 @@ DCR_after_intensity:\n\
         out.push_str("    LDB >VLINE_DX  ; EXTENDED\n");
         out.push_str("    JSR Draw_Line_d ; Beam moves automatically\n");
         
-        // Check if we need segment 2 - for BOTH dy > 127 AND dy < -128
-        out.push_str("    ; Check if we need SEGMENT 2 (dy outside ±127 range)\n");
+        // Check if we need segment 2 - for dy OR dx outside ±127/±128 range
+        out.push_str("    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)\n");
         out.push_str("    LDD >VLINE_DY_16 ; Reload original dy - EXTENDED\n");
         out.push_str("    CMPD #127\n");
         out.push_str("    BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2\n");
         out.push_str("    CMPD #-128\n");
         out.push_str("    BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2\n");
-        out.push_str("    BRA DLW_DONE       ; dy in range ±127: no segment 2\n");
+        out.push_str("    LDD >VLINE_DX_16 ; Also check dx - EXTENDED\n");
+        out.push_str("    CMPD #127\n");
+        out.push_str("    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2\n");
+        out.push_str("    CMPD #-128\n");
+        out.push_str("    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2\n");
+        out.push_str("    BRA DLW_DONE       ; both dy and dx in range: no segment 2\n");
         out.push_str("DLW_NEED_SEG2:\n");
         
         // SEGMENT 2: Handle remaining dy AND dx - USE EXTENDED ADDRESSING
@@ -867,10 +872,15 @@ DCR_after_intensity:\n\
         out.push_str("    ; Calculate remaining dy\n");
         out.push_str("    LDD >VLINE_DY_16 ; Load original full dy - EXTENDED\n");
         out.push_str("    CMPD #127\n");
-        out.push_str("    BGT DLW_SEG2_DY_POS  ; dy > 127\n");
+        out.push_str("    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127\n");
+        out.push_str("    CMPD #-128\n");
+        out.push_str("    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy\n");
         out.push_str("    ; dy < -128, so we drew -128 in segment 1\n");
         out.push_str("    ; remaining = dy - (-128) = dy + 128\n");
         out.push_str("    ADDD #128       ; Add back the -128 we already drew\n");
+        out.push_str("    BRA DLW_SEG2_DY_DONE\n");
+        out.push_str("DLW_SEG2_DY_NO_REMAIN:\n");
+        out.push_str("    LDD #0          ; dy in range: no remaining\n");
         out.push_str("    BRA DLW_SEG2_DY_DONE\n");
         out.push_str("DLW_SEG2_DY_POS:\n");
         out.push_str("    ; dy > 127, so we drew 127 in segment 1\n");
@@ -951,36 +961,36 @@ DSWM_NO_NEGATE_X:\n\
             LDA #$CC\n\
             STA VIA_cntl\n\
             CLR VIA_port_a\n\
-            LDA #$82\n\
-            STA VIA_port_b\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            LDA #$83\n\
-            STA VIA_port_b\n\
-            ; Move sequence\n\
+            LDA #$03\n\
+            STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; repeat\n\
+            LDA #$01\n\
+            STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+            ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
             LDD TEMP_YX\n\
-            STB VIA_port_a          ; y to DAC\n\
-            PSHS A                  ; Save x\n\
+            STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+            PSHS A                  ; ~4 cycle settling delay for Y\n\
             LDA #$CE\n\
-            STA VIA_cntl\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
-            PULS A                  ; Restore x\n\
-            STA VIA_port_a          ; x to DAC\n\
+            STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+            CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
+            PULS A                  ; Restore X\n\
+            STA VIA_port_a          ; X to DAC\n\
             ; Timing setup\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
-            ; Wait for move to complete\n\
+            ; Wait for move to complete (PB=1 on exit)\n\
             DSWM_W1:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W1\n\
+            ; PB stays 1 — draw loop begins with PB=1\n\
             ; Loop de dibujo (conditional mirrors)\n\
             DSWM_LOOP:\n\
             LDA ,X+                 ; Read flag\n\
@@ -1001,22 +1011,23 @@ DSWM_NO_NEGATE_DY:\n\
             BEQ DSWM_NO_NEGATE_DX\n\
             NEGA                    ; ← Negate dx if flag set\n\
 DSWM_NO_NEGATE_DX:\n\
-            PSHS A                  ; Save final dx\n\
-            STB VIA_port_a          ; dy (possibly negated) to DAC\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
-            PULS A                  ; Restore final dx\n\
-            STA VIA_port_a          ; dx (possibly negated) to DAC\n\
-            CLR VIA_t1_cnt_hi\n\
+            ; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)\n\
+            STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction\n\
+            NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)\n\
+            NOP                     ; settling 2\n\
+            NOP                     ; settling 3\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at DY\n\
+            STA VIA_port_a          ; DX to DAC\n\
             LDA #$FF\n\
-            STA VIA_shift_reg\n\
+            STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)\n\
+            CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)\n\
             ; Wait for line draw\n\
             DSWM_W2:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
-            CLR VIA_shift_reg\n\
+            CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\
@@ -1054,36 +1065,35 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             LDA #$CC\n\
             STA VIA_cntl\n\
             CLR VIA_port_a\n\
-            LDA #$82\n\
-            STA VIA_port_b\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            NOP\n\
-            LDA #$83\n\
-            STA VIA_port_b\n\
-            ; Move to new start position\n\
+            LDA #$03\n\
+            STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)\n\
+            LDA #$02\n\
+            STA VIA_port_b          ; repeat\n\
+            LDA #$01\n\
+            STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
+            ; Moveto new start position (BIOS Moveto_d order)\n\
             LDD TEMP_YX\n\
-            STB VIA_port_a\n\
-            PSHS A\n\
+            STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
+            CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
+            PSHS A                  ; ~4 cycle settling delay for Y\n\
             LDA #$CE\n\
-            STA VIA_cntl\n\
-            CLR VIA_port_b\n\
-            LDA #1\n\
-            STA VIA_port_b\n\
+            STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active\n\
+            CLR VIA_shift_reg       ; SR=0: no draw during moveto\n\
+            INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
-            STA VIA_port_a\n\
+            STA VIA_port_a          ; X to DAC\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
-            ; Wait for move\n\
+            ; Wait for move (PB=1 on exit)\n\
             DSWM_W3:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W3\n\
-            CLR VIA_shift_reg\n\
+            ; PB stays 1 — draw loop continues with PB=1\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             DSWM_DONE:\n\
             RTS\n"

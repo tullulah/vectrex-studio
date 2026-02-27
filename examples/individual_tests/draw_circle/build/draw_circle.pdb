@@ -3,166 +3,3268 @@
   "source": "main.vpy",
   "asm": "draw_circle.asm",
   "binary": "draw_circle.bin",
-  "entryPoint": "0x0000",
-  "symbols": {},
-  "lineMap": {},
-  "vpyLineMap": {},
-  "asmLineMap": {},
+  "entryPoint": "0x01E1",
+  "symbols": {
+    "LOOP_BODY": "0x0236",
+    "J1B2_BUILTIN.J1B2_OFF": "0x006B",
+    "__Moveto_d": "0x0095",
+    "DRAW_CIRCLE_RUNTIME": "0x009F",
+    "CE_3": "0x051F",
+    "__Reset0Ref": "0x0092",
+    "__Draw_Line_d": "0x009A",
+    "J1B3_BUILTIN": "0x006F",
+    "MAIN": "0x0209",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0089",
+    "__Intensity_a": "0x008D",
+    "J1B4_BUILTIN": "0x007E",
+    "IF_NEXT_1": "0x053A",
+    "START": "0x01E1",
+    "CT_2": "0x0519",
+    "DCR_intensity_5F": "0x00D1",
+    "J1Y_BUILTIN": "0x0039",
+    "IF_END_0": "0x053A",
+    "DCR_after_intensity": "0x00D4",
+    "J1B3_BUILTIN.J1B3_OFF": "0x007A",
+    "J1B1_BUILTIN": "0x0051",
+    "J1X_BUILTIN": "0x0021",
+    "J1B1_BUILTIN.J1B1_OFF": "0x005C",
+    "J1B2_BUILTIN": "0x0060"
+  },
+  "lineMap": {
+    "15": "0x0242",
+    "11": "0x01F8",
+    "27": "0x04B6",
+    "18": "0x0300",
+    "29": "0x0525",
+    "28": "0x04E4",
+    "24": "0x03F7",
+    "21": "0x03BE",
+    "8": "0x01F2"
+  },
+  "vpyLineMap": {
+    "0x01F8": {
+      "file": "main.vpy",
+      "address": "0x01F8",
+      "line": 11
+    },
+    "0x03F7": {
+      "file": "main.vpy",
+      "address": "0x03F7",
+      "line": 24
+    },
+    "0x03BE": {
+      "file": "main.vpy",
+      "address": "0x03BE",
+      "line": 21
+    },
+    "0x0525": {
+      "file": "main.vpy",
+      "address": "0x0525",
+      "line": 29
+    },
+    "0x01F2": {
+      "file": "main.vpy",
+      "address": "0x01F2",
+      "line": 8
+    },
+    "0x04E4": {
+      "file": "main.vpy",
+      "address": "0x04E4",
+      "line": 28
+    },
+    "0x04B6": {
+      "file": "main.vpy",
+      "address": "0x04B6",
+      "line": 27
+    },
+    "0x0300": {
+      "file": "main.vpy",
+      "address": "0x0300",
+      "line": 18
+    },
+    "0x0242": {
+      "file": "main.vpy",
+      "address": "0x0242",
+      "line": 15
+    }
+  },
+  "asmLineMap": {
+    "0x02D6": {
+      "file": "draw_circle.asm",
+      "address": "0x02D6",
+      "line": 457
+    },
+    "0x02E2": {
+      "file": "draw_circle.asm",
+      "address": "0x02E2",
+      "line": 462
+    },
+    "0x01D9": {
+      "file": "draw_circle.asm",
+      "address": "0x01D9",
+      "line": 339
+    },
+    "0x0359": {
+      "file": "draw_circle.asm",
+      "address": "0x0359",
+      "line": 513
+    },
+    "0x02E0": {
+      "file": "draw_circle.asm",
+      "address": "0x02E0",
+      "line": 461
+    },
+    "0x0214": {
+      "file": "draw_circle.asm",
+      "address": "0x0214",
+      "line": 37
+    },
+    "0x0129": {
+      "file": "draw_circle.asm",
+      "address": "0x0129",
+      "line": 251
+    },
+    "0x02A9": {
+      "file": "draw_circle.asm",
+      "address": "0x02A9",
+      "line": 439
+    },
+    "0x0367": {
+      "file": "draw_circle.asm",
+      "address": "0x0367",
+      "line": 519
+    },
+    "0x031D": {
+      "file": "draw_circle.asm",
+      "address": "0x031D",
+      "line": 489
+    },
+    "0x01F2": {
+      "file": "draw_circle.asm",
+      "address": "0x01F2",
+      "line": 354
+    },
+    "0x025E": {
+      "file": "draw_circle.asm",
+      "address": "0x025E",
+      "line": 409
+    },
+    "0x034F": {
+      "file": "draw_circle.asm",
+      "address": "0x034F",
+      "line": 509
+    },
+    "0x03B5": {
+      "file": "draw_circle.asm",
+      "address": "0x03B5",
+      "line": 550
+    },
+    "0x004A": {
+      "file": "draw_circle.asm",
+      "address": "0x004A",
+      "line": 83
+    },
+    "0x02F4": {
+      "file": "draw_circle.asm",
+      "address": "0x02F4",
+      "line": 469
+    },
+    "0x044B": {
+      "file": "draw_circle.asm",
+      "address": "0x044B",
+      "line": 612
+    },
+    "0x030A": {
+      "file": "draw_circle.asm",
+      "address": "0x030A",
+      "line": 480
+    },
+    "0x0175": {
+      "file": "draw_circle.asm",
+      "address": "0x0175",
+      "line": 293
+    },
+    "0x0482": {
+      "file": "draw_circle.asm",
+      "address": "0x0482",
+      "line": 634
+    },
+    "0x0162": {
+      "file": "draw_circle.asm",
+      "address": "0x0162",
+      "line": 280
+    },
+    "0x042F": {
+      "file": "draw_circle.asm",
+      "address": "0x042F",
+      "line": 601
+    },
+    "0x00D9": {
+      "file": "draw_circle.asm",
+      "address": "0x00D9",
+      "line": 200
+    },
+    "0x01E1": {
+      "file": "draw_circle.asm",
+      "address": "0x01E1",
+      "line": 343
+    },
+    "0x00DB": {
+      "file": "draw_circle.asm",
+      "address": "0x00DB",
+      "line": 201
+    },
+    "0x01B2": {
+      "file": "draw_circle.asm",
+      "address": "0x01B2",
+      "line": 323
+    },
+    "0x00B0": {
+      "file": "draw_circle.asm",
+      "address": "0x00B0",
+      "line": 171
+    },
+    "0x0471": {
+      "file": "draw_circle.asm",
+      "address": "0x0471",
+      "line": 627
+    },
+    "0x046B": {
+      "file": "draw_circle.asm",
+      "address": "0x046B",
+      "line": 625
+    },
+    "0x00D1": {
+      "file": "draw_circle.asm",
+      "address": "0x00D1",
+      "line": 192
+    },
+    "0x03EB": {
+      "file": "draw_circle.asm",
+      "address": "0x03EB",
+      "line": 571
+    },
+    "0x0478": {
+      "file": "draw_circle.asm",
+      "address": "0x0478",
+      "line": 630
+    },
+    "0x011F": {
+      "file": "draw_circle.asm",
+      "address": "0x011F",
+      "line": 246
+    },
+    "0x0182": {
+      "file": "draw_circle.asm",
+      "address": "0x0182",
+      "line": 299
+    },
+    "0x00D4": {
+      "file": "draw_circle.asm",
+      "address": "0x00D4",
+      "line": 197
+    },
+    "0x02B0": {
+      "file": "draw_circle.asm",
+      "address": "0x02B0",
+      "line": 442
+    },
+    "0x0167": {
+      "file": "draw_circle.asm",
+      "address": "0x0167",
+      "line": 284
+    },
+    "0x02AE": {
+      "file": "draw_circle.asm",
+      "address": "0x02AE",
+      "line": 441
+    },
+    "0x018F": {
+      "file": "draw_circle.asm",
+      "address": "0x018F",
+      "line": 305
+    },
+    "0x0119": {
+      "file": "draw_circle.asm",
+      "address": "0x0119",
+      "line": 244
+    },
+    "0x01F5": {
+      "file": "draw_circle.asm",
+      "address": "0x01F5",
+      "line": 18
+    },
+    "0x0055": {
+      "file": "draw_circle.asm",
+      "address": "0x0055",
+      "line": 97
+    },
+    "0x0313": {
+      "file": "draw_circle.asm",
+      "address": "0x0313",
+      "line": 485
+    },
+    "0x041E": {
+      "file": "draw_circle.asm",
+      "address": "0x041E",
+      "line": 594
+    },
+    "0x024C": {
+      "file": "draw_circle.asm",
+      "address": "0x024C",
+      "line": 401
+    },
+    "0x0388": {
+      "file": "draw_circle.asm",
+      "address": "0x0388",
+      "line": 532
+    },
+    "0x042D": {
+      "file": "draw_circle.asm",
+      "address": "0x042D",
+      "line": 600
+    },
+    "0x02B6": {
+      "file": "draw_circle.asm",
+      "address": "0x02B6",
+      "line": 444
+    },
+    "0x0519": {
+      "file": "draw_circle.asm",
+      "address": "0x0519",
+      "line": 692
+    },
+    "0x04BE": {
+      "file": "draw_circle.asm",
+      "address": "0x04BE",
+      "line": 660
+    },
+    "0x0223": {
+      "file": "draw_circle.asm",
+      "address": "0x0223",
+      "line": 376
+    },
+    "0x0335": {
+      "file": "draw_circle.asm",
+      "address": "0x0335",
+      "line": 499
+    },
+    "0x0097": {
+      "file": "draw_circle.asm",
+      "address": "0x0097",
+      "line": 142
+    },
+    "0x0092": {
+      "file": "draw_circle.asm",
+      "address": "0x0092",
+      "line": 139
+    },
+    "0x043F": {
+      "file": "draw_circle.asm",
+      "address": "0x043F",
+      "line": 607
+    },
+    "0x0383": {
+      "file": "draw_circle.asm",
+      "address": "0x0383",
+      "line": 530
+    },
+    "0x0259": {
+      "file": "draw_circle.asm",
+      "address": "0x0259",
+      "line": 407
+    },
+    "0x036D": {
+      "file": "draw_circle.asm",
+      "address": "0x036D",
+      "line": 521
+    },
+    "0x04E0": {
+      "file": "draw_circle.asm",
+      "address": "0x04E0",
+      "line": 672
+    },
+    "0x01F8": {
+      "file": "draw_circle.asm",
+      "address": "0x01F8",
+      "line": 19
+    },
+    "0x043C": {
+      "file": "draw_circle.asm",
+      "address": "0x043C",
+      "line": 606
+    },
+    "0x0100": {
+      "file": "draw_circle.asm",
+      "address": "0x0100",
+      "line": 223
+    },
+    "0x02BD": {
+      "file": "draw_circle.asm",
+      "address": "0x02BD",
+      "line": 447
+    },
+    "0x0349": {
+      "file": "draw_circle.asm",
+      "address": "0x0349",
+      "line": 507
+    },
+    "0x01D6": {
+      "file": "draw_circle.asm",
+      "address": "0x01D6",
+      "line": 338
+    },
+    "0x024D": {
+      "file": "draw_circle.asm",
+      "address": "0x024D",
+      "line": 402
+    },
+    "0x0074": {
+      "file": "draw_circle.asm",
+      "address": "0x0074",
+      "line": 118
+    },
+    "0x012F": {
+      "file": "draw_circle.asm",
+      "address": "0x012F",
+      "line": 254
+    },
+    "0x03FD": {
+      "file": "draw_circle.asm",
+      "address": "0x03FD",
+      "line": 579
+    },
+    "0x0204": {
+      "file": "draw_circle.asm",
+      "address": "0x0204",
+      "line": 31
+    },
+    "0x0085": {
+      "file": "draw_circle.asm",
+      "address": "0x0085",
+      "line": 129
+    },
+    "0x00ED": {
+      "file": "draw_circle.asm",
+      "address": "0x00ED",
+      "line": 214
+    },
+    "0x02E5": {
+      "file": "draw_circle.asm",
+      "address": "0x02E5",
+      "line": 463
+    },
+    "0x004B": {
+      "file": "draw_circle.asm",
+      "address": "0x004B",
+      "line": 84
+    },
+    "0x0453": {
+      "file": "draw_circle.asm",
+      "address": "0x0453",
+      "line": 615
+    },
+    "0x02A6": {
+      "file": "draw_circle.asm",
+      "address": "0x02A6",
+      "line": 438
+    },
+    "0x052C": {
+      "file": "draw_circle.asm",
+      "address": "0x052C",
+      "line": 701
+    },
+    "0x04C4": {
+      "file": "draw_circle.asm",
+      "address": "0x04C4",
+      "line": 662
+    },
+    "0x00E5": {
+      "file": "draw_circle.asm",
+      "address": "0x00E5",
+      "line": 211
+    },
+    "0x0385": {
+      "file": "draw_circle.asm",
+      "address": "0x0385",
+      "line": 531
+    },
+    "0x00BF": {
+      "file": "draw_circle.asm",
+      "address": "0x00BF",
+      "line": 181
+    },
+    "0x0063": {
+      "file": "draw_circle.asm",
+      "address": "0x0063",
+      "line": 106
+    },
+    "0x014B": {
+      "file": "draw_circle.asm",
+      "address": "0x014B",
+      "line": 270
+    },
+    "0x02B8": {
+      "file": "draw_circle.asm",
+      "address": "0x02B8",
+      "line": 445
+    },
+    "0x012C": {
+      "file": "draw_circle.asm",
+      "address": "0x012C",
+      "line": 252
+    },
+    "0x0281": {
+      "file": "draw_circle.asm",
+      "address": "0x0281",
+      "line": 423
+    },
+    "0x01D0": {
+      "file": "draw_circle.asm",
+      "address": "0x01D0",
+      "line": 335
+    },
+    "0x00DC": {
+      "file": "draw_circle.asm",
+      "address": "0x00DC",
+      "line": 202
+    },
+    "0x00AD": {
+      "file": "draw_circle.asm",
+      "address": "0x00AD",
+      "line": 170
+    },
+    "0x04F4": {
+      "file": "draw_circle.asm",
+      "address": "0x04F4",
+      "line": 684
+    },
+    "0x003B": {
+      "file": "draw_circle.asm",
+      "address": "0x003B",
+      "line": 78
+    },
+    "0x0392": {
+      "file": "draw_circle.asm",
+      "address": "0x0392",
+      "line": 536
+    },
+    "0x049D": {
+      "file": "draw_circle.asm",
+      "address": "0x049D",
+      "line": 645
+    },
+    "0x0315": {
+      "file": "draw_circle.asm",
+      "address": "0x0315",
+      "line": 486
+    },
+    "0x0286": {
+      "file": "draw_circle.asm",
+      "address": "0x0286",
+      "line": 425
+    },
+    "0x0437": {
+      "file": "draw_circle.asm",
+      "address": "0x0437",
+      "line": 604
+    },
+    "0x0363": {
+      "file": "draw_circle.asm",
+      "address": "0x0363",
+      "line": 517
+    },
+    "0x026A": {
+      "file": "draw_circle.asm",
+      "address": "0x026A",
+      "line": 414
+    },
+    "0x04A3": {
+      "file": "draw_circle.asm",
+      "address": "0x04A3",
+      "line": 647
+    },
+    "0x02C0": {
+      "file": "draw_circle.asm",
+      "address": "0x02C0",
+      "line": 448
+    },
+    "0x0270": {
+      "file": "draw_circle.asm",
+      "address": "0x0270",
+      "line": 416
+    },
+    "0x02F6": {
+      "file": "draw_circle.asm",
+      "address": "0x02F6",
+      "line": 470
+    },
+    "0x0345": {
+      "file": "draw_circle.asm",
+      "address": "0x0345",
+      "line": 505
+    },
+    "0x0140": {
+      "file": "draw_circle.asm",
+      "address": "0x0140",
+      "line": 264
+    },
+    "0x03A9": {
+      "file": "draw_circle.asm",
+      "address": "0x03A9",
+      "line": 545
+    },
+    "0x033D": {
+      "file": "draw_circle.asm",
+      "address": "0x033D",
+      "line": 502
+    },
+    "0x0506": {
+      "file": "draw_circle.asm",
+      "address": "0x0506",
+      "line": 690
+    },
+    "0x02BA": {
+      "file": "draw_circle.asm",
+      "address": "0x02BA",
+      "line": 446
+    },
+    "0x0457": {
+      "file": "draw_circle.asm",
+      "address": "0x0457",
+      "line": 617
+    },
+    "0x03CD": {
+      "file": "draw_circle.asm",
+      "address": "0x03CD",
+      "line": 561
+    },
+    "0x00DE": {
+      "file": "draw_circle.asm",
+      "address": "0x00DE",
+      "line": 203
+    },
+    "0x00C5": {
+      "file": "draw_circle.asm",
+      "address": "0x00C5",
+      "line": 186
+    },
+    "0x00B8": {
+      "file": "draw_circle.asm",
+      "address": "0x00B8",
+      "line": 176
+    },
+    "0x0441": {
+      "file": "draw_circle.asm",
+      "address": "0x0441",
+      "line": 608
+    },
+    "0x0139": {
+      "file": "draw_circle.asm",
+      "address": "0x0139",
+      "line": 258
+    },
+    "0x0333": {
+      "file": "draw_circle.asm",
+      "address": "0x0333",
+      "line": 498
+    },
+    "0x04B8": {
+      "file": "draw_circle.asm",
+      "address": "0x04B8",
+      "line": 658
+    },
+    "0x02DE": {
+      "file": "draw_circle.asm",
+      "address": "0x02DE",
+      "line": 460
+    },
+    "0x0155": {
+      "file": "draw_circle.asm",
+      "address": "0x0155",
+      "line": 274
+    },
+    "0x04AF": {
+      "file": "draw_circle.asm",
+      "address": "0x04AF",
+      "line": 652
+    },
+    "0x04E2": {
+      "file": "draw_circle.asm",
+      "address": "0x04E2",
+      "line": 674
+    },
+    "0x014E": {
+      "file": "draw_circle.asm",
+      "address": "0x014E",
+      "line": 271
+    },
+    "0x0449": {
+      "file": "draw_circle.asm",
+      "address": "0x0449",
+      "line": 611
+    },
+    "0x0435": {
+      "file": "draw_circle.asm",
+      "address": "0x0435",
+      "line": 603
+    },
+    "0x0088": {
+      "file": "draw_circle.asm",
+      "address": "0x0088",
+      "line": 131
+    },
+    "0x032B": {
+      "file": "draw_circle.asm",
+      "address": "0x032B",
+      "line": 495
+    },
+    "0x00B1": {
+      "file": "draw_circle.asm",
+      "address": "0x00B1",
+      "line": 172
+    },
+    "0x01D3": {
+      "file": "draw_circle.asm",
+      "address": "0x01D3",
+      "line": 336
+    },
+    "0x0051": {
+      "file": "draw_circle.asm",
+      "address": "0x0051",
+      "line": 95
+    },
+    "0x0379": {
+      "file": "draw_circle.asm",
+      "address": "0x0379",
+      "line": 526
+    },
+    "0x0342": {
+      "file": "draw_circle.asm",
+      "address": "0x0342",
+      "line": 504
+    },
+    "0x03E8": {
+      "file": "draw_circle.asm",
+      "address": "0x03E8",
+      "line": 570
+    },
+    "0x0491": {
+      "file": "draw_circle.asm",
+      "address": "0x0491",
+      "line": 640
+    },
+    "0x009C": {
+      "file": "draw_circle.asm",
+      "address": "0x009C",
+      "line": 145
+    },
+    "0x0073": {
+      "file": "draw_circle.asm",
+      "address": "0x0073",
+      "line": 117
+    },
+    "0x0151": {
+      "file": "draw_circle.asm",
+      "address": "0x0151",
+      "line": 272
+    },
+    "0x0079": {
+      "file": "draw_circle.asm",
+      "address": "0x0079",
+      "line": 121
+    },
+    "0x005B": {
+      "file": "draw_circle.asm",
+      "address": "0x005B",
+      "line": 101
+    },
+    "0x0295": {
+      "file": "draw_circle.asm",
+      "address": "0x0295",
+      "line": 431
+    },
+    "0x0347": {
+      "file": "draw_circle.asm",
+      "address": "0x0347",
+      "line": 506
+    },
+    "0x03B0": {
+      "file": "draw_circle.asm",
+      "address": "0x03B0",
+      "line": 548
+    },
+    "0x014A": {
+      "file": "draw_circle.asm",
+      "address": "0x014A",
+      "line": 269
+    },
+    "0x017B": {
+      "file": "draw_circle.asm",
+      "address": "0x017B",
+      "line": 295
+    },
+    "0x00F7": {
+      "file": "draw_circle.asm",
+      "address": "0x00F7",
+      "line": 219
+    },
+    "0x0260": {
+      "file": "draw_circle.asm",
+      "address": "0x0260",
+      "line": 410
+    },
+    "0x0219": {
+      "file": "draw_circle.asm",
+      "address": "0x0219",
+      "line": 372
+    },
+    "0x0522": {
+      "file": "draw_circle.asm",
+      "address": "0x0522",
+      "line": 696
+    },
+    "0x04DD": {
+      "file": "draw_circle.asm",
+      "address": "0x04DD",
+      "line": 671
+    },
+    "0x0421": {
+      "file": "draw_circle.asm",
+      "address": "0x0421",
+      "line": 595
+    },
+    "0x044D": {
+      "file": "draw_circle.asm",
+      "address": "0x044D",
+      "line": 613
+    },
+    "0x0526": {
+      "file": "draw_circle.asm",
+      "address": "0x0526",
+      "line": 699
+    },
+    "0x03B3": {
+      "file": "draw_circle.asm",
+      "address": "0x03B3",
+      "line": 549
+    },
+    "0x03D9": {
+      "file": "draw_circle.asm",
+      "address": "0x03D9",
+      "line": 565
+    },
+    "0x0277": {
+      "file": "draw_circle.asm",
+      "address": "0x0277",
+      "line": 419
+    },
+    "0x048F": {
+      "file": "draw_circle.asm",
+      "address": "0x048F",
+      "line": 639
+    },
+    "0x03F1": {
+      "file": "draw_circle.asm",
+      "address": "0x03F1",
+      "line": 573
+    },
+    "0x0054": {
+      "file": "draw_circle.asm",
+      "address": "0x0054",
+      "line": 96
+    },
+    "0x013C": {
+      "file": "draw_circle.asm",
+      "address": "0x013C",
+      "line": 262
+    },
+    "0x02FB": {
+      "file": "draw_circle.asm",
+      "address": "0x02FB",
+      "line": 472
+    },
+    "0x0535": {
+      "file": "draw_circle.asm",
+      "address": "0x0535",
+      "line": 704
+    },
+    "0x03DF": {
+      "file": "draw_circle.asm",
+      "address": "0x03DF",
+      "line": 567
+    },
+    "0x00E1": {
+      "file": "draw_circle.asm",
+      "address": "0x00E1",
+      "line": 204
+    },
+    "0x006A": {
+      "file": "draw_circle.asm",
+      "address": "0x006A",
+      "line": 111
+    },
+    "0x03E5": {
+      "file": "draw_circle.asm",
+      "address": "0x03E5",
+      "line": 569
+    },
+    "0x04A5": {
+      "file": "draw_circle.asm",
+      "address": "0x04A5",
+      "line": 648
+    },
+    "0x00A9": {
+      "file": "draw_circle.asm",
+      "address": "0x00A9",
+      "line": 167
+    },
+    "0x00A8": {
+      "file": "draw_circle.asm",
+      "address": "0x00A8",
+      "line": 166
+    },
+    "0x01C1": {
+      "file": "draw_circle.asm",
+      "address": "0x01C1",
+      "line": 329
+    },
+    "0x02D1": {
+      "file": "draw_circle.asm",
+      "address": "0x02D1",
+      "line": 455
+    },
+    "0x0439": {
+      "file": "draw_circle.asm",
+      "address": "0x0439",
+      "line": 605
+    },
+    "0x00D7": {
+      "file": "draw_circle.asm",
+      "address": "0x00D7",
+      "line": 198
+    },
+    "0x006F": {
+      "file": "draw_circle.asm",
+      "address": "0x006F",
+      "line": 115
+    },
+    "0x005C": {
+      "file": "draw_circle.asm",
+      "address": "0x005C",
+      "line": 102
+    },
+    "0x04E4": {
+      "file": "draw_circle.asm",
+      "address": "0x04E4",
+      "line": 677
+    },
+    "0x00AA": {
+      "file": "draw_circle.asm",
+      "address": "0x00AA",
+      "line": 168
+    },
+    "0x0303": {
+      "file": "draw_circle.asm",
+      "address": "0x0303",
+      "line": 477
+    },
+    "0x0455": {
+      "file": "draw_circle.asm",
+      "address": "0x0455",
+      "line": 616
+    },
+    "0x02C2": {
+      "file": "draw_circle.asm",
+      "address": "0x02C2",
+      "line": 449
+    },
+    "0x010C": {
+      "file": "draw_circle.asm",
+      "address": "0x010C",
+      "line": 238
+    },
+    "0x0419": {
+      "file": "draw_circle.asm",
+      "address": "0x0419",
+      "line": 592
+    },
+    "0x030D": {
+      "file": "draw_circle.asm",
+      "address": "0x030D",
+      "line": 482
+    },
+    "0x03F7": {
+      "file": "draw_circle.asm",
+      "address": "0x03F7",
+      "line": 577
+    },
+    "0x036A": {
+      "file": "draw_circle.asm",
+      "address": "0x036A",
+      "line": 520
+    },
+    "0x051C": {
+      "file": "draw_circle.asm",
+      "address": "0x051C",
+      "line": 693
+    },
+    "0x042B": {
+      "file": "draw_circle.asm",
+      "address": "0x042B",
+      "line": 599
+    },
+    "0x0166": {
+      "file": "draw_circle.asm",
+      "address": "0x0166",
+      "line": 283
+    },
+    "0x0122": {
+      "file": "draw_circle.asm",
+      "address": "0x0122",
+      "line": 248
+    },
+    "0x02EF": {
+      "file": "draw_circle.asm",
+      "address": "0x02EF",
+      "line": 467
+    },
+    "0x048C": {
+      "file": "draw_circle.asm",
+      "address": "0x048C",
+      "line": 638
+    },
+    "0x01A5": {
+      "file": "draw_circle.asm",
+      "address": "0x01A5",
+      "line": 314
+    },
+    "0x03CA": {
+      "file": "draw_circle.asm",
+      "address": "0x03CA",
+      "line": 560
+    },
+    "0x0489": {
+      "file": "draw_circle.asm",
+      "address": "0x0489",
+      "line": 637
+    },
+    "0x01E5": {
+      "file": "draw_circle.asm",
+      "address": "0x01E5",
+      "line": 345
+    },
+    "0x00E8": {
+      "file": "draw_circle.asm",
+      "address": "0x00E8",
+      "line": 212
+    },
+    "0x00B4": {
+      "file": "draw_circle.asm",
+      "address": "0x00B4",
+      "line": 174
+    },
+    "0x0199": {
+      "file": "draw_circle.asm",
+      "address": "0x0199",
+      "line": 310
+    },
+    "0x02DB": {
+      "file": "draw_circle.asm",
+      "address": "0x02DB",
+      "line": 459
+    },
+    "0x0216": {
+      "file": "draw_circle.asm",
+      "address": "0x0216",
+      "line": 371
+    },
+    "0x03A6": {
+      "file": "draw_circle.asm",
+      "address": "0x03A6",
+      "line": 544
+    },
+    "0x03BC": {
+      "file": "draw_circle.asm",
+      "address": "0x03BC",
+      "line": 553
+    },
+    "0x026D": {
+      "file": "draw_circle.asm",
+      "address": "0x026D",
+      "line": 415
+    },
+    "0x03AD": {
+      "file": "draw_circle.asm",
+      "address": "0x03AD",
+      "line": 547
+    },
+    "0x03AB": {
+      "file": "draw_circle.asm",
+      "address": "0x03AB",
+      "line": 546
+    },
+    "0x028B": {
+      "file": "draw_circle.asm",
+      "address": "0x028B",
+      "line": 427
+    },
+    "0x052F": {
+      "file": "draw_circle.asm",
+      "address": "0x052F",
+      "line": 702
+    },
+    "0x0414": {
+      "file": "draw_circle.asm",
+      "address": "0x0414",
+      "line": 590
+    },
+    "0x0443": {
+      "file": "draw_circle.asm",
+      "address": "0x0443",
+      "line": 609
+    },
+    "0x04B1": {
+      "file": "draw_circle.asm",
+      "address": "0x04B1",
+      "line": 653
+    },
+    "0x0408": {
+      "file": "draw_circle.asm",
+      "address": "0x0408",
+      "line": 585
+    },
+    "0x0056": {
+      "file": "draw_circle.asm",
+      "address": "0x0056",
+      "line": 98
+    },
+    "0x02D8": {
+      "file": "draw_circle.asm",
+      "address": "0x02D8",
+      "line": 458
+    },
+    "0x0029": {
+      "file": "draw_circle.asm",
+      "address": "0x0029",
+      "line": 66
+    },
+    "0x0469": {
+      "file": "draw_circle.asm",
+      "address": "0x0469",
+      "line": 624
+    },
+    "0x0083": {
+      "file": "draw_circle.asm",
+      "address": "0x0083",
+      "line": 128
+    },
+    "0x041B": {
+      "file": "draw_circle.asm",
+      "address": "0x041B",
+      "line": 593
+    },
+    "0x01DC": {
+      "file": "draw_circle.asm",
+      "address": "0x01DC",
+      "line": 340
+    },
+    "0x0163": {
+      "file": "draw_circle.asm",
+      "address": "0x0163",
+      "line": 281
+    },
+    "0x032E": {
+      "file": "draw_circle.asm",
+      "address": "0x032E",
+      "line": 496
+    },
+    "0x0133": {
+      "file": "draw_circle.asm",
+      "address": "0x0133",
+      "line": 256
+    },
+    "0x03C4": {
+      "file": "draw_circle.asm",
+      "address": "0x03C4",
+      "line": 558
+    },
+    "0x0356": {
+      "file": "draw_circle.asm",
+      "address": "0x0356",
+      "line": 512
+    },
+    "0x03D3": {
+      "file": "draw_circle.asm",
+      "address": "0x03D3",
+      "line": 563
+    },
+    "0x0041": {
+      "file": "draw_circle.asm",
+      "address": "0x0041",
+      "line": 80
+    },
+    "0x030E": {
+      "file": "draw_circle.asm",
+      "address": "0x030E",
+      "line": 483
+    },
+    "0x0076": {
+      "file": "draw_circle.asm",
+      "address": "0x0076",
+      "line": 119
+    },
+    "0x0244": {
+      "file": "draw_circle.asm",
+      "address": "0x0244",
+      "line": 397
+    },
+    "0x01A6": {
+      "file": "draw_circle.asm",
+      "address": "0x01A6",
+      "line": 318
+    },
+    "0x0288": {
+      "file": "draw_circle.asm",
+      "address": "0x0288",
+      "line": 426
+    },
+    "0x004C": {
+      "file": "draw_circle.asm",
+      "address": "0x004C",
+      "line": 85
+    },
+    "0x0116": {
+      "file": "draw_circle.asm",
+      "address": "0x0116",
+      "line": 243
+    },
+    "0x009F": {
+      "file": "draw_circle.asm",
+      "address": "0x009F",
+      "line": 161
+    },
+    "0x047D": {
+      "file": "draw_circle.asm",
+      "address": "0x047D",
+      "line": 632
+    },
+    "0x024B": {
+      "file": "draw_circle.asm",
+      "address": "0x024B",
+      "line": 400
+    },
+    "0x0284": {
+      "file": "draw_circle.asm",
+      "address": "0x0284",
+      "line": 424
+    },
+    "0x0272": {
+      "file": "draw_circle.asm",
+      "address": "0x0272",
+      "line": 417
+    },
+    "0x01EA": {
+      "file": "draw_circle.asm",
+      "address": "0x01EA",
+      "line": 14
+    },
+    "0x04B4": {
+      "file": "draw_circle.asm",
+      "address": "0x04B4",
+      "line": 654
+    },
+    "0x0353": {
+      "file": "draw_circle.asm",
+      "address": "0x0353",
+      "line": 511
+    },
+    "0x004D": {
+      "file": "draw_circle.asm",
+      "address": "0x004D",
+      "line": 86
+    },
+    "0x0228": {
+      "file": "draw_circle.asm",
+      "address": "0x0228",
+      "line": 45
+    },
+    "0x03E2": {
+      "file": "draw_circle.asm",
+      "address": "0x03E2",
+      "line": 568
+    },
+    "0x0143": {
+      "file": "draw_circle.asm",
+      "address": "0x0143",
+      "line": 265
+    },
+    "0x02CE": {
+      "file": "draw_circle.asm",
+      "address": "0x02CE",
+      "line": 454
+    },
+    "0x0446": {
+      "file": "draw_circle.asm",
+      "address": "0x0446",
+      "line": 610
+    },
+    "0x0503": {
+      "file": "draw_circle.asm",
+      "address": "0x0503",
+      "line": 689
+    },
+    "0x0198": {
+      "file": "draw_circle.asm",
+      "address": "0x0198",
+      "line": 308
+    },
+    "0x00D8": {
+      "file": "draw_circle.asm",
+      "address": "0x00D8",
+      "line": 199
+    },
+    "0x04F7": {
+      "file": "draw_circle.asm",
+      "address": "0x04F7",
+      "line": 685
+    },
+    "0x04D8": {
+      "file": "draw_circle.asm",
+      "address": "0x04D8",
+      "line": 669
+    },
+    "0x0103": {
+      "file": "draw_circle.asm",
+      "address": "0x0103",
+      "line": 224
+    },
+    "0x0404": {
+      "file": "draw_circle.asm",
+      "address": "0x0404",
+      "line": 582
+    },
+    "0x0082": {
+      "file": "draw_circle.asm",
+      "address": "0x0082",
+      "line": 127
+    },
+    "0x040D": {
+      "file": "draw_circle.asm",
+      "address": "0x040D",
+      "line": 587
+    },
+    "0x0365": {
+      "file": "draw_circle.asm",
+      "address": "0x0365",
+      "line": 518
+    },
+    "0x00FF": {
+      "file": "draw_circle.asm",
+      "address": "0x00FF",
+      "line": 222
+    },
+    "0x008F": {
+      "file": "draw_circle.asm",
+      "address": "0x008F",
+      "line": 137
+    },
+    "0x018C": {
+      "file": "draw_circle.asm",
+      "address": "0x018C",
+      "line": 304
+    },
+    "0x009A": {
+      "file": "draw_circle.asm",
+      "address": "0x009A",
+      "line": 144
+    },
+    "0x04EC": {
+      "file": "draw_circle.asm",
+      "address": "0x04EC",
+      "line": 681
+    },
+    "0x0072": {
+      "file": "draw_circle.asm",
+      "address": "0x0072",
+      "line": 116
+    },
+    "0x0406": {
+      "file": "draw_circle.asm",
+      "address": "0x0406",
+      "line": 583
+    },
+    "0x038D": {
+      "file": "draw_circle.asm",
+      "address": "0x038D",
+      "line": 534
+    },
+    "0x0317": {
+      "file": "draw_circle.asm",
+      "address": "0x0317",
+      "line": 487
+    },
+    "0x02E8": {
+      "file": "draw_circle.asm",
+      "address": "0x02E8",
+      "line": 464
+    },
+    "0x0033": {
+      "file": "draw_circle.asm",
+      "address": "0x0033",
+      "line": 70
+    },
+    "0x029A": {
+      "file": "draw_circle.asm",
+      "address": "0x029A",
+      "line": 433
+    },
+    "0x0159": {
+      "file": "draw_circle.asm",
+      "address": "0x0159",
+      "line": 277
+    },
+    "0x00EE": {
+      "file": "draw_circle.asm",
+      "address": "0x00EE",
+      "line": 215
+    },
+    "0x0081": {
+      "file": "draw_circle.asm",
+      "address": "0x0081",
+      "line": 126
+    },
+    "0x01CD": {
+      "file": "draw_circle.asm",
+      "address": "0x01CD",
+      "line": 334
+    },
+    "0x0246": {
+      "file": "draw_circle.asm",
+      "address": "0x0246",
+      "line": 398
+    },
+    "0x01C7": {
+      "file": "draw_circle.asm",
+      "address": "0x01C7",
+      "line": 331
+    },
+    "0x01B5": {
+      "file": "draw_circle.asm",
+      "address": "0x01B5",
+      "line": 324
+    },
+    "0x04E9": {
+      "file": "draw_circle.asm",
+      "address": "0x04E9",
+      "line": 680
+    },
+    "0x03F4": {
+      "file": "draw_circle.asm",
+      "address": "0x03F4",
+      "line": 574
+    },
+    "0x031F": {
+      "file": "draw_circle.asm",
+      "address": "0x031F",
+      "line": 490
+    },
+    "0x04D5": {
+      "file": "draw_circle.asm",
+      "address": "0x04D5",
+      "line": 668
+    },
+    "0x02A4": {
+      "file": "draw_circle.asm",
+      "address": "0x02A4",
+      "line": 437
+    },
+    "0x0263": {
+      "file": "draw_circle.asm",
+      "address": "0x0263",
+      "line": 411
+    },
+    "0x0475": {
+      "file": "draw_circle.asm",
+      "address": "0x0475",
+      "line": 629
+    },
+    "0x0060": {
+      "file": "draw_circle.asm",
+      "address": "0x0060",
+      "line": 105
+    },
+    "0x046E": {
+      "file": "draw_circle.asm",
+      "address": "0x046E",
+      "line": 626
+    },
+    "0x04BB": {
+      "file": "draw_circle.asm",
+      "address": "0x04BB",
+      "line": 659
+    },
+    "0x0298": {
+      "file": "draw_circle.asm",
+      "address": "0x0298",
+      "line": 432
+    },
+    "0x04FA": {
+      "file": "draw_circle.asm",
+      "address": "0x04FA",
+      "line": 686
+    },
+    "0x0432": {
+      "file": "draw_circle.asm",
+      "address": "0x0432",
+      "line": 602
+    },
+    "0x0220": {
+      "file": "draw_circle.asm",
+      "address": "0x0220",
+      "line": 375
+    },
+    "0x0039": {
+      "file": "draw_circle.asm",
+      "address": "0x0039",
+      "line": 77
+    },
+    "0x0525": {
+      "file": "draw_circle.asm",
+      "address": "0x0525",
+      "line": 698
+    },
+    "0x0178": {
+      "file": "draw_circle.asm",
+      "address": "0x0178",
+      "line": 294
+    },
+    "0x02D4": {
+      "file": "draw_circle.asm",
+      "address": "0x02D4",
+      "line": 456
+    },
+    "0x0185": {
+      "file": "draw_circle.asm",
+      "address": "0x0185",
+      "line": 300
+    },
+    "0x022E": {
+      "file": "draw_circle.asm",
+      "address": "0x022E",
+      "line": 383
+    },
+    "0x0256": {
+      "file": "draw_circle.asm",
+      "address": "0x0256",
+      "line": 406
+    },
+    "0x00A4": {
+      "file": "draw_circle.asm",
+      "address": "0x00A4",
+      "line": 164
+    },
+    "0x038B": {
+      "file": "draw_circle.asm",
+      "address": "0x038B",
+      "line": 533
+    },
+    "0x0292": {
+      "file": "draw_circle.asm",
+      "address": "0x0292",
+      "line": 430
+    },
+    "0x049B": {
+      "file": "draw_circle.asm",
+      "address": "0x049B",
+      "line": 644
+    },
+    "0x0034": {
+      "file": "draw_circle.asm",
+      "address": "0x0034",
+      "line": 71
+    },
+    "0x00BD": {
+      "file": "draw_circle.asm",
+      "address": "0x00BD",
+      "line": 180
+    },
+    "0x0274": {
+      "file": "draw_circle.asm",
+      "address": "0x0274",
+      "line": 418
+    },
+    "0x04CC": {
+      "file": "draw_circle.asm",
+      "address": "0x04CC",
+      "line": 665
+    },
+    "0x023F": {
+      "file": "draw_circle.asm",
+      "address": "0x023F",
+      "line": 393
+    },
+    "0x01BE": {
+      "file": "draw_circle.asm",
+      "address": "0x01BE",
+      "line": 328
+    },
+    "0x02CC": {
+      "file": "draw_circle.asm",
+      "address": "0x02CC",
+      "line": 453
+    },
+    "0x03A1": {
+      "file": "draw_circle.asm",
+      "address": "0x03A1",
+      "line": 542
+    },
+    "0x0493": {
+      "file": "draw_circle.asm",
+      "address": "0x0493",
+      "line": 641
+    },
+    "0x0044": {
+      "file": "draw_circle.asm",
+      "address": "0x0044",
+      "line": 81
+    },
+    "0x0242": {
+      "file": "draw_circle.asm",
+      "address": "0x0242",
+      "line": 55
+    },
+    "0x0058": {
+      "file": "draw_circle.asm",
+      "address": "0x0058",
+      "line": 99
+    },
+    "0x0487": {
+      "file": "draw_circle.asm",
+      "address": "0x0487",
+      "line": 636
+    },
+    "0x013D": {
+      "file": "draw_circle.asm",
+      "address": "0x013D",
+      "line": 263
+    },
+    "0x0485": {
+      "file": "draw_circle.asm",
+      "address": "0x0485",
+      "line": 635
+    },
+    "0x008D": {
+      "file": "draw_circle.asm",
+      "address": "0x008D",
+      "line": 136
+    },
+    "0x02A2": {
+      "file": "draw_circle.asm",
+      "address": "0x02A2",
+      "line": 436
+    },
+    "0x0532": {
+      "file": "draw_circle.asm",
+      "address": "0x0532",
+      "line": 703
+    },
+    "0x0461": {
+      "file": "draw_circle.asm",
+      "address": "0x0461",
+      "line": 621
+    },
+    "0x03C7": {
+      "file": "draw_circle.asm",
+      "address": "0x03C7",
+      "line": 559
+    },
+    "0x016A": {
+      "file": "draw_circle.asm",
+      "address": "0x016A",
+      "line": 285
+    },
+    "0x0310": {
+      "file": "draw_circle.asm",
+      "address": "0x0310",
+      "line": 484
+    },
+    "0x04EF": {
+      "file": "draw_circle.asm",
+      "address": "0x04EF",
+      "line": 682
+    },
+    "0x025C": {
+      "file": "draw_circle.asm",
+      "address": "0x025C",
+      "line": 408
+    },
+    "0x051F": {
+      "file": "draw_circle.asm",
+      "address": "0x051F",
+      "line": 695
+    },
+    "0x007E": {
+      "file": "draw_circle.asm",
+      "address": "0x007E",
+      "line": 125
+    },
+    "0x040A": {
+      "file": "draw_circle.asm",
+      "address": "0x040A",
+      "line": 586
+    },
+    "0x0171": {
+      "file": "draw_circle.asm",
+      "address": "0x0171",
+      "line": 288
+    },
+    "0x027E": {
+      "file": "draw_circle.asm",
+      "address": "0x027E",
+      "line": 422
+    },
+    "0x039F": {
+      "file": "draw_circle.asm",
+      "address": "0x039F",
+      "line": 541
+    },
+    "0x037E": {
+      "file": "draw_circle.asm",
+      "address": "0x037E",
+      "line": 528
+    },
+    "0x04C7": {
+      "file": "draw_circle.asm",
+      "address": "0x04C7",
+      "line": 663
+    },
+    "0x04C1": {
+      "file": "draw_circle.asm",
+      "address": "0x04C1",
+      "line": 661
+    },
+    "0x0499": {
+      "file": "draw_circle.asm",
+      "address": "0x0499",
+      "line": 643
+    },
+    "0x020F": {
+      "file": "draw_circle.asm",
+      "address": "0x020F",
+      "line": 35
+    },
+    "0x0234": {
+      "file": "draw_circle.asm",
+      "address": "0x0234",
+      "line": 386
+    },
+    "0x01A9": {
+      "file": "draw_circle.asm",
+      "address": "0x01A9",
+      "line": 319
+    },
+    "0x030C": {
+      "file": "draw_circle.asm",
+      "address": "0x030C",
+      "line": 481
+    },
+    "0x00C4": {
+      "file": "draw_circle.asm",
+      "address": "0x00C4",
+      "line": 183
+    },
+    "0x02F9": {
+      "file": "draw_circle.asm",
+      "address": "0x02F9",
+      "line": 471
+    },
+    "0x0331": {
+      "file": "draw_circle.asm",
+      "address": "0x0331",
+      "line": 497
+    },
+    "0x0266": {
+      "file": "draw_circle.asm",
+      "address": "0x0266",
+      "line": 412
+    },
+    "0x01C4": {
+      "file": "draw_circle.asm",
+      "address": "0x01C4",
+      "line": 330
+    },
+    "0x0136": {
+      "file": "draw_circle.asm",
+      "address": "0x0136",
+      "line": 257
+    },
+    "0x003E": {
+      "file": "draw_circle.asm",
+      "address": "0x003E",
+      "line": 79
+    },
+    "0x037B": {
+      "file": "draw_circle.asm",
+      "address": "0x037B",
+      "line": 527
+    },
+    "0x0146": {
+      "file": "draw_circle.asm",
+      "address": "0x0146",
+      "line": 266
+    },
+    "0x0154": {
+      "file": "draw_circle.asm",
+      "address": "0x0154",
+      "line": 273
+    },
+    "0x0407": {
+      "file": "draw_circle.asm",
+      "address": "0x0407",
+      "line": 584
+    },
+    "0x04D2": {
+      "file": "draw_circle.asm",
+      "address": "0x04D2",
+      "line": 667
+    },
+    "0x006B": {
+      "file": "draw_circle.asm",
+      "address": "0x006B",
+      "line": 112
+    },
+    "0x0249": {
+      "file": "draw_circle.asm",
+      "address": "0x0249",
+      "line": 399
+    },
+    "0x0170": {
+      "file": "draw_circle.asm",
+      "address": "0x0170",
+      "line": 287
+    },
+    "0x021E": {
+      "file": "draw_circle.asm",
+      "address": "0x021E",
+      "line": 41
+    },
+    "0x03D0": {
+      "file": "draw_circle.asm",
+      "address": "0x03D0",
+      "line": 562
+    },
+    "0x0023": {
+      "file": "draw_circle.asm",
+      "address": "0x0023",
+      "line": 64
+    },
+    "0x0108": {
+      "file": "draw_circle.asm",
+      "address": "0x0108",
+      "line": 236
+    },
+    "0x00CA": {
+      "file": "draw_circle.asm",
+      "address": "0x00CA",
+      "line": 190
+    },
+    "0x04E5": {
+      "file": "draw_circle.asm",
+      "address": "0x04E5",
+      "line": 678
+    },
+    "0x0300": {
+      "file": "draw_circle.asm",
+      "address": "0x0300",
+      "line": 476
+    },
+    "0x04A0": {
+      "file": "draw_circle.asm",
+      "address": "0x04A0",
+      "line": 646
+    },
+    "0x0047": {
+      "file": "draw_circle.asm",
+      "address": "0x0047",
+      "line": 82
+    },
+    "0x0211": {
+      "file": "draw_circle.asm",
+      "address": "0x0211",
+      "line": 369
+    },
+    "0x017E": {
+      "file": "draw_circle.asm",
+      "address": "0x017E",
+      "line": 296
+    },
+    "0x011C": {
+      "file": "draw_circle.asm",
+      "address": "0x011C",
+      "line": 245
+    },
+    "0x015C": {
+      "file": "draw_circle.asm",
+      "address": "0x015C",
+      "line": 278
+    },
+    "0x039C": {
+      "file": "draw_circle.asm",
+      "address": "0x039C",
+      "line": 540
+    },
+    "0x0329": {
+      "file": "draw_circle.asm",
+      "address": "0x0329",
+      "line": 494
+    },
+    "0x0032": {
+      "file": "draw_circle.asm",
+      "address": "0x0032",
+      "line": 69
+    },
+    "0x00C8": {
+      "file": "draw_circle.asm",
+      "address": "0x00C8",
+      "line": 188
+    },
+    "0x0268": {
+      "file": "draw_circle.asm",
+      "address": "0x0268",
+      "line": 413
+    },
+    "0x00C9": {
+      "file": "draw_circle.asm",
+      "address": "0x00C9",
+      "line": 189
+    },
+    "0x02AC": {
+      "file": "draw_circle.asm",
+      "address": "0x02AC",
+      "line": 440
+    },
+    "0x020C": {
+      "file": "draw_circle.asm",
+      "address": "0x020C",
+      "line": 367
+    },
+    "0x0464": {
+      "file": "draw_circle.asm",
+      "address": "0x0464",
+      "line": 622
+    },
+    "0x0327": {
+      "file": "draw_circle.asm",
+      "address": "0x0327",
+      "line": 493
+    },
+    "0x04F1": {
+      "file": "draw_circle.asm",
+      "address": "0x04F1",
+      "line": 683
+    },
+    "0x0395": {
+      "file": "draw_circle.asm",
+      "address": "0x0395",
+      "line": 537
+    },
+    "0x0321": {
+      "file": "draw_circle.asm",
+      "address": "0x0321",
+      "line": 491
+    },
+    "0x04AD": {
+      "file": "draw_circle.asm",
+      "address": "0x04AD",
+      "line": 651
+    },
+    "0x0338": {
+      "file": "draw_circle.asm",
+      "address": "0x0338",
+      "line": 500
+    },
+    "0x031A": {
+      "file": "draw_circle.asm",
+      "address": "0x031A",
+      "line": 488
+    },
+    "0x0231": {
+      "file": "draw_circle.asm",
+      "address": "0x0231",
+      "line": 385
+    },
+    "0x022B": {
+      "file": "draw_circle.asm",
+      "address": "0x022B",
+      "line": 46
+    },
+    "0x0399": {
+      "file": "draw_circle.asm",
+      "address": "0x0399",
+      "line": 539
+    },
+    "0x047F": {
+      "file": "draw_circle.asm",
+      "address": "0x047F",
+      "line": 633
+    },
+    "0x007A": {
+      "file": "draw_circle.asm",
+      "address": "0x007A",
+      "line": 122
+    },
+    "0x0201": {
+      "file": "draw_circle.asm",
+      "address": "0x0201",
+      "line": 30
+    },
+    "0x0428": {
+      "file": "draw_circle.asm",
+      "address": "0x0428",
+      "line": 598
+    },
+    "0x02C7": {
+      "file": "draw_circle.asm",
+      "address": "0x02C7",
+      "line": 451
+    },
+    "0x033B": {
+      "file": "draw_circle.asm",
+      "address": "0x033B",
+      "line": 501
+    },
+    "0x0207": {
+      "file": "draw_circle.asm",
+      "address": "0x0207",
+      "line": 32
+    },
+    "0x04AA": {
+      "file": "draw_circle.asm",
+      "address": "0x04AA",
+      "line": 650
+    },
+    "0x02C4": {
+      "file": "draw_circle.asm",
+      "address": "0x02C4",
+      "line": 450
+    },
+    "0x053A": {
+      "file": "draw_circle.asm",
+      "address": "0x053A",
+      "line": 707
+    },
+    "0x015F": {
+      "file": "draw_circle.asm",
+      "address": "0x015F",
+      "line": 279
+    },
+    "0x02CA": {
+      "file": "draw_circle.asm",
+      "address": "0x02CA",
+      "line": 452
+    },
+    "0x01FB": {
+      "file": "draw_circle.asm",
+      "address": "0x01FB",
+      "line": 358
+    },
+    "0x024F": {
+      "file": "draw_circle.asm",
+      "address": "0x024F",
+      "line": 403
+    },
+    "0x01ED": {
+      "file": "draw_circle.asm",
+      "address": "0x01ED",
+      "line": 348
+    },
+    "0x00A2": {
+      "file": "draw_circle.asm",
+      "address": "0x00A2",
+      "line": 162
+    },
+    "0x0123": {
+      "file": "draw_circle.asm",
+      "address": "0x0123",
+      "line": 249
+    },
+    "0x0529": {
+      "file": "draw_circle.asm",
+      "address": "0x0529",
+      "line": 700
+    },
+    "0x0130": {
+      "file": "draw_circle.asm",
+      "address": "0x0130",
+      "line": 255
+    },
+    "0x019F": {
+      "file": "draw_circle.asm",
+      "address": "0x019F",
+      "line": 312
+    },
+    "0x0089": {
+      "file": "draw_circle.asm",
+      "address": "0x0089",
+      "line": 132
+    },
+    "0x028E": {
+      "file": "draw_circle.asm",
+      "address": "0x028E",
+      "line": 428
+    },
+    "0x023C": {
+      "file": "draw_circle.asm",
+      "address": "0x023C",
+      "line": 392
+    },
+    "0x02EA": {
+      "file": "draw_circle.asm",
+      "address": "0x02EA",
+      "line": 465
+    },
+    "0x0188": {
+      "file": "draw_circle.asm",
+      "address": "0x0188",
+      "line": 301
+    },
+    "0x04CF": {
+      "file": "draw_circle.asm",
+      "address": "0x04CF",
+      "line": 666
+    },
+    "0x0112": {
+      "file": "draw_circle.asm",
+      "address": "0x0112",
+      "line": 240
+    },
+    "0x02EC": {
+      "file": "draw_circle.asm",
+      "address": "0x02EC",
+      "line": 466
+    },
+    "0x0473": {
+      "file": "draw_circle.asm",
+      "address": "0x0473",
+      "line": 628
+    },
+    "0x03C1": {
+      "file": "draw_circle.asm",
+      "address": "0x03C1",
+      "line": 557
+    },
+    "0x00FD": {
+      "file": "draw_circle.asm",
+      "address": "0x00FD",
+      "line": 221
+    },
+    "0x00BB": {
+      "file": "draw_circle.asm",
+      "address": "0x00BB",
+      "line": 179
+    },
+    "0x0192": {
+      "file": "draw_circle.asm",
+      "address": "0x0192",
+      "line": 306
+    },
+    "0x03A3": {
+      "file": "draw_circle.asm",
+      "address": "0x03A3",
+      "line": 543
+    },
+    "0x0095": {
+      "file": "draw_circle.asm",
+      "address": "0x0095",
+      "line": 141
+    },
+    "0x00F1": {
+      "file": "draw_circle.asm",
+      "address": "0x00F1",
+      "line": 216
+    },
+    "0x018B": {
+      "file": "draw_circle.asm",
+      "address": "0x018B",
+      "line": 302
+    },
+    "0x0417": {
+      "file": "draw_circle.asm",
+      "address": "0x0417",
+      "line": 591
+    },
+    "0x0496": {
+      "file": "draw_circle.asm",
+      "address": "0x0496",
+      "line": 642
+    },
+    "0x00F4": {
+      "file": "draw_circle.asm",
+      "address": "0x00F4",
+      "line": 217
+    },
+    "0x0307": {
+      "file": "draw_circle.asm",
+      "address": "0x0307",
+      "line": 479
+    },
+    "0x03D6": {
+      "file": "draw_circle.asm",
+      "address": "0x03D6",
+      "line": 564
+    },
+    "0x040F": {
+      "file": "draw_circle.asm",
+      "address": "0x040F",
+      "line": 588
+    },
+    "0x01E8": {
+      "file": "draw_circle.asm",
+      "address": "0x01E8",
+      "line": 13
+    },
+    "0x010F": {
+      "file": "draw_circle.asm",
+      "address": "0x010F",
+      "line": 239
+    },
+    "0x0425": {
+      "file": "draw_circle.asm",
+      "address": "0x0425",
+      "line": 597
+    },
+    "0x04A7": {
+      "file": "draw_circle.asm",
+      "address": "0x04A7",
+      "line": 649
+    },
+    "0x01F0": {
+      "file": "draw_circle.asm",
+      "address": "0x01F0",
+      "line": 349
+    },
+    "0x01BB": {
+      "file": "draw_circle.asm",
+      "address": "0x01BB",
+      "line": 326
+    },
+    "0x0351": {
+      "file": "draw_circle.asm",
+      "address": "0x0351",
+      "line": 510
+    },
+    "0x045D": {
+      "file": "draw_circle.asm",
+      "address": "0x045D",
+      "line": 619
+    },
+    "0x033F": {
+      "file": "draw_circle.asm",
+      "address": "0x033F",
+      "line": 503
+    },
+    "0x0021": {
+      "file": "draw_circle.asm",
+      "address": "0x0021",
+      "line": 63
+    },
+    "0x00F6": {
+      "file": "draw_circle.asm",
+      "address": "0x00F6",
+      "line": 218
+    },
+    "0x0467": {
+      "file": "draw_circle.asm",
+      "address": "0x0467",
+      "line": 623
+    },
+    "0x03EE": {
+      "file": "draw_circle.asm",
+      "address": "0x03EE",
+      "line": 572
+    },
+    "0x029F": {
+      "file": "draw_circle.asm",
+      "address": "0x029F",
+      "line": 435
+    },
+    "0x0209": {
+      "file": "draw_circle.asm",
+      "address": "0x0209",
+      "line": 33
+    },
+    "0x01B8": {
+      "file": "draw_circle.asm",
+      "address": "0x01B8",
+      "line": 325
+    },
+    "0x0239": {
+      "file": "draw_circle.asm",
+      "address": "0x0239",
+      "line": 51
+    },
+    "0x0035": {
+      "file": "draw_circle.asm",
+      "address": "0x0035",
+      "line": 72
+    },
+    "0x04CA": {
+      "file": "draw_circle.asm",
+      "address": "0x04CA",
+      "line": 664
+    },
+    "0x0226": {
+      "file": "draw_circle.asm",
+      "address": "0x0226",
+      "line": 380
+    },
+    "0x0026": {
+      "file": "draw_circle.asm",
+      "address": "0x0026",
+      "line": 65
+    },
+    "0x0360": {
+      "file": "draw_circle.asm",
+      "address": "0x0360",
+      "line": 516
+    },
+    "0x00E3": {
+      "file": "draw_circle.asm",
+      "address": "0x00E3",
+      "line": 210
+    },
+    "0x0423": {
+      "file": "draw_circle.asm",
+      "address": "0x0423",
+      "line": 596
+    },
+    "0x0115": {
+      "file": "draw_circle.asm",
+      "address": "0x0115",
+      "line": 242
+    },
+    "0x021B": {
+      "file": "draw_circle.asm",
+      "address": "0x021B",
+      "line": 373
+    },
+    "0x027C": {
+      "file": "draw_circle.asm",
+      "address": "0x027C",
+      "line": 421
+    },
+    "0x045F": {
+      "file": "draw_circle.asm",
+      "address": "0x045F",
+      "line": 620
+    },
+    "0x03DC": {
+      "file": "draw_circle.asm",
+      "address": "0x03DC",
+      "line": 566
+    },
+    "0x035D": {
+      "file": "draw_circle.asm",
+      "address": "0x035D",
+      "line": 515
+    },
+    "0x027A": {
+      "file": "draw_circle.asm",
+      "address": "0x027A",
+      "line": 420
+    },
+    "0x0290": {
+      "file": "draw_circle.asm",
+      "address": "0x0290",
+      "line": 429
+    },
+    "0x0147": {
+      "file": "draw_circle.asm",
+      "address": "0x0147",
+      "line": 267
+    },
+    "0x00FA": {
+      "file": "draw_circle.asm",
+      "address": "0x00FA",
+      "line": 220
+    },
+    "0x035B": {
+      "file": "draw_circle.asm",
+      "address": "0x035B",
+      "line": 514
+    },
+    "0x029C": {
+      "file": "draw_circle.asm",
+      "address": "0x029C",
+      "line": 434
+    },
+    "0x0381": {
+      "file": "draw_circle.asm",
+      "address": "0x0381",
+      "line": 529
+    },
+    "0x002C": {
+      "file": "draw_circle.asm",
+      "address": "0x002C",
+      "line": 67
+    },
+    "0x0109": {
+      "file": "draw_circle.asm",
+      "address": "0x0109",
+      "line": 237
+    },
+    "0x03FA": {
+      "file": "draw_circle.asm",
+      "address": "0x03FA",
+      "line": 578
+    },
+    "0x0067": {
+      "file": "draw_circle.asm",
+      "address": "0x0067",
+      "line": 109
+    },
+    "0x0377": {
+      "file": "draw_circle.asm",
+      "address": "0x0377",
+      "line": 525
+    },
+    "0x01E3": {
+      "file": "draw_circle.asm",
+      "address": "0x01E3",
+      "line": 11
+    },
+    "0x0064": {
+      "file": "draw_circle.asm",
+      "address": "0x0064",
+      "line": 107
+    },
+    "0x0174": {
+      "file": "draw_circle.asm",
+      "address": "0x0174",
+      "line": 292
+    },
+    "0x04E1": {
+      "file": "draw_circle.asm",
+      "address": "0x04E1",
+      "line": 673
+    },
+    "0x047B": {
+      "file": "draw_circle.asm",
+      "address": "0x047B",
+      "line": 631
+    },
+    "0x01AF": {
+      "file": "draw_circle.asm",
+      "address": "0x01AF",
+      "line": 321
+    },
+    "0x00A7": {
+      "file": "draw_circle.asm",
+      "address": "0x00A7",
+      "line": 165
+    },
+    "0x0126": {
+      "file": "draw_circle.asm",
+      "address": "0x0126",
+      "line": 250
+    },
+    "0x04FD": {
+      "file": "draw_circle.asm",
+      "address": "0x04FD",
+      "line": 687
+    },
+    "0x045A": {
+      "file": "draw_circle.asm",
+      "address": "0x045A",
+      "line": 618
+    },
+    "0x04B6": {
+      "file": "draw_circle.asm",
+      "address": "0x04B6",
+      "line": 657
+    },
+    "0x0305": {
+      "file": "draw_circle.asm",
+      "address": "0x0305",
+      "line": 478
+    },
+    "0x0158": {
+      "file": "draw_circle.asm",
+      "address": "0x0158",
+      "line": 276
+    },
+    "0x03BE": {
+      "file": "draw_circle.asm",
+      "address": "0x03BE",
+      "line": 556
+    },
+    "0x0236": {
+      "file": "draw_circle.asm",
+      "address": "0x0236",
+      "line": 50
+    },
+    "0x0252": {
+      "file": "draw_circle.asm",
+      "address": "0x0252",
+      "line": 404
+    },
+    "0x01AC": {
+      "file": "draw_circle.asm",
+      "address": "0x01AC",
+      "line": 320
+    },
+    "0x036F": {
+      "file": "draw_circle.asm",
+      "address": "0x036F",
+      "line": 522
+    },
+    "0x04E6": {
+      "file": "draw_circle.asm",
+      "address": "0x04E6",
+      "line": 679
+    },
+    "0x01A2": {
+      "file": "draw_circle.asm",
+      "address": "0x01A2",
+      "line": 313
+    },
+    "0x00B7": {
+      "file": "draw_circle.asm",
+      "address": "0x00B7",
+      "line": 175
+    },
+    "0x0371": {
+      "file": "draw_circle.asm",
+      "address": "0x0371",
+      "line": 523
+    },
+    "0x0397": {
+      "file": "draw_circle.asm",
+      "address": "0x0397",
+      "line": 538
+    },
+    "0x0254": {
+      "file": "draw_circle.asm",
+      "address": "0x0254",
+      "line": 405
+    },
+    "0x0195": {
+      "file": "draw_circle.asm",
+      "address": "0x0195",
+      "line": 307
+    },
+    "0x01CA": {
+      "file": "draw_circle.asm",
+      "address": "0x01CA",
+      "line": 333
+    },
+    "0x019C": {
+      "file": "draw_circle.asm",
+      "address": "0x019C",
+      "line": 311
+    },
+    "0x02FD": {
+      "file": "draw_circle.asm",
+      "address": "0x02FD",
+      "line": 473
+    },
+    "0x02F2": {
+      "file": "draw_circle.asm",
+      "address": "0x02F2",
+      "line": 468
+    },
+    "0x00C6": {
+      "file": "draw_circle.asm",
+      "address": "0x00C6",
+      "line": 187
+    },
+    "0x03B7": {
+      "file": "draw_circle.asm",
+      "address": "0x03B7",
+      "line": 551
+    },
+    "0x0065": {
+      "file": "draw_circle.asm",
+      "address": "0x0065",
+      "line": 108
+    },
+    "0x0106": {
+      "file": "draw_circle.asm",
+      "address": "0x0106",
+      "line": 225
+    },
+    "0x017F": {
+      "file": "draw_circle.asm",
+      "address": "0x017F",
+      "line": 298
+    },
+    "0x0401": {
+      "file": "draw_circle.asm",
+      "address": "0x0401",
+      "line": 581
+    },
+    "0x0324": {
+      "file": "draw_circle.asm",
+      "address": "0x0324",
+      "line": 492
+    },
+    "0x01FE": {
+      "file": "draw_circle.asm",
+      "address": "0x01FE",
+      "line": 359
+    },
+    "0x016D": {
+      "file": "draw_circle.asm",
+      "address": "0x016D",
+      "line": 286
+    },
+    "0x0500": {
+      "file": "draw_circle.asm",
+      "address": "0x0500",
+      "line": 688
+    },
+    "0x0411": {
+      "file": "draw_circle.asm",
+      "address": "0x0411",
+      "line": 589
+    },
+    "0x03BA": {
+      "file": "draw_circle.asm",
+      "address": "0x03BA",
+      "line": 552
+    },
+    "0x02B3": {
+      "file": "draw_circle.asm",
+      "address": "0x02B3",
+      "line": 443
+    },
+    "0x034C": {
+      "file": "draw_circle.asm",
+      "address": "0x034C",
+      "line": 508
+    },
+    "0x04DA": {
+      "file": "draw_circle.asm",
+      "address": "0x04DA",
+      "line": 670
+    },
+    "0x038F": {
+      "file": "draw_circle.asm",
+      "address": "0x038F",
+      "line": 535
+    },
+    "0x03FF": {
+      "file": "draw_circle.asm",
+      "address": "0x03FF",
+      "line": 580
+    },
+    "0x002F": {
+      "file": "draw_circle.asm",
+      "address": "0x002F",
+      "line": 68
+    },
+    "0x00C2": {
+      "file": "draw_circle.asm",
+      "address": "0x00C2",
+      "line": 182
+    },
+    "0x0374": {
+      "file": "draw_circle.asm",
+      "address": "0x0374",
+      "line": 524
+    },
+    "0x0450": {
+      "file": "draw_circle.asm",
+      "address": "0x0450",
+      "line": 614
+    },
+    "0x00EB": {
+      "file": "draw_circle.asm",
+      "address": "0x00EB",
+      "line": 213
+    }
+  },
   "functions": {},
   "nativeCalls": {},
   "asmFunctions": {},
-  "asmAddressMap": {},
+  "asmAddressMap": {
+    "52": "0x023C",
+    "321": "0x01AF",
+    "72": "0x0035",
+    "629": "0x0475",
+    "417": "0x0272",
+    "188": "0x00C8",
+    "539": "0x0399",
+    "584": "0x0407",
+    "48": "0x0231",
+    "702": "0x052F",
+    "406": "0x0256",
+    "168": "0x00AA",
+    "203": "0x00DE",
+    "265": "0x0143",
+    "467": "0x02EF",
+    "453": "0x02CC",
+    "429": "0x0290",
+    "483": "0x030E",
+    "121": "0x0079",
+    "653": "0x04B1",
+    "551": "0x03B7",
+    "329": "0x01C1",
+    "650": "0x04AA",
+    "568": "0x03E2",
+    "218": "0x00F6",
+    "526": "0x0379",
+    "392": "0x023C",
+    "381": "0x0228",
+    "503": "0x033F",
+    "523": "0x0371",
+    "401": "0x024C",
+    "324": "0x01B5",
+    "171": "0x00B0",
+    "511": "0x0353",
+    "425": "0x0286",
+    "562": "0x03D0",
+    "415": "0x026D",
+    "263": "0x013D",
+    "437": "0x02A4",
+    "580": "0x03FF",
+    "323": "0x01B2",
+    "186": "0x00C5",
+    "404": "0x0252",
+    "301": "0x0188",
+    "455": "0x02D1",
+    "468": "0x02F2",
+    "12": "0x01E5",
+    "2": "0x01E1",
+    "293": "0x0175",
+    "344": "0x01E3",
+    "421": "0x027C",
+    "49": "0x0234",
+    "637": "0x0489",
+    "631": "0x047B",
+    "264": "0x0140",
+    "507": "0x0349",
+    "273": "0x0154",
+    "688": "0x0500",
+    "419": "0x0277",
+    "277": "0x0159",
+    "695": "0x051F",
+    "105": "0x0060",
+    "638": "0x048C",
+    "591": "0x0417",
+    "77": "0x0039",
+    "515": "0x035D",
+    "222": "0x00FF",
+    "97": "0x0055",
+    "663": "0x04C7",
+    "368": "0x020F",
+    "540": "0x039C",
+    "464": "0x02E8",
+    "548": "0x03B0",
+    "345": "0x01E5",
+    "553": "0x03BC",
+    "360": "0x0201",
+    "224": "0x0103",
+    "556": "0x03BE",
+    "543": "0x03A3",
+    "462": "0x02E2",
+    "704": "0x0535",
+    "463": "0x02E5",
+    "211": "0x00E5",
+    "280": "0x0162",
+    "458": "0x02D8",
+    "648": "0x04A5",
+    "684": "0x04F4",
+    "560": "0x03CA",
+    "498": "0x0333",
+    "267": "0x0147",
+    "582": "0x0404",
+    "243": "0x0116",
+    "480": "0x030A",
+    "162": "0x00A2",
+    "225": "0x0106",
+    "202": "0x00DC",
+    "65": "0x0026",
+    "129": "0x0085",
+    "531": "0x0385",
+    "312": "0x019F",
+    "172": "0x00B1",
+    "449": "0x02C2",
+    "239": "0x010F",
+    "95": "0x0051",
+    "618": "0x045A",
+    "673": "0x04E1",
+    "36": "0x0211",
+    "63": "0x0021",
+    "590": "0x0414",
+    "400": "0x024B",
+    "357": "0x01F8",
+    "671": "0x04DD",
+    "512": "0x0356",
+    "390": "0x0236",
+    "517": "0x0363",
+    "513": "0x0359",
+    "40": "0x021B",
+    "266": "0x0146",
+    "646": "0x04A0",
+    "574": "0x03F4",
+    "84": "0x004B",
+    "609": "0x0443",
+    "672": "0x04E0",
+    "602": "0x0432",
+    "630": "0x0478",
+    "506": "0x0347",
+    "119": "0x0076",
+    "632": "0x047D",
+    "651": "0x04AD",
+    "347": "0x01EA",
+    "310": "0x0199",
+    "659": "0x04BB",
+    "666": "0x04CF",
+    "374": "0x021E",
+    "142": "0x0097",
+    "320": "0x01AC",
+    "461": "0x02E0",
+    "240": "0x0112",
+    "365": "0x0209",
+    "557": "0x03C1",
+    "279": "0x015F",
+    "707": "0x053A",
+    "214": "0x00ED",
+    "328": "0x01BE",
+    "612": "0x044B",
+    "664": "0x04CA",
+    "284": "0x0167",
+    "136": "0x008D",
+    "29": "0x01FE",
+    "624": "0x0469",
+    "583": "0x0406",
+    "107": "0x0064",
+    "481": "0x030C",
+    "443": "0x02B3",
+    "505": "0x0345",
+    "141": "0x0095",
+    "418": "0x0274",
+    "529": "0x0381",
+    "698": "0x0525",
+    "654": "0x04B4",
+    "413": "0x0268",
+    "403": "0x024F",
+    "102": "0x005C",
+    "396": "0x0242",
+    "34": "0x020C",
+    "189": "0x00C9",
+    "181": "0x00BF",
+    "625": "0x046B",
+    "165": "0x00A7",
+    "693": "0x051C",
+    "579": "0x03FD",
+    "608": "0x0441",
+    "571": "0x03EB",
+    "47": "0x022E",
+    "486": "0x0315",
+    "510": "0x0351",
+    "287": "0x0170",
+    "516": "0x0360",
+    "587": "0x040D",
+    "484": "0x0310",
+    "518": "0x0365",
+    "335": "0x01D0",
+    "569": "0x03E5",
+    "501": "0x033B",
+    "137": "0x008F",
+    "701": "0x052C",
+    "334": "0x01CD",
+    "262": "0x013C",
+    "176": "0x00B8",
+    "564": "0x03D6",
+    "665": "0x04CC",
+    "606": "0x043C",
+    "362": "0x0207",
+    "600": "0x042D",
+    "69": "0x0032",
+    "383": "0x022E",
+    "402": "0x024D",
+    "255": "0x0130",
+    "270": "0x014B",
+    "359": "0x01FE",
+    "473": "0x02FD",
+    "131": "0x0088",
+    "106": "0x0063",
+    "410": "0x0260",
+    "454": "0x02CE",
+    "642": "0x0496",
+    "331": "0x01C7",
+    "652": "0x04AF",
+    "108": "0x0065",
+    "292": "0x0174",
+    "616": "0x0455",
+    "250": "0x0126",
+    "391": "0x0239",
+    "42": "0x0220",
+    "589": "0x0411",
+    "179": "0x00BB",
+    "82": "0x0047",
+    "187": "0x00C6",
+    "573": "0x03F1",
+    "101": "0x005B",
+    "500": "0x0338",
+    "118": "0x0074",
+    "15": "0x01ED",
+    "459": "0x02DB",
+    "524": "0x0374",
+    "662": "0x04C4",
+    "276": "0x0158",
+    "422": "0x027E",
+    "703": "0x0532",
+    "605": "0x0439",
+    "490": "0x031F",
+    "6": "0x01E1",
+    "20": "0x01FB",
+    "626": "0x046E",
+    "304": "0x018C",
+    "514": "0x035B",
+    "649": "0x04A7",
+    "432": "0x0298",
+    "476": "0x0300",
+    "563": "0x03D3",
+    "660": "0x04BE",
+    "385": "0x0231",
+    "669": "0x04D8",
+    "39": "0x0219",
+    "375": "0x0220",
+    "561": "0x03CD",
+    "488": "0x031A",
+    "44": "0x0226",
+    "192": "0x00D1",
+    "32": "0x0207",
+    "271": "0x014E",
+    "127": "0x0082",
+    "633": "0x047F",
+    "471": "0x02F9",
+    "55": "0x0242",
+    "98": "0x0056",
+    "278": "0x015C",
+    "11": "0x01E3",
+    "614": "0x0450",
+    "145": "0x009C",
+    "17": "0x01F2",
+    "67": "0x002C",
+    "215": "0x00EE",
+    "438": "0x02A6",
+    "122": "0x007A",
+    "621": "0x0461",
+    "687": "0x04FD",
+    "128": "0x0083",
+    "398": "0x0246",
+    "43": "0x0223",
+    "412": "0x0266",
+    "658": "0x04B8",
+    "700": "0x0529",
+    "577": "0x03F7",
+    "493": "0x0327",
+    "534": "0x038D",
+    "125": "0x007E",
+    "623": "0x0467",
+    "283": "0x0166",
+    "522": "0x036F",
+    "667": "0x04D2",
+    "112": "0x006B",
+    "533": "0x038B",
+    "361": "0x0204",
+    "604": "0x0437",
+    "424": "0x0284",
+    "681": "0x04EC",
+    "346": "0x01E8",
+    "436": "0x02A2",
+    "409": "0x025E",
+    "348": "0x01ED",
+    "592": "0x0419",
+    "132": "0x0089",
+    "338": "0x01D6",
+    "696": "0x0522",
+    "13": "0x01E8",
+    "294": "0x0178",
+    "495": "0x032B",
+    "542": "0x03A1",
+    "288": "0x0171",
+    "355": "0x01F5",
+    "170": "0x00AD",
+    "477": "0x0303",
+    "175": "0x00B7",
+    "494": "0x0329",
+    "585": "0x0408",
+    "519": "0x0367",
+    "420": "0x027A",
+    "367": "0x020C",
+    "670": "0x04DA",
+    "190": "0x00CA",
+    "99": "0x0058",
+    "382": "0x022B",
+    "478": "0x0305",
+    "197": "0x00D4",
+    "595": "0x0421",
+    "427": "0x028B",
+    "440": "0x02AC",
+    "86": "0x004D",
+    "252": "0x012C",
+    "450": "0x02C4",
+    "559": "0x03C7",
+    "245": "0x011C",
+    "613": "0x044D",
+    "578": "0x03FA",
+    "610": "0x0446",
+    "611": "0x0449",
+    "340": "0x01DC",
+    "369": "0x0211",
+    "682": "0x04EF",
+    "441": "0x02AE",
+    "66": "0x0029",
+    "447": "0x02BD",
+    "111": "0x006A",
+    "641": "0x0493",
+    "71": "0x0034",
+    "161": "0x009F",
+    "496": "0x032E",
+    "217": "0x00F4",
+    "644": "0x049B",
+    "581": "0x0401",
+    "399": "0x0249",
+    "306": "0x0192",
+    "674": "0x04E2",
+    "219": "0x00F7",
+    "174": "0x00B4",
+    "167": "0x00A9",
+    "216": "0x00F1",
+    "96": "0x0054",
+    "80": "0x0041",
+    "272": "0x0151",
+    "431": "0x0295",
+    "439": "0x02A9",
+    "428": "0x028E",
+    "298": "0x017F",
+    "311": "0x019C",
+    "485": "0x0313",
+    "599": "0x042B",
+    "307": "0x0195",
+    "318": "0x01A6",
+    "41": "0x021E",
+    "544": "0x03A6",
+    "326": "0x01BB",
+    "183": "0x00C4",
+    "221": "0x00FD",
+    "689": "0x0503",
+    "302": "0x018B",
+    "699": "0x0526",
+    "466": "0x02EC",
+    "508": "0x034C",
+    "308": "0x0198",
+    "64": "0x0023",
+    "295": "0x017B",
+    "116": "0x0072",
+    "597": "0x0425",
+    "521": "0x036D",
+    "446": "0x02BA",
+    "38": "0x0216",
+    "678": "0x04E5",
+    "296": "0x017E",
+    "414": "0x026A",
+    "572": "0x03EE",
+    "237": "0x0109",
+    "371": "0x0216",
+    "640": "0x0491",
+    "435": "0x029F",
+    "81": "0x0044",
+    "692": "0x0519",
+    "628": "0x0473",
+    "679": "0x04E6",
+    "469": "0x02F4",
+    "16": "0x01F0",
+    "164": "0x00A4",
+    "370": "0x0214",
+    "456": "0x02D4",
+    "269": "0x014A",
+    "257": "0x0136",
+    "457": "0x02D6",
+    "373": "0x021B",
+    "258": "0x0139",
+    "380": "0x0226",
+    "53": "0x023F",
+    "504": "0x0342",
+    "144": "0x009A",
+    "299": "0x0182",
+    "619": "0x045D",
+    "30": "0x0201",
+    "238": "0x010C",
+    "615": "0x0453",
+    "319": "0x01A9",
+    "536": "0x0392",
+    "45": "0x0228",
+    "397": "0x0244",
+    "636": "0x0487",
+    "254": "0x012F",
+    "586": "0x040A",
+    "285": "0x016A",
+    "552": "0x03BA",
+    "690": "0x0506",
+    "200": "0x00D9",
+    "180": "0x00BD",
+    "482": "0x030D",
+    "213": "0x00EB",
+    "249": "0x0123",
+    "645": "0x049D",
+    "372": "0x0219",
+    "594": "0x041E",
+    "79": "0x003E",
+    "201": "0x00DB",
+    "596": "0x0423",
+    "212": "0x00E8",
+    "117": "0x0073",
+    "33": "0x0209",
+    "50": "0x0236",
+    "487": "0x0317",
+    "210": "0x00E3",
+    "236": "0x0108",
+    "470": "0x02F6",
+    "639": "0x048F",
+    "376": "0x0223",
+    "528": "0x037E",
+    "426": "0x0288",
+    "336": "0x01D3",
+    "647": "0x04A3",
+    "598": "0x0428",
+    "472": "0x02FB",
+    "497": "0x0331",
+    "661": "0x04C1",
+    "489": "0x031D",
+    "627": "0x0471",
+    "18": "0x01F5",
+    "520": "0x036A",
+    "199": "0x00D8",
+    "109": "0x0067",
+    "430": "0x0292",
+    "525": "0x0377",
+    "677": "0x04E4",
+    "423": "0x0281",
+    "220": "0x00FA",
+    "451": "0x02C7",
+    "330": "0x01C4",
+    "339": "0x01D9",
+    "567": "0x03DF",
+    "479": "0x0307",
+    "622": "0x0464",
+    "68": "0x002F",
+    "343": "0x01E1",
+    "530": "0x0383",
+    "408": "0x025C",
+    "139": "0x0092",
+    "182": "0x00C2",
+    "246": "0x011F",
+    "248": "0x0122",
+    "434": "0x029C",
+    "256": "0x0133",
+    "546": "0x03AB",
+    "570": "0x03E8",
+    "547": "0x03AD",
+    "558": "0x03C4",
+    "37": "0x0214",
+    "657": "0x04B6",
+    "537": "0x0395",
+    "607": "0x043F",
+    "465": "0x02EA",
+    "349": "0x01F0",
+    "333": "0x01CA",
+    "223": "0x0100",
+    "445": "0x02B8",
+    "83": "0x004A",
+    "541": "0x039F",
+    "115": "0x006F",
+    "242": "0x0115",
+    "78": "0x003B",
+    "448": "0x02C0",
+    "492": "0x0324",
+    "46": "0x022B",
+    "274": "0x0155",
+    "549": "0x03B3",
+    "198": "0x00D7",
+    "565": "0x03D9",
+    "416": "0x0270",
+    "70": "0x0033",
+    "452": "0x02CA",
+    "527": "0x037B",
+    "354": "0x01F2",
+    "499": "0x0335",
+    "545": "0x03A9",
+    "683": "0x04F1",
+    "19": "0x01F8",
+    "166": "0x00A8",
+    "244": "0x0119",
+    "251": "0x0129",
+    "305": "0x018F",
+    "593": "0x041B",
+    "601": "0x042F",
+    "281": "0x0163",
+    "126": "0x0081",
+    "535": "0x038F",
+    "325": "0x01B8",
+    "433": "0x029A",
+    "31": "0x0204",
+    "509": "0x034F",
+    "668": "0x04D5",
+    "502": "0x033D",
+    "407": "0x0259",
+    "634": "0x0482",
+    "411": "0x0263",
+    "286": "0x016D",
+    "686": "0x04FA",
+    "313": "0x01A2",
+    "442": "0x02B0",
+    "538": "0x0397",
+    "550": "0x03B5",
+    "532": "0x0388",
+    "680": "0x04E9",
+    "51": "0x0239",
+    "300": "0x0185",
+    "635": "0x0485",
+    "617": "0x0457",
+    "588": "0x040F",
+    "620": "0x045F",
+    "85": "0x004C",
+    "386": "0x0234",
+    "314": "0x01A5",
+    "491": "0x0321",
+    "393": "0x023F",
+    "35": "0x020F",
+    "358": "0x01FB",
+    "14": "0x01EA",
+    "566": "0x03DC",
+    "444": "0x02B6",
+    "460": "0x02DE",
+    "405": "0x0254",
+    "643": "0x0499",
+    "204": "0x00E1",
+    "603": "0x0435",
+    "685": "0x04F7"
+  },
   "variables": {
-    "DRAW_CIRCLE_XC": {
-      "name": "DRAW_CIRCLE_XC",
-      "address": "0xC89A",
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC892",
       "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_TEMP": {
-      "name": "DRAW_CIRCLE_TEMP",
-      "address": "0xC89E",
-      "size": 8,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC8AC",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC891",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg1": {
-      "name": "arg1",
-      "address": "0xC8AA",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_YC": {
-      "name": "DRAW_CIRCLE_YC",
-      "address": "0xC89B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_X": {
-      "name": "TEMP_X",
-      "address": "0xC890",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPRIGHT": {
-      "name": "TMPRIGHT",
-      "address": "0xC886",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPRIGHT2": {
-      "name": "TMPRIGHT2",
-      "address": "0xC888",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "radius": {
-      "name": "radius",
-      "address": "0xC8A6",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg4": {
-      "name": "arg4",
-      "address": "0xC8B0",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_Y": {
-      "name": "VPY_MOVE_Y",
-      "address": "0xC893",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC894",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_INTENSITY": {
-      "name": "DRAW_CIRCLE_INTENSITY",
-      "address": "0xC89D",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC88A",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC88C",
-      "size": 2,
       "type": "unknown",
       "declLine": null
     },
     "arg3": {
       "name": "arg3",
-      "address": "0xC8AE",
+      "address": "0xC8B8",
       "size": 2,
       "type": "unknown",
       "declLine": null
     },
-    "TMPLEFT2": {
-      "name": "TMPLEFT2",
-      "address": "0xC884",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_DIAM": {
-      "name": "DRAW_CIRCLE_DIAM",
-      "address": "0xC89C",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "RESULT": {
-      "name": "RESULT",
-      "address": "0xC880",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg0": {
-      "name": "arg0",
-      "address": "0xC8A8",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_X": {
-      "name": "VPY_MOVE_X",
-      "address": "0xC892",
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8A7",
       "size": 1,
       "type": "unknown",
       "declLine": null
@@ -177,6 +3279,146 @@
     "TMPLEFT": {
       "name": "TMPLEFT",
       "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC893",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8B2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8B6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8A6",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8A8",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC89E",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8BA",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC894",
+      "size": 10,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC890",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC891",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC8A4",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC8A5",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "radius": {
+      "name": "radius",
+      "address": "0xC8B0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8B4",
       "size": 2,
       "type": "unknown",
       "declLine": null

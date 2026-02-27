@@ -126,6 +126,7 @@ VECTREX_PRINT_TEXT:
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref  ; Reset beam to center for absolute text positioning
     LDU VAR_ARG2   ; string pointer (ARG2 = third param)
     LDA VAR_ARG1+1 ; Y (ARG1 = second param)
