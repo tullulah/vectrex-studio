@@ -17,3 +17,4 @@ def loop():
 
     # Center square: starts at (-15,-15), 30 wide, 30 tall -> corners (-15,-15) to (15,15)
     DRAW_RECT(-15, -15, 30, 30, 80)
+ 

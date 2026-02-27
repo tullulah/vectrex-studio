@@ -105,13 +105,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_TILE_SIZE", 1, "Tile size");
     }
     
-    // Fade effects variables
-    if needed.contains("FADE_IN") || needed.contains("FADE_OUT") || needed.contains("FADE_IN_RUNTIME") || needed.contains("FADE_OUT_RUNTIME") {
-        ram.allocate("FRAME_COUNTER", 2, "Frame counter for fade effects");
-        ram.allocate("CURRENT_INTENSITY", 2, "Current intensity for fade");
-    }
-
-    // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
+// Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
     // These need to be at a fixed location for cross-bank compatibility
     // CRITICAL: Must be within Vectrex 1KB RAM ($C800-$CBFF) — $CFxx is unmapped!
     // Placed at $CB80, well below stack ($CBEA grows down, ~106 bytes headroom)
@@ -138,6 +132,10 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate_fixed("PSG_MUSIC_BANK", 0xCBF2, 1, "PSG music bank ID (for multibank)");
         ram.allocate_fixed("SFX_PTR", 0xCBF3, 2, "SFX data pointer");
         ram.allocate_fixed("SFX_ACTIVE", 0xCBF5, 1, "SFX active flag");
+    }
+
+    if needed.contains("BEEP") {
+        ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
     }
 
     // =========================================================================
@@ -261,15 +259,7 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 needed.insert("LOAD_LEVEL".to_string());
             }
             
-            // Utility helpers
-            if name_upper == "FADE_IN" {
-                needed.insert("FADE_IN_RUNTIME".to_string());
-            }
-            if name_upper == "FADE_OUT" {
-                needed.insert("FADE_OUT_RUNTIME".to_string());
-            }
-            
-            // Math helpers: Need runtime if operands contain variables
+// Math helpers: Need runtime if operands contain variables
             if name_upper == "SQRT" && has_variable_args(args) {
                 needed.insert("SQRT_HELPER".to_string());
                 needed.insert("DIV16".to_string()); // SQRT uses DIV16
@@ -287,7 +277,10 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 needed.insert("RAND_RANGE_HELPER".to_string());
                 needed.insert("RAND_HELPER".to_string()); // RAND_RANGE uses RAND
             }
-            
+            if name_upper == "BEEP" {
+                needed.insert("BEEP".to_string());
+            }
+
             // Recursively analyze arguments
             for arg in args {
                 analyze_expr_for_helpers(arg, needed);
@@ -527,6 +520,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         emit_play_sfx_runtime(&mut asm);
     }
 
+    // BEEP_UPDATE_RUNTIME: Auto-inject if beep() is used
+    if needed.contains("BEEP") {
+        emit_beep_update_runtime(&mut asm);
+    }
+
     Ok(asm)
 }
 
@@ -655,10 +653,23 @@ PMr_done:\n\
         ; STOP_MUSIC_RUNTIME - Stop music playback\n\
         ; ============================================================================\n\
         STOP_MUSIC_RUNTIME:\n\
-        CLR >PSG_IS_PLAYING     ; Clear playing flag (extended - var at 0xC8A0)\n\
-        CLR >PSG_MUSIC_PTR      ; Clear pointer high byte (force extended)\n\
-        CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte (force extended)\n\
-        ; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing\n\
+        CLR >PSG_IS_PLAYING     ; Clear playing flag\n\
+        CLR >PSG_MUSIC_PTR      ; Clear pointer high byte\n\
+        CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte\n\
+        ; Mute all PSG channels so the last note doesn't keep sounding\n\
+        PSHS DP\n\
+        LDA #$D0\n\
+        TFR A,DP                ; Set DP=$D0 for Sound_Byte\n\
+        LDA #8                  ; PSG reg 8 = Volume Channel A\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #9                  ; PSG reg 9 = Volume Channel B\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #10                 ; PSG reg 10 = Volume Channel C\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        PULS DP\n\
         RTS\n\
         \n"
     );
@@ -1094,6 +1105,34 @@ fn emit_play_sfx_runtime(asm: &mut String) {
             STD >SFX_PTR            ; Clear pointer\n\
             RTS\n\
         \n"
+    );
+}
+
+/// Emit BEEP_UPDATE_RUNTIME - decrements beep timer and mutes PSG when done
+/// Auto-injected at start of LOOP_BODY when beep() is used
+fn emit_beep_update_runtime(asm: &mut String) {
+    asm.push_str(
+        "; ============================================================================\n\
+        ; BEEP_UPDATE_RUNTIME - Tick beep countdown, mute PSG when expired\n\
+        ; ============================================================================\n\
+        ; Called once per frame (auto-injected). Non-blocking: drawing continues\n\
+        ; while PSG plays the tone set by beep().\n\
+        BEEP_UPDATE_RUNTIME:\n\
+        LDA >BEEP_FRAMES_LEFT    ; Check beep timer\n\
+        BEQ BEEP_UPDATE_DONE     ; Zero = nothing playing, skip\n\
+        DECA\n\
+        STA >BEEP_FRAMES_LEFT    ; Decrement and store\n\
+        BNE BEEP_UPDATE_DONE     ; Still counting, keep playing\n\
+        ; Timer just expired: mute PSG channel A\n\
+        PSHS DP\n\
+        LDA #$D0\n\
+        TFR A,DP                ; DP=$D0 for Sound_Byte\n\
+        LDA #8                  ; PSG reg 8 = Volume Channel A\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        PULS DP\n\
+BEEP_UPDATE_DONE:\n\
+        RTS\n\n"
     );
 }
 

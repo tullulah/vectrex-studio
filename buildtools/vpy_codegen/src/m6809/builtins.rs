@@ -665,15 +665,6 @@ pub fn emit_builtin(
             utilities::emit_beep(args, out);
             true
         }
-        "FADE_IN" => {
-            utilities::emit_fade_in(args, out);
-            true
-        }
-        "FADE_OUT" => {
-            utilities::emit_fade_out(args, out);
-            true
-        }
-        
         "OLD_LEN" => {
             out.push_str("    ; LEN: Get array/string length\n");
             expressions::emit_simple_expr(&args[0], out, assets);

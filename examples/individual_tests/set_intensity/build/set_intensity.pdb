@@ -1,0 +1,4639 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "set_intensity.asm",
+  "binary": "set_intensity.bin",
+  "entryPoint": "0x01FB",
+  "symbols": {
+    "STR_0": "0x0713",
+    "J1B3_BUILTIN": "0x006D",
+    "START": "0x01FB",
+    "STR_3": "0x071E",
+    "DCR_intensity_5F": "0x00EB",
+    "__Moveto_d": "0x00AF",
+    "VECTREX_PRINT_TEXT": "0x008B",
+    "STR_5": "0x0724",
+    "__Draw_Line_d": "0x00B4",
+    "J1B1_BUILTIN": "0x004F",
+    "MAIN": "0x020C",
+    "__Reset0Ref": "0x00AC",
+    "LOOP_BODY": "0x0239",
+    "__Intensity_a": "0x00A7",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0078",
+    "STR_2": "0x071B",
+    "J1B2_BUILTIN": "0x005E",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0069",
+    "STR_1": "0x0717",
+    "STR_4": "0x0721",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0087",
+    "J1B4_BUILTIN": "0x007C",
+    "J1Y_BUILTIN": "0x0037",
+    "DCR_after_intensity": "0x00EE",
+    "DRAW_CIRCLE_RUNTIME": "0x00B9",
+    "J1B1_BUILTIN.J1B1_OFF": "0x005A",
+    "J1X_BUILTIN": "0x001F"
+  },
+  "lineMap": {
+    "24": "0x0683",
+    "17": "0x03ED",
+    "15": "0x0271",
+    "16": "0x032F",
+    "23": "0x0657",
+    "22": "0x0629",
+    "19": "0x056B",
+    "26": "0x06DB",
+    "18": "0x04AC",
+    "12": "0x0245",
+    "25": "0x06AF"
+  },
+  "vpyLineMap": {
+    "0x056B": {
+      "file": "main.vpy",
+      "address": "0x056B",
+      "line": 19
+    },
+    "0x04AC": {
+      "file": "main.vpy",
+      "address": "0x04AC",
+      "line": 18
+    },
+    "0x0657": {
+      "file": "main.vpy",
+      "address": "0x0657",
+      "line": 23
+    },
+    "0x03ED": {
+      "file": "main.vpy",
+      "address": "0x03ED",
+      "line": 17
+    },
+    "0x0271": {
+      "file": "main.vpy",
+      "address": "0x0271",
+      "line": 15
+    },
+    "0x0683": {
+      "file": "main.vpy",
+      "address": "0x0683",
+      "line": 24
+    },
+    "0x06AF": {
+      "file": "main.vpy",
+      "address": "0x06AF",
+      "line": 25
+    },
+    "0x06DB": {
+      "file": "main.vpy",
+      "address": "0x06DB",
+      "line": 26
+    },
+    "0x0245": {
+      "file": "main.vpy",
+      "address": "0x0245",
+      "line": 12
+    },
+    "0x032F": {
+      "file": "main.vpy",
+      "address": "0x032F",
+      "line": 16
+    },
+    "0x0629": {
+      "file": "main.vpy",
+      "address": "0x0629",
+      "line": 22
+    }
+  },
+  "asmLineMap": {
+    "0x0063": {
+      "file": "set_intensity.asm",
+      "address": "0x0063",
+      "line": 102
+    },
+    "0x03F5": {
+      "file": "set_intensity.asm",
+      "address": "0x03F5",
+      "line": 580
+    },
+    "0x038A": {
+      "file": "set_intensity.asm",
+      "address": "0x038A",
+      "line": 535
+    },
+    "0x0030": {
+      "file": "set_intensity.asm",
+      "address": "0x0030",
+      "line": 63
+    },
+    "0x0126": {
+      "file": "set_intensity.asm",
+      "address": "0x0126",
+      "line": 247
+    },
+    "0x0471": {
+      "file": "set_intensity.asm",
+      "address": "0x0471",
+      "line": 631
+    },
+    "0x02CE": {
+      "file": "set_intensity.asm",
+      "address": "0x02CE",
+      "line": 456
+    },
+    "0x068B": {
+      "file": "set_intensity.asm",
+      "address": "0x068B",
+      "line": 862
+    },
+    "0x0317": {
+      "file": "set_intensity.asm",
+      "address": "0x0317",
+      "line": 485
+    },
+    "0x0518": {
+      "file": "set_intensity.asm",
+      "address": "0x0518",
+      "line": 702
+    },
+    "0x004F": {
+      "file": "set_intensity.asm",
+      "address": "0x004F",
+      "line": 89
+    },
+    "0x0117": {
+      "file": "set_intensity.asm",
+      "address": "0x0117",
+      "line": 230
+    },
+    "0x030A": {
+      "file": "set_intensity.asm",
+      "address": "0x030A",
+      "line": 480
+    },
+    "0x013C": {
+      "file": "set_intensity.asm",
+      "address": "0x013C",
+      "line": 257
+    },
+    "0x045F": {
+      "file": "set_intensity.asm",
+      "address": "0x045F",
+      "line": 624
+    },
+    "0x0356": {
+      "file": "set_intensity.asm",
+      "address": "0x0356",
+      "line": 514
+    },
+    "0x0399": {
+      "file": "set_intensity.asm",
+      "address": "0x0399",
+      "line": 541
+    },
+    "0x02C7": {
+      "file": "set_intensity.asm",
+      "address": "0x02C7",
+      "line": 453
+    },
+    "0x02E7": {
+      "file": "set_intensity.asm",
+      "address": "0x02E7",
+      "line": 466
+    },
+    "0x030D": {
+      "file": "set_intensity.asm",
+      "address": "0x030D",
+      "line": 481
+    },
+    "0x03D0": {
+      "file": "set_intensity.asm",
+      "address": "0x03D0",
+      "line": 563
+    },
+    "0x0033": {
+      "file": "set_intensity.asm",
+      "address": "0x0033",
+      "line": 66
+    },
+    "0x021E": {
+      "file": "set_intensity.asm",
+      "address": "0x021E",
+      "line": 374
+    },
+    "0x0718": {
+      "file": "set_intensity.asm",
+      "address": "0x0718",
+      "line": 926
+    },
+    "0x0362": {
+      "file": "set_intensity.asm",
+      "address": "0x0362",
+      "line": 519
+    },
+    "0x0487": {
+      "file": "set_intensity.asm",
+      "address": "0x0487",
+      "line": 640
+    },
+    "0x0615": {
+      "file": "set_intensity.asm",
+      "address": "0x0615",
+      "line": 807
+    },
+    "0x01C6": {
+      "file": "set_intensity.asm",
+      "address": "0x01C6",
+      "line": 329
+    },
+    "0x03FA": {
+      "file": "set_intensity.asm",
+      "address": "0x03FA",
+      "line": 582
+    },
+    "0x03AA": {
+      "file": "set_intensity.asm",
+      "address": "0x03AA",
+      "line": 548
+    },
+    "0x06BA": {
+      "file": "set_intensity.asm",
+      "address": "0x06BA",
+      "line": 883
+    },
+    "0x0425": {
+      "file": "set_intensity.asm",
+      "address": "0x0425",
+      "line": 601
+    },
+    "0x01BF": {
+      "file": "set_intensity.asm",
+      "address": "0x01BF",
+      "line": 323
+    },
+    "0x02E2": {
+      "file": "set_intensity.asm",
+      "address": "0x02E2",
+      "line": 464
+    },
+    "0x05D7": {
+      "file": "set_intensity.asm",
+      "address": "0x05D7",
+      "line": 782
+    },
+    "0x050E": {
+      "file": "set_intensity.asm",
+      "address": "0x050E",
+      "line": 698
+    },
+    "0x02EC": {
+      "file": "set_intensity.asm",
+      "address": "0x02EC",
+      "line": 468
+    },
+    "0x0722": {
+      "file": "set_intensity.asm",
+      "address": "0x0722",
+      "line": 935
+    },
+    "0x0575": {
+      "file": "set_intensity.asm",
+      "address": "0x0575",
+      "line": 741
+    },
+    "0x03B4": {
+      "file": "set_intensity.asm",
+      "address": "0x03B4",
+      "line": 552
+    },
+    "0x04FD": {
+      "file": "set_intensity.asm",
+      "address": "0x04FD",
+      "line": 691
+    },
+    "0x04F3": {
+      "file": "set_intensity.asm",
+      "address": "0x04F3",
+      "line": 687
+    },
+    "0x0455": {
+      "file": "set_intensity.asm",
+      "address": "0x0455",
+      "line": 620
+    },
+    "0x004B": {
+      "file": "set_intensity.asm",
+      "address": "0x004B",
+      "line": 80
+    },
+    "0x05AD": {
+      "file": "set_intensity.asm",
+      "address": "0x05AD",
+      "line": 765
+    },
+    "0x0048": {
+      "file": "set_intensity.asm",
+      "address": "0x0048",
+      "line": 77
+    },
+    "0x0081": {
+      "file": "set_intensity.asm",
+      "address": "0x0081",
+      "line": 122
+    },
+    "0x001F": {
+      "file": "set_intensity.asm",
+      "address": "0x001F",
+      "line": 57
+    },
+    "0x0525": {
+      "file": "set_intensity.asm",
+      "address": "0x0525",
+      "line": 707
+    },
+    "0x036A": {
+      "file": "set_intensity.asm",
+      "address": "0x036A",
+      "line": 522
+    },
+    "0x0504": {
+      "file": "set_intensity.asm",
+      "address": "0x0504",
+      "line": 694
+    },
+    "0x0671": {
+      "file": "set_intensity.asm",
+      "address": "0x0671",
+      "line": 848
+    },
+    "0x016E": {
+      "file": "set_intensity.asm",
+      "address": "0x016E",
+      "line": 282
+    },
+    "0x0403": {
+      "file": "set_intensity.asm",
+      "address": "0x0403",
+      "line": 587
+    },
+    "0x025D": {
+      "file": "set_intensity.asm",
+      "address": "0x025D",
+      "line": 406
+    },
+    "0x0689": {
+      "file": "set_intensity.asm",
+      "address": "0x0689",
+      "line": 860
+    },
+    "0x022B": {
+      "file": "set_intensity.asm",
+      "address": "0x022B",
+      "line": 382
+    },
+    "0x0453": {
+      "file": "set_intensity.asm",
+      "address": "0x0453",
+      "line": 619
+    },
+    "0x0683": {
+      "file": "set_intensity.asm",
+      "address": "0x0683",
+      "line": 858
+    },
+    "0x05A3": {
+      "file": "set_intensity.asm",
+      "address": "0x05A3",
+      "line": 761
+    },
+    "0x0231": {
+      "file": "set_intensity.asm",
+      "address": "0x0231",
+      "line": 384
+    },
+    "0x01B6": {
+      "file": "set_intensity.asm",
+      "address": "0x01B6",
+      "line": 320
+    },
+    "0x00A0": {
+      "file": "set_intensity.asm",
+      "address": "0x00A0",
+      "line": 140
+    },
+    "0x008B": {
+      "file": "set_intensity.asm",
+      "address": "0x008B",
+      "line": 132
+    },
+    "0x038F": {
+      "file": "set_intensity.asm",
+      "address": "0x038F",
+      "line": 537
+    },
+    "0x051E": {
+      "file": "set_intensity.asm",
+      "address": "0x051E",
+      "line": 704
+    },
+    "0x0153": {
+      "file": "set_intensity.asm",
+      "address": "0x0153",
+      "line": 267
+    },
+    "0x035D": {
+      "file": "set_intensity.asm",
+      "address": "0x035D",
+      "line": 517
+    },
+    "0x03ED": {
+      "file": "set_intensity.asm",
+      "address": "0x03ED",
+      "line": 577
+    },
+    "0x0639": {
+      "file": "set_intensity.asm",
+      "address": "0x0639",
+      "line": 824
+    },
+    "0x059B": {
+      "file": "set_intensity.asm",
+      "address": "0x059B",
+      "line": 758
+    },
+    "0x06D8": {
+      "file": "set_intensity.asm",
+      "address": "0x06D8",
+      "line": 894
+    },
+    "0x00B9": {
+      "file": "set_intensity.asm",
+      "address": "0x00B9",
+      "line": 170
+    },
+    "0x06E6": {
+      "file": "set_intensity.asm",
+      "address": "0x06E6",
+      "line": 903
+    },
+    "0x05A5": {
+      "file": "set_intensity.asm",
+      "address": "0x05A5",
+      "line": 762
+    },
+    "0x0674": {
+      "file": "set_intensity.asm",
+      "address": "0x0674",
+      "line": 849
+    },
+    "0x0439": {
+      "file": "set_intensity.asm",
+      "address": "0x0439",
+      "line": 609
+    },
+    "0x0332": {
+      "file": "set_intensity.asm",
+      "address": "0x0332",
+      "line": 498
+    },
+    "0x0042": {
+      "file": "set_intensity.asm",
+      "address": "0x0042",
+      "line": 75
+    },
+    "0x038C": {
+      "file": "set_intensity.asm",
+      "address": "0x038C",
+      "line": 536
+    },
+    "0x031E": {
+      "file": "set_intensity.asm",
+      "address": "0x031E",
+      "line": 488
+    },
+    "0x0095": {
+      "file": "set_intensity.asm",
+      "address": "0x0095",
+      "line": 136
+    },
+    "0x0087": {
+      "file": "set_intensity.asm",
+      "address": "0x0087",
+      "line": 126
+    },
+    "0x050A": {
+      "file": "set_intensity.asm",
+      "address": "0x050A",
+      "line": 696
+    },
+    "0x03B2": {
+      "file": "set_intensity.asm",
+      "address": "0x03B2",
+      "line": 551
+    },
+    "0x042F": {
+      "file": "set_intensity.asm",
+      "address": "0x042F",
+      "line": 605
+    },
+    "0x04B6": {
+      "file": "set_intensity.asm",
+      "address": "0x04B6",
+      "line": 661
+    },
+    "0x0353": {
+      "file": "set_intensity.asm",
+      "address": "0x0353",
+      "line": 513
+    },
+    "0x04D8": {
+      "file": "set_intensity.asm",
+      "address": "0x04D8",
+      "line": 676
+    },
+    "0x04A7": {
+      "file": "set_intensity.asm",
+      "address": "0x04A7",
+      "line": 653
+    },
+    "0x0021": {
+      "file": "set_intensity.asm",
+      "address": "0x0021",
+      "line": 58
+    },
+    "0x0611": {
+      "file": "set_intensity.asm",
+      "address": "0x0611",
+      "line": 805
+    },
+    "0x04BD": {
+      "file": "set_intensity.asm",
+      "address": "0x04BD",
+      "line": 664
+    },
+    "0x008D": {
+      "file": "set_intensity.asm",
+      "address": "0x008D",
+      "line": 133
+    },
+    "0x0346": {
+      "file": "set_intensity.asm",
+      "address": "0x0346",
+      "line": 508
+    },
+    "0x06E3": {
+      "file": "set_intensity.asm",
+      "address": "0x06E3",
+      "line": 902
+    },
+    "0x0068": {
+      "file": "set_intensity.asm",
+      "address": "0x0068",
+      "line": 105
+    },
+    "0x011D": {
+      "file": "set_intensity.asm",
+      "address": "0x011D",
+      "line": 233
+    },
+    "0x0275": {
+      "file": "set_intensity.asm",
+      "address": "0x0275",
+      "line": 419
+    },
+    "0x05D9": {
+      "file": "set_intensity.asm",
+      "address": "0x05D9",
+      "line": 783
+    },
+    "0x04DF": {
+      "file": "set_intensity.asm",
+      "address": "0x04DF",
+      "line": 679
+    },
+    "0x0199": {
+      "file": "set_intensity.asm",
+      "address": "0x0199",
+      "line": 307
+    },
+    "0x02AB": {
+      "file": "set_intensity.asm",
+      "address": "0x02AB",
+      "line": 442
+    },
+    "0x05DF": {
+      "file": "set_intensity.asm",
+      "address": "0x05DF",
+      "line": 785
+    },
+    "0x0187": {
+      "file": "set_intensity.asm",
+      "address": "0x0187",
+      "line": 295
+    },
+    "0x0053": {
+      "file": "set_intensity.asm",
+      "address": "0x0053",
+      "line": 91
+    },
+    "0x0192": {
+      "file": "set_intensity.asm",
+      "address": "0x0192",
+      "line": 303
+    },
+    "0x0319": {
+      "file": "set_intensity.asm",
+      "address": "0x0319",
+      "line": 486
+    },
+    "0x045D": {
+      "file": "set_intensity.asm",
+      "address": "0x045D",
+      "line": 623
+    },
+    "0x020F": {
+      "file": "set_intensity.asm",
+      "address": "0x020F",
+      "line": 368
+    },
+    "0x02D5": {
+      "file": "set_intensity.asm",
+      "address": "0x02D5",
+      "line": 459
+    },
+    "0x01FD": {
+      "file": "set_intensity.asm",
+      "address": "0x01FD",
+      "line": 11
+    },
+    "0x0130": {
+      "file": "set_intensity.asm",
+      "address": "0x0130",
+      "line": 252
+    },
+    "0x0414": {
+      "file": "set_intensity.asm",
+      "address": "0x0414",
+      "line": 594
+    },
+    "0x05EB": {
+      "file": "set_intensity.asm",
+      "address": "0x05EB",
+      "line": 790
+    },
+    "0x03FE": {
+      "file": "set_intensity.asm",
+      "address": "0x03FE",
+      "line": 585
+    },
+    "0x06B7": {
+      "file": "set_intensity.asm",
+      "address": "0x06B7",
+      "line": 882
+    },
+    "0x02EF": {
+      "file": "set_intensity.asm",
+      "address": "0x02EF",
+      "line": 469
+    },
+    "0x0394": {
+      "file": "set_intensity.asm",
+      "address": "0x0394",
+      "line": 539
+    },
+    "0x00EB": {
+      "file": "set_intensity.asm",
+      "address": "0x00EB",
+      "line": 201
+    },
+    "0x0694": {
+      "file": "set_intensity.asm",
+      "address": "0x0694",
+      "line": 865
+    },
+    "0x003F": {
+      "file": "set_intensity.asm",
+      "address": "0x003F",
+      "line": 74
+    },
+    "0x0107": {
+      "file": "set_intensity.asm",
+      "address": "0x0107",
+      "line": 223
+    },
+    "0x0502": {
+      "file": "set_intensity.asm",
+      "address": "0x0502",
+      "line": 693
+    },
+    "0x0437": {
+      "file": "set_intensity.asm",
+      "address": "0x0437",
+      "line": 608
+    },
+    "0x04F6": {
+      "file": "set_intensity.asm",
+      "address": "0x04F6",
+      "line": 688
+    },
+    "0x0376": {
+      "file": "set_intensity.asm",
+      "address": "0x0376",
+      "line": 527
+    },
+    "0x0204": {
+      "file": "set_intensity.asm",
+      "address": "0x0204",
+      "line": 356
+    },
+    "0x0629": {
+      "file": "set_intensity.asm",
+      "address": "0x0629",
+      "line": 818
+    },
+    "0x014D": {
+      "file": "set_intensity.asm",
+      "address": "0x014D",
+      "line": 265
+    },
+    "0x01CF": {
+      "file": "set_intensity.asm",
+      "address": "0x01CF",
+      "line": 333
+    },
+    "0x00F8": {
+      "file": "set_intensity.asm",
+      "address": "0x00F8",
+      "line": 212
+    },
+    "0x01A2": {
+      "file": "set_intensity.asm",
+      "address": "0x01A2",
+      "line": 310
+    },
+    "0x02BD": {
+      "file": "set_intensity.asm",
+      "address": "0x02BD",
+      "line": 449
+    },
+    "0x0102": {
+      "file": "set_intensity.asm",
+      "address": "0x0102",
+      "line": 221
+    },
+    "0x0344": {
+      "file": "set_intensity.asm",
+      "address": "0x0344",
+      "line": 507
+    },
+    "0x0168": {
+      "file": "set_intensity.asm",
+      "address": "0x0168",
+      "line": 280
+    },
+    "0x00D1": {
+      "file": "set_intensity.asm",
+      "address": "0x00D1",
+      "line": 184
+    },
+    "0x0686": {
+      "file": "set_intensity.asm",
+      "address": "0x0686",
+      "line": 859
+    },
+    "0x0120": {
+      "file": "set_intensity.asm",
+      "address": "0x0120",
+      "line": 234
+    },
+    "0x02F9": {
+      "file": "set_intensity.asm",
+      "address": "0x02F9",
+      "line": 473
+    },
+    "0x04BE": {
+      "file": "set_intensity.asm",
+      "address": "0x04BE",
+      "line": 665
+    },
+    "0x00A9": {
+      "file": "set_intensity.asm",
+      "address": "0x00A9",
+      "line": 146
+    },
+    "0x01B2": {
+      "file": "set_intensity.asm",
+      "address": "0x01B2",
+      "line": 317
+    },
+    "0x0157": {
+      "file": "set_intensity.asm",
+      "address": "0x0157",
+      "line": 272
+    },
+    "0x0181": {
+      "file": "set_intensity.asm",
+      "address": "0x0181",
+      "line": 293
+    },
+    "0x04AA": {
+      "file": "set_intensity.asm",
+      "address": "0x04AA",
+      "line": 654
+    },
+    "0x06DB": {
+      "file": "set_intensity.asm",
+      "address": "0x06DB",
+      "line": 898
+    },
+    "0x033F": {
+      "file": "set_intensity.asm",
+      "address": "0x033F",
+      "line": 505
+    },
+    "0x0561": {
+      "file": "set_intensity.asm",
+      "address": "0x0561",
+      "line": 731
+    },
+    "0x05ED": {
+      "file": "set_intensity.asm",
+      "address": "0x05ED",
+      "line": 791
+    },
+    "0x00B1": {
+      "file": "set_intensity.asm",
+      "address": "0x00B1",
+      "line": 151
+    },
+    "0x0539": {
+      "file": "set_intensity.asm",
+      "address": "0x0539",
+      "line": 715
+    },
+    "0x0251": {
+      "file": "set_intensity.asm",
+      "address": "0x0251",
+      "line": 402
+    },
+    "0x02C9": {
+      "file": "set_intensity.asm",
+      "address": "0x02C9",
+      "line": 454
+    },
+    "0x0305": {
+      "file": "set_intensity.asm",
+      "address": "0x0305",
+      "line": 478
+    },
+    "0x027A": {
+      "file": "set_intensity.asm",
+      "address": "0x027A",
+      "line": 421
+    },
+    "0x019C": {
+      "file": "set_intensity.asm",
+      "address": "0x019C",
+      "line": 308
+    },
+    "0x056D": {
+      "file": "set_intensity.asm",
+      "address": "0x056D",
+      "line": 738
+    },
+    "0x0701": {
+      "file": "set_intensity.asm",
+      "address": "0x0701",
+      "line": 913
+    },
+    "0x0464": {
+      "file": "set_intensity.asm",
+      "address": "0x0464",
+      "line": 626
+    },
+    "0x00F3": {
+      "file": "set_intensity.asm",
+      "address": "0x00F3",
+      "line": 209
+    },
+    "0x00EE": {
+      "file": "set_intensity.asm",
+      "address": "0x00EE",
+      "line": 206
+    },
+    "0x0176": {
+      "file": "set_intensity.asm",
+      "address": "0x0176",
+      "line": 287
+    },
+    "0x0242": {
+      "file": "set_intensity.asm",
+      "address": "0x0242",
+      "line": 394
+    },
+    "0x052C": {
+      "file": "set_intensity.asm",
+      "address": "0x052C",
+      "line": 710
+    },
+    "0x00FD": {
+      "file": "set_intensity.asm",
+      "address": "0x00FD",
+      "line": 219
+    },
+    "0x010B": {
+      "file": "set_intensity.asm",
+      "address": "0x010B",
+      "line": 225
+    },
+    "0x00FF": {
+      "file": "set_intensity.asm",
+      "address": "0x00FF",
+      "line": 220
+    },
+    "0x04EE": {
+      "file": "set_intensity.asm",
+      "address": "0x04EE",
+      "line": 685
+    },
+    "0x0657": {
+      "file": "set_intensity.asm",
+      "address": "0x0657",
+      "line": 838
+    },
+    "0x017C": {
+      "file": "set_intensity.asm",
+      "address": "0x017C",
+      "line": 289
+    },
+    "0x0392": {
+      "file": "set_intensity.asm",
+      "address": "0x0392",
+      "line": 538
+    },
+    "0x0536": {
+      "file": "set_intensity.asm",
+      "address": "0x0536",
+      "line": 714
+    },
+    "0x01FB": {
+      "file": "set_intensity.asm",
+      "address": "0x01FB",
+      "line": 352
+    },
+    "0x0520": {
+      "file": "set_intensity.asm",
+      "address": "0x0520",
+      "line": 705
+    },
+    "0x0321": {
+      "file": "set_intensity.asm",
+      "address": "0x0321",
+      "line": 489
+    },
+    "0x0654": {
+      "file": "set_intensity.asm",
+      "address": "0x0654",
+      "line": 834
+    },
+    "0x01D2": {
+      "file": "set_intensity.asm",
+      "address": "0x01D2",
+      "line": 334
+    },
+    "0x0328": {
+      "file": "set_intensity.asm",
+      "address": "0x0328",
+      "line": 492
+    },
+    "0x05E3": {
+      "file": "set_intensity.asm",
+      "address": "0x05E3",
+      "line": 787
+    },
+    "0x0027": {
+      "file": "set_intensity.asm",
+      "address": "0x0027",
+      "line": 60
+    },
+    "0x0273": {
+      "file": "set_intensity.asm",
+      "address": "0x0273",
+      "line": 418
+    },
+    "0x03CB": {
+      "file": "set_intensity.asm",
+      "address": "0x03CB",
+      "line": 561
+    },
+    "0x0108": {
+      "file": "set_intensity.asm",
+      "address": "0x0108",
+      "line": 224
+    },
+    "0x0522": {
+      "file": "set_intensity.asm",
+      "address": "0x0522",
+      "line": 706
+    },
+    "0x06F8": {
+      "file": "set_intensity.asm",
+      "address": "0x06F8",
+      "line": 909
+    },
+    "0x0198": {
+      "file": "set_intensity.asm",
+      "address": "0x0198",
+      "line": 305
+    },
+    "0x01F0": {
+      "file": "set_intensity.asm",
+      "address": "0x01F0",
+      "line": 347
+    },
+    "0x05CB": {
+      "file": "set_intensity.asm",
+      "address": "0x05CB",
+      "line": 777
+    },
+    "0x033B": {
+      "file": "set_intensity.asm",
+      "address": "0x033B",
+      "line": 502
+    },
+    "0x06FB": {
+      "file": "set_intensity.asm",
+      "address": "0x06FB",
+      "line": 911
+    },
+    "0x02DF": {
+      "file": "set_intensity.asm",
+      "address": "0x02DF",
+      "line": 463
+    },
+    "0x06C3": {
+      "file": "set_intensity.asm",
+      "address": "0x06C3",
+      "line": 886
+    },
+    "0x0031": {
+      "file": "set_intensity.asm",
+      "address": "0x0031",
+      "line": 64
+    },
+    "0x04EC": {
+      "file": "set_intensity.asm",
+      "address": "0x04EC",
+      "line": 684
+    },
+    "0x00E3": {
+      "file": "set_intensity.asm",
+      "address": "0x00E3",
+      "line": 198
+    },
+    "0x047B": {
+      "file": "set_intensity.asm",
+      "address": "0x047B",
+      "line": 635
+    },
+    "0x02DD": {
+      "file": "set_intensity.asm",
+      "address": "0x02DD",
+      "line": 462
+    },
+    "0x06AC": {
+      "file": "set_intensity.asm",
+      "address": "0x06AC",
+      "line": 874
+    },
+    "0x02D3": {
+      "file": "set_intensity.asm",
+      "address": "0x02D3",
+      "line": 458
+    },
+    "0x04E6": {
+      "file": "set_intensity.asm",
+      "address": "0x04E6",
+      "line": 682
+    },
+    "0x00BE": {
+      "file": "set_intensity.asm",
+      "address": "0x00BE",
+      "line": 173
+    },
+    "0x0378": {
+      "file": "set_intensity.asm",
+      "address": "0x0378",
+      "line": 528
+    },
+    "0x041B": {
+      "file": "set_intensity.asm",
+      "address": "0x041B",
+      "line": 597
+    },
+    "0x0136": {
+      "file": "set_intensity.asm",
+      "address": "0x0136",
+      "line": 254
+    },
+    "0x0349": {
+      "file": "set_intensity.asm",
+      "address": "0x0349",
+      "line": 509
+    },
+    "0x0212": {
+      "file": "set_intensity.asm",
+      "address": "0x0212",
+      "line": 19
+    },
+    "0x0245": {
+      "file": "set_intensity.asm",
+      "address": "0x0245",
+      "line": 46
+    },
+    "0x0086": {
+      "file": "set_intensity.asm",
+      "address": "0x0086",
+      "line": 125
+    },
+    "0x065E": {
+      "file": "set_intensity.asm",
+      "address": "0x065E",
+      "line": 841
+    },
+    "0x0613": {
+      "file": "set_intensity.asm",
+      "address": "0x0613",
+      "line": 806
+    },
+    "0x0358": {
+      "file": "set_intensity.asm",
+      "address": "0x0358",
+      "line": 515
+    },
+    "0x054A": {
+      "file": "set_intensity.asm",
+      "address": "0x054A",
+      "line": 722
+    },
+    "0x014A": {
+      "file": "set_intensity.asm",
+      "address": "0x014A",
+      "line": 264
+    },
+    "0x043F": {
+      "file": "set_intensity.asm",
+      "address": "0x043F",
+      "line": 611
+    },
+    "0x04E9": {
+      "file": "set_intensity.asm",
+      "address": "0x04E9",
+      "line": 683
+    },
+    "0x00A6": {
+      "file": "set_intensity.asm",
+      "address": "0x00A6",
+      "line": 142
+    },
+    "0x02BA": {
+      "file": "set_intensity.asm",
+      "address": "0x02BA",
+      "line": 448
+    },
+    "0x0226": {
+      "file": "set_intensity.asm",
+      "address": "0x0226",
+      "line": 377
+    },
+    "0x0239": {
+      "file": "set_intensity.asm",
+      "address": "0x0239",
+      "line": 42
+    },
+    "0x0179": {
+      "file": "set_intensity.asm",
+      "address": "0x0179",
+      "line": 288
+    },
+    "0x0080": {
+      "file": "set_intensity.asm",
+      "address": "0x0080",
+      "line": 121
+    },
+    "0x0336": {
+      "file": "set_intensity.asm",
+      "address": "0x0336",
+      "line": 500
+    },
+    "0x03A8": {
+      "file": "set_intensity.asm",
+      "address": "0x03A8",
+      "line": 547
+    },
+    "0x0532": {
+      "file": "set_intensity.asm",
+      "address": "0x0532",
+      "line": 712
+    },
+    "0x039E": {
+      "file": "set_intensity.asm",
+      "address": "0x039E",
+      "line": 543
+    },
+    "0x03DC": {
+      "file": "set_intensity.asm",
+      "address": "0x03DC",
+      "line": 568
+    },
+    "0x069A": {
+      "file": "set_intensity.asm",
+      "address": "0x069A",
+      "line": 867
+    },
+    "0x0334": {
+      "file": "set_intensity.asm",
+      "address": "0x0334",
+      "line": 499
+    },
+    "0x0511": {
+      "file": "set_intensity.asm",
+      "address": "0x0511",
+      "line": 699
+    },
+    "0x0697": {
+      "file": "set_intensity.asm",
+      "address": "0x0697",
+      "line": 866
+    },
+    "0x00C1": {
+      "file": "set_intensity.asm",
+      "address": "0x00C1",
+      "line": 174
+    },
+    "0x065D": {
+      "file": "set_intensity.asm",
+      "address": "0x065D",
+      "line": 840
+    },
+    "0x0202": {
+      "file": "set_intensity.asm",
+      "address": "0x0202",
+      "line": 13
+    },
+    "0x04CB": {
+      "file": "set_intensity.asm",
+      "address": "0x04CB",
+      "line": 671
+    },
+    "0x0223": {
+      "file": "set_intensity.asm",
+      "address": "0x0223",
+      "line": 34
+    },
+    "0x0054": {
+      "file": "set_intensity.asm",
+      "address": "0x0054",
+      "line": 92
+    },
+    "0x035A": {
+      "file": "set_intensity.asm",
+      "address": "0x035A",
+      "line": 516
+    },
+    "0x05B4": {
+      "file": "set_intensity.asm",
+      "address": "0x05B4",
+      "line": 768
+    },
+    "0x020C": {
+      "file": "set_intensity.asm",
+      "address": "0x020C",
+      "line": 366
+    },
+    "0x055A": {
+      "file": "set_intensity.asm",
+      "address": "0x055A",
+      "line": 728
+    },
+    "0x05E9": {
+      "file": "set_intensity.asm",
+      "address": "0x05E9",
+      "line": 789
+    },
+    "0x026C": {
+      "file": "set_intensity.asm",
+      "address": "0x026C",
+      "line": 412
+    },
+    "0x00D5": {
+      "file": "set_intensity.asm",
+      "address": "0x00D5",
+      "line": 188
+    },
+    "0x0382": {
+      "file": "set_intensity.asm",
+      "address": "0x0382",
+      "line": 532
+    },
+    "0x00D9": {
+      "file": "set_intensity.asm",
+      "address": "0x00D9",
+      "line": 190
+    },
+    "0x0156": {
+      "file": "set_intensity.asm",
+      "address": "0x0156",
+      "line": 271
+    },
+    "0x058F": {
+      "file": "set_intensity.asm",
+      "address": "0x058F",
+      "line": 753
+    },
+    "0x04A0": {
+      "file": "set_intensity.asm",
+      "address": "0x04A0",
+      "line": 650
+    },
+    "0x06CF": {
+      "file": "set_intensity.asm",
+      "address": "0x06CF",
+      "line": 891
+    },
+    "0x06E9": {
+      "file": "set_intensity.asm",
+      "address": "0x06E9",
+      "line": 904
+    },
+    "0x0299": {
+      "file": "set_intensity.asm",
+      "address": "0x0299",
+      "line": 435
+    },
+    "0x0514": {
+      "file": "set_intensity.asm",
+      "address": "0x0514",
+      "line": 700
+    },
+    "0x05A0": {
+      "file": "set_intensity.asm",
+      "address": "0x05A0",
+      "line": 760
+    },
+    "0x02D8": {
+      "file": "set_intensity.asm",
+      "address": "0x02D8",
+      "line": 460
+    },
+    "0x026D": {
+      "file": "set_intensity.asm",
+      "address": "0x026D",
+      "line": 413
+    },
+    "0x066E": {
+      "file": "set_intensity.asm",
+      "address": "0x066E",
+      "line": 847
+    },
+    "0x00CA": {
+      "file": "set_intensity.asm",
+      "address": "0x00CA",
+      "line": 180
+    },
+    "0x01A5": {
+      "file": "set_intensity.asm",
+      "address": "0x01A5",
+      "line": 311
+    },
+    "0x065A": {
+      "file": "set_intensity.asm",
+      "address": "0x065A",
+      "line": 839
+    },
+    "0x03D5": {
+      "file": "set_intensity.asm",
+      "address": "0x03D5",
+      "line": 565
+    },
+    "0x034C": {
+      "file": "set_intensity.asm",
+      "address": "0x034C",
+      "line": 510
+    },
+    "0x0371": {
+      "file": "set_intensity.asm",
+      "address": "0x0371",
+      "line": 525
+    },
+    "0x0625": {
+      "file": "set_intensity.asm",
+      "address": "0x0625",
+      "line": 813
+    },
+    "0x03CE": {
+      "file": "set_intensity.asm",
+      "address": "0x03CE",
+      "line": 562
+    },
+    "0x01E4": {
+      "file": "set_intensity.asm",
+      "address": "0x01E4",
+      "line": 342
+    },
+    "0x06B6": {
+      "file": "set_intensity.asm",
+      "address": "0x06B6",
+      "line": 881
+    },
+    "0x0450": {
+      "file": "set_intensity.asm",
+      "address": "0x0450",
+      "line": 618
+    },
+    "0x05BE": {
+      "file": "set_intensity.asm",
+      "address": "0x05BE",
+      "line": 772
+    },
+    "0x032C": {
+      "file": "set_intensity.asm",
+      "address": "0x032C",
+      "line": 494
+    },
+    "0x00D7": {
+      "file": "set_intensity.asm",
+      "address": "0x00D7",
+      "line": 189
+    },
+    "0x03BE": {
+      "file": "set_intensity.asm",
+      "address": "0x03BE",
+      "line": 556
+    },
+    "0x046E": {
+      "file": "set_intensity.asm",
+      "address": "0x046E",
+      "line": 630
+    },
+    "0x01A6": {
+      "file": "set_intensity.asm",
+      "address": "0x01A6",
+      "line": 313
+    },
+    "0x04B8": {
+      "file": "set_intensity.asm",
+      "address": "0x04B8",
+      "line": 662
+    },
+    "0x01C3": {
+      "file": "set_intensity.asm",
+      "address": "0x01C3",
+      "line": 328
+    },
+    "0x03C1": {
+      "file": "set_intensity.asm",
+      "address": "0x03C1",
+      "line": 557
+    },
+    "0x04D5": {
+      "file": "set_intensity.asm",
+      "address": "0x04D5",
+      "line": 675
+    },
+    "0x0651": {
+      "file": "set_intensity.asm",
+      "address": "0x0651",
+      "line": 833
+    },
+    "0x01EA": {
+      "file": "set_intensity.asm",
+      "address": "0x01EA",
+      "line": 344
+    },
+    "0x06C9": {
+      "file": "set_intensity.asm",
+      "address": "0x06C9",
+      "line": 888
+    },
+    "0x02C1": {
+      "file": "set_intensity.asm",
+      "address": "0x02C1",
+      "line": 451
+    },
+    "0x0609": {
+      "file": "set_intensity.asm",
+      "address": "0x0609",
+      "line": 802
+    },
+    "0x067D": {
+      "file": "set_intensity.asm",
+      "address": "0x067D",
+      "line": 853
+    },
+    "0x0325": {
+      "file": "set_intensity.asm",
+      "address": "0x0325",
+      "line": 491
+    },
+    "0x0260": {
+      "file": "set_intensity.asm",
+      "address": "0x0260",
+      "line": 407
+    },
+    "0x017D": {
+      "file": "set_intensity.asm",
+      "address": "0x017D",
+      "line": 290
+    },
+    "0x05E1": {
+      "file": "set_intensity.asm",
+      "address": "0x05E1",
+      "line": 786
+    },
+    "0x040D": {
+      "file": "set_intensity.asm",
+      "address": "0x040D",
+      "line": 591
+    },
+    "0x036E": {
+      "file": "set_intensity.asm",
+      "address": "0x036E",
+      "line": 524
+    },
+    "0x0528": {
+      "file": "set_intensity.asm",
+      "address": "0x0528",
+      "line": 708
+    },
+    "0x044B": {
+      "file": "set_intensity.asm",
+      "address": "0x044B",
+      "line": 616
+    },
+    "0x05FD": {
+      "file": "set_intensity.asm",
+      "address": "0x05FD",
+      "line": 797
+    },
+    "0x049B": {
+      "file": "set_intensity.asm",
+      "address": "0x049B",
+      "line": 648
+    },
+    "0x02B5": {
+      "file": "set_intensity.asm",
+      "address": "0x02B5",
+      "line": 446
+    },
+    "0x057E": {
+      "file": "set_intensity.asm",
+      "address": "0x057E",
+      "line": 745
+    },
+    "0x02F6": {
+      "file": "set_intensity.asm",
+      "address": "0x02F6",
+      "line": 472
+    },
+    "0x069D": {
+      "file": "set_intensity.asm",
+      "address": "0x069D",
+      "line": 868
+    },
+    "0x0446": {
+      "file": "set_intensity.asm",
+      "address": "0x0446",
+      "line": 614
+    },
+    "0x018F": {
+      "file": "set_intensity.asm",
+      "address": "0x018F",
+      "line": 302
+    },
+    "0x0078": {
+      "file": "set_intensity.asm",
+      "address": "0x0078",
+      "line": 116
+    },
+    "0x01CC": {
+      "file": "set_intensity.asm",
+      "address": "0x01CC",
+      "line": 332
+    },
+    "0x071C": {
+      "file": "set_intensity.asm",
+      "address": "0x071C",
+      "line": 929
+    },
+    "0x00FB": {
+      "file": "set_intensity.asm",
+      "address": "0x00FB",
+      "line": 213
+    },
+    "0x04AC": {
+      "file": "set_intensity.asm",
+      "address": "0x04AC",
+      "line": 657
+    },
+    "0x005E": {
+      "file": "set_intensity.asm",
+      "address": "0x005E",
+      "line": 99
+    },
+    "0x0566": {
+      "file": "set_intensity.asm",
+      "address": "0x0566",
+      "line": 733
+    },
+    "0x0160": {
+      "file": "set_intensity.asm",
+      "address": "0x0160",
+      "line": 275
+    },
+    "0x028D": {
+      "file": "set_intensity.asm",
+      "address": "0x028D",
+      "line": 430
+    },
+    "0x034E": {
+      "file": "set_intensity.asm",
+      "address": "0x034E",
+      "line": 511
+    },
+    "0x0432": {
+      "file": "set_intensity.asm",
+      "address": "0x0432",
+      "line": 606
+    },
+    "0x0496": {
+      "file": "set_intensity.asm",
+      "address": "0x0496",
+      "line": 646
+    },
+    "0x00B6": {
+      "file": "set_intensity.asm",
+      "address": "0x00B6",
+      "line": 154
+    },
+    "0x0579": {
+      "file": "set_intensity.asm",
+      "address": "0x0579",
+      "line": 743
+    },
+    "0x03F3": {
+      "file": "set_intensity.asm",
+      "address": "0x03F3",
+      "line": 579
+    },
+    "0x02BF": {
+      "file": "set_intensity.asm",
+      "address": "0x02BF",
+      "line": 450
+    },
+    "0x0263": {
+      "file": "set_intensity.asm",
+      "address": "0x0263",
+      "line": 408
+    },
+    "0x007C": {
+      "file": "set_intensity.asm",
+      "address": "0x007C",
+      "line": 119
+    },
+    "0x01E7": {
+      "file": "set_intensity.asm",
+      "address": "0x01E7",
+      "line": 343
+    },
+    "0x0473": {
+      "file": "set_intensity.asm",
+      "address": "0x0473",
+      "line": 632
+    },
+    "0x0257": {
+      "file": "set_intensity.asm",
+      "address": "0x0257",
+      "line": 404
+    },
+    "0x05B7": {
+      "file": "set_intensity.asm",
+      "address": "0x05B7",
+      "line": 769
+    },
+    "0x009E": {
+      "file": "set_intensity.asm",
+      "address": "0x009E",
+      "line": 139
+    },
+    "0x04A5": {
+      "file": "set_intensity.asm",
+      "address": "0x04A5",
+      "line": 652
+    },
+    "0x06D2": {
+      "file": "set_intensity.asm",
+      "address": "0x06D2",
+      "line": 892
+    },
+    "0x0557": {
+      "file": "set_intensity.asm",
+      "address": "0x0557",
+      "line": 727
+    },
+    "0x0237": {
+      "file": "set_intensity.asm",
+      "address": "0x0237",
+      "line": 387
+    },
+    "0x043C": {
+      "file": "set_intensity.asm",
+      "address": "0x043C",
+      "line": 610
+    },
+    "0x05FA": {
+      "file": "set_intensity.asm",
+      "address": "0x05FA",
+      "line": 796
+    },
+    "0x00A7": {
+      "file": "set_intensity.asm",
+      "address": "0x00A7",
+      "line": 145
+    },
+    "0x0589": {
+      "file": "set_intensity.asm",
+      "address": "0x0589",
+      "line": 751
+    },
+    "0x016B": {
+      "file": "set_intensity.asm",
+      "address": "0x016B",
+      "line": 281
+    },
+    "0x05D2": {
+      "file": "set_intensity.asm",
+      "address": "0x05D2",
+      "line": 780
+    },
+    "0x062C": {
+      "file": "set_intensity.asm",
+      "address": "0x062C",
+      "line": 819
+    },
+    "0x0172": {
+      "file": "set_intensity.asm",
+      "address": "0x0172",
+      "line": 285
+    },
+    "0x0627": {
+      "file": "set_intensity.asm",
+      "address": "0x0627",
+      "line": 814
+    },
+    "0x0411": {
+      "file": "set_intensity.asm",
+      "address": "0x0411",
+      "line": 593
+    },
+    "0x033C": {
+      "file": "set_intensity.asm",
+      "address": "0x033C",
+      "line": 503
+    },
+    "0x0119": {
+      "file": "set_intensity.asm",
+      "address": "0x0119",
+      "line": 231
+    },
+    "0x0049": {
+      "file": "set_intensity.asm",
+      "address": "0x0049",
+      "line": 78
+    },
+    "0x03C8": {
+      "file": "set_intensity.asm",
+      "address": "0x03C8",
+      "line": 560
+    },
+    "0x053C": {
+      "file": "set_intensity.asm",
+      "address": "0x053C",
+      "line": 716
+    },
+    "0x00E2": {
+      "file": "set_intensity.asm",
+      "address": "0x00E2",
+      "line": 197
+    },
+    "0x060E": {
+      "file": "set_intensity.asm",
+      "address": "0x060E",
+      "line": 804
+    },
+    "0x01B9": {
+      "file": "set_intensity.asm",
+      "address": "0x01B9",
+      "line": 321
+    },
+    "0x052F": {
+      "file": "set_intensity.asm",
+      "address": "0x052F",
+      "line": 711
+    },
+    "0x04C1": {
+      "file": "set_intensity.asm",
+      "address": "0x04C1",
+      "line": 667
+    },
+    "0x0123": {
+      "file": "set_intensity.asm",
+      "address": "0x0123",
+      "line": 246
+    },
+    "0x04E2": {
+      "file": "set_intensity.asm",
+      "address": "0x04E2",
+      "line": 680
+    },
+    "0x0283": {
+      "file": "set_intensity.asm",
+      "address": "0x0283",
+      "line": 426
+    },
+    "0x00CE": {
+      "file": "set_intensity.asm",
+      "address": "0x00CE",
+      "line": 183
+    },
+    "0x05F7": {
+      "file": "set_intensity.asm",
+      "address": "0x05F7",
+      "line": 795
+    },
+    "0x0642": {
+      "file": "set_intensity.asm",
+      "address": "0x0642",
+      "line": 827
+    },
+    "0x060B": {
+      "file": "set_intensity.asm",
+      "address": "0x060B",
+      "line": 803
+    },
+    "0x064E": {
+      "file": "set_intensity.asm",
+      "address": "0x064E",
+      "line": 832
+    },
+    "0x0419": {
+      "file": "set_intensity.asm",
+      "address": "0x0419",
+      "line": 596
+    },
+    "0x02A3": {
+      "file": "set_intensity.asm",
+      "address": "0x02A3",
+      "line": 439
+    },
+    "0x03C4": {
+      "file": "set_intensity.asm",
+      "address": "0x03C4",
+      "line": 558
+    },
+    "0x02B3": {
+      "file": "set_intensity.asm",
+      "address": "0x02B3",
+      "line": 445
+    },
+    "0x03B0": {
+      "file": "set_intensity.asm",
+      "address": "0x03B0",
+      "line": 550
+    },
+    "0x05FF": {
+      "file": "set_intensity.asm",
+      "address": "0x05FF",
+      "line": 798
+    },
+    "0x0441": {
+      "file": "set_intensity.asm",
+      "address": "0x0441",
+      "line": 612
+    },
+    "0x0077": {
+      "file": "set_intensity.asm",
+      "address": "0x0077",
+      "line": 115
+    },
+    "0x071B": {
+      "file": "set_intensity.asm",
+      "address": "0x071B",
+      "line": 928
+    },
+    "0x04E4": {
+      "file": "set_intensity.asm",
+      "address": "0x04E4",
+      "line": 681
+    },
+    "0x011A": {
+      "file": "set_intensity.asm",
+      "address": "0x011A",
+      "line": 232
+    },
+    "0x023F": {
+      "file": "set_intensity.asm",
+      "address": "0x023F",
+      "line": 44
+    },
+    "0x0493": {
+      "file": "set_intensity.asm",
+      "address": "0x0493",
+      "line": 645
+    },
+    "0x003C": {
+      "file": "set_intensity.asm",
+      "address": "0x003C",
+      "line": 73
+    },
+    "0x0140": {
+      "file": "set_intensity.asm",
+      "address": "0x0140",
+      "line": 259
+    },
+    "0x065F": {
+      "file": "set_intensity.asm",
+      "address": "0x065F",
+      "line": 842
+    },
+    "0x0636": {
+      "file": "set_intensity.asm",
+      "address": "0x0636",
+      "line": 823
+    },
+    "0x0069": {
+      "file": "set_intensity.asm",
+      "address": "0x0069",
+      "line": 106
+    },
+    "0x0582": {
+      "file": "set_intensity.asm",
+      "address": "0x0582",
+      "line": 748
+    },
+    "0x0307": {
+      "file": "set_intensity.asm",
+      "address": "0x0307",
+      "line": 479
+    },
+    "0x0248": {
+      "file": "set_intensity.asm",
+      "address": "0x0248",
+      "line": 47
+    },
+    "0x002D": {
+      "file": "set_intensity.asm",
+      "address": "0x002D",
+      "line": 62
+    },
+    "0x06EF": {
+      "file": "set_intensity.asm",
+      "address": "0x06EF",
+      "line": 906
+    },
+    "0x009B": {
+      "file": "set_intensity.asm",
+      "address": "0x009B",
+      "line": 138
+    },
+    "0x06B2": {
+      "file": "set_intensity.asm",
+      "address": "0x06B2",
+      "line": 879
+    },
+    "0x021C": {
+      "file": "set_intensity.asm",
+      "address": "0x021C",
+      "line": 373
+    },
+    "0x030F": {
+      "file": "set_intensity.asm",
+      "address": "0x030F",
+      "line": 482
+    },
+    "0x0548": {
+      "file": "set_intensity.asm",
+      "address": "0x0548",
+      "line": 721
+    },
+    "0x0149": {
+      "file": "set_intensity.asm",
+      "address": "0x0149",
+      "line": 263
+    },
+    "0x012C": {
+      "file": "set_intensity.asm",
+      "address": "0x012C",
+      "line": 249
+    },
+    "0x06A9": {
+      "file": "set_intensity.asm",
+      "address": "0x06A9",
+      "line": 873
+    },
+    "0x0721": {
+      "file": "set_intensity.asm",
+      "address": "0x0721",
+      "line": 934
+    },
+    "0x0704": {
+      "file": "set_intensity.asm",
+      "address": "0x0704",
+      "line": 914
+    },
+    "0x0668": {
+      "file": "set_intensity.asm",
+      "address": "0x0668",
+      "line": 845
+    },
+    "0x03C6": {
+      "file": "set_intensity.asm",
+      "address": "0x03C6",
+      "line": 559
+    },
+    "0x028B": {
+      "file": "set_intensity.asm",
+      "address": "0x028B",
+      "line": 429
+    },
+    "0x02A1": {
+      "file": "set_intensity.asm",
+      "address": "0x02A1",
+      "line": 438
+    },
+    "0x032A": {
+      "file": "set_intensity.asm",
+      "address": "0x032A",
+      "line": 493
+    },
+    "0x0074": {
+      "file": "set_intensity.asm",
+      "address": "0x0074",
+      "line": 113
+    },
+    "0x0092": {
+      "file": "set_intensity.asm",
+      "address": "0x0092",
+      "line": 135
+    },
+    "0x010E": {
+      "file": "set_intensity.asm",
+      "address": "0x010E",
+      "line": 226
+    },
+    "0x048C": {
+      "file": "set_intensity.asm",
+      "address": "0x048C",
+      "line": 642
+    },
+    "0x01C9": {
+      "file": "set_intensity.asm",
+      "address": "0x01C9",
+      "line": 330
+    },
+    "0x05DC": {
+      "file": "set_intensity.asm",
+      "address": "0x05DC",
+      "line": 784
+    },
+    "0x01AF": {
+      "file": "set_intensity.asm",
+      "address": "0x01AF",
+      "line": 316
+    },
+    "0x06F2": {
+      "file": "set_intensity.asm",
+      "address": "0x06F2",
+      "line": 907
+    },
+    "0x06A3": {
+      "file": "set_intensity.asm",
+      "address": "0x06A3",
+      "line": 871
+    },
+    "0x0449": {
+      "file": "set_intensity.asm",
+      "address": "0x0449",
+      "line": 615
+    },
+    "0x02FD": {
+      "file": "set_intensity.asm",
+      "address": "0x02FD",
+      "line": 475
+    },
+    "0x06C0": {
+      "file": "set_intensity.asm",
+      "address": "0x06C0",
+      "line": 885
+    },
+    "0x0633": {
+      "file": "set_intensity.asm",
+      "address": "0x0633",
+      "line": 822
+    },
+    "0x05E6": {
+      "file": "set_intensity.asm",
+      "address": "0x05E6",
+      "line": 788
+    },
+    "0x0564": {
+      "file": "set_intensity.asm",
+      "address": "0x0564",
+      "line": 732
+    },
+    "0x03B7": {
+      "file": "set_intensity.asm",
+      "address": "0x03B7",
+      "line": 553
+    },
+    "0x023C": {
+      "file": "set_intensity.asm",
+      "address": "0x023C",
+      "line": 43
+    },
+    "0x00E0": {
+      "file": "set_intensity.asm",
+      "address": "0x00E0",
+      "line": 196
+    },
+    "0x0467": {
+      "file": "set_intensity.asm",
+      "address": "0x0467",
+      "line": 627
+    },
+    "0x04FA": {
+      "file": "set_intensity.asm",
+      "address": "0x04FA",
+      "line": 690
+    },
+    "0x0180": {
+      "file": "set_intensity.asm",
+      "address": "0x0180",
+      "line": 292
+    },
+    "0x037E": {
+      "file": "set_intensity.asm",
+      "address": "0x037E",
+      "line": 530
+    },
+    "0x0677": {
+      "file": "set_intensity.asm",
+      "address": "0x0677",
+      "line": 851
+    },
+    "0x0056": {
+      "file": "set_intensity.asm",
+      "address": "0x0056",
+      "line": 93
+    },
+    "0x03DF": {
+      "file": "set_intensity.asm",
+      "address": "0x03DF",
+      "line": 569
+    },
+    "0x013D": {
+      "file": "set_intensity.asm",
+      "address": "0x013D",
+      "line": 258
+    },
+    "0x02FB": {
+      "file": "set_intensity.asm",
+      "address": "0x02FB",
+      "line": 474
+    },
+    "0x057F": {
+      "file": "set_intensity.asm",
+      "address": "0x057F",
+      "line": 746
+    },
+    "0x0098": {
+      "file": "set_intensity.asm",
+      "address": "0x0098",
+      "line": 137
+    },
+    "0x0219": {
+      "file": "set_intensity.asm",
+      "address": "0x0219",
+      "line": 372
+    },
+    "0x0281": {
+      "file": "set_intensity.asm",
+      "address": "0x0281",
+      "line": 425
+    },
+    "0x036C": {
+      "file": "set_intensity.asm",
+      "address": "0x036C",
+      "line": 523
+    },
+    "0x0457": {
+      "file": "set_intensity.asm",
+      "address": "0x0457",
+      "line": 621
+    },
+    "0x002A": {
+      "file": "set_intensity.asm",
+      "address": "0x002A",
+      "line": 61
+    },
+    "0x022E": {
+      "file": "set_intensity.asm",
+      "address": "0x022E",
+      "line": 383
+    },
+    "0x0482": {
+      "file": "set_intensity.asm",
+      "address": "0x0482",
+      "line": 638
+    },
+    "0x00D2": {
+      "file": "set_intensity.asm",
+      "address": "0x00D2",
+      "line": 185
+    },
+    "0x047F": {
+      "file": "set_intensity.asm",
+      "address": "0x047F",
+      "line": 637
+    },
+    "0x05F3": {
+      "file": "set_intensity.asm",
+      "address": "0x05F3",
+      "line": 793
+    },
+    "0x031B": {
+      "file": "set_intensity.asm",
+      "address": "0x031B",
+      "line": 487
+    },
+    "0x046B": {
+      "file": "set_intensity.asm",
+      "address": "0x046B",
+      "line": 629
+    },
+    "0x04AE": {
+      "file": "set_intensity.asm",
+      "address": "0x04AE",
+      "line": 658
+    },
+    "0x051B": {
+      "file": "set_intensity.asm",
+      "address": "0x051B",
+      "line": 703
+    },
+    "0x05C1": {
+      "file": "set_intensity.asm",
+      "address": "0x05C1",
+      "line": 773
+    },
+    "0x0297": {
+      "file": "set_intensity.asm",
+      "address": "0x0297",
+      "line": 434
+    },
+    "0x04CE": {
+      "file": "set_intensity.asm",
+      "address": "0x04CE",
+      "line": 672
+    },
+    "0x00DC": {
+      "file": "set_intensity.asm",
+      "address": "0x00DC",
+      "line": 191
+    },
+    "0x0388": {
+      "file": "set_intensity.asm",
+      "address": "0x0388",
+      "line": 534
+    },
+    "0x05BB": {
+      "file": "set_intensity.asm",
+      "address": "0x05BB",
+      "line": 771
+    },
+    "0x0714": {
+      "file": "set_intensity.asm",
+      "address": "0x0714",
+      "line": 923
+    },
+    "0x0161": {
+      "file": "set_intensity.asm",
+      "address": "0x0161",
+      "line": 276
+    },
+    "0x0150": {
+      "file": "set_intensity.asm",
+      "address": "0x0150",
+      "line": 266
+    },
+    "0x006D": {
+      "file": "set_intensity.asm",
+      "address": "0x006D",
+      "line": 109
+    },
+    "0x025A": {
+      "file": "set_intensity.asm",
+      "address": "0x025A",
+      "line": 405
+    },
+    "0x01E1": {
+      "file": "set_intensity.asm",
+      "address": "0x01E1",
+      "line": 340
+    },
+    "0x0062": {
+      "file": "set_intensity.asm",
+      "address": "0x0062",
+      "line": 101
+    },
+    "0x02CB": {
+      "file": "set_intensity.asm",
+      "address": "0x02CB",
+      "line": 455
+    },
+    "0x066B": {
+      "file": "set_intensity.asm",
+      "address": "0x066B",
+      "line": 846
+    },
+    "0x0292": {
+      "file": "set_intensity.asm",
+      "address": "0x0292",
+      "line": 432
+    },
+    "0x00AF": {
+      "file": "set_intensity.asm",
+      "address": "0x00AF",
+      "line": 150
+    },
+    "0x054D": {
+      "file": "set_intensity.asm",
+      "address": "0x054D",
+      "line": 723
+    },
+    "0x0070": {
+      "file": "set_intensity.asm",
+      "address": "0x0070",
+      "line": 110
+    },
+    "0x0580": {
+      "file": "set_intensity.asm",
+      "address": "0x0580",
+      "line": 747
+    },
+    "0x03EB": {
+      "file": "set_intensity.asm",
+      "address": "0x03EB",
+      "line": 574
+    },
+    "0x0665": {
+      "file": "set_intensity.asm",
+      "address": "0x0665",
+      "line": 844
+    },
+    "0x01FF": {
+      "file": "set_intensity.asm",
+      "address": "0x01FF",
+      "line": 354
+    },
+    "0x0400": {
+      "file": "set_intensity.asm",
+      "address": "0x0400",
+      "line": 586
+    },
+    "0x0342": {
+      "file": "set_intensity.asm",
+      "address": "0x0342",
+      "line": 506
+    },
+    "0x01D5": {
+      "file": "set_intensity.asm",
+      "address": "0x01D5",
+      "line": 335
+    },
+    "0x015A": {
+      "file": "set_intensity.asm",
+      "address": "0x015A",
+      "line": 273
+    },
+    "0x05A7": {
+      "file": "set_intensity.asm",
+      "address": "0x05A7",
+      "line": 763
+    },
+    "0x005A": {
+      "file": "set_intensity.asm",
+      "address": "0x005A",
+      "line": 96
+    },
+    "0x0229": {
+      "file": "set_intensity.asm",
+      "address": "0x0229",
+      "line": 36
+    },
+    "0x024E": {
+      "file": "set_intensity.asm",
+      "address": "0x024E",
+      "line": 401
+    },
+    "0x03E6": {
+      "file": "set_intensity.asm",
+      "address": "0x03E6",
+      "line": 572
+    },
+    "0x0184": {
+      "file": "set_intensity.asm",
+      "address": "0x0184",
+      "line": 294
+    },
+    "0x0607": {
+      "file": "set_intensity.asm",
+      "address": "0x0607",
+      "line": 801
+    },
+    "0x00F4": {
+      "file": "set_intensity.asm",
+      "address": "0x00F4",
+      "line": 210
+    },
+    "0x00C3": {
+      "file": "set_intensity.asm",
+      "address": "0x00C3",
+      "line": 176
+    },
+    "0x018E": {
+      "file": "set_intensity.asm",
+      "address": "0x018E",
+      "line": 301
+    },
+    "0x047D": {
+      "file": "set_intensity.asm",
+      "address": "0x047D",
+      "line": 636
+    },
+    "0x00F1": {
+      "file": "set_intensity.asm",
+      "address": "0x00F1",
+      "line": 207
+    },
+    "0x04D0": {
+      "file": "set_intensity.asm",
+      "address": "0x04D0",
+      "line": 673
+    },
+    "0x05AA": {
+      "file": "set_intensity.asm",
+      "address": "0x05AA",
+      "line": 764
+    },
+    "0x0323": {
+      "file": "set_intensity.asm",
+      "address": "0x0323",
+      "line": 490
+    },
+    "0x0037": {
+      "file": "set_intensity.asm",
+      "address": "0x0037",
+      "line": 71
+    },
+    "0x068E": {
+      "file": "set_intensity.asm",
+      "address": "0x068E",
+      "line": 863
+    },
+    "0x0271": {
+      "file": "set_intensity.asm",
+      "address": "0x0271",
+      "line": 417
+    },
+    "0x02E9": {
+      "file": "set_intensity.asm",
+      "address": "0x02E9",
+      "line": 467
+    },
+    "0x057C": {
+      "file": "set_intensity.asm",
+      "address": "0x057C",
+      "line": 744
+    },
+    "0x0396": {
+      "file": "set_intensity.asm",
+      "address": "0x0396",
+      "line": 540
+    },
+    "0x02C4": {
+      "file": "set_intensity.asm",
+      "address": "0x02C4",
+      "line": 452
+    },
+    "0x0720": {
+      "file": "set_intensity.asm",
+      "address": "0x0720",
+      "line": 932
+    },
+    "0x02A6": {
+      "file": "set_intensity.asm",
+      "address": "0x02A6",
+      "line": 440
+    },
+    "0x018A": {
+      "file": "set_intensity.asm",
+      "address": "0x018A",
+      "line": 296
+    },
+    "0x056B": {
+      "file": "set_intensity.asm",
+      "address": "0x056B",
+      "line": 737
+    },
+    "0x0546": {
+      "file": "set_intensity.asm",
+      "address": "0x0546",
+      "line": 720
+    },
+    "0x027E": {
+      "file": "set_intensity.asm",
+      "address": "0x027E",
+      "line": 424
+    },
+    "0x0122": {
+      "file": "set_intensity.asm",
+      "address": "0x0122",
+      "line": 245
+    },
+    "0x03D8": {
+      "file": "set_intensity.asm",
+      "address": "0x03D8",
+      "line": 566
+    },
+    "0x004A": {
+      "file": "set_intensity.asm",
+      "address": "0x004A",
+      "line": 79
+    },
+    "0x06DE": {
+      "file": "set_intensity.asm",
+      "address": "0x06DE",
+      "line": 899
+    },
+    "0x0662": {
+      "file": "set_intensity.asm",
+      "address": "0x0662",
+      "line": 843
+    },
+    "0x06EC": {
+      "file": "set_intensity.asm",
+      "address": "0x06EC",
+      "line": 905
+    },
+    "0x04DC": {
+      "file": "set_intensity.asm",
+      "address": "0x04DC",
+      "line": 678
+    },
+    "0x0461": {
+      "file": "set_intensity.asm",
+      "address": "0x0461",
+      "line": 625
+    },
+    "0x027C": {
+      "file": "set_intensity.asm",
+      "address": "0x027C",
+      "line": 423
+    },
+    "0x033D": {
+      "file": "set_intensity.asm",
+      "address": "0x033D",
+      "line": 504
+    },
+    "0x0146": {
+      "file": "set_intensity.asm",
+      "address": "0x0146",
+      "line": 261
+    },
+    "0x063C": {
+      "file": "set_intensity.asm",
+      "address": "0x063C",
+      "line": 825
+    },
+    "0x0288": {
+      "file": "set_intensity.asm",
+      "address": "0x0288",
+      "line": 428
+    },
+    "0x06A6": {
+      "file": "set_intensity.asm",
+      "address": "0x06A6",
+      "line": 872
+    },
+    "0x0475": {
+      "file": "set_intensity.asm",
+      "address": "0x0475",
+      "line": 633
+    },
+    "0x06C6": {
+      "file": "set_intensity.asm",
+      "address": "0x06C6",
+      "line": 887
+    },
+    "0x0601": {
+      "file": "set_intensity.asm",
+      "address": "0x0601",
+      "line": 799
+    },
+    "0x0195": {
+      "file": "set_intensity.asm",
+      "address": "0x0195",
+      "line": 304
+    },
+    "0x02D1": {
+      "file": "set_intensity.asm",
+      "address": "0x02D1",
+      "line": 457
+    },
+    "0x01AC": {
+      "file": "set_intensity.asm",
+      "address": "0x01AC",
+      "line": 315
+    },
+    "0x0165": {
+      "file": "set_intensity.asm",
+      "address": "0x0165",
+      "line": 279
+    },
+    "0x02E5": {
+      "file": "set_intensity.asm",
+      "address": "0x02E5",
+      "line": 465
+    },
+    "0x0423": {
+      "file": "set_intensity.asm",
+      "address": "0x0423",
+      "line": 600
+    },
+    "0x01C0": {
+      "file": "set_intensity.asm",
+      "address": "0x01C0",
+      "line": 327
+    },
+    "0x0724": {
+      "file": "set_intensity.asm",
+      "address": "0x0724",
+      "line": 937
+    },
+    "0x0534": {
+      "file": "set_intensity.asm",
+      "address": "0x0534",
+      "line": 713
+    },
+    "0x058C": {
+      "file": "set_intensity.asm",
+      "address": "0x058C",
+      "line": 752
+    },
+    "0x0554": {
+      "file": "set_intensity.asm",
+      "address": "0x0554",
+      "line": 726
+    },
+    "0x0221": {
+      "file": "set_intensity.asm",
+      "address": "0x0221",
+      "line": 33
+    },
+    "0x06A0": {
+      "file": "set_intensity.asm",
+      "address": "0x06A0",
+      "line": 869
+    },
+    "0x0587": {
+      "file": "set_intensity.asm",
+      "address": "0x0587",
+      "line": 750
+    },
+    "0x04B1": {
+      "file": "set_intensity.asm",
+      "address": "0x04B1",
+      "line": 659
+    },
+    "0x0164": {
+      "file": "set_intensity.asm",
+      "address": "0x0164",
+      "line": 278
+    },
+    "0x061F": {
+      "file": "set_intensity.asm",
+      "address": "0x061F",
+      "line": 811
+    },
+    "0x03A3": {
+      "file": "set_intensity.asm",
+      "address": "0x03A3",
+      "line": 545
+    },
+    "0x028F": {
+      "file": "set_intensity.asm",
+      "address": "0x028F",
+      "line": 431
+    },
+    "0x0254": {
+      "file": "set_intensity.asm",
+      "address": "0x0254",
+      "line": 403
+    },
+    "0x0540": {
+      "file": "set_intensity.asm",
+      "address": "0x0540",
+      "line": 718
+    },
+    "0x0061": {
+      "file": "set_intensity.asm",
+      "address": "0x0061",
+      "line": 100
+    },
+    "0x0500": {
+      "file": "set_intensity.asm",
+      "address": "0x0500",
+      "line": 692
+    },
+    "0x03BA": {
+      "file": "set_intensity.asm",
+      "address": "0x03BA",
+      "line": 554
+    },
+    "0x015D": {
+      "file": "set_intensity.asm",
+      "address": "0x015D",
+      "line": 274
+    },
+    "0x0364": {
+      "file": "set_intensity.asm",
+      "address": "0x0364",
+      "line": 520
+    },
+    "0x0024": {
+      "file": "set_intensity.asm",
+      "address": "0x0024",
+      "line": 59
+    },
+    "0x0105": {
+      "file": "set_intensity.asm",
+      "address": "0x0105",
+      "line": 222
+    },
+    "0x0680": {
+      "file": "set_intensity.asm",
+      "address": "0x0680",
+      "line": 854
+    },
+    "0x0596": {
+      "file": "set_intensity.asm",
+      "address": "0x0596",
+      "line": 756
+    },
+    "0x0173": {
+      "file": "set_intensity.asm",
+      "address": "0x0173",
+      "line": 286
+    },
+    "0x055E": {
+      "file": "set_intensity.asm",
+      "address": "0x055E",
+      "line": 730
+    },
+    "0x01F6": {
+      "file": "set_intensity.asm",
+      "address": "0x01F6",
+      "line": 349
+    },
+    "0x06CC": {
+      "file": "set_intensity.asm",
+      "address": "0x06CC",
+      "line": 889
+    },
+    "0x03FD": {
+      "file": "set_intensity.asm",
+      "address": "0x03FD",
+      "line": 584
+    },
+    "0x06B5": {
+      "file": "set_intensity.asm",
+      "address": "0x06B5",
+      "line": 880
+    },
+    "0x03E9": {
+      "file": "set_intensity.asm",
+      "address": "0x03E9",
+      "line": 573
+    },
+    "0x061D": {
+      "file": "set_intensity.asm",
+      "address": "0x061D",
+      "line": 810
+    },
+    "0x00AC": {
+      "file": "set_intensity.asm",
+      "address": "0x00AC",
+      "line": 148
+    },
+    "0x03F7": {
+      "file": "set_intensity.asm",
+      "address": "0x03F7",
+      "line": 581
+    },
+    "0x056F": {
+      "file": "set_intensity.asm",
+      "address": "0x056F",
+      "line": 739
+    },
+    "0x06E1": {
+      "file": "set_intensity.asm",
+      "address": "0x06E1",
+      "line": 900
+    },
+    "0x00BC": {
+      "file": "set_intensity.asm",
+      "address": "0x00BC",
+      "line": 171
+    },
+    "0x0065": {
+      "file": "set_intensity.asm",
+      "address": "0x0065",
+      "line": 103
+    },
+    "0x039C": {
+      "file": "set_intensity.asm",
+      "address": "0x039C",
+      "line": 542
+    },
+    "0x0421": {
+      "file": "set_intensity.asm",
+      "address": "0x0421",
+      "line": 599
+    },
+    "0x03D2": {
+      "file": "set_intensity.asm",
+      "address": "0x03D2",
+      "line": 564
+    },
+    "0x0217": {
+      "file": "set_intensity.asm",
+      "address": "0x0217",
+      "line": 371
+    },
+    "0x00CB": {
+      "file": "set_intensity.asm",
+      "address": "0x00CB",
+      "line": 181
+    },
+    "0x04C8": {
+      "file": "set_intensity.asm",
+      "address": "0x04C8",
+      "line": 670
+    },
+    "0x0111": {
+      "file": "set_intensity.asm",
+      "address": "0x0111",
+      "line": 228
+    },
+    "0x0622": {
+      "file": "set_intensity.asm",
+      "address": "0x0622",
+      "line": 812
+    },
+    "0x0568": {
+      "file": "set_intensity.asm",
+      "address": "0x0568",
+      "line": 734
+    },
+    "0x05CD": {
+      "file": "set_intensity.asm",
+      "address": "0x05CD",
+      "line": 778
+    },
+    "0x055C": {
+      "file": "set_intensity.asm",
+      "address": "0x055C",
+      "line": 729
+    },
+    "0x00C2": {
+      "file": "set_intensity.asm",
+      "address": "0x00C2",
+      "line": 175
+    },
+    "0x0360": {
+      "file": "set_intensity.asm",
+      "address": "0x0360",
+      "line": 518
+    },
+    "0x0443": {
+      "file": "set_intensity.asm",
+      "address": "0x0443",
+      "line": 613
+    },
+    "0x0266": {
+      "file": "set_intensity.asm",
+      "address": "0x0266",
+      "line": 409
+    },
+    "0x0648": {
+      "file": "set_intensity.asm",
+      "address": "0x0648",
+      "line": 829
+    },
+    "0x0278": {
+      "file": "set_intensity.asm",
+      "address": "0x0278",
+      "line": 420
+    },
+    "0x0478": {
+      "file": "set_intensity.asm",
+      "address": "0x0478",
+      "line": 634
+    },
+    "0x01DE": {
+      "file": "set_intensity.asm",
+      "address": "0x01DE",
+      "line": 339
+    },
+    "0x0300": {
+      "file": "set_intensity.asm",
+      "address": "0x0300",
+      "line": 476
+    },
+    "0x0707": {
+      "file": "set_intensity.asm",
+      "address": "0x0707",
+      "line": 915
+    },
+    "0x016F": {
+      "file": "set_intensity.asm",
+      "address": "0x016F",
+      "line": 283
+    },
+    "0x050C": {
+      "file": "set_intensity.asm",
+      "address": "0x050C",
+      "line": 697
+    },
+    "0x0407": {
+      "file": "set_intensity.asm",
+      "address": "0x0407",
+      "line": 589
+    },
+    "0x0110": {
+      "file": "set_intensity.asm",
+      "address": "0x0110",
+      "line": 227
+    },
+    "0x04A3": {
+      "file": "set_intensity.asm",
+      "address": "0x04A3",
+      "line": 651
+    },
+    "0x00DE": {
+      "file": "set_intensity.asm",
+      "address": "0x00DE",
+      "line": 192
+    },
+    "0x00C7": {
+      "file": "set_intensity.asm",
+      "address": "0x00C7",
+      "line": 179
+    },
+    "0x0435": {
+      "file": "set_intensity.asm",
+      "address": "0x0435",
+      "line": 607
+    },
+    "0x02DB": {
+      "file": "set_intensity.asm",
+      "address": "0x02DB",
+      "line": 461
+    },
+    "0x04C6": {
+      "file": "set_intensity.asm",
+      "address": "0x04C6",
+      "line": 669
+    },
+    "0x0374": {
+      "file": "set_intensity.asm",
+      "address": "0x0374",
+      "line": 526
+    },
+    "0x0499": {
+      "file": "set_intensity.asm",
+      "address": "0x0499",
+      "line": 647
+    },
+    "0x0550": {
+      "file": "set_intensity.asm",
+      "address": "0x0550",
+      "line": 724
+    },
+    "0x06AF": {
+      "file": "set_intensity.asm",
+      "address": "0x06AF",
+      "line": 878
+    },
+    "0x0339": {
+      "file": "set_intensity.asm",
+      "address": "0x0339",
+      "line": 501
+    },
+    "0x029C": {
+      "file": "set_intensity.asm",
+      "address": "0x029C",
+      "line": 436
+    },
+    "0x0385": {
+      "file": "set_intensity.asm",
+      "address": "0x0385",
+      "line": 533
+    },
+    "0x007F": {
+      "file": "set_intensity.asm",
+      "address": "0x007F",
+      "line": 120
+    },
+    "0x0604": {
+      "file": "set_intensity.asm",
+      "address": "0x0604",
+      "line": 800
+    },
+    "0x0618": {
+      "file": "set_intensity.asm",
+      "address": "0x0618",
+      "line": 808
+    },
+    "0x02B0": {
+      "file": "set_intensity.asm",
+      "address": "0x02B0",
+      "line": 444
+    },
+    "0x05C5": {
+      "file": "set_intensity.asm",
+      "address": "0x05C5",
+      "line": 775
+    },
+    "0x0593": {
+      "file": "set_intensity.asm",
+      "address": "0x0593",
+      "line": 755
+    },
+    "0x026E": {
+      "file": "set_intensity.asm",
+      "address": "0x026E",
+      "line": 414
+    },
+    "0x0032": {
+      "file": "set_intensity.asm",
+      "address": "0x0032",
+      "line": 65
+    },
+    "0x06F5": {
+      "file": "set_intensity.asm",
+      "address": "0x06F5",
+      "line": 908
+    },
+    "0x0380": {
+      "file": "set_intensity.asm",
+      "address": "0x0380",
+      "line": 531
+    },
+    "0x052A": {
+      "file": "set_intensity.asm",
+      "address": "0x052A",
+      "line": 709
+    },
+    "0x0285": {
+      "file": "set_intensity.asm",
+      "address": "0x0285",
+      "line": 427
+    },
+    "0x0234": {
+      "file": "set_intensity.asm",
+      "address": "0x0234",
+      "line": 40
+    },
+    "0x01B3": {
+      "file": "set_intensity.asm",
+      "address": "0x01B3",
+      "line": 319
+    },
+    "0x00DF": {
+      "file": "set_intensity.asm",
+      "address": "0x00DF",
+      "line": 195
+    },
+    "0x03F0": {
+      "file": "set_intensity.asm",
+      "address": "0x03F0",
+      "line": 578
+    },
+    "0x0269": {
+      "file": "set_intensity.asm",
+      "address": "0x0269",
+      "line": 411
+    },
+    "0x0543": {
+      "file": "set_intensity.asm",
+      "address": "0x0543",
+      "line": 719
+    },
+    "0x029F": {
+      "file": "set_intensity.asm",
+      "address": "0x029F",
+      "line": 437
+    },
+    "0x0139": {
+      "file": "set_intensity.asm",
+      "address": "0x0139",
+      "line": 255
+    },
+    "0x05B1": {
+      "file": "set_intensity.asm",
+      "address": "0x05B1",
+      "line": 767
+    },
+    "0x01ED": {
+      "file": "set_intensity.asm",
+      "address": "0x01ED",
+      "line": 345
+    },
+    "0x0114": {
+      "file": "set_intensity.asm",
+      "address": "0x0114",
+      "line": 229
+    },
+    "0x0552": {
+      "file": "set_intensity.asm",
+      "address": "0x0552",
+      "line": 725
+    },
+    "0x0143": {
+      "file": "set_intensity.asm",
+      "address": "0x0143",
+      "line": 260
+    },
+    "0x05AF": {
+      "file": "set_intensity.asm",
+      "address": "0x05AF",
+      "line": 766
+    },
+    "0x027B": {
+      "file": "set_intensity.asm",
+      "address": "0x027B",
+      "line": 422
+    },
+    "0x0314": {
+      "file": "set_intensity.asm",
+      "address": "0x0314",
+      "line": 484
+    },
+    "0x03AD": {
+      "file": "set_intensity.asm",
+      "address": "0x03AD",
+      "line": 549
+    },
+    "0x0214": {
+      "file": "set_intensity.asm",
+      "address": "0x0214",
+      "line": 20
+    },
+    "0x020A": {
+      "file": "set_intensity.asm",
+      "address": "0x020A",
+      "line": 358
+    },
+    "0x063F": {
+      "file": "set_intensity.asm",
+      "address": "0x063F",
+      "line": 826
+    },
+    "0x0207": {
+      "file": "set_intensity.asm",
+      "address": "0x0207",
+      "line": 357
+    },
+    "0x04BF": {
+      "file": "set_intensity.asm",
+      "address": "0x04BF",
+      "line": 666
+    },
+    "0x0507": {
+      "file": "set_intensity.asm",
+      "address": "0x0507",
+      "line": 695
+    },
+    "0x02A9": {
+      "file": "set_intensity.asm",
+      "address": "0x02A9",
+      "line": 441
+    },
+    "0x05B9": {
+      "file": "set_intensity.asm",
+      "address": "0x05B9",
+      "line": 770
+    },
+    "0x0485": {
+      "file": "set_intensity.asm",
+      "address": "0x0485",
+      "line": 639
+    },
+    "0x03A0": {
+      "file": "set_intensity.asm",
+      "address": "0x03A0",
+      "line": 544
+    },
+    "0x00F2": {
+      "file": "set_intensity.asm",
+      "address": "0x00F2",
+      "line": 208
+    },
+    "0x04F0": {
+      "file": "set_intensity.asm",
+      "address": "0x04F0",
+      "line": 686
+    },
+    "0x0489": {
+      "file": "set_intensity.asm",
+      "address": "0x0489",
+      "line": 641
+    },
+    "0x01BC": {
+      "file": "set_intensity.asm",
+      "address": "0x01BC",
+      "line": 322
+    },
+    "0x05F0": {
+      "file": "set_intensity.asm",
+      "address": "0x05F0",
+      "line": 792
+    },
+    "0x0713": {
+      "file": "set_intensity.asm",
+      "address": "0x0713",
+      "line": 922
+    },
+    "0x0052": {
+      "file": "set_intensity.asm",
+      "address": "0x0052",
+      "line": 90
+    },
+    "0x0691": {
+      "file": "set_intensity.asm",
+      "address": "0x0691",
+      "line": 864
+    },
+    "0x012F": {
+      "file": "set_intensity.asm",
+      "address": "0x012F",
+      "line": 251
+    },
+    "0x04B4": {
+      "file": "set_intensity.asm",
+      "address": "0x04B4",
+      "line": 660
+    },
+    "0x045A": {
+      "file": "set_intensity.asm",
+      "address": "0x045A",
+      "line": 622
+    },
+    "0x0717": {
+      "file": "set_intensity.asm",
+      "address": "0x0717",
+      "line": 925
+    },
+    "0x018B": {
+      "file": "set_intensity.asm",
+      "address": "0x018B",
+      "line": 297
+    },
+    "0x0350": {
+      "file": "set_intensity.asm",
+      "address": "0x0350",
+      "line": 512
+    },
+    "0x067A": {
+      "file": "set_intensity.asm",
+      "address": "0x067A",
+      "line": 852
+    },
+    "0x0295": {
+      "file": "set_intensity.asm",
+      "address": "0x0295",
+      "line": 433
+    },
+    "0x01A9": {
+      "file": "set_intensity.asm",
+      "address": "0x01A9",
+      "line": 314
+    },
+    "0x0129": {
+      "file": "set_intensity.asm",
+      "address": "0x0129",
+      "line": 248
+    },
+    "0x0417": {
+      "file": "set_intensity.asm",
+      "address": "0x0417",
+      "line": 595
+    },
+    "0x0311": {
+      "file": "set_intensity.asm",
+      "address": "0x0311",
+      "line": 483
+    },
+    "0x03A6": {
+      "file": "set_intensity.asm",
+      "address": "0x03A6",
+      "line": 546
+    },
+    "0x06E2": {
+      "file": "set_intensity.asm",
+      "address": "0x06E2",
+      "line": 901
+    },
+    "0x0591": {
+      "file": "set_intensity.asm",
+      "address": "0x0591",
+      "line": 754
+    },
+    "0x0072": {
+      "file": "set_intensity.asm",
+      "address": "0x0072",
+      "line": 112
+    },
+    "0x008F": {
+      "file": "set_intensity.asm",
+      "address": "0x008F",
+      "line": 134
+    },
+    "0x0071": {
+      "file": "set_intensity.asm",
+      "address": "0x0071",
+      "line": 111
+    },
+    "0x0599": {
+      "file": "set_intensity.asm",
+      "address": "0x0599",
+      "line": 757
+    },
+    "0x03FC": {
+      "file": "set_intensity.asm",
+      "address": "0x03FC",
+      "line": 583
+    },
+    "0x040F": {
+      "file": "set_intensity.asm",
+      "address": "0x040F",
+      "line": 592
+    },
+    "0x064B": {
+      "file": "set_intensity.asm",
+      "address": "0x064B",
+      "line": 831
+    },
+    "0x04F8": {
+      "file": "set_intensity.asm",
+      "address": "0x04F8",
+      "line": 689
+    },
+    "0x0367": {
+      "file": "set_intensity.asm",
+      "address": "0x0367",
+      "line": 521
+    },
+    "0x00C4": {
+      "file": "set_intensity.asm",
+      "address": "0x00C4",
+      "line": 177
+    },
+    "0x06FE": {
+      "file": "set_intensity.asm",
+      "address": "0x06FE",
+      "line": 912
+    },
+    "0x00F6": {
+      "file": "set_intensity.asm",
+      "address": "0x00F6",
+      "line": 211
+    },
+    "0x0577": {
+      "file": "set_intensity.asm",
+      "address": "0x0577",
+      "line": 742
+    },
+    "0x0469": {
+      "file": "set_intensity.asm",
+      "address": "0x0469",
+      "line": 628
+    },
+    "0x019F": {
+      "file": "set_intensity.asm",
+      "address": "0x019F",
+      "line": 309
+    },
+    "0x02B7": {
+      "file": "set_intensity.asm",
+      "address": "0x02B7",
+      "line": 447
+    },
+    "0x0133": {
+      "file": "set_intensity.asm",
+      "address": "0x0133",
+      "line": 253
+    },
+    "0x06D5": {
+      "file": "set_intensity.asm",
+      "address": "0x06D5",
+      "line": 893
+    },
+    "0x061B": {
+      "file": "set_intensity.asm",
+      "address": "0x061B",
+      "line": 809
+    },
+    "0x040A": {
+      "file": "set_intensity.asm",
+      "address": "0x040A",
+      "line": 590
+    },
+    "0x01D8": {
+      "file": "set_intensity.asm",
+      "address": "0x01D8",
+      "line": 337
+    },
+    "0x0572": {
+      "file": "set_intensity.asm",
+      "address": "0x0572",
+      "line": 740
+    },
+    "0x0630": {
+      "file": "set_intensity.asm",
+      "address": "0x0630",
+      "line": 821
+    },
+    "0x068A": {
+      "file": "set_intensity.asm",
+      "address": "0x068A",
+      "line": 861
+    },
+    "0x02F1": {
+      "file": "set_intensity.asm",
+      "address": "0x02F1",
+      "line": 470
+    },
+    "0x02F3": {
+      "file": "set_intensity.asm",
+      "address": "0x02F3",
+      "line": 471
+    },
+    "0x04DA": {
+      "file": "set_intensity.asm",
+      "address": "0x04DA",
+      "line": 677
+    },
+    "0x062E": {
+      "file": "set_intensity.asm",
+      "address": "0x062E",
+      "line": 820
+    },
+    "0x05C3": {
+      "file": "set_intensity.asm",
+      "address": "0x05C3",
+      "line": 774
+    },
+    "0x03BC": {
+      "file": "set_intensity.asm",
+      "address": "0x03BC",
+      "line": 555
+    },
+    "0x0516": {
+      "file": "set_intensity.asm",
+      "address": "0x0516",
+      "line": 701
+    },
+    "0x059D": {
+      "file": "set_intensity.asm",
+      "address": "0x059D",
+      "line": 759
+    },
+    "0x0645": {
+      "file": "set_intensity.asm",
+      "address": "0x0645",
+      "line": 828
+    },
+    "0x0083": {
+      "file": "set_intensity.asm",
+      "address": "0x0083",
+      "line": 123
+    },
+    "0x042D": {
+      "file": "set_intensity.asm",
+      "address": "0x042D",
+      "line": 604
+    },
+    "0x05CF": {
+      "file": "set_intensity.asm",
+      "address": "0x05CF",
+      "line": 779
+    },
+    "0x0303": {
+      "file": "set_intensity.asm",
+      "address": "0x0303",
+      "line": 477
+    },
+    "0x03E4": {
+      "file": "set_intensity.asm",
+      "address": "0x03E4",
+      "line": 571
+    },
+    "0x0039": {
+      "file": "set_intensity.asm",
+      "address": "0x0039",
+      "line": 72
+    },
+    "0x041E": {
+      "file": "set_intensity.asm",
+      "address": "0x041E",
+      "line": 598
+    },
+    "0x0045": {
+      "file": "set_intensity.asm",
+      "address": "0x0045",
+      "line": 76
+    },
+    "0x0491": {
+      "file": "set_intensity.asm",
+      "address": "0x0491",
+      "line": 644
+    },
+    "0x05F5": {
+      "file": "set_intensity.asm",
+      "address": "0x05F5",
+      "line": 794
+    },
+    "0x071E": {
+      "file": "set_intensity.asm",
+      "address": "0x071E",
+      "line": 931
+    },
+    "0x05D5": {
+      "file": "set_intensity.asm",
+      "address": "0x05D5",
+      "line": 781
+    },
+    "0x02AD": {
+      "file": "set_intensity.asm",
+      "address": "0x02AD",
+      "line": 443
+    },
+    "0x06BD": {
+      "file": "set_intensity.asm",
+      "address": "0x06BD",
+      "line": 884
+    },
+    "0x00B4": {
+      "file": "set_intensity.asm",
+      "address": "0x00B4",
+      "line": 153
+    },
+    "0x0405": {
+      "file": "set_intensity.asm",
+      "address": "0x0405",
+      "line": 588
+    },
+    "0x03DA": {
+      "file": "set_intensity.asm",
+      "address": "0x03DA",
+      "line": 567
+    },
+    "0x04BB": {
+      "file": "set_intensity.asm",
+      "address": "0x04BB",
+      "line": 663
+    },
+    "0x024B": {
+      "file": "set_intensity.asm",
+      "address": "0x024B",
+      "line": 49
+    },
+    "0x032F": {
+      "file": "set_intensity.asm",
+      "address": "0x032F",
+      "line": 497
+    },
+    "0x042B": {
+      "file": "set_intensity.asm",
+      "address": "0x042B",
+      "line": 603
+    },
+    "0x0428": {
+      "file": "set_intensity.asm",
+      "address": "0x0428",
+      "line": 602
+    },
+    "0x01F3": {
+      "file": "set_intensity.asm",
+      "address": "0x01F3",
+      "line": 348
+    },
+    "0x04D2": {
+      "file": "set_intensity.asm",
+      "address": "0x04D2",
+      "line": 674
+    },
+    "0x03E2": {
+      "file": "set_intensity.asm",
+      "address": "0x03E2",
+      "line": 570
+    },
+    "0x048F": {
+      "file": "set_intensity.asm",
+      "address": "0x048F",
+      "line": 643
+    },
+    "0x0725": {
+      "file": "set_intensity.asm",
+      "address": "0x0725",
+      "line": 938
+    },
+    "0x044D": {
+      "file": "set_intensity.asm",
+      "address": "0x044D",
+      "line": 617
+    },
+    "0x05C8": {
+      "file": "set_intensity.asm",
+      "address": "0x05C8",
+      "line": 776
+    },
+    "0x0059": {
+      "file": "set_intensity.asm",
+      "address": "0x0059",
+      "line": 95
+    },
+    "0x037B": {
+      "file": "set_intensity.asm",
+      "address": "0x037B",
+      "line": 529
+    },
+    "0x053E": {
+      "file": "set_intensity.asm",
+      "address": "0x053E",
+      "line": 717
+    },
+    "0x04C4": {
+      "file": "set_intensity.asm",
+      "address": "0x04C4",
+      "line": 668
+    },
+    "0x00E4": {
+      "file": "set_intensity.asm",
+      "address": "0x00E4",
+      "line": 199
+    },
+    "0x0585": {
+      "file": "set_intensity.asm",
+      "address": "0x0585",
+      "line": 749
+    },
+    "0x049D": {
+      "file": "set_intensity.asm",
+      "address": "0x049D",
+      "line": 649
+    },
+    "0x01DB": {
+      "file": "set_intensity.asm",
+      "address": "0x01DB",
+      "line": 338
+    },
+    "0x00A3": {
+      "file": "set_intensity.asm",
+      "address": "0x00A3",
+      "line": 141
+    }
+  },
+  "functions": {},
+  "nativeCalls": {
+    "23": "VECTREX_PRINT_TEXT",
+    "25": "VECTREX_PRINT_TEXT",
+    "12": "VECTREX_PRINT_TEXT",
+    "24": "VECTREX_PRINT_TEXT",
+    "22": "VECTREX_PRINT_TEXT",
+    "26": "VECTREX_PRINT_TEXT"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "set_intensity.asm",
+      "startLine": 128,
+      "endLine": 142,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {
+    "185": "0x00D2",
+    "649": "0x049D",
+    "234": "0x0120",
+    "541": "0x0399",
+    "659": "0x04B1",
+    "883": "0x06BA",
+    "463": "0x02DF",
+    "764": "0x05AA",
+    "756": "0x0596",
+    "521": "0x0367",
+    "859": "0x0686",
+    "605": "0x042F",
+    "824": "0x0639",
+    "892": "0x06D2",
+    "706": "0x0522",
+    "901": "0x06E2",
+    "909": "0x06F8",
+    "529": "0x037B",
+    "247": "0x0126",
+    "619": "0x0453",
+    "41": "0x0237",
+    "654": "0x04AA",
+    "667": "0x04C1",
+    "489": "0x0321",
+    "869": "0x06A0",
+    "392": "0x023C",
+    "154": "0x00B6",
+    "934": "0x0721",
+    "411": "0x0269",
+    "469": "0x02EF",
+    "514": "0x0356",
+    "258": "0x013D",
+    "17": "0x020C",
+    "355": "0x0202",
+    "610": "0x043C",
+    "266": "0x0150",
+    "57": "0x001F",
+    "408": "0x0263",
+    "135": "0x0092",
+    "227": "0x0110",
+    "174": "0x00C1",
+    "571": "0x03E4",
+    "566": "0x03D8",
+    "15": "0x0207",
+    "556": "0x03BE",
+    "935": "0x0722",
+    "38": "0x022E",
+    "211": "0x00F6",
+    "80": "0x004B",
+    "712": "0x0532",
+    "606": "0x0432",
+    "774": "0x05C3",
+    "570": "0x03E2",
+    "794": "0x05F5",
+    "433": "0x0295",
+    "620": "0x0455",
+    "451": "0x02C1",
+    "867": "0x069A",
+    "399": "0x0248",
+    "89": "0x004F",
+    "843": "0x0662",
+    "616": "0x044B",
+    "671": "0x04CB",
+    "480": "0x030A",
+    "72": "0x0039",
+    "434": "0x0297",
+    "709": "0x052A",
+    "609": "0x0439",
+    "478": "0x0305",
+    "180": "0x00CA",
+    "829": "0x0648",
+    "587": "0x0403",
+    "866": "0x0697",
+    "723": "0x054D",
+    "492": "0x0328",
+    "741": "0x0575",
+    "765": "0x05AD",
+    "799": "0x0601",
+    "507": "0x0344",
+    "65": "0x0032",
+    "601": "0x0425",
+    "464": "0x02E2",
+    "96": "0x005A",
+    "376": "0x0223",
+    "223": "0x0107",
+    "834": "0x0654",
+    "275": "0x0160",
+    "109": "0x006D",
+    "808": "0x0618",
+    "253": "0x0133",
+    "758": "0x059B",
+    "542": "0x039C",
+    "638": "0x0482",
+    "137": "0x0098",
+    "479": "0x0307",
+    "662": "0x04B8",
+    "207": "0x00F1",
+    "491": "0x0325",
+    "122": "0x0081",
+    "734": "0x0568",
+    "573": "0x03E9",
+    "90": "0x0052",
+    "145": "0x00A7",
+    "181": "0x00CB",
+    "222": "0x0105",
+    "201": "0x00EB",
+    "466": "0x02E7",
+    "644": "0x0491",
+    "454": "0x02C9",
+    "337": "0x01D8",
+    "79": "0x004A",
+    "226": "0x010E",
+    "340": "0x01E1",
+    "684": "0x04EC",
+    "405": "0x025A",
+    "73": "0x003C",
+    "92": "0x0054",
+    "103": "0x0065",
+    "304": "0x0195",
+    "592": "0x040F",
+    "279": "0x0165",
+    "586": "0x0400",
+    "334": "0x01D2",
+    "582": "0x03FA",
+    "873": "0x06A9",
+    "516": "0x035A",
+    "259": "0x0140",
+    "720": "0x0546",
+    "188": "0x00D5",
+    "400": "0x024B",
+    "543": "0x039E",
+    "577": "0x03ED",
+    "442": "0x02AB",
+    "555": "0x03BC",
+    "604": "0x042D",
+    "231": "0x0119",
+    "761": "0x05A3",
+    "532": "0x0382",
+    "846": "0x066B",
+    "562": "0x03CE",
+    "47": "0x0248",
+    "406": "0x025D",
+    "729": "0x055C",
+    "777": "0x05CB",
+    "688": "0x04F6",
+    "490": "0x0323",
+    "452": "0x02C4",
+    "105": "0x0068",
+    "858": "0x0683",
+    "803": "0x060B",
+    "748": "0x0582",
+    "461": "0x02DB",
+    "39": "0x0231",
+    "317": "0x01B2",
+    "780": "0x05D2",
+    "838": "0x0657",
+    "296": "0x018A",
+    "292": "0x0180",
+    "271": "0x0156",
+    "703": "0x051B",
+    "290": "0x017D",
+    "375": "0x0221",
+    "245": "0x0122",
+    "64": "0x0031",
+    "763": "0x05A7",
+    "189": "0x00D7",
+    "839": "0x065A",
+    "683": "0x04E9",
+    "278": "0x0164",
+    "798": "0x05FF",
+    "704": "0x051E",
+    "663": "0x04BB",
+    "813": "0x0625",
+    "60": "0x0027",
+    "913": "0x0701",
+    "6": "0x01FB",
+    "862": "0x068B",
+    "564": "0x03D2",
+    "125": "0x0086",
+    "753": "0x058F",
+    "628": "0x0469",
+    "722": "0x054A",
+    "66": "0x0033",
+    "911": "0x06FB",
+    "335": "0x01D5",
+    "899": "0x06DE",
+    "680": "0x04E2",
+    "251": "0x012F",
+    "430": "0x028D",
+    "101": "0x0062",
+    "795": "0x05F7",
+    "673": "0x04D0",
+    "768": "0x05B4",
+    "640": "0x0487",
+    "333": "0x01CF",
+    "714": "0x0536",
+    "749": "0x0585",
+    "366": "0x020C",
+    "678": "0x04DC",
+    "770": "0x05B9",
+    "420": "0x0278",
+    "871": "0x06A3",
+    "170": "0x00B9",
+    "792": "0x05F0",
+    "757": "0x0599",
+    "370": "0x0214",
+    "642": "0x048C",
+    "467": "0x02E9",
+    "811": "0x061F",
+    "561": "0x03CB",
+    "603": "0x042B",
+    "422": "0x027B",
+    "721": "0x0548",
+    "915": "0x0707",
+    "819": "0x062C",
+    "327": "0x01C0",
+    "295": "0x0187",
+    "802": "0x0609",
+    "705": "0x0520",
+    "614": "0x0446",
+    "475": "0x02FD",
+    "790": "0x05EB",
+    "534": "0x0388",
+    "498": "0x0332",
+    "398": "0x0245",
+    "288": "0x0179",
+    "197": "0x00E2",
+    "636": "0x047D",
+    "91": "0x0053",
+    "436": "0x029C",
+    "820": "0x062E",
+    "784": "0x05DC",
+    "488": "0x031E",
+    "426": "0x0283",
+    "929": "0x071C",
+    "447": "0x02B7",
+    "12": "0x01FF",
+    "404": "0x0257",
+    "43": "0x023C",
+    "444": "0x02B0",
+    "386": "0x0234",
+    "483": "0x0311",
+    "650": "0x04A0",
+    "842": "0x065F",
+    "14": "0x0204",
+    "686": "0x04F0",
+    "737": "0x056B",
+    "518": "0x0360",
+    "261": "0x0146",
+    "311": "0x01A5",
+    "228": "0x0111",
+    "725": "0x0552",
+    "553": "0x03B7",
+    "744": "0x057C",
+    "707": "0x0525",
+    "651": "0x04A3",
+    "773": "0x05C1",
+    "645": "0x0493",
+    "925": "0x0717",
+    "666": "0x04BF",
+    "699": "0x0511",
+    "119": "0x007C",
+    "675": "0x04D5",
+    "458": "0x02D3",
+    "255": "0x0139",
+    "527": "0x0376",
+    "440": "0x02A6",
+    "769": "0x05B7",
+    "460": "0x02D8",
+    "196": "0x00E0",
+    "448": "0x02BA",
+    "670": "0x04C8",
+    "608": "0x0437",
+    "818": "0x0629",
+    "95": "0x0059",
+    "273": "0x015A",
+    "199": "0x00E4",
+    "646": "0x0496",
+    "175": "0x00C2",
+    "511": "0x034E",
+    "937": "0x0724",
+    "494": "0x032C",
+    "906": "0x06EF",
+    "402": "0x0251",
+    "880": "0x06B5",
+    "637": "0x047F",
+    "282": "0x016E",
+    "192": "0x00DE",
+    "265": "0x014D",
+    "272": "0x0157",
+    "289": "0x017C",
+    "812": "0x0622",
+    "409": "0x0266",
+    "349": "0x01F6",
+    "449": "0x02BD",
+    "732": "0x0564",
+    "287": "0x0176",
+    "793": "0x05F3",
+    "900": "0x06E1",
+    "719": "0x0543",
+    "617": "0x044D",
+    "886": "0x06C3",
+    "221": "0x0102",
+    "926": "0x0718",
+    "32": "0x021E",
+    "34": "0x0223",
+    "854": "0x0680",
+    "472": "0x02F6",
+    "212": "0x00F8",
+    "674": "0x04D2",
+    "248": "0x0129",
+    "497": "0x032F",
+    "682": "0x04E6",
+    "391": "0x0239",
+    "536": "0x038C",
+    "432": "0x0292",
+    "357": "0x0207",
+    "393": "0x023F",
+    "285": "0x0172",
+    "142": "0x00A6",
+    "413": "0x026D",
+    "615": "0x0449",
+    "369": "0x0212",
+    "347": "0x01F0",
+    "20": "0x0214",
+    "806": "0x0613",
+    "731": "0x0561",
+    "374": "0x021E",
+    "738": "0x056D",
+    "453": "0x02C7",
+    "465": "0x02E5",
+    "18": "0x020F",
+    "560": "0x03C8",
+    "908": "0x06F5",
+    "805": "0x0611",
+    "695": "0x0507",
+    "539": "0x0394",
+    "754": "0x0591",
+    "755": "0x0593",
+    "750": "0x0587",
+    "519": "0x0362",
+    "730": "0x055E",
+    "865": "0x0694",
+    "37": "0x022B",
+    "742": "0x0577",
+    "183": "0x00CE",
+    "99": "0x005E",
+    "602": "0x0428",
+    "470": "0x02F1",
+    "598": "0x041E",
+    "414": "0x026E",
+    "660": "0x04B4",
+    "717": "0x053E",
+    "710": "0x052C",
+    "828": "0x0645",
+    "412": "0x026C",
+    "499": "0x0334",
+    "457": "0x02D1",
+    "711": "0x052F",
+    "809": "0x061B",
+    "653": "0x04A7",
+    "787": "0x05E3",
+    "230": "0x0117",
+    "796": "0x05FA",
+    "407": "0x0260",
+    "513": "0x0353",
+    "889": "0x06CC",
+    "551": "0x03B2",
+    "321": "0x01B9",
+    "191": "0x00DC",
+    "585": "0x03FE",
+    "874": "0x06AC",
+    "418": "0x0273",
+    "860": "0x0689",
+    "728": "0x055A",
+    "198": "0x00E3",
+    "726": "0x0554",
+    "814": "0x0627",
+    "531": "0x0380",
+    "428": "0x0288",
+    "545": "0x03A3",
+    "115": "0x0077",
+    "151": "0x00B1",
+    "905": "0x06EC",
+    "634": "0x0478",
+    "713": "0x0534",
+    "232": "0x011A",
+    "807": "0x0615",
+    "387": "0x0237",
+    "766": "0x05AF",
+    "685": "0x04EE",
+    "574": "0x03EB",
+    "477": "0x0303",
+    "343": "0x01E7",
+    "486": "0x0319",
+    "339": "0x01DE",
+    "810": "0x061D",
+    "912": "0x06FE",
+    "661": "0x04B6",
+    "745": "0x057E",
+    "482": "0x030F",
+    "257": "0x013C",
+    "78": "0x0049",
+    "309": "0x019F",
+    "861": "0x068A",
+    "643": "0x048F",
+    "786": "0x05E1",
+    "600": "0x0423",
+    "190": "0x00D9",
+    "505": "0x033F",
+    "508": "0x0346",
+    "112": "0x0072",
+    "523": "0x036C",
+    "641": "0x0489",
+    "383": "0x022E",
+    "286": "0x0173",
+    "589": "0x0407",
+    "224": "0x0108",
+    "456": "0x02CE",
+    "635": "0x047B",
+    "567": "0x03DA",
+    "121": "0x0080",
+    "264": "0x014A",
+    "310": "0x01A2",
+    "537": "0x038F",
+    "345": "0x01ED",
+    "520": "0x0364",
+    "715": "0x0539",
+    "771": "0x05BB",
+    "320": "0x01B6",
+    "30": "0x0219",
+    "622": "0x045A",
+    "493": "0x032A",
+    "700": "0x0514",
+    "751": "0x0589",
+    "208": "0x00F2",
+    "438": "0x02A1",
+    "476": "0x0300",
+    "19": "0x0212",
+    "134": "0x008F",
+    "77": "0x0048",
+    "281": "0x016B",
+    "840": "0x065D",
+    "607": "0x0435",
+    "595": "0x0417",
+    "45": "0x0242",
+    "441": "0x02A9",
+    "627": "0x0467",
+    "533": "0x0385",
+    "789": "0x05E9",
+    "302": "0x018F",
+    "431": "0x028F",
+    "791": "0x05ED",
+    "549": "0x03AD",
+    "267": "0x0153",
+    "503": "0x033C",
+    "922": "0x0713",
+    "879": "0x06B2",
+    "249": "0x012C",
+    "471": "0x02F3",
+    "59": "0x0024",
+    "195": "0x00DF",
+    "213": "0x00FB",
+    "303": "0x0192",
+    "639": "0x0485",
+    "423": "0x027C",
+    "322": "0x01BC",
+    "522": "0x036A",
+    "126": "0x0087",
+    "44": "0x023F",
+    "584": "0x03FD",
+    "891": "0x06CF",
+    "382": "0x022B",
+    "800": "0x0604",
+    "557": "0x03C1",
+    "455": "0x02CB",
+    "864": "0x0691",
+    "928": "0x071B",
+    "701": "0x0516",
+    "868": "0x069D",
+    "76": "0x0045",
+    "148": "0x00AC",
+    "509": "0x0349",
+    "328": "0x01C3",
+    "153": "0x00B4",
+    "872": "0x06A6",
+    "500": "0x0336",
+    "591": "0x040D",
+    "613": "0x0443",
+    "760": "0x05A0",
+    "581": "0x03F7",
+    "884": "0x06BD",
+    "16": "0x020A",
+    "694": "0x0504",
+    "344": "0x01EA",
+    "931": "0x071E",
+    "319": "0x01B3",
+    "708": "0x0528",
+    "568": "0x03DC",
+    "681": "0x04E4",
+    "42": "0x0239",
+    "546": "0x03A6",
+    "588": "0x0405",
+    "353": "0x01FD",
+    "316": "0x01AF",
+    "827": "0x0642",
+    "427": "0x0285",
+    "517": "0x035D",
+    "826": "0x063F",
+    "225": "0x010B",
+    "698": "0x050E",
+    "552": "0x03B4",
+    "657": "0x04AC",
+    "484": "0x0314",
+    "841": "0x065E",
+    "739": "0x056F",
+    "833": "0x0651",
+    "348": "0x01F3",
+    "630": "0x046E",
+    "848": "0x0671",
+    "590": "0x040A",
+    "907": "0x06F2",
+    "35": "0x0226",
+    "596": "0x0419",
+    "676": "0x04D8",
+    "524": "0x036E",
+    "550": "0x03B0",
+    "844": "0x0665",
+    "633": "0x0475",
+    "481": "0x030D",
+    "329": "0x01C6",
+    "894": "0x06D8",
+    "394": "0x0242",
+    "914": "0x0704",
+    "338": "0x01DB",
+    "49": "0x024B",
+    "313": "0x01A6",
+    "177": "0x00C4",
+    "904": "0x06E9",
+    "569": "0x03DF",
+    "538": "0x0392",
+    "171": "0x00BC",
+    "772": "0x05BE",
+    "767": "0x05B1",
+    "822": "0x0633",
+    "696": "0x050A",
+    "139": "0x009E",
+    "611": "0x043F",
+    "888": "0x06C9",
+    "323": "0x01BF",
+    "150": "0x00AF",
+    "733": "0x0566",
+    "140": "0x00A0",
+    "677": "0x04DA",
+    "403": "0x0254",
+    "381": "0x0229",
+    "401": "0x024E",
+    "74": "0x003F",
+    "578": "0x03F0",
+    "132": "0x008B",
+    "116": "0x0078",
+    "801": "0x0607",
+    "629": "0x046B",
+    "315": "0x01AC",
+    "305": "0x0198",
+    "29": "0x0217",
+    "46": "0x0245",
+    "435": "0x0299",
+    "563": "0x03D0",
+    "515": "0x0358",
+    "853": "0x067D",
+    "33": "0x0221",
+    "308": "0x019C",
+    "283": "0x016F",
+    "593": "0x0411",
+    "718": "0x0540",
+    "540": "0x0396",
+    "621": "0x0457",
+    "626": "0x0464",
+    "775": "0x05C5",
+    "658": "0x04AE",
+    "747": "0x0580",
+    "624": "0x045F",
+    "510": "0x034C",
+    "797": "0x05FD",
+    "623": "0x045D",
+    "254": "0x0136",
+    "462": "0x02DD",
+    "778": "0x05CD",
+    "58": "0x0021",
+    "743": "0x0579",
+    "179": "0x00C7",
+    "702": "0x0518",
+    "40": "0x0234",
+    "664": "0x04BD",
+    "100": "0x0061",
+    "716": "0x053C",
+    "689": "0x04F8",
+    "863": "0x068E",
+    "893": "0x06D5",
+    "260": "0x0143",
+    "583": "0x03FC",
+    "847": "0x066E",
+    "133": "0x008D",
+    "421": "0x027A",
+    "297": "0x018B",
+    "506": "0x0342",
+    "579": "0x03F3",
+    "887": "0x06C6",
+    "544": "0x03A0",
+    "301": "0x018E",
+    "597": "0x041B",
+    "612": "0x0441",
+    "526": "0x0374",
+    "547": "0x03A8",
+    "559": "0x03C6",
+    "459": "0x02D5",
+    "740": "0x0572",
+    "141": "0x00A3",
+    "123": "0x0083",
+    "832": "0x064E",
+    "565": "0x03D5",
+    "120": "0x007F",
+    "110": "0x0070",
+    "294": "0x0184",
+    "679": "0x04DF",
+    "692": "0x0500",
+    "632": "0x0473",
+    "246": "0x0123",
+    "71": "0x0037",
+    "878": "0x06AF",
+    "804": "0x060E",
+    "727": "0x0557",
+    "779": "0x05CF",
+    "36": "0x0229",
+    "31": "0x021C",
+    "697": "0x050C",
+    "902": "0x06E3",
+    "821": "0x0630",
+    "781": "0x05D5",
+    "358": "0x020A",
+    "512": "0x0350",
+    "439": "0x02A3",
+    "219": "0x00FD",
+    "450": "0x02BF",
+    "690": "0x04FA",
+    "136": "0x0095",
+    "782": "0x05D7",
+    "252": "0x0130",
+    "13": "0x0202",
+    "209": "0x00F3",
+    "554": "0x03BA",
+    "356": "0x0204",
+    "2": "0x01FB",
+    "487": "0x031B",
+    "504": "0x033D",
+    "625": "0x0461",
+    "293": "0x0181",
+    "594": "0x0414",
+    "903": "0x06E6",
+    "932": "0x0720",
+    "233": "0x011D",
+    "530": "0x037E",
+    "762": "0x05A5",
+    "885": "0x06C0",
+    "652": "0x04A5",
+    "111": "0x0071",
+    "558": "0x03C4",
+    "206": "0x00EE",
+    "263": "0x0149",
+    "845": "0x0668",
+    "776": "0x05C8",
+    "176": "0x00C3",
+    "669": "0x04C6",
+    "61": "0x002A",
+    "229": "0x0114",
+    "11": "0x01FD",
+    "445": "0x02B3",
+    "280": "0x0168",
+    "330": "0x01C9",
+    "372": "0x0219",
+    "502": "0x033B",
+    "648": "0x049B",
+    "173": "0x00BE",
+    "184": "0x00D1",
+    "851": "0x0677",
+    "501": "0x0339",
+    "443": "0x02AD",
+    "371": "0x0217",
+    "93": "0x0056",
+    "525": "0x0371",
+    "62": "0x002D",
+    "419": "0x0275",
+    "314": "0x01A9",
+    "599": "0x0421",
+    "384": "0x0231",
+    "332": "0x01CC",
+    "668": "0x04C4",
+    "102": "0x0063",
+    "473": "0x02F9",
+    "788": "0x05E6",
+    "665": "0x04BE",
+    "354": "0x01FF",
+    "759": "0x059D",
+    "938": "0x0725",
+    "882": "0x06B7",
+    "849": "0x0674",
+    "785": "0x05DF",
+    "274": "0x015D",
+    "220": "0x00FF",
+    "113": "0x0074",
+    "783": "0x05D9",
+    "672": "0x04CE",
+    "898": "0x06DB",
+    "485": "0x0317",
+    "474": "0x02FB",
+    "852": "0x067A",
+    "580": "0x03F5",
+    "691": "0x04FD",
+    "923": "0x0714",
+    "424": "0x027E",
+    "342": "0x01E4",
+    "687": "0x04F3",
+    "446": "0x02B5",
+    "429": "0x028B",
+    "572": "0x03E6",
+    "693": "0x0502",
+    "417": "0x0271",
+    "352": "0x01FB",
+    "831": "0x064B",
+    "823": "0x0636",
+    "75": "0x0042",
+    "368": "0x020F",
+    "881": "0x06B6",
+    "746": "0x057F",
+    "535": "0x038A",
+    "307": "0x0199",
+    "138": "0x009B",
+    "146": "0x00A9",
+    "528": "0x0378",
+    "825": "0x063C",
+    "752": "0x058C",
+    "210": "0x00F4",
+    "618": "0x0450",
+    "276": "0x0161",
+    "548": "0x03AA",
+    "631": "0x0471",
+    "377": "0x0226",
+    "425": "0x0281",
+    "468": "0x02EC",
+    "647": "0x0499",
+    "724": "0x0550",
+    "437": "0x029F",
+    "63": "0x0030",
+    "373": "0x021C",
+    "106": "0x0069"
+  },
+  "variables": {
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC88A",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC896",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC894",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8A4",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC892",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC895",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC89E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8A6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC88B",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC893",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC88C",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC888",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8A0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC889",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8A2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

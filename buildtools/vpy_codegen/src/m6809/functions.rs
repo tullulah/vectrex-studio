@@ -21,6 +21,34 @@ pub fn fresh_label(prefix: &str) -> String {
     format!("{}_{}", prefix, id)
 }
 
+/// Check if module uses BEEP (needs BEEP_UPDATE_RUNTIME auto-injection)
+pub fn has_beep_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "BEEP")
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
@@ -153,13 +181,17 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
         asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+        // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
+        if has_beep_calls(module) {
+            asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
         generate_function_body(loop_fn, &mut asm, assets)?;
-        
+
         // Auto-inject AUDIO_UPDATE at END if module uses PLAY_MUSIC/PLAY_SFX
         if has_audio_calls(module) {
             asm.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)\n");
         }
-        
+
         asm.push_str("    RTS\n\n");
     } else {
         // Empty loop if not defined
@@ -493,12 +525,15 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
         bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
         bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+        if has_beep_calls(module) {
+            bank0_asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
         generate_function_body(loop_fn, &mut bank0_asm, assets)?;
-        
+
         if has_audio_calls(module) {
             bank0_asm.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)\n");
         }
-        
+
         bank0_asm.push_str("    RTS\n\n");
     } else {
         bank0_asm.push_str("LOOP_BODY:\n");

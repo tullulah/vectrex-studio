@@ -403,7 +403,7 @@ function e8910()
         if (this.ctx == null && (window.AudioContext || window.webkitAudioContext)) {
             self.e8910_build_mixer_table();
             var ctx = window.AudioContext ?
-                new window.AudioContext({sampleRate: 44100}) : // Fixed: was 22050, causing audio to be too low-pitched
+                new window.AudioContext({sampleRate: 44100}) :
                 new window.webkitAudioContext();
             this.ctx = ctx;
             this.node = this.ctx.createScriptProcessor(512, 0, 1);

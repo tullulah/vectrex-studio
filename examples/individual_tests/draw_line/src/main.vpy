@@ -12,8 +12,8 @@ def loop():
     # Pentagon - radius 60, vertices starting at top (90deg), going clockwise
     # V0=(0,60)  V1=(-57,19)  V2=(-35,-49)  V3=(35,-49)  V4=(57,19)
     
-    PRINT_TEXT( -60, 0, "TEST")
-    PRINT_NUMBER(0, 0, 123)
+    PRINT_TEXT( -55, 20, "TEST")
+    PRINT_NUMBER(-5, 20, 123)
 
     DRAW_LINE(0, 60, -57, 19, 80)
     DRAW_LINE(-57, 19, -35, -49, 80)

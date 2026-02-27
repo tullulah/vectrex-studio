@@ -335,6 +335,16 @@ pub fn scan_expr_runtime(e: &Expr, usage: &mut RuntimeUsage) {
                 usage.uses_draw_circle = true;
                 usage.wrappers_used.insert("DRAW_CIRCLE_RUNTIME".to_string());
             }
+            // RAND / RAND_RANGE: need RAND_HELPER runtime + RAND_SEED variable
+            if matches!(up.as_str(), "RAND"|"MATH_RAND"|"RAND_RANGE"|"MATH_RAND_RANGE") {
+                usage.wrappers_used.insert("RAND_HELPER".to_string());
+            }
+            if matches!(up.as_str(), "RAND_RANGE"|"MATH_RAND_RANGE") {
+                usage.wrappers_used.insert("RAND_RANGE_HELPER".to_string());
+            }
+            if up == "BEEP" {
+                usage.wrappers_used.insert("BEEP_UPDATE_RUNTIME".to_string());
+            }
             // PRINT_NUMBER: needs NUM_STR buffer
             if up == "PRINT_NUMBER" {
                 usage.uses_print_number = true;

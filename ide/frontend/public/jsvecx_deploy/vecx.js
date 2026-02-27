@@ -1285,36 +1285,40 @@ function VecX()
     // Añadido para compatibilidad con OutputPanel.tsx
     this.totalCycles = 0;
     this.instructionCount = 0;
-    
+
+    // Capture reference for closures (avoids this-binding issues)
+    var self = this;
+
     // Wrapper para métricas del emulador
     this.getMetrics = function() {
         return {
-            totalCycles: this.totalCycles,
-            instructionCount: this.instructionCount,
-            frameCount: this.count || 0,
-            running: this.running
+            totalCycles: self.totalCycles,
+            instructionCount: self.instructionCount,
+            frameCount: self.count || 0,
+            running: self.running,
+            vectorCount: self.vector_erse_cnt || 0
         };
     }
     
     // Wrapper para acceso a registros CPU
     this.getRegisters = function() {
-        if (!this.e6809) {
+        if (!self.e6809) {
             return {
                 PC: 0, A: 0, B: 0, X: 0, Y: 0, U: 0, S: 0, DP: 0, CC: 0
             };
         }
-        
+
         return {
-            PC: this.e6809.reg_pc || 0,
-            A: this.e6809.reg_a || 0,
-            B: this.e6809.reg_b || 0,
-            X: (this.e6809.reg_x && this.e6809.reg_x.value) || 0,
-            Y: (this.e6809.reg_y && this.e6809.reg_y.value) || 0,
-            U: (this.e6809.reg_u && this.e6809.reg_u.value) || 0,
-            S: (this.e6809.reg_s && this.e6809.reg_s.value) || 0,
-            DP: this.e6809.reg_dp || 0,
-            CC: this.e6809.reg_cc || 0,
-            BANK: this.currentBank || 0
+            PC: self.e6809.reg_pc || 0,
+            A: self.e6809.reg_a || 0,
+            B: self.e6809.reg_b || 0,
+            X: (self.e6809.reg_x && self.e6809.reg_x.value) || 0,
+            Y: (self.e6809.reg_y && self.e6809.reg_y.value) || 0,
+            U: (self.e6809.reg_u && self.e6809.reg_u.value) || 0,
+            S: (self.e6809.reg_s && self.e6809.reg_s.value) || 0,
+            DP: self.e6809.reg_dp || 0,
+            CC: self.e6809.reg_cc || 0,
+            BANK: self.currentBank || 0
         };
     }
     

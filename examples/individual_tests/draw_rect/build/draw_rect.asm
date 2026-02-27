@@ -1,155 +1,82 @@
-; --- Motorola 6809 backend (Vectrex) title='DRAW_RECT' origin=$0000 ---
-        ORG $0000
+; VPy M6809 Assembly (Vectrex)
+; ROM: 32768 bytes
+
+
+    ORG $0000
+
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
     INCLUDE "VECTREX.I"
 
 ;***************************************************************************
-; HEADER SECTION
+; CARTRIDGE HEADER
 ;***************************************************************************
-    FCC "g GCE 1982"
-    FCB $80
-    FDB music1
-    FCB $F8
-    FCB $50
-    FCB $20
-    FCB $BB
-    FCC "DRAW RECT"
-    FCB $80
-    FCB 0
+    FCC "g GCE 2025"
+    FCB $80                 ; String terminator
+    FDB music1              ; Music pointer
+    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
+    FCC "DRAW_RECT"
+    FCB $80                 ; String terminator
+    FCB 0                   ; End of header
 
 ;***************************************************************************
 ; CODE SECTION
 ;***************************************************************************
 
-; === RAM VARIABLE DEFINITIONS (EQU) ===
-; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 30 bytes
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
-TEMP_YX              EQU $C880+$06   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
-VPY_MOVE_X           EQU $C880+$0A   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$0B   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-NUM_STR              EQU $C880+$0C   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-VAR_ARG0             EQU $C880+$12   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$14   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$16   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$18   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$1A   ; Function argument 4 (2 bytes)
-VAR_ARG5             EQU $C880+$1C   ; Function argument 5 (2 bytes)
-
-    JMP START
-
-;**** CONST DECLARATIONS (NUMBER-ONLY) ****
-
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
-J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
-J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; === BUTTON SYSTEM - BIOS TRANSITIONS ===
-; J1_BUTTON_1-4() - Read transition bits from $C811
-; Read_Btns (auto-injected) calculates: ~(new) OR Vec_Prev_Btns
-; Result: bit=1 ONLY on rising edge (0→1 transition)
-; Returns: D = 1 (just pressed), 0 (not pressed or still held)
-
-J1B1_BUILTIN:
-    LDA $C811      ; Read transition bits (Vec_Button_1_1)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    BEQ .J1B1_OFF
-    LDD #1         ; Return pressed (rising edge)
-    RTS
-.J1B1_OFF:
-    LDD #0         ; Return not pressed
-    RTS
-
-J1B2_BUILTIN:
-    LDA $C811
-    ANDA #$02      ; Test bit 1 (Button 2)
-    BEQ .J1B2_OFF
-    LDD #1
-    RTS
-.J1B2_OFF:
-    LDD #0
-    RTS
-
-J1B3_BUILTIN:
-    LDA $C811
-    ANDA #$04      ; Test bit 2 (Button 3)
-    BEQ .J1B3_OFF
-    LDD #1
-    RTS
-.J1B3_OFF:
-    LDD #0
-    RTS
-
-J1B4_BUILTIN:
-    LDA $C811
-    ANDA #$08      ; Test bit 3 (Button 4)
-    BEQ .J1B4_OFF
-    LDD #1
-    RTS
-.J1B4_OFF:
-    LDD #0
-    RTS
-
-; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
-__Intensity_a:
-TFR B,A         ; Move B to A (BIOS expects intensity in A)
-JMP Intensity_a ; JMP (not JSR) - BIOS returns to original caller
-__Reset0Ref:
-JMP Reset0Ref   ; JMP (not JSR) - BIOS returns to original caller
-__Moveto_d:
-LDA 2,S         ; Get Y from stack (after return address)
-JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
-__Draw_Line_d:
-LDA 2,S         ; Get dy from stack (after return address)
-JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
 START:
     LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
-    CLR $C80E        ; Initialize Vec_Prev_Btns to 0 for Read_Btns debounce
+    TFR A,DP        ; Set Direct Page for BIOS
+    CLR $C80E        ; Initialize Vec_Prev_Btns
     LDA #$80
     STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk
+    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
+    LDA #0
+    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
+    JMP MAIN
 
-    ; *** DEBUG *** main() function code inline (initialization)
-    ; VPy_LINE:8
-    ; VPy_LINE:9
-    ; pass (no-op)
+;***************************************************************************
+; === RAM VARIABLE DEFINITIONS ===
+;***************************************************************************
+RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
+DRAW_RECT_X          EQU $C880+$0C   ; Rectangle X (1 bytes)
+DRAW_RECT_Y          EQU $C880+$0D   ; Rectangle Y (1 bytes)
+DRAW_RECT_WIDTH      EQU $C880+$0E   ; Rectangle width (1 bytes)
+DRAW_RECT_HEIGHT     EQU $C880+$0F   ; Rectangle height (1 bytes)
+DRAW_RECT_INTENSITY  EQU $C880+$10   ; Rectangle intensity (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$11   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1B   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$1D   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$1F   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$20   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$21   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$23   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+
+
+;***************************************************************************
+; MAIN PROGRAM
+;***************************************************************************
 
 MAIN:
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
+    ; Initialize global variables
+    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
     ; === Initialize Joystick (one-time setup) ===
+    JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
     LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
     STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
@@ -162,30 +89,25 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
-    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
-    ; *** Call loop() as subroutine (executed every frame)
-    JSR LOOP_BODY
-    BRA MAIN
+    ; Call main() for initialization
+    ; TODO: Statement Pass { source_line: 9 }
 
-    ; VPy_LINE:11
+.MAIN_LOOP:
+    JSR LOOP_BODY
+    LBRA .MAIN_LOOP   ; Use long branch for multibank support
+
 LOOP_BODY:
-    JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
+    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:13
-    LDA #$50
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$50
+    JSR Intensity_a
     LDA #$D8
     LDB #$B0
     JSR Moveto_d
@@ -206,18 +128,16 @@ LOOP_BODY:
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
-    TFR A,DP
+    TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(8)
-    ; VPy_LINE:16
-    LDA #$50
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$50
+    JSR Intensity_a
     LDA #$D8
     LDB #$32
     JSR Moveto_d
@@ -238,18 +158,16 @@ LOOP_BODY:
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
-    TFR A,DP
+    TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
-    ; DEBUG: Statement 2 - Discriminant(8)
-    ; VPy_LINE:19
-    LDA #$50
-    JSR Intensity_a
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
     LDA #$80
     STA <$04
+    LDA #$50
+    JSR Intensity_a
     LDA #$F1
     LDB #$F1
     JSR Moveto_d
@@ -270,11 +188,118 @@ LOOP_BODY:
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
-    TFR A,DP
+    TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
     RTS
 
 ;***************************************************************************
-; DATA SECTION
+; RUNTIME HELPERS
 ;***************************************************************************
+
+MOD16:
+    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
+    ; X = dividend (i16), D = divisor (i16) -> D = remainder
+    STD TMPPTR          ; Save divisor
+    TFR X,D             ; D = dividend (TFR does NOT set flags!)
+    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
+    BPL .M16_DPOS       ; if dividend >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |dividend|
+    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
+    LDA #1
+    STA TMPPTR2         ; sign_flag = 1
+    BRA .M16_RCHECK
+.M16_DPOS:
+    STD TMPVAL          ; dividend is positive, store as-is
+    LDA #0
+    STA TMPPTR2         ; sign_flag = 0 (positive result)
+.M16_RCHECK:
+    LDD TMPPTR          ; D = divisor
+    BPL .M16_RPOS       ; if divisor >= 0, skip negation
+    COMA
+    COMB
+    ADDD #1             ; D = |divisor|
+    STD TMPPTR          ; TMPPTR = |divisor|
+.M16_RPOS:
+.M16_LOOP:
+    LDD TMPVAL
+    SUBD TMPPTR         ; |dividend| - |divisor|
+    BLO .M16_END        ; if |dividend| < |divisor|, done
+    STD TMPVAL          ; update remainder
+    BRA .M16_LOOP
+.M16_END:
+    LDD TMPVAL          ; D = |remainder|
+    LDA TMPPTR2
+    BEQ .M16_DONE       ; zero = positive result
+    COMA
+    COMB
+    ADDD #1             ; negate (same sign as dividend)
+.M16_DONE:
+    RTS
+
+DRAW_RECT_RUNTIME:
+    ; Input: DRAW_RECT_X, DRAW_RECT_Y, DRAW_RECT_WIDTH, DRAW_RECT_HEIGHT, DRAW_RECT_INTENSITY
+    ; Draws 4 sides of rectangle
+    
+    ; Save parameters to stack before DP change
+    LDB DRAW_RECT_INTENSITY
+    PSHS B
+    LDB DRAW_RECT_HEIGHT
+    PSHS B
+    LDB DRAW_RECT_WIDTH
+    PSHS B
+    LDB DRAW_RECT_Y
+    PSHS B
+    LDB DRAW_RECT_X
+    PSHS B
+    
+    ; Setup BIOS
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04            ; VIA_t1_cnt_lo = $80 (ensure correct scale)
+    
+    ; Set intensity
+    LDA 4,S             ; intensity
+    JSR Intensity_a
+    
+    ; Move to starting position (x, y)
+    LDA 1,S             ; y
+    LDB ,S              ; x
+    JSR Moveto_d_7F
+    
+    ; Draw right side
+    CLR Vec_Misc_Count
+    LDA #0
+    LDB 2,S             ; width
+    JSR Draw_Line_d
+    
+    ; Draw down side
+    CLR Vec_Misc_Count
+    LDA 3,S             ; height
+    NEGA                ; -height
+    LDB #0
+    JSR Draw_Line_d
+    
+    ; Draw left side
+    CLR Vec_Misc_Count
+    LDA #0
+    LDB 2,S             ; width
+    NEGB                ; -width
+    JSR Draw_Line_d
+    
+    ; Draw up side
+    CLR Vec_Misc_Count
+    LDA 2,S             ; height
+    NEGA                ; -height
+    LDB #0
+    JSR Draw_Line_d
+    
+    LDA #$C8
+    TFR A,DP            ; Restore DP=$C8 before return
+    LEAS 5,S            ; Clean stack
+    RTS
+

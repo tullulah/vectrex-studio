@@ -1,0 +1,2714 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "fade_effects.asm",
+  "binary": "fade_effects.bin",
+  "entryPoint": "0x0181",
+  "symbols": {
+    "CT_4": "0x026F",
+    "DLW_DONE": "0x016A",
+    "DLW_NEED_SEG2": "0x012B",
+    "DLW_SEG2_DY_POS": "0x0139",
+    "LOOP_BODY": "0x01D6",
+    "CT_10": "0x02EA",
+    "DLW_SEG2_DX_DONE": "0x015B",
+    "DLW_SEG2_DY_DONE": "0x013C",
+    "IF_NEXT_3": "0x02B2",
+    "__Moveto_d": "0x0177",
+    "J1X_BUILTIN": "0x001A",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0064",
+    "IF_END_2": "0x02B2",
+    "IF_END_6": "0x0330",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0082",
+    "DLW_SEG1_DX_NO_CLAMP": "0x0108",
+    "IF_NEXT_1": "0x02B5",
+    "IF_END_0": "0x02B5",
+    "__Reset0Ref": "0x0174",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0073",
+    "J1B1_BUILTIN": "0x004A",
+    "STR_1": "0x043E",
+    "MAIN": "0x01A9",
+    "CE_5": "0x0275",
+    "STR_0": "0x042D",
+    "IF_END_8": "0x032D",
+    "__Intensity_a": "0x016F",
+    "DRAW_LINE_WRAPPER": "0x00A2",
+    "DLW_SEG1_DX_LO": "0x00FE",
+    "DLW_SEG1_DY_NO_CLAMP": "0x00EB",
+    "START": "0x0181",
+    "J1B1_BUILTIN.J1B1_OFF": "0x0055",
+    "CE_11": "0x02F0",
+    "DLW_SEG2_DX_CHECK_NEG": "0x014D",
+    "DLW_SEG2_DX_NO_REMAIN": "0x0158",
+    "DLW_SEG1_DX_READY": "0x010B",
+    "J1B4_BUILTIN": "0x0077",
+    "IF_NEXT_7": "0x0330",
+    "VECTREX_PRINT_TEXT": "0x0086",
+    "J1B2_BUILTIN": "0x0059",
+    "DLW_SEG1_DY_READY": "0x00EE",
+    "IF_NEXT_9": "0x032D",
+    "__Draw_Line_d": "0x017C",
+    "J1Y_BUILTIN": "0x0032",
+    "J1B3_BUILTIN": "0x0068",
+    "DLW_SEG1_DY_LO": "0x00E1"
+  },
+  "lineMap": {
+    "33": "0x0402",
+    "17": "0x01E2",
+    "28": "0x0330",
+    "18": "0x020E",
+    "31": "0x03AE",
+    "11": "0x0192",
+    "29": "0x035A",
+    "24": "0x02B5",
+    "25": "0x02C1",
+    "14": "0x0198",
+    "22": "0x027B",
+    "21": "0x0246",
+    "26": "0x02F6",
+    "20": "0x023A",
+    "30": "0x0384",
+    "32": "0x03D8"
+  },
+  "vpyLineMap": {
+    "0x0192": {
+      "file": "main.vpy",
+      "address": "0x0192",
+      "line": 11
+    },
+    "0x02C1": {
+      "file": "main.vpy",
+      "address": "0x02C1",
+      "line": 25
+    },
+    "0x0198": {
+      "file": "main.vpy",
+      "address": "0x0198",
+      "line": 14
+    },
+    "0x02F6": {
+      "file": "main.vpy",
+      "address": "0x02F6",
+      "line": 26
+    },
+    "0x035A": {
+      "file": "main.vpy",
+      "address": "0x035A",
+      "line": 29
+    },
+    "0x020E": {
+      "file": "main.vpy",
+      "address": "0x020E",
+      "line": 18
+    },
+    "0x0384": {
+      "file": "main.vpy",
+      "address": "0x0384",
+      "line": 30
+    },
+    "0x01E2": {
+      "file": "main.vpy",
+      "address": "0x01E2",
+      "line": 17
+    },
+    "0x02B5": {
+      "file": "main.vpy",
+      "address": "0x02B5",
+      "line": 24
+    },
+    "0x03D8": {
+      "file": "main.vpy",
+      "address": "0x03D8",
+      "line": 32
+    },
+    "0x0402": {
+      "file": "main.vpy",
+      "address": "0x0402",
+      "line": 33
+    },
+    "0x023A": {
+      "file": "main.vpy",
+      "address": "0x023A",
+      "line": 20
+    },
+    "0x027B": {
+      "file": "main.vpy",
+      "address": "0x027B",
+      "line": 22
+    },
+    "0x0330": {
+      "file": "main.vpy",
+      "address": "0x0330",
+      "line": 28
+    },
+    "0x03AE": {
+      "file": "main.vpy",
+      "address": "0x03AE",
+      "line": 31
+    },
+    "0x0246": {
+      "file": "main.vpy",
+      "address": "0x0246",
+      "line": 21
+    }
+  },
+  "asmLineMap": {
+    "0x01AC": {
+      "file": "fade_effects.asm",
+      "address": "0x01AC",
+      "line": 34
+    },
+    "0x00E7": {
+      "file": "fade_effects.asm",
+      "address": "0x00E7",
+      "line": 190
+    },
+    "0x0282": {
+      "file": "fade_effects.asm",
+      "address": "0x0282",
+      "line": 405
+    },
+    "0x0263": {
+      "file": "fade_effects.asm",
+      "address": "0x0263",
+      "line": 392
+    },
+    "0x02CE": {
+      "file": "fade_effects.asm",
+      "address": "0x02CE",
+      "line": 439
+    },
+    "0x0108": {
+      "file": "fade_effects.asm",
+      "address": "0x0108",
+      "line": 208
+    },
+    "0x03F3": {
+      "file": "fade_effects.asm",
+      "address": "0x03F3",
+      "line": 553
+    },
+    "0x0360": {
+      "file": "fade_effects.asm",
+      "address": "0x0360",
+      "line": 498
+    },
+    "0x0185": {
+      "file": "fade_effects.asm",
+      "address": "0x0185",
+      "line": 283
+    },
+    "0x00BF": {
+      "file": "fade_effects.asm",
+      "address": "0x00BF",
+      "line": 179
+    },
+    "0x03E7": {
+      "file": "fade_effects.asm",
+      "address": "0x03E7",
+      "line": 549
+    },
+    "0x0293": {
+      "file": "fade_effects.asm",
+      "address": "0x0293",
+      "line": 411
+    },
+    "0x01C8": {
+      "file": "fade_effects.asm",
+      "address": "0x01C8",
+      "line": 45
+    },
+    "0x027B": {
+      "file": "fade_effects.asm",
+      "address": "0x027B",
+      "line": 401
+    },
+    "0x02F6": {
+      "file": "fade_effects.asm",
+      "address": "0x02F6",
+      "line": 454
+    },
+    "0x0072": {
+      "file": "fade_effects.asm",
+      "address": "0x0072",
+      "line": 125
+    },
+    "0x03F6": {
+      "file": "fade_effects.asm",
+      "address": "0x03F6",
+      "line": 554
+    },
+    "0x0111": {
+      "file": "fade_effects.asm",
+      "address": "0x0111",
+      "line": 213
+    },
+    "0x02F9": {
+      "file": "fade_effects.asm",
+      "address": "0x02F9",
+      "line": 456
+    },
+    "0x0195": {
+      "file": "fade_effects.asm",
+      "address": "0x0195",
+      "line": 18
+    },
+    "0x0414": {
+      "file": "fade_effects.asm",
+      "address": "0x0414",
+      "line": 566
+    },
+    "0x030E": {
+      "file": "fade_effects.asm",
+      "address": "0x030E",
+      "line": 464
+    },
+    "0x0022": {
+      "file": "fade_effects.asm",
+      "address": "0x0022",
+      "line": 70
+    },
+    "0x020E": {
+      "file": "fade_effects.asm",
+      "address": "0x020E",
+      "line": 355
+    },
+    "0x0354": {
+      "file": "fade_effects.asm",
+      "address": "0x0354",
+      "line": 492
+    },
+    "0x00BD": {
+      "file": "fade_effects.asm",
+      "address": "0x00BD",
+      "line": 176
+    },
+    "0x0181": {
+      "file": "fade_effects.asm",
+      "address": "0x0181",
+      "line": 2
+    },
+    "0x013F": {
+      "file": "fade_effects.asm",
+      "address": "0x013F",
+      "line": 240
+    },
+    "0x0211": {
+      "file": "fade_effects.asm",
+      "address": "0x0211",
+      "line": 356
+    },
+    "0x0082": {
+      "file": "fade_effects.asm",
+      "address": "0x0082",
+      "line": 136
+    },
+    "0x00AD": {
+      "file": "fade_effects.asm",
+      "address": "0x00AD",
+      "line": 165
+    },
+    "0x01AF": {
+      "file": "fade_effects.asm",
+      "address": "0x01AF",
+      "line": 35
+    },
+    "0x0183": {
+      "file": "fade_effects.asm",
+      "address": "0x0183",
+      "line": 11
+    },
+    "0x0123": {
+      "file": "fade_effects.asm",
+      "address": "0x0123",
+      "line": 220
+    },
+    "0x01A1": {
+      "file": "fade_effects.asm",
+      "address": "0x01A1",
+      "line": 30
+    },
+    "0x01EE": {
+      "file": "fade_effects.asm",
+      "address": "0x01EE",
+      "line": 339
+    },
+    "0x009E": {
+      "file": "fade_effects.asm",
+      "address": "0x009E",
+      "line": 151
+    },
+    "0x0316": {
+      "file": "fade_effects.asm",
+      "address": "0x0316",
+      "line": 467
+    },
+    "0x00B6": {
+      "file": "fade_effects.asm",
+      "address": "0x00B6",
+      "line": 169
+    },
+    "0x00C8": {
+      "file": "fade_effects.asm",
+      "address": "0x00C8",
+      "line": 185
+    },
+    "0x01E5": {
+      "file": "fade_effects.asm",
+      "address": "0x01E5",
+      "line": 55
+    },
+    "0x018D": {
+      "file": "fade_effects.asm",
+      "address": "0x018D",
+      "line": 15
+    },
+    "0x0229": {
+      "file": "fade_effects.asm",
+      "address": "0x0229",
+      "line": 364
+    },
+    "0x002E": {
+      "file": "fade_effects.asm",
+      "address": "0x002E",
+      "line": 76
+    },
+    "0x0134": {
+      "file": "fade_effects.asm",
+      "address": "0x0134",
+      "line": 231
+    },
+    "0x0420": {
+      "file": "fade_effects.asm",
+      "address": "0x0420",
+      "line": 570
+    },
+    "0x025C": {
+      "file": "fade_effects.asm",
+      "address": "0x025C",
+      "line": 389
+    },
+    "0x0250": {
+      "file": "fade_effects.asm",
+      "address": "0x0250",
+      "line": 385
+    },
+    "0x00B8": {
+      "file": "fade_effects.asm",
+      "address": "0x00B8",
+      "line": 171
+    },
+    "0x0135": {
+      "file": "fade_effects.asm",
+      "address": "0x0135",
+      "line": 232
+    },
+    "0x03DB": {
+      "file": "fade_effects.asm",
+      "address": "0x03DB",
+      "line": 545
+    },
+    "0x00F8": {
+      "file": "fade_effects.asm",
+      "address": "0x00F8",
+      "line": 199
+    },
+    "0x016E": {
+      "file": "fade_effects.asm",
+      "address": "0x016E",
+      "line": 267
+    },
+    "0x005E": {
+      "file": "fade_effects.asm",
+      "address": "0x005E",
+      "line": 112
+    },
+    "0x01E2": {
+      "file": "fade_effects.asm",
+      "address": "0x01E2",
+      "line": 54
+    },
+    "0x0025": {
+      "file": "fade_effects.asm",
+      "address": "0x0025",
+      "line": 71
+    },
+    "0x02C1": {
+      "file": "fade_effects.asm",
+      "address": "0x02C1",
+      "line": 433
+    },
+    "0x00CB": {
+      "file": "fade_effects.asm",
+      "address": "0x00CB",
+      "line": 186
+    },
+    "0x037B": {
+      "file": "fade_effects.asm",
+      "address": "0x037B",
+      "line": 507
+    },
+    "0x004D": {
+      "file": "fade_effects.asm",
+      "address": "0x004D",
+      "line": 100
+    },
+    "0x038A": {
+      "file": "fade_effects.asm",
+      "address": "0x038A",
+      "line": 514
+    },
+    "0x01FA": {
+      "file": "fade_effects.asm",
+      "address": "0x01FA",
+      "line": 343
+    },
+    "0x0308": {
+      "file": "fade_effects.asm",
+      "address": "0x0308",
+      "line": 462
+    },
+    "0x01CB": {
+      "file": "fade_effects.asm",
+      "address": "0x01CB",
+      "line": 46
+    },
+    "0x0088": {
+      "file": "fade_effects.asm",
+      "address": "0x0088",
+      "line": 143
+    },
+    "0x0146": {
+      "file": "fade_effects.asm",
+      "address": "0x0146",
+      "line": 242
+    },
+    "0x012B": {
+      "file": "fade_effects.asm",
+      "address": "0x012B",
+      "line": 226
+    },
+    "0x03C9": {
+      "file": "fade_effects.asm",
+      "address": "0x03C9",
+      "line": 537
+    },
+    "0x0372": {
+      "file": "fade_effects.asm",
+      "address": "0x0372",
+      "line": 504
+    },
+    "0x042D": {
+      "file": "fade_effects.asm",
+      "address": "0x042D",
+      "line": 581
+    },
+    "0x0366": {
+      "file": "fade_effects.asm",
+      "address": "0x0366",
+      "line": 500
+    },
+    "0x043E": {
+      "file": "fade_effects.asm",
+      "address": "0x043E",
+      "line": 584
+    },
+    "0x002D": {
+      "file": "fade_effects.asm",
+      "address": "0x002D",
+      "line": 75
+    },
+    "0x01F4": {
+      "file": "fade_effects.asm",
+      "address": "0x01F4",
+      "line": 341
+    },
+    "0x024D": {
+      "file": "fade_effects.asm",
+      "address": "0x024D",
+      "line": 384
+    },
+    "0x01DC": {
+      "file": "fade_effects.asm",
+      "address": "0x01DC",
+      "line": 52
+    },
+    "0x0405": {
+      "file": "fade_effects.asm",
+      "address": "0x0405",
+      "line": 561
+    },
+    "0x0102": {
+      "file": "fade_effects.asm",
+      "address": "0x0102",
+      "line": 204
+    },
+    "0x0129": {
+      "file": "fade_effects.asm",
+      "address": "0x0129",
+      "line": 222
+    },
+    "0x031E": {
+      "file": "fade_effects.asm",
+      "address": "0x031E",
+      "line": 472
+    },
+    "0x017E": {
+      "file": "fade_effects.asm",
+      "address": "0x017E",
+      "line": 279
+    },
+    "0x02A2": {
+      "file": "fade_effects.asm",
+      "address": "0x02A2",
+      "line": 418
+    },
+    "0x00AB": {
+      "file": "fade_effects.asm",
+      "address": "0x00AB",
+      "line": 162
+    },
+    "0x042E": {
+      "file": "fade_effects.asm",
+      "address": "0x042E",
+      "line": 582
+    },
+    "0x038D": {
+      "file": "fade_effects.asm",
+      "address": "0x038D",
+      "line": 515
+    },
+    "0x0104": {
+      "file": "fade_effects.asm",
+      "address": "0x0104",
+      "line": 205
+    },
+    "0x03D5": {
+      "file": "fade_effects.asm",
+      "address": "0x03D5",
+      "line": 541
+    },
+    "0x0262": {
+      "file": "fade_effects.asm",
+      "address": "0x0262",
+      "line": 391
+    },
+    "0x016A": {
+      "file": "fade_effects.asm",
+      "address": "0x016A",
+      "line": 265
+    },
+    "0x0063": {
+      "file": "fade_effects.asm",
+      "address": "0x0063",
+      "line": 115
+    },
+    "0x00BC": {
+      "file": "fade_effects.asm",
+      "address": "0x00BC",
+      "line": 175
+    },
+    "0x00FA": {
+      "file": "fade_effects.asm",
+      "address": "0x00FA",
+      "line": 200
+    },
+    "0x02D7": {
+      "file": "fade_effects.asm",
+      "address": "0x02D7",
+      "line": 442
+    },
+    "0x0200": {
+      "file": "fade_effects.asm",
+      "address": "0x0200",
+      "line": 345
+    },
+    "0x007E": {
+      "file": "fade_effects.asm",
+      "address": "0x007E",
+      "line": 133
+    },
+    "0x006C": {
+      "file": "fade_effects.asm",
+      "address": "0x006C",
+      "line": 121
+    },
+    "0x0164": {
+      "file": "fade_effects.asm",
+      "address": "0x0164",
+      "line": 262
+    },
+    "0x0043": {
+      "file": "fade_effects.asm",
+      "address": "0x0043",
+      "line": 87
+    },
+    "0x013C": {
+      "file": "fade_effects.asm",
+      "address": "0x013C",
+      "line": 238
+    },
+    "0x0045": {
+      "file": "fade_effects.asm",
+      "address": "0x0045",
+      "line": 89
+    },
+    "0x03F9": {
+      "file": "fade_effects.asm",
+      "address": "0x03F9",
+      "line": 555
+    },
+    "0x0127": {
+      "file": "fade_effects.asm",
+      "address": "0x0127",
+      "line": 221
+    },
+    "0x0369": {
+      "file": "fade_effects.asm",
+      "address": "0x0369",
+      "line": 501
+    },
+    "0x01A7": {
+      "file": "fade_effects.asm",
+      "address": "0x01A7",
+      "line": 300
+    },
+    "0x02F8": {
+      "file": "fade_effects.asm",
+      "address": "0x02F8",
+      "line": 455
+    },
+    "0x03A8": {
+      "file": "fade_effects.asm",
+      "address": "0x03A8",
+      "line": 524
+    },
+    "0x0167": {
+      "file": "fade_effects.asm",
+      "address": "0x0167",
+      "line": 263
+    },
+    "0x005D": {
+      "file": "fade_effects.asm",
+      "address": "0x005D",
+      "line": 111
+    },
+    "0x0249": {
+      "file": "fade_effects.asm",
+      "address": "0x0249",
+      "line": 382
+    },
+    "0x0179": {
+      "file": "fade_effects.asm",
+      "address": "0x0179",
+      "line": 276
+    },
+    "0x0060": {
+      "file": "fade_effects.asm",
+      "address": "0x0060",
+      "line": 113
+    },
+    "0x0411": {
+      "file": "fade_effects.asm",
+      "address": "0x0411",
+      "line": 565
+    },
+    "0x004F": {
+      "file": "fade_effects.asm",
+      "address": "0x004F",
+      "line": 102
+    },
+    "0x0171": {
+      "file": "fade_effects.asm",
+      "address": "0x0171",
+      "line": 271
+    },
+    "0x01B6": {
+      "file": "fade_effects.asm",
+      "address": "0x01B6",
+      "line": 38
+    },
+    "0x0073": {
+      "file": "fade_effects.asm",
+      "address": "0x0073",
+      "line": 126
+    },
+    "0x0148": {
+      "file": "fade_effects.asm",
+      "address": "0x0148",
+      "line": 245
+    },
+    "0x003A": {
+      "file": "fade_effects.asm",
+      "address": "0x003A",
+      "line": 84
+    },
+    "0x03AE": {
+      "file": "fade_effects.asm",
+      "address": "0x03AE",
+      "line": 528
+    },
+    "0x0153": {
+      "file": "fade_effects.asm",
+      "address": "0x0153",
+      "line": 252
+    },
+    "0x02A3": {
+      "file": "fade_effects.asm",
+      "address": "0x02A3",
+      "line": 419
+    },
+    "0x0237": {
+      "file": "fade_effects.asm",
+      "address": "0x0237",
+      "line": 371
+    },
+    "0x03C0": {
+      "file": "fade_effects.asm",
+      "address": "0x03C0",
+      "line": 534
+    },
+    "0x03B1": {
+      "file": "fade_effects.asm",
+      "address": "0x03B1",
+      "line": 529
+    },
+    "0x0214": {
+      "file": "fade_effects.asm",
+      "address": "0x0214",
+      "line": 357
+    },
+    "0x0429": {
+      "file": "fade_effects.asm",
+      "address": "0x0429",
+      "line": 573
+    },
+    "0x027D": {
+      "file": "fade_effects.asm",
+      "address": "0x027D",
+      "line": 402
+    },
+    "0x00C6": {
+      "file": "fade_effects.asm",
+      "address": "0x00C6",
+      "line": 183
+    },
+    "0x034E": {
+      "file": "fade_effects.asm",
+      "address": "0x034E",
+      "line": 490
+    },
+    "0x0068": {
+      "file": "fade_effects.asm",
+      "address": "0x0068",
+      "line": 119
+    },
+    "0x004E": {
+      "file": "fade_effects.asm",
+      "address": "0x004E",
+      "line": 101
+    },
+    "0x0285": {
+      "file": "fade_effects.asm",
+      "address": "0x0285",
+      "line": 406
+    },
+    "0x007C": {
+      "file": "fade_effects.asm",
+      "address": "0x007C",
+      "line": 132
+    },
+    "0x012E": {
+      "file": "fade_effects.asm",
+      "address": "0x012E",
+      "line": 227
+    },
+    "0x0390": {
+      "file": "fade_effects.asm",
+      "address": "0x0390",
+      "line": 516
+    },
+    "0x016C": {
+      "file": "fade_effects.asm",
+      "address": "0x016C",
+      "line": 266
+    },
+    "0x00EE": {
+      "file": "fade_effects.asm",
+      "address": "0x00EE",
+      "line": 195
+    },
+    "0x027E": {
+      "file": "fade_effects.asm",
+      "address": "0x027E",
+      "line": 403
+    },
+    "0x0034": {
+      "file": "fade_effects.asm",
+      "address": "0x0034",
+      "line": 82
+    },
+    "0x03E4": {
+      "file": "fade_effects.asm",
+      "address": "0x03E4",
+      "line": 548
+    },
+    "0x00E1": {
+      "file": "fade_effects.asm",
+      "address": "0x00E1",
+      "line": 188
+    },
+    "0x0096": {
+      "file": "fade_effects.asm",
+      "address": "0x0096",
+      "line": 148
+    },
+    "0x01D9": {
+      "file": "fade_effects.asm",
+      "address": "0x01D9",
+      "line": 329
+    },
+    "0x01F7": {
+      "file": "fade_effects.asm",
+      "address": "0x01F7",
+      "line": 342
+    },
+    "0x018A": {
+      "file": "fade_effects.asm",
+      "address": "0x018A",
+      "line": 285
+    },
+    "0x0132": {
+      "file": "fade_effects.asm",
+      "address": "0x0132",
+      "line": 228
+    },
+    "0x028A": {
+      "file": "fade_effects.asm",
+      "address": "0x028A",
+      "line": 408
+    },
+    "0x0272": {
+      "file": "fade_effects.asm",
+      "address": "0x0272",
+      "line": 396
+    },
+    "0x0396": {
+      "file": "fade_effects.asm",
+      "address": "0x0396",
+      "line": 518
+    },
+    "0x03B4": {
+      "file": "fade_effects.asm",
+      "address": "0x03B4",
+      "line": 530
+    },
+    "0x01EB": {
+      "file": "fade_effects.asm",
+      "address": "0x01EB",
+      "line": 338
+    },
+    "0x005C": {
+      "file": "fade_effects.asm",
+      "address": "0x005C",
+      "line": 110
+    },
+    "0x031B": {
+      "file": "fade_effects.asm",
+      "address": "0x031B",
+      "line": 470
+    },
+    "0x010E": {
+      "file": "fade_effects.asm",
+      "address": "0x010E",
+      "line": 212
+    },
+    "0x0336": {
+      "file": "fade_effects.asm",
+      "address": "0x0336",
+      "line": 482
+    },
+    "0x0264": {
+      "file": "fade_effects.asm",
+      "address": "0x0264",
+      "line": 393
+    },
+    "0x0064": {
+      "file": "fade_effects.asm",
+      "address": "0x0064",
+      "line": 116
+    },
+    "0x004A": {
+      "file": "fade_effects.asm",
+      "address": "0x004A",
+      "line": 99
+    },
+    "0x001F": {
+      "file": "fade_effects.asm",
+      "address": "0x001F",
+      "line": 69
+    },
+    "0x030B": {
+      "file": "fade_effects.asm",
+      "address": "0x030B",
+      "line": 463
+    },
+    "0x01D6": {
+      "file": "fade_effects.asm",
+      "address": "0x01D6",
+      "line": 50
+    },
+    "0x0154": {
+      "file": "fade_effects.asm",
+      "address": "0x0154",
+      "line": 253
+    },
+    "0x02C5": {
+      "file": "fade_effects.asm",
+      "address": "0x02C5",
+      "line": 436
+    },
+    "0x0426": {
+      "file": "fade_effects.asm",
+      "address": "0x0426",
+      "line": 572
+    },
+    "0x0121": {
+      "file": "fade_effects.asm",
+      "address": "0x0121",
+      "line": 219
+    },
+    "0x01B1": {
+      "file": "fade_effects.asm",
+      "address": "0x01B1",
+      "line": 36
+    },
+    "0x03CF": {
+      "file": "fade_effects.asm",
+      "address": "0x03CF",
+      "line": 539
+    },
+    "0x00B9": {
+      "file": "fade_effects.asm",
+      "address": "0x00B9",
+      "line": 174
+    },
+    "0x02B2": {
+      "file": "fade_effects.asm",
+      "address": "0x02B2",
+      "line": 422
+    },
+    "0x0192": {
+      "file": "fade_effects.asm",
+      "address": "0x0192",
+      "line": 17
+    },
+    "0x0174": {
+      "file": "fade_effects.asm",
+      "address": "0x0174",
+      "line": 273
+    },
+    "0x043F": {
+      "file": "fade_effects.asm",
+      "address": "0x043F",
+      "line": 585
+    },
+    "0x0188": {
+      "file": "fade_effects.asm",
+      "address": "0x0188",
+      "line": 284
+    },
+    "0x0161": {
+      "file": "fade_effects.asm",
+      "address": "0x0161",
+      "line": 261
+    },
+    "0x01BE": {
+      "file": "fade_effects.asm",
+      "address": "0x01BE",
+      "line": 41
+    },
+    "0x0363": {
+      "file": "fade_effects.asm",
+      "address": "0x0363",
+      "line": 499
+    },
+    "0x0217": {
+      "file": "fade_effects.asm",
+      "address": "0x0217",
+      "line": 358
+    },
+    "0x031D": {
+      "file": "fade_effects.asm",
+      "address": "0x031D",
+      "line": 471
+    },
+    "0x0032": {
+      "file": "fade_effects.asm",
+      "address": "0x0032",
+      "line": 81
+    },
+    "0x019E": {
+      "file": "fade_effects.asm",
+      "address": "0x019E",
+      "line": 297
+    },
+    "0x036C": {
+      "file": "fade_effects.asm",
+      "address": "0x036C",
+      "line": 502
+    },
+    "0x02F3": {
+      "file": "fade_effects.asm",
+      "address": "0x02F3",
+      "line": 452
+    },
+    "0x0300": {
+      "file": "fade_effects.asm",
+      "address": "0x0300",
+      "line": 459
+    },
+    "0x025F": {
+      "file": "fade_effects.asm",
+      "address": "0x025F",
+      "line": 390
+    },
+    "0x03CC": {
+      "file": "fade_effects.asm",
+      "address": "0x03CC",
+      "line": 538
+    },
+    "0x02DF": {
+      "file": "fade_effects.asm",
+      "address": "0x02DF",
+      "line": 446
+    },
+    "0x0402": {
+      "file": "fade_effects.asm",
+      "address": "0x0402",
+      "line": 560
+    },
+    "0x00E5": {
+      "file": "fade_effects.asm",
+      "address": "0x00E5",
+      "line": 189
+    },
+    "0x015E": {
+      "file": "fade_effects.asm",
+      "address": "0x015E",
+      "line": 260
+    },
+    "0x02EA": {
+      "file": "fade_effects.asm",
+      "address": "0x02EA",
+      "line": 448
+    },
+    "0x02DD": {
+      "file": "fade_effects.asm",
+      "address": "0x02DD",
+      "line": 444
+    },
+    "0x0090": {
+      "file": "fade_effects.asm",
+      "address": "0x0090",
+      "line": 146
+    },
+    "0x01FD": {
+      "file": "fade_effects.asm",
+      "address": "0x01FD",
+      "line": 344
+    },
+    "0x02DE": {
+      "file": "fade_effects.asm",
+      "address": "0x02DE",
+      "line": 445
+    },
+    "0x03B7": {
+      "file": "fade_effects.asm",
+      "address": "0x03B7",
+      "line": 531
+    },
+    "0x011D": {
+      "file": "fade_effects.asm",
+      "address": "0x011D",
+      "line": 218
+    },
+    "0x0059": {
+      "file": "fade_effects.asm",
+      "address": "0x0059",
+      "line": 109
+    },
+    "0x00C7": {
+      "file": "fade_effects.asm",
+      "address": "0x00C7",
+      "line": 184
+    },
+    "0x01F1": {
+      "file": "fade_effects.asm",
+      "address": "0x01F1",
+      "line": 340
+    },
+    "0x021D": {
+      "file": "fade_effects.asm",
+      "address": "0x021D",
+      "line": 360
+    },
+    "0x0046": {
+      "file": "fade_effects.asm",
+      "address": "0x0046",
+      "line": 90
+    },
+    "0x03ED": {
+      "file": "fade_effects.asm",
+      "address": "0x03ED",
+      "line": 551
+    },
+    "0x02FD": {
+      "file": "fade_effects.asm",
+      "address": "0x02FD",
+      "line": 458
+    },
+    "0x03F0": {
+      "file": "fade_effects.asm",
+      "address": "0x03F0",
+      "line": 552
+    },
+    "0x0375": {
+      "file": "fade_effects.asm",
+      "address": "0x0375",
+      "line": 505
+    },
+    "0x0177": {
+      "file": "fade_effects.asm",
+      "address": "0x0177",
+      "line": 275
+    },
+    "0x0288": {
+      "file": "fade_effects.asm",
+      "address": "0x0288",
+      "line": 407
+    },
+    "0x00F1": {
+      "file": "fade_effects.asm",
+      "address": "0x00F1",
+      "line": 197
+    },
+    "0x01DF": {
+      "file": "fade_effects.asm",
+      "address": "0x01DF",
+      "line": 331
+    },
+    "0x008A": {
+      "file": "fade_effects.asm",
+      "address": "0x008A",
+      "line": 144
+    },
+    "0x022C": {
+      "file": "fade_effects.asm",
+      "address": "0x022C",
+      "line": 365
+    },
+    "0x00A6": {
+      "file": "fade_effects.asm",
+      "address": "0x00A6",
+      "line": 160
+    },
+    "0x0313": {
+      "file": "fade_effects.asm",
+      "address": "0x0313",
+      "line": 466
+    },
+    "0x01B4": {
+      "file": "fade_effects.asm",
+      "address": "0x01B4",
+      "line": 308
+    },
+    "0x0240": {
+      "file": "fade_effects.asm",
+      "address": "0x0240",
+      "line": 377
+    },
+    "0x037E": {
+      "file": "fade_effects.asm",
+      "address": "0x037E",
+      "line": 508
+    },
+    "0x007A": {
+      "file": "fade_effects.asm",
+      "address": "0x007A",
+      "line": 130
+    },
+    "0x0246": {
+      "file": "fade_effects.asm",
+      "address": "0x0246",
+      "line": 380
+    },
+    "0x0243": {
+      "file": "fade_effects.asm",
+      "address": "0x0243",
+      "line": 378
+    },
+    "0x029F": {
+      "file": "fade_effects.asm",
+      "address": "0x029F",
+      "line": 416
+    },
+    "0x031A": {
+      "file": "fade_effects.asm",
+      "address": "0x031A",
+      "line": 469
+    },
+    "0x02FA": {
+      "file": "fade_effects.asm",
+      "address": "0x02FA",
+      "line": 457
+    },
+    "0x0158": {
+      "file": "fade_effects.asm",
+      "address": "0x0158",
+      "line": 255
+    },
+    "0x0117": {
+      "file": "fade_effects.asm",
+      "address": "0x0117",
+      "line": 215
+    },
+    "0x02C8": {
+      "file": "fade_effects.asm",
+      "address": "0x02C8",
+      "line": 437
+    },
+    "0x01BB": {
+      "file": "fade_effects.asm",
+      "address": "0x01BB",
+      "line": 311
+    },
+    "0x0151": {
+      "file": "fade_effects.asm",
+      "address": "0x0151",
+      "line": 249
+    },
+    "0x006B": {
+      "file": "fade_effects.asm",
+      "address": "0x006B",
+      "line": 120
+    },
+    "0x03D8": {
+      "file": "fade_effects.asm",
+      "address": "0x03D8",
+      "line": 544
+    },
+    "0x0339": {
+      "file": "fade_effects.asm",
+      "address": "0x0339",
+      "line": 483
+    },
+    "0x01A9": {
+      "file": "fade_effects.asm",
+      "address": "0x01A9",
+      "line": 33
+    },
+    "0x003D": {
+      "file": "fade_effects.asm",
+      "address": "0x003D",
+      "line": 85
+    },
+    "0x0190": {
+      "file": "fade_effects.asm",
+      "address": "0x0190",
+      "line": 16
+    },
+    "0x0077": {
+      "file": "fade_effects.asm",
+      "address": "0x0077",
+      "line": 129
+    },
+    "0x036F": {
+      "file": "fade_effects.asm",
+      "address": "0x036F",
+      "line": 503
+    },
+    "0x021A": {
+      "file": "fade_effects.asm",
+      "address": "0x021A",
+      "line": 359
+    },
+    "0x0305": {
+      "file": "fade_effects.asm",
+      "address": "0x0305",
+      "line": 461
+    },
+    "0x00C5": {
+      "file": "fade_effects.asm",
+      "address": "0x00C5",
+      "line": 182
+    },
+    "0x039C": {
+      "file": "fade_effects.asm",
+      "address": "0x039C",
+      "line": 520
+    },
+    "0x035A": {
+      "file": "fade_effects.asm",
+      "address": "0x035A",
+      "line": 496
+    },
+    "0x029E": {
+      "file": "fade_effects.asm",
+      "address": "0x029E",
+      "line": 415
+    },
+    "0x0099": {
+      "file": "fade_effects.asm",
+      "address": "0x0099",
+      "line": 149
+    },
+    "0x0423": {
+      "file": "fade_effects.asm",
+      "address": "0x0423",
+      "line": 571
+    },
+    "0x026F": {
+      "file": "fade_effects.asm",
+      "address": "0x026F",
+      "line": 395
+    },
+    "0x0028": {
+      "file": "fade_effects.asm",
+      "address": "0x0028",
+      "line": 72
+    },
+    "0x00E9": {
+      "file": "fade_effects.asm",
+      "address": "0x00E9",
+      "line": 191
+    },
+    "0x0259": {
+      "file": "fade_effects.asm",
+      "address": "0x0259",
+      "line": 388
+    },
+    "0x0378": {
+      "file": "fade_effects.asm",
+      "address": "0x0378",
+      "line": 506
+    },
+    "0x0333": {
+      "file": "fade_effects.asm",
+      "address": "0x0333",
+      "line": 481
+    },
+    "0x0311": {
+      "file": "fade_effects.asm",
+      "address": "0x0311",
+      "line": 465
+    },
+    "0x0417": {
+      "file": "fade_effects.asm",
+      "address": "0x0417",
+      "line": 567
+    },
+    "0x017C": {
+      "file": "fade_effects.asm",
+      "address": "0x017C",
+      "line": 278
+    },
+    "0x019B": {
+      "file": "fade_effects.asm",
+      "address": "0x019B",
+      "line": 20
+    },
+    "0x00A4": {
+      "file": "fade_effects.asm",
+      "address": "0x00A4",
+      "line": 159
+    },
+    "0x03A5": {
+      "file": "fade_effects.asm",
+      "address": "0x03A5",
+      "line": 523
+    },
+    "0x027F": {
+      "file": "fade_effects.asm",
+      "address": "0x027F",
+      "line": 404
+    },
+    "0x03C6": {
+      "file": "fade_effects.asm",
+      "address": "0x03C6",
+      "line": 536
+    },
+    "0x0040": {
+      "file": "fade_effects.asm",
+      "address": "0x0040",
+      "line": 86
+    },
+    "0x032D": {
+      "file": "fade_effects.asm",
+      "address": "0x032D",
+      "line": 475
+    },
+    "0x001C": {
+      "file": "fade_effects.asm",
+      "address": "0x001C",
+      "line": 68
+    },
+    "0x0209": {
+      "file": "fade_effects.asm",
+      "address": "0x0209",
+      "line": 349
+    },
+    "0x00B3": {
+      "file": "fade_effects.asm",
+      "address": "0x00B3",
+      "line": 168
+    },
+    "0x020A": {
+      "file": "fade_effects.asm",
+      "address": "0x020A",
+      "line": 350
+    },
+    "0x01C6": {
+      "file": "fade_effects.asm",
+      "address": "0x01C6",
+      "line": 318
+    },
+    "0x0348": {
+      "file": "fade_effects.asm",
+      "address": "0x0348",
+      "line": 488
+    },
+    "0x02B8": {
+      "file": "fade_effects.asm",
+      "address": "0x02B8",
+      "line": 429
+    },
+    "0x00A1": {
+      "file": "fade_effects.asm",
+      "address": "0x00A1",
+      "line": 152
+    },
+    "0x0220": {
+      "file": "fade_effects.asm",
+      "address": "0x0220",
+      "line": 361
+    },
+    "0x02BB": {
+      "file": "fade_effects.asm",
+      "address": "0x02BB",
+      "line": 430
+    },
+    "0x0393": {
+      "file": "fade_effects.asm",
+      "address": "0x0393",
+      "line": 517
+    },
+    "0x0248": {
+      "file": "fade_effects.asm",
+      "address": "0x0248",
+      "line": 381
+    },
+    "0x0086": {
+      "file": "fade_effects.asm",
+      "address": "0x0086",
+      "line": 142
+    },
+    "0x0051": {
+      "file": "fade_effects.asm",
+      "address": "0x0051",
+      "line": 103
+    },
+    "0x00FE": {
+      "file": "fade_effects.asm",
+      "address": "0x00FE",
+      "line": 203
+    },
+    "0x022F": {
+      "file": "fade_effects.asm",
+      "address": "0x022F",
+      "line": 366
+    },
+    "0x00B7": {
+      "file": "fade_effects.asm",
+      "address": "0x00B7",
+      "line": 170
+    },
+    "0x0319": {
+      "file": "fade_effects.asm",
+      "address": "0x0319",
+      "line": 468
+    },
+    "0x029B": {
+      "file": "fade_effects.asm",
+      "address": "0x029B",
+      "line": 414
+    },
+    "0x002C": {
+      "file": "fade_effects.asm",
+      "address": "0x002C",
+      "line": 74
+    },
+    "0x03BA": {
+      "file": "fade_effects.asm",
+      "address": "0x03BA",
+      "line": 532
+    },
+    "0x023A": {
+      "file": "fade_effects.asm",
+      "address": "0x023A",
+      "line": 375
+    },
+    "0x0139": {
+      "file": "fade_effects.asm",
+      "address": "0x0139",
+      "line": 236
+    },
+    "0x0408": {
+      "file": "fade_effects.asm",
+      "address": "0x0408",
+      "line": 562
+    },
+    "0x0054": {
+      "file": "fade_effects.asm",
+      "address": "0x0054",
+      "line": 105
+    },
+    "0x0055": {
+      "file": "fade_effects.asm",
+      "address": "0x0055",
+      "line": 106
+    },
+    "0x006D": {
+      "file": "fade_effects.asm",
+      "address": "0x006D",
+      "line": 122
+    },
+    "0x02A0": {
+      "file": "fade_effects.asm",
+      "address": "0x02A0",
+      "line": 417
+    },
+    "0x02CB": {
+      "file": "fade_effects.asm",
+      "address": "0x02CB",
+      "line": 438
+    },
+    "0x008D": {
+      "file": "fade_effects.asm",
+      "address": "0x008D",
+      "line": 145
+    },
+    "0x01D4": {
+      "file": "fade_effects.asm",
+      "address": "0x01D4",
+      "line": 49
+    },
+    "0x01A4": {
+      "file": "fade_effects.asm",
+      "address": "0x01A4",
+      "line": 31
+    },
+    "0x02ED": {
+      "file": "fade_effects.asm",
+      "address": "0x02ED",
+      "line": 449
+    },
+    "0x03A2": {
+      "file": "fade_effects.asm",
+      "address": "0x03A2",
+      "line": 522
+    },
+    "0x0253": {
+      "file": "fade_effects.asm",
+      "address": "0x0253",
+      "line": 386
+    },
+    "0x023D": {
+      "file": "fade_effects.asm",
+      "address": "0x023D",
+      "line": 376
+    },
+    "0x0203": {
+      "file": "fade_effects.asm",
+      "address": "0x0203",
+      "line": 346
+    },
+    "0x0236": {
+      "file": "fade_effects.asm",
+      "address": "0x0236",
+      "line": 370
+    },
+    "0x007B": {
+      "file": "fade_effects.asm",
+      "address": "0x007B",
+      "line": 131
+    },
+    "0x0384": {
+      "file": "fade_effects.asm",
+      "address": "0x0384",
+      "line": 512
+    },
+    "0x041A": {
+      "file": "fade_effects.asm",
+      "address": "0x041A",
+      "line": 568
+    },
+    "0x0093": {
+      "file": "fade_effects.asm",
+      "address": "0x0093",
+      "line": 147
+    },
+    "0x035D": {
+      "file": "fade_effects.asm",
+      "address": "0x035D",
+      "line": 497
+    },
+    "0x01D1": {
+      "file": "fade_effects.asm",
+      "address": "0x01D1",
+      "line": 323
+    },
+    "0x00FC": {
+      "file": "fade_effects.asm",
+      "address": "0x00FC",
+      "line": 201
+    },
+    "0x0235": {
+      "file": "fade_effects.asm",
+      "address": "0x0235",
+      "line": 369
+    },
+    "0x02D4": {
+      "file": "fade_effects.asm",
+      "address": "0x02D4",
+      "line": 441
+    },
+    "0x03BD": {
+      "file": "fade_effects.asm",
+      "address": "0x03BD",
+      "line": 533
+    },
+    "0x0278": {
+      "file": "fade_effects.asm",
+      "address": "0x0278",
+      "line": 399
+    },
+    "0x033F": {
+      "file": "fade_effects.asm",
+      "address": "0x033F",
+      "line": 485
+    },
+    "0x0037": {
+      "file": "fade_effects.asm",
+      "address": "0x0037",
+      "line": 83
+    },
+    "0x0044": {
+      "file": "fade_effects.asm",
+      "address": "0x0044",
+      "line": 88
+    },
+    "0x02BE": {
+      "file": "fade_effects.asm",
+      "address": "0x02BE",
+      "line": 431
+    },
+    "0x0342": {
+      "file": "fade_effects.asm",
+      "address": "0x0342",
+      "line": 486
+    },
+    "0x03E1": {
+      "file": "fade_effects.asm",
+      "address": "0x03E1",
+      "line": 547
+    },
+    "0x0357": {
+      "file": "fade_effects.asm",
+      "address": "0x0357",
+      "line": 493
+    },
+    "0x03D2": {
+      "file": "fade_effects.asm",
+      "address": "0x03D2",
+      "line": 540
+    },
+    "0x02B5": {
+      "file": "fade_effects.asm",
+      "address": "0x02B5",
+      "line": 428
+    },
+    "0x0226": {
+      "file": "fade_effects.asm",
+      "address": "0x0226",
+      "line": 363
+    },
+    "0x0351": {
+      "file": "fade_effects.asm",
+      "address": "0x0351",
+      "line": 491
+    },
+    "0x03FC": {
+      "file": "fade_effects.asm",
+      "address": "0x03FC",
+      "line": 556
+    },
+    "0x0149": {
+      "file": "fade_effects.asm",
+      "address": "0x0149",
+      "line": 246
+    },
+    "0x0381": {
+      "file": "fade_effects.asm",
+      "address": "0x0381",
+      "line": 509
+    },
+    "0x00EB": {
+      "file": "fade_effects.asm",
+      "address": "0x00EB",
+      "line": 193
+    },
+    "0x0206": {
+      "file": "fade_effects.asm",
+      "address": "0x0206",
+      "line": 348
+    },
+    "0x01CE": {
+      "file": "fade_effects.asm",
+      "address": "0x01CE",
+      "line": 47
+    },
+    "0x00A9": {
+      "file": "fade_effects.asm",
+      "address": "0x00A9",
+      "line": 161
+    },
+    "0x011A": {
+      "file": "fade_effects.asm",
+      "address": "0x011A",
+      "line": 217
+    },
+    "0x02F0": {
+      "file": "fade_effects.asm",
+      "address": "0x02F0",
+      "line": 451
+    },
+    "0x020B": {
+      "file": "fade_effects.asm",
+      "address": "0x020B",
+      "line": 351
+    },
+    "0x033C": {
+      "file": "fade_effects.asm",
+      "address": "0x033C",
+      "line": 484
+    },
+    "0x00A2": {
+      "file": "fade_effects.asm",
+      "address": "0x00A2",
+      "line": 158
+    },
+    "0x042C": {
+      "file": "fade_effects.asm",
+      "address": "0x042C",
+      "line": 574
+    },
+    "0x0303": {
+      "file": "fade_effects.asm",
+      "address": "0x0303",
+      "line": 460
+    },
+    "0x006F": {
+      "file": "fade_effects.asm",
+      "address": "0x006F",
+      "line": 123
+    },
+    "0x01C3": {
+      "file": "fade_effects.asm",
+      "address": "0x01C3",
+      "line": 43
+    },
+    "0x016F": {
+      "file": "fade_effects.asm",
+      "address": "0x016F",
+      "line": 270
+    },
+    "0x0223": {
+      "file": "fade_effects.asm",
+      "address": "0x0223",
+      "line": 362
+    },
+    "0x02C4": {
+      "file": "fade_effects.asm",
+      "address": "0x02C4",
+      "line": 435
+    },
+    "0x03C3": {
+      "file": "fade_effects.asm",
+      "address": "0x03C3",
+      "line": 535
+    },
+    "0x0198": {
+      "file": "fade_effects.asm",
+      "address": "0x0198",
+      "line": 295
+    },
+    "0x024A": {
+      "file": "fade_effects.asm",
+      "address": "0x024A",
+      "line": 383
+    },
+    "0x0106": {
+      "file": "fade_effects.asm",
+      "address": "0x0106",
+      "line": 206
+    },
+    "0x001A": {
+      "file": "fade_effects.asm",
+      "address": "0x001A",
+      "line": 67
+    },
+    "0x0081": {
+      "file": "fade_effects.asm",
+      "address": "0x0081",
+      "line": 135
+    },
+    "0x039F": {
+      "file": "fade_effects.asm",
+      "address": "0x039F",
+      "line": 521
+    },
+    "0x040B": {
+      "file": "fade_effects.asm",
+      "address": "0x040B",
+      "line": 563
+    },
+    "0x0399": {
+      "file": "fade_effects.asm",
+      "address": "0x0399",
+      "line": 519
+    },
+    "0x002B": {
+      "file": "fade_effects.asm",
+      "address": "0x002B",
+      "line": 73
+    },
+    "0x00BE": {
+      "file": "fade_effects.asm",
+      "address": "0x00BE",
+      "line": 178
+    },
+    "0x00F4": {
+      "file": "fade_effects.asm",
+      "address": "0x00F4",
+      "line": 198
+    },
+    "0x040E": {
+      "file": "fade_effects.asm",
+      "address": "0x040E",
+      "line": 564
+    },
+    "0x0290": {
+      "file": "fade_effects.asm",
+      "address": "0x0290",
+      "line": 410
+    },
+    "0x015B": {
+      "file": "fade_effects.asm",
+      "address": "0x015B",
+      "line": 257
+    },
+    "0x03DE": {
+      "file": "fade_effects.asm",
+      "address": "0x03DE",
+      "line": 546
+    },
+    "0x00B0": {
+      "file": "fade_effects.asm",
+      "address": "0x00B0",
+      "line": 167
+    },
+    "0x01E8": {
+      "file": "fade_effects.asm",
+      "address": "0x01E8",
+      "line": 56
+    },
+    "0x0387": {
+      "file": "fade_effects.asm",
+      "address": "0x0387",
+      "line": 513
+    },
+    "0x01B9": {
+      "file": "fade_effects.asm",
+      "address": "0x01B9",
+      "line": 39
+    },
+    "0x0275": {
+      "file": "fade_effects.asm",
+      "address": "0x0275",
+      "line": 398
+    },
+    "0x0232": {
+      "file": "fade_effects.asm",
+      "address": "0x0232",
+      "line": 368
+    },
+    "0x02DA": {
+      "file": "fade_effects.asm",
+      "address": "0x02DA",
+      "line": 443
+    },
+    "0x0256": {
+      "file": "fade_effects.asm",
+      "address": "0x0256",
+      "line": 387
+    },
+    "0x00AC": {
+      "file": "fade_effects.asm",
+      "address": "0x00AC",
+      "line": 164
+    },
+    "0x01C0": {
+      "file": "fade_effects.asm",
+      "address": "0x01C0",
+      "line": 313
+    },
+    "0x0345": {
+      "file": "fade_effects.asm",
+      "address": "0x0345",
+      "line": 487
+    },
+    "0x03AB": {
+      "file": "fade_effects.asm",
+      "address": "0x03AB",
+      "line": 525
+    },
+    "0x00C2": {
+      "file": "fade_effects.asm",
+      "address": "0x00C2",
+      "line": 180
+    },
+    "0x0142": {
+      "file": "fade_effects.asm",
+      "address": "0x0142",
+      "line": 241
+    },
+    "0x02D1": {
+      "file": "fade_effects.asm",
+      "address": "0x02D1",
+      "line": 440
+    },
+    "0x034B": {
+      "file": "fade_effects.asm",
+      "address": "0x034B",
+      "line": 489
+    },
+    "0x009B": {
+      "file": "fade_effects.asm",
+      "address": "0x009B",
+      "line": 150
+    },
+    "0x02C3": {
+      "file": "fade_effects.asm",
+      "address": "0x02C3",
+      "line": 434
+    },
+    "0x0330": {
+      "file": "fade_effects.asm",
+      "address": "0x0330",
+      "line": 480
+    },
+    "0x0298": {
+      "file": "fade_effects.asm",
+      "address": "0x0298",
+      "line": 413
+    },
+    "0x03FF": {
+      "file": "fade_effects.asm",
+      "address": "0x03FF",
+      "line": 557
+    },
+    "0x010B": {
+      "file": "fade_effects.asm",
+      "address": "0x010B",
+      "line": 210
+    },
+    "0x041D": {
+      "file": "fade_effects.asm",
+      "address": "0x041D",
+      "line": 569
+    },
+    "0x0114": {
+      "file": "fade_effects.asm",
+      "address": "0x0114",
+      "line": 214
+    },
+    "0x0296": {
+      "file": "fade_effects.asm",
+      "address": "0x0296",
+      "line": 412
+    },
+    "0x028D": {
+      "file": "fade_effects.asm",
+      "address": "0x028D",
+      "line": 409
+    },
+    "0x014D": {
+      "file": "fade_effects.asm",
+      "address": "0x014D",
+      "line": 248
+    },
+    "0x03EA": {
+      "file": "fade_effects.asm",
+      "address": "0x03EA",
+      "line": 550
+    }
+  },
+  "functions": {},
+  "nativeCalls": {
+    "18": "VECTREX_PRINT_TEXT",
+    "17": "VECTREX_PRINT_TEXT",
+    "24": "J1_BUTTON_2",
+    "20": "J1_BUTTON_1"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "fade_effects.asm",
+      "startLine": 138,
+      "endLine": 152,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {
+    "67": "0x001A",
+    "475": "0x032D",
+    "457": "0x02FA",
+    "165": "0x00AD",
+    "44": "0x01C6",
+    "299": "0x01A4",
+    "226": "0x012B",
+    "204": "0x0102",
+    "414": "0x029B",
+    "88": "0x0044",
+    "221": "0x0127",
+    "496": "0x035A",
+    "500": "0x0366",
+    "105": "0x0054",
+    "12": "0x0185",
+    "310": "0x01B9",
+    "514": "0x038A",
+    "281": "0x0181",
+    "265": "0x016A",
+    "111": "0x005D",
+    "413": "0x0298",
+    "39": "0x01B9",
+    "232": "0x0135",
+    "518": "0x0396",
+    "121": "0x006C",
+    "120": "0x006B",
+    "68": "0x001C",
+    "263": "0x0167",
+    "554": "0x03F6",
+    "380": "0x0246",
+    "351": "0x020B",
+    "460": "0x0303",
+    "305": "0x01AC",
+    "253": "0x0154",
+    "112": "0x005E",
+    "436": "0x02C5",
+    "321": "0x01CE",
+    "238": "0x013C",
+    "212": "0x010E",
+    "328": "0x01D6",
+    "433": "0x02C1",
+    "572": "0x0426",
+    "430": "0x02BB",
+    "515": "0x038D",
+    "145": "0x008D",
+    "537": "0x03C9",
+    "160": "0x00A6",
+    "530": "0x03B4",
+    "405": "0x0282",
+    "529": "0x03B1",
+    "451": "0x02F0",
+    "147": "0x0093",
+    "266": "0x016C",
+    "306": "0x01AF",
+    "182": "0x00C5",
+    "119": "0x0068",
+    "410": "0x0290",
+    "191": "0x00E9",
+    "262": "0x0164",
+    "219": "0x0121",
+    "228": "0x0132",
+    "428": "0x02B5",
+    "48": "0x01D1",
+    "489": "0x034B",
+    "398": "0x0275",
+    "442": "0x02D7",
+    "275": "0x0177",
+    "50": "0x01D6",
+    "213": "0x0111",
+    "13": "0x0188",
+    "222": "0x0129",
+    "359": "0x021A",
+    "152": "0x00A1",
+    "564": "0x040E",
+    "323": "0x01D1",
+    "472": "0x031E",
+    "34": "0x01AC",
+    "544": "0x03D8",
+    "252": "0x0153",
+    "585": "0x043F",
+    "388": "0x0259",
+    "446": "0x02DF",
+    "532": "0x03BA",
+    "37": "0x01B4",
+    "519": "0x0399",
+    "458": "0x02FD",
+    "553": "0x03F3",
+    "435": "0x02C4",
+    "569": "0x041D",
+    "401": "0x027B",
+    "443": "0x02DA",
+    "461": "0x0305",
+    "245": "0x0148",
+    "158": "0x00A2",
+    "498": "0x0360",
+    "143": "0x0088",
+    "355": "0x020E",
+    "180": "0x00C2",
+    "320": "0x01CB",
+    "466": "0x0313",
+    "492": "0x0354",
+    "521": "0x039F",
+    "330": "0x01DC",
+    "434": "0x02C3",
+    "218": "0x011D",
+    "366": "0x022F",
+    "242": "0x0146",
+    "491": "0x0351",
+    "480": "0x0330",
+    "464": "0x030E",
+    "246": "0x0149",
+    "144": "0x008A",
+    "483": "0x0339",
+    "503": "0x036F",
+    "303": "0x01A9",
+    "83": "0x0037",
+    "14": "0x018A",
+    "378": "0x0243",
+    "283": "0x0185",
+    "582": "0x042E",
+    "309": "0x01B6",
+    "418": "0x02A2",
+    "57": "0x01EB",
+    "190": "0x00E7",
+    "349": "0x0209",
+    "560": "0x0402",
+    "377": "0x0240",
+    "501": "0x0369",
+    "208": "0x0108",
+    "51": "0x01D9",
+    "6": "0x0181",
+    "69": "0x001F",
+    "335": "0x01E2",
+    "343": "0x01FA",
+    "361": "0x0220",
+    "103": "0x0051",
+    "456": "0x02F9",
+    "183": "0x00C6",
+    "346": "0x0203",
+    "257": "0x015B",
+    "296": "0x019B",
+    "203": "0x00FE",
+    "199": "0x00F8",
+    "142": "0x0086",
+    "20": "0x019B",
+    "381": "0x0248",
+    "523": "0x03A5",
+    "531": "0x03B7",
+    "363": "0x0226",
+    "241": "0x0142",
+    "293": "0x0195",
+    "404": "0x027F",
+    "54": "0x01E2",
+    "248": "0x014D",
+    "185": "0x00C8",
+    "535": "0x03C3",
+    "314": "0x01C3",
+    "35": "0x01AF",
+    "231": "0x0134",
+    "562": "0x0408",
+    "454": "0x02F6",
+    "440": "0x02D1",
+    "101": "0x004E",
+    "422": "0x02B2",
+    "279": "0x017E",
+    "319": "0x01C8",
+    "441": "0x02D4",
+    "298": "0x01A1",
+    "106": "0x0055",
+    "509": "0x0381",
+    "307": "0x01B1",
+    "419": "0x02A3",
+    "70": "0x0022",
+    "368": "0x0232",
+    "387": "0x0256",
+    "282": "0x0183",
+    "376": "0x023D",
+    "437": "0x02C8",
+    "59": "0x01EE",
+    "71": "0x0025",
+    "459": "0x0300",
+    "566": "0x0414",
+    "416": "0x029F",
+    "504": "0x0372",
+    "385": "0x0250",
+    "524": "0x03A8",
+    "220": "0x0123",
+    "452": "0x02F3",
+    "517": "0x0393",
+    "513": "0x0387",
+    "406": "0x0285",
+    "19": "0x0198",
+    "287": "0x0190",
+    "539": "0x03CF",
+    "395": "0x026F",
+    "550": "0x03EA",
+    "552": "0x03F0",
+    "215": "0x0117",
+    "81": "0x0032",
+    "568": "0x041A",
+    "336": "0x01E5",
+    "135": "0x0081",
+    "174": "0x00B9",
+    "415": "0x029E",
+    "148": "0x0096",
+    "357": "0x0214",
+    "271": "0x0171",
+    "556": "0x03FC",
+    "462": "0x0308",
+    "115": "0x0063",
+    "470": "0x031B",
+    "581": "0x042D",
+    "131": "0x007B",
+    "487": "0x0345",
+    "255": "0x0158",
+    "267": "0x016E",
+    "512": "0x0384",
+    "32": "0x01A7",
+    "482": "0x0336",
+    "445": "0x02DE",
+    "278": "0x017C",
+    "555": "0x03F9",
+    "371": "0x0237",
+    "448": "0x02EA",
+    "584": "0x043E",
+    "195": "0x00EE",
+    "30": "0x01A1",
+    "382": "0x0249",
+    "408": "0x028A",
+    "110": "0x005C",
+    "506": "0x0378",
+    "74": "0x002C",
+    "362": "0x0223",
+    "403": "0x027E",
+    "324": "0x01D4",
+    "490": "0x034E",
+    "407": "0x0288",
+    "33": "0x01A9",
+    "463": "0x030B",
+    "508": "0x037E",
+    "249": "0x0151",
+    "563": "0x040B",
+    "383": "0x024A",
+    "292": "0x0192",
+    "168": "0x00B3",
+    "273": "0x0174",
+    "312": "0x01BE",
+    "122": "0x006D",
+    "547": "0x03E1",
+    "179": "0x00BF",
+    "217": "0x011A",
+    "198": "0x00F4",
+    "340": "0x01F1",
+    "567": "0x0417",
+    "197": "0x00F1",
+    "571": "0x0423",
+    "49": "0x01D4",
+    "536": "0x03C6",
+    "41": "0x01BE",
+    "393": "0x0264",
+    "469": "0x031A",
+    "47": "0x01CE",
+    "11": "0x0183",
+    "150": "0x009B",
+    "214": "0x0114",
+    "170": "0x00B7",
+    "29": "0x019E",
+    "146": "0x0090",
+    "36": "0x01B1",
+    "484": "0x033C",
+    "360": "0x021D",
+    "350": "0x020A",
+    "178": "0x00BE",
+    "87": "0x0043",
+    "533": "0x03BD",
+    "364": "0x0229",
+    "497": "0x035D",
+    "38": "0x01B6",
+    "151": "0x009E",
+    "45": "0x01C8",
+    "396": "0x0272",
+    "130": "0x007A",
+    "468": "0x0319",
+    "261": "0x0161",
+    "534": "0x03C0",
+    "236": "0x0139",
+    "227": "0x012E",
+    "455": "0x02F8",
+    "73": "0x002B",
+    "284": "0x0188",
+    "369": "0x0235",
+    "31": "0x01A4",
+    "499": "0x0363",
+    "40": "0x01BB",
+    "486": "0x0342",
+    "75": "0x002D",
+    "205": "0x0104",
+    "574": "0x042C",
+    "528": "0x03AE",
+    "2": "0x0181",
+    "113": "0x0060",
+    "297": "0x019E",
+    "52": "0x01DC",
+    "318": "0x01C6",
+    "465": "0x0311",
+    "132": "0x007C",
+    "356": "0x0211",
+    "444": "0x02DD",
+    "109": "0x0059",
+    "438": "0x02CB",
+    "493": "0x0357",
+    "573": "0x0429",
+    "431": "0x02BE",
+    "82": "0x0034",
+    "123": "0x006F",
+    "308": "0x01B4",
+    "467": "0x0316",
+    "507": "0x037B",
+    "339": "0x01EE",
+    "189": "0x00E5",
+    "46": "0x01CB",
+    "399": "0x0278",
+    "126": "0x0073",
+    "276": "0x0179",
+    "164": "0x00AC",
+    "540": "0x03D2",
+    "162": "0x00AB",
+    "184": "0x00C7",
+    "546": "0x03DE",
+    "412": "0x0296",
+    "417": "0x02A0",
+    "488": "0x0348",
+    "161": "0x00A9",
+    "201": "0x00FC",
+    "541": "0x03D5",
+    "392": "0x0263",
+    "169": "0x00B6",
+    "516": "0x0390",
+    "76": "0x002E",
+    "481": "0x0333",
+    "133": "0x007E",
+    "449": "0x02ED",
+    "206": "0x0106",
+    "176": "0x00BD",
+    "548": "0x03E4",
+    "344": "0x01FD",
+    "125": "0x0072",
+    "370": "0x0236",
+    "557": "0x03FF",
+    "16": "0x0190",
+    "391": "0x0262",
+    "149": "0x0099",
+    "439": "0x02CE",
+    "375": "0x023A",
+    "85": "0x003D",
+    "341": "0x01F4",
+    "200": "0x00FA",
+    "286": "0x018D",
+    "561": "0x0405",
+    "188": "0x00E1",
+    "311": "0x01BB",
+    "384": "0x024D",
+    "337": "0x01E8",
+    "329": "0x01D9",
+    "520": "0x039C",
+    "551": "0x03ED",
+    "570": "0x0420",
+    "240": "0x013F",
+    "485": "0x033F",
+    "129": "0x0077",
+    "53": "0x01DF",
+    "429": "0x02B8",
+    "186": "0x00CB",
+    "175": "0x00BC",
+    "193": "0x00EB",
+    "348": "0x0206",
+    "171": "0x00B8",
+    "159": "0x00A4",
+    "84": "0x003A",
+    "549": "0x03E7",
+    "100": "0x004D",
+    "505": "0x0375",
+    "285": "0x018A",
+    "331": "0x01DF",
+    "295": "0x0198",
+    "300": "0x01A7",
+    "565": "0x0411",
+    "502": "0x036C",
+    "358": "0x0217",
+    "102": "0x004F",
+    "136": "0x0082",
+    "538": "0x03CC",
+    "402": "0x027D",
+    "72": "0x0028",
+    "89": "0x0045",
+    "18": "0x0195",
+    "17": "0x0192",
+    "55": "0x01E5",
+    "210": "0x010B",
+    "525": "0x03AB",
+    "365": "0x022C",
+    "545": "0x03DB",
+    "471": "0x031D",
+    "116": "0x0064",
+    "86": "0x0040",
+    "522": "0x03A2",
+    "345": "0x0200",
+    "15": "0x018D",
+    "90": "0x0046",
+    "42": "0x01C0",
+    "313": "0x01C0",
+    "389": "0x025C",
+    "411": "0x0293",
+    "167": "0x00B0",
+    "99": "0x004A",
+    "338": "0x01EB",
+    "409": "0x028D",
+    "386": "0x0253",
+    "270": "0x016F",
+    "56": "0x01E8",
+    "342": "0x01F7",
+    "260": "0x015E",
+    "43": "0x01C3",
+    "390": "0x025F"
+  },
+  "variables": {
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8B9",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC89E",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_LIST": {
+      "name": "VLINE_LIST",
+      "address": "0xC8AF",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC891",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT": {
+      "name": "TMPLEFT",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_STEPS": {
+      "name": "VLINE_STEPS",
+      "address": "0xC8AE",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8B5",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_DY_REMAINING": {
+      "name": "VLINE_DY_REMAINING",
+      "address": "0xC8AA",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8B3",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC893",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_DY_16": {
+      "name": "VLINE_DY_16",
+      "address": "0xC8A6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC892",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC88E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg5": {
+      "name": "arg5",
+      "address": "0xC8BD",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_DY": {
+      "name": "VLINE_DY",
+      "address": "0xC8A9",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_DX_REMAINING": {
+      "name": "VLINE_DX_REMAINING",
+      "address": "0xC8AC",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8BB",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_DX_16": {
+      "name": "VLINE_DX_16",
+      "address": "0xC8A4",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC890",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC894",
+      "size": 10,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8B7",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VLINE_DX": {
+      "name": "VLINE_DX",
+      "address": "0xC8A8",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "brightness": {
+      "name": "brightness",
+      "address": "0xC8B1",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

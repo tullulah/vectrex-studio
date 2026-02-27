@@ -38,8 +38,10 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     "ABS"|"MATH_ABS"|"MIN"|"MATH_MIN"|"MAX"|"MATH_MAX"|"CLAMP"|"MATH_CLAMP"|"LEN"|
     "MUL_A"|"DIV_A"|"MOD_A"|
     "DRAW_CIRCLE"|"DRAW_CIRCLE_SEG"|"DRAW_ARC"|"DRAW_SPIRAL"|"DRAW_VECTORLIST"|"DRAW_POLYGON"|
-    "DRAW_RECT"|"DRAW_FILLED_RECT"|
-    "DEBUG_PRINT"|"DEBUG_PRINT_LABELED"|"DEBUG_PRINT_STR"
+    "DRAW_RECT"|"DRAW_FILLED_RECT"|"DRAW_ELLIPSE"|
+    "DEBUG_PRINT"|"DEBUG_PRINT_LABELED"|"DEBUG_PRINT_STR"|
+    "RAND"|"MATH_RAND"|"RAND_RANGE"|"MATH_RAND_RANGE"|
+    "BEEP"
     );
     
     // Helper para agregar comentario de tracking cuando es una llamada nativa real
@@ -348,6 +350,34 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
     
+    // BEEP: Non-blocking beep (PSG ch A, freq=50, 8 frames)
+    // Sets PSG registers and BEEP_FRAMES_LEFT counter, returns immediately.
+    // BEEP_UPDATE_RUNTIME (auto-injected at LOOP_BODY start) mutes PSG when timer expires.
+    if up == "BEEP" && args.is_empty() {
+        add_native_call_comment(out, "BEEP");
+        out.push_str("; BEEP() - non-blocking beep (PSG ch A, freq=50, 8 frames)\n");
+        out.push_str("    PSHS DP\n");
+        out.push_str("    LDA #$D0\n");
+        out.push_str("    TFR A,DP            ; DP=$D0 for Sound_Byte\n");
+        out.push_str("    LDA #0              ; PSG reg 0 = freq low\n");
+        out.push_str("    LDB #50\n");
+        out.push_str("    JSR Sound_Byte\n");
+        out.push_str("    LDA #1              ; PSG reg 1 = freq high\n");
+        out.push_str("    LDB #0\n");
+        out.push_str("    JSR Sound_Byte\n");
+        out.push_str("    LDA #7              ; PSG reg 7 = mixer (tone A on)\n");
+        out.push_str("    LDB #$3E            ; %00111110\n");
+        out.push_str("    JSR Sound_Byte\n");
+        out.push_str("    LDA #8              ; PSG reg 8 = volume A\n");
+        out.push_str("    LDB #15             ; Max volume\n");
+        out.push_str("    JSR Sound_Byte\n");
+        out.push_str("    PULS DP             ; Restore DP=$C8\n");
+        out.push_str("    LDA #8              ; Beep duration: 8 frames\n");
+        out.push_str("    STA >BEEP_FRAMES_LEFT  ; BEEP_UPDATE_RUNTIME will mute when this reaches 0\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
     // SFX_UPDATE: Update SFX playback (call once per frame, typically at end of loop)
     // Usage: SFX_UPDATE() -> advances envelope/pitch for any playing SFX
     if up == "SFX_UPDATE" && args.is_empty() {
@@ -883,35 +913,24 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     // DRAW_LINE fallback: if not all constants, use wrapper
     if up == "DRAW_LINE" && args.len() == 5 {
         // For arguments with variables/expressions, use wrapper
-        // CRITICAL: Store arguments in TMPPTR area (not RESULT) to prevent
-        // emit_expr from overwriting values during complex expression evaluation
-        // 
-        // Argument layout in TMPPTR:
-        // TMPPTR+0 = x0, TMPPTR+2 = y0, TMPPTR+4 = x1, TMPPTR+6 = y1, TMPPTR+8 = intensity
+        // Store directly into DRAW_LINE_ARGS (dedicated 10-byte buffer) to avoid
+        // corrupting TMPPTR area (TMPPTR+8 overlaps VPY_MOVE_Y at $C893).
+        //
+        // Argument layout in DRAW_LINE_ARGS:
+        // +0 = x0, +2 = y0, +4 = x1, +6 = y1, +8 = intensity
         for (i, arg) in args.iter().enumerate() {
             let offset = i * 2;
             match arg {
                 Expr::Number(n) => {
-                    // Direct constant - load and store to TMPPTR area
                     out.push_str(&format!("    LDD #{}\n", *n & 0xFFFF));
-                    out.push_str(&format!("    STD TMPPTR+{}\n", offset));
+                    out.push_str(&format!("    STD >DRAW_LINE_ARGS+{}\n", offset));
                 }
                 _ => {
-                    // Complex expression: evaluate to RESULT, then copy to TMPPTR
-                    // This prevents RESULT from being overwritten during next emit_expr
                     emit_expr(arg, out, fctx, string_map, opts);
-                    // Value is in D, store to TMPPTR area
-                    out.push_str(&format!("    STD TMPPTR+{}\n", offset));
+                    out.push_str(&format!("    STD >DRAW_LINE_ARGS+{}\n", offset));
                 }
             }
         }
-        // Copy from TMPPTR to RESULT for DRAW_LINE_WRAPPER
-        // DRAW_LINE_WRAPPER expects arguments at RESULT+0-8
-        out.push_str("    LDD TMPPTR+0\n    STD RESULT+0\n");
-        out.push_str("    LDD TMPPTR+2\n    STD RESULT+2\n");
-        out.push_str("    LDD TMPPTR+4\n    STD RESULT+4\n");
-        out.push_str("    LDD TMPPTR+6\n    STD RESULT+6\n");
-        out.push_str("    LDD TMPPTR+8\n    STD RESULT+8\n");
         out.push_str("    JSR DRAW_LINE_WRAPPER\n");
         out.push_str("    LDD #0\n    STD RESULT\n");
         return true;
@@ -938,10 +957,9 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                         for i in 0..n { if let (Expr::Number(xv), Expr::Number(yv)) = (&args[start_index+2*i], &args[start_index+2*i+1]) { verts.push((*xv, *yv)); } }
                         if verts.len()==n {
                             // OPTIMIZED MODE: Set intensity and DP once, then draw all edges efficiently
-                            // Set intensity once for all edges
-                            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
-                            // Set DP once for all VIA operations (inline for now)
+                            // Correct sequence: Reset0Ref first (zeros DAC), then Intensity_a
                             out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+                            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                             
                             for i in 0..n {
                                 let (x0,y0)=verts[i];
@@ -988,9 +1006,9 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
                         let y = (*yc as f64) + r*ang.sin();
                         verts.push((x.round() as i32, y.round() as i32));
                     }
-                    // Emit optimized similar to polygon - intensity FIRST, then Reset0Ref
-                    if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
+                    // Correct sequence: Reset0Ref first (zeros DAC), then Intensity_a
                     out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+                    if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
                     let (sx,sy)=verts[0];
                     out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (sy & 0xFF), (sx & 0xFF)));
                     for i in 0..segs {
@@ -1043,6 +1061,28 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
     
+    // RAND() — returns random 0..32767 in D
+    if (up == "RAND" || up == "MATH_RAND") && args.is_empty() {
+        out.push_str("    ; RAND: random number 0..32767\n");
+        out.push_str("    JSR RAND_HELPER\n");
+        out.push_str("    STD RESULT\n");
+        return true;
+    }
+
+    // RAND_RANGE(min, max) — returns random in [min, max] in D
+    if (up == "RAND_RANGE" || up == "MATH_RAND_RANGE") && args.len() == 2 {
+        out.push_str("    ; RAND_RANGE(min, max)\n");
+        // Evaluate min → TMPPTR
+        emit_expr(&args[0], out, fctx, string_map, opts);
+        out.push_str("    STD TMPPTR\n");
+        // Evaluate max → TMPPTR2
+        emit_expr(&args[1], out, fctx, string_map, opts);
+        out.push_str("    STD TMPPTR2\n");
+        out.push_str("    JSR RAND_RANGE_HELPER\n");
+        out.push_str("    STD RESULT\n");
+        return true;
+    }
+
     // DRAW_CIRCLE_SEG(nseg, xc,yc,diam[,intensity]) variable segments
     if up == "DRAW_CIRCLE_SEG" && (args.len()==4 || args.len()==5) && args.iter().all(|a| matches!(a, Expr::Number(_))) {
         if let (Expr::Number(nseg),Expr::Number(xc),Expr::Number(yc),Expr::Number(diam)) = (&args[0],&args[1],&args[2],&args[3]) {
@@ -1109,8 +1149,8 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
             let mut intensity: i32 = 0x5F;
             if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
             let (x0, y0, w0, h0) = (*x, *y, *w, *h);
-            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
             out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
             out.push_str("    CLR Vec_Misc_Count\n");
             out.push_str(&format!("    LDA #$00\n    LDB #${:02X}\n    JSR Draw_Line_d\n", (w0 & 0xFF)));   // right
@@ -1140,8 +1180,8 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
             let mut intensity: i32 = 0x5F;
             if args.len() == 5 { if let Expr::Number(i) = &args[4] { intensity = *i; } }
             let (x0, y0, w0, h0) = (*x, *y, *w, *h);
-            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
             out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+            if intensity == 0x5F { out.push_str("    JSR Intensity_5F\n"); } else { out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF)); }
             // First scanline: absolute position from (0,0)
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", (y0 & 0xFF), (x0 & 0xFF)));
             out.push_str("    CLR Vec_Misc_Count\n");
@@ -1168,7 +1208,53 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         return true;
     }
 
-    // Check if it's a struct instantiation BEFORE checking builtins
+    // DRAW_ELLIPSE(xc, yc, rx, ry[, intensity]) - ellipse approximation via 24-segment polygon
+    if up == "DRAW_ELLIPSE" && (args.len() == 4 || args.len() == 5) && args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        if let (Expr::Number(xc), Expr::Number(yc), Expr::Number(rx), Expr::Number(ry)) =
+            (&args[0], &args[1], &args[2], &args[3])
+        {
+            let mut intensity: i32 = 0x5F;
+            if args.len() == 5 {
+                if let Expr::Number(i) = &args[4] { intensity = *i; }
+            }
+            let segs = 24usize;
+            let rx_f = *rx as f64;
+            let ry_f = *ry as f64;
+            let mut verts: Vec<(i32, i32)> = Vec::new();
+            for k in 0..segs {
+                let ang = 2.0 * std::f64::consts::PI * (k as f64) / (segs as f64);
+                let x = (*xc as f64) + rx_f * ang.cos();
+                let y = (*yc as f64) + ry_f * ang.sin();
+                verts.push((x.round() as i32, y.round() as i32));
+            }
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+            if intensity == 0x5F {
+                out.push_str("    JSR Intensity_5F\n");
+            } else {
+                out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
+            }
+            let (sx, sy) = verts[0];
+            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                (sy & 0xFF) as u8, (sx & 0xFF) as u8));
+            for i in 0..segs {
+                let (x0, y0) = verts[i];
+                let (x1, y1) = verts[(i + 1) % segs];
+                let dx = ((x1 - x0) & 0xFF) as u8;
+                let dy = ((y1 - y0) & 0xFF) as u8;
+                out.push_str("    CLR Vec_Misc_Count\n");
+                out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", dy, dx));
+            }
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return true;
+        }
+    }
+    if up == "DRAW_ELLIPSE" && (args.len() == 4 || args.len() == 5) {
+        out.push_str("    ; DRAW_ELLIPSE with variables not yet implemented in core\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return true;
+    }
+
+// Check if it's a struct instantiation BEFORE checking builtins
     // Structs are detected by checking if name exists in struct registry
     if let Some(layout) = opts.structs.get(name) {
         out.push_str(&format!("; Struct instantiation: {} (size {} bytes)\n", name, layout.total_size));

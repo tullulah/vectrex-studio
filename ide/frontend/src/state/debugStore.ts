@@ -35,6 +35,7 @@ export interface PdbData {
   }>;
   vpyLineMap?: Record<string, { file: string; line: number; column: number }>; // Multibank format
   romConfig?: { isMultibank?: boolean; [key: string]: unknown };
+  variables?: Record<string, { name: string; address: string; size: number; type?: string; declLine?: number | null }>;
 }
 
 export interface CallFrame {

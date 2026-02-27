@@ -25,7 +25,7 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 26 bytes
+; Total RAM used: 36 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPPTR               EQU $C880+$02   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
 TMPPTR2              EQU $C880+$04   ; Pointer temp 2 (for nested array operations) (2 bytes)
@@ -34,11 +34,12 @@ TEMP_X               EQU $C880+$08   ; Temporary x storage (1 bytes)
 TEMP_Y               EQU $C880+$09   ; Temporary y storage (1 bytes)
 VPY_MOVE_X           EQU $C880+$0A   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$0B   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-NUM_STR              EQU $C880+$0C   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-VAR_ARG0             EQU $C880+$12   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$14   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$16   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$18   ; Function argument 3 (2 bytes)
+DRAW_LINE_ARGS       EQU $C880+$0C   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity as i16x5) (10 bytes)
+NUM_STR              EQU $C880+$16   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+VAR_ARG0             EQU $C880+$1C   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$1E   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$20   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$22   ; Function argument 3 (2 bytes)
 
     JMP START
 

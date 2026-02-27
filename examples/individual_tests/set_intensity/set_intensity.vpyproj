@@ -1,0 +1,12 @@
+[project]
+name = "set_intensity"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/set_intensity.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

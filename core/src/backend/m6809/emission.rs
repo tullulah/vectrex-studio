@@ -176,7 +176,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     }
     if w.contains("VECTREX_PRINT_TEXT") {
         let start_line = out.lines().count() + 1;
-        let function_code = "VECTREX_PRINT_TEXT:\n    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)\n    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)\n    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n    LDA #$D0\n    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n    JSR Reset0Ref  ; Reset beam to center for absolute text positioning\n    LDU VAR_ARG2   ; string pointer (ARG2 = third param)\n    LDA VAR_ARG1+1 ; Y (ARG1 = second param)\n    LDB VAR_ARG0+1 ; X (ARG0 = first param)\n    JSR Print_Str_d\n    LDA #$80\n    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)\n    JSR $F1AF      ; DP_to_C8 (restore before return)\n    RTS\n";
+        let function_code = "VECTREX_PRINT_TEXT:\n    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)\n    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)\n    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n    LDA #$D0\n    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)\n    JSR Reset0Ref  ; Reset beam to center for absolute text positioning\n    LDU VAR_ARG2   ; string pointer (ARG2 = third param)\n    LDA VAR_ARG1+1 ; Y (ARG1 = second param)\n    LDB VAR_ARG0+1 ; X (ARG0 = first param)\n    JSR Print_Str_d\n    LDA #$80\n    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)\n    JSR $F1AF      ; DP_to_C8 (restore before return)\n    RTS\n";
         out.push_str(function_code);
         let end_line = out.lines().count();
         
@@ -237,7 +237,7 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
     if w.contains("DRAW_LINE_WRAPPER") {
         // Header and setup
         out.push_str("; DRAW_LINE unified wrapper - handles 16-bit signed coordinates\n");
-        out.push_str("; Args: (x0,y0,x1,y1,intensity) as 16-bit words\n");
+        out.push_str("; Args in DRAW_LINE_ARGS[0..9]: x0,y0,x1,y1,intensity (5x i16, low byte used for coords)\n");
         out.push_str("; Resets beam to center, moves to (x0,y0), draws to (x1,y1)\n");
         out.push_str("DRAW_LINE_WRAPPER:\n");
         out.push_str("    ; Set DP to hardware registers\n");
@@ -249,25 +249,25 @@ pub fn emit_builtin_helpers(out: &mut String, usage: &RuntimeUsage, opts: &Codeg
 
         // Set intensity and move to start — use extended addressing since DP=$D0
         out.push_str("    ; Set intensity\n");
-        out.push_str("    LDA >RESULT+8+1  ; intensity (low byte) - extended addressing\n");
+        out.push_str("    LDA >DRAW_LINE_ARGS+9  ; intensity (low byte)\n");
         out.push_str("    JSR Intensity_a\n");
         out.push_str("    ; Move to start position (y in A, x in B)\n");
-        out.push_str("    LDA >RESULT+2+1  ; Y start (low byte) - extended addressing\n");
-        out.push_str("    ADDA VPY_MOVE_Y  ; Add MOVE Y offset\n");
-        out.push_str("    LDB >RESULT+0+1  ; X start (low byte) - extended addressing\n");
-        out.push_str("    ADDB VPY_MOVE_X  ; Add MOVE X offset\n");
+        out.push_str("    LDA >DRAW_LINE_ARGS+3  ; Y start (low byte)\n");
+        out.push_str("    ADDA >VPY_MOVE_Y       ; Add MOVE Y offset\n");
+        out.push_str("    LDB >DRAW_LINE_ARGS+1  ; X start (low byte)\n");
+        out.push_str("    ADDB >VPY_MOVE_X       ; Add MOVE X offset\n");
         out.push_str("    JSR Moveto_d\n");
-        
+
         // Compute deltas
         out.push_str("    ; Compute deltas using 16-bit arithmetic\n");
         out.push_str("    ; dx = x1 - x0 (treating as signed 16-bit)\n");
-        out.push_str("    LDD RESULT+4    ; x1 (RESULT+4, 16-bit)\n");
-        out.push_str("    SUBD RESULT+0   ; subtract x0 (RESULT+0, 16-bit)\n");
-        out.push_str("    STD VLINE_DX_16 ; Store full 16-bit dx\n");
+        out.push_str("    LDD >DRAW_LINE_ARGS+4  ; x1 (16-bit)\n");
+        out.push_str("    SUBD >DRAW_LINE_ARGS+0 ; subtract x0 (16-bit)\n");
+        out.push_str("    STD VLINE_DX_16        ; Store full 16-bit dx\n");
         out.push_str("    ; dy = y1 - y0 (treating as signed 16-bit)\n");
-        out.push_str("    LDD RESULT+6    ; y1 (RESULT+6, 16-bit)\n");
-        out.push_str("    SUBD RESULT+2   ; subtract y0 (RESULT+2, 16-bit)\n");
-        out.push_str("    STD VLINE_DY_16 ; Store full 16-bit dy\n");
+        out.push_str("    LDD >DRAW_LINE_ARGS+6  ; y1 (16-bit)\n");
+        out.push_str("    SUBD >DRAW_LINE_ARGS+2 ; subtract y0 (16-bit)\n");
+        out.push_str("    STD VLINE_DY_16        ; Store full 16-bit dy\n");
         
         // SEGMENT 1: Clamp and draw first segment
         out.push_str("    ; SEGMENT 1: Clamp dy to ±127 and draw\n");
@@ -538,10 +538,23 @@ PSG_update_done:\n\
             ; STOP_MUSIC_RUNTIME - Stop music playback\n\
             ; ============================================================================\n\
             STOP_MUSIC_RUNTIME:\n\
-            CLR >PSG_IS_PLAYING ; Clear playing flag (extended - var at 0xC8A0)\n\
-            CLR >PSG_MUSIC_PTR     ; Clear pointer high byte (force extended)\n\
-            CLR >PSG_MUSIC_PTR+1   ; Clear pointer low byte (force extended)\n\
-            ; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing\n\
+            CLR >PSG_IS_PLAYING     ; Clear playing flag\n\
+            CLR >PSG_MUSIC_PTR      ; Clear pointer high byte\n\
+            CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte\n\
+            ; Mute all PSG channels so the last note doesn't keep sounding\n\
+            PSHS DP\n\
+            LDA #$D0\n\
+            TFR A,DP                ; Set DP=$D0 for Sound_Byte\n\
+            LDA #8                  ; PSG reg 8 = Volume Channel A\n\
+            LDB #0\n\
+            JSR Sound_Byte\n\
+            LDA #9                  ; PSG reg 9 = Volume Channel B\n\
+            LDB #0\n\
+            JSR Sound_Byte\n\
+            LDA #10                 ; PSG reg 10 = Volume Channel C\n\
+            LDB #0\n\
+            JSR Sound_Byte\n\
+            PULS DP\n\
             RTS\n\
             \n\
             ; ============================================================================\n\
@@ -1485,7 +1498,54 @@ DCR_after_intensity:\n\
         );
     }
     
-    // ========== JOYSTICK SUPPORT ==========
+
+    // ========== RAND HELPERS ==========
+    if usage.wrappers_used.contains("RAND_HELPER") {
+        out.push_str(concat!(
+            "; === RAND_HELPER - LCG random number generator ===\n",
+            "; Returns D = random value 0..$7FFF\n",
+            "RAND_HELPER:\n",
+            "    LDD RAND_SEED\n",
+            "    LDX #26\n",
+            "    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)\n",
+            "    PSHS D\n",
+            "    LDD #0\n",
+            "RAND_MUL_LOOP:\n",
+            "    LEAX -1,X\n",
+            "    BEQ RAND_MUL_DONE\n",
+            "    ADDD ,S\n",
+            "    BRA RAND_MUL_LOOP\n",
+            "RAND_MUL_DONE:\n",
+            "    LEAS 2,S\n",
+            "    ADDD #13\n",
+            "    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output\n",
+            "    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)\n",
+            "    RTS\n\n",
+        ));
+    }
+    if usage.wrappers_used.contains("RAND_RANGE_HELPER") {
+        out.push_str(concat!(
+            "; === RAND_RANGE_HELPER - Random in [min, max] ===\n",
+            "; Inputs: TMPPTR = min (i16), TMPPTR2 = max (i16)\n",
+            "; Returns: D = min + (rand % (max - min + 1))\n",
+            "RAND_RANGE_HELPER:\n",
+            "    JSR RAND_HELPER        ; D = rand (0..$7FFF)\n",
+            "    PSHS D                 ; Save rand\n",
+            "    LDD TMPPTR2            ; max\n",
+            "    SUBD TMPPTR            ; D = max - min\n",
+            "    ADDD #1                ; D = inclusive range\n",
+            "    STD TMPPTR2            ; TMPPTR2 = range\n",
+            "    PULS D                 ; Restore rand\n",
+            "RRH_MOD:\n",
+            "    SUBD TMPPTR2           ; D -= range\n",
+            "    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting\n",
+            "    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range\n",
+            "    ADDD TMPPTR            ; Add min -> D in [min, max]\n",
+            "    RTS\n\n",
+        ));
+    }
+
+// ========== JOYSTICK SUPPORT ==========
     // VPy programs now use REAL BIOS routines just like commercial ROMs:
     // - Joy_Digital ($F1F8) - reads joystick axes, updates Vec_Joy_1_X/Y ($C81B/$C81C)
     // - Read_Btns ($F1BA) - reads button states, updates Vec_Btn_State ($C80F)
@@ -2170,6 +2230,33 @@ DCR_after_intensity:\n\
         out.push_str("    RTS\n");
         out.push_str("    \n");
         } // End conditional ULR_GAMEPLAY_COLLISIONS
+    }
+
+    // BEEP_UPDATE_RUNTIME: auto-injected at LOOP_BODY start when beep() is used
+    if w.contains("BEEP_UPDATE_RUNTIME") {
+        out.push_str(
+            "; ============================================================================\n\
+            ; BEEP_UPDATE_RUNTIME - Tick beep countdown, mute PSG when expired\n\
+            ; ============================================================================\n\
+            ; Called once per frame (auto-injected before user code in LOOP_BODY).\n\
+            ; Non-blocking: drawing continues normally while PSG plays the tone.\n\
+            BEEP_UPDATE_RUNTIME:\n\
+            LDA >BEEP_FRAMES_LEFT    ; Check beep timer\n\
+            BEQ BEEP_UPDATE_DONE     ; Zero = nothing playing, skip\n\
+            DECA\n\
+            STA >BEEP_FRAMES_LEFT    ; Decrement and store\n\
+            BNE BEEP_UPDATE_DONE     ; Still counting, keep playing\n\
+            ; Timer just expired: mute PSG channel A\n\
+            PSHS DP\n\
+            LDA #$D0\n\
+            TFR A,DP                ; DP=$D0 for Sound_Byte\n\
+            LDA #8                  ; PSG reg 8 = Volume Channel A\n\
+            LDB #0\n\
+            JSR Sound_Byte\n\
+            PULS DP\n\
+BEEP_UPDATE_DONE:\n\
+            RTS\n\n"
+        );
     }
 }
 

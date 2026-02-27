@@ -487,6 +487,10 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     ram.allocate("TEMP_Y", 1, "Temporary y storage");
     ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
     ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
+    ram.allocate("DRAW_LINE_ARGS", 10, "DRAW_LINE argument buffer (x0,y0,x1,y1,intensity as i16x5)");
+    if rt_usage.wrappers_used.contains("RAND_HELPER") {
+        ram.allocate("RAND_SEED", 2, "Random seed for RAND() LCG");
+    }
     
     // 6. PSG Music variables (needed by AUDIO_UPDATE which is emitted for music OR sfx)
     if has_music_assets || has_sfx_assets {
@@ -515,6 +519,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     // 8. PRINT_NUMBER buffer (always allocate if not suppressed)
     if !suppress_runtime {
         ram.allocate("NUM_STR", 6, "String buffer for PRINT_NUMBER (5 digits + terminator)");
+    }
+
+    // 8.1 BEEP timer (non-blocking beep countdown)
+    if rt_usage.wrappers_used.contains("BEEP_UPDATE_RUNTIME") {
+        ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
     }
     
     // 9. DRAW_VECTOR position/mirror variables (used by DRAW_VECTOR, DRAW_VECTOR_EX, and SHOW_LEVEL)
@@ -960,6 +969,10 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
                     out.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
                     out.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
                     out.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+                    // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
+                    if rt_usage.wrappers_used.contains("BEEP_UPDATE_RUNTIME") {
+                        out.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+                    }
 
                     let fctx = FuncCtx { locals: locals.clone(), frame_size, var_info, struct_type: None, params: f.params.clone() };
                     for (i, stmt) in f.body.iter().enumerate() {

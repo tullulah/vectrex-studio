@@ -468,11 +468,13 @@ impl SfxResource {
 
         // Calculate PSG period from frequency
         // AY-3-8910: f = clock / (16 * TP), so TP = clock / (16 * f)
-        // Vectrex PSG clock = 1.5 MHz
+        // JSVecX emulator: 4 PSG ticks per output sample (tick_rate = 4*44100 = 176400 Hz)
+        //   freq = tick_rate / (2 * period)  =>  period = 88200 / freq
+        //   Virtual PSG clock = 16 * 88200 = 1411200 Hz
         let base_period = if self.oscillator.frequency > 0 {
-            (1_500_000u32 / (16 * self.oscillator.frequency as u32)).min(4095) as u16
+            (1_411_200u32 / (16 * self.oscillator.frequency as u32)).max(1).min(4095) as u16
         } else {
-            213 // Default to A4 (440Hz) = period 213
+            200 // Default to A4 (440Hz) = period ~200
         };
         
         // Duration in frames (50 FPS for Vectrex)
@@ -542,11 +544,11 @@ impl SfxResource {
                 // Apply note offset
                 let current_midi = (base_midi_note + note_offset as f32).round() as i32;
 
-                // Convert MIDI note to PSG period
+                // Convert MIDI note to PSG period (calibrated for JSVecX: virtual clock = 1411200 Hz)
                 // freq = 440 * 2^((midi - 69) / 12)
-                // TP = 1_500_000 / (16 * freq)
+                // TP = 1411200 / (16 * freq) = 88200 / freq
                 let frequency = 440.0 * 2.0_f32.powf((current_midi - 69) as f32 / 12.0);
-                current_period = (1_500_000.0 / (16.0 * frequency)).round() as u16;
+                current_period = (1_411_200.0 / (16.0 * frequency)).round() as u16;
                 current_period = current_period.max(1).min(4095);
             } else if self.pitch.enabled && total_frames > 1 {
                 // PITCH SWEEP: smooth frequency change
@@ -563,34 +565,51 @@ impl SfxResource {
                 current_period = current_period.max(1).min(4095);
             }
             
+            // Noise volume: independent decay over noise.decay_ms
+            let noise_frame_vol: u8 = if self.noise.enabled {
+                if self.noise.decay_ms > 0 {
+                    let noise_total_frames = (self.noise.decay_ms as u32 * 50 / 1000).max(1) as f32;
+                    let progress = (frame as f32 / noise_total_frames).min(1.0);
+                    ((1.0 - progress) * self.noise.volume as f32).round() as u8
+                } else {
+                    self.noise.volume
+                }
+            } else {
+                0
+            };
+
+            // Channel volume: whichever is louder — tone envelope or noise
+            let channel_volume = volume.max(noise_frame_vol);
+
             // Build flag byte
-            let mut flag: u8 = volume & 0x0F; // Bits 0-3: volume
-            
+            let mut flag: u8 = channel_volume & 0x0F; // Bits 0-3: volume
+
             // VRelease optimization: only include data when it changes
             // EXCEPTION: if arpeggio is active, ALWAYS emit tone (notes change every frame)
             // This prevents desync where player reads wrong bytes
             let include_tone = self.modulation.arpeggio || last_period != Some(current_period);
+            // Noise is active only while noise_frame_vol > 0
+            let noise_active = self.noise.enabled && noise_frame_vol > 0;
             // Include noise if: (1) period changed, OR (2) tone is being emitted now
-            // This ensures noise stays active during tone+noise sections
-            let include_noise = self.noise.enabled && (last_noise != Some(self.noise.period) || include_tone);
-            
+            let include_noise = noise_active && (last_noise != Some(self.noise.period) || include_tone);
+
             if include_tone {
                 flag |= 0x20; // Bit 5: tone data present
             }
             if include_noise {
                 flag |= 0x40; // Bit 6: noise data present
             }
-            
+
             // Bit 4: disable tone (never for simple SFX)
-            // Bit 7: disable noise (set if noise not enabled)
-            if !self.noise.enabled {
+            // Bit 7: disable noise (set if noise not active this frame)
+            if !noise_active {
                 flag |= 0x80;
             }
-            
+
             // Emit frame data
-            asm.push_str(&format!("    FCB ${:02X}         ; Frame {} - flags (vol={}, tone={}, noise={})
+            asm.push_str(&format!("    FCB ${:02X}         ; Frame {} - flags (vol={}, noisevol={}, tone={}, noise={})
 ",
-                flag, frame, volume,
+                flag, frame, channel_volume, noise_frame_vol,
                 if include_tone { "Y" } else { "N" },
                 if include_noise { "Y" } else { "N" }
             ));

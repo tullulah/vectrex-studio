@@ -128,18 +128,21 @@ impl MusicResource {
         }
     }
     
-    /// MIDI note to PSG frequency (Vectrex uses 1.5 MHz clock)
-    /// Formula: freq = 1500000 / (32 * midi_freq_hz)
+    /// MIDI note to PSG frequency (calibrated for JSVecX emulator)
+    /// Formula: Period = 44100 / freq_hz
     pub fn midi_to_psg_period(midi: u8) -> u16 {
         // MIDI note to Hz: 440 * 2^((note - 69) / 12)
         let note = midi as f64;
         let freq_hz = 440.0 * 2.0_f64.powf((note - 69.0) / 12.0);
-        
+
         // AY-3-8910 PSG formula: Freq_out = Clock / (16 * Period)
-        // Vectrex clock: 1.5MHz
-        // Therefore: Period = 1.5MHz / (16 * freq)
-        let period = (1_500_000.0 / (16.0 * freq_hz)) as u16;
-        period.clamp(0, 4095) // 12-bit period
+        // JSVecX emulator: buffer=512 samples, length<<1=1024 outer iterations, left=2 ticks each,
+        //   but output written only every other iteration → 4 PSG ticks per output sample
+        //   tick_rate = 4 * 44100 = 176400 Hz
+        //   freq = tick_rate / (2 * period)  =>  period = 88200 / freq
+        //   Virtual PSG clock = 16 * 88200 = 1411200 Hz
+        let period = (1_411_200.0 / (16.0 * freq_hz)) as u16;
+        period.clamp(1, 4095) // 12-bit period, min 1
     }
     
     /// Compile to direct PSG format (inspired by Christman2024/malbanGit)

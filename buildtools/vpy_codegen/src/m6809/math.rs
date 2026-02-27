@@ -380,40 +380,40 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; LCG: seed = (seed * 1103515245 + 12345) & 0x7FFF\n");
         out.push_str("    ; Simplified for 6809: seed = (seed * 25 + 13) & 0x7FFF\n");
         out.push_str("    LDD RAND_SEED\n");
-        out.push_str("    LDX #25\n");
-        out.push_str("    ; Multiply by 25 (simple loop)\n");
+        out.push_str("    LDX #26\n");
+        out.push_str("    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)\n");
         out.push_str("    PSHS D\n");
         out.push_str("    LDD #0\n");
-        out.push_str(".RAND_MUL_LOOP:\n");
+        out.push_str("RAND_MUL_LOOP:\n");
         out.push_str("    LEAX -1,X\n");
-        out.push_str("    BEQ .RAND_MUL_DONE\n");
+        out.push_str("    BEQ RAND_MUL_DONE\n");
         out.push_str("    ADDD ,S\n");
-        out.push_str("    BRA .RAND_MUL_LOOP\n");
-        out.push_str(".RAND_MUL_DONE:\n");
+        out.push_str("    BRA RAND_MUL_LOOP\n");
+        out.push_str("RAND_MUL_DONE:\n");
         out.push_str("    LEAS 2,S\n");
-        out.push_str("    ADDD #13       ; Add constant\n");
-        out.push_str("    ANDA #$7F      ; Mask to positive 15-bit\n");
-        out.push_str("    STD RAND_SEED  ; Update seed\n");
+        out.push_str("    ADDD #13       ; Add constant c=13 (odd, Hull-Dobell ok)\n");
+        out.push_str("    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output\n");
+        out.push_str("    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)\n");
         out.push_str("    RTS\n\n");
     }
     
     // RAND_RANGE_HELPER: Random in range [min, max]
     if needed.contains("RAND_RANGE_HELPER") {
-            out.push_str("RAND_RANGE_HELPER:\n");
-        out.push_str("    ; Input: TMPPTR = min, TMPPTR2 = max\n");
-        out.push_str("    JSR RAND_HELPER\n");
-        out.push_str("    ; D = rand()\n");
-        out.push_str("    ; range = max - min\n");
-        out.push_str("    PSHS D         ; Save random value\n");
-        out.push_str("    LDD TMPPTR2    ; max\n");
-        out.push_str("    SUBD TMPPTR    ; max - min\n");
-        out.push_str("    STD TMPPTR2    ; Save range\n");
-        out.push_str("    ; result = (rand % range) + min\n");
-        out.push_str("    PULS D         ; Restore random\n");
-        out.push_str("    ; Simple modulo: D = D % TMPPTR2 (TODO: proper modulo)\n");
-        out.push_str("    ; For now: mask to range (works for power-of-2 ranges)\n");
-        out.push_str("    ; result = min + (rand & (range-1))\n");
-        out.push_str("    ADDD TMPPTR    ; Add min\n");
+        out.push_str("RAND_RANGE_HELPER:\n");
+        out.push_str("    ; Input: TMPPTR = min (i16), TMPPTR2 = max (i16)\n");
+        out.push_str("    ; Returns: D = min + (rand % (max - min + 1))\n");
+        out.push_str("    JSR RAND_HELPER        ; D = rand (0..$7FFF)\n");
+        out.push_str("    PSHS D                 ; Save rand\n");
+        out.push_str("    LDD TMPPTR2            ; max\n");
+        out.push_str("    SUBD TMPPTR            ; D = max - min\n");
+        out.push_str("    ADDD #1                ; D = inclusive range\n");
+        out.push_str("    STD TMPPTR2            ; TMPPTR2 = range\n");
+        out.push_str("    PULS D                 ; Restore rand\n");
+        out.push_str("RRH_MOD:\n");
+        out.push_str("    SUBD TMPPTR2           ; D -= range\n");
+        out.push_str("    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting\n");
+        out.push_str("    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range\n");
+        out.push_str("    ADDD TMPPTR            ; Add min -> D in [min, max]\n");
         out.push_str("    RTS\n\n");
     }
 }

@@ -617,7 +617,11 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
 /// Evalúa una expresión aritmética: SYMBOL+10, LABEL-2, etc.
 fn evaluate_expression(expr: &str, equates: &HashMap<String, u16>) -> Result<u16, String> {
     let expr = expr.trim();
-    
+    // Strip force-extended (>) and force-direct (<) addressing prefixes.
+    // These are addressing mode hints for the caller — the symbol name itself has no prefix.
+    let expr = expr.strip_prefix('>').unwrap_or(expr);
+    let expr = expr.strip_prefix('<').unwrap_or(expr);
+
     // Detectar operadores + o -
     if let Some(pos) = expr.rfind('+') {
         let left = expr[..pos].trim();
@@ -1490,6 +1494,19 @@ fn emit_adda(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
         let val = parse_immediate(&operand[1..])?;
         emitter.adda_immediate(val);
         Ok(())
+    } else if operand.starts_with('>') {
+        // Extended mode forced (lwasm compatibility) - strip > and resolve
+        let inner = &operand[1..];
+        match evaluate_expression(inner, equates) {
+            Ok(addr) => { emitter.adda_extended(addr); Ok(()) }
+            Err(msg) => {
+                if msg.starts_with("SYMBOL:") {
+                    let (symbol, addend) = parse_symbol_and_addend(&msg)?;
+                    emitter.emit_extended_symbol_ref(0xBB, &symbol, addend); // ADDA extended
+                    Ok(())
+                } else { Err(msg) }
+            }
+        }
     } else if operand.contains(',') {
         // Modo indexado: ADDA ,X  ADDA 5,Y  etc.
         let (postbyte, offset) = parse_indexed_mode(operand)?;
@@ -1526,6 +1543,19 @@ fn emit_addb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
         let val = parse_immediate(&operand[1..])?;
         emitter.addb_immediate(val);
         Ok(())
+    } else if operand.starts_with('>') {
+        // Extended mode forced (lwasm compatibility) - strip > and resolve
+        let inner = &operand[1..];
+        match evaluate_expression(inner, equates) {
+            Ok(addr) => { emitter.emit(0xFB); emitter.emit_word(addr); Ok(()) }
+            Err(msg) => {
+                if msg.starts_with("SYMBOL:") {
+                    let (symbol, addend) = parse_symbol_and_addend(&msg)?;
+                    emitter.emit_extended_symbol_ref(0xFB, &symbol, addend); // ADDB extended
+                    Ok(())
+                } else { Err(msg) }
+            }
+        }
     } else if operand.contains(',') {
         // INDEXED MODE (e.g., ",X", "B,X", "5,Y")
         emitter.emit(0xEB); // ADDB indexed opcode

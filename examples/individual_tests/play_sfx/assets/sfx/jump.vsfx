@@ -2,7 +2,7 @@
   "version": "1.0",
   "name": "powerup",
   "category": "powerup",
-  "duration_ms": 200,
+  "duration_ms": 230,
   "oscillator": {
     "frequency": 440,
     "channel": 0,

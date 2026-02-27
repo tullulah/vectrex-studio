@@ -66,7 +66,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("DRAW_LINE", 5),
     ("SET_ORIGIN", 0),
     ("SET_INTENSITY", 1),
-    ("DEBUG_PRINT", 1),
+("DEBUG_PRINT", 1),
     ("DEBUG_PRINT_LABELED", 2),  // label, value
     ("DEBUG_PRINT_STR", 1),      // string variable
     
@@ -89,7 +89,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("DRAW_CIRCLE_SEG", 999),// Variable arity: nseg, xc, yc, diam, [intensity]
     ("DRAW_ARC", 999),       // Variable arity - arc drawing
     ("DRAW_SPIRAL", 999),    // Variable arity - spiral drawing
-    ("DRAW_RECT", 5),       // x, y, width, height, intensity
+    ("DRAW_RECT", 5),        // x, y, width, height, intensity
+    ("DRAW_FILLED_RECT", 999), // x, y, width, height, [intensity]
+    ("DRAW_ELLIPSE", 999),   // xc, yc, rx, ry, [intensity]
     
     // Funciones específicas de vectorlist
     ("DRAW_VL", 2),
@@ -112,7 +114,17 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("MUL_A", 2),           // Multiply
     ("DIV_A", 2),           // Divide
     ("MOD_A", 2),           // Modulo
-    
+    ("SIN", 1),             // Sine via LUT (arg 0..127 = full circle)
+    ("COS", 1),             // Cosine via LUT
+    ("TAN", 1),             // Tangent via LUT
+    ("MATH_SIN", 1),        // Alias
+    ("MATH_COS", 1),        // Alias
+    ("MATH_TAN", 1),        // Alias
+    ("RAND", 0),            // Random number 0..32767
+    ("MATH_RAND", 0),       // Alias
+    ("RAND_RANGE", 2),      // Random number in [min, max]
+    ("MATH_RAND_RANGE", 2), // Alias
+
     // Array functions
     ("LEN", 1),             // Get array length
     
@@ -153,6 +165,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("UPDATE_LEVEL", 0),    // Update gameplay layer physics objects
     ("UPDATE_LEVEL", 0),    // Update level state (physics, animations) - placeholder
     
+    // Utilities
+    ("BEEP", 0),            // Short beep sound (default tone, ~3 frames)
+
     // Compatibilidad hacia atrás (deprecated)
     ("MOVE_TO", 2),         // deprecated: use MOVE
 ];
@@ -176,6 +191,8 @@ fn is_valid_builtin_arity(name: &str, arg_count: usize) -> bool {
         "DRAW_CIRCLE_SEG" => arg_count >= 4,     // nseg, xc, yc, diam, intensity?
         "DRAW_ARC" => arg_count >= 4,            // Arc drawing variadic
         "DRAW_SPIRAL" => arg_count >= 3,         // Spiral drawing variadic
+        "DRAW_FILLED_RECT" => arg_count == 4 || arg_count == 5, // x, y, w, h, [intensity]
+        "DRAW_ELLIPSE" => arg_count == 4 || arg_count == 5,     // xc, yc, rx, ry, [intensity]
         _ => {
             // Fixed-arity functions
             if let Some(exp) = expected_builtin_arity(name) {

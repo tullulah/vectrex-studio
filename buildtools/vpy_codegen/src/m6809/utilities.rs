@@ -172,161 +172,62 @@ pub fn emit_wait(args: &[Expr], out: &mut String) {
     out.push_str("    STD RESULT\n");
 }
 
-/// Emit BEEP(frequency, duration) - Generate sound
-/// 
+/// Emit BEEP(frequency, duration) - Generate sound (non-blocking)
+///
 /// Parameters:
-/// - frequency: Sound frequency (0-255, PSG period)
-/// - duration: Duration in frames (1-255)
-/// 
-/// Uses PSG registers for tone generation
+/// - frequency: PSG period value (0-255); higher = lower pitch. 50 ≈ ~1.8kHz
+/// - duration: Duration in frames (1-255); timer decremented by BEEP_UPDATE_RUNTIME
+///
+/// Non-blocking: sets PSG registers and BEEP_FRAMES_LEFT counter, then returns.
+/// BEEP_UPDATE_RUNTIME (auto-injected at LOOP_BODY start) mutes PSG when timer expires.
+/// No busy-wait = no frame blanking = no screen flicker.
 pub fn emit_beep(args: &[Expr], out: &mut String) {
-    out.push_str("    ; ===== BEEP builtin =====\n");
-    
-    if args.len() != 2 {
-        out.push_str("    ; ERROR: BEEP requires 2 arguments (frequency, duration)\n");
-        out.push_str("    LDD #0\n");
-        out.push_str("    STD RESULT\n");
-        return;
-    }
-    
-    // Check if arguments are constants
-    if let (Expr::Number(freq), Expr::Number(dur)) = (&args[0], &args[1]) {
-        out.push_str("    ; Set PSG tone on channel A\n");
-        out.push_str("    LDA #$D0\n");
-        out.push_str("    TFR A,DP               ; Set DP to PSG\n");
-        out.push_str(&format!("    LDA #{}                ; Frequency low\n", freq & 0xFF));
-        out.push_str("    STA <$00               ; PSG register 0\n");
-        out.push_str("    LDA #0\n");
-        out.push_str("    STA <$01               ; PSG register 1 (high)\n");
-        out.push_str("    LDA #$0F               ; Volume max\n");
-        out.push_str("    STA <$08               ; PSG register 8 (volume A)\n");
-        out.push_str("    LDA #$C8\n");
-        out.push_str("    TFR A,DP               ; Restore DP\n");
-        out.push_str("    \n");
-        out.push_str(&format!("    ; Wait {} frames\n", dur));
-        out.push_str(&format!("    LDA #{}                ; Duration\n", dur));
-        out.push_str("BEEP_LOOP:\n");
-        out.push_str("    PSHS A\n");
-        out.push_str("    JSR Wait_Recal\n");
-        out.push_str("    PULS A\n");
-        out.push_str("    DECA\n");
-        out.push_str("    BNE BEEP_LOOP\n");
-        out.push_str("    \n");
-        out.push_str("    ; Silence\n");
-        out.push_str("    LDA #$D0\n");
-        out.push_str("    TFR A,DP\n");
-        out.push_str("    LDA #0\n");
-        out.push_str("    STA <$08               ; Volume off\n");
-        out.push_str("    LDA #$C8\n");
-        out.push_str("    TFR A,DP\n");
+    out.push_str("    ; ===== BEEP builtin (non-blocking) =====\n");
+
+    // Resolve (freq, dur): 0 args = defaults, 2 const args = explicit
+    let (freq, dur): (i32, i32) = if args.is_empty() {
+        (50, 8)
+    } else if args.len() == 2 {
+        if let (Expr::Number(f), Expr::Number(d)) = (&args[0], &args[1]) {
+            (*f, *d)
+        } else {
+            out.push_str("    ; TODO: Support variable frequency/duration\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return;
+        }
     } else {
-        out.push_str("    ; TODO: Support variable frequency/duration\n");
-    }
-    
+        out.push_str("    ; ERROR: BEEP requires 0 or 2 arguments\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    };
+
+    // Use Sound_Byte BIOS call for proper VIA-mediated PSG writes
+    out.push_str("    PSHS DP\n");
+    out.push_str("    LDA #$D0\n");
+    out.push_str("    TFR A,DP            ; DP=$D0 for Sound_Byte\n");
+    out.push_str("    LDA #0              ; PSG reg 0 = freq low\n");
+    out.push_str(&format!("    LDB #{}             ; frequency period ({})\n", freq & 0xFF, freq & 0xFF));
+    out.push_str("    JSR Sound_Byte\n");
+    out.push_str("    LDA #1              ; PSG reg 1 = freq high\n");
+    out.push_str("    LDB #0\n");
+    out.push_str("    JSR Sound_Byte\n");
+    out.push_str("    LDA #7              ; PSG reg 7 = mixer\n");
+    out.push_str("    LDB #$3E            ; Enable tone A, disable noise\n");
+    out.push_str("    JSR Sound_Byte\n");
+    out.push_str("    LDA #8              ; PSG reg 8 = volume A\n");
+    out.push_str("    LDB #15             ; Max volume\n");
+    out.push_str("    JSR Sound_Byte\n");
+    out.push_str("    PULS DP             ; Restore DP=$C8\n");
+    // Set timer - BEEP_UPDATE_RUNTIME will mute PSG after this many frames
+    out.push_str(&format!("    LDA #{}             ; Beep duration: {} frames\n", dur, dur));
+    out.push_str("    STA >BEEP_FRAMES_LEFT\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }
 
-/// Emit FADE_IN() - Gradual intensity increase
-/// 
-/// Gradually increases intensity from 0 to current SET_INTENSITY value.
-/// Uses 8 steps with WAIT_RECAL between each.
-pub fn emit_fade_in(_args: &[Expr], out: &mut String) {
-    out.push_str("    ; ===== FADE_IN builtin =====\n");
-    out.push_str("    JSR FADE_IN_RUNTIME\n");
-    out.push_str("    LDD #0\n");
-    out.push_str("    STD RESULT\n");
-}
-
-/// Emit FADE_OUT() - Gradual intensity decrease
-/// 
-/// Gradually decreases intensity from current value to 0.
-/// Uses 8 steps with WAIT_RECAL between each.
-pub fn emit_fade_out(_args: &[Expr], out: &mut String) {
-    out.push_str("    ; ===== FADE_OUT builtin =====\n");
-    out.push_str("    JSR FADE_OUT_RUNTIME\n");
-    out.push_str("    LDD #0\n");
-    out.push_str("    STD RESULT\n");
-}
 
 /// Emit runtime helpers for utilities builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
-    // FADE_IN_RUNTIME: Gradual intensity increase
-    if needed.contains("FADE_IN_RUNTIME") {
-        out.push_str("; === FADE_IN_RUNTIME - Gradual intensity increase ===\n");
-        out.push_str("FADE_IN_RUNTIME:\n");
-    out.push_str("    ; Input: CURRENT_INTENSITY (target intensity)\n");
-    out.push_str("    ; Gradually increases from 0 to target in 8 steps\n");
-    out.push_str("    \n");
-    out.push_str("    LDA CURRENT_INTENSITY\n");
-    out.push_str("    STA TMPPTR+1         ; Save target intensity\n");
-    out.push_str("    CLR TMPPTR           ; Step counter = 0\n");
-    out.push_str("    \n");
-    out.push_str(".FI_LOOP:\n");
-    out.push_str("    LDA TMPPTR\n");
-    out.push_str("    CMPA #8\n");
-    out.push_str("    BHS .FI_DONE\n");
-    out.push_str("    \n");
-    out.push_str("    ; Calculate intensity: (step * target) / 8\n");
-    out.push_str("    LDB TMPPTR+1         ; target\n");
-    out.push_str("    MUL                  ; D = step * target\n");
-    out.push_str("    LSRA                 ; Divide by 8\n");
-    out.push_str("    RORB\n");
-    out.push_str("    LSRA\n");
-    out.push_str("    RORB\n");
-    out.push_str("    LSRA\n");
-    out.push_str("    RORB\n");
-    out.push_str("    \n");
-    out.push_str("    ; Set intensity\n");
-    out.push_str("    TFR B,A\n");
-    out.push_str("    JSR Intensity_a\n");
-    out.push_str("    JSR Wait_Recal\n");
-    out.push_str("    \n");
-    out.push_str("    INC TMPPTR\n");
-    out.push_str("    BRA .FI_LOOP\n");
-    out.push_str("    \n");
-        out.push_str(".FI_DONE:\n");
-        out.push_str("    RTS\n\n");
-    }
-    
-    // FADE_OUT_RUNTIME: Gradual intensity decrease
-    if needed.contains("FADE_OUT_RUNTIME") {
-        out.push_str("; === FADE_OUT_RUNTIME - Gradual intensity decrease ===\n");
-        out.push_str("FADE_OUT_RUNTIME:\n");
-    out.push_str("    ; Input: CURRENT_INTENSITY (starting intensity)\n");
-    out.push_str("    ; Gradually decreases from current to 0 in 8 steps\n");
-    out.push_str("    \n");
-    out.push_str("    LDA CURRENT_INTENSITY\n");
-    out.push_str("    STA TMPPTR+1         ; Save starting intensity\n");
-    out.push_str("    CLR TMPPTR           ; Step counter = 0\n");
-    out.push_str("    \n");
-    out.push_str(".FO_LOOP:\n");
-    out.push_str("    LDA TMPPTR\n");
-    out.push_str("    CMPA #8\n");
-    out.push_str("    BHS .FO_DONE\n");
-    out.push_str("    \n");
-    out.push_str("    ; Calculate intensity: ((8 - step) * target) / 8\n");
-    out.push_str("    LDA #8\n");
-    out.push_str("    SUBA TMPPTR          ; A = 8 - step\n");
-    out.push_str("    LDB TMPPTR+1         ; B = target\n");
-    out.push_str("    MUL                  ; D = (8-step) * target\n");
-    out.push_str("    LSRA                 ; Divide by 8\n");
-    out.push_str("    RORB\n");
-    out.push_str("    LSRA\n");
-    out.push_str("    RORB\n");
-    out.push_str("    LSRA\n");
-    out.push_str("    RORB\n");
-    out.push_str("    \n");
-    out.push_str("    ; Set intensity\n");
-    out.push_str("    TFR B,A\n");
-    out.push_str("    JSR Intensity_a\n");
-    out.push_str("    JSR Wait_Recal\n");
-    out.push_str("    \n");
-    out.push_str("    INC TMPPTR\n");
-    out.push_str("    BRA .FO_LOOP\n");
-    out.push_str("    \n");
-        out.push_str(".FO_DONE:\n");
-        out.push_str("    RTS\n\n");
-    }
+pub fn emit_runtime_helpers(_out: &mut String, _needed: &HashSet<String>) {
+    // No utility runtime helpers currently needed
 }

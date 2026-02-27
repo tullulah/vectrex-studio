@@ -1203,7 +1203,7 @@ def loop():
       default:
         logger.warn('App', 'unknown command:', id);
     }
-  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject]);
+  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild]);
 
   // Keyboard shortcuts mapping (similar to VS conventions)
   useEffect(() => {

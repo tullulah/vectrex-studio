@@ -38,12 +38,12 @@ pub fn emit_draw_circle(
             }
             
             // Emit inline code (like core does)
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             if intensity == 0x5F {
                 out.push_str("    JSR Intensity_5F\n");
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -98,12 +98,12 @@ pub fn emit_draw_rect(
             let _y1 = y0 + h;  // Calculated but not used directly
             
             // Emit inline code
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             if intensity == 0x5F {
                 out.push_str("    JSR Intensity_5F\n");
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             // Move to start
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -137,65 +137,89 @@ pub fn emit_draw_rect(
     out.push_str("    LDD #0\n    STD RESULT\n");
 }
 
-/// DRAW_POLYGON(points_array[, intensity]) - points_array is array of [x,y] pairs
-/// Simplified version: DRAW_POLYGON(x0, y0, x1, y1, x2, y2[, intensity])
+/// DRAW_POLYGON(N, [intensity,] x0, y0, x1, y1, ..., xN-1, yN-1)
+/// Form A: N, x0, y0, ...           (args.len() == 1 + 2*N)
+/// Form B: N, intensity, x0, y0, ... (args.len() == 2 + 2*N)
 pub fn emit_draw_polygon(
     args: &[Expr],
     out: &mut String,
 ) {
-    if args.len() < 6 {
-        out.push_str("    ; ERROR: DRAW_POLYGON requires at least 6 arguments (3 points)\n");
+    if args.len() < 7 {
+        out.push_str("    ; ERROR: DRAW_POLYGON requires at least N + 3 vertices (7+ args)\n");
         return;
     }
-    
-    // Check if all args are constants - optimize inline
+
+    // All-constants path
     if args.iter().all(|a| matches!(a, Expr::Number(_))) {
-        let mut intensity: i32 = 0x5F;
-        let num_coords = if args.len() % 2 == 0 { 
-            args.len() 
-        } else { 
-            // Last arg is intensity
-            if let Expr::Number(i) = &args[args.len() - 1] {
-                intensity = *i;
+        if let Expr::Number(nv) = &args[0] {
+            let n = *nv as usize;
+            let form_a_len = 1 + 2 * n;
+            let form_b_len = 2 + 2 * n;
+            let mut intensity: i32 = 0x5F;
+            let (start_index, ok) = if args.len() == form_a_len {
+                (1usize, true)
+            } else if args.len() == form_b_len {
+                if let Expr::Number(iv) = &args[1] { intensity = *iv; }
+                (2usize, true)
+            } else {
+                (0, false)
+            };
+            if ok && n >= 3 {
+                let mut verts: Vec<(i32, i32)> = Vec::new();
+                for i in 0..n {
+                    if let (Expr::Number(x), Expr::Number(y)) =
+                        (&args[start_index + 2 * i], &args[start_index + 2 * i + 1])
+                    {
+                        verts.push((*x, *y));
+                    }
+                }
+                if verts.len() == n {
+                    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+                    if intensity == 0x5F {
+                        out.push_str("    JSR Intensity_5F\n");
+                    } else {
+                        out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
+                    }
+
+                    for i in 0..n {
+                        let (x0, y0) = verts[i];
+                        let (x1, y1) = verts[(i + 1) % n];
+                        let dx_total = x1 - x0;
+                        let dy_total = y1 - y0;
+                        let need_split = dx_total.abs().max(dy_total.abs()) > 127;
+                        let (fdx, fdy, sdx, sdy, split) = if need_split {
+                            (dx_total / 2, dy_total / 2,
+                             dx_total - dx_total / 2, dy_total - dy_total / 2, true)
+                        } else {
+                            (dx_total, dy_total, 0, 0, false)
+                        };
+                        if i == 0 {
+                            out.push_str(&format!(
+                                "    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+                                (y0 & 0xFF) as u8, (x0 & 0xFF) as u8
+                            ));
+                        }
+                        out.push_str("    CLR Vec_Misc_Count\n");
+                        out.push_str(&format!(
+                            "    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+                            (fdy & 0xFF) as u8, (fdx & 0xFF) as u8
+                        ));
+                        if split {
+                            out.push_str("    CLR Vec_Misc_Count\n");
+                            out.push_str(&format!(
+                                "    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+                                (sdy & 0xFF) as u8, (sdx & 0xFF) as u8
+                            ));
+                        }
+                    }
+                    out.push_str("    LDA #$C8\n    TFR A,DP    ; Restore DP=$C8\n");
+                    out.push_str("    LDD #0\n    STD RESULT\n");
+                    return;
+                }
             }
-            args.len() - 1
-        };
-        
-        let num_points = num_coords / 2;
-        let mut verts: Vec<(i32, i32)> = Vec::new();
-        
-        for i in 0..num_points {
-            if let (Expr::Number(x), Expr::Number(y)) = 
-                (&args[i * 2], &args[i * 2 + 1]) {
-                verts.push((*x, *y));
-            }
         }
-        
-        // Emit inline code
-        if intensity == 0x5F {
-            out.push_str("    JSR Intensity_5F\n");
-        } else {
-            out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
-        }
-        out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
-        
-        let (sx, sy) = verts[0];
-        out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
-            (sy & 0xFF), (sx & 0xFF)));
-        
-        for i in 0..num_points {
-            let (x0, y0) = verts[i];
-            let (x1, y1) = verts[(i + 1) % num_points];
-            let dx = (x1 - x0) & 0xFF;
-            let dy = (y1 - y0) & 0xFF;
-            out.push_str("    CLR Vec_Misc_Count\n");
-            out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n", 
-                dy, dx));
-        }
-        out.push_str("    LDD #0\n    STD RESULT\n");
-        return;
     }
-    
+
     // Variables - TODO: implement runtime helper (complex: requires array handling)
     out.push_str("    ; ERROR: DRAW_POLYGON with variables not yet implemented\n");
     out.push_str("    LDD #0\n    STD RESULT\n");
@@ -234,12 +258,12 @@ pub fn emit_draw_circle_seg(
             }
             
             // Emit inline code
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             if intensity == 0x5F {
                 out.push_str("    JSR Intensity_5F\n");
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -300,12 +324,12 @@ pub fn emit_draw_arc(
             }
             
             // Emit inline code
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             if intensity == 0x5F {
                 out.push_str("    JSR Intensity_5F\n");
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 
@@ -356,12 +380,12 @@ pub fn emit_draw_filled_rect(
             let height = *h;
             
             // Emit inline code
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             if intensity == 0x5F {
                 out.push_str("    JSR Intensity_5F\n");
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             // Draw horizontal scanlines using relative Moveto_d between lines
             // (absolute Moveto_d per line would accumulate position error)
@@ -428,12 +452,12 @@ pub fn emit_draw_ellipse(
             }
             
             // Emit inline code
+            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             if intensity == 0x5F {
                 out.push_str("    JSR Intensity_5F\n");
             } else {
                 out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
             }
-            out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
             
             let (sx, sy) = verts[0];
             out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n", 

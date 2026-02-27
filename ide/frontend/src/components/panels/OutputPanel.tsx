@@ -1,26 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { useDebugStore } from '../../state/debugStore.js';
 
-// Tipos simples para JSVecX
 interface VecxMetrics {
   totalCycles: number;
   instructionCount: number;
   frameCount: number;
   running: boolean;
+  vectorCount: number;
 }
 
-interface VecxRegs {
-  PC: number;
-  A: number; B: number;
-  X: number; Y: number; U: number; S: number;
-  DP: number; CC: number;
-}
-
-// Componente compacto para gráficas de barras horizontales con historial
-const PerformanceChart: React.FC<{ 
-  label: string; 
+const PerformanceChart: React.FC<{
+  label: string;
   data: number[];
-  max: number; 
-  color: string; 
+  max: number;
+  color: string;
   dangerZone?: number;
   unit?: string;
 }> = ({ label, data, max, color, dangerZone, unit = '' }) => {
@@ -28,20 +21,21 @@ const PerformanceChart: React.FC<{
   const percentage = Math.min((current / max) * 100, 100);
   const isDanger = dangerZone && current >= dangerZone;
   const dangerPercentage = dangerZone ? (dangerZone / max) * 100 : 0;
-  
+
   return (
-    <div style={{ flex: 1, minWidth: '200px' }}>
+    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
       <div style={{
         fontSize: '11px',
         marginBottom: '4px',
         color: isDanger ? '#ff6666' : '#ddd',
         fontWeight: 'bold',
-        textAlign: 'center'
+        textAlign: 'center',
+        whiteSpace: 'nowrap'
       }}>
-        {label} {isDanger ? '⚠️' : ''}: {current.toLocaleString()}{unit}
+        {label}{isDanger ? ' ⚠️' : ''}: {current.toLocaleString()}{unit}
       </div>
-      
-      {/* Barra de progreso compacta */}
+
+      {/* Progress bar */}
       <div style={{
         width: '100%',
         height: '16px',
@@ -52,7 +46,6 @@ const PerformanceChart: React.FC<{
         position: 'relative',
         marginBottom: '6px'
       }}>
-        {/* Zona de peligro de fondo */}
         {dangerZone && (
           <div style={{
             position: 'absolute',
@@ -63,12 +56,11 @@ const PerformanceChart: React.FC<{
             zIndex: 1
           }} />
         )}
-        
-        {/* Barra de progreso principal */}
+
         <div style={{
           width: `${percentage}%`,
           height: '100%',
-          background: isDanger ? 
+          background: isDanger ?
             'linear-gradient(90deg, #ff4444, #ff6666)' :
             `linear-gradient(90deg, ${color}, ${color}aa)`,
           transition: 'width 0.3s ease-out',
@@ -77,8 +69,7 @@ const PerformanceChart: React.FC<{
           position: 'relative',
           boxShadow: isDanger ? '0 0 8px rgba(255, 68, 68, 0.6)' : `0 0 6px ${color}44`
         }} />
-        
-        {/* Línea marcadora de zona peligro */}
+
         {dangerZone && (
           <div style={{
             position: 'absolute',
@@ -91,8 +82,8 @@ const PerformanceChart: React.FC<{
           }} />
         )}
       </div>
-      
-      {/* Mini gráfica de historial */}
+
+      {/* History sparkline */}
       <div style={{
         display: 'flex',
         height: '24px',
@@ -126,13 +117,35 @@ const PerformanceChart: React.FC<{
   );
 };
 
+// Vectrex user RAM: $C880-$CBEA = 874 bytes available
+const VECTREX_USER_RAM_START = 0xC880;
+const VECTREX_USER_RAM_END = 0xCBEA;
+const VECTREX_USER_RAM_TOTAL = VECTREX_USER_RAM_END - VECTREX_USER_RAM_START; // 874
+
 export const OutputPanel: React.FC = () => {
   const [metrics, setMetrics] = useState<VecxMetrics | null>(null);
-  const auto = true; // Always auto-update
-  const [cpuData, setCpuData] = useState<number[]>([]);
-  const [ramData, setRamData] = useState<number[]>([]);
+  const [cyclesData, setCyclesData] = useState<number[]>([]);
   const [vectorData, setVectorData] = useState<number[]>([]);
   const timerRef = useRef<number|null>(null);
+  const prevRef = useRef<{ cycles: number; frames: number } | null>(null);
+
+  // RAM allocated: computed from PDB variables (compile-time info)
+  const pdbData = useDebugStore(s => s.pdbData);
+  const ramAllocated = useMemo(() => {
+    if (!pdbData?.variables) return 0;
+    const vars = Object.values(pdbData.variables);
+    if (vars.length === 0) return 0;
+    // Only count variables in user RAM range ($C880-$CBEA).
+    // PDB also contains ROM constants and BIOS symbols — skip those.
+    let highestEnd = VECTREX_USER_RAM_START;
+    for (const v of vars) {
+      const addr = parseInt(v.address, 16);
+      if (isNaN(addr) || addr < VECTREX_USER_RAM_START || addr >= VECTREX_USER_RAM_END) continue;
+      const end = addr + v.size;
+      if (end > highestEnd) highestEnd = end;
+    }
+    return highestEnd - VECTREX_USER_RAM_START;
+  }, [pdbData]);
 
   const fetchStats = () => {
     try {
@@ -141,37 +154,29 @@ export const OutputPanel: React.FC = () => {
         setMetrics(null);
         return;
       }
-      
-      const fetchedMetrics = vecx.getMetrics && vecx.getMetrics();
-      setMetrics(fetchedMetrics || null);
-      
-      // Generar datos simulados basados en el estado del emulador
-      if (fetchedMetrics && fetchedMetrics.running) {
-        const currentTime = Date.now();
-        
-        // CPU Usage simulado (0-100%)
-        const baseCpu = 45;
-        const cpuVariation = Math.sin(currentTime / 3000) * 25 + Math.random() * 15;
-        const newCpuUsage = Math.max(5, Math.min(95, baseCpu + cpuVariation));
-        
-        // RAM Usage simulado (256-800 bytes)
-        const baseRam = 400;
-        const ramVariation = Math.sin(currentTime / 5000) * 150 + Math.random() * 100;
-        const newRamUsage = Math.max(256, Math.min(800, baseRam + ramVariation));
-        
-        // Vector count simulado (50-180 vectores, zona peligro en 150+)
-        const baseVectors = 85;
-        const vectorVariation = Math.sin(currentTime / 2000) * 40;
-        const randomBurst = Math.random() > 0.9 ? Math.random() * 50 : 0; // Picos ocasionales
-        const newVectorCount = Math.max(20, Math.min(180, baseVectors + vectorVariation + randomBurst));
-        
-        setCpuData(prev => [...prev.slice(-39), newCpuUsage]);
-        setRamData(prev => [...prev.slice(-39), newRamUsage]);
-        setVectorData(prev => [...prev.slice(-39), newVectorCount]);
+
+      const m = vecx.getMetrics && vecx.getMetrics();
+      setMetrics(m || null);
+
+      if (m && m.running) {
+        // Cycles per frame: delta cycles / delta frames since last sample
+        let cyclesPerFrame = 0;
+        const prev = prevRef.current;
+        if (prev && m.frameCount > prev.frames) {
+          const dCycles = m.totalCycles - prev.cycles;
+          const dFrames = m.frameCount - prev.frames;
+          cyclesPerFrame = Math.round(dCycles / dFrames);
+        }
+        prevRef.current = { cycles: m.totalCycles, frames: m.frameCount };
+
+        // Vector count: directly from emulator (last completed frame)
+        const vectors = m.vectorCount || 0;
+
+        setCyclesData(prev => [...prev.slice(-39), cyclesPerFrame]);
+        setVectorData(prev => [...prev.slice(-39), vectors]);
       } else {
-        // Emulador detenido
-        setCpuData(prev => [...prev.slice(-39), 0]);
-        setRamData(prev => [...prev.slice(-39), 256]);
+        prevRef.current = null;
+        setCyclesData(prev => [...prev.slice(-39), 0]);
         setVectorData(prev => [...prev.slice(-39), 0]);
       }
     } catch (e) {
@@ -181,13 +186,13 @@ export const OutputPanel: React.FC = () => {
 
   useEffect(() => { fetchStats(); }, []);
   useEffect(() => {
-    if (auto) {
-      timerRef.current = window.setInterval(fetchStats, 500); // Más frecuente para gráficas suaves
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current); timerRef.current=null;
-    }
+    timerRef.current = window.setInterval(fetchStats, 500);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [auto]);
+  }, []);
+
+  // RAM bar: static value from PDB, shown as percentage of available user RAM
+  const ramPercentage = Math.min((ramAllocated / VECTREX_USER_RAM_TOTAL) * 100, 100);
+  const ramDanger = ramAllocated >= 700;
 
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%', fontSize:12}}>
@@ -196,50 +201,111 @@ export const OutputPanel: React.FC = () => {
           Status: {metrics?.running ? '🟢 Running' : '🔴 Stopped'}
         </span>
       </div>
-      
+
       <div style={{
         padding: '16px',
         flex: 1,
-        overflow: 'auto'
+        overflow: 'hidden'
       }}>
-        {/* Tres gráficas en una sola línea horizontal */}
         <div style={{
           display: 'flex',
           gap: '16px',
           width: '100%'
         }}>
-          <PerformanceChart 
-            label="CPU Usage"
-            data={cpuData}
-            max={100}
+          <PerformanceChart
+            label="Cycles/Frame"
+            data={cyclesData}
+            max={50000}
             color="#00ff88"
-            unit="%"
+            dangerZone={37500}
           />
-          
-          <PerformanceChart 
-            label="RAM Usage"
-            data={ramData}
-            max={1024}
-            color="#4488ff"
-            unit=" bytes"
-          />
-          
-          <PerformanceChart 
-            label="Vectors per Frame"
+
+          {/* RAM: static bar from PDB (no sparkline — compile-time value) */}
+          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <div style={{
+              fontSize: '11px',
+              marginBottom: '4px',
+              color: ramDanger ? '#ff6666' : '#ddd',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              whiteSpace: 'nowrap'
+            }}>
+              RAM{ramDanger ? ' ⚠️' : ''}: {ramAllocated} / {VECTREX_USER_RAM_TOTAL} bytes
+            </div>
+
+            <div style={{
+              width: '100%',
+              height: '16px',
+              background: '#2a2a2a',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              border: '1px solid #444',
+              position: 'relative',
+              marginBottom: '6px'
+            }}>
+              {/* Danger zone background */}
+              <div style={{
+                position: 'absolute',
+                left: '80%',
+                width: '20%',
+                height: '100%',
+                background: 'rgba(255, 68, 68, 0.2)',
+                zIndex: 1
+              }} />
+
+              {/* Fill bar */}
+              <div style={{
+                width: `${ramPercentage}%`,
+                height: '100%',
+                background: ramDanger ?
+                  'linear-gradient(90deg, #ff4444, #ff6666)' :
+                  'linear-gradient(90deg, #4488ff, #4488ffaa)',
+                transition: 'width 0.3s ease-out',
+                borderRadius: '8px',
+                zIndex: 2,
+                position: 'relative',
+                boxShadow: ramDanger ? '0 0 8px rgba(255, 68, 68, 0.6)' : '0 0 6px #4488ff44'
+              }} />
+
+              {/* Danger line at 80% */}
+              <div style={{
+                position: 'absolute',
+                left: '80%',
+                width: '2px',
+                height: '100%',
+                background: '#ff4444',
+                zIndex: 3,
+                boxShadow: '0 0 4px #ff4444'
+              }} />
+            </div>
+
+            {/* Label instead of sparkline */}
+            <div style={{
+              height: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#1a1a1a',
+              borderRadius: '4px',
+              border: '1px solid #333',
+              fontSize: '10px',
+              color: '#888'
+            }}>
+              {ramAllocated > 0
+                ? `${VECTREX_USER_RAM_TOTAL - ramAllocated} bytes free`
+                : 'No PDB loaded'}
+            </div>
+          </div>
+
+          <PerformanceChart
+            label="Vectors/Frame"
             data={vectorData}
             max={200}
             color="#ffaa00"
-            dangerZone={150} // Zona roja donde empiezan los parpadeos
-            unit=" vectors"
+            dangerZone={150}
           />
         </div>
       </div>
     </div>
   );
 };
-
-const btnStyle: React.CSSProperties = { background:'#1e1e1e', color:'#ddd', border:'1px solid #333', padding:'2px 6px', cursor:'pointer', fontSize:11 };
-const th: React.CSSProperties = { padding:'4px 6px' };
-const td: React.CSSProperties = { padding:'2px 6px', fontFamily:'monospace' };
-function hex8(v:any){ if (typeof v!=='number') return '--'; return '0x'+(v&0xFF).toString(16).padStart(2,'0'); }
-function hex16(v:any){ if (typeof v!=='number') return '--'; return '0x'+(v&0xFFFF).toString(16).padStart(4,'0'); }
