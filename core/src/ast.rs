@@ -15,6 +15,8 @@ pub struct ModuleMeta {
 	pub copyright_override: Option<String>,
 	/// Inject VIA T2 catch-up: call AUDIO_UPDATE twice when a frame is slow. Default: true.
 	pub music_timer: bool,
+	/// Interleaved rendering: split draw calls across N frame groups. None = disabled.
+	pub interleaved_frames: Option<u8>,
 }
 
 impl Default for ModuleMeta {
@@ -25,6 +27,7 @@ impl Default for ModuleMeta {
 			music_override: Some("music1".to_string()),
 			copyright_override: None,
 			music_timer: true,
+			interleaved_frames: None,
 		}
 	}
 }
@@ -95,11 +98,13 @@ pub enum VlEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Function { 
-	pub name: String, 
+pub struct Function {
+	pub name: String,
 	pub line: usize,  // Starting line number of function definition
-	#[allow(dead_code)] pub params: Vec<String>, 
-	pub body: Vec<Stmt> 
+	#[allow(dead_code)] pub params: Vec<String>,
+	pub body: Vec<Stmt>,
+	/// Interleaved frame group this function belongs to (from @frame(N) decorator). None = always runs.
+	pub frame_group: Option<u8>,
 }
 
 /// Definición de struct

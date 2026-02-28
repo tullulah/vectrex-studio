@@ -38,6 +38,13 @@ thread_local! {
     /// Map of const names (lowercase) to their compile-time integer values.
     /// Populated before codegen so emit_simple_expr can emit LDD #value instead of LDD >VAR_name.
     static CONST_VALUES: RefCell<HashMap<String, i64>> = RefCell::new(HashMap::new());
+
+    /// Map of function names (uppercase) to their frame group (from @frame(N) decorator).
+    /// Used by generate_statement to wrap JSR calls with FRAME_PARITY guard.
+    static FRAME_GROUPS: RefCell<HashMap<String, u8>> = RefCell::new(HashMap::new());
+
+    /// Interleaved frames count (2 or 3). 0 means disabled.
+    static INTERLEAVED_N: RefCell<u8> = RefCell::new(0);
 }
 
 /// Initialize the mutable arrays context
@@ -103,7 +110,30 @@ pub fn get_const_value(name: &str) -> Option<i64> {
     })
 }
 
-/// Clear all compilation context (mutable arrays, variable sizes, and const values)
+/// Set the frame groups map (function name uppercase → frame group index)
+pub fn set_frame_groups(groups: HashMap<String, u8>, n: u8) {
+    FRAME_GROUPS.with(|fg| {
+        *fg.borrow_mut() = groups;
+    });
+    INTERLEAVED_N.with(|inl| {
+        *inl.borrow_mut() = n;
+    });
+}
+
+/// Look up the frame group for a function name (uppercase)
+/// Returns Some(n) if decorated with @frame(n), None if always runs
+pub fn get_frame_group(name: &str) -> Option<u8> {
+    FRAME_GROUPS.with(|fg| {
+        fg.borrow().get(name).copied()
+    })
+}
+
+/// Get the interleaved_frames N value (0 = disabled)
+pub fn get_interleaved_n() -> u8 {
+    INTERLEAVED_N.with(|inl| *inl.borrow())
+}
+
+/// Clear all compilation context (mutable arrays, variable sizes, const values, frame groups)
 pub fn clear_context() {
     MUTABLE_ARRAYS.with(|ma| {
         ma.borrow_mut().clear();
@@ -111,6 +141,12 @@ pub fn clear_context() {
     clear_var_sizes();
     CONST_VALUES.with(|cv| {
         cv.borrow_mut().clear();
+    });
+    FRAME_GROUPS.with(|fg| {
+        fg.borrow_mut().clear();
+    });
+    INTERLEAVED_N.with(|inl| {
+        *inl.borrow_mut() = 0;
     });
 }
 

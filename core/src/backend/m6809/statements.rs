@@ -173,7 +173,23 @@ pub fn emit_stmt(stmt: &Stmt, out: &mut String, loop_ctx: &LoopCtx, fctx: &FuncC
                 }
             }
         }
-        Stmt::Expr(e, _) => emit_expr(e, out, fctx, string_map, opts),
+        Stmt::Expr(e, _) => {
+            // If interleaved rendering is active and this is a call to a @frame(N) function, guard it
+            if let Expr::Call(call_info) = e {
+                let name_upper = call_info.name.to_uppercase();
+                if let Some(group) = opts.frame_groups.get(&name_upper).copied() {
+                    let skip = fresh_label("FRAME_SKIP");
+                    out.push_str(&format!("    ; @frame({}) guard for {}\n", group, call_info.name));
+                    out.push_str("    LDB >FRAME_PARITY\n");
+                    out.push_str(&format!("    CMPB #{}\n", group));
+                    out.push_str(&format!("    BNE {}\n", skip));
+                    emit_expr(e, out, fctx, string_map, opts);
+                    out.push_str(&format!("{}:\n", skip));
+                    return;
+                }
+            }
+            emit_expr(e, out, fctx, string_map, opts);
+        }
         Stmt::Return(o, _) => {
             if let Some(e) = o { emit_expr(e, out, fctx, string_map, opts); }
             if fctx.frame_size > 0 { out.push_str(&format!("    LEAS {} ,S ; free locals\n", fctx.frame_size)); }

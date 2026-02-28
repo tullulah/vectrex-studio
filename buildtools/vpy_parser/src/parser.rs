@@ -290,6 +290,12 @@ impl<'a> Parser<'a> {
                             }
                             _ => {}
                         }
+                    } else if key.eq_ignore_ascii_case("INTERLEAVED_FRAMES") {
+                        if let Expr::Number(n) = value {
+                            if n == 2 || n == 3 {
+                                meta.interleaved_frames = Some(n as u8);
+                            }
+                        }
                     }
                     
                     if let Expr::StringLit(s) = &value {
@@ -317,6 +323,34 @@ impl<'a> Parser<'a> {
                     self.advance();
                     let struct_def = self.parse_struct_def()?;
                     items.push(Item::StructDef(struct_def));
+                    continue;
+                }
+                TokenKind::At => {
+                    // @frame(N) decorator before def
+                    self.advance();
+                    let decorator = self.identifier()?;
+                    let frame_group = if decorator.eq_ignore_ascii_case("frame") {
+                        self.consume(TokenKind::LParen)?;
+                        let n = if let TokenKind::Number(n) = self.peek().kind.clone() {
+                            self.advance();
+                            n as u8
+                        } else {
+                            return self.err_here("Expected number in @frame(N) decorator");
+                        };
+                        self.consume(TokenKind::RParen)?;
+                        self.consume(TokenKind::Newline)?;
+                        Some(n)
+                    } else {
+                        None
+                    };
+                    // Expect 'def' immediately after decorator
+                    if !self.check(TokenKind::Def) {
+                        return self.err_here("Expected 'def' after @frame(N) decorator");
+                    }
+                    self.advance();
+                    let mut func = self.parse_function_def()?;
+                    func.frame_group = frame_group;
+                    items.push(Item::Function(func));
                     continue;
                 }
                 TokenKind::Def => {
@@ -474,6 +508,7 @@ impl<'a> Parser<'a> {
             line,
             params,
             body,
+            frame_group: None,
         })
     }
 

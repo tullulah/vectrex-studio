@@ -24,6 +24,7 @@ pub enum TokenKind {
     // OOP
     Struct,
     Self_,
+    At,
     Eof,
 }
 
@@ -176,6 +177,10 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> Result<()> {
             }
             '~' => {
                 out.push(tok(TokenKind::Tilde, line_no, idx));
+                idx += 1;
+            }
+            '@' => {
+                out.push(tok(TokenKind::At, line_no, idx));
                 idx += 1;
             }
             '=' => {

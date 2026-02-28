@@ -301,6 +301,7 @@ fn rewrite_function(
         body: f.body.iter()
             .map(|s| rewrite_stmt(s, current_module, symbols, name_map, options))
             .collect(),
+        frame_group: f.frame_group,
     }
 }
 

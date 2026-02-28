@@ -170,6 +170,7 @@ mod tests {
             params: vec![],
             body,
             line: 1,
+            frame_group: None,
         }
     }
     

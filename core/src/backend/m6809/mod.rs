@@ -543,6 +543,11 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     if rt_usage.wrappers_used.contains("BEEP_UPDATE_RUNTIME") {
         ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
     }
+
+    // 8.2 FRAME_PARITY for interleaved rendering
+    if module.meta.interleaved_frames.is_some() {
+        ram.allocate("FRAME_PARITY", 1, "Interleaved frame group counter");
+    }
     
     // 9. DRAW_VECTOR position/mirror variables (used by DRAW_VECTOR, DRAW_VECTOR_EX, and SHOW_LEVEL)
     if rt_usage.uses_draw_vector || rt_usage.uses_draw_vector_ex || rt_usage.uses_show_level {
@@ -1002,11 +1007,40 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
                     if rt_usage.wrappers_used.contains("BEEP_UPDATE_RUNTIME") {
                         out.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
                     }
+                    // Auto-inject FRAME_PARITY toggle for interleaved rendering
+                    // Build a local mutable opts copy so we can inject frame_groups for emit_stmt
+                    let mut loop_opts_owned;
+                    let loop_opts: &CodegenOptions = if let Some(n) = module.meta.interleaved_frames {
+                        let groups: std::collections::HashMap<String, u8> = module.items.iter()
+                            .filter_map(|item2| {
+                                if let Item::Function(f2) = item2 {
+                                    f2.frame_group.map(|g| (f2.name.to_uppercase(), g))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        loop_opts_owned = opts.clone();
+                        loop_opts_owned.frame_groups = groups;
+                        loop_opts_owned.interleaved_frames = Some(n);
+                        let skip_label = fresh_label("PARITY_OK");
+                        out.push_str("    ; META INTERLEAVED_FRAMES: advance frame group counter\n");
+                        out.push_str("    LDB >FRAME_PARITY\n");
+                        out.push_str("    INCB\n");
+                        out.push_str(&format!("    CMPB #{}\n", n));
+                        out.push_str(&format!("    BLO {}\n", skip_label));
+                        out.push_str("    CLRB\n");
+                        out.push_str(&format!("{}:\n", skip_label));
+                        out.push_str("    STB >FRAME_PARITY\n");
+                        &loop_opts_owned
+                    } else {
+                        opts
+                    };
 
                     let fctx = FuncCtx { locals: locals.clone(), frame_size, var_info, struct_type: None, params: f.params.clone() };
                     for (i, stmt) in f.body.iter().enumerate() {
                         out.push_str(&format!("    ; DEBUG: Statement {} - {:?}\n", i, std::mem::discriminant(stmt)));
-                        emit_stmt(stmt, &mut out, &LoopCtx::default(), &fctx, &string_map, opts, &mut tracker, 0);
+                        emit_stmt(stmt, &mut out, &LoopCtx::default(), &fctx, &string_map, loop_opts, &mut tracker, 0);
                     }
                     
                     // Auto-inject AUDIO_UPDATE at END of loop (after all game logic)

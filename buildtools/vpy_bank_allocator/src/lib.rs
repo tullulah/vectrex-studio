@@ -163,6 +163,7 @@ mod tests {
                     line: 0,
                     params: vec![],
                     body: vec![],
+                    frame_group: None,
                 })
             ],
             meta: ModuleMeta::default(),

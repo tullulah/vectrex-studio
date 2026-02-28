@@ -181,6 +181,10 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
     }
 
+    if module.meta.interleaved_frames.is_some() {
+        ram.allocate("FRAME_PARITY", 1, "Interleaved frame group counter");
+    }
+
     // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
     // =========================================================================

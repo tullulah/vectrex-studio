@@ -56,6 +56,7 @@ fn token_display_name(kind: &TokenKind) -> String {
         TokenKind::Pipe => "'|'".to_string(),
         TokenKind::Caret => "'^'".to_string(),
         TokenKind::Tilde => "'~'".to_string(),
+        TokenKind::At => "'@'".to_string(),
         TokenKind::ShiftLeft => "'<<'".to_string(),
         TokenKind::ShiftRight => "'>>'".to_string(),
         TokenKind::Newline => "newline".to_string(),
@@ -212,6 +213,13 @@ impl<'a> Parser<'a> {
                         meta.music_timer = !id.name.eq_ignore_ascii_case("false");
                     }
                 }
+                else if key.eq_ignore_ascii_case("INTERLEAVED_FRAMES") {
+                    if let Expr::Number(n) = value {
+                        if n == 2 || n == 3 {
+                            meta.interleaved_frames = Some(n as u8);
+                        }
+                    }
+                }
                 continue;
             }
             if self.match_kind(&TokenKind::VectorList) || self.match_ident_case("VECTORLIST") {
@@ -240,7 +248,33 @@ impl<'a> Parser<'a> {
                 continue;
             }
             
-            if self.check(TokenKind::Def) { items.push(self.function()?); continue; }
+            // @frame(N) decorator before def
+            let pending_frame_group = if self.check(TokenKind::At) {
+                self.advance();
+                let decorator = self.identifier()?;
+                if decorator.eq_ignore_ascii_case("frame") {
+                    self.consume(TokenKind::LParen)?;
+                    let n = if let TokenKind::Number(n) = self.peek().kind.clone() {
+                        self.advance();
+                        n as u8
+                    } else {
+                        return self.err_here("Expected number in @frame(N) decorator");
+                    };
+                    self.consume(TokenKind::RParen)?;
+                    self.consume(TokenKind::Newline)?;
+                    Some(n)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if self.check(TokenKind::Def) {
+                let mut func = self.parse_function_def()?;
+                func.frame_group = pending_frame_group;
+                items.push(Item::Function(func));
+                continue;
+            }
             
             // Permitir expression statements en top-level (llamadas a funciones, etc.)
             if !self.check(TokenKind::Eof) && !self.check(TokenKind::Newline) {
@@ -443,7 +477,7 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::RParen)?; self.consume(TokenKind::Colon)?; self.consume(TokenKind::Newline)?; self.consume(TokenKind::Indent)?;
         let mut body = Vec::new();
         while !self.match_kind(&TokenKind::Dedent) { body.push(self.statement()?); }
-        Ok(Function { name, line: func_line, params, body })
+        Ok(Function { name, line: func_line, params, body, frame_group: None })
     }
 
     // Parse struct definition: struct Name:

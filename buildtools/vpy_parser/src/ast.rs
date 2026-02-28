@@ -22,6 +22,8 @@ pub struct ModuleMeta {
     pub rom_bank_size: Option<u32>,
     /// Inject VIA T2 catch-up: call AUDIO_UPDATE twice when a frame is slow. Default: true.
     pub music_timer: bool,
+    /// Interleaved rendering: split draw calls across N frame groups. None = disabled.
+    pub interleaved_frames: Option<u8>,
 }
 
 impl Default for ModuleMeta {
@@ -34,6 +36,7 @@ impl Default for ModuleMeta {
             rom_total_size: None,
             rom_bank_size: None,
             music_timer: true,
+            interleaved_frames: None,
         }
     }
 }
@@ -97,6 +100,8 @@ pub struct Function {
     pub line: usize,
     pub params: Vec<String>,
     pub body: Vec<Stmt>,
+    /// Interleaved frame group this function belongs to (from @frame(N) decorator). None = always runs.
+    pub frame_group: Option<u8>,
 }
 
 /// Struct definition with fields and methods

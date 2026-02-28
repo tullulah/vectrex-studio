@@ -38,6 +38,7 @@ pub enum TokenKind {
     Export,
     Struct,
     Self_,
+    At,
 
     // Literals
     Identifier(String),
@@ -301,6 +302,10 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
             }
             '~' => {
                 out.push(token(TokenKind::Tilde, line_no, idx));
+                idx += 1;
+            }
+            '@' => {
+                out.push(token(TokenKind::At, line_no, idx));
                 idx += 1;
             }
 

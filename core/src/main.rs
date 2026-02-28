@@ -586,6 +586,8 @@ fn build_cmd(path: &PathBuf, out: Option<&PathBuf>, tgt: target::Target, title: 
                     needs_buffer: r.needs_buffer,
                     analyzed_files: r.analyzed_files.clone(),
                 }),
+                interleaved_frames: None,
+                frame_groups: std::collections::HashMap::new(),
             });
                 let base = path.file_stem().unwrap().to_string_lossy();
                 let out_path = out.cloned().unwrap_or_else(|| path.with_file_name(format!("{}-{}.asm", base, ct)));
@@ -666,8 +668,10 @@ fn build_cmd(path: &PathBuf, out: Option<&PathBuf>, tgt: target::Target, title: 
                 needs_buffer: r.needs_buffer,
                 analyzed_files: r.analyzed_files.clone(),
             }),
+            interleaved_frames: None,
+            frame_groups: std::collections::HashMap::new(),
         });
-        
+
         // Phase 4 validation: Check if assembly was actually generated
         if asm.is_empty() {
             eprintln!("❌ PHASE 4 FAILED: Empty assembly generated (0 bytes)");

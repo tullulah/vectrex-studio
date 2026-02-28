@@ -116,7 +116,21 @@ pub fn has_audio_calls(module: &Module) -> bool {
 
 pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<String, String> {
     let mut asm = String::new();
-    
+
+    // Build frame_groups map and populate context for conditional JSR wrapping
+    if let Some(n) = module.meta.interleaved_frames {
+        let groups: HashMap<String, u8> = module.items.iter()
+            .filter_map(|item| {
+                if let vpy_parser::Item::Function(f) = item {
+                    f.frame_group.map(|g| (f.name.to_uppercase(), g))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        context::set_frame_groups(groups, n);
+    }
+
     // Find main() and loop()
     let mut main_fn = None;
     let mut loop_fn = None;
@@ -217,6 +231,18 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
         if has_beep_calls(module) {
             asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
+        // Auto-inject FRAME_PARITY toggle for interleaved rendering
+        if let Some(n) = module.meta.interleaved_frames {
+            let skip_label = fresh_label("PARITY_OK");
+            asm.push_str("    ; META INTERLEAVED_FRAMES: advance frame group counter\n");
+            asm.push_str("    LDB >FRAME_PARITY\n");
+            asm.push_str("    INCB\n");
+            asm.push_str(&format!("    CMPB #{}\n", n));
+            asm.push_str(&format!("    BLO {}\n", skip_label));
+            asm.push_str("    CLRB\n");
+            asm.push_str(&format!("{}:\n", skip_label));
+            asm.push_str("    STB >FRAME_PARITY\n");
         }
         generate_function_body(loop_fn, &mut asm, assets)?;
 
@@ -420,6 +446,22 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
         }
 
         Stmt::Expr(expr, ..) => {
+            // If this is a call to a @frame(N)-decorated function, guard with FRAME_PARITY check
+            if let Expr::Call(call_info) = expr {
+                let name_upper = call_info.name.to_uppercase();
+                if let Some(group) = context::get_frame_group(&name_upper) {
+                    if context::get_interleaved_n() > 0 {
+                        let skip = fresh_label("FRAME_SKIP");
+                        asm.push_str(&format!("    ; @frame({}) guard for {}\n", group, call_info.name));
+                        asm.push_str("    LDB >FRAME_PARITY\n");
+                        asm.push_str(&format!("    CMPB #{}\n", group));
+                        asm.push_str(&format!("    BNE {}\n", skip));
+                        expressions::emit_simple_expr(expr, asm, assets);
+                        asm.push_str(&format!("{}:\n", skip));
+                        return Ok(());
+                    }
+                }
+            }
             expressions::emit_simple_expr(expr, asm, assets);
         }
 
