@@ -282,6 +282,14 @@ impl<'a> Parser<'a> {
                         if let Expr::Number(n) = value {
                             meta.rom_bank_size = Some(n as u32);
                         }
+                    } else if key.eq_ignore_ascii_case("MUSIC_TIMER") {
+                        // META MUSIC_TIMER = true  → inject VIA T2 catch-up in LOOP_BODY
+                        match &value {
+                            Expr::Ident(ident) if ident.name.eq_ignore_ascii_case("true") => {
+                                meta.music_timer = true;
+                            }
+                            _ => {}
+                        }
                     }
                     
                     if let Expr::StringLit(s) = &value {

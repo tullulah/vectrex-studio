@@ -463,22 +463,15 @@ function detectEdgesFromImage(
 ): VecPath[] {
   // Calculate image draw position (same as in the draw function)
   if (!img.width || !img.height) return [];
-  const imgAspect = img.width / img.height;
-  const canvasAspect = canvasWidth / canvasHeight;
-  let drawWidth: number, drawHeight: number, drawX: number, drawY: number;
-  if (imgAspect > canvasAspect) {
-    drawWidth = canvasWidth;
-    drawHeight = canvasWidth / imgAspect;
-  } else {
-    drawHeight = canvasHeight;
-    drawWidth = canvasHeight * imgAspect;
-  }
-  drawX = (canvasWidth - drawWidth) / 2;
-  drawY = (canvasHeight - drawHeight) / 2;
-  
-  // Process at a reasonable resolution for speed
+  // Image is stretched to fill 100% of the canvas area
+  const drawWidth = canvasWidth;
+  const drawHeight = canvasHeight;
+  const drawX = 0;
+  const drawY = 0;
+
+  // Process at a reasonable resolution for speed (match canvas aspect ratio)
   const processWidth = Math.min(400, img.width);
-  const processHeight = Math.round(processWidth / imgAspect);
+  const processHeight = Math.round(processWidth * canvasHeight / canvasWidth);
   
   // Create a temporary canvas to process the image
   const tempCanvas = document.createElement('canvas');
@@ -540,11 +533,18 @@ function detectEdgesFromImage(
 export const VectorEditor: React.FC<VectorEditorProps> = ({
   resource: initialResource,
   onChange,
-  width = 480,
-  height = 640,
+  width: propWidth = 480,
+  height: propHeight = 640,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mousePenPosRef = useRef<{ x: number; y: number } | null>(null);
+  const circlePreviewRef = useRef<{ center: { x: number; y: number }; radius: number; tool: string } | null>(null);
+
+  // Dynamic canvas size — updated by ResizeObserver; all coordinate logic reads these
+  const [width, setWidth] = useState(propWidth);
+  const [height, setHeight] = useState(propHeight);
   
   // Calculate center point from all vector points (design-time)
   const calculateCenter = (res: VecResource): { centerX: number; centerY: number } => {
@@ -636,6 +636,22 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const isInternalChange = useRef(false);
   
   // Sync with external resource changes (but not our own changes)
+  // Resize the canvas to the largest square that fits the available space
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(([entry]) => {
+      const { width: cw, height: ch } = entry.contentRect;
+      if (cw > 20 && ch > 20) {
+        const size = Math.min(Math.floor(cw), Math.floor(ch));
+        setWidth(size);
+        setHeight(size);
+      }
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
   useEffect(() => {
     if (isInternalChange.current) {
       isInternalChange.current = false;
@@ -949,21 +965,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.save();
       ctx.globalAlpha = backgroundOpacity;
       
-      // Calculate image position and size
-      const imgAspect = backgroundImage.width / backgroundImage.height;
-      const canvasAspect = width / height;
-      let drawWidth, drawHeight, drawX, drawY;
-      
-      if (imgAspect > canvasAspect) {
-        drawWidth = width * zoom;
-        drawHeight = (width / imgAspect) * zoom;
-      } else {
-        drawHeight = height * zoom;
-        drawWidth = (height * imgAspect) * zoom;
-      }
-      
-      drawX = (width - drawWidth) / 2 + pan.x + backgroundOffset.x;
-      drawY = (height - drawHeight) / 2 + pan.y + backgroundOffset.y;
+      // Stretch image to fill 100% of the canvas area, centered so zoom scales from center
+      const drawWidth = width * zoom;
+      const drawHeight = height * zoom;
+      const drawX = (width - drawWidth) / 2 + pan.x + backgroundOffset.x;
+      const drawY = (height - drawHeight) / 2 + pan.y + backgroundOffset.y;
       
       ctx.drawImage(backgroundImage, drawX, drawY, drawWidth, drawHeight);
       
@@ -1140,19 +1146,37 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      // Rubber-band: preview line from last point to current mouse position
+      const lastPt = tempPoints[tempPoints.length - 1];
+      if (lastPt && mousePenPosRef.current) {
+        const lastCanvas = resourceToCanvas(lastPt);
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(lastCanvas.x, lastCanvas.y);
+        ctx.lineTo(mousePenPosRef.current.x, mousePenPosRef.current.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
     }
-    
-    // Draw circle/arc preview while dragging
-    if ((currentTool === 'circle' || currentTool === 'arc') && circleCenter && circleRadius > 0) {
-      const previewPoints = currentTool === 'circle'
-        ? generateCirclePoints(circleCenter, circleRadius, circleSegments, true)
-        : generateArcPoints(circleCenter, circleRadius, arcStartAngle, arcEndAngle, circleSegments);
-      
+
+    // Draw circle/arc preview while dragging (reads from ref for synchronous updates)
+    const circlePreview = circlePreviewRef.current;
+    if (circlePreview && circlePreview.radius > 0) {
+      const { center: previewCenter, radius: previewRadius, tool: previewTool } = circlePreview;
+      const previewPoints = previewTool === 'circle'
+        ? generateCirclePoints(previewCenter, previewRadius, circleSegments, true)
+        : generateArcPoints(previewCenter, previewRadius, arcStartAngle, arcEndAngle, circleSegments);
+
       ctx.strokeStyle = '#00ff00';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      
+
       if (previewPoints.length > 0) {
         const startPt = resourceToCanvas(previewPoints[0]);
         ctx.moveTo(startPt.x, startPt.y);
@@ -1160,20 +1184,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           const pt = resourceToCanvas(previewPoints[i]);
           ctx.lineTo(pt.x, pt.y);
         }
-        if (currentTool === 'circle') {
+        if (previewTool === 'circle') {
           ctx.closePath();
         }
       }
       ctx.stroke();
       ctx.setLineDash([]);
-      
+
       // Draw center point
-      const centerCanvas = resourceToCanvas(circleCenter);
+      const centerCanvas = resourceToCanvas(previewCenter);
       ctx.fillStyle = '#00ff00';
       ctx.beginPath();
       ctx.arc(centerCanvas.x, centerCanvas.y, 5, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Draw radius line
       if (previewPoints.length > 0) {
         const firstPt = resourceToCanvas(previewPoints[0]);
@@ -1185,11 +1209,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.lineTo(firstPt.x, firstPt.y);
         ctx.stroke();
         ctx.setLineDash([]);
-        
+
         // Draw radius text
         ctx.fillStyle = '#00ff00';
         ctx.font = '12px monospace';
-        ctx.fillText(`R: ${circleRadius}`, centerCanvas.x + 10, centerCanvas.y - 10);
+        ctx.fillText(`R: ${previewRadius}`, centerCanvas.x + 10, centerCanvas.y - 10);
       }
     }
     
@@ -1353,9 +1377,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    // Right-click (button 2) → finalise pen path if drawing, otherwise ignore
+    if (e.button === 2) {
+      if (currentTool === 'pen' && tempPoints.length >= 2) {
+        e.preventDefault();
+        finalizePenPath();
+      }
+      return;
+    }
+
+    // Middle mouse button (button 1) → temporary pan regardless of current tool
+    if (e.button === 1) {
+      e.preventDefault();
+      const canvasX = e.clientX - rect.left;
+      const canvasY = e.clientY - rect.top;
+      dragStartRef.current = { x: canvasX, y: canvasY, panX: pan.x, panY: pan.y };
+      setIsDrawing(true);
+      return;
+    }
+
     const canvasX = e.clientX - rect.left;
     const canvasY = e.clientY - rect.top;
-    
+
     // With background tool, allow moving the background image
     if (currentTool === 'background') {
       // Check if clicking on background
@@ -1481,7 +1524,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     // Update Vectrex coordinates display
     const vectrexPoint = canvasToResource(canvasX, canvasY);
     setMouseVectrexCoords({ x: vectrexPoint.x, y: vectrexPoint.y });
-    
+
+    // Track mouse position for rubber-band preview; redraw if pen is mid-path
+    mousePenPosRef.current = { x: canvasX, y: canvasY };
+    if (currentTool === 'pen' && tempPoints.length > 0) {
+      draw();
+    }
+
+    // Middle mouse button drag → pan (e.buttons bit 4 = middle button held)
+    if (e.buttons === 4 && dragStartRef.current) {
+      const deltaX = canvasX - dragStartRef.current.x;
+      const deltaY = canvasY - dragStartRef.current.y;
+      setPan({ x: dragStartRef.current.panX + deltaX, y: dragStartRef.current.panY + deltaY });
+      return;
+    }
+
     // Handle background movement with background tool
     if (currentTool === 'background' && isDrawing && dragStartRef.current && isBackgroundSelected) {
       const deltaX = canvasX - dragStartRef.current.x;
@@ -1527,8 +1584,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const point = canvasToResource(canvasX, canvasY);
       const dx = point.x - circleCenter.x;
       const dy = point.y - circleCenter.y;
-      const radius = Math.sqrt(dx * dx + dy * dy);
-      setCircleRadius(Math.round(radius));
+      const radius = Math.round(Math.sqrt(dx * dx + dy * dy));
+      circlePreviewRef.current = { center: circleCenter, tool: currentTool, radius };
+      setCircleRadius(radius);
+      draw();
       return;
     }
 
@@ -1569,6 +1628,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       // Reset circle/arc state
       setCircleCenter(null);
       setCircleRadius(0);
+      circlePreviewRef.current = null;
     }
     
     // Complete box selection
@@ -1677,7 +1737,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     setCurrentPathIndex(-1);
   }, [resource, currentLayerIndex, selectedPoints, updateResource]);
 
-  const handleDoubleClick = () => {
+  // Finalise the in-progress pen path (Enter, right-click, or double-click)
+  const finalizePenPath = () => {
+    mousePenPosRef.current = null;
     if (currentTool === 'pen' && tempPoints.length >= 2) {
       const newPath: VecPath = {
         name: `path_${Date.now()}`,
@@ -1685,12 +1747,33 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         closed: false,
         points: [...tempPoints],
       };
-
       const newResource = { ...resource };
       newResource.layers[currentLayerIndex].paths.push(newPath);
       updateResource(resource, newResource);
       setTempPoints([]);
       setCurrentPathIndex(newResource.layers[currentLayerIndex].paths.length - 1);
+    }
+  };
+
+  const handleDoubleClick = () => {
+    mousePenPosRef.current = null;
+    if (currentTool === 'pen' && tempPoints.length >= 3) {
+      // The second click of the double-click already added a duplicate last point;
+      // trim it before materialising the path
+      const points = tempPoints.slice(0, -1);
+      const newPath: VecPath = {
+        name: `path_${Date.now()}`,
+        intensity: 127,
+        closed: false,
+        points,
+      };
+      const newResource = { ...resource };
+      newResource.layers[currentLayerIndex].paths.push(newPath);
+      updateResource(resource, newResource);
+      setTempPoints([]);
+      setCurrentPathIndex(newResource.layers[currentLayerIndex].paths.length - 1);
+    } else {
+      finalizePenPath();
     }
   };
 
@@ -1722,7 +1805,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       return;
     }
     
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finalizePenPath();
+      return;
+    }
+
     if (e.key === 'Escape') {
+      mousePenPosRef.current = null;
       setTempPoints([]);
       setSelectedPointIndex(-1);
       setSelectedPoints(new Set());
@@ -2718,9 +2808,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     );
   };
 
-  // Right side panel - simplified for single view layout
+  // Right side panel - fixed width so canvas takes remaining space
   const RightPanel = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '200px', flexShrink: 0, overflowY: 'auto' }}>
       <LayersPanel />
       <PathPropertiesPanel />
       <EdgeSettingsPanel />
@@ -2728,11 +2818,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
       <Toolbar />
       <CircleArcSettings />
-      <div style={{ display: 'flex', gap: '8px', overflow: 'hidden' }}>
-        <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: '8px', overflow: 'hidden', flex: 1 }}>
+        {/* Centering wrapper — takes all remaining horizontal space */}
+        <div ref={canvasContainerRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {/* Inner div sized to the square canvas — no wasted black area */}
+        <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
           <canvas
             ref={canvasRef}
             width={width}
@@ -2741,6 +2834,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onAuxClick={e => e.preventDefault()}
+            onContextMenu={e => e.preventDefault()}
             onDoubleClick={handleDoubleClick}
             onKeyDown={handleKeyDown}
             onWheel={handleWheel}
@@ -2764,6 +2859,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             }}
           />
           <ViewCube />
+        </div>
         </div>
         <RightPanel />
       </div>

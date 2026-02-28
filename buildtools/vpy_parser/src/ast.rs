@@ -9,16 +9,33 @@ pub struct Module {
 }
 
 /// Module metadata (title, author, ROM config, etc.)
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleMeta {
     pub title_override: Option<String>,
     pub metas: HashMap<String, String>,
+    /// BIOS copyright-screen music pointer. Defaults to "music1" (BIOS jingle).
     pub music_override: Option<String>,
     pub copyright_override: Option<String>,
     /// Total ROM size in bytes (e.g., 524288 for 512KB multibank)
     pub rom_total_size: Option<u32>,
     /// Bank size in bytes (e.g., 16384 for 16KB)
     pub rom_bank_size: Option<u32>,
+    /// Inject VIA T2 catch-up: call AUDIO_UPDATE twice when a frame is slow. Default: true.
+    pub music_timer: bool,
+}
+
+impl Default for ModuleMeta {
+    fn default() -> Self {
+        ModuleMeta {
+            title_override: None,
+            metas: HashMap::new(),
+            music_override: Some("music1".to_string()),
+            copyright_override: None,
+            rom_total_size: None,
+            rom_bank_size: None,
+            music_timer: true,
+        }
+    }
 }
 
 /// Top-level items in a module

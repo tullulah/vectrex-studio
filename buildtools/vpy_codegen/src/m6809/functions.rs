@@ -49,6 +49,34 @@ pub fn has_beep_calls(module: &Module) -> bool {
     })
 }
 
+/// Check if module uses PRINT_TEXT or PRINT_NUMBER (needs TEXT_SCALE initialization)
+pub fn has_print_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "PRINT_TEXT" || c.name == "PRINT_NUMBER")
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
@@ -116,6 +144,12 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     asm.push_str("    ; Initialize global variables\n");
     asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    if has_print_calls(module) {
+        asm.push_str("    LDA #$F8\n");
+        asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
+        asm.push_str("    LDA #$48\n");
+        asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
+    }
     let mut array_copy_counter = 0;
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
@@ -143,11 +177,10 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
 
                 array_copy_counter += 1;
             } else {
-                // Non-array initialization
-                if let vpy_parser::Expr::Number(n) = value {
-                    asm.push_str(&format!("    LDD #{}\n", n));
-                    asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
-                }
+                // Non-array initialization: use emit_simple_expr so we handle any
+                // valid initializer (Number, Ident pointing to a const, etc.)
+                expressions::emit_simple_expr(value, &mut asm, assets);
+                asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
             }
         }
     }
@@ -189,7 +222,20 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
 
         // Auto-inject AUDIO_UPDATE at END if module uses PLAY_MUSIC/PLAY_SFX
         if has_audio_calls(module) {
-            asm.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)\n");
+            if module.meta.music_timer {
+                // META MUSIC_TIMER = true: use VIA T2 to call AUDIO_UPDATE an extra time
+                // when user code took longer than one frame, keeping music in sync.
+                // T2 bit 5 of VIA_int_flags ($D00D) is set when the timer fires;
+                // Wait_Recal clears it on the next call — we must NOT clear it here.
+                // Extended addressing (>) required: DP=$C8 but VIA is at $D00D.
+                asm.push_str("    ; META MUSIC_TIMER: catch up if game frame was slow\n");
+                asm.push_str("    LDA >$D00D              ; VIA_int_flags (extended addr, DP=$C8)\n");
+                asm.push_str("    BITA #$20               ; Bit 5 = T2 elapsed (>1 frame of user code)\n");
+                asm.push_str("    BEQ MUSIC_CATCHUP_SKIP  ; On time — skip extra tick\n");
+                asm.push_str("    JSR AUDIO_UPDATE        ; Catch-up tick: game was slow\n");
+                asm.push_str("MUSIC_CATCHUP_SKIP:\n");
+            }
+            asm.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX\n");
         }
 
         asm.push_str("    RTS\n\n");

@@ -302,7 +302,23 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         .cloned()
         .collect();
     
-    let syms: Vec<String> = non_const_vars.iter().map(|(name, _)| name.clone()).collect(); // Only non-const global names
+    let mut syms: Vec<String> = non_const_vars.iter().map(|(name, _)| name.clone()).collect(); // Only non-const global names
+    // Also collect for-loop variables from function bodies (they are emitted as VAR_X but not declared as globals)
+    {
+        use std::collections::BTreeSet;
+        let mut loop_vars: BTreeSet<String> = BTreeSet::new();
+        for item in &module.items {
+            if let Item::Function(f) = item {
+                for stmt in &f.body { collect_stmt_syms(stmt, &mut loop_vars); }
+            }
+        }
+        let global_set: std::collections::HashSet<_> = syms.iter().cloned().collect();
+        for v in loop_vars {
+            if !global_set.contains(&v) {
+                syms.push(v);
+            }
+        }
+    }
     let global_names = syms.clone(); // Same list for passing to collectors
     let string_map = collect_string_literals(module);
     
@@ -519,6 +535,8 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
     // 8. PRINT_NUMBER buffer (always allocate if not suppressed)
     if !suppress_runtime {
         ram.allocate("NUM_STR", 6, "String buffer for PRINT_NUMBER (5 digits + terminator)");
+        ram.allocate("TEXT_SCALE_H", 1, "Character height for Print_Str_d (default $F8=-8, normal)");
+        ram.allocate("TEXT_SCALE_W", 1, "Character width for Print_Str_d (default $48=72, normal)");
     }
 
     // 8.1 BEEP timer (non-blocking beep countdown)
@@ -880,6 +898,12 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
         out.push_str("    LDA #$80\n    STA VIA_t1_cnt_lo\n");
         out.push_str("    CLR VPY_MOVE_X  ; MOVE offset defaults to 0\n");
         out.push_str("    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0\n");
+        if !suppress_runtime {
+            out.push_str("    LDA #$F8\n");
+            out.push_str("    STA TEXT_SCALE_H  ; Default height = -8 (normal size)\n");
+            out.push_str("    LDA #$48\n");
+            out.push_str("    STA TEXT_SCALE_W  ; Default width = 72 (normal size)\n");
+        }
         // NOTE: UPDATE_MUSIC_PSG now called at START of LOOP_BODY, not here
         
         // CRITICAL: Initialize global variables even if main() has no content
@@ -988,7 +1012,20 @@ pub fn emit_with_debug(module: &Module, _t: Target, ti: &TargetInfo, opts: &Code
                     // Auto-inject AUDIO_UPDATE at END of loop (after all game logic)
                     // This prevents Sound_Byte from changing DP to $D0 during user's button reads
                     if opts.has_audio(module) {
-                        out.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)\n");
+                        if module.meta.music_timer {
+                            // META MUSIC_TIMER (default true): use VIA T2 to call AUDIO_UPDATE
+                            // an extra time when user code took longer than one frame.
+                            // T2 bit 5 of VIA_int_flags ($D00D) is set when the timer fires;
+                            // Wait_Recal clears it on the next call — do NOT clear it here.
+                            // Extended addressing (>) required: DP=$C8, VIA is at $D00D.
+                            out.push_str("    ; META MUSIC_TIMER: catch up if game frame was slow\n");
+                            out.push_str("    LDA >$D00D              ; VIA_int_flags (extended addr, DP=$C8)\n");
+                            out.push_str("    BITA #$20               ; Bit 5 = T2 elapsed (>1 frame of user code)\n");
+                            out.push_str("    BEQ MUSIC_CATCHUP_SKIP  ; On time — skip extra tick\n");
+                            out.push_str("    JSR AUDIO_UPDATE        ; Catch-up tick: game was slow\n");
+                            out.push_str("MUSIC_CATCHUP_SKIP:\n");
+                        }
+                        out.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX\n");
                     }
                     
                     // Free locals before RTS (same as emit_function)

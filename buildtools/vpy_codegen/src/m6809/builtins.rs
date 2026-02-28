@@ -55,6 +55,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Core display builtins
     ("PRINT_TEXT", 3),      // x, y, string (3 args) OR x, y, string, height, width (5 args - handled specially)
     ("PRINT_NUMBER", 3),    // x, y, number
+    ("SET_TEXT_SIZE", 1),   // n (1-8, 8=normal): sets Vec_Text_Height/Width
     ("DRAW_LINE", 5),       // x0, y0, x1, y1, intensity
     ("DRAW_RECT", 5),       // x, y, width, height, intensity
     ("SET_INTENSITY", 1),   // intensity
@@ -161,6 +162,24 @@ pub fn emit_builtin(
         }
         "PRINT_TEXT" => {
             emit_print_text(args, out, assets);
+            true
+        }
+        "SET_TEXT_SIZE" => {
+            // SET_TEXT_SIZE(n): n=1..8, n=8 is normal size
+            // Vec_Text_Height ($C82A) = -n (signed byte: e.g. -8 = $F8 for normal)
+            // Vec_Text_Width  ($C82B) = n*9 (e.g. 72 for normal)
+            if let Some(arg) = args.first() {
+                expressions::emit_simple_expr(arg, out, assets);
+                out.push_str("    LDB RESULT+1    ; n = scale value (1-8)\n");
+                out.push_str("    NEGB            ; B = -n -> TEXT_SCALE_H\n");
+                out.push_str("    STB >TEXT_SCALE_H\n");
+                out.push_str("    LDB RESULT+1    ; reload n\n");
+                out.push_str("    ASLB            ; n*2\n");
+                out.push_str("    ASLB            ; n*4\n");
+                out.push_str("    ASLB            ; n*8\n");
+                out.push_str("    ADDB RESULT+1   ; n*8 + n = n*9 -> TEXT_SCALE_W\n");
+                out.push_str("    STB >TEXT_SCALE_W\n");
+            }
             true
         }
         "DRAW_LINE" => {

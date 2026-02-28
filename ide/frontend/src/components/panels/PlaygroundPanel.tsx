@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../state/projectStore';
-import { VPlayLevel, VPlayObject, VPlayValidator, DEFAULT_LEVEL, VPLAY_VERSION } from '../../types/vplay-schema';
+import { VPlayLevel, VPlayObject, VPlayValidator, VPlayHotspot, HotspotTrigger, DEFAULT_LEVEL, VPLAY_VERSION } from '../../types/vplay-schema';
 
 interface VecPath {
   name: string;
@@ -62,6 +62,11 @@ export function PlaygroundPanel() {
   const [velocityMagnitude, setVelocityMagnitude] = useState(10);
   const [velocityAngle, setVelocityAngle] = useState(-90); // -90 = up
   const [toasts, setToasts] = useState<Array<{id: number; message: string; type: 'success' | 'error'}>>([]);
+  const [hotspots, setHotspots] = useState<VPlayHotspot[]>([]);
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
+  const [activeTool, setActiveTool] = useState<'select' | 'hotspot'>('select');
+  const [draggingHotspotId, setDraggingHotspotId] = useState<string | null>(null);
+  const [hotspotDragOffset, setHotspotDragOffset] = useState<{ x: number; y: number } | null>(null);
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -112,9 +117,12 @@ export function PlaygroundPanel() {
         
         for (const pattern of vectorResources) {
           if (pattern.includes('*')) {
-            const dirPath = pattern.substring(0, pattern.lastIndexOf('/'));
+            // Find the deepest non-glob directory segment
+            const parts = pattern.split('/');
+            const firstGlobIdx = parts.findIndex(p => p.includes('*'));
+            const dirPath = firstGlobIdx > 0 ? parts.slice(0, firstGlobIdx).join('/') : '.';
             const fullDirPath = `${projectPath}/${dirPath}`;
-            
+
             const result = await filesAPI.readDirectory(fullDirPath);
             if (!result.error && result.files) {
               const matchedFiles = result.files
@@ -429,7 +437,8 @@ export function PlaygroundPanel() {
         },
         spawnPoints: {
           player: { x: 0, y: -100 }
-        }
+        },
+        hotspots: hotspots,
       };
 
       // Validate before saving
@@ -498,6 +507,8 @@ export function PlaygroundPanel() {
       }
       
       setObjects(loadedObjects);
+      setHotspots(sceneData.hotspots || []);
+      setSelectedHotspotId(null);
       setSelectedId(null);
       setSceneName(name); // Remember the scene name for future saves
       console.log('[Playground] Loaded scene:', name, `(${loadedObjects.length} objects)`);
@@ -627,11 +638,26 @@ export function PlaygroundPanel() {
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (draggingHotspotId && hotspotDragOffset) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
+      const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+      setHotspots(prev => prev.map(hs =>
+        hs.id === draggingHotspotId
+          ? { ...hs, x: vecX - hotspotDragOffset.x, y: vecY - hotspotDragOffset.y }
+          : hs
+      ));
+      return;
+    }
+
     if (draggingVelocity) {
       handleVelocityArrowDrag(e);
       return;
     }
-    
+
     if (!draggingObjectId || !dragOffset || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
@@ -654,6 +680,8 @@ export function PlaygroundPanel() {
     setDraggingObjectId(null);
     setDragOffset(null);
     setDraggingVelocity(false);
+    setDraggingHotspotId(null);
+    setHotspotDragOffset(null);
   };
 
   // Convert Vectrex coordinates to SVG viewport coordinates
@@ -662,6 +690,102 @@ export function PlaygroundPanel() {
       x: x - VECTREX_X_MIN,
       y: VECTREX_Y_MAX - y,
     };
+  };
+
+  // Canvas click — create hotspot or deselect
+  const handleCanvasClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const target = e.target as SVGElement;
+    const tag = target.tagName.toLowerCase();
+
+    if (activeTool === 'hotspot') {
+      // Only create on background rect or svg element itself
+      if (tag !== 'svg' && tag !== 'rect') return;
+
+      const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
+      const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+
+      const newHotspot: VPlayHotspot = {
+        id: `hs_${Date.now()}`,
+        x: vecX,
+        y: vecY,
+        w: 20,
+        h: 20,
+        trigger: 'player_near',
+        label: 'hotspot',
+      };
+
+      setHotspots(prev => [...prev, newHotspot]);
+      setSelectedHotspotId(newHotspot.id);
+      setSelectedId(null);
+    } else {
+      // Select tool — clicking canvas background deselects everything
+      if (tag === 'svg' || tag === 'rect') {
+        setSelectedId(null);
+        setSelectedHotspotId(null);
+      }
+    }
+  };
+
+  // Render a hotspot zone on the SVG canvas
+  const renderHotspot = (hs: VPlayHotspot) => {
+    const svgPos = vecToSvg(hs.x, hs.y);
+    const isSelected = selectedHotspotId === hs.id;
+    const color = isSelected ? '#ffaa00' : '#ffaa0088';
+    const fillColor = isSelected ? '#ffaa0030' : '#ffaa0015';
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setSelectedHotspotId(hs.id);
+      setSelectedId(null);
+
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
+      const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+      setDraggingHotspotId(hs.id);
+      setHotspotDragOffset({ x: vecX - hs.x, y: vecY - hs.y });
+    };
+
+    return (
+      <g key={hs.id} onMouseDown={handleMouseDown} style={{ cursor: 'move' }}>
+        <rect
+          x={svgPos.x - hs.w}
+          y={svgPos.y - hs.h}
+          width={hs.w * 2}
+          height={hs.h * 2}
+          fill={fillColor}
+          stroke={color}
+          strokeWidth={isSelected ? 1.5 : 1}
+          strokeDasharray="4 2"
+        />
+        <text
+          x={svgPos.x}
+          y={svgPos.y - hs.h - 3}
+          fill={color}
+          fontSize="7"
+          textAnchor="middle"
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
+        >
+          {hs.label}
+        </text>
+        <text
+          x={svgPos.x}
+          y={svgPos.y + 4}
+          fill={color}
+          fontSize="5"
+          textAnchor="middle"
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
+        >
+          {hs.trigger}
+        </text>
+      </g>
+    );
   };
 
   // Render a vector sprite from loaded .vec data
@@ -826,6 +950,35 @@ export function PlaygroundPanel() {
         )}
         <div style={{ borderLeft: '1px solid #555', height: '24px', margin: '0 4px' }} />
         <button
+          onClick={() => { setActiveTool('select'); }}
+          title="Select / Move objects"
+          style={{
+            padding: '4px 10px',
+            background: activeTool === 'select' ? '#005500' : '#2a2a2a',
+            color: activeTool === 'select' ? '#00ff00' : '#aaa',
+            border: `1px solid ${activeTool === 'select' ? '#00ff00' : '#555'}`,
+            cursor: 'pointer',
+            fontSize: '12px',
+          }}
+        >
+          SELECT
+        </button>
+        <button
+          onClick={() => { setActiveTool('hotspot'); }}
+          title="Place hotspot zones"
+          style={{
+            padding: '4px 10px',
+            background: activeTool === 'hotspot' ? '#554400' : '#2a2a2a',
+            color: activeTool === 'hotspot' ? '#ffaa00' : '#aaa',
+            border: `1px solid ${activeTool === 'hotspot' ? '#ffaa00' : '#555'}`,
+            cursor: 'pointer',
+            fontSize: '12px',
+          }}
+        >
+          HOTSPOT
+        </button>
+        <div style={{ borderLeft: '1px solid #555', height: '24px', margin: '0 4px' }} />
+        <button
           onClick={() => setEditingVelocity(!editingVelocity)}
           style={{
             padding: '4px 12px',
@@ -884,6 +1037,8 @@ export function PlaygroundPanel() {
           onClick={() => {
             setObjects([]);
             setSelectedId(null);
+            setHotspots([]);
+            setSelectedHotspotId(null);
           }}
           style={{
             padding: '4px 12px',
@@ -970,6 +1125,7 @@ export function PlaygroundPanel() {
               onMouseMove={handleCanvasMouseMove}
               onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleCanvasMouseUp}
+              onClick={handleCanvasClick}
               viewBox={`0 0 ${VECTREX_WIDTH} ${VECTREX_HEIGHT}`}
               preserveAspectRatio="xMidYMid meet"
               style={{
@@ -977,7 +1133,8 @@ export function PlaygroundPanel() {
                 height: 'auto',
                 aspectRatio: '3 / 4',
                 backgroundColor: '#000',
-                border: '2px solid #00ff00',
+                border: `2px solid ${activeTool === 'hotspot' ? '#ffaa00' : '#00ff00'}`,
+                cursor: activeTool === 'hotspot' ? 'crosshair' : 'default',
               }}
             >
             {/* Grid */}
@@ -998,12 +1155,17 @@ export function PlaygroundPanel() {
             {/* Center marker */}
             <circle cx={VECTREX_WIDTH / 2} cy={VECTREX_HEIGHT / 2} r="3" fill="#00ff00" opacity="0.5" />
 
-            {/* Objects - render actual vectors */}
-            {objects.map(obj => renderVector(obj))}
+            {/* Render hotspots below objects */}
+            {hotspots.map(hs => renderHotspot(hs))}
 
-            {/* Coordinates display */}
+            {/* Objects - render actual vectors */}
+            {objects.filter(o => o.layer === 'background').map(renderVector)}
+            {objects.filter(o => !o.layer || o.layer === 'gameplay').map(renderVector)}
+            {objects.filter(o => o.layer === 'foreground').map(renderVector)}
+
+            {/* Status display */}
             <text x="5" y="15" fill="#00ff00" fontSize="8" fontFamily="monospace">
-              {objects.length} objects | {loadedVectors.size} vectors loaded
+              {objects.length} objects | {hotspots.length} hotspots | {loadedVectors.size} vectors
             </text>
           </svg>
           </div>
@@ -1019,6 +1181,101 @@ export function PlaygroundPanel() {
           <h3 style={{ fontSize: '12px', margin: '0 0 8px 0', color: '#888' }}>
             PROPERTIES
           </h3>
+
+          {/* Hotspot properties panel */}
+          {selectedHotspotId && (() => {
+            const hs = hotspots.find(h => h.id === selectedHotspotId);
+            if (!hs) return null;
+
+            const update = (patch: Partial<VPlayHotspot>) => {
+              setHotspots(prev => prev.map(h => h.id === hs.id ? { ...h, ...patch } : h));
+            };
+
+            return (
+              <div style={{ padding: '8px', color: '#ffaa00', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid #ffaa0044', paddingBottom: '4px', fontSize: '11px' }}>
+                  HOTSPOT
+                </div>
+
+                <div style={{ marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '2px' }}>ID</label>
+                  <input
+                    value={hs.id}
+                    onChange={e => update({ id: e.target.value })}
+                    style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '2px' }}>Label (in-game prompt)</label>
+                  <input
+                    value={hs.label}
+                    onChange={e => update({ label: e.target.value })}
+                    style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '2px' }}>Trigger</label>
+                  <select
+                    value={hs.trigger}
+                    onChange={e => update({ trigger: e.target.value as HotspotTrigger })}
+                    style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px' }}
+                  >
+                    <option value="player_near">player_near — proximity</option>
+                    <option value="player_on">player_on — overlap</option>
+                    <option value="projectile">projectile — shot hit</option>
+                    <option value="auto">auto — always active</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                  <div>
+                    <label style={{ fontSize: '10px', color: '#aaa', display: 'block' }}>X</label>
+                    <input type="number" value={hs.x}
+                      onChange={e => update({ x: parseInt(e.target.value) || 0 })}
+                      style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', color: '#aaa', display: 'block' }}>Y</label>
+                    <input type="number" value={hs.y}
+                      onChange={e => update({ y: parseInt(e.target.value) || 0 })}
+                      style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                  <div>
+                    <label style={{ fontSize: '10px', color: '#aaa', display: 'block' }}>Width (half)</label>
+                    <input type="number" value={hs.w} min={5} max={96}
+                      onChange={e => update({ w: Math.max(5, parseInt(e.target.value) || 20) })}
+                      style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', color: '#aaa', display: 'block' }}>Height (half)</label>
+                    <input type="number" value={hs.h} min={5} max={128}
+                      onChange={e => update({ h: Math.max(5, parseInt(e.target.value) || 20) })}
+                      style={{ width: '100%', background: '#1a1a1a', color: '#ffaa00', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setHotspots(prev => prev.filter(h => h.id !== hs.id));
+                    setSelectedHotspotId(null);
+                  }}
+                  style={{ width: '100%', padding: '4px', background: '#3a0000', color: '#ff6666', border: '1px solid #aa3333', cursor: 'pointer', fontSize: '11px' }}
+                >
+                  Delete Hotspot
+                </button>
+              </div>
+            );
+          })()}
+
           {selectedId ? (
             <div style={{ fontSize: '11px' }}>
               {(() => {

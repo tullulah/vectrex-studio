@@ -32,6 +32,14 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         }
         
         Expr::Ident(id) => {
+            // Compile-time consts: emit an immediate value instead of a RAM load.
+            // This prevents reading from uninitialized RAM and matches how core handles consts.
+            if let Some(const_val) = context::get_const_value(&id.name) {
+                out.push_str(&format!("    LDD #{}  ; const {}\n", const_val, id.name));
+                out.push_str("    STD RESULT\n");
+                return;
+            }
+
             // Variable references use uppercase labels
             // Check variable size: use LDB + sign/zero-extend for 8-bit, LDD for 16-bit
             let size = context::get_var_size(&id.name);

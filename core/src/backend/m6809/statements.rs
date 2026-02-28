@@ -215,7 +215,7 @@ pub fn emit_stmt(stmt: &Stmt, out: &mut String, loop_ctx: &LoopCtx, fctx: &FuncC
             if let Some(off) = fctx.offset_of(var) { out.push_str(&format!("    LDD {} ,S\n", off)); }
             else { out.push_str(&format!("    LDD VAR_{}\n", var.to_uppercase())); }
             emit_expr(end, out, fctx, string_map, opts);
-            out.push_str("    LDX RESULT\n    CPD RESULT\n");
+            out.push_str("    LDX RESULT\n    CMPD RESULT\n");
             out.push_str(&format!("    LBCC {}\n", le)); // unsigned >= end => exit
             let inner = LoopCtx { start: Some(ls.clone()), end: Some(le.clone()) };
             for s in body { emit_stmt(s, out, &inner, fctx, string_map, opts, tracker, depth + 1); }
@@ -340,7 +340,7 @@ pub fn emit_stmt(stmt: &Stmt, out: &mut String, loop_ctx: &LoopCtx, fctx: &FuncC
                     let mut label_map: BTreeMap<i32,String> = BTreeMap::new();
                     for (val, _) in &numeric_cases { label_map.insert(*val & 0xFFFF, fresh_label("SW_CASE")); }
                     out.push_str(&format!("    LDD TMPLEFT\n    SUBD #{}\n    LBLT {}\n", min, def_label.as_ref().unwrap_or(&end)));
-                    out.push_str(&format!("    CPD #{}\n    LBHI {}\n", span as i32 - 1, def_label.as_ref().unwrap_or(&end)));
+                    out.push_str(&format!("    CMPD #{}\n    LBHI {}\n", span as i32 - 1, def_label.as_ref().unwrap_or(&end)));
                     out.push_str("    ASLB\n    ROLA\n");
                     out.push_str(&format!("    LDX #{}\n    ABX\n", table_label));
                     out.push_str("    LDD ,X\n    TFR D,X\n    JMP ,X\n");

@@ -121,9 +121,9 @@ export const DockWorkspace: React.FC = () => {
   playground: { json: null as any }
   });
   // Extra metadata to preserve docking edge for panels so re-pin restores original side
-  const panelMetaRef = useRef<Partial<Record<DockComponent | 'build-output' | 'compiler-output', { edge: 'left'|'right'|'bottom'|'top'; parentTabsetId?: string }>>>({ files:{edge:'left'}, emulator:{edge:'right'}, debug:{edge:'bottom'}, errors:{edge:'bottom'}, output:{edge:'bottom'}, memory:{edge:'right'}, trace:{edge:'right'}, psglog:{edge:'right'}, bioscalls:{edge:'right'}, 'build-output':{edge:'bottom'}, 'compiler-output':{edge:'bottom'} });
+  const panelMetaRef = useRef<Partial<Record<DockComponent | 'build-output' | 'compiler-output', { edge: 'left'|'right'|'bottom'|'top'; parentTabsetId?: string }>>>({ files:{edge:'left'}, emulator:{edge:'right'}, debug:{edge:'bottom'}, errors:{edge:'bottom'}, output:{edge:'bottom'}, memory:{edge:'right'}, trace:{edge:'right'}, psglog:{edge:'right'}, bioscalls:{edge:'right'}, playground:{edge:'right'}, 'build-output':{edge:'bottom'}, 'compiler-output':{edge:'bottom'} });
   const hiddenSetRef = useRef<Set<DockComponent>>(new Set());
-  const pinnedSetRef = useRef<Set<DockComponent | 'build-output' | 'compiler-output'>>(new Set(['files','emulator','memory','trace','psglog','bioscalls','debug','errors','output','build-output','compiler-output']));
+  const pinnedSetRef = useRef<Set<DockComponent | 'build-output' | 'compiler-output'>>(new Set(['files','emulator','memory','trace','psglog','bioscalls','playground','debug','errors','output','build-output','compiler-output']));
   const [, forceRerender] = useState(0); // for pin UI updates
   (window as any).__pinnedPanelsRef = pinnedSetRef;
   // Expose globally so static handlers can reach
@@ -386,7 +386,7 @@ export const DockWorkspace: React.FC = () => {
   const onRenderTabSet = useCallback((tabsetNode: any, renderValues: any) => {
     try {
       const children: any[] = tabsetNode.getChildren?.() || [];
-  const panelChildren: DockComponent[] = children.map(c => (typeof c.getComponent === 'function' ? c.getComponent() : c?._attributes?.component)).filter((n: any) => ['files','emulator','debug','errors','output','memory','trace','bioscalls'].includes(n));
+  const panelChildren: DockComponent[] = children.map(c => (typeof c.getComponent === 'function' ? c.getComponent() : c?._attributes?.component)).filter((n: any) => ['files','emulator','debug','errors','output','memory','trace','bioscalls','playground'].includes(n));
       if (panelChildren.length === 0) return; // not a pure panel tabset
       const hasMixed = children.some(c => {
         const compName = (typeof c.getComponent === 'function' ? c.getComponent() : c?._attributes?.component);
@@ -398,7 +398,7 @@ export const DockWorkspace: React.FC = () => {
       let edge: 'left' | 'right' | 'bottom' | 'top' = 'top';
   if (panelChildren.every(pc => pc === 'debug' || pc === 'errors' || pc === 'output')) edge = 'bottom';
       else if (panelChildren.every(pc => pc === 'files')) edge = 'left';
-  else if (panelChildren.every(pc => pc === 'emulator' || pc === 'memory' || pc === 'trace' || pc === 'bioscalls')) edge = 'right';
+  else if (panelChildren.every(pc => pc === 'emulator' || pc === 'memory' || pc === 'trace' || pc === 'bioscalls' || pc === 'playground')) edge = 'right';
       // top currently unused but reserved if future top docking added
       const allPinned = panelChildren.every(pc => pinnedSetRef.current.has(pc));
       // Record parent tabset id for each panel child so re-pin returns here
@@ -407,7 +407,7 @@ export const DockWorkspace: React.FC = () => {
         if (parentId) {
           // edge inference again
           let edge: 'left'|'right'|'bottom'|'top' = 'top';
-          if (pc === 'files') edge='left'; else if (pc==='emulator' || pc==='memory' || pc==='trace' || pc==='bioscalls') edge='right'; else if (pc==='debug' || pc==='errors' || pc==='output') edge='bottom';
+          if (pc === 'files') edge='left'; else if (pc==='emulator' || pc==='memory' || pc==='trace' || pc==='bioscalls' || pc==='playground') edge='right'; else if (pc==='debug' || pc==='errors' || pc==='output') edge='bottom';
           panelMetaRef.current[pc] = { edge, parentTabsetId: parentId };
         }
       });
@@ -748,7 +748,7 @@ export const DockWorkspace: React.FC = () => {
         ))}
       </div>
       <div className="vpy-rail right">
-        {(['emulator'] as DockComponent[]).filter(p=>!pinnedSetRef.current.has(p)).map(p=> (
+        {(['emulator','playground'] as DockComponent[]).filter(p=>!pinnedSetRef.current.has(p)).map(p=> (
           <div key={p} className="rail-icon" title={t('action.showPanel','Show panel')+': '+t(`panel.${p}`, p)} onClick={()=>{ pinnedSetRef.current.add(p); persistPinnedPanels(); addComponent(p); forceRerender(n=>n+1); }}>
             <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:2}}>
               <span>📌</span>

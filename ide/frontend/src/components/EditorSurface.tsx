@@ -137,12 +137,10 @@ export const EditorSurface: React.FC = () => {
             />
           </div>
         ) : isVectorFile ? (
-          <div style={{ padding: '16px', background: '#1e1e1e', height: '100%', overflow: 'auto' }}>
-            <VectorEditor 
-              resource={vectorResource} 
+          <div style={{ background: '#1e1e1e', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <VectorEditor
+              resource={vectorResource}
               onChange={handleVectorChange}
-              width={600}
-              height={600}
             />
           </div>
         ) : (
@@ -176,5 +174,5 @@ const editorSurfaceStyles = `
 .vpy-tab .icon { font-size:14px; }
 .vpy-tab .close { background:transparent; border:none; color:#888; font-size:12px; cursor:pointer; padding:0 2px; }
 .vpy-tab .close:hover { color:#fff; }
-.vpy-editor-body { flex:1; position:relative; min-height:0; overflow:auto; }
+.vpy-editor-body { flex:1; position:relative; min-height:0; overflow:hidden; }
 `;

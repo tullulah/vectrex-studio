@@ -21,7 +21,8 @@ fn is_known_builtin(name: &str) -> bool {
         "MOVE" | "PRINT_TEXT" | "DRAW_TO" | "DRAW_LINE" | "DEBUG_PRINT" |
         "DEBUG_PRINT_LABELED" | "DEBUG_PRINT_STR" | "DRAW_VECTOR" |
         "PLAY_MUSIC" | "PLAY_SFX" | "DRAW_VECTOR_LIST" | "DRAW_VL" |
-        "FRAME_BEGIN" | "ABS" | "LEN" | "ASM" | "SET_INTENSITY"
+        "FRAME_BEGIN" | "ABS" | "LEN" | "ASM" | "SET_INTENSITY" |
+        "SET_TEXT_SIZE" | "PRINT_NUMBER" | "BEEP" | "RAND" | "RAND_RANGE"
     )
 }
 
@@ -198,8 +199,19 @@ impl<'a> Parser<'a> {
                 self.consume(TokenKind::Newline)?;
                 if let Expr::StringLit(s)=&value { meta.metas.insert(key.to_uppercase(), s.clone()); }
                 if key.eq_ignore_ascii_case("TITLE") { if let Expr::StringLit(s)=&value { meta.title_override = Some(s.clone()); } }
-                else if key.eq_ignore_ascii_case("MUSIC") { if let Expr::StringLit(s)=&value { meta.music_override = Some(s.clone()); } }
+                else if key.eq_ignore_ascii_case("MUSIC") {
+                    match &value {
+                        Expr::StringLit(s) => meta.music_override = Some(s.clone()),
+                        Expr::Ident(id) => meta.music_override = Some(id.name.clone()),
+                        _ => {}
+                    }
+                }
                 else if key.eq_ignore_ascii_case("COPYRIGHT") { if let Expr::StringLit(s)=&value { meta.copyright_override = Some(s.clone()); } }
+                else if key.eq_ignore_ascii_case("MUSIC_TIMER") {
+                    if let Expr::Ident(id) = &value {
+                        meta.music_timer = !id.name.eq_ignore_ascii_case("false");
+                    }
+                }
                 continue;
             }
             if self.match_kind(&TokenKind::VectorList) || self.match_ident_case("VECTORLIST") {

@@ -23,7 +23,7 @@ pub fn generate_header(title: &str, _meta: &ModuleMeta) -> Result<String, String
     let music_ptr = if let Some(ref music_name) = _meta.music_override {
         music_name.as_str()
     } else {
-        "$0000"
+        "music1"
     };
     asm.push_str(&format!("    FDB {}              ; Music pointer\n", music_ptr));
     

@@ -166,6 +166,18 @@ export interface VPlayLayers {
   foreground: VPlayObject[];
 }
 
+export type HotspotTrigger = 'player_near' | 'player_on' | 'projectile' | 'auto';
+
+export interface VPlayHotspot {
+  id: string;
+  x: number;           // center X in Vectrex coords
+  y: number;           // center Y in Vectrex coords
+  w: number;           // half-width (total width = w*2)
+  h: number;           // half-height (total height = h*2)
+  trigger: HotspotTrigger;
+  label: string;       // shown in editor and as in-game prompt
+}
+
 /**
  * Complete VPlay Level Structure v2.0
  */
@@ -187,6 +199,9 @@ export interface VPlayLevel {
   
   // Triggers (optional, for advanced levels)
   triggers?: VPlayTrigger[];
+
+  // Hotspots (interactive zones queryable at runtime)
+  hotspots?: VPlayHotspot[];
 }
 
 /**
@@ -268,6 +283,25 @@ export class VPlayValidator {
       }
     });
     
+    // Validate hotspots if present
+    const validTriggers: HotspotTrigger[] = ['player_near', 'player_on', 'projectile', 'auto'];
+    if (level.hotspots) {
+      (level.hotspots as any[]).forEach((hs: any, index: number) => {
+        if (!hs.id || hs.id.trim() === '') {
+          errors.push(`Hotspot at index ${index} has empty id`);
+        }
+        if (!validTriggers.includes(hs.trigger)) {
+          errors.push(`Hotspot ${hs.id || index} has invalid trigger: ${hs.trigger}`);
+        }
+        if (!(hs.w > 0)) {
+          errors.push(`Hotspot ${hs.id || index} w must be > 0`);
+        }
+        if (!(hs.h > 0)) {
+          errors.push(`Hotspot ${hs.id || index} h must be > 0`);
+        }
+      });
+    }
+
     return {
       valid: errors.length === 0,
       errors
@@ -295,7 +329,8 @@ export class VPlayValidator {
         background: [],
         gameplay: v1Level.objects || [],
         foreground: []
-      }
+      },
+      hotspots: []
     };
   }
 }
@@ -327,5 +362,6 @@ export const DEFAULT_LEVEL: VPlayLevel = {
   spawnPoints: {
     player: { x: 0, y: -100 }
   },
-  triggers: []
+  triggers: [],
+  hotspots: []
 };

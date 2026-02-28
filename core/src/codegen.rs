@@ -167,6 +167,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     
     // Utilities
     ("BEEP", 0),            // Short beep sound (default tone, ~3 frames)
+    ("SET_TEXT_SIZE", 1),   // Set Print_Str_d character scale ($80=normal, smaller=smaller)
 
     // Compatibilidad hacia atrás (deprecated)
     ("MOVE_TO", 2),         // deprecated: use MOVE

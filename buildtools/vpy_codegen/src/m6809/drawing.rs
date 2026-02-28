@@ -933,29 +933,33 @@ DCR_after_intensity:\n\
         ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
             ; NOTE: Caller must ensure DP=$D0 for VIA access\n\
-            LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set\n\
+            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,\n\
+            ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (reg $02),\n\
+            ; setting PB0 as input and breaking the X/Y integrator mux entirely.\n\
+            ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
             BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
             LDA ,X+                 ; Otherwise, read intensity from vector data\n\
             BRA DSWM_SET_INTENSITY\n\
 DSWM_USE_OVERRIDE:\n\
             LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_SET_INTENSITY:\n\
-            JSR $F2AB               ; BIOS Intensity_a\n\
+            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
-            TST MIRROR_Y\n\
+            TST >MIRROR_Y\n\
             BEQ DSWM_NO_NEGATE_Y\n\
             NEGB                    ; ← Negate Y if flag set\n\
 DSWM_NO_NEGATE_Y:\n\
-            ADDB DRAW_VEC_Y         ; Add Y offset\n\
+            ADDB >DRAW_VEC_Y        ; Add Y offset\n\
             LDA ,X+                 ; x_start from .vec (already relative to center)\n\
             ; Check if X mirroring is enabled\n\
-            TST MIRROR_X\n\
+            TST >MIRROR_X\n\
             BEQ DSWM_NO_NEGATE_X\n\
             NEGA                    ; ← Negate X if flag set\n\
 DSWM_NO_NEGATE_X:\n\
-            ADDA DRAW_VEC_X         ; Add X offset\n\
-            STD TEMP_YX             ; Save adjusted position\n\
+            ADDA >DRAW_VEC_X        ; Add X offset\n\
+            STD >TEMP_YX            ; Save adjusted position\n\
             ; Reset completo\n\
             CLR VIA_shift_reg\n\
             LDA #$CC\n\
@@ -970,7 +974,7 @@ DSWM_NO_NEGATE_X:\n\
             LDA #$01\n\
             STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
             ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
-            LDD TEMP_YX\n\
+            LDD >TEMP_YX\n\
             STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
             CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
             PSHS A                  ; ~4 cycle settling delay for Y\n\
@@ -1001,13 +1005,13 @@ DSWM_NO_NEGATE_X:\n\
             ; Draw line with conditional negations\n\
             LDB ,X+                 ; dy\n\
             ; Check if Y mirroring is enabled\n\
-            TST MIRROR_Y\n\
+            TST >MIRROR_Y\n\
             BEQ DSWM_NO_NEGATE_DY\n\
             NEGB                    ; ← Negate dy if flag set\n\
 DSWM_NO_NEGATE_DY:\n\
             LDA ,X+                 ; dx\n\
             ; Check if X mirroring is enabled\n\
-            TST MIRROR_X\n\
+            TST >MIRROR_X\n\
             BEQ DSWM_NO_NEGATE_DX\n\
             NEGA                    ; ← Negate dx if flag set\n\
 DSWM_NO_NEGATE_DX:\n\
@@ -1034,7 +1038,7 @@ DSWM_NO_NEGATE_DX:\n\
             TFR X,D\n\
             PSHS D\n\
             ; Check intensity override (same logic as start)\n\
-            LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
             BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
             LDA ,X+                 ; Otherwise, read intensity from vector data\n\
             BRA DSWM_NEXT_SET_INTENSITY\n\
@@ -1043,20 +1047,20 @@ DSWM_NEXT_USE_OVERRIDE:\n\
 DSWM_NEXT_SET_INTENSITY:\n\
             PSHS A\n\
             LDB ,X+                 ; y_start\n\
-            TST MIRROR_Y\n\
+            TST >MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
             NEGB\n\
 DSWM_NEXT_NO_NEGATE_Y:\n\
-            ADDB DRAW_VEC_Y         ; Add Y offset\n\
+            ADDB >DRAW_VEC_Y        ; Add Y offset\n\
             LDA ,X+                 ; x_start\n\
-            TST MIRROR_X\n\
+            TST >MIRROR_X\n\
             BEQ DSWM_NEXT_NO_NEGATE_X\n\
             NEGA\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
-            ADDA DRAW_VEC_X         ; Add X offset\n\
-            STD TEMP_YX\n\
+            ADDA >DRAW_VEC_X        ; Add X offset\n\
+            STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            JSR $F2AB\n\
+            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1074,7 +1078,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             LDA #$01\n\
             STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
             ; Moveto new start position (BIOS Moveto_d order)\n\
-            LDD TEMP_YX\n\
+            LDD >TEMP_YX\n\
             STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
             CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
             PSHS A                  ; ~4 cycle settling delay for Y\n\

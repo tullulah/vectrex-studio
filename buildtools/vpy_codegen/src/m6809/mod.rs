@@ -269,7 +269,17 @@ pub fn generate_m6809_asm(
         }
     }
     context::set_mutable_arrays(mutable_arrays);
-    
+
+    // Register compile-time const values so emit_simple_expr emits LDD #n (immediate)
+    // instead of LDD >VAR_name (RAM load), which would read uninitialized garbage.
+    for item in &module.items {
+        if let Item::Const { name, value, .. } = item {
+            if let Expr::Number(n) = value {
+                context::set_const_value(name, *n as i64);
+            }
+        }
+    }
+
     // Calculate bank configuration dynamically
     let bank_size = 16384; // Standard Vectrex bank size (16KB)
     

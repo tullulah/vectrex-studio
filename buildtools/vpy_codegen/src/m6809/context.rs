@@ -34,6 +34,10 @@ thread_local! {
     /// Map of variable names (lowercase, no VAR_ prefix) to their size metadata
     /// Used to emit correct load/store instructions and allocation sizes
     static VAR_SIZES: RefCell<HashMap<String, VarSize>> = RefCell::new(HashMap::new());
+
+    /// Map of const names (lowercase) to their compile-time integer values.
+    /// Populated before codegen so emit_simple_expr can emit LDD #value instead of LDD >VAR_name.
+    static CONST_VALUES: RefCell<HashMap<String, i64>> = RefCell::new(HashMap::new());
 }
 
 /// Initialize the mutable arrays context
@@ -83,12 +87,31 @@ fn clear_var_sizes() {
     });
 }
 
-/// Clear all compilation context (both mutable arrays and variable sizes)
+/// Register a compile-time const value.
+/// name: lowercase const name (no VAR_ prefix), value: integer literal
+pub fn set_const_value(name: &str, value: i64) {
+    CONST_VALUES.with(|cv| {
+        cv.borrow_mut().insert(name.to_lowercase(), value);
+    });
+}
+
+/// Look up a compile-time const value.
+/// Returns Some(value) if the name is a const, None if it is a runtime variable.
+pub fn get_const_value(name: &str) -> Option<i64> {
+    CONST_VALUES.with(|cv| {
+        cv.borrow().get(&name.to_lowercase()).copied()
+    })
+}
+
+/// Clear all compilation context (mutable arrays, variable sizes, and const values)
 pub fn clear_context() {
     MUTABLE_ARRAYS.with(|ma| {
         ma.borrow_mut().clear();
     });
     clear_var_sizes();
+    CONST_VALUES.with(|cv| {
+        cv.borrow_mut().clear();
+    });
 }
 
 #[cfg(test)]

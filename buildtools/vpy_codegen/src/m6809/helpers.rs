@@ -140,6 +140,14 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
     }
     
+    // Text scale (2 bytes): written by SET_TEXT_SIZE, read by VECTREX_PRINT_TEXT/NUMBER
+    // Vec_Text_Height ($C82A): signed byte, -n (default $F8 = -8 = normal)
+    // Vec_Text_Width ($C82B): unsigned byte, n*9 (default 72 = $48 = normal)
+    if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
+        ram.allocate("TEXT_SCALE_H", 1, "Character height for Print_Str_d (default $F8 = -8, normal)");
+        ram.allocate("TEXT_SCALE_W", 1, "Character width for Print_Str_d (default $48 = 72, normal)");
+    }
+
 // Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
     // These need to be at a fixed location for cross-bank compatibility
     // CRITICAL: Must be within Vectrex 1KB RAM ($C800-$CBFF) — $CFxx is unmapped!
@@ -445,11 +453,17 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)\n");
         asm.push_str("    JSR Reset0Ref   ; Reset beam to center before positioning text\n");
         asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
+        asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)\n");
+        asm.push_str("    STA >$C82A      ; Vec_Text_Height: controls character Y scale\n");
+        asm.push_str("    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)\n");
+        asm.push_str("    STA >$C82B      ; Vec_Text_Width: controls character X spacing\n");
         asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
         asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
         asm.push_str("    JSR Print_Str_d\n");
-        asm.push_str("    LDA #$80\n");
-        asm.push_str("    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale\n");
+        asm.push_str("    LDA #$F8\n");
+        asm.push_str("    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)\n");
+        asm.push_str("    LDA #$48\n");
+        asm.push_str("    STA >$C82B      ; Restore Vec_Text_Width to normal (72)\n");
         asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }
@@ -533,12 +547,18 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
         asm.push_str("    JSR Reset0Ref    ; Reset beam to center before positioning text\n");
+        asm.push_str("    LDU #NUM_STR     ; String pointer\n");
+        asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte)\n");
+        asm.push_str("    STA >$C82A       ; Vec_Text_Height: character Y scale\n");
+        asm.push_str("    LDA >TEXT_SCALE_W ; width (unsigned byte)\n");
+        asm.push_str("    STA >$C82B       ; Vec_Text_Width: character X spacing\n");
         asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
         asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
-        asm.push_str("    LDU #NUM_STR     ; String pointer\n");
         asm.push_str("    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n");
-        asm.push_str("    LDA #$80\n");
-        asm.push_str("    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale\n");
+        asm.push_str("    LDA #$F8\n");
+        asm.push_str("    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)\n");
+        asm.push_str("    LDA #$48\n");
+        asm.push_str("    STA >$C82B       ; Restore Vec_Text_Width to normal (72)\n");
         asm.push_str(&format!("    JSR {}      ; Restore DP to $C8\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }
@@ -608,6 +628,23 @@ fn emit_play_music_runtime(asm: &mut String) {
         LDA >PSG_IS_PLAYING     ; Check if currently playing\n\
         BNE PMr_done            ; If playing same song, ignore\n\
 PMr_start_new:\n\
+        ; Silence PSG before switching tracks (prevents noise bleed-through)\n\
+        PSHS X,DP               ; Save music pointer and DP\n\
+        LDA #$D0\n\
+        TFR A,DP                ; Set DP=$D0 for Sound_Byte\n\
+        LDA #7                  ; PSG reg 7 = Mixer\n\
+        LDB #$FF                ; All channels disabled\n\
+        JSR Sound_Byte\n\
+        LDA #8                  ; PSG reg 8 = Volume channel A\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #9                  ; PSG reg 9 = Volume channel B\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #10                 ; PSG reg 10 = Volume channel C\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        PULS X,DP               ; Restore music pointer and DP\n\
         STX >PSG_MUSIC_PTR      ; Store current music pointer (force extended)\n\
         STX >PSG_MUSIC_START    ; Store start pointer for loops (force extended)\n\
         CLR >PSG_DELAY_FRAMES   ; Clear delay counter\n\
@@ -866,30 +903,34 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
         "Draw_Sync_List_At_With_Mirrors:\n\
         ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
-            ; NOTE: Caller must ensure DP=$D0 for VIA access\n\
-            LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set\n\
+            ; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing\n\
+            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,\n\
+            ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (register $02),\n\
+            ; setting PB0 as an input and breaking the X/Y integrator mux completely.\n\
+            ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
             BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
             LDA ,X+                 ; Otherwise, read intensity from vector data\n\
             BRA DSWM_SET_INTENSITY\n\
 DSWM_USE_OVERRIDE:\n\
             LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_SET_INTENSITY:\n\
-            JSR $F2AB               ; BIOS Intensity_a\n\
+            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
-            TST MIRROR_Y\n\
+            TST >MIRROR_Y\n\
             BEQ DSWM_NO_NEGATE_Y\n\
             NEGB                    ; ← Negate Y if flag set\n\
 DSWM_NO_NEGATE_Y:\n\
-            ADDB DRAW_VEC_Y         ; Add Y offset\n\
+            ADDB >DRAW_VEC_Y        ; Add Y offset\n\
             LDA ,X+                 ; x_start from .vec (already relative to center)\n\
             ; Check if X mirroring is enabled\n\
-            TST MIRROR_X\n\
+            TST >MIRROR_X\n\
             BEQ DSWM_NO_NEGATE_X\n\
             NEGA                    ; ← Negate X if flag set\n\
 DSWM_NO_NEGATE_X:\n\
-            ADDA DRAW_VEC_X         ; Add X offset\n\
-            STD TEMP_YX             ; Save adjusted position\n\
+            ADDA >DRAW_VEC_X        ; Add X offset\n\
+            STD >TEMP_YX            ; Save adjusted position\n\
             ; Reset completo\n\
             CLR VIA_shift_reg\n\
             LDA #$CC\n\
@@ -904,7 +945,7 @@ DSWM_NO_NEGATE_X:\n\
             LDA #$01\n\
             STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
             ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
-            LDD TEMP_YX\n\
+            LDD >TEMP_YX\n\
             STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
             CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
             PSHS A                  ; ~4 cycle settling delay for Y\n\
@@ -935,13 +976,13 @@ DSWM_NO_NEGATE_X:\n\
             ; Draw line with conditional negations\n\
             LDB ,X+                 ; dy\n\
             ; Check if Y mirroring is enabled\n\
-            TST MIRROR_Y\n\
+            TST >MIRROR_Y\n\
             BEQ DSWM_NO_NEGATE_DY\n\
             NEGB                    ; ← Negate dy if flag set\n\
 DSWM_NO_NEGATE_DY:\n\
             LDA ,X+                 ; dx\n\
             ; Check if X mirroring is enabled\n\
-            TST MIRROR_X\n\
+            TST >MIRROR_X\n\
             BEQ DSWM_NO_NEGATE_DX\n\
             NEGA                    ; ← Negate dx if flag set\n\
 DSWM_NO_NEGATE_DX:\n\
@@ -968,7 +1009,7 @@ DSWM_NO_NEGATE_DX:\n\
             TFR X,D\n\
             PSHS D\n\
             ; Check intensity override (same logic as start)\n\
-            LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
             BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
             LDA ,X+                 ; Otherwise, read intensity from vector data\n\
             BRA DSWM_NEXT_SET_INTENSITY\n\
@@ -977,20 +1018,20 @@ DSWM_NEXT_USE_OVERRIDE:\n\
 DSWM_NEXT_SET_INTENSITY:\n\
             PSHS A\n\
             LDB ,X+                 ; y_start\n\
-            TST MIRROR_Y\n\
+            TST >MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
             NEGB\n\
 DSWM_NEXT_NO_NEGATE_Y:\n\
-            ADDB DRAW_VEC_Y         ; Add Y offset\n\
+            ADDB >DRAW_VEC_Y        ; Add Y offset\n\
             LDA ,X+                 ; x_start\n\
-            TST MIRROR_X\n\
+            TST >MIRROR_X\n\
             BEQ DSWM_NEXT_NO_NEGATE_X\n\
             NEGA\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
-            ADDA DRAW_VEC_X         ; Add X offset\n\
-            STD TEMP_YX\n\
+            ADDA >DRAW_VEC_X        ; Add X offset\n\
+            STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            JSR $F2AB\n\
+            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1008,7 +1049,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             LDA #$01\n\
             STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
             ; Moveto new start position (BIOS Moveto_d order)\n\
-            LDD TEMP_YX\n\
+            LDD >TEMP_YX\n\
             STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
             CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
             PSHS A                  ; ~4 cycle settling delay for Y\n\

@@ -324,7 +324,8 @@ fn is_builtin(name: &str) -> bool {
         "FRAME_BEGIN" | "ABS" | "LEN" | "ASM" | "SET_INTENSITY" |
         "J1_X" | "J1_Y" | "J1_BUTTON_1" | "J1_BUTTON_2" | "J1_BUTTON_3" | "J1_BUTTON_4" |
         "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "GET_LEVEL_BOUNDS" |
-        "DRAW_VECTOR_EX" | "SFX_UPDATE"
+        "DRAW_VECTOR_EX" | "SFX_UPDATE" | "SET_TEXT_SIZE" | "PRINT_NUMBER" |
+        "RAND" | "RAND_RANGE" | "BEEP" | "UPDATE_BUTTONS"
     )
 }
 

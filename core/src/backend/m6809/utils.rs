@@ -121,7 +121,8 @@ pub fn collect_stmt_syms(stmt: &Stmt, set: &mut BTreeSet<String>) {
                 collect_stmt_syms(s, set);
             }
         }
-        Stmt::For { body, .. } => {
+        Stmt::For { var, body, .. } => {
+            set.insert(var.clone());
             for s in body {
                 collect_stmt_syms(s, set);
             }

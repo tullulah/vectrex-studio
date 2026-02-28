@@ -41,7 +41,7 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
     "DRAW_RECT"|"DRAW_FILLED_RECT"|"DRAW_ELLIPSE"|
     "DEBUG_PRINT"|"DEBUG_PRINT_LABELED"|"DEBUG_PRINT_STR"|
     "RAND"|"MATH_RAND"|"RAND_RANGE"|"MATH_RAND_RANGE"|
-    "BEEP"
+    "BEEP"|"SET_TEXT_SIZE"
     );
     
     // Helper para agregar comentario de tracking cuando es una llamada nativa real
@@ -1615,6 +1615,25 @@ pub fn emit_builtin_call(name: &str, args: &Vec<Expr>, out: &mut String, fctx: &
         }
     }
     
+    // SET_TEXT_SIZE: set character scale for subsequent PRINT_TEXT/PRINT_NUMBER calls
+    // n=1..8, n=8 = normal (default); height = -n ($C82A), width = n*9 ($C82B)
+    if up == "SET_TEXT_SIZE" {
+        if let Some(arg) = args.first() {
+            emit_expr(arg, out, fctx, string_map, opts);
+            out.push_str("    LDB RESULT+1    ; n = scale value (1-8)\n");
+            out.push_str("    NEGB            ; B = -n -> TEXT_SCALE_H\n");
+            out.push_str("    STB >TEXT_SCALE_H\n");
+            out.push_str("    LDB RESULT+1    ; reload n\n");
+            out.push_str("    ASLB            ; n*2\n");
+            out.push_str("    ASLB            ; n*4\n");
+            out.push_str("    ASLB            ; n*8\n");
+            out.push_str("    ADDB RESULT+1   ; n*8 + n = n*9 -> TEXT_SCALE_W\n");
+            out.push_str("    STB >TEXT_SCALE_W\n");
+        }
+        out.push_str("    CLRA\n    CLRB\n    STD RESULT\n");
+        return true;
+    }
+
     // Trig functions
     if matches!(up.as_str(), "SIN"|"COS"|"TAN"|"MATH_SIN"|"MATH_COS"|"MATH_TAN") {
         // Expect 1 arg

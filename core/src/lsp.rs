@@ -86,6 +86,7 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "POLYGON" => Some(AritySpec::Variable(3)),              // n, x1, y1, ... (minimum 3: count + at least one point)
         "PRINT_TEXT" => Some(AritySpec::Variable(3)),        // x, y, text [, height, width] - min 3, accepts up to 5
         "PRINT_NUMBER" => Some(AritySpec::Exact(3)),         // x, y, number
+        "SET_TEXT_SIZE" => Some(AritySpec::Exact(1)),        // n (1-8, 8=normal)
         "DEBUG_PRINT" => Some(AritySpec::Exact(1)),             // value - debug output to console
         "DEBUG_PRINT_LABELED" => Some(AritySpec::Exact(2)),     // label, value - debug output with label
         
@@ -96,6 +97,15 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "PLAY_SFX" => Some(AritySpec::Exact(1)),               // sound effect (one-shot)
         "STOP_MUSIC" => Some(AritySpec::Exact(0)),             // stop background music
         "MUSIC_UPDATE" => Some(AritySpec::Exact(0)),           // process music frame
+        "AUDIO_UPDATE" => Some(AritySpec::Exact(0)),           // alias for MUSIC_UPDATE
+        "BEEP" => Some(AritySpec::Exact(2)),                   // frequency, duration
+        "RAND" => Some(AritySpec::Exact(0)),                   // random 0-255
+        "RAND_RANGE" => Some(AritySpec::Exact(2)),             // min, max
+        "UPDATE_BUTTONS" => Some(AritySpec::Exact(0)),         // read joystick buttons
+        "ABS" => Some(AritySpec::Exact(1)),
+        "MIN" => Some(AritySpec::Exact(2)),
+        "MAX" => Some(AritySpec::Exact(2)),
+        "CLAMP" => Some(AritySpec::Exact(3)),                  // value, min, max
         
         // Funciones de dibujo con intensidad explícita
         "DRAW_POLYGON" => Some(AritySpec::Variable(4)),         // n, intensity, x1, y1, ... (minimum 4: count + intensity + at least one point)
@@ -140,7 +150,9 @@ pub fn is_builtin_function(name: &str) -> bool {
     
     // Funciones unificadas (global + vectorlist)
     if matches!(upper.as_str(),
-        "MOVE"|"SET_INTENSITY"|"DRAW_TO"|"DRAW_LINE"|"SET_ORIGIN"|"PRINT_TEXT"|"PRINT_NUMBER"
+        "MOVE"|"SET_INTENSITY"|"DRAW_TO"|"DRAW_LINE"|"SET_ORIGIN"|"PRINT_TEXT"|"PRINT_NUMBER"|
+        "SET_TEXT_SIZE"|"BEEP"|"RAND"|"RAND_RANGE"|"STOP_MUSIC"|"PLAY_SFX"|"AUDIO_UPDATE"|
+        "UPDATE_BUTTONS"|"WAIT_RECAL"|"ABS"|"MIN"|"MAX"|"CLAMP"
     ) {
         return true;
     }

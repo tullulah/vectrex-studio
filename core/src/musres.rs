@@ -246,11 +246,10 @@ impl MusicResource {
                 break;
             }
             
-            // Skip empty frames (optimization - don't emit silence frames before music starts)
-            if active_notes.is_empty() && active_noise.is_empty() {
-                current_frame += 1;
-                continue;
-            }
+            // NOTE: Do NOT skip empty frames here.
+            // When noise expires with no active notes, we must still emit a silence frame
+            // (mixer=0xFF, vol=0) so the PSG stops the noise immediately.
+            // The state_changed check below prevents redundant emissions on subsequent frames.
             
             // Build current channel state and generate register writes
             let mut reg_writes = Vec::new();
