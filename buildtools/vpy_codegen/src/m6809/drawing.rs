@@ -937,14 +937,14 @@ DCR_after_intensity:\n\
             ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (reg $02),\n\
             ; setting PB0 as input and breaking the X/Y integrator mux entirely.\n\
             ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_SET_INTENSITY\n\
-DSWM_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
-DSWM_SET_INTENSITY:\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)\n\
+            ; Intensity: use SET_INTENSITY ($C832) by default, or DRAW_VEC_INTENSITY if set\n\
+            ; FCB per-path intensity byte is always skipped — use SET_INTENSITY() in VPy\n\
+            LDA >DRAW_VEC_INTENSITY ; Non-zero = explicit override\n\
+            BNE DSWM_INTENSITY_READY\n\
+            LDA >$C832              ; Zero = use Vec_Misc_Count (last SET_INTENSITY call)\n\
+DSWM_INTENSITY_READY:\n\
+            STA VIA_t1_cnt_lo       ; Set T1 latch directly (never overwrite $C832)\n\
+            LEAX 1,X                ; Always skip FCB intensity byte\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -984,9 +984,7 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; Timing setup: use Vec_Misc_Count ($C832) so per-path intensity from .vec is honoured\n\
-            LDA >$C832\n\
-            STA VIA_t1_cnt_lo\n\
+            ; T1 latch set in path header — just reload and start\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
             ; Wait for move to complete (PB=1 on exit)\n\
@@ -1037,15 +1035,13 @@ DSWM_NO_NEGATE_DX:\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Check intensity override (same logic as start)\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_NEXT_SET_INTENSITY\n\
-DSWM_NEXT_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
-DSWM_NEXT_SET_INTENSITY:\n\
-            PSHS A\n\
+            ; Intensity: use SET_INTENSITY ($C832) or DRAW_VEC_INTENSITY override\n\
+            LDA >DRAW_VEC_INTENSITY\n\
+            BNE DSWM_NEXT_INTENSITY_READY\n\
+            LDA >$C832\n\
+DSWM_NEXT_INTENSITY_READY:\n\
+            STA VIA_t1_cnt_lo       ; Set T1 latch for this path\n\
+            LEAX 1,X                ; Skip FCB intensity byte\n\
             LDB ,X+                 ; y_start\n\
             TST >MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
@@ -1059,8 +1055,6 @@ DSWM_NEXT_NO_NEGATE_Y:\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
-            PULS A                  ; Get intensity back\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1088,8 +1082,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            LDA >$C832              ; Use Vec_Misc_Count so per-path intensity is honoured\n\
-            STA VIA_t1_cnt_lo\n\
+            ; T1 latch set in path header — just reload and start\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
             ; Wait for move (PB=1 on exit)\n\
