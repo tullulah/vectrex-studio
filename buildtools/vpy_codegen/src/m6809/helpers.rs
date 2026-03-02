@@ -964,8 +964,8 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; Timing setup\n\
-            LDA #$7F\n\
+            ; Timing setup: use Vec_Misc_Count ($C832) so per-path intensity from .vec is honoured\n\
+            LDA >$C832\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
@@ -1068,7 +1068,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            LDA #$7F\n\
+            LDA >$C832              ; Use Vec_Misc_Count so per-path intensity is honoured\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
