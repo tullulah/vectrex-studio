@@ -3291,6 +3291,69 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[IDE] unhandledRejection', reason);
 });
+
+// ─── EPROM Programmer (minipro CLI wrapper) ───────────────────────────────────
+
+function runMinipro(args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string; error?: string }> {
+  return new Promise((resolve) => {
+    const proc = spawn('minipro', args, { timeout: 120000 });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+    proc.on('error', (err: Error) => {
+      resolve({ ok: false, stdout, stderr, error: err.message });
+    });
+    proc.on('close', (code: number | null) => {
+      if (code === 0) {
+        resolve({ ok: true, stdout, stderr });
+      } else {
+        resolve({ ok: false, stdout, stderr, error: `minipro exited with code ${code}` });
+      }
+    });
+  });
+}
+
+ipcMain.handle('eprom:detect', async () => {
+  try {
+    const result = await runMinipro(['--version']);
+    if (result.ok) {
+      // Extract version from output: "minipro version 0.6  ..."
+      const ver = (result.stdout + result.stderr).trim().split('\n')[0];
+      return { ok: true, version: ver };
+    }
+    return { ok: false, error: result.error || 'minipro not found in PATH' };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Failed to detect minipro' };
+  }
+});
+
+ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string }) => {
+  const { binPath, chip } = args;
+  if (!binPath || !existsSync(binPath)) {
+    return { ok: false, error: `File not found: ${binPath}`, stdout: '', stderr: '' };
+  }
+  // minipro -p <chip> -w <file>
+  return runMinipro(['-p', chip, '-w', binPath]);
+});
+
+ipcMain.handle('eprom:verify', async (_e, args: { binPath: string; chip: string; programmer: string }) => {
+  const { binPath, chip } = args;
+  if (!binPath || !existsSync(binPath)) {
+    return { ok: false, error: `File not found: ${binPath}`, stdout: '', stderr: '' };
+  }
+  // minipro -p <chip> -m <file> (verify/check)
+  return runMinipro(['-p', chip, '-m', binPath]);
+});
+
+ipcMain.handle('eprom:blankCheck', async (_e, args: { chip: string; programmer: string }) => {
+  const { chip } = args;
+  // minipro -p <chip> --blank_check
+  return runMinipro(['-p', chip, '--blank_check']);
+});
+
+// ─── End EPROM ────────────────────────────────────────────────────────────────
+
 app.on('window-all-closed', () => {
   console.warn('[IDE] all windows closed');
   if (process.platform !== 'darwin') app.quit();

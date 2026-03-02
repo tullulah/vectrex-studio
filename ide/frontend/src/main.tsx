@@ -21,7 +21,9 @@ import { GitPanel } from './components/panels/GitPanel.js';
 import { FileTreePanel } from './components/panels/FileTreePanel.js';
 import { PlaygroundPanel } from './components/panels/PlaygroundPanel.js';
 import { SettingsPanel } from './components/panels/SettingsPanel.js';
+import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialog.js';
 import { useSettings } from './state/settingsStore.js';
+import { useEmulatorSettings } from './state/emulatorSettings.js';
 
 // Initialize store reference for cross-store access
 setEditorStoreRef(useEditorStore);
@@ -323,6 +325,18 @@ function App() {
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx'>('vec');
+  // EPROM Programmer dialog state
+  const [showEpromDialog, setShowEpromDialog] = useState(false);
+  const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
+
+  // Handle activity bar clicks — eprom opens a dialog instead of a panel
+  const handleActivityBarClick = useCallback((item: ActivityBarItem) => {
+    if (item === 'eprom') {
+      setShowEpromDialog(true);
+    } else {
+      setActiveSidebarPanel(prev => prev === item ? null : item);
+    }
+  }, []);
   const diags = allDiagnostics || [];
   const errCount = diags.filter((d: any)=>d.severity==='error').length;
   const warnCount = diags.filter((d: any)=>d.severity==='warning').length;
@@ -1465,7 +1479,7 @@ def loop():
         {/* Activity Bar (left sidebar with icons) */}
         <ActivityBar 
           activeItem={activeSidebarPanel} 
-          onItemClick={setActiveSidebarPanel}
+          onItemClick={handleActivityBarClick}
         />
         
         {/* Fullscreen Playground mode */}
@@ -1737,6 +1751,14 @@ def loop():
           }
         }}
       />
+
+      {/* EPROM Programmer Dialog */}
+      {showEpromDialog && (
+        <EpromProgrammerDialog
+          binPath={lastCompiledBinary}
+          onClose={() => setShowEpromDialog(false)}
+        />
+      )}
     </div>
   );
 }
