@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../../styles/Dialog.css';
+import { storageGet, storageSet, StorageKey } from '../../services/persistentStorage';
 
 /** Common EPROM chips for Vectrex cartridges */
 const CHIP_PRESETS = [
@@ -47,8 +48,44 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
   const [skipIdCheck, setSkipIdCheck] = useState(false);
   const [skipVerify, setSkipVerify] = useState(false);
   const [eraseFirst, setEraseFirst] = useState(false);
+  // Advanced: voltage & timing overrides (write mode only)
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [vpp, setVpp] = useState('');
+  const [vdd, setVdd] = useState('');
+  const [vcc, setVcc] = useState('');
+  const [pulse, setPulse] = useState('');
 
-  // Check if minipro is available on mount
+  // Load saved settings when chip changes
+  useEffect(() => {
+    storageGet<Record<string, any>>(StorageKey.EPROM_CHIP_CONFIGS).then(all => {
+      const cfg = all?.[chip];
+      if (cfg) {
+        if (cfg.vpp   !== undefined) setVpp(cfg.vpp);
+        if (cfg.vdd   !== undefined) setVdd(cfg.vdd);
+        if (cfg.vcc   !== undefined) setVcc(cfg.vcc);
+        if (cfg.pulse !== undefined) setPulse(cfg.pulse);
+        if (cfg.skipIdCheck !== undefined) setSkipIdCheck(cfg.skipIdCheck);
+        if (cfg.skipVerify  !== undefined) setSkipVerify(cfg.skipVerify);
+        if (cfg.eraseFirst  !== undefined) setEraseFirst(cfg.eraseFirst);
+      } else {
+        // Reset to defaults when switching to a chip with no saved config
+        setVpp(''); setVdd(''); setVcc(''); setPulse('');
+        setSkipIdCheck(false); setSkipVerify(false); setEraseFirst(false);
+      }
+    });
+  }, [chip]);
+
+  // Save settings for the current chip whenever any option changes
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const all = (await storageGet<Record<string, any>>(StorageKey.EPROM_CHIP_CONFIGS)) ?? {};
+      all[chip] = { vpp, vdd, vcc, pulse, skipIdCheck, skipVerify, eraseFirst };
+      storageSet(StorageKey.EPROM_CHIP_CONFIGS, all);
+    }, 400);
+  }, [chip, vpp, vdd, vcc, pulse, skipIdCheck, skipVerify, eraseFirst]);
+
   useEffect(() => {
     const checkMinipro = async () => {
       const eprom = (window as any).eprom;
@@ -144,6 +181,10 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
       skipIdCheck,
       skipVerify,
       eraseFirst,
+      vpp: vpp || undefined,
+      vdd: vdd || undefined,
+      vcc: vcc || undefined,
+      pulse: pulse || undefined,
     });
 
     if (result?.ok) {
@@ -383,6 +424,50 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
                 style={{ accentColor: '#0098ff' }} />
               Erase before write <span style={{ color: '#858585', fontSize: 11 }}>(flash chips only)</span>
             </label>
+          </div>
+
+          {/* Advanced — voltage & timing overrides (write mode only) */}
+          <div>
+            <button
+              onClick={() => setShowAdvanced(v => !v)}
+              style={{ background: 'none', border: 'none', color: '#858585', fontSize: 11, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              {showAdvanced ? '▾' : '▸'} Advanced (VPP / VDD / VCC / Pulse)
+            </button>
+            {showAdvanced && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', marginTop: 6 }}>
+                <label style={{ fontSize: 11, color: '#cccccc' }}>
+                  VPP (programming V)
+                  <select value={vpp} onChange={e => setVpp(e.target.value)} disabled={isWorking}
+                    style={{ display: 'block', width: '100%', marginTop: 2, background: '#2d2d2d', color: '#cccccc', border: '1px solid #454545', borderRadius: 3, padding: '2px 4px', fontSize: 11 }}>
+                    <option value="">chip default</option>
+                    {['9','9.5','10','11','11.5','12','12.5','13','13.5','14','14.5','15.5','16','16.5','17','18','21'].map(v => <option key={v} value={v}>{v} V</option>)}
+                  </select>
+                </label>
+                <label style={{ fontSize: 11, color: '#cccccc' }}>
+                  VDD (write V)
+                  <select value={vdd} onChange={e => setVdd(e.target.value)} disabled={isWorking}
+                    style={{ display: 'block', width: '100%', marginTop: 2, background: '#2d2d2d', color: '#cccccc', border: '1px solid #454545', borderRadius: 3, padding: '2px 4px', fontSize: 11 }}>
+                    <option value="">chip default</option>
+                    {['3.3','4','4.5','5','5.5','6.5'].map(v => <option key={v} value={v}>{v} V</option>)}
+                  </select>
+                </label>
+                <label style={{ fontSize: 11, color: '#cccccc' }}>
+                  VCC (verify V)
+                  <select value={vcc} onChange={e => setVcc(e.target.value)} disabled={isWorking}
+                    style={{ display: 'block', width: '100%', marginTop: 2, background: '#2d2d2d', color: '#cccccc', border: '1px solid #454545', borderRadius: 3, padding: '2px 4px', fontSize: 11 }}>
+                    <option value="">chip default</option>
+                    {['3.3','4','4.5','5','5.5','6.5'].map(v => <option key={v} value={v}>{v} V</option>)}
+                  </select>
+                </label>
+                <label style={{ fontSize: 11, color: '#cccccc' }}>
+                  Pulse delay (µs)
+                  <input type="number" min={0} max={65535} value={pulse} onChange={e => setPulse(e.target.value)} disabled={isWorking}
+                    placeholder="chip default"
+                    style={{ display: 'block', width: '100%', marginTop: 2, background: '#2d2d2d', color: '#cccccc', border: '1px solid #454545', borderRadius: 3, padding: '2px 4px', fontSize: 11, boxSizing: 'border-box' }} />
+                </label>
+              </div>
+            )}
           </div>
 
           {/* ROM file info */}

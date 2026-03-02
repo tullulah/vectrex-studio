@@ -65,9 +65,12 @@ flag_taller_open = 0
 # Music state (prevents restarting the same track on room transitions)
 current_music = MUSIC_TITLE
 
-# Button edge detection
-prev_btn1 = 0
-prev_btn3 = 0
+# Button edge detection — init to 1 so a release is required before the first
+# press is counted. Prevents false triggers at startup on real hardware.
+prev_btn1 = 1
+prev_btn3 = 1
+btn1_fired = 0
+btn3_fired = 0
 
 # ─── Entry point ───────────────────────────────────────────────────────────────
 def main():
@@ -77,6 +80,23 @@ def main():
 
 # ─── Main loop ─────────────────────────────────────────────────────────────────
 def loop():
+    # Debounce btn1 — done here in loop() so globals update correctly
+    b1 = J1_BUTTON_1()
+    btn1_fired = 0
+    if b1 == 1 and prev_btn1 == 0:
+        btn1_fired = 1
+        prev_btn1 = 1
+    if b1 == 0:
+        prev_btn1 = 0
+    # Debounce btn3
+    b3 = J1_BUTTON_3()
+    btn3_fired = 0
+    if b3 == 1 and prev_btn3 == 0:
+        btn3_fired = 1
+        prev_btn3 = 1
+    if b3 == 0:
+        prev_btn3 = 0
+
     if screen == STATE_TITLE:
         draw_title()
     elif screen == STATE_INTRO:
@@ -107,13 +127,9 @@ def draw_title():
         SET_TEXT_SIZE(7)
         PRINT_TEXT(-107, -100, "PUSH BUTTON 1 TO START")
 
-    btn = J1_BUTTON_1()
-    if btn == 1 and prev_btn1 == 0:
-        prev_btn1 = 1
+    if btn1_fired == 1:
         intro_page = 0
         screen = STATE_INTRO
-    if btn == 0:
-        prev_btn1 = 0
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INTRO — 3 story pages
@@ -157,16 +173,12 @@ def draw_intro():
         SET_INTENSITY(60)
         PRINT_TEXT(-70, -90, "PRESS BUTTON 1")
 
-    btn = J1_BUTTON_1()
-    if btn == 1 and prev_btn1 == 0:
-        prev_btn1 = 1
+    if btn1_fired == 1:
         if intro_page < 2:
             intro_page = intro_page + 1
         else:
             enter_room(ROOM_ENTRANCE)
             screen = STATE_ROOM
-    if btn == 0:
-        prev_btn1 = 0
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROOM — Load & transition
@@ -240,28 +252,20 @@ def update_room():
             enter_room(ROOM_CLOCKROOM)
 
     # Button 3 — cycle verb (only when no message showing)
-    btn3 = J1_BUTTON_3()
-    if btn3 == 1 and prev_btn3 == 0:
-        prev_btn3 = 1
+    if btn3_fired == 1:
         if msg_timer == 0:
             if current_verb == VERB_USE:
                 current_verb = VERB_EXAMINE
             else:
                 current_verb = current_verb + 1
-    if btn3 == 0:
-        prev_btn3 = 0
 
     # Button 1 — interact or dismiss message
-    btn1 = J1_BUTTON_1()
-    if btn1 == 1 and prev_btn1 == 0:
-        prev_btn1 = 1
+    if btn1_fired == 1:
         if msg_timer > 0:
             msg_timer = 0
         elif near_hs >= 0:
             if current_room == ROOM_ENTRANCE:
                 interact_entrance(near_hs)
-    if btn1 == 0:
-        prev_btn1 = 0
 
 # ─── Hotspot detection (unrolled — codegen TODO: for-in-function) ──────────────
 def check_entrance_hotspots():

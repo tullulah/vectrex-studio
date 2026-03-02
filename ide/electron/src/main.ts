@@ -3328,8 +3328,8 @@ ipcMain.handle('eprom:detect', async () => {
   }
 });
 
-ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean; skipVerify?: boolean; eraseFirst?: boolean }) => {
-  const { binPath, chip, skipIdCheck, skipVerify, eraseFirst } = args;
+ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean; skipVerify?: boolean; eraseFirst?: boolean; vpp?: string; vdd?: string; vcc?: string; pulse?: string }) => {
+  const { binPath, chip, skipIdCheck, skipVerify, eraseFirst, vpp, vdd, vcc, pulse } = args;
   if (!binPath || !existsSync(binPath)) {
     return { ok: false, error: `File not found: ${binPath}`, stdout: '', stderr: '' };
   }
@@ -3338,6 +3338,10 @@ ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; 
   if (skipIdCheck) flags.push('-y');
   if (skipVerify) flags.push('-v');
   if (eraseFirst) flags.push('-e');
+  if (vpp) flags.push('--vpp', vpp);
+  if (vdd) flags.push('--vdd', vdd);
+  if (vcc) flags.push('--vcc', vcc);
+  if (pulse) flags.push('--pulse', pulse);
   return runMinipro(flags);
 });
 

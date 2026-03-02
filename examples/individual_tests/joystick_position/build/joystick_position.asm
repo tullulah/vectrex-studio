@@ -61,10 +61,16 @@ VLINE_DX             EQU $C880+$2D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
 VLINE_DY             EQU $C880+$2E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_X                EQU $C880+$33   ; User variable: X (2 bytes)
-VAR_Y                EQU $C880+$35   ; User variable: Y (2 bytes)
-VAR_CIRCLE_X         EQU $C880+$37   ; User variable: CIRCLE_X (2 bytes)
-VAR_CIRCLE_Y         EQU $C880+$39   ; User variable: CIRCLE_Y (2 bytes)
+TEXT_SCALE_H         EQU $C880+$33   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$34   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_X                EQU $C880+$35   ; User variable: X (2 bytes)
+VAR_Y                EQU $C880+$37   ; User variable: Y (2 bytes)
+VAR_CIRCLE_X         EQU $C880+$39   ; User variable: CIRCLE_X (2 bytes)
+VAR_CIRCLE_Y         EQU $C880+$3B   ; User variable: CIRCLE_Y (2 bytes)
+VAR_BTN1             EQU $C880+$3D   ; User variable: BTN1 (2 bytes)
+VAR_BTN2             EQU $C880+$3F   ; User variable: BTN2 (2 bytes)
+VAR_BTN3             EQU $C880+$41   ; User variable: BTN3 (2 bytes)
+VAR_BTN4             EQU $C880+$43   ; User variable: BTN4 (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -81,13 +87,21 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDD #0
+    STD RESULT
     STD VAR_X
     LDD #0
+    STD RESULT
     STD VAR_Y
     LDD #0
+    STD RESULT
     STD VAR_CIRCLE_X
     LDD #0
+    STD RESULT
     STD VAR_CIRCLE_Y
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
@@ -227,6 +241,170 @@ LOOP_BODY:
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$01      ; Test bit 0 (Button 1)
+    LBEQ .J1B1_0_OFF
+    LDD #1
+    LBRA .J1B1_0_END
+.J1B1_0_OFF:
+    LDD #0
+.J1B1_0_END:
+    STD RESULT
+    LDD RESULT
+    STD VAR_BTN1
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$02      ; Test bit 1 (Button 2)
+    LBEQ .J1B2_1_OFF
+    LDD #1
+    LBRA .J1B2_1_END
+.J1B2_1_OFF:
+    LDD #0
+.J1B2_1_END:
+    STD RESULT
+    LDD RESULT
+    STD VAR_BTN2
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$04      ; Test bit 2 (Button 3)
+    LBEQ .J1B3_2_OFF
+    LDD #1
+    LBRA .J1B3_2_END
+.J1B3_2_OFF:
+    LDD #0
+.J1B3_2_END:
+    STD RESULT
+    LDD RESULT
+    STD VAR_BTN3
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$08      ; Test bit 3 (Button 4)
+    LBEQ .J1B4_3_OFF
+    LDD #1
+    LBRA .J1B4_3_END
+.J1B4_3_OFF:
+    LDD #0
+.J1B4_3_END:
+    STD RESULT
+    LDD RESULT
+    STD VAR_BTN4
+    ; PRINT_TEXT: Print text at position
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #40
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2049397      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0    ; X position
+    LDD #40
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1    ; Y position
+    LDD >VAR_BTN1
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #20
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2049398      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0    ; X position
+    LDD #20
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1    ; Y position
+    LDD >VAR_BTN2
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2049399      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0    ; X position
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1    ; Y position
+    LDD >VAR_BTN3
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-60
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0
+    LDD #-20
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2049400      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #0
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG0    ; X position
+    LDD #-20
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG1    ; Y position
+    LDD >VAR_BTN4
+    STD RESULT
+    LDD RESULT
+    STD VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
     RTS
 
 ;***************************************************************************
@@ -244,11 +422,17 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -328,12 +512,18 @@ VECTREX_PRINT_NUMBER:
     LDA #$D0
     TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
     JSR Reset0Ref    ; Reset beam to center before positioning text
+    LDU #NUM_STR     ; String pointer
+    LDA >TEXT_SCALE_H ; height (signed byte)
+    STA >$C82A       ; Vec_Text_Height: character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte)
+    STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
-    LDU #NUM_STR     ; String pointer
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    LDA #$F8
+    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B       ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; Restore DP to $C8
     RTS
 
@@ -655,6 +845,22 @@ TFR A,DP           ; Restore DP=$C8 before return
 RTS
 
 ;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_2049397:
+    FCC "BTN1"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2049398:
+    FCC "BTN2"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2049399:
+    FCC "BTN3"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2049400:
+    FCC "BTN4"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_76316012:
     FCC "POS X"
     FCB $80          ; Vectrex string terminator
