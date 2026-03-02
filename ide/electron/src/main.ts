@@ -3352,6 +3352,67 @@ ipcMain.handle('eprom:blankCheck', async (_e, args: { chip: string; programmer: 
   return runMinipro(['-p', chip, '--blank_check']);
 });
 
+ipcMain.handle('eprom:platform', async () => {
+  return { platform: process.platform }; // 'darwin' | 'linux' | 'win32'
+});
+
+ipcMain.handle('eprom:install', async (_e, _args: { platform?: string } = {}) => {
+  const plat = process.platform;
+  
+  // Helper to run a shell command and stream output
+  function runShell(cmd: string, args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string; error?: string }> {
+    return new Promise((resolve) => {
+      const proc = spawn(cmd, args, { timeout: 300000, shell: true });
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (d: Buffer) => {
+        const chunk = d.toString();
+        stdout += chunk;
+        // Send progress to renderer
+        if (mainWindow?.webContents) {
+          mainWindow.webContents.send('eprom://installProgress', chunk);
+        }
+      });
+      proc.stderr.on('data', (d: Buffer) => {
+        const chunk = d.toString();
+        stderr += chunk;
+        if (mainWindow?.webContents) {
+          mainWindow.webContents.send('eprom://installProgress', chunk);
+        }
+      });
+      proc.on('error', (err: Error) => {
+        resolve({ ok: false, stdout, stderr, error: err.message });
+      });
+      proc.on('close', (code: number | null) => {
+        resolve(code === 0 ? { ok: true, stdout, stderr } : { ok: false, stdout, stderr, error: `Process exited with code ${code}` });
+      });
+    });
+  }
+
+  try {
+    if (plat === 'darwin') {
+      // macOS: use Homebrew
+      return await runShell('brew', ['install', 'minipro']);
+    } else if (plat === 'linux') {
+      // Linux: try apt first, fallback to building from source
+      const aptResult = await runShell('sudo', ['apt-get', 'install', '-y', 'minipro']);
+      if (aptResult.ok) return aptResult;
+      // If apt fails, try snap or provide instructions
+      return { ok: false, stdout: aptResult.stdout, stderr: aptResult.stderr, error: 'apt install failed. Try building from source: https://gitlab.com/DavidGriffith/minipro' };
+    } else if (plat === 'win32') {
+      // Windows: try winget, choco, or scoop
+      const wingetResult = await runShell('winget', ['install', 'minipro']);
+      if (wingetResult.ok) return wingetResult;
+      const chocoResult = await runShell('choco', ['install', 'minipro', '-y']);
+      if (chocoResult.ok) return chocoResult;
+      return { ok: false, stdout: '', stderr: '', error: 'Automatic install not available on Windows. Download from https://gitlab.com/DavidGriffith/minipro/-/releases' };
+    }
+    return { ok: false, stdout: '', stderr: '', error: `Unsupported platform: ${plat}` };
+  } catch (e: any) {
+    return { ok: false, stdout: '', stderr: '', error: e?.message || 'Install failed' };
+  }
+});
+
 // ─── End EPROM ────────────────────────────────────────────────────────────────
 
 app.on('window-all-closed', () => {

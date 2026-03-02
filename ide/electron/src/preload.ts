@@ -437,6 +437,13 @@ contextBridge.exposeInMainWorld('eprom', {
     ipcRenderer.invoke('eprom:verify', args) as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,
   blankCheck: (args: { chip: string; programmer: string }) =>
     ipcRenderer.invoke('eprom:blankCheck', args) as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,
+  platform: () => ipcRenderer.invoke('eprom:platform') as Promise<{ platform: string }>,
+  install: () => ipcRenderer.invoke('eprom:install') as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,
+  onInstallProgress: (cb: (chunk: string) => void) => {
+    const handler = (_e: IpcRendererEvent, data: string) => cb(data);
+    ipcRenderer.on('eprom://installProgress', handler);
+    return () => ipcRenderer.removeListener('eprom://installProgress', handler);
+  },
 });
 
 export {};

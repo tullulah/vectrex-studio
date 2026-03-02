@@ -40,6 +40,9 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [miniproFound, setMiniproFound] = useState<boolean | null>(null);
   const [miniproVersion, setMiniproVersion] = useState<string>('');
+  const [installing, setInstalling] = useState(false);
+  const [installLog, setInstallLog] = useState<string[]>([]);
+  const [platform, setPlatform] = useState<string>('');
 
   // Check if minipro is available on mount
   useEffect(() => {
@@ -50,20 +53,66 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
         setError('EPROM API not available');
         return;
       }
+      // Get platform
+      const platResult = await eprom.platform?.();
+      if (platResult?.platform) setPlatform(platResult.platform);
+
       const result = await eprom.detect();
       if (result?.ok) {
         setMiniproFound(true);
         setMiniproVersion(result.version || '');
       } else {
         setMiniproFound(false);
-        setError(result?.error || 'minipro not found. Install it from https://gitlab.com/DavidGriffith/minipro');
+        setError(result?.error || 'minipro not found');
       }
     };
     checkMinipro();
   }, []);
 
+  // Listen for install progress
+  useEffect(() => {
+    const eprom = (window as any).eprom;
+    if (!eprom?.onInstallProgress) return;
+    const cleanup = eprom.onInstallProgress((chunk: string) => {
+      const lines = chunk.split('\n').filter((l: string) => l.trim());
+      setInstallLog(prev => [...prev, ...lines]);
+    });
+    return cleanup;
+  }, []);
+
   const addLog = (msg: string) => {
     setLog(prev => [...prev, msg]);
+  };
+
+  const handleInstall = async () => {
+    const eprom = (window as any).eprom;
+    if (!eprom?.install) return;
+
+    setInstalling(true);
+    setInstallLog([]);
+    setError(null);
+
+    const installCmd = platform === 'darwin' ? 'brew install minipro' 
+      : platform === 'linux' ? 'sudo apt-get install -y minipro'
+      : 'winget / choco install';
+    setInstallLog([`Running: ${installCmd}`, '']);
+
+    const result = await eprom.install();
+
+    if (result?.ok) {
+      setInstallLog(prev => [...prev, '', '✓ minipro installed successfully!']);
+      // Re-detect
+      const detect = await eprom.detect();
+      if (detect?.ok) {
+        setMiniproFound(true);
+        setMiniproVersion(detect.version || '');
+        setError(null);
+      }
+    } else {
+      setInstallLog(prev => [...prev, '', `✗ Install failed: ${result?.error || 'Unknown error'}`]);
+      if (result?.error) setError(result.error);
+    }
+    setInstalling(false);
   };
 
   const handleWrite = async () => {
@@ -169,7 +218,7 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
     }
   };
 
-  const isWorking = status === 'writing' || status === 'verifying' || status === 'detecting';
+  const isWorking = status === 'writing' || status === 'verifying' || status === 'detecting' || installing;
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
@@ -196,16 +245,66 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
 
         <div className="dialog-content">
           {/* minipro status */}
-          {miniproFound === false && (
-            <div className="dialog-error">
-              <strong>minipro not found.</strong><br/>
-              Install from: <a href="https://gitlab.com/DavidGriffith/minipro" target="_blank" rel="noreferrer" style={{ color: '#569cd6' }}>gitlab.com/DavidGriffith/minipro</a>
-              <br/><br/>
-              <span style={{ fontSize: 11, color: '#999' }}>
-                macOS: <code>brew install minipro</code><br/>
-                Linux: build from source or use package manager<br/>
-                Windows: download from releases page
-              </span>
+          {miniproFound === false && !installing && (
+            <div className="dialog-error" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <strong>minipro not found.</strong><br/>
+                <span style={{ fontSize: 12 }}>
+                  {platform === 'darwin' && 'Install via Homebrew with one click, or manually from source.'}
+                  {platform === 'linux' && 'Install via apt or build from source.'}
+                  {platform === 'win32' && 'Install via winget/choco or download from the releases page.'}
+                  {!platform && 'Install from source or via your package manager.'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={handleInstall}
+                  style={{
+                    background: '#0098ff',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 3,
+                    padding: '6px 16px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {platform === 'darwin' ? '⬇ Install (brew)' : platform === 'linux' ? '⬇ Install (apt)' : '⬇ Install'}
+                </button>
+                <a
+                  href="https://gitlab.com/DavidGriffith/minipro"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#569cd6', fontSize: 11 }}
+                >
+                  Manual install →
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Install progress */}
+          {installing && (
+            <div style={{
+              background: '#1a1a1a',
+              border: '1px solid #2d2d30',
+              borderRadius: 3,
+              padding: '8px 12px',
+              maxHeight: 180,
+              overflowY: 'auto',
+              fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+              fontSize: 11,
+              color: '#cccccc',
+              lineHeight: '1.5',
+            }}>
+              <div style={{ marginBottom: 6, color: '#0098ff', fontWeight: 600 }}>Installing minipro...</div>
+              {installLog.map((line, i) => (
+                <div key={i} style={{ color: line.startsWith('✓') ? '#4ec9b0' : line.startsWith('✗') ? '#f48771' : '#cccccc' }}>
+                  {line || '\u00A0'}
+                </div>
+              ))}
+              {installing && <div style={{ color: '#858585' }}>⏳ Please wait...</div>}
             </div>
           )}
 
