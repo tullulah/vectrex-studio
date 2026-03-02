@@ -1,0 +1,21 @@
+[project]
+name = "clockmakers_crypt"
+version = "0.1.0"
+author = ""
+description = "A vector graphic adventure game for Vectrex"
+entry = "src/main.vpy"
+
+[build]
+output = "build/clockmakers_crypt.bin"
+target = "vectrex"
+optimization = 0
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/**/*.vec"]
+music = ["assets/music/**/*.vmus"]
+sfx = ["assets/sfx/**/*.vsfx"]
+playground = ["assets/playground/**/*.vplay"]

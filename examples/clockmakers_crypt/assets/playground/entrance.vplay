@@ -1,0 +1,126 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "entrance",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-03-02"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 863,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_1772392174432",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 458,
+        "y": -2,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1772392204950",
+        "type": "enemy",
+        "vectorName": "canvas",
+        "layer": "gameplay",
+        "x": 259,
+        "y": -49,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1772392228716",
+        "type": "enemy",
+        "vectorName": "locked_door",
+        "layer": "gameplay",
+        "x": 738,
+        "y": -80,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1772461603432",
+        "type": "enemy",
+        "vectorName": "entrance_arc",
+        "layer": "gameplay",
+        "x": -42,
+        "y": -83,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [
+    {
+      "id": "hs_1772461857107",
+      "x": 260,
+      "y": -98,
+      "w": 20,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "hotspot"
+    },
+    {
+      "id": "hs_1772461861596",
+      "x": 738,
+      "y": -88,
+      "w": 34,
+      "h": 40,
+      "trigger": "player_near",
+      "label": "hotspot"
+    }
+  ]
+}

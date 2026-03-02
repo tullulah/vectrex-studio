@@ -80,97 +80,101 @@ LEVEL_TEMP           EQU $C880+$3C   ; SHOW_LEVEL temporary byte (legacy) (1 byt
 LEVEL_BG_COUNT       EQU $C880+$3D   ; BG object count (1 bytes)
 LEVEL_GP_COUNT       EQU $C880+$3E   ; GP object count (1 bytes)
 LEVEL_FG_COUNT       EQU $C880+$3F   ; FG object count (1 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$40   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$42   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$44   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$46   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$48   ; GP objects RAM buffer (max 8 objects × 14 bytes) (112 bytes)
-UGPC_OUTER_IDX       EQU $C880+$B8   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$B9   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$BA   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$BB   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$BD   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$BF   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$C0   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$C1   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$C2   ; GP-FG |dy| (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$C3   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_MAP        EQU $C880+$C5   ; User variable: STATE_MAP (2 bytes)
-VAR_STATE_GAME       EQU $C880+$C7   ; User variable: STATE_GAME (2 bytes)
-VAR_SCREEN           EQU $C880+$C9   ; User variable: SCREEN (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$CB   ; User variable: TITLE_INTENSITY (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$CD   ; User variable: TITLE_STATE (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$CF   ; User variable: CURRENT_MUSIC (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$D1   ; User variable: LOCATION_X_COORDS (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$D3   ; User variable: LOCATION_Y_COORDS (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$D5   ; User variable: LOCATION_NAMES (2 bytes)
-VAR_LEVEL_BACKGROUNDS EQU $C880+$D7   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
-VAR_LEVEL_ENEMY_COUNT EQU $C880+$D9   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
-VAR_LEVEL_ENEMY_SPEED EQU $C880+$DB   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$DD   ; User variable: PREV_BTN1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$DF   ; User variable: PREV_BTN2 (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$E1   ; User variable: PREV_BTN3 (2 bytes)
-VAR_PREV_BTN4        EQU $C880+$E3   ; User variable: PREV_BTN4 (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$E5   ; User variable: NUM_LOCATIONS (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$E7   ; User variable: CURRENT_LOCATION (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$E9   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$EB   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
-VAR_JOY_X            EQU $C880+$ED   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$EF   ; User variable: JOY_Y (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$F1   ; User variable: PREV_JOY_X (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$F3   ; User variable: PREV_JOY_Y (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$F5   ; User variable: COUNTDOWN_TIMER (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$F7   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$F9   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$FB   ; User variable: HOOK_ACTIVE (2 bytes)
-VAR_HOOK_X           EQU $C880+$FD   ; User variable: HOOK_X (2 bytes)
-VAR_HOOK_Y           EQU $C880+$FF   ; User variable: HOOK_Y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$101   ; User variable: HOOK_MAX_Y (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$103   ; User variable: HOOK_GUN_X (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$105   ; User variable: HOOK_GUN_Y (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$107   ; User variable: HOOK_INIT_Y (2 bytes)
-VAR_PLAYER_X         EQU $C880+$109   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$10B   ; User variable: PLAYER_Y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$10D   ; User variable: MOVE_SPEED (2 bytes)
-VAR_ABS_JOY          EQU $C880+$10F   ; User variable: ABS_JOY (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$111   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$113   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$115   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$117   ; User variable: PLAYER_FACING (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$119   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_GRAVITY          EQU $C880+$11B   ; User variable: GRAVITY (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$11D   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$11F   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_GROUND_Y         EQU $C880+$121   ; User variable: GROUND_Y (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$123   ; User variable: JOYSTICK1_STATE (2 bytes)
-VAR_LOC_X            EQU $C880+$125   ; User variable: LOC_X (2 bytes)
-VAR_LOC_Y            EQU $C880+$127   ; User variable: LOC_Y (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$129   ; User variable: ANIM_THRESHOLD (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$12B   ; User variable: MIRROR_MODE (2 bytes)
-VAR_COUNT            EQU $C880+$12D   ; User variable: COUNT (2 bytes)
-VAR_SPEED            EQU $C880+$12F   ; User variable: SPEED (2 bytes)
-VAR_I                EQU $C880+$131   ; User variable: I (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$133   ; User variable: ENEMY_ACTIVE (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$135   ; User variable: ENEMY_SIZE (2 bytes)
-VAR_ENEMY_X          EQU $C880+$137   ; User variable: ENEMY_X (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$139   ; User variable: ENEMY_Y (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$13B   ; User variable: ENEMY_VX (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$13D   ; User variable: ENEMY_VY (2 bytes)
-VAR_START_X          EQU $C880+$147   ; User variable: start_x (2 bytes)
-VAR_START_Y          EQU $C880+$149   ; User variable: start_y (2 bytes)
-VAR_END_X            EQU $C880+$14B   ; User variable: end_x (2 bytes)
-VAR_END_Y            EQU $C880+$14D   ; User variable: end_y (2 bytes)
-VAR_START_X          EQU $C880+$147   ; User variable: START_X (2 bytes)
-VAR_START_Y          EQU $C880+$149   ; User variable: START_Y (2 bytes)
-VAR_END_X            EQU $C880+$14B   ; User variable: END_X (2 bytes)
-VAR_END_Y            EQU $C880+$14D   ; User variable: END_Y (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$14F   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$15B   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$16B   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$17B   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$18B   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$19B   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$1AB   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
+CAMERA_X             EQU $C880+$40   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$42   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$44   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$46   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$48   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+SLR_CUR_X            EQU $C880+$4A   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$4B   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
+UGPC_OUTER_IDX       EQU $C880+$C3   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$C4   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$C5   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$C6   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$C8   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$CA   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$CB   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$CC   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$CD   ; GP-FG |dy| (1 bytes)
+TEXT_SCALE_H         EQU $C880+$CE   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$CF   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_STATE_TITLE      EQU $C880+$D0   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_MAP        EQU $C880+$D2   ; User variable: STATE_MAP (2 bytes)
+VAR_STATE_GAME       EQU $C880+$D4   ; User variable: STATE_GAME (2 bytes)
+VAR_SCREEN           EQU $C880+$D6   ; User variable: SCREEN (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$D8   ; User variable: TITLE_INTENSITY (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$DA   ; User variable: TITLE_STATE (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$DC   ; User variable: CURRENT_MUSIC (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$DE   ; User variable: LOCATION_X_COORDS (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$E0   ; User variable: LOCATION_Y_COORDS (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$E2   ; User variable: LOCATION_NAMES (2 bytes)
+VAR_LEVEL_BACKGROUNDS EQU $C880+$E4   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$E6   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$E8   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$EA   ; User variable: PREV_BTN1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$EC   ; User variable: PREV_BTN2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$EE   ; User variable: PREV_BTN3 (2 bytes)
+VAR_PREV_BTN4        EQU $C880+$F0   ; User variable: PREV_BTN4 (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$F2   ; User variable: NUM_LOCATIONS (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$F4   ; User variable: CURRENT_LOCATION (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$F6   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$F8   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
+VAR_JOY_X            EQU $C880+$FA   ; User variable: JOY_X (2 bytes)
+VAR_JOY_Y            EQU $C880+$FC   ; User variable: JOY_Y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$FE   ; User variable: PREV_JOY_X (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$100   ; User variable: PREV_JOY_Y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$102   ; User variable: COUNTDOWN_TIMER (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$104   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$106   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$108   ; User variable: HOOK_ACTIVE (2 bytes)
+VAR_HOOK_X           EQU $C880+$10A   ; User variable: HOOK_X (2 bytes)
+VAR_HOOK_Y           EQU $C880+$10C   ; User variable: HOOK_Y (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$10E   ; User variable: HOOK_MAX_Y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$110   ; User variable: HOOK_GUN_X (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$112   ; User variable: HOOK_GUN_Y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$114   ; User variable: HOOK_INIT_Y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$116   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$118   ; User variable: PLAYER_Y (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$11A   ; User variable: MOVE_SPEED (2 bytes)
+VAR_ABS_JOY          EQU $C880+$11C   ; User variable: ABS_JOY (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$11E   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$120   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$122   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$124   ; User variable: PLAYER_FACING (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$126   ; User variable: MAX_ENEMIES (2 bytes)
+VAR_GRAVITY          EQU $C880+$128   ; User variable: GRAVITY (2 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$12A   ; User variable: BOUNCE_DAMPING (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$12C   ; User variable: MIN_BOUNCE_VY (2 bytes)
+VAR_GROUND_Y         EQU $C880+$12E   ; User variable: GROUND_Y (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$130   ; User variable: JOYSTICK1_STATE (2 bytes)
+VAR_LOC_X            EQU $C880+$132   ; User variable: LOC_X (2 bytes)
+VAR_LOC_Y            EQU $C880+$134   ; User variable: LOC_Y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$136   ; User variable: ANIM_THRESHOLD (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$138   ; User variable: MIRROR_MODE (2 bytes)
+VAR_COUNT            EQU $C880+$13A   ; User variable: COUNT (2 bytes)
+VAR_SPEED            EQU $C880+$13C   ; User variable: SPEED (2 bytes)
+VAR_I                EQU $C880+$13E   ; User variable: I (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$140   ; User variable: ENEMY_ACTIVE (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$142   ; User variable: ENEMY_SIZE (2 bytes)
+VAR_ENEMY_X          EQU $C880+$144   ; User variable: ENEMY_X (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$146   ; User variable: ENEMY_Y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$148   ; User variable: ENEMY_VX (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$14A   ; User variable: ENEMY_VY (2 bytes)
+VAR_START_X          EQU $C880+$154   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$156   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$158   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$15A   ; User variable: end_y (2 bytes)
+VAR_START_X          EQU $C880+$154   ; User variable: START_X (2 bytes)
+VAR_START_Y          EQU $C880+$156   ; User variable: START_Y (2 bytes)
+VAR_END_X            EQU $C880+$158   ; User variable: END_X (2 bytes)
+VAR_END_Y            EQU $C880+$15A   ; User variable: END_Y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$15C   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$168   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$178   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$188   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$198   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$1A8   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$1B8   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -500,11 +504,21 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
+    LDD #0  ; const STATE_TITLE
+    STD RESULT
+    STD VAR_SCREEN
     LDD #30
+    STD RESULT
     STD VAR_TITLE_INTENSITY
     LDD #0
+    STD RESULT
     STD VAR_TITLE_STATE
     LDD #-1
+    STD RESULT
     STD VAR_CURRENT_MUSIC
     ; Copy array 'JOYSTICK1_STATE' from ROM to RAM (6 elements)
     LDX #ARRAY_JOYSTICK1_STATE_DATA       ; Source: ROM array data
@@ -518,56 +532,82 @@ MAIN:
     LDX #VAR_JOYSTICK1_STATE_DATA    ; Array now in RAM
     STX VAR_JOYSTICK1_STATE
     LDD #0
+    STD RESULT
     STD VAR_PREV_BTN1
     LDD #0
+    STD RESULT
     STD VAR_PREV_BTN2
     LDD #0
+    STD RESULT
     STD VAR_PREV_BTN3
     LDD #0
+    STD RESULT
     STD VAR_PREV_BTN4
     LDD #0
+    STD RESULT
     STD VAR_CURRENT_LOCATION
     LDD #60
+    STD RESULT
     STD VAR_LOCATION_GLOW_INTENSITY
     LDD #0
+    STD RESULT
     STD VAR_LOCATION_GLOW_DIRECTION
     LDD #0
+    STD RESULT
     STD VAR_JOY_X
     LDD #0
+    STD RESULT
     STD VAR_JOY_Y
     LDD #0
+    STD RESULT
     STD VAR_PREV_JOY_X
     LDD #0
+    STD RESULT
     STD VAR_PREV_JOY_Y
     LDD #0
+    STD RESULT
     STD VAR_COUNTDOWN_TIMER
     LDD #0
+    STD RESULT
     STD VAR_COUNTDOWN_ACTIVE
     LDD #0
+    STD RESULT
     STD VAR_JOYSTICK_POLL_COUNTER
     LDD #0
+    STD RESULT
     STD VAR_HOOK_ACTIVE
     LDD #0
+    STD RESULT
     STD VAR_HOOK_X
     LDD #-70
+    STD RESULT
     STD VAR_HOOK_Y
     LDD #0
+    STD RESULT
     STD VAR_HOOK_GUN_X
     LDD #0
+    STD RESULT
     STD VAR_HOOK_GUN_Y
     LDD #0
+    STD RESULT
     STD VAR_HOOK_INIT_Y
     LDD #0
+    STD RESULT
     STD VAR_PLAYER_X
     LDD #0
+    STD RESULT
     STD VAR_MOVE_SPEED
     LDD #0
+    STD RESULT
     STD VAR_ABS_JOY
     LDD #1
+    STD RESULT
     STD VAR_PLAYER_ANIM_FRAME
     LDD #0
+    STD RESULT
     STD VAR_PLAYER_ANIM_COUNTER
     LDD #1
+    STD RESULT
     STD VAR_PLAYER_FACING
     ; Copy array 'ENEMY_ACTIVE' from ROM to RAM (8 elements)
     LDX #ARRAY_ENEMY_ACTIVE_DATA       ; Source: ROM array data
@@ -670,7 +710,7 @@ MAIN:
     STD RESULT
     LDD RESULT
     STD VAR_LOCATION_GLOW_DIRECTION
-    LDD >VAR_STATE_TITLE
+    LDD #0  ; const STATE_TITLE
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -725,7 +765,7 @@ LOOP_BODY:
     JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
     JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     JSR READ_JOYSTICK1_STATE
-    LDD >VAR_STATE_TITLE
+    LDD #0  ; const STATE_TITLE
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -823,7 +863,7 @@ IF_END_2:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_5
-    LDD >VAR_STATE_MAP
+    LDD #1  ; const STATE_MAP
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -884,7 +924,7 @@ IF_NEXT_5:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_6
-    LDD >VAR_STATE_MAP
+    LDD #1  ; const STATE_MAP
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -945,7 +985,7 @@ IF_NEXT_6:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_7
-    LDD >VAR_STATE_MAP
+    LDD #1  ; const STATE_MAP
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -1006,7 +1046,7 @@ IF_NEXT_7:
     STD RESULT
     LDD RESULT
     LBEQ IF_END_4
-    LDD >VAR_STATE_MAP
+    LDD #1  ; const STATE_MAP
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -1018,7 +1058,7 @@ IF_NEXT_7:
 IF_END_4:
     LBRA IF_END_0
 IF_NEXT_1:
-    LDD >VAR_STATE_MAP
+    LDD #1  ; const STATE_MAP
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -1174,7 +1214,7 @@ IF_END_11:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
-    LDD >VAR_NUM_LOCATIONS
+    LDD #17  ; const NUM_LOCATIONS
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -1276,7 +1316,7 @@ IF_NEXT_14:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_19
-    LDD >VAR_NUM_LOCATIONS
+    LDD #17  ; const NUM_LOCATIONS
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -1347,7 +1387,7 @@ IF_NEXT_17:
     STD RESULT
     LDD RESULT
     STD VAR_CURRENT_LOCATION
-    LDD >VAR_NUM_LOCATIONS
+    LDD #17  ; const NUM_LOCATIONS
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -1445,7 +1485,7 @@ IF_NEXT_20:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_24
-    LDD >VAR_NUM_LOCATIONS
+    LDD #17  ; const NUM_LOCATIONS
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -1522,7 +1562,7 @@ IF_END_13:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_26
-    LDD >VAR_STATE_GAME
+    LDD #2  ; const STATE_GAME
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -1587,7 +1627,7 @@ IF_NEXT_26:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_27
-    LDD >VAR_STATE_GAME
+    LDD #2  ; const STATE_GAME
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -1652,7 +1692,7 @@ IF_NEXT_27:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_28
-    LDD >VAR_STATE_GAME
+    LDD #2  ; const STATE_GAME
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -1717,7 +1757,7 @@ IF_NEXT_28:
     STD RESULT
     LDD RESULT
     LBEQ IF_END_25
-    LDD >VAR_STATE_GAME
+    LDD #2  ; const STATE_GAME
     STD RESULT
     LDD RESULT
     STD VAR_SCREEN
@@ -1734,7 +1774,7 @@ IF_END_25:
     JSR DRAW_MAP_SCREEN
     LBRA IF_END_0
 IF_NEXT_8:
-    LDD >VAR_STATE_GAME
+    LDD #2  ; const STATE_GAME
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -2063,7 +2103,7 @@ IF_NEXT_38:
     LDD RESULT
     STD VAR_HOOK_GUN_X
 IF_END_37:
-    LDD >VAR_PLAYER_Y
+    LDD #-70  ; const PLAYER_Y
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -2116,7 +2156,7 @@ IF_END_33:
     STD RESULT
     LDD RESULT
     STD VAR_HOOK_Y
-    LDD >VAR_HOOK_MAX_Y
+    LDD #127  ; const HOOK_MAX_Y
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -2203,7 +2243,13 @@ IF_END_0:
     STD RESULT
     LDD RESULT
     STD VAR_PREV_BTN4
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
+    ; META MUSIC_TIMER: catch up if game frame was slow
+    LDA >$D00D              ; VIA_int_flags (extended addr, DP=$C8)
+    BITA #$20               ; Bit 5 = T2 elapsed (>1 frame of user code)
+    BEQ MUSIC_CATCHUP_SKIP  ; On time — skip extra tick
+    JSR AUDIO_UPDATE        ; Catch-up tick: game was slow
+MUSIC_CATCHUP_SKIP:
+    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
     RTS
 
 ; Function: DRAW_MAP_SCREEN
@@ -4402,7 +4448,7 @@ IF_END_88:
     STD RESULT
     LDD RESULT
     STD VAR_PLAYER_ANIM_COUNTER
-    LDD >VAR_PLAYER_ANIM_SPEED
+    LDD #5  ; const PLAYER_ANIM_SPEED
     STD RESULT
     LDD RESULT
     STD VAR_ANIM_THRESHOLD
@@ -4448,7 +4494,7 @@ IF_END_88:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_91
-    LDD >VAR_PLAYER_ANIM_SPEED
+    LDD #5  ; const PLAYER_ANIM_SPEED
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -4584,7 +4630,7 @@ IF_END_96:
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA DRAW_VEC_X
-    LDD >VAR_PLAYER_Y
+    LDD #-70  ; const PLAYER_Y
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
@@ -4679,7 +4725,7 @@ IF_NEXT_99:
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA DRAW_VEC_X
-    LDD >VAR_PLAYER_Y
+    LDD #-70  ; const PLAYER_Y
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
@@ -4774,7 +4820,7 @@ IF_NEXT_100:
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA DRAW_VEC_X
-    LDD >VAR_PLAYER_Y
+    LDD #-70  ; const PLAYER_Y
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
@@ -4869,7 +4915,7 @@ IF_NEXT_101:
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA DRAW_VEC_X
-    LDD >VAR_PLAYER_Y
+    LDD #-70  ; const PLAYER_Y
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
@@ -4947,7 +4993,7 @@ IF_NEXT_102:
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA DRAW_VEC_X
-    LDD >VAR_PLAYER_Y
+    LDD #-70  ; const PLAYER_Y
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
@@ -5162,7 +5208,7 @@ SPAWN_ENEMIES:
     LBRA IF_END_105
 IF_NEXT_106:
 IF_END_105:
-    LDD >VAR_MAX_ENEMIES
+    LDD #8  ; const MAX_ENEMIES
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -5179,7 +5225,7 @@ IF_END_105:
     STD RESULT
     LDD RESULT
     LBEQ IF_NEXT_108
-    LDD >VAR_MAX_ENEMIES
+    LDD #8  ; const MAX_ENEMIES
     STD RESULT
     LDD RESULT
     STD VAR_COUNT
@@ -5208,7 +5254,7 @@ WH_109: ; while start
     STD RESULT
     LDD RESULT
     LBEQ .LOGIC_106_FALSE
-    LDD >VAR_MAX_ENEMIES
+    LDD #8  ; const MAX_ENEMIES
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -5418,7 +5464,7 @@ UPDATE_ENEMIES:
     LDD RESULT
     STD VAR_I
 WH_113: ; while start
-    LDD >VAR_MAX_ENEMIES
+    LDD #8  ; const MAX_ENEMIES
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -5485,7 +5531,7 @@ WH_113: ; while start
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_GRAVITY
+    LDD #1  ; const GRAVITY
     STD RESULT
     LDD RESULT
     STD TMPPTR      ; Save right operand to TMPPTR
@@ -5577,7 +5623,7 @@ WH_113: ; while start
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LDD >VAR_GROUND_Y
+    LDD #-70  ; const GROUND_Y
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -5614,7 +5660,7 @@ WH_113: ; while start
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
-    LDD >VAR_GROUND_Y
+    LDD #-70  ; const GROUND_Y
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
@@ -5676,7 +5722,7 @@ WH_113: ; while start
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BOUNCE_DAMPING
+    LDD #17  ; const BOUNCE_DAMPING
     STD RESULT
     LDD RESULT
     LDX TMPVAL      ; Get left into X from TMPVAL
@@ -5693,7 +5739,7 @@ WH_113: ; while start
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
-    LDD >VAR_MIN_BOUNCE_VY
+    LDD #10  ; const MIN_BOUNCE_VY
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -5730,7 +5776,7 @@ WH_113: ; while start
     LDD TMPPTR      ; D = offset
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
-    LDD >VAR_MIN_BOUNCE_VY
+    LDD #10  ; const MIN_BOUNCE_VY
     STD RESULT
     LDX TMPPTR2     ; Load computed address
     LDD RESULT      ; Load value
@@ -5922,7 +5968,7 @@ DRAW_ENEMIES:
     LDD RESULT
     STD VAR_I
 WH_125: ; while start
-    LDD >VAR_MAX_ENEMIES
+    LDD #8  ; const MAX_ENEMIES
     STD RESULT
     LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -6405,6 +6451,7 @@ READ_JOYSTICK1_STATE:
 ; Center: (0, 8)
 
 _ANGKOR_BG_WIDTH EQU 192
+_ANGKOR_BG_HALF_WIDTH EQU 96
 _ANGKOR_BG_CENTER_X EQU 0
 _ANGKOR_BG_CENTER_Y EQU 8
 
@@ -8024,6 +8071,7 @@ _ANGKOR_BG_PATH191:    ; Path 191
 ; Center: (-7, 46)
 
 _ANTARCTICA_BG_WIDTH EQU 223
+_ANTARCTICA_BG_HALF_WIDTH EQU 111
 _ANTARCTICA_BG_CENTER_X EQU -7
 _ANTARCTICA_BG_CENTER_Y EQU 46
 
@@ -8227,6 +8275,7 @@ _ANTARCTICA_BG_PATH19:    ; Path 19
 ; Center: (0, 0)
 
 _ATHENS_BG_WIDTH EQU 160
+_ATHENS_BG_HALF_WIDTH EQU 80
 _ATHENS_BG_CENTER_X EQU 0
 _ATHENS_BG_CENTER_Y EQU 0
 
@@ -8594,6 +8643,7 @@ _ATHENS_BG_PATH40:    ; Path 40
 ; Center: (3, 10)
 
 _AYERS_BG_WIDTH EQU 198
+_AYERS_BG_HALF_WIDTH EQU 99
 _AYERS_BG_CENTER_X EQU 3
 _AYERS_BG_CENTER_Y EQU 10
 
@@ -8802,6 +8852,7 @@ _AYERS_BG_PATH17:    ; Path 17
 ; Center: (11, 13)
 
 _BARCELONA_BG_WIDTH EQU 116
+_BARCELONA_BG_HALF_WIDTH EQU 58
 _BARCELONA_BG_CENTER_X EQU 11
 _BARCELONA_BG_CENTER_Y EQU 13
 
@@ -9310,6 +9361,7 @@ _BARCELONA_BG_PATH59:    ; Path 59
 ; Center: (1, 0)
 
 _BUBBLE_HUGE_WIDTH EQU 52
+_BUBBLE_HUGE_HALF_WIDTH EQU 26
 _BUBBLE_HUGE_CENTER_X EQU 1
 _BUBBLE_HUGE_CENTER_Y EQU 0
 
@@ -9335,6 +9387,7 @@ _BUBBLE_HUGE_PATH0:    ; Path 0
 ; Center: (0, 0)
 
 _BUBBLE_LARGE_WIDTH EQU 40
+_BUBBLE_LARGE_HALF_WIDTH EQU 20
 _BUBBLE_LARGE_CENTER_X EQU 0
 _BUBBLE_LARGE_CENTER_Y EQU 0
 
@@ -9376,6 +9429,7 @@ _BUBBLE_LARGE_PATH0:    ; Path 0
 ; Center: (0, 0)
 
 _BUBBLE_MEDIUM_WIDTH EQU 30
+_BUBBLE_MEDIUM_HALF_WIDTH EQU 15
 _BUBBLE_MEDIUM_CENTER_X EQU 0
 _BUBBLE_MEDIUM_CENTER_Y EQU 0
 
@@ -9417,6 +9471,7 @@ _BUBBLE_MEDIUM_PATH0:    ; Path 0
 ; Center: (0, 0)
 
 _BUBBLE_SMALL_WIDTH EQU 20
+_BUBBLE_SMALL_HALF_WIDTH EQU 10
 _BUBBLE_SMALL_CENTER_X EQU 0
 _BUBBLE_SMALL_CENTER_Y EQU 0
 
@@ -9458,6 +9513,7 @@ _BUBBLE_SMALL_PATH0:    ; Path 0
 ; Center: (0, 20)
 
 _BUDDHA_BG_WIDTH EQU 160
+_BUDDHA_BG_HALF_WIDTH EQU 80
 _BUDDHA_BG_CENTER_X EQU 0
 _BUDDHA_BG_CENTER_Y EQU 20
 
@@ -9500,6 +9556,7 @@ _BUDDHA_BG_PATH3:    ; Path 3
 ; Center: (0, 15)
 
 _EASTER_BG_WIDTH EQU 70
+_EASTER_BG_HALF_WIDTH EQU 35
 _EASTER_BG_CENTER_X EQU 0
 _EASTER_BG_CENTER_Y EQU 15
 
@@ -9555,6 +9612,7 @@ _EASTER_BG_PATH4:    ; Path 4
 ; Center: (0, 0)
 
 _FUJI_BG_WIDTH EQU 250
+_FUJI_BG_HALF_WIDTH EQU 125
 _FUJI_BG_CENTER_X EQU 0
 _FUJI_BG_CENTER_Y EQU 0
 
@@ -9661,6 +9719,7 @@ _FUJI_BG_PATH5:    ; Path 5
 ; Center: (0, 0)
 
 _HOOK_WIDTH EQU 12
+_HOOK_HALF_WIDTH EQU 6
 _HOOK_CENTER_X EQU 0
 _HOOK_CENTER_Y EQU 0
 
@@ -9687,6 +9746,7 @@ _HOOK_PATH0:    ; Path 0
 ; Center: (0, 10)
 
 _KEIRIN_BG_WIDTH EQU 200
+_KEIRIN_BG_HALF_WIDTH EQU 100
 _KEIRIN_BG_CENTER_X EQU 0
 _KEIRIN_BG_CENTER_Y EQU 10
 
@@ -9724,6 +9784,7 @@ _KEIRIN_BG_PATH2:    ; Path 2
 ; Center: (0, 12)
 
 _KILIMANJARO_BG_WIDTH EQU 200
+_KILIMANJARO_BG_HALF_WIDTH EQU 100
 _KILIMANJARO_BG_CENTER_X EQU 0
 _KILIMANJARO_BG_CENTER_Y EQU 12
 
@@ -9768,6 +9829,7 @@ _KILIMANJARO_BG_PATH3:    ; Path 3
 ; Center: (0, 30)
 
 _LENINGRAD_BG_WIDTH EQU 60
+_LENINGRAD_BG_HALF_WIDTH EQU 30
 _LENINGRAD_BG_CENTER_X EQU 0
 _LENINGRAD_BG_CENTER_Y EQU 30
 
@@ -9825,6 +9887,7 @@ _LENINGRAD_BG_PATH4:    ; Path 4
 ; Center: (0, 1)
 
 _LOCATION_MARKER_WIDTH EQU 22
+_LOCATION_MARKER_HALF_WIDTH EQU 11
 _LOCATION_MARKER_CENTER_X EQU 0
 _LOCATION_MARKER_CENTER_Y EQU 1
 
@@ -9852,6 +9915,7 @@ _LOCATION_MARKER_PATH0:    ; Path 0
 ; Center: (0, 0)
 
 _LOGO_WIDTH EQU 163
+_LOGO_HALF_WIDTH EQU 81
 _LOGO_CENTER_X EQU 0
 _LOGO_CENTER_Y EQU 0
 
@@ -9963,6 +10027,7 @@ _LOGO_PATH6:    ; Path 6
 ; Center: (0, 15)
 
 _LONDON_BG_WIDTH EQU 40
+_LONDON_BG_HALF_WIDTH EQU 20
 _LONDON_BG_CENTER_X EQU 0
 _LONDON_BG_CENTER_Y EQU 15
 
@@ -10010,6 +10075,7 @@ _LONDON_BG_PATH3:    ; Path 3
 ; Center: (-6, -3)
 
 _MAP_WIDTH EQU 242
+_MAP_HALF_WIDTH EQU 121
 _MAP_CENTER_X EQU -6
 _MAP_CENTER_Y EQU -3
 
@@ -10261,6 +10327,7 @@ _MAP_PATH14:    ; Path 14
 ; Center: (0, 10)
 
 _MAYAN_BG_WIDTH EQU 160
+_MAYAN_BG_HALF_WIDTH EQU 80
 _MAYAN_BG_CENTER_X EQU 0
 _MAYAN_BG_CENTER_Y EQU 10
 
@@ -10319,6 +10386,7 @@ _MAYAN_BG_PATH4:    ; Path 4
 ; Center: (0, 27)
 
 _NEWYORK_BG_WIDTH EQU 50
+_NEWYORK_BG_HALF_WIDTH EQU 25
 _NEWYORK_BG_CENTER_X EQU 0
 _NEWYORK_BG_CENTER_Y EQU 27
 
@@ -10377,6 +10445,7 @@ _NEWYORK_BG_PATH4:    ; Path 4
 ; Center: (0, 17)
 
 _PARIS_BG_WIDTH EQU 100
+_PARIS_BG_HALF_WIDTH EQU 50
 _PARIS_BG_CENTER_X EQU 0
 _PARIS_BG_CENTER_Y EQU 17
 
@@ -10428,6 +10497,7 @@ _PARIS_BG_PATH4:    ; Path 4
 ; Center: (1, 0)
 
 _PLAYER_WALK_1_WIDTH EQU 19
+_PLAYER_WALK_1_HALF_WIDTH EQU 9
 _PLAYER_WALK_1_CENTER_X EQU 1
 _PLAYER_WALK_1_CENTER_Y EQU 0
 
@@ -10600,6 +10670,7 @@ _PLAYER_WALK_1_PATH16:    ; Path 16
 ; Center: (0, -1)
 
 _PLAYER_WALK_2_WIDTH EQU 21
+_PLAYER_WALK_2_HALF_WIDTH EQU 10
 _PLAYER_WALK_2_CENTER_X EQU 0
 _PLAYER_WALK_2_CENTER_Y EQU -1
 
@@ -10772,6 +10843,7 @@ _PLAYER_WALK_2_PATH16:    ; Path 16
 ; Center: (1, -1)
 
 _PLAYER_WALK_3_WIDTH EQU 20
+_PLAYER_WALK_3_HALF_WIDTH EQU 10
 _PLAYER_WALK_3_CENTER_X EQU 1
 _PLAYER_WALK_3_CENTER_Y EQU -1
 
@@ -10944,6 +11016,7 @@ _PLAYER_WALK_3_PATH16:    ; Path 16
 ; Center: (1, -1)
 
 _PLAYER_WALK_4_WIDTH EQU 19
+_PLAYER_WALK_4_HALF_WIDTH EQU 9
 _PLAYER_WALK_4_CENTER_X EQU 1
 _PLAYER_WALK_4_CENTER_Y EQU -1
 
@@ -11116,6 +11189,7 @@ _PLAYER_WALK_4_PATH16:    ; Path 16
 ; Center: (1, 0)
 
 _PLAYER_WALK_5_WIDTH EQU 19
+_PLAYER_WALK_5_HALF_WIDTH EQU 9
 _PLAYER_WALK_5_CENTER_X EQU 1
 _PLAYER_WALK_5_CENTER_Y EQU 0
 
@@ -11288,6 +11362,7 @@ _PLAYER_WALK_5_PATH16:    ; Path 16
 ; Center: (0, 0)
 
 _PYRAMIDS_BG_WIDTH EQU 180
+_PYRAMIDS_BG_HALF_WIDTH EQU 90
 _PYRAMIDS_BG_CENTER_X EQU 0
 _PYRAMIDS_BG_CENTER_Y EQU 0
 
@@ -11329,6 +11404,7 @@ _PYRAMIDS_BG_PATH3:    ; Path 3
 ; Center: (0, 22)
 
 _TAJ_BG_WIDTH EQU 140
+_TAJ_BG_HALF_WIDTH EQU 70
 _TAJ_BG_CENTER_X EQU 0
 _TAJ_BG_CENTER_Y EQU 22
 
@@ -12588,11 +12664,12 @@ _FUJI_LEVEL1_V2_BG_OBJECTS:
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
+    FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _FUJI_BG_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
+    FCB _FUJI_BG_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB 0  ; reserved (ROM+19)
 
 
 _FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS:
@@ -12610,7 +12687,8 @@ _FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS:
     FCB 20  ; collision_size
     FDB 0  ; spawn_delay
     FDB _BUBBLE_LARGE_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
+    FCB _BUBBLE_LARGE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB 0  ; reserved (ROM+19)
 
 ; Object: enemy_2 (enemy)
     FCB 1  ; type
@@ -12626,7 +12704,8 @@ _FUJI_LEVEL1_V2_GAMEPLAY_OBJECTS:
     FCB 20  ; collision_size
     FDB 60  ; spawn_delay
     FDB _BUBBLE_LARGE_VECTORS  ; vector_ptr
-    FDB 0  ; properties_ptr (reserved)
+    FCB _BUBBLE_LARGE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB 0  ; reserved (ROM+19)
 
 
 _FUJI_LEVEL1_V2_FG_OBJECTS:
@@ -12646,11 +12725,17 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -12919,64 +13004,68 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,
+; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (reg $02),
+; setting PB0 as input and breaking the X/Y integrator mux entirely.
+; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
 BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
 LDA ,X+                 ; Otherwise, read intensity from vector data
 BRA DSWM_SET_INTENSITY
 DSWM_USE_OVERRIDE:
 LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-JSR $F2AB               ; BIOS Intensity_a
+STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_Y
 NEGB                    ; ← Negate Y if flag set
 DSWM_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start from .vec (already relative to center)
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_X
 NEGA                    ; ← Negate X if flag set
 DSWM_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX             ; Save adjusted position
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX            ; Save adjusted position
 ; Reset completo
 CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
-LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
+LDD >TEMP_YX
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore x
-STA VIA_port_a          ; x to DAC
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
+PULS A                  ; Restore X
+STA VIA_port_a          ; X to DAC
 ; Timing setup
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
+; Wait for move to complete (PB=1 on exit)
 DSWM_W1:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W1
+; PB stays 1 — draw loop begins with PB=1
 ; Loop de dibujo (conditional mirrors)
 DSWM_LOOP:
 LDA ,X+                 ; Read flag
@@ -12987,39 +13076,40 @@ LBEQ DSWM_NEXT_PATH
 ; Draw line with conditional negations
 LDB ,X+                 ; dy
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_DY
 NEGB                    ; ← Negate dy if flag set
 DSWM_NO_NEGATE_DY:
 LDA ,X+                 ; dx
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_DX
 NEGA                    ; ← Negate dx if flag set
 DSWM_NO_NEGATE_DX:
-PSHS A                  ; Save final dx
-STB VIA_port_a          ; dy (possibly negated) to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore final dx
-STA VIA_port_a          ; dx (possibly negated) to DAC
-CLR VIA_t1_cnt_hi
+; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)
+STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
+NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
+NOP                     ; settling 2
+NOP                     ; settling 3
+INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
+STA VIA_port_a          ; DX to DAC
 LDA #$FF
-STA VIA_shift_reg
+STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
+CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
 ; Wait for line draw
 DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_shift_reg
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
 ; Check intensity override (same logic as start)
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
 BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
 LDA ,X+                 ; Otherwise, read intensity from vector data
 BRA DSWM_NEXT_SET_INTENSITY
@@ -13028,20 +13118,20 @@ LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
 NEGB
 DSWM_NEXT_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NEXT_NO_NEGATE_X
 NEGA
 DSWM_NEXT_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX
 PULS A                  ; Get intensity back
-JSR $F2AB
+STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)
 PULS D
 ADDD #3
 TFR D,X
@@ -13050,36 +13140,35 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
-LDD TEMP_YX
-STB VIA_port_a
-PSHS A
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto new start position (BIOS Moveto_d order)
+LDD >TEMP_YX
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
-STA VIA_port_a
+STA VIA_port_a          ; X to DAC
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X
-; Wait for move
+; Wait for move (PB=1 on exit)
 DSWM_W3:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W3
-CLR VIA_shift_reg
+; PB stays 1 — draw loop continues with PB=1
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
@@ -13095,6 +13184,10 @@ LOAD_LEVEL_RUNTIME:
     
     ; Store level pointer persistently
     STX >LEVEL_PTR
+    
+    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized
+    LDD #0
+    STD >CAMERA_X
     
     ; Skip world bounds (8 bytes) + time/score (4 bytes)
     LEAX 12,X        ; X now points to object counts (+12)
@@ -13125,7 +13218,7 @@ LOAD_LEVEL_RUNTIME:
     LDB #8           ; Max 8 objects
 LLR_CLR_GP_LOOP:
     STA ,U           ; Write $FF to first byte of object slot
-    LEAU 14,U        ; Advance by 14 bytes (RAM object stride)
+    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
     DECB
     BNE LLR_CLR_GP_LOOP
     
@@ -13149,16 +13242,16 @@ LLR_SKIP_GP:
     PULS D,X,Y,U,PC  ; Restore and return
     
 ; === LLR_COPY_OBJECTS - Copy N ROM objects to RAM buffer ===
-; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 14 bytes/obj)
+; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 15 bytes/obj)
 ; ROM object layout (20 bytes):
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18-19: properties_ptr(FDB)
-; RAM object layout (14 bytes):
-;   +0: x(low), +1: y(low), +2: scale(low), +3: rotation,
-;   +4: velocity_x, +5: velocity_y, +6: physics_flags, +7: collision_flags,
-;   +8: collision_size, +9: spawn_delay(low), +10-11: vector_ptr, +12-13: properties_ptr
+;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved
+; RAM object layout (15 bytes):
+;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
+;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:
@@ -13169,48 +13262,50 @@ LLR_COPY_LOOP:
     ; X points to ROM object start (+0 = type)
     LEAX 1,X         ; Skip type (+0), X now at +1 (x FDB high)
     
-    ; RAM +0: x low byte (ROM +2, low byte of x FDB)
+    ; RAM +0-1: world_x FDB (16-bit, ROM +1-2)
+    LDA ,X           ; ROM +1 = high byte of x FDB
+    STA ,U+
     LDA 1,X          ; ROM +2 = low byte of x FDB
     STA ,U+
-    ; RAM +1: y low byte (ROM +4, low byte of y FDB)
+    ; RAM +2: y low byte (ROM +4, low byte of y FDB)
     LDA 3,X          ; ROM +4 = low byte of y FDB
     STA ,U+
-    ; RAM +2: scale low byte (ROM +6, low byte of scale FDB)
+    ; RAM +3: scale low byte (ROM +6, low byte of scale FDB)
     LDA 5,X          ; ROM +6 = low byte of scale FDB
     STA ,U+
-    ; RAM +3: rotation (ROM +7)
+    ; RAM +4: rotation (ROM +7)
     LDA 6,X          ; ROM +7 = rotation
     STA ,U+
     ; Skip to ROM +9 (past intensity at ROM +8)
     LEAX 8,X         ; X now points to ROM +9 (velocity_x)
-    ; RAM +4: velocity_x (ROM +9)
+    ; RAM +5: velocity_x (ROM +9)
     LDA ,X+          ; ROM +9
     STA ,U+
-    ; RAM +5: velocity_y (ROM +10)
+    ; RAM +6: velocity_y (ROM +10)
     LDA ,X+          ; ROM +10
     STA ,U+
-    ; RAM +6: physics_flags (ROM +11)
+    ; RAM +7: physics_flags (ROM +11)
     LDA ,X+          ; ROM +11
     STA ,U+
-    ; RAM +7: collision_flags (ROM +12)
+    ; RAM +8: collision_flags (ROM +12)
     LDA ,X+          ; ROM +12
     STA ,U+
-    ; RAM +8: collision_size (ROM +13)
+    ; RAM +9: collision_size (ROM +13)
     LDA ,X+          ; ROM +13
     STA ,U+
-    ; RAM +9: spawn_delay low byte (ROM +15, skip high at ROM +14)
+    ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)
     LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB
     STA ,U+
     LEAX 2,X         ; Skip spawn_delay FDB (2 bytes), X now at ROM +16
-    ; RAM +10-11: vector_ptr FDB (ROM +16-17)
+    ; RAM +11-12: vector_ptr FDB (ROM +16-17)
     LDD ,X++         ; ROM +16-17
     STD ,U++
-    ; RAM +12-13: properties_ptr FDB (ROM +18-19)
+    ; RAM +13-14: properties_ptr FDB (ROM +18-19)
     LDD ,X++         ; ROM +18-19
     STD ,U++
     ; X is now past end of this ROM object (ROM +1 + 8 + 5 + 2 + 2 + 2 = +20 total)
     ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:
-    ;   1,X and 3,X and 5,X and 6,X via indexed → X unchanged
+    ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged
     ;   then LEAX 8,X (X now at ROM+9)
     ;   then 5 post-increment ,X+ → X at ROM+14
     ;   then LEAX 2,X (X at ROM+16)
@@ -13257,6 +13352,23 @@ BNE PMr_start_new       ; If different, start fresh
 LDA >PSG_IS_PLAYING     ; Check if currently playing
 BNE PMr_done            ; If playing same song, ignore
 PMr_start_new:
+; Silence PSG before switching tracks (prevents noise bleed-through)
+PSHS X,DP               ; Save music pointer and DP
+LDA #$D0
+TFR A,DP                ; Set DP=$D0 for Sound_Byte
+LDA #7                  ; PSG reg 7 = Mixer
+LDB #$FF                ; All channels disabled
+JSR Sound_Byte
+LDA #8                  ; PSG reg 8 = Volume channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume channel C
+LDB #0
+JSR Sound_Byte
+PULS X,DP               ; Restore music pointer and DP
 STX >PSG_MUSIC_PTR      ; Store current music pointer (force extended)
 STX >PSG_MUSIC_START    ; Store start pointer for loops (force extended)
 CLR >PSG_DELAY_FRAMES   ; Clear delay counter

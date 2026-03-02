@@ -33,11 +33,12 @@ const ENT_HS_PAINTING = 0
 const ENT_HS_DOOR     = 1
 
 # Hotspot bounding boxes — must match entrance.vplay positions exactly
-# Player_y is always -75; HS_Y matches that; X matches vplay object x
-const ENT_HS_X = [15, 65]
-const ENT_HS_Y = [-75, -75]
-const ENT_HS_W = [15, 12]
-const ENT_HS_H = [10, 10]
+# Hotspot 0 = canvas/painting (x=260, y=-98)
+# Hotspot 1 = locked_door      (x=738, y=-88)
+const ENT_HS_X = [260, 738]
+const ENT_HS_Y = [-98, -88]
+const ENT_HS_W = [25, 40]
+const ENT_HS_H = [35, 45]
 
 # ─── Global variables ──────────────────────────────────────────────────────────
 screen        = STATE_TITLE
@@ -48,7 +49,9 @@ intro_page    = 0
 # Room state
 current_room    = ROOM_ENTRANCE
 player_x        = 0
-player_y        = -75
+player_y        = -115
+scroll_x        = 0
+player_speed    = 5
 current_verb    = VERB_EXAMINE
 near_hs         = -1
 msg_id          = 0
@@ -84,8 +87,6 @@ def loop():
     elif screen == STATE_ENDING:
         draw_ending()
     
-    
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # TITLE SCREEN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -179,7 +180,9 @@ def enter_room(room_id):
     if room_id == ROOM_ENTRANCE:
         LOAD_LEVEL("entrance")
         player_x = 0
-        player_y = -75
+        player_y = -115
+        scroll_x = 0
+        SET_CAMERA_X(0)
         if current_music != MUSIC_EXPLORATION:
             PLAY_MUSIC("exploration")
             current_music = MUSIC_EXPLORATION
@@ -194,16 +197,38 @@ def enter_room(room_id):
 # ROOM — Update (input + logic)
 # ═══════════════════════════════════════════════════════════════════════════════
 def update_room():
-    # Player movement (horizontal only — adventure game side view)
+    # ─── Side-scroll camera ────────────────────────────────────────────
+    # player_x is in WORLD coordinates (0 .. 640+95)
+    # scroll_x is the camera offset (0 .. 640)
+    # screen_x = player_x - scroll_x  (what we draw on screen)
+    #
+    # Behaviour:
+    #   - Player at screen center (x==0) → scroll starts
+    #   - scroll_x 0..640 → player stays centered, world scrolls
+    #   - scroll_x == 0   → player can walk left to screen edge (-90)
+    #   - scroll_x == 640  → player can walk right to screen edge (+90)
+    # ───────────────────────────────────────────────────────────────────
+    debug_print(near_hs)
     joy_x = J1_X()
     if joy_x > 30:
-        player_x = player_x + 2
+        player_x = player_x + player_speed
     elif joy_x < -30:
-        player_x = player_x - 2
-    player_x = clamp(player_x, -82, 82)
+        player_x = player_x - player_speed
+
+    # Clamp player_x to world bounds: left edge = -90, right edge = 640 + 90
+    player_x = clamp(player_x, -90, 780)
+
+    # Derive ideal camera so player stays at screen center
+    # ideal_scroll = player_x  (so screen_x = player_x - scroll_x = 0)
+    # Then clamp scroll to valid range [0..670]
+    scroll_x = clamp(player_x, 0, 670)
+
+    SET_CAMERA_X(scroll_x)
 
     # Hotspot proximity check
     near_hs = -1
+    debug_print(player_x)
+    debug_print(current_room)
     if current_room == ROOM_ENTRANCE:
         check_entrance_hotspots()
 
@@ -238,13 +263,20 @@ def update_room():
     if btn1 == 0:
         prev_btn1 = 0
 
-# ─── Hotspot detection ─────────────────────────────────────────────────────────
+# ─── Hotspot detection (unrolled — codegen TODO: for-in-function) ──────────────
 def check_entrance_hotspots():
-    for i in range(0, ENT_HS_COUNT):
-        dx = player_x - ENT_HS_X[i]
-        dy = player_y - ENT_HS_Y[i]
-        if abs(dx) <= ENT_HS_W[i] and abs(dy) <= ENT_HS_H[i]:
-            near_hs = i
+    # Hotspot 0: painting/canvas
+    dx = player_x - ENT_HS_X[0]
+    dy = player_y - ENT_HS_Y[0]
+    debug_print(dx)
+    debug_print(dy)
+    if abs(dx) <= ENT_HS_W[0] and abs(dy) <= ENT_HS_H[0]:
+        near_hs = 0
+    # Hotspot 1: locked door
+    dx = player_x - ENT_HS_X[1]
+    dy = player_y - ENT_HS_Y[1]
+    if abs(dx) <= ENT_HS_W[1] and abs(dy) <= ENT_HS_H[1]:
+        near_hs = 1
 
 # ─── Interactions ──────────────────────────────────────────────────────────────
 def interact_entrance(hs):
@@ -291,39 +323,55 @@ def draw_room():
     UPDATE_LEVEL()
     SHOW_LEVEL()
 
-    # Player character
+    # Player character (draw at screen position = world_x - camera)
+    screen_x = player_x - scroll_x
     SET_INTENSITY(110)
-    DRAW_VECTOR("player", player_x, player_y)
+    DRAW_VECTOR("player", screen_x, player_y)
 
-    # HUD: current verb (top-left)
-    draw_hud()
+    # Bottom HUD: verb + hotspot name + interaction text
+    draw_bottom_hud()
 
-    # Hotspot prompt (bottom, only when no message active)
-    if near_hs >= 0 and msg_timer == 0:
-        draw_hotspot_prompt()
+# ─── Bottom HUD ────────────────────────────────────────────────────────────────
+def draw_bottom_hud():
+    # Show verb + hotspot name fused in one line
+    if near_hs >= 0:
+        SET_INTENSITY(100)
+        if current_room == ROOM_ENTRANCE:
+            draw_entrance_action_line()
+    else:
+        # No hotspot nearby — just show the verb alone
+        SET_INTENSITY(70)
+        draw_verb_indicator()
 
-    # Dialog message box (bottom third)
+    # Show interaction message below the action line
     if msg_timer > 0:
         draw_message()
 
-# ─── HUD ───────────────────────────────────────────────────────────────────────
-def draw_hud():
-    SET_INTENSITY(70)
-    if current_verb == VERB_EXAMINE:
-        PRINT_TEXT(-90, 108, "EXAMINE")
-    elif current_verb == VERB_TAKE:
-        PRINT_TEXT(-90, 108, "TAKE")
-    elif current_verb == VERB_USE:
-        PRINT_TEXT(-90, 108, "USE")
+# ─── Verb + hotspot fused lines (one line each combo) ─────────────────────────
+def draw_entrance_action_line():
+    if near_hs == ENT_HS_PAINTING:
+        if current_verb == VERB_EXAMINE:
+            PRINT_TEXT(-70, 127, "EXAMINE PAINTING")
+        elif current_verb == VERB_TAKE:
+            PRINT_TEXT(-56, 127, "TAKE PAINTING")
+        elif current_verb == VERB_USE:
+            PRINT_TEXT(-49, 127, "USE PAINTING")
+    elif near_hs == ENT_HS_DOOR:
+        if current_verb == VERB_EXAMINE:
+            PRINT_TEXT(-91, 127, "EXAMINE WORKSHOP DOOR")
+        elif current_verb == VERB_TAKE:
+            PRINT_TEXT(-77, 127, "TAKE WORKSHOP DOOR")
+        elif current_verb == VERB_USE:
+            PRINT_TEXT(-70, 127, "USE WORKSHOP DOOR")
 
-# ─── Hotspot prompt ────────────────────────────────────────────────────────────
-def draw_hotspot_prompt():
-    SET_INTENSITY(90)
-    if current_room == ROOM_ENTRANCE:
-        if near_hs == ENT_HS_PAINTING:
-            PRINT_TEXT(-49, -108, "EXAMINE PAINTING")
-        elif near_hs == ENT_HS_DOOR:
-            PRINT_TEXT(-49, -108, "WORKSHOP DOOR")
+# ─── Verb indicator (no hotspot nearby) ────────────────────────────────────────
+def draw_verb_indicator():
+    if current_verb == VERB_EXAMINE:
+        PRINT_TEXT(-42, 127, "EXAMINE")
+    elif current_verb == VERB_TAKE:
+        PRINT_TEXT(-28, 127, "TAKE")
+    elif current_verb == VERB_USE:
+        PRINT_TEXT(-21, 127, "USE")
 
 # ─── Message display ───────────────────────────────────────────────────────────
 # msg_id 1 : examined portrait
@@ -334,21 +382,21 @@ def draw_hotspot_prompt():
 def draw_message():
     SET_INTENSITY(100)
     if msg_id == 1:
-        PRINT_TEXT(-70, -75,  "THE PORTRAIT SHOWS")
-        PRINT_TEXT(-70, -88,  "VOSS IN 1887.")
+        PRINT_TEXT(-70, 114,  "THE PORTRAIT SHOWS")
+        PRINT_TEXT(-70, 101, "VOSS IN 1887.")
         SET_INTENSITY(80)
-        PRINT_TEXT(-70, -101, "A DATE... A CODE?")
+        PRINT_TEXT(-70, 88, "A DATE... A CODE?")
     elif msg_id == 2:
-        PRINT_TEXT(-70, -75, "A COMBINATION LOCK.")
-        PRINT_TEXT(-70, -88, "4 DIGIT WHEELS.")
+        PRINT_TEXT(-70, 114, "A COMBINATION LOCK.")
+        PRINT_TEXT(-70, 101, "4 DIGIT WHEELS.")
     elif msg_id == 3:
-        PRINT_TEXT(-70, -75, "YOU NEED TO FIND")
-        PRINT_TEXT(-70, -88, "THE COMBINATION.")
+        PRINT_TEXT(-70, 114, "YOU NEED TO FIND")
+        PRINT_TEXT(-70, 101, "THE COMBINATION.")
     elif msg_id == 4:
-        PRINT_TEXT(-70, -75, "YOU TRY:  1 - 8 - 8 - 7")
-        PRINT_TEXT(-70, -88, "THE DOOR CLICKS OPEN.")
+        PRINT_TEXT(-70, 114, "YOU TRY:  1 - 8 - 8 - 7")
+        PRINT_TEXT(-70, 101, "THE DOOR CLICKS OPEN.")
     elif msg_id == 5:
-        PRINT_TEXT(-63, -82, "YOU CANNOT DO THAT.")
+        PRINT_TEXT(-70, 114, "YOU CANNOT DO THAT.")
 
 # ─── Clock room stub ───────────────────────────────────────────────────────────
 # (placeholder until assets are ready)

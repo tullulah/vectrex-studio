@@ -496,7 +496,7 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
     match mnemonic.as_str() {
         // === DATA DIRECTIVES ===
         "FCC" => emit_fcc(emitter, operand),
-        "FCB" | "DB" => emit_fcb(emitter, operand),  // DB is a common alias (Frogger uses DB)
+        "FCB" | "DB" => emit_fcb(emitter, operand, equates),  // DB is a common alias (Frogger uses DB)
         "FDB" | "FDW" | "DW" => emit_fdb(emitter, operand, equates),  // DW is a common alias (Frogger uses DW)
         "RMB" => emit_rmb(emitter, operand),
         "ZMB" => emit_zmb(emitter, operand),
@@ -2710,12 +2710,18 @@ fn emit_fcc(emitter: &mut BinaryEmitter, operand: &str) -> Result<(), String> {
     Err(format!("FCC requires a quoted string: {}", operand))
 }
 
-fn emit_fcb(emitter: &mut BinaryEmitter, operand: &str) -> Result<(), String> {
+fn emit_fcb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
     // FCB $80,$FF,10 - Form Constant Byte(s)
     let parts: Vec<&str> = operand.split(',').map(|s| s.trim()).collect();
     for part in parts {
-        let value = parse_immediate(part)?;
-        emitter.emit_bytes(&[value]);
+        // Try to resolve as EQU symbol first
+        let upper = part.to_uppercase();
+        if let Some(&value) = equates.get(&upper) {
+            emitter.emit_bytes(&[value as u8]);
+        } else {
+            let value = parse_immediate(part)?;
+            emitter.emit_bytes(&[value]);
+        }
     }
     Ok(())
 }

@@ -1,0 +1,168 @@
+{
+  "version": "1.0",
+  "name": "player",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "body",
+      "visible": true,
+      "paths": [
+        {
+          "name": "hat",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -5,
+              "y": 12
+            },
+            {
+              "x": -8,
+              "y": 12
+            },
+            {
+              "x": -8,
+              "y": 11
+            },
+            {
+              "x": 8,
+              "y": 11
+            },
+            {
+              "x": 8,
+              "y": 12
+            },
+            {
+              "x": 5,
+              "y": 12
+            },
+            {
+              "x": 5,
+              "y": 20
+            },
+            {
+              "x": -5,
+              "y": 20
+            },
+            {
+              "x": -5,
+              "y": 12
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": -5,
+              "y": 5
+            },
+            {
+              "x": 5,
+              "y": 5
+            },
+            {
+              "x": 5,
+              "y": 12
+            },
+            {
+              "x": -5,
+              "y": 12
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -4,
+              "y": 5
+            },
+            {
+              "x": -8,
+              "y": -14
+            },
+            {
+              "x": 8,
+              "y": -14
+            },
+            {
+              "x": 4,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -4,
+              "y": -14
+            },
+            {
+              "x": -5,
+              "y": -22
+            }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 4,
+              "y": -14
+            },
+            {
+              "x": 5,
+              "y": -22
+            }
+          ]
+        },
+        {
+          "name": "left_arm",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -6,
+              "y": -2
+            },
+            {
+              "x": -10,
+              "y": -8
+            }
+          ]
+        },
+        {
+          "name": "right_arm",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": 6,
+              "y": -2
+            },
+            {
+              "x": 11,
+              "y": -7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 1,
+  "center_y": -1
+}

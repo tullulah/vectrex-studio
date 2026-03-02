@@ -590,7 +590,21 @@ export const EmulatorPanel: React.FC = () => {
       const joystickConfig = useJoystickStore.getState();
       const { gamepadIndex, axisXIndex, axisYIndex, axisXInverted, axisYInverted, deadzone, buttonMappings, dpadUpButton, dpadDownButton, dpadLeftButton, dpadRightButton } = joystickConfig;
 
-      if (gamepadIndex === null) return;
+      if (gamepadIndex === null) {
+        // No gamepad configured — use keyboard input (ArrowLeft/Right/Up/Down or WASD)
+        const kb = inputManager.update();
+        const kbX = kb.x / 127; // normalize -127..127 → -1..1
+        const kbY = kb.y / 127;
+        try {
+          vecx.leftHeld  = kbX < -0.3;
+          vecx.rightHeld = kbX > 0.3;
+          vecx.downHeld  = kbY < -0.3;
+          vecx.upHeld    = kbY > 0.3;
+          vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
+          vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
+        } catch {}
+        return;
+      }
 
       const gamepad = gamepads[gamepadIndex];
       if (!gamepad || !gamepad.connected) return;

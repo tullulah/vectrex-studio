@@ -74,6 +74,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     
     // DRAW_VECTOR / DRAW_VECTOR_EX variables (CRITICAL - MISSING!)
     if needed.contains("DRAW_VECTOR") || needed.contains("DRAW_VECTOR_EX") {
+        ram.allocate("DRAW_VEC_X_HI", 1, "Vector draw X high byte (16-bit screen_x)");
         ram.allocate("DRAW_VEC_X", 1, "Vector draw X offset");
         ram.allocate("DRAW_VEC_Y", 1, "Vector draw Y offset");
         ram.allocate("DRAW_VEC_INTENSITY", 1, "Vector intensity override (0=use vector data)");
@@ -114,20 +115,24 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_BG_COUNT", 1, "BG object count");
         ram.allocate("LEVEL_GP_COUNT", 1, "GP object count");
         ram.allocate("LEVEL_FG_COUNT", 1, "FG object count");
+        ram.allocate("CAMERA_X", 2, "Camera X scroll offset (16-bit signed world units)");
         ram.allocate("LEVEL_BG_ROM_PTR", 2, "BG layer ROM pointer");
         ram.allocate("LEVEL_GP_ROM_PTR", 2, "GP layer ROM pointer");
         ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");
         ram.allocate("LEVEL_GP_PTR", 2, "GP active pointer (RAM buffer after LOAD_LEVEL)");
         // SHOW_LEVEL_RUNTIME draw temps (shared with DRAW_VECTOR if not already allocated)
         if !needed.contains("DRAW_VECTOR") && !needed.contains("DRAW_VECTOR_EX") {
+            ram.allocate("DRAW_VEC_X_HI", 1, "SHOW_LEVEL: vector draw X high byte (16-bit)");
             ram.allocate("DRAW_VEC_X", 1, "SHOW_LEVEL: vector draw X");
             ram.allocate("DRAW_VEC_Y", 1, "SHOW_LEVEL: vector draw Y");
             ram.allocate("MIRROR_X", 1, "SHOW_LEVEL: mirror X flag");
             ram.allocate("MIRROR_Y", 1, "SHOW_LEVEL: mirror Y flag");
             ram.allocate("DRAW_VEC_INTENSITY", 1, "SHOW_LEVEL: intensity override");
         }
-        // GP objects RAM buffer (max 8 objects × 14 bytes)
-        ram.allocate("LEVEL_GP_BUFFER", 8 * 14, "GP objects RAM buffer (max 8 objects × 14 bytes)");
+        // Clipped-path draw loop tracker
+        ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: tracked beam X for per-segment clipping");
+        // GP objects RAM buffer (max 8 objects × 15 bytes)
+        ram.allocate("LEVEL_GP_BUFFER", 8 * 15, "GP objects RAM buffer (max 8 objects × 15 bytes)");
         // Physics / collision temporaries
         ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
         ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");

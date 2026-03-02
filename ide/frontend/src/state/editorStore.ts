@@ -13,6 +13,7 @@ interface EditorState {
   scrollPositions: Record<string, number>; // vertical scrollTop per document
   hadFocus: Record<string, boolean>; // whether doc was focused last interaction
   breakpoints: Record<string, Set<number>>; // uri -> set of line numbers (1-indexed)
+  vecClipboard: any[] | null; // global clipboard for VectorEditor copy/paste
   openDocument: (doc: DocumentModel) => void;
   setActive: (uri: string) => void;
   updateContent: (uri: string, content: string) => void;
@@ -23,6 +24,7 @@ interface EditorState {
   gotoLocation: (uri: string, line: number, column: number) => void;
   setScrollPosition: (uri: string, top: number) => void;
   setHadFocus: (uri: string, focused: boolean) => void;
+  setVecClipboard: (paths: any[] | null) => void;
   toggleBreakpoint: (uri: string, lineNumber: number) => void;
   clearAllBreakpoints: (uri?: string) => void;
   loadBreakpointsFromDb: (projectPath: string) => Promise<void>;
@@ -75,6 +77,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   scrollPositions: {},
   hadFocus: {},
   breakpoints: {}, // Initialize breakpoints map
+  vecClipboard: null,
   openDocument: (doc) => set((s) => {
     logger.debug('File', 'openDocument called with URI:', doc.uri);
     // If document already open (by uri) just activate & optionally refresh metadata
@@ -196,6 +199,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   setScrollPosition: (uri, top) => set(s => ({ scrollPositions: { ...s.scrollPositions, [uri]: top } })),
   setHadFocus: (uri, focused) => set(s => ({ hadFocus: { ...s.hadFocus, [uri]: focused } })),
+  setVecClipboard: (paths) => set({ vecClipboard: paths }),
   toggleBreakpoint: (uri, lineNumber) => {
     const s = useEditorStore.getState();
     const bps = s.breakpoints[uri] || new Set<number>();

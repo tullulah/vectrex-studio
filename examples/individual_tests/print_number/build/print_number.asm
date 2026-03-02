@@ -55,7 +55,9 @@ VLINE_DX             EQU $C880+$20   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
 VLINE_DY             EQU $C880+$21   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_COUNTER          EQU $C880+$26   ; User variable: COUNTER (2 bytes)
+TEXT_SCALE_H         EQU $C880+$26   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$27   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_COUNTER          EQU $C880+$28   ; User variable: COUNTER (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -72,6 +74,10 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDD #0
     STD VAR_COUNTER
     ; === Initialize Joystick (one-time setup) ===
@@ -191,11 +197,17 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -275,12 +287,18 @@ VECTREX_PRINT_NUMBER:
     LDA #$D0
     TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
     JSR Reset0Ref    ; Reset beam to center before positioning text
+    LDU #NUM_STR     ; String pointer
+    LDA >TEXT_SCALE_H ; height (signed byte)
+    STA >$C82A       ; Vec_Text_Height: character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte)
+    STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
-    LDU #NUM_STR     ; String pointer
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    LDA #$F8
+    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B       ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; Restore DP to $C8
     RTS
 

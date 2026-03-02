@@ -40,12 +40,15 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 return;
             }
 
+            // Check if this is a function parameter → use VAR_ARGn
+            let var_label = resolve_var_label(&id.name);
+
             // Variable references use uppercase labels
             // Check variable size: use LDB + sign/zero-extend for 8-bit, LDD for 16-bit
             let size = context::get_var_size(&id.name);
             if size.bytes == 1 {
                 // 8-bit load: LDB then extend to 16-bit in D (use > for extended addressing)
-                out.push_str(&format!("    LDB >VAR_{}\n", id.name.to_uppercase()));
+                out.push_str(&format!("    LDB >{}\n", var_label));
                 if size.signed {
                     out.push_str("    SEX             ; Sign-extend B -> D\n");
                 } else {
@@ -54,7 +57,7 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 out.push_str("    STD RESULT\n");
             } else {
                 // 16-bit load: standard LDD (use > for extended addressing)
-                out.push_str(&format!("    LDD >VAR_{}\n", id.name.to_uppercase()));
+                out.push_str(&format!("    LDD >{}\n", var_label));
                 out.push_str("    STD RESULT\n");
             }
         }
@@ -367,5 +370,15 @@ fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]
         // 16-bit element: standard LDD
         out.push_str("    LDD ,X      ; Load 16-bit value\n");
         out.push_str("    STD RESULT\n");
+    }
+}
+
+/// Resolve a variable name to its ASM label.
+/// If the name is a function parameter, returns VAR_ARGn; otherwise VAR_NAME.
+pub fn resolve_var_label(name: &str) -> String {
+    if let Some(idx) = context::get_param_index(name) {
+        format!("VAR_ARG{}", idx)
+    } else {
+        format!("VAR_{}", name.to_uppercase())
     }
 }

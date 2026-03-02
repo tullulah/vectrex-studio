@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "name": "door_unlock",
+  "category": "custom",
+  "duration_ms": 400,
+
+  "oscillator": {
+    "frequency": 330,
+    "channel": 0,
+    "duty": 25
+  },
+
+  "envelope": {
+    "attack": 0,
+    "decay": 40,
+    "sustain": 6,
+    "release": 250,
+    "peak": 14
+  },
+
+  "pitch": {
+    "enabled": true,
+    "start_mult": 2.5,
+    "end_mult": 0.4,
+    "curve": -3
+  },
+
+  "noise": {
+    "enabled": true,
+    "period": 6,
+    "volume": 8,
+    "decay_ms": 180
+  },
+
+  "modulation": {
+    "arpeggio": false,
+    "arpeggio_notes": [],
+    "arpeggio_speed": 50,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 8
+  }
+}

@@ -90,6 +90,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("DEBUG_PRINT", 1),           // value
     ("DEBUG_PRINT_LABELED", 2),   // label, value
     ("DEBUG_PRINT_STR", 1),       // string
+
+    // Level camera
+    ("SET_CAMERA_X", 1),          // camera_x (16-bit scroll offset)
 ];
 
 /// Get expected arity for a builtin (None if not a builtin)
@@ -629,7 +632,7 @@ pub fn emit_builtin(
             true
         }
         
-        // Level System (6 builtins)
+        // Level System (7 builtins)
         "LOAD_LEVEL" => {
             level::emit_load_level(args, out, assets);
             true
@@ -652,6 +655,10 @@ pub fn emit_builtin(
         }
         "GET_LEVEL_TILE" => {
             level::emit_get_level_tile(args, out);
+            true
+        }
+        "SET_CAMERA_X" => {
+            level::emit_set_camera_x(args, out, assets);
             true
         }
         

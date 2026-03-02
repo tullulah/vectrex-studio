@@ -296,6 +296,7 @@ impl VecResource {
         
         // Emit asset constants for runtime calculations
         asm.push_str(&format!("_{}_WIDTH EQU {}\n", symbol_name, width));
+        asm.push_str(&format!("_{}_HALF_WIDTH EQU {}\n", symbol_name, width / 2));
         asm.push_str(&format!("_{}_CENTER_X EQU {}\n", symbol_name, center_x));
         asm.push_str(&format!("_{}_CENTER_Y EQU {}\n", symbol_name, center_y));
         asm.push_str("\n");

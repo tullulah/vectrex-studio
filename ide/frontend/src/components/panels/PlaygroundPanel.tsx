@@ -43,6 +43,10 @@ export function PlaygroundPanel() {
   const { t } = useTranslation();
   const { vpyProject } = useProjectStore();
   const canvasRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+  const [isPanning, setIsPanning] = useState(false);
   const [objects, setObjects] = useState<SceneObject[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [availableVectors, setAvailableVectors] = useState<string[]>([]);
@@ -67,6 +71,8 @@ export function PlaygroundPanel() {
   const [activeTool, setActiveTool] = useState<'select' | 'hotspot'>('select');
   const [draggingHotspotId, setDraggingHotspotId] = useState<string | null>(null);
   const [hotspotDragOffset, setHotspotDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [widthScreens, setWidthScreens] = useState(1);
+  const [heightScreens, setHeightScreens] = useState(1);
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -84,6 +90,13 @@ export function PlaygroundPanel() {
   const VECTREX_X_MAX = 95;
   const VECTREX_Y_MIN = -128;
   const VECTREX_Y_MAX = 127;
+
+  // World bounds derived from screen count
+  const SVG_SCALE = 3; // pixels per Vectrex unit
+  const worldXMin = VECTREX_X_MIN;
+  const worldXMax = VECTREX_X_MIN + 192 * widthScreens - 1;
+  const worldYMax = VECTREX_Y_MAX;
+  const worldYMin = VECTREX_Y_MAX - 256 * heightScreens + 1;
 
   // Load available vectors from project config
   useEffect(() => {
@@ -259,8 +272,8 @@ export function PlaygroundPanel() {
           // Boundary collisions based on physics type (with radius)
           if (physicsType !== 'static') {
             // Horizontal walls (left/right)
-            if (newX - objRadius <= VECTREX_X_MIN) {
-              newX = VECTREX_X_MIN + objRadius;
+            if (newX - objRadius <= worldXMin) {
+              newX = worldXMin + objRadius;
               if (physicsType === 'bounce') {
                 velX = -velX; // Perfect bounce
               } else if (physicsType === 'gravity') {
@@ -268,8 +281,8 @@ export function PlaygroundPanel() {
               } else if (physicsType === 'projectile') {
                 velX = 0; // Stop
               }
-            } else if (newX + objRadius >= VECTREX_X_MAX) {
-              newX = VECTREX_X_MAX - objRadius;
+            } else if (newX + objRadius >= worldXMax) {
+              newX = worldXMax - objRadius;
               if (physicsType === 'bounce') {
                 velX = -velX;
               } else if (physicsType === 'gravity') {
@@ -280,8 +293,8 @@ export function PlaygroundPanel() {
             }
 
             // Vertical walls (floor/ceiling)
-            if (newY - objRadius <= VECTREX_Y_MIN) {
-              newY = VECTREX_Y_MIN + objRadius + 0.5; // Keep object fully visible + safety margin
+            if (newY - objRadius <= worldYMin) {
+              newY = worldYMin + objRadius + 0.5; // Keep object fully visible + safety margin
               if (physicsType === 'bounce') {
                 velY = -velY; // Perfect bounce - maintains speed
               } else if (physicsType === 'gravity') {
@@ -290,8 +303,8 @@ export function PlaygroundPanel() {
               } else if (physicsType === 'projectile') {
                 velY = 0; // Stop on ground
               }
-            } else if (newY + objRadius >= VECTREX_Y_MAX) {
-              newY = VECTREX_Y_MAX - objRadius - 0.5; // Keep object fully visible + safety margin
+            } else if (newY + objRadius >= worldYMax) {
+              newY = worldYMax - objRadius - 0.5; // Keep object fully visible + safety margin
               if (physicsType === 'bounce') {
                 velY = -velY; // Perfect bounce from ceiling
               } else if (physicsType === 'gravity') {
@@ -398,10 +411,10 @@ export function PlaygroundPanel() {
           description: `Created in Playground - ${new Date().toISOString().split('T')[0]}`
         },
         worldBounds: {
-          xMin: -96,
-          xMax: 95,
-          yMin: -128,
-          yMax: 127
+          xMin: worldXMin,
+          xMax: worldXMax,
+          yMin: worldYMin,
+          yMax: worldYMax,
         },
         layers: {
           background: objects.filter(obj => obj.layer === 'background').map(obj => ({
@@ -506,6 +519,18 @@ export function PlaygroundPanel() {
         loadedObjects.push(...sceneData.objects);
       }
       
+      // Restore world bounds (screen count) from saved data
+      if (sceneData.worldBounds) {
+        const wScreens = Math.max(1, Math.round(
+          (sceneData.worldBounds.xMax - sceneData.worldBounds.xMin + 1) / 192
+        ));
+        const hScreens = Math.max(1, Math.round(
+          (sceneData.worldBounds.yMax - sceneData.worldBounds.yMin + 1) / 256
+        ));
+        setWidthScreens(wScreens);
+        setHeightScreens(hScreens);
+      }
+
       setObjects(loadedObjects);
       setHotspots(sceneData.hotspots || []);
       setSelectedHotspotId(null);
@@ -554,8 +579,8 @@ export function PlaygroundPanel() {
     const y = e.clientY - rect.top;
 
     // Convert screen coordinates to Vectrex coordinates
-    const vecX = Math.round((x / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
-    const vecY = Math.round(VECTREX_Y_MAX - (y / rect.height) * VECTREX_HEIGHT);
+    const vecX = Math.round((x / rect.width) * (192 * widthScreens) + worldXMin);
+    const vecY = Math.round(worldYMax - (y / rect.height) * (256 * heightScreens));
 
     const newObject: SceneObject = {
       id: `obj_${Date.now()}`,
@@ -595,8 +620,8 @@ export function PlaygroundPanel() {
     const mouseY = e.clientY - rect.top;
 
     // Convert to Vectrex coordinates
-    const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
-    const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+    const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+    const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
 
     setDraggingObjectId(objId);
     setDragOffset({ x: vecX - obj.x, y: vecY - obj.y });
@@ -621,8 +646,8 @@ export function PlaygroundPanel() {
     const mouseY = e.clientY - rect.top;
 
     // Convert to Vectrex coordinates
-    const vecX = ((mouseX / rect.width) * (VECTREX_X_MAX - VECTREX_X_MIN)) + VECTREX_X_MIN;
-    const vecY = VECTREX_Y_MAX - ((mouseY / rect.height) * (VECTREX_Y_MAX - VECTREX_Y_MIN));
+    const vecX = (mouseX / rect.width) * (192 * widthScreens) + worldXMin;
+    const vecY = worldYMax - (mouseY / rect.height) * (256 * heightScreens);
 
     // Calculate velocity from mouse position relative to object
     const dx = vecX - selectedObj.x;
@@ -637,14 +662,38 @@ export function PlaygroundPanel() {
     ));
   };
 
+  // Middle mouse button: start pan
+  const handleCanvasMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      isPanningRef.current = true;
+      setIsPanning(true);
+      panStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        scrollLeft: containerRef.current?.scrollLeft ?? 0,
+        scrollTop: containerRef.current?.scrollTop ?? 0,
+      };
+    }
+  };
+
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    // Middle mouse pan
+    if (isPanningRef.current && containerRef.current) {
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
+      containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+      return;
+    }
+
     if (draggingHotspotId && hotspotDragOffset) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
-      const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
       setHotspots(prev => prev.map(hs =>
         hs.id === draggingHotspotId
           ? { ...hs, x: vecX - hotspotDragOffset.x, y: vecY - hotspotDragOffset.y }
@@ -665,8 +714,8 @@ export function PlaygroundPanel() {
     const mouseY = e.clientY - rect.top;
 
     // Convert to Vectrex coordinates
-    const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
-    const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+    const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+    const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
 
     // Update object position
     setObjects(objects.map(obj => 
@@ -677,6 +726,8 @@ export function PlaygroundPanel() {
   };
 
   const handleCanvasMouseUp = () => {
+    isPanningRef.current = false;
+    setIsPanning(false);
     setDraggingObjectId(null);
     setDragOffset(null);
     setDraggingVelocity(false);
@@ -687,8 +738,8 @@ export function PlaygroundPanel() {
   // Convert Vectrex coordinates to SVG viewport coordinates
   const vecToSvg = (x: number, y: number) => {
     return {
-      x: x - VECTREX_X_MIN,
-      y: VECTREX_Y_MAX - y,
+      x: x - worldXMin,
+      y: worldYMax - y,
     };
   };
 
@@ -705,8 +756,8 @@ export function PlaygroundPanel() {
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
-      const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
 
       const newHotspot: VPlayHotspot = {
         id: `hs_${Date.now()}`,
@@ -746,8 +797,8 @@ export function PlaygroundPanel() {
       if (!rect) return;
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      const vecX = Math.round((mouseX / rect.width) * VECTREX_WIDTH + VECTREX_X_MIN);
-      const vecY = Math.round(VECTREX_Y_MAX - (mouseY / rect.height) * VECTREX_HEIGHT);
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
       setDraggingHotspotId(hs.id);
       setHotspotDragOffset({ x: vecX - hs.x, y: vecY - hs.y });
     };
@@ -894,6 +945,7 @@ export function PlaygroundPanel() {
       flexDirection: 'column',
       height: '100%',
       width: '100%',
+      overflow: 'hidden',
       backgroundColor: '#1e1e1e',
       color: '#d4d4d4',
     }}>
@@ -992,6 +1044,28 @@ export function PlaygroundPanel() {
         >
           {editingVelocity ? '🎯 Editing Velocity' : '➡ Set Velocity'}
         </button>
+        <div style={{ borderLeft: '1px solid #555', height: '24px', margin: '0 4px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: '#888', fontSize: 11 }}>W</span>
+          <input
+            type="number"
+            min={1}
+            max={8}
+            value={widthScreens}
+            onChange={e => setWidthScreens(Math.max(1, Math.min(8, parseInt(e.target.value) || 1)))}
+            style={{ width: 36, background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: 3, padding: '2px 4px', fontSize: 11 }}
+          />
+          <span style={{ color: '#888', fontSize: 11 }}>H</span>
+          <input
+            type="number"
+            min={1}
+            max={8}
+            value={heightScreens}
+            onChange={e => setHeightScreens(Math.max(1, Math.min(8, parseInt(e.target.value) || 1)))}
+            style={{ width: 36, background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: 3, padding: '2px 4px', fontSize: 11 }}
+          />
+          <span style={{ color: '#555', fontSize: 10 }}>screens</span>
+        </div>
         <div style={{ flex: 1 }} />
         <button
           onClick={() => {
@@ -1058,10 +1132,12 @@ export function PlaygroundPanel() {
         {/* Asset Palette */}
         <div style={{
           width: '200px',
+          flexShrink: 0,
           borderRight: '1px solid #3e3e3e',
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
+          overflow: 'hidden',
         }}>
           <h3 style={{ fontSize: '12px', margin: '12px 12px 8px 12px', color: '#888', flexShrink: 0 }}>
             VECTORS
@@ -1101,23 +1177,14 @@ export function PlaygroundPanel() {
         </div>
 
         {/* Canvas Area */}
-        <div style={{
+        <div ref={containerRef} style={{
           flex: 1,
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'center',
+          overflow: 'auto',
           padding: '20px',
-          overflow: 'hidden',
           minWidth: 0,
           minHeight: 0,
         }}>
-          <div style={{
-            width: '100%',
-            maxWidth: '600px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'center',
-          }}>
+          <div style={{ width: 'fit-content' }}>
             <svg
               ref={canvasRef}
               onDrop={handleDrop}
@@ -1125,16 +1192,16 @@ export function PlaygroundPanel() {
               onMouseMove={handleCanvasMouseMove}
               onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleCanvasMouseUp}
+              onMouseDown={handleCanvasMouseDown}
               onClick={handleCanvasClick}
-              viewBox={`0 0 ${VECTREX_WIDTH} ${VECTREX_HEIGHT}`}
-              preserveAspectRatio="xMidYMid meet"
+              viewBox={`0 0 ${192 * widthScreens} ${256 * heightScreens}`}
               style={{
-                width: '100%',
-                height: 'auto',
-                aspectRatio: '3 / 4',
+                width: `${192 * widthScreens * SVG_SCALE}px`,
+                height: `${256 * heightScreens * SVG_SCALE}px`,
+                display: 'block',
                 backgroundColor: '#000',
                 border: `2px solid ${activeTool === 'hotspot' ? '#ffaa00' : '#00ff00'}`,
-                cursor: activeTool === 'hotspot' ? 'crosshair' : 'default',
+                cursor: isPanning ? 'grabbing' : activeTool === 'hotspot' ? 'crosshair' : 'default',
               }}
             >
             {/* Grid */}
@@ -1146,14 +1213,24 @@ export function PlaygroundPanel() {
                 <polygon points="0 0, 10 3, 0 6" fill="#ff8000" />
               </marker>
             </defs>
-            <rect width={VECTREX_WIDTH} height={VECTREX_HEIGHT} fill="url(#grid)" />
+            <rect width={192 * widthScreens} height={256 * heightScreens} fill="url(#grid)" />
 
-            {/* Axes */}
-            <line x1="0" y1={VECTREX_HEIGHT / 2} x2={VECTREX_WIDTH} y2={VECTREX_HEIGHT / 2} stroke="#00ff0040" strokeWidth="1" />
-            <line x1={VECTREX_WIDTH / 2} y1="0" x2={VECTREX_WIDTH / 2} y2={VECTREX_HEIGHT} stroke="#00ff0040" strokeWidth="1" />
+            {/* Axes through Vectrex origin (0,0) */}
+            <line x1="0" y1={worldYMax} x2={192 * widthScreens} y2={worldYMax} stroke="#00ff0040" strokeWidth="1" />
+            <line x1={-worldXMin} y1="0" x2={-worldXMin} y2={256 * heightScreens} stroke="#00ff0040" strokeWidth="1" />
 
-            {/* Center marker */}
-            <circle cx={VECTREX_WIDTH / 2} cy={VECTREX_HEIGHT / 2} r="3" fill="#00ff00" opacity="0.5" />
+            {/* Origin marker */}
+            <circle cx={-worldXMin} cy={worldYMax} r="3" fill="#00ff00" opacity="0.5" />
+
+            {/* Screen boundary lines */}
+            {Array.from({ length: widthScreens - 1 }, (_, i) => (
+              <line key={`vb-${i}`} x1={(i + 1) * 192} y1={0} x2={(i + 1) * 192} y2={256 * heightScreens}
+                stroke="#334433" strokeWidth="1" strokeDasharray="4 4" />
+            ))}
+            {Array.from({ length: heightScreens - 1 }, (_, i) => (
+              <line key={`hb-${i}`} x1={0} y1={(i + 1) * 256} x2={192 * widthScreens} y2={(i + 1) * 256}
+                stroke="#334433" strokeWidth="1" strokeDasharray="4 4" />
+            ))}
 
             {/* Render hotspots below objects */}
             {hotspots.map(hs => renderHotspot(hs))}
@@ -1174,9 +1251,11 @@ export function PlaygroundPanel() {
         {/* Properties Panel */}
         <div style={{
           width: '250px',
+          flexShrink: 0,
           borderLeft: '1px solid #3e3e3e',
           padding: '12px',
           overflowY: 'auto',
+          minHeight: 0,
         }}>
           <h3 style={{ fontSize: '12px', margin: '0 0 8px 0', color: '#888' }}>
             PROPERTIES

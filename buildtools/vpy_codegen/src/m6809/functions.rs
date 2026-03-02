@@ -304,9 +304,17 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
 }
 
 fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
+    // Set parameter mapping so identifiers referencing params use VAR_ARGn
+    if !func.params.is_empty() {
+        context::set_current_params(&func.params);
+    }
     // Generate code for each statement
     for stmt in &func.body {
         generate_statement(stmt, asm, assets)?;
+    }
+    // Clear parameter mapping after function body
+    if !func.params.is_empty() {
+        context::clear_current_params();
     }
     Ok(())
 }
@@ -321,15 +329,16 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     expressions::emit_simple_expr(value, asm, assets);
 
                     // 2. Store to variable with correct width dispatch
+                    let var_label = expressions::resolve_var_label(name);
                     let size = context::get_var_size(name);
                     if size.bytes == 1 {
                         // 8-bit store: take low byte from RESULT and store with STB
                         asm.push_str("    LDB RESULT+1    ; Load low byte\n");
-                        asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+                        asm.push_str(&format!("    STB {}\n", var_label));
                     } else {
                         // 16-bit store: standard STD
                         asm.push_str("    LDD RESULT\n");
-                        asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                        asm.push_str(&format!("    STD {}\n", var_label));
                     }
                 }
                 
@@ -401,8 +410,9 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             // Load current value, save to TMPVAL, evaluate right side, perform op
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
-                    // IMPORTANT: Convert name to uppercase for consistency with variable allocation
-                    asm.push_str(&format!("    LDD >VAR_{}\n", name.to_uppercase()));
+                    // IMPORTANT: Resolve to VAR_ARGn if this is a function parameter
+                    let var_label = expressions::resolve_var_label(name);
+                    asm.push_str(&format!("    LDD >{}\n", var_label));
                     asm.push_str("    STD TMPVAL          ; Save left operand\n");
 
                     // Evaluate right side
@@ -420,8 +430,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                         _ => return Err(format!("Aug-assign {:?} not yet supported", op)),
                     }
 
-                    // Store back (uppercase for consistency)
-                    asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                    // Store back
+                    asm.push_str(&format!("    STD {}\n", var_label));
                 }
                 _ => return Err("Complex assignment targets not yet supported".to_string()),
             }

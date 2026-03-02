@@ -1,0 +1,169 @@
+{
+  "version": "1.0",
+  "name": "door_locked",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "door",
+      "visible": true,
+      "paths": [
+        {
+          "name": "door_frame",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {"x": -11, "y": -25},
+            {"x": -11, "y":  20},
+            {"x":  -5, "y":  28},
+            {"x":   5, "y":  28},
+            {"x":  11, "y":  20},
+            {"x":  11, "y": -25},
+            {"x": -11, "y": -25}
+          ]
+        },
+        {
+          "name": "door_panel_top",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -8, "y":   5},
+            {"x": -8, "y":  18},
+            {"x":  8, "y":  18},
+            {"x":  8, "y":   5},
+            {"x": -8, "y":   5}
+          ]
+        },
+        {
+          "name": "door_panel_bot",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -8, "y": -22},
+            {"x": -8, "y":  -2},
+            {"x":  8, "y":  -2},
+            {"x":  8, "y": -22},
+            {"x": -8, "y": -22}
+          ]
+        },
+        {
+          "name": "plank_line",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": 0, "y": -25},
+            {"x": 0, "y":  28}
+          ]
+        },
+        {
+          "name": "hinge_top",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":  8, "y": 15},
+            {"x": 11, "y": 15},
+            {"x": 11, "y": 12},
+            {"x":  8, "y": 12}
+          ]
+        },
+        {
+          "name": "hinge_bot",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":  8, "y": -15},
+            {"x": 11, "y": -15},
+            {"x": 11, "y": -18},
+            {"x":  8, "y": -18}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lock",
+      "visible": true,
+      "paths": [
+        {
+          "name": "lock_body",
+          "intensity": 120,
+          "closed": false,
+          "points": [
+            {"x": -7, "y":  -3},
+            {"x": -7, "y": -13},
+            {"x":  7, "y": -13},
+            {"x":  7, "y":  -3},
+            {"x": -7, "y":  -3}
+          ]
+        },
+        {
+          "name": "wheel_1",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x": -5, "y": -5},
+            {"x": -4, "y": -3},
+            {"x": -5, "y": -1},
+            {"x": -6, "y": -3}
+          ]
+        },
+        {
+          "name": "wheel_2",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x": -2, "y": -5},
+            {"x": -1, "y": -3},
+            {"x": -2, "y": -1},
+            {"x": -3, "y": -3}
+          ]
+        },
+        {
+          "name": "wheel_3",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x":  1, "y": -5},
+            {"x":  2, "y": -3},
+            {"x":  1, "y": -1},
+            {"x":  0, "y": -3}
+          ]
+        },
+        {
+          "name": "wheel_4",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x": 4, "y": -5},
+            {"x": 5, "y": -3},
+            {"x": 4, "y": -1},
+            {"x": 3, "y": -3}
+          ]
+        },
+        {
+          "name": "keyhole_stem",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {"x":  0, "y": -14},
+            {"x":  1, "y": -16},
+            {"x":  1, "y": -18},
+            {"x": -1, "y": -18},
+            {"x": -1, "y": -16},
+            {"x":  0, "y": -14}
+          ]
+        },
+        {
+          "name": "keyhole_circle",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {"x":  0, "y": -14},
+            {"x":  1, "y": -15},
+            {"x":  0, "y": -16},
+            {"x": -1, "y": -15},
+            {"x":  0, "y": -14}
+          ]
+        }
+      ]
+    }
+  ]
+}

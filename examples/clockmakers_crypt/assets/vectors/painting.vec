@@ -1,0 +1,131 @@
+{
+  "version": "1.0",
+  "name": "painting",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "frame",
+      "visible": true,
+      "paths": [
+        {
+          "name": "outer_frame",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {"x": -14, "y":  16},
+            {"x":  14, "y":  16},
+            {"x":  14, "y": -16},
+            {"x": -14, "y": -16},
+            {"x": -14, "y":  16}
+          ]
+        },
+        {
+          "name": "inner_frame",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -11, "y":  13},
+            {"x":  11, "y":  13},
+            {"x":  11, "y": -13},
+            {"x": -11, "y": -13},
+            {"x": -11, "y":  13}
+          ]
+        },
+        {
+          "name": "corner_tl",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -14, "y": 16},
+            {"x": -16, "y": 18},
+            {"x": -12, "y": 18},
+            {"x": -14, "y": 16}
+          ]
+        },
+        {
+          "name": "corner_tr",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": 14, "y": 16},
+            {"x": 16, "y": 18},
+            {"x": 12, "y": 18},
+            {"x": 14, "y": 16}
+          ]
+        },
+        {
+          "name": "corner_bl",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -14, "y": -16},
+            {"x": -16, "y": -18},
+            {"x": -12, "y": -18},
+            {"x": -14, "y": -16}
+          ]
+        },
+        {
+          "name": "corner_br",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": 14, "y": -16},
+            {"x": 16, "y": -18},
+            {"x": 12, "y": -18},
+            {"x": 14, "y": -16}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "portrait",
+      "visible": true,
+      "paths": [
+        {
+          "name": "face_oval",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -6, "y":  10},
+            {"x":  6, "y":  10},
+            {"x":  8, "y":   4},
+            {"x":  8, "y":  -6},
+            {"x":  6, "y": -12},
+            {"x": -6, "y": -12},
+            {"x": -8, "y":  -6},
+            {"x": -8, "y":   4},
+            {"x": -6, "y":  10}
+          ]
+        },
+        {
+          "name": "eye_left",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -3, "y": 3},
+            {"x": -2, "y": 3}
+          ]
+        },
+        {
+          "name": "eye_right",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": 2, "y": 3},
+            {"x": 3, "y": 3}
+          ]
+        },
+        {
+          "name": "mustache",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -4, "y": -2},
+            {"x":  0, "y": -4},
+            {"x":  4, "y": -2}
+          ]
+        }
+      ]
+    }
+  ]
+}

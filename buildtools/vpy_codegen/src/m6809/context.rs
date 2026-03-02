@@ -45,6 +45,10 @@ thread_local! {
 
     /// Interleaved frames count (2 or 3). 0 means disabled.
     static INTERLEAVED_N: RefCell<u8> = RefCell::new(0);
+
+    /// Map of current function parameter names (lowercase) → ARG index (0-4).
+    /// When set, identifiers matching a param are emitted as VAR_ARGn instead of VAR_NAME.
+    static CURRENT_PARAMS: RefCell<HashMap<String, usize>> = RefCell::new(HashMap::new());
 }
 
 /// Initialize the mutable arrays context
@@ -133,6 +137,34 @@ pub fn get_interleaved_n() -> u8 {
     INTERLEAVED_N.with(|inl| *inl.borrow())
 }
 
+/// Set the current function's parameter mapping (param name lowercase → ARG index).
+/// Call at the start of generating a user function with parameters.
+pub fn set_current_params(params: &[String]) {
+    CURRENT_PARAMS.with(|cp| {
+        let mut map = cp.borrow_mut();
+        map.clear();
+        for (i, p) in params.iter().enumerate().take(5) {
+            map.insert(p.to_lowercase(), i);
+        }
+    });
+}
+
+/// Clear the current function parameter mapping.
+/// Call after generating a user function body.
+pub fn clear_current_params() {
+    CURRENT_PARAMS.with(|cp| {
+        cp.borrow_mut().clear();
+    });
+}
+
+/// Look up whether a variable name is a function parameter.
+/// Returns Some(index) if it is (should use VAR_ARGn), None if not.
+pub fn get_param_index(name: &str) -> Option<usize> {
+    CURRENT_PARAMS.with(|cp| {
+        cp.borrow().get(&name.to_lowercase()).copied()
+    })
+}
+
 /// Clear all compilation context (mutable arrays, variable sizes, const values, frame groups)
 pub fn clear_context() {
     MUTABLE_ARRAYS.with(|ma| {
@@ -147,6 +179,9 @@ pub fn clear_context() {
     });
     INTERLEAVED_N.with(|inl| {
         *inl.borrow_mut() = 0;
+    });
+    CURRENT_PARAMS.with(|cp| {
+        cp.borrow_mut().clear();
     });
 }
 

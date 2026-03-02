@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "name": "item_pickup",
+  "category": "pickup",
+  "duration_ms": 200,
+
+  "oscillator": {
+    "frequency": 880,
+    "channel": 0,
+    "duty": 50
+  },
+
+  "envelope": {
+    "attack": 0,
+    "decay": 10,
+    "sustain": 11,
+    "release": 120,
+    "peak": 15
+  },
+
+  "pitch": {
+    "enabled": true,
+    "start_mult": 0.9,
+    "end_mult": 1.2,
+    "curve": 1
+  },
+
+  "noise": {
+    "enabled": false,
+    "period": 15,
+    "volume": 0,
+    "decay_ms": 100
+  },
+
+  "modulation": {
+    "arpeggio": true,
+    "arpeggio_notes": [0, 12],
+    "arpeggio_speed": 80,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 8
+  }
+}

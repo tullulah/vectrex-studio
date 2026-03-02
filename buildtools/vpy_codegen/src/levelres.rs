@@ -340,8 +340,12 @@ impl VPlayLevel {
         let vector_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase());
         out.push_str(&format!("    FDB {}  ; vector_ptr\n", vector_label));
         
-        // Properties pointer (for now, null - future: custom data)
-        out.push_str("    FDB 0  ; properties_ptr (reserved)\n");
+        // Bytes +18-19: half_width (for visibility culling) + reserved
+        // When copied to RAM, LDD ,X++ picks these up as high:low of the FDB word,
+        // so RAM+13 = half_width (A), RAM+14 = 0 (B).
+        let half_width_label = format!("_{}_HALF_WIDTH", obj.vector_name.to_uppercase());
+        out.push_str(&format!("    FCB {}  ; half_width (visual cull margin, ROM+18)\n", half_width_label));
+        out.push_str("    FCB 0  ; reserved (ROM+19)\n");
         
         out.push_str("\n");
         out

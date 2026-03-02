@@ -10,6 +10,7 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useEditorStore } from '../state/editorStore.js';
 
 // Types from the .vec format
 interface Point {
@@ -621,12 +622,13 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   
-  // Circle/Arc tool settings
+  // Circle/Arc/Polygon tool settings
   const [circleSegments, setCircleSegments] = useState(16);
   const [arcStartAngle, setArcStartAngle] = useState(0);
   const [arcEndAngle, setArcEndAngle] = useState(180);
   const [circleCenter, setCircleCenter] = useState<Point | null>(null);
   const [circleRadius, setCircleRadius] = useState(0);
+  const [polygonSides, setPolygonSides] = useState(6);
   
   // Undo/Redo history
   const [history, setHistory] = useState<VecResource[]>([]);
@@ -773,6 +775,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
   const [boxStart, setBoxStart] = useState<{ x: number; y: number } | null>(null);
   const [boxEnd, setBoxEnd] = useState<{ x: number; y: number } | null>(null);
+
+  // Subtract selection mode (Shift+drag box = remove from selection)
+  const [isSubtractSelect, setIsSubtractSelect] = useState(false);
+
+  // Move mode toggle (M key — drag from empty space to move all selected points)
+  const [isMoveMode, setIsMoveMode] = useState(false);
+
+  // Multi-point drag: snapshot positions at mouseDown, apply delta each frame
+  const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null);
+  const dragStartResCoordRef = useRef<{ x: number; y: number } | null>(null);
   
   // Helper functions for circle/arc generation
   const generateCirclePoints = (center: Point, radius: number, segments: number, closed: boolean = true): Point[] => {
@@ -790,6 +802,23 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     return points;
   };
   
+  const generatePolygonPoints = (center: Point, radius: number, sides: number): Point[] => {
+    const points: Point[] = [];
+    const angleStep = (Math.PI * 2) / sides;
+    // Start from top (-PI/2) so flat edge is at bottom for even sided polygons
+    const startAngle = -Math.PI / 2;
+    for (let i = 0; i < sides; i++) {
+      const angle = startAngle + i * angleStep;
+      points.push({
+        x: Math.round(center.x + Math.cos(angle) * radius),
+        y: Math.round(center.y + Math.sin(angle) * radius),
+      });
+    }
+    // Close: add first point again
+    points.push({ ...points[0] });
+    return points;
+  };
+
   const generateArcPoints = (center: Point, radius: number, startAngle: number, endAngle: number, segments: number): Point[] => {
     const points: Point[] = [];
     const startRad = (startAngle * Math.PI) / 180;
@@ -1170,6 +1199,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const { center: previewCenter, radius: previewRadius, tool: previewTool } = circlePreview;
       const previewPoints = previewTool === 'circle'
         ? generateCirclePoints(previewCenter, previewRadius, circleSegments, true)
+        : previewTool === 'polygon'
+        ? generatePolygonPoints(previewCenter, previewRadius, polygonSides)
         : generateArcPoints(previewCenter, previewRadius, arcStartAngle, arcEndAngle, circleSegments);
 
       ctx.strokeStyle = '#00ff00';
@@ -1184,7 +1215,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           const pt = resourceToCanvas(previewPoints[i]);
           ctx.lineTo(pt.x, pt.y);
         }
-        if (previewTool === 'circle') {
+        if (previewTool === 'circle' || previewTool === 'polygon') {
           ctx.closePath();
         }
       }
@@ -1219,10 +1250,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     // Draw box selection rectangle
     if (isBoxSelecting && boxStart && boxEnd) {
-      ctx.strokeStyle = '#00aaff';
+      const selectColor = isSubtractSelect ? '#ff4444' : '#00aaff';
+      ctx.strokeStyle = selectColor;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
-      ctx.fillStyle = 'rgba(0, 170, 255, 0.1)';
+      ctx.fillStyle = isSubtractSelect ? 'rgba(255, 68, 68, 0.1)' : 'rgba(0, 170, 255, 0.1)';
       const x = Math.min(boxStart.x, boxEnd.x);
       const y = Math.min(boxStart.y, boxEnd.y);
       const w = Math.abs(boxEnd.x - boxStart.x);
@@ -1230,6 +1262,17 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.fillRect(x, y, w, h);
       ctx.strokeRect(x, y, w, h);
       ctx.setLineDash([]);
+      // Draw +/- indicator in corner of selection box
+      ctx.font = 'bold 14px monospace';
+      ctx.fillStyle = selectColor;
+      ctx.fillText(isSubtractSelect ? '\u2212' : '+', x + 4, y + 16);
+    }
+
+    // Draw MOVE mode indicator
+    if (isMoveMode) {
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillText('MOVE', 8, 18);
     }
     
     // Draw preview paths (edge detection preview)
@@ -1289,7 +1332,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode]);
 
   useEffect(() => {
     draw();
@@ -1422,8 +1465,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     if (currentTool === 'pen') {
       setTempPoints([...tempPoints, point]);
       setIsDrawing(true);
-    } else if (currentTool === 'circle' || currentTool === 'arc') {
-      // Start drawing circle/arc - set center
+    } else if (currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') {
+      // Start drawing circle/arc/polygon - set center
       setCircleCenter(point);
       setCircleRadius(0);
       setIsDrawing(true);
@@ -1486,12 +1529,24 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         if (closestPoint >= 0) {
           setSelectedPointIndex(closestPoint);
           const key = `${closestPath}-${closestPoint}`;
+          let newSelection: Set<string>;
           if (e.shiftKey) {
             // Add to selection
-            setSelectedPoints(prev => new Set([...prev, key]));
+            newSelection = new Set([...selectedPoints, key]);
           } else {
-            setSelectedPoints(new Set([key]));
+            newSelection = new Set([key]);
           }
+          setSelectedPoints(newSelection);
+          // Snapshot all selected point positions for multi-drag
+          const startRes = canvasToResource(canvasX, canvasY);
+          dragStartResCoordRef.current = { x: startRes.x, y: startRes.y };
+          const startPositions = new Map<string, { x: number; y: number }>();
+          for (const k of newSelection) {
+            const [pIdx, ptIdx] = k.split('-').map(Number);
+            const pt = resource.layers[currentLayerIndex]?.paths[pIdx]?.points[ptIdx];
+            if (pt) startPositions.set(k, { x: pt.x, y: pt.y });
+          }
+          dragStartPositionsRef.current = startPositions;
         } else {
           // Clicked on path line but not a point - just select the path
           setSelectedPointIndex(-1);
@@ -1501,14 +1556,30 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }
         setIsDrawing(true); // Enable dragging
       } else {
-        // Start box selection
-        setIsBoxSelecting(true);
-        setBoxStart({ x: canvasX, y: canvasY });
-        setBoxEnd({ x: canvasX, y: canvasY });
-        if (!e.shiftKey) {
-          setSelectedPoints(new Set());
-          setSelectedPointIndex(-1);
-          setCurrentPathIndex(-1);
+        // No point clicked
+        if (isMoveMode && selectedPoints.size > 0) {
+          // M-mode: drag from empty canvas space to move all selected points
+          const startRes = canvasToResource(canvasX, canvasY);
+          dragStartResCoordRef.current = { x: startRes.x, y: startRes.y };
+          const startPositions = new Map<string, { x: number; y: number }>();
+          for (const k of selectedPoints) {
+            const [pIdx, ptIdx] = k.split('-').map(Number);
+            const pt = resource.layers[currentLayerIndex]?.paths[pIdx]?.points[ptIdx];
+            if (pt) startPositions.set(k, { x: pt.x, y: pt.y });
+          }
+          dragStartPositionsRef.current = startPositions;
+          setIsDrawing(true);
+        } else {
+          // Start box selection
+          setIsBoxSelecting(true);
+          setBoxStart({ x: canvasX, y: canvasY });
+          setBoxEnd({ x: canvasX, y: canvasY });
+          setIsSubtractSelect(e.shiftKey);
+          if (!e.shiftKey) {
+            setSelectedPoints(new Set());
+            setSelectedPointIndex(-1);
+            setCurrentPathIndex(-1);
+          }
         }
       }
     }
@@ -1579,8 +1650,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       return;
     }
     
-    // Handle circle/arc radius dragging
-    if ((currentTool === 'circle' || currentTool === 'arc') && isDrawing && circleCenter) {
+    // Handle circle/arc/polygon radius dragging
+    if ((currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') && isDrawing && circleCenter) {
       const point = canvasToResource(canvasX, canvasY);
       const dx = point.x - circleCenter.x;
       const dy = point.y - circleCenter.y;
@@ -1595,6 +1666,24 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
     const point = canvasToResource(canvasX, canvasY);
 
+    // Multi-point drag: apply delta from mouseDown position to ALL selected points
+    if (dragStartPositionsRef.current && dragStartResCoordRef.current) {
+      const dx = point.x - dragStartResCoordRef.current.x;
+      const dy = point.y - dragStartResCoordRef.current.y;
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      for (const [key, startPos] of dragStartPositionsRef.current) {
+        const [pIdx, ptIdx] = key.split('-').map(Number);
+        const path = newResource.layers[currentLayerIndex]?.paths[pIdx];
+        if (path?.points[ptIdx]) {
+          path.points[ptIdx].x = Math.round(Math.max(-127, Math.min(127, startPos.x + dx)));
+          path.points[ptIdx].y = Math.round(Math.max(-127, Math.min(127, startPos.y + dy)));
+        }
+      }
+      updateResource(resource, newResource);
+      return;
+    }
+
+    // Single-point drag fallback (no longer reached when a point is clicked, kept for safety)
     if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
       const newResource = { ...resource };
       newResource.layers[currentLayerIndex].paths[currentPathIndex].points[selectedPointIndex] = point;
@@ -1607,16 +1696,18 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     dragStartRef.current = null;
     setIsBackgroundSelected(false);
     
-    // Finalize circle/arc
-    if ((currentTool === 'circle' || currentTool === 'arc') && isDrawing && circleCenter && circleRadius > 0) {
+    // Finalize circle/arc/polygon
+    if ((currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') && isDrawing && circleCenter && circleRadius > 0) {
       const points = currentTool === 'circle'
         ? generateCirclePoints(circleCenter, circleRadius, circleSegments, true)
+        : currentTool === 'polygon'
+        ? generatePolygonPoints(circleCenter, circleRadius, polygonSides)
         : generateArcPoints(circleCenter, circleRadius, arcStartAngle, arcEndAngle, circleSegments);
       
       const newPath: VecPath = {
-        name: currentTool === 'circle' ? `circle_${Date.now()}` : `arc_${Date.now()}`,
+        name: currentTool === 'circle' ? `circle_${Date.now()}` : currentTool === 'polygon' ? `polygon_${Date.now()}` : `arc_${Date.now()}`,
         intensity: 127,
-        closed: currentTool === 'circle',
+        closed: currentTool === 'circle' || currentTool === 'polygon',
         points,
       };
       
@@ -1637,28 +1728,42 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const maxX = Math.max(boxStart.x, boxEnd.x);
       const minY = Math.min(boxStart.y, boxEnd.y);
       const maxY = Math.max(boxStart.y, boxEnd.y);
-      
+
       // Find all points within the box
-      const newSelection = new Set(selectedPoints);
       const layer = resource.layers[currentLayerIndex];
-      
+      const newlySelected: string[] = [];
+
       for (let pathIdx = 0; pathIdx < layer.paths.length; pathIdx++) {
         const path = layer.paths[pathIdx];
         for (let pointIdx = 0; pointIdx < path.points.length; pointIdx++) {
           const canvasPt = resourceToCanvas(path.points[pointIdx]);
-          if (canvasPt.x >= minX && canvasPt.x <= maxX && 
+          if (canvasPt.x >= minX && canvasPt.x <= maxX &&
               canvasPt.y >= minY && canvasPt.y <= maxY) {
-            newSelection.add(`${pathIdx}-${pointIdx}`);
+            newlySelected.push(`${pathIdx}-${pointIdx}`);
           }
         }
       }
-      
-      setSelectedPoints(newSelection);
+
+      if (isSubtractSelect) {
+        // Remove newly selected points from the existing selection
+        const next = new Set(selectedPoints);
+        for (const key of newlySelected) next.delete(key);
+        setSelectedPoints(next);
+      } else {
+        // Add newly selected points to the existing selection
+        setSelectedPoints(new Set([...selectedPoints, ...newlySelected]));
+      }
+
+      setIsSubtractSelect(false);
       setIsBoxSelecting(false);
       setBoxStart(null);
       setBoxEnd(null);
     }
-    
+
+    // Clear multi-drag state
+    dragStartPositionsRef.current = null;
+    dragStartResCoordRef.current = null;
+
     setIsDrawing(false);
   };
   
@@ -1789,6 +1894,56 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       e.stopPropagation();
       return;
     }
+
+    // Copy selected paths to global clipboard
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      e.preventDefault();
+      const pathIndices = new Set<number>();
+      for (const key of selectedPoints) {
+        pathIndices.add(parseInt(key.split('-')[0]));
+      }
+      if (pathIndices.size > 0) {
+        const layer = resource.layers[currentLayerIndex];
+        const copied = [...pathIndices].sort((a, b) => a - b).map(i =>
+          JSON.parse(JSON.stringify(layer.paths[i]))
+        );
+        useEditorStore.getState().setVecClipboard(copied);
+      }
+      e.stopPropagation();
+      return;
+    }
+
+    // Paste paths from global clipboard
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      e.preventDefault();
+      const clipboard = useEditorStore.getState().vecClipboard;
+      if (clipboard && clipboard.length > 0) {
+        const PASTE_OFFSET = 10;
+        const pasted = clipboard.map((path: any) => ({
+          ...JSON.parse(JSON.stringify(path)),
+          name: `${path.name}_copy`,
+          points: path.points.map((pt: any) => ({
+            ...pt,
+            x: Math.max(-127, Math.min(127, pt.x + PASTE_OFFSET)),
+            y: Math.max(-127, Math.min(127, pt.y + PASTE_OFFSET)),
+          }))
+        }));
+        const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+        const insertIdx = newResource.layers[currentLayerIndex].paths.length;
+        newResource.layers[currentLayerIndex].paths.push(...pasted);
+        updateResource(resource, newResource);
+        // Auto-select all points of pasted paths
+        const newSelected = new Set<string>();
+        for (let i = 0; i < pasted.length; i++) {
+          for (let j = 0; j < pasted[i].points.length; j++) {
+            newSelected.add(`${insertIdx + i}-${j}`);
+          }
+        }
+        setSelectedPoints(newSelected);
+      }
+      e.stopPropagation();
+      return;
+    }
     
     // View switching shortcuts
     if (e.key === '1') {
@@ -1819,6 +1974,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       setIsBoxSelecting(false);
       setBoxStart(null);
       setBoxEnd(null);
+      setIsMoveMode(false);
+    } else if (e.key === 'm' || e.key === 'M') {
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        setIsMoveMode(prev => !prev);
+      }
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       e.stopPropagation(); // Prevent FileTreePanel from handling this event
@@ -1964,6 +2124,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         title="Arc tool - click center, drag to set radius"
       >
         ◔ Arc
+      </button>
+      <button
+        onClick={() => setCurrentTool('polygon')}
+        style={{
+          padding: '8px 12px',
+          background: currentTool === 'polygon' ? '#4a4a8e' : '#3a3a5e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Polygon tool - click center, drag to set radius"
+      >
+        ⬡ Polygon
       </button>
       {backgroundImage && (
         <button
@@ -2202,11 +2376,12 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   );
 
   const CircleArcSettings = () => {
-    if (currentTool !== 'circle' && currentTool !== 'arc') return null;
+    if (currentTool !== 'circle' && currentTool !== 'arc' && currentTool !== 'polygon') return null;
     
     return (
       <div style={{ background: '#2a2a4e', padding: '10px', borderRadius: '4px', marginBottom: '8px' }}>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {(currentTool === 'circle' || currentTool === 'arc') && (
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#aaa', fontSize: '12px' }}>
             <span>Segments:</span>
             <input
@@ -2225,7 +2400,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               }}
             />
           </label>
+          )}
           
+          {currentTool === 'polygon' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#aaa', fontSize: '12px' }}>
+              <span>Sides:</span>
+              <input
+                type="number"
+                min="3"
+                max="32"
+                value={polygonSides}
+                onChange={(e) => setPolygonSides(Math.max(3, Math.min(32, parseInt(e.target.value) || 6)))}
+                style={{
+                  width: '60px',
+                  padding: '4px',
+                  background: '#1a1a3e',
+                  color: 'white',
+                  border: '1px solid #4a4a6e',
+                  borderRadius: '4px',
+                }}
+              />
+            </label>
+          )}
           {currentTool === 'arc' && (
             <>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#aaa', fontSize: '12px' }}>
@@ -2270,6 +2466,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <div style={{ color: '#888', fontSize: '11px' }}>
             {currentTool === 'circle' 
               ? `Click center, drag to set radius. ${circleSegments} segments.`
+              : currentTool === 'polygon'
+              ? `Click center, drag to set radius. ${polygonSides}-sided polygon.`
               : `Click center, drag to set radius. Arc from ${arcStartAngle}° to ${arcEndAngle}° (${circleSegments} segments).`
             }
           </div>
@@ -2843,9 +3041,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               border: '2px solid #4a4a8e',
               borderRadius: '4px',
               display: 'block',
-              cursor: currentTool === 'pen' 
-                ? 'crosshair' 
-                : currentTool === 'circle' || currentTool === 'arc'
+              cursor: currentTool === 'pen'
+                ? 'crosshair'
+                : currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon'
                 ? 'crosshair'
                 : currentTool === 'pan' && viewMode === '3d' && isDrawing
                 ? 'grabbing'
@@ -2855,6 +3053,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 ? 'move'
                 : currentTool === 'background'
                 ? isBackgroundSelected ? 'grabbing' : 'grab'
+                : isMoveMode && selectedPoints.size > 0
+                ? (dragStartPositionsRef.current ? 'grabbing' : 'grab')
                 : 'default',
             }}
           />
@@ -2870,6 +3070,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           {currentTool === 'select' && 'Click to select points. Drag to move.'}
           {currentTool === 'circle' && '⭕ Click center, drag to set radius. Circle will be generated with specified segments.'}
           {currentTool === 'arc' && '◔ Click center, drag to set radius. Arc from start angle to end angle.'}
+          {currentTool === 'polygon' && '⬡ Click center, drag to set radius. Regular polygon with specified sides.'}
           {currentTool === 'background' && '🖼️ Drag to move the background image.'}
           {currentTool === 'pan' && viewMode === '3d' && '🔄 Drag to rotate 3D view. Scroll to zoom.'}
           {currentTool === 'pan' && viewMode !== '3d' && '✋ Drag to pan. Scroll to zoom.'}

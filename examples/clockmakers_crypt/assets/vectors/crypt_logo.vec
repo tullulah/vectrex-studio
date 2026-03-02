@@ -1,0 +1,480 @@
+{
+  "version": "1.0",
+  "name": "crypt_logo",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "clock",
+      "visible": true,
+      "paths": [
+        {
+          "name": "clock_face",
+          "intensity": 90,
+          "closed": true,
+          "points": [
+            {"x":  0, "y": 98},
+            {"x": 10, "y": 95},
+            {"x": 18, "y": 88},
+            {"x": 20, "y": 78},
+            {"x": 18, "y": 68},
+            {"x": 10, "y": 61},
+            {"x":  0, "y": 58},
+            {"x":-10, "y": 61},
+            {"x":-18, "y": 68},
+            {"x":-20, "y": 78},
+            {"x":-18, "y": 88},
+            {"x":-10, "y": 95}
+          ]
+        },
+        {
+          "name": "clock_hand_minute",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x":  0, "y": 78},
+            {"x":  0, "y": 96}
+          ]
+        },
+        {
+          "name": "clock_hand_hour",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x":  0, "y": 78},
+            {"x":-13, "y": 90}
+          ]
+        },
+        {
+          "name": "clock_center_dot",
+          "intensity": 90,
+          "closed": true,
+          "points": [
+            {"x":  0, "y": 80},
+            {"x": -2, "y": 78},
+            {"x":  0, "y": 76},
+            {"x":  2, "y": 78}
+          ]
+        },
+        {
+          "name": "pendulum_line",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x":  0, "y": 58},
+            {"x":  0, "y": 40}
+          ]
+        },
+        {
+          "name": "pendulum_bob",
+          "intensity": 70,
+          "closed": true,
+          "points": [
+            {"x":  0, "y": 45},
+            {"x": -4, "y": 40},
+            {"x":  0, "y": 35},
+            {"x":  4, "y": 40}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "subtitle",
+      "visible": true,
+      "paths": [
+        {
+          "name": "sub_T_bar",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -75, "y": 35},
+            {"x": -67, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_T_stem",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -71, "y": 35},
+            {"x": -71, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_H",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -65, "y": 25},
+            {"x": -65, "y": 35},
+            {"x": -65, "y": 30},
+            {"x": -59, "y": 30},
+            {"x": -59, "y": 35},
+            {"x": -59, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_E",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -57, "y": 35},
+            {"x": -57, "y": 25},
+            {"x": -51, "y": 25},
+            {"x": -51, "y": 27},
+            {"x": -55, "y": 27},
+            {"x": -55, "y": 30},
+            {"x": -51, "y": 30},
+            {"x": -51, "y": 32},
+            {"x": -55, "y": 32},
+            {"x": -55, "y": 35},
+            {"x": -51, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_C1",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -41, "y": 34},
+            {"x": -47, "y": 34},
+            {"x": -47, "y": 26},
+            {"x": -41, "y": 26},
+            {"x": -41, "y": 28},
+            {"x": -45, "y": 28},
+            {"x": -45, "y": 32},
+            {"x": -41, "y": 32}
+          ]
+        },
+        {
+          "name": "sub_L",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -39, "y": 35},
+            {"x": -39, "y": 25},
+            {"x": -33, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_O",
+          "intensity": 70,
+          "closed": true,
+          "points": [
+            {"x": -31, "y": 35},
+            {"x": -25, "y": 35},
+            {"x": -25, "y": 25},
+            {"x": -31, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_C2",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -17, "y": 34},
+            {"x": -23, "y": 34},
+            {"x": -23, "y": 26},
+            {"x": -17, "y": 26},
+            {"x": -17, "y": 28},
+            {"x": -21, "y": 28},
+            {"x": -21, "y": 32},
+            {"x": -17, "y": 32}
+          ]
+        },
+        {
+          "name": "sub_K1_stem",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -15, "y": 25},
+            {"x": -15, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_K1_upper",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -15, "y": 30},
+            {"x": -10, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_K1_lower",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -15, "y": 30},
+            {"x": -10, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_M",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -7, "y": 25},
+            {"x": -7, "y": 35},
+            {"x": -4, "y": 30},
+            {"x": -1, "y": 35},
+            {"x": -1, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_A_legs",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x":  1, "y": 25},
+            {"x":  4, "y": 35},
+            {"x":  7, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_A_bar",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x":  2, "y": 30},
+            {"x":  6, "y": 30}
+          ]
+        },
+        {
+          "name": "sub_K2_stem",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x":  9, "y": 25},
+            {"x":  9, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_K2_upper",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x":  9, "y": 30},
+            {"x": 14, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_K2_lower",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x":  9, "y": 30},
+            {"x": 14, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_E2",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": 17, "y": 35},
+            {"x": 17, "y": 25},
+            {"x": 23, "y": 25},
+            {"x": 23, "y": 27},
+            {"x": 19, "y": 27},
+            {"x": 19, "y": 30},
+            {"x": 23, "y": 30},
+            {"x": 23, "y": 32},
+            {"x": 19, "y": 32},
+            {"x": 19, "y": 35},
+            {"x": 23, "y": 35}
+          ]
+        },
+        {
+          "name": "sub_R",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": 25, "y": 25},
+            {"x": 25, "y": 35},
+            {"x": 31, "y": 35},
+            {"x": 33, "y": 33},
+            {"x": 33, "y": 30},
+            {"x": 31, "y": 28},
+            {"x": 25, "y": 28},
+            {"x": 31, "y": 28},
+            {"x": 33, "y": 25}
+          ]
+        },
+        {
+          "name": "sub_S",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": 41, "y": 34},
+            {"x": 36, "y": 34},
+            {"x": 35, "y": 32},
+            {"x": 36, "y": 30},
+            {"x": 41, "y": 30},
+            {"x": 42, "y": 28},
+            {"x": 41, "y": 26},
+            {"x": 36, "y": 26}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "title",
+      "visible": true,
+      "paths": [
+        {
+          "name": "letter_C",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -54, "y":  20},
+            {"x": -82, "y":  20},
+            {"x": -82, "y": -20},
+            {"x": -54, "y": -20},
+            {"x": -54, "y": -14},
+            {"x": -77, "y": -14},
+            {"x": -77, "y":  14},
+            {"x": -54, "y":  14}
+          ]
+        },
+        {
+          "name": "letter_R_body",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -48, "y": -20},
+            {"x": -48, "y":  20},
+            {"x": -28, "y":  20},
+            {"x": -20, "y":  14},
+            {"x": -20, "y":   4},
+            {"x": -28, "y":  -1},
+            {"x": -48, "y":  -1}
+          ]
+        },
+        {
+          "name": "letter_R_leg",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -28, "y":  -1},
+            {"x": -20, "y": -20}
+          ]
+        },
+        {
+          "name": "letter_Y_v",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -14, "y":  20},
+            {"x":   0, "y":   0},
+            {"x":  14, "y":  20}
+          ]
+        },
+        {
+          "name": "letter_Y_stem",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x":   0, "y":   0},
+            {"x":   0, "y": -20}
+          ]
+        },
+        {
+          "name": "letter_P",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x":  20, "y": -20},
+            {"x":  20, "y":  20},
+            {"x":  40, "y":  20},
+            {"x":  48, "y":  14},
+            {"x":  48, "y":   4},
+            {"x":  40, "y":  -1},
+            {"x":  20, "y":  -1}
+          ]
+        },
+        {
+          "name": "letter_T_bar",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x":  54, "y":  20},
+            {"x":  82, "y":  20}
+          ]
+        },
+        {
+          "name": "letter_T_stem",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x":  68, "y":  20},
+            {"x":  68, "y": -20}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "decoration",
+      "visible": true,
+      "paths": [
+        {
+          "name": "bar_below_title",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -83, "y": -24},
+            {"x":  83, "y": -24}
+          ]
+        },
+        {
+          "name": "bar_above_subtitle",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x": -83, "y": 22},
+            {"x":  83, "y": 22}
+          ]
+        },
+        {
+          "name": "key_head",
+          "intensity": 80,
+          "closed": true,
+          "points": [
+            {"x":   0, "y": -40},
+            {"x":   5, "y": -43},
+            {"x":   5, "y": -48},
+            {"x":   0, "y": -51},
+            {"x":  -5, "y": -48},
+            {"x":  -5, "y": -43}
+          ]
+        },
+        {
+          "name": "key_shaft",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":   0, "y": -51},
+            {"x":   0, "y": -65}
+          ]
+        },
+        {
+          "name": "key_tooth_1",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":   0, "y": -57},
+            {"x":   5, "y": -57}
+          ]
+        },
+        {
+          "name": "key_tooth_2",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":   0, "y": -62},
+            {"x":   5, "y": -62}
+          ]
+        }
+      ]
+    }
+  ]
+}

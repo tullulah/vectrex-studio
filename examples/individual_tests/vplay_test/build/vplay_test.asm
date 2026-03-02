@@ -70,20 +70,23 @@ LEVEL_TEMP           EQU $C880+$3C   ; SHOW_LEVEL temporary byte (legacy) (1 byt
 LEVEL_BG_COUNT       EQU $C880+$3D   ; BG object count (1 bytes)
 LEVEL_GP_COUNT       EQU $C880+$3E   ; GP object count (1 bytes)
 LEVEL_FG_COUNT       EQU $C880+$3F   ; FG object count (1 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$40   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$42   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$44   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$46   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$48   ; GP objects RAM buffer (max 8 objects × 14 bytes) (112 bytes)
-UGPC_OUTER_IDX       EQU $C880+$B8   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$B9   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$BA   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$BB   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$BD   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$BF   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$C0   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$C1   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$C2   ; GP-FG |dy| (1 bytes)
+CAMERA_X             EQU $C880+$40   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$42   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$44   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$46   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$48   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$4A   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
+UGPC_OUTER_IDX       EQU $C880+$C2   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$C3   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$C4   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$C5   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$C7   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$C9   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$CA   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$CB   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$CC   ; GP-FG |dy| (1 bytes)
+TEXT_SCALE_H         EQU $C880+$CD   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$CE   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -100,6 +103,10 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -469,11 +476,17 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -523,29 +536,33 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,
+; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (reg $02),
+; setting PB0 as input and breaking the X/Y integrator mux entirely.
+; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
 BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
 LDA ,X+                 ; Otherwise, read intensity from vector data
 BRA DSWM_SET_INTENSITY
 DSWM_USE_OVERRIDE:
 LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-JSR $F2AB               ; BIOS Intensity_a
+STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_Y
 NEGB                    ; ← Negate Y if flag set
 DSWM_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start from .vec (already relative to center)
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_X
 NEGA                    ; ← Negate X if flag set
 DSWM_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX             ; Save adjusted position
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX            ; Save adjusted position
 ; Reset completo
 CLR VIA_shift_reg
 LDA #$CC
@@ -560,7 +577,7 @@ STA VIA_port_b          ; repeat
 LDA #$01
 STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
 ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD TEMP_YX
+LDD >TEMP_YX
 STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
 CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
 PSHS A                  ; ~4 cycle settling delay for Y
@@ -591,13 +608,13 @@ LBEQ DSWM_NEXT_PATH
 ; Draw line with conditional negations
 LDB ,X+                 ; dy
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_DY
 NEGB                    ; ← Negate dy if flag set
 DSWM_NO_NEGATE_DY:
 LDA ,X+                 ; dx
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_DX
 NEGA                    ; ← Negate dx if flag set
 DSWM_NO_NEGATE_DX:
@@ -624,7 +641,7 @@ DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
 ; Check intensity override (same logic as start)
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
 BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
 LDA ,X+                 ; Otherwise, read intensity from vector data
 BRA DSWM_NEXT_SET_INTENSITY
@@ -633,20 +650,20 @@ LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
 NEGB
 DSWM_NEXT_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NEXT_NO_NEGATE_X
 NEGA
 DSWM_NEXT_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX
 PULS A                  ; Get intensity back
-JSR $F2AB
+STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)
 PULS D
 ADDD #3
 TFR D,X
@@ -664,7 +681,7 @@ STA VIA_port_b          ; repeat
 LDA #$01
 STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
 ; Moveto new start position (BIOS Moveto_d order)
-LDD TEMP_YX
+LDD >TEMP_YX
 STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
 CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
 PSHS A                  ; ~4 cycle settling delay for Y
@@ -729,7 +746,7 @@ LOAD_LEVEL_RUNTIME:
     LDB #8           ; Max 8 objects
 LLR_CLR_GP_LOOP:
     STA ,U           ; Write $FF to first byte of object slot
-    LEAU 14,U        ; Advance by 14 bytes (RAM object stride)
+    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
     DECB
     BNE LLR_CLR_GP_LOOP
     
@@ -753,16 +770,16 @@ LLR_SKIP_GP:
     PULS D,X,Y,U,PC  ; Restore and return
     
 ; === LLR_COPY_OBJECTS - Copy N ROM objects to RAM buffer ===
-; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 14 bytes/obj)
+; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 15 bytes/obj)
 ; ROM object layout (20 bytes):
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
 ;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18-19: properties_ptr(FDB)
-; RAM object layout (14 bytes):
-;   +0: x(low), +1: y(low), +2: scale(low), +3: rotation,
-;   +4: velocity_x, +5: velocity_y, +6: physics_flags, +7: collision_flags,
-;   +8: collision_size, +9: spawn_delay(low), +10-11: vector_ptr, +12-13: properties_ptr
+; RAM object layout (15 bytes):
+;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
+;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13-14: properties_ptr
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:
@@ -773,48 +790,50 @@ LLR_COPY_LOOP:
     ; X points to ROM object start (+0 = type)
     LEAX 1,X         ; Skip type (+0), X now at +1 (x FDB high)
     
-    ; RAM +0: x low byte (ROM +2, low byte of x FDB)
+    ; RAM +0-1: world_x FDB (16-bit, ROM +1-2)
+    LDA ,X           ; ROM +1 = high byte of x FDB
+    STA ,U+
     LDA 1,X          ; ROM +2 = low byte of x FDB
     STA ,U+
-    ; RAM +1: y low byte (ROM +4, low byte of y FDB)
+    ; RAM +2: y low byte (ROM +4, low byte of y FDB)
     LDA 3,X          ; ROM +4 = low byte of y FDB
     STA ,U+
-    ; RAM +2: scale low byte (ROM +6, low byte of scale FDB)
+    ; RAM +3: scale low byte (ROM +6, low byte of scale FDB)
     LDA 5,X          ; ROM +6 = low byte of scale FDB
     STA ,U+
-    ; RAM +3: rotation (ROM +7)
+    ; RAM +4: rotation (ROM +7)
     LDA 6,X          ; ROM +7 = rotation
     STA ,U+
     ; Skip to ROM +9 (past intensity at ROM +8)
     LEAX 8,X         ; X now points to ROM +9 (velocity_x)
-    ; RAM +4: velocity_x (ROM +9)
+    ; RAM +5: velocity_x (ROM +9)
     LDA ,X+          ; ROM +9
     STA ,U+
-    ; RAM +5: velocity_y (ROM +10)
+    ; RAM +6: velocity_y (ROM +10)
     LDA ,X+          ; ROM +10
     STA ,U+
-    ; RAM +6: physics_flags (ROM +11)
+    ; RAM +7: physics_flags (ROM +11)
     LDA ,X+          ; ROM +11
     STA ,U+
-    ; RAM +7: collision_flags (ROM +12)
+    ; RAM +8: collision_flags (ROM +12)
     LDA ,X+          ; ROM +12
     STA ,U+
-    ; RAM +8: collision_size (ROM +13)
+    ; RAM +9: collision_size (ROM +13)
     LDA ,X+          ; ROM +13
     STA ,U+
-    ; RAM +9: spawn_delay low byte (ROM +15, skip high at ROM +14)
+    ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)
     LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB
     STA ,U+
     LEAX 2,X         ; Skip spawn_delay FDB (2 bytes), X now at ROM +16
-    ; RAM +10-11: vector_ptr FDB (ROM +16-17)
+    ; RAM +11-12: vector_ptr FDB (ROM +16-17)
     LDD ,X++         ; ROM +16-17
     STD ,U++
-    ; RAM +12-13: properties_ptr FDB (ROM +18-19)
+    ; RAM +13-14: properties_ptr FDB (ROM +18-19)
     LDD ,X++         ; ROM +18-19
     STD ,U++
     ; X is now past end of this ROM object (ROM +1 + 8 + 5 + 2 + 2 + 2 = +20 total)
     ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:
-    ;   1,X and 3,X and 5,X and 6,X via indexed → X unchanged
+    ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged
     ;   then LEAX 8,X (X now at ROM+9)
     ;   then 5 post-increment ,X+ → X at ROM+14
     ;   then LEAX 2,X (X at ROM+16)
@@ -830,11 +849,13 @@ LLR_COPY_DONE:
 ; === SHOW_LEVEL_RUNTIME ===
 ; Draw all level objects from all layers
 ; Input:  LEVEL_PTR = pointer to level header
-; Layers: BG (ROM stride 20), GP (RAM stride 14), FG (ROM stride 20)
+; Layers: BG (ROM stride 20), GP (RAM stride 15), FG (ROM stride 20)
 ; Each object: load intensity, x, y, vector_ptr, call SLR_DRAW_OBJECTS
 SHOW_LEVEL_RUNTIME:
     PSHS D,X,Y,U     ; Preserve registers
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDA #$18         ; ACR = $18: SR shift-out under PHI2
+    STA VIA_aux_cntl ; Enables CB2 beam control via shift register (required for DSWM)
     
     ; Check if level is loaded
     LDX >LEVEL_PTR
@@ -860,14 +881,14 @@ SLR_BG_COUNT:
     LDX >LEVEL_BG_ROM_PTR
     JSR SLR_DRAW_OBJECTS
     
-    ; === Draw Gameplay Layer (RAM, stride=14) ===
+    ; === Draw Gameplay Layer (RAM, stride=15) ===
 SLR_GAMEPLAY:
 SLR_GP_COUNT:
     CLRB
     LDB >LEVEL_GP_COUNT
     CMPB #0
     BEQ SLR_FOREGROUND
-    LDA #14          ; RAM object stride (14 bytes)
+    LDA #15          ; RAM object stride (15 bytes)
     LDX >LEVEL_GP_PTR
     JSR SLR_DRAW_OBJECTS
     
@@ -887,10 +908,11 @@ SLR_DONE:
     PULS D,X,Y,U,PC  ; Restore and return
     
 ; === SLR_DRAW_OBJECTS - Draw N objects from a layer ===
-; Input:  A = stride (14=RAM, 20=ROM), B = count, X = objects ptr
+; Input:  A = stride (15=RAM, 20=ROM), B = count, X = objects ptr
 ; For ROM objects (stride=20): intensity at +8, y FDB at +3, x FDB at +1, vector_ptr FDB at +16
-; For RAM objects (stride=14): look up intensity from ROM via LEVEL_GP_ROM_PTR,
-;   y at +1, x at +0, vector_ptr FDB at +10
+; For RAM objects (stride=15): look up intensity from ROM via LEVEL_GP_ROM_PTR,
+;   world_x at +0-1 (16-bit), y at +2, vector_ptr FDB at +11
+; Camera: SUBD >CAMERA_X applied to world_x; objects outside i8 range are culled
 SLR_DRAW_OBJECTS:
     PSHS A           ; Save stride on stack (A=stride)
 SLR_OBJ_LOOP:
@@ -904,7 +926,7 @@ SLR_OBJ_LOOP:
     CMPA #20
     BEQ SLR_ROM_OFFSETS
     
-    ; === RAM object (stride=14) ===
+    ; === RAM object (stride=15) ===
     ; Need to look up intensity from ROM counterpart
     ; objIndex = LEVEL_GP_COUNT - currentCount
     PSHS X           ; Save RAM object pointer
@@ -918,28 +940,44 @@ SLR_ROM_ADDR_LOOP:
     BRA SLR_ROM_ADDR_LOOP
 SLR_INTENSITY_READ:
     LDA 8,X          ; intensity at ROM +8
-    STA DRAW_VEC_INTENSITY
+    STA >DRAW_VEC_INTENSITY  ; DP=$D0, must use extended addressing
     PULS X           ; Restore RAM object pointer
     
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDB 1,X          ; y at RAM +1
-    STB DRAW_VEC_Y
-    LDB 0,X          ; x at RAM +0
-    STB DRAW_VEC_X
-    LDU 10,X         ; vector_ptr at RAM +10
+    CLR >MIRROR_X    ; DP=$D0, must use extended addressing
+    CLR >MIRROR_Y
+    ; Load world_x (16-bit), subtract CAMERA_X, check visibility
+    LDD 0,X          ; RAM +0-1 = world_x (16-bit)
+    SUBD >CAMERA_X   ; screen_x = world_x - camera_x
+    ; Visibility check: A must be $00 (positive) or $FF (negative) for i8 fit
+    TSTA
+    BEQ SLR_RAM_VISIBLE
+    INCA
+    LBNE SLR_OBJ_NEXT ; A was not $FF — object is out of screen range
+SLR_RAM_VISIBLE:
+    STB >DRAW_VEC_X  ; DP=$D0, must use extended addressing
+    LDB 2,X          ; y at RAM +2
+    STB >DRAW_VEC_Y
+    LDU 11,X         ; vector_ptr at RAM +11
     BRA SLR_DRAW_VECTOR
     
 SLR_ROM_OFFSETS:
     ; === ROM object (stride=20) ===
-    CLR MIRROR_X
-    CLR MIRROR_Y
+    CLR >MIRROR_X    ; DP=$D0, must use extended addressing
+    CLR >MIRROR_Y
     LDA 8,X          ; intensity at ROM +8
-    STA DRAW_VEC_INTENSITY
+    STA >DRAW_VEC_INTENSITY
     LDD 3,X          ; y FDB at ROM +3; low byte into B
-    STB DRAW_VEC_Y
-    LDD 1,X          ; x FDB at ROM +1; low byte into B
-    STB DRAW_VEC_X
+    STB >DRAW_VEC_Y  ; DP=$D0, must use extended addressing
+    ; Load world_x (16-bit), subtract CAMERA_X, check visibility
+    LDD 1,X          ; x FDB at ROM +1
+    SUBD >CAMERA_X   ; screen_x = world_x - camera_x
+    ; Visibility check: A must be $00 or $FF for i8 fit
+    TSTA
+    BEQ SLR_ROM_VISIBLE
+    INCA
+    LBNE SLR_OBJ_NEXT ; out of screen range
+SLR_ROM_VISIBLE:
+    STB >DRAW_VEC_X  ; DP=$D0, must use extended addressing
     LDU 16,X         ; vector_ptr FDB at ROM +16
     
 SLR_DRAW_VECTOR:
@@ -966,7 +1004,11 @@ SLR_PATH_LOOP:
 SLR_PATH_DONE:
     PULS X           ; Restore object pointer
     
+SLR_OBJ_NEXT:
     ; Advance to next object using stride
+    ; Reached here after draw (X restored by PULS X above) OR from
+    ; visibility skip (X never pushed, still points to current object)
+    ; Stack state in both cases: B on top, A=stride below
     LDA 1,S          ; Load stride from stack (+1 because B is on top)
     LEAX A,X         ; X += stride
     
@@ -1002,11 +1044,11 @@ ULR_EXIT:
     RTS
 
 ; === ULR_UPDATE_LAYER - Apply physics to each object in GP buffer ===
-; Input: B = object count, U = buffer base (14 bytes/object)
+; Input: B = object count, U = buffer base (15 bytes/object)
 ; RAM object layout:
-;   +0: x(signed 8-bit)  +1: y(signed 8-bit)  +2: scale  +3: rotation
-;   +4: velocity_x  +5: velocity_y  +6: physics_flags  +7: collision_flags
-;   +8: collision_size  +9: spawn_delay_lo  +10-11: vector_ptr  +12-13: props_ptr
+;   +0-1: world_x(i16)  +2: y(i8)  +3: scale  +4: rotation
+;   +5: velocity_x  +6: velocity_y  +7: physics_flags  +8: collision_flags
+;   +9: collision_size  +10: spawn_delay_lo  +11-12: vector_ptr  +13-14: props_ptr
 ULR_UPDATE_LAYER:
     LDX >LEVEL_PTR   ; Load level pointer for world bounds
     CMPX #0
@@ -1015,8 +1057,8 @@ ULR_UPDATE_LAYER:
 ULR_LOOP:
     PSHS B           ; Save loop counter
     
-    ; Check physics_flags (RAM +6)
-    LDB 6,U
+    ; Check physics_flags (RAM +7)
+    LDB 7,U
     CMPB #0
     LBEQ ULR_NEXT    ; No physics at all, skip
     
@@ -1029,38 +1071,29 @@ ULR_LOOP:
     LBEQ ULR_NO_GRAVITY
     
     ; Apply gravity: velocity_y -= 1, clamp to -15
-    LDB 5,U          ; velocity_y (RAM +5)
+    LDB 6,U          ; velocity_y (RAM +6)
     DECB
     CMPB #$F1        ; -15
     BGE ULR_VY_OK
     LDB #$F1
 ULR_VY_OK:
-    STB 5,U
+    STB 6,U
     
 ULR_NO_GRAVITY:
-    ; Apply velocity: x += velocity_x (16-bit to avoid wraparound)
-    LDB 0,U          ; x (8-bit signed)
-    SEX              ; D = sign-extended x
-    TFR D,Y          ; Y = x (16-bit)
-    LDB 4,U          ; velocity_x (8-bit signed)
+    ; Apply velocity: world_x += velocity_x (16-bit)
+    LDD 0,U          ; world_x (16-bit signed)
+    TFR D,Y          ; Y = world_x
+    LDB 5,U          ; velocity_x (8-bit signed)
     SEX              ; D = sign-extended velocity_x
-    LEAY D,Y         ; Y = x + velocity_x (16-bit addition)
-    TFR Y,D          ; D = 16-bit result
-    CMPD #127        ; Clamp to i8 max
-    BLE ULR_X_NOT_MAX
-    LDD #127
-ULR_X_NOT_MAX:
-    CMPD #-128       ; Clamp to i8 min
-    BGE ULR_X_NOT_MIN
-    LDD #-128
-ULR_X_NOT_MIN:
-    STB 0,U          ; Store clamped x
+    LEAY D,Y         ; Y = world_x + velocity_x (16-bit addition)
+    TFR Y,D          ; D = new world_x
+    STD 0,U          ; Store 16-bit world_x
     
     ; Apply velocity: y += velocity_y (16-bit to avoid wraparound)
-    LDB 1,U          ; y (8-bit signed)
+    LDB 2,U          ; y (8-bit signed, RAM +2)
     SEX              ; D = sign-extended y
     TFR D,Y          ; Y = y (16-bit)
-    LDB 5,U          ; velocity_y (8-bit signed)
+    LDB 6,U          ; velocity_y (8-bit signed, RAM +6)
     SEX              ; D = sign-extended velocity_y
     LEAY D,Y         ; Y = y + velocity_y (16-bit addition)
     TFR Y,D          ; D = 16-bit result
@@ -1072,10 +1105,10 @@ ULR_Y_NOT_MAX:
     BGE ULR_Y_NOT_MIN
     LDD #-128
 ULR_Y_NOT_MIN:
-    STB 1,U          ; Store clamped y
+    STB 2,U          ; Store clamped y (RAM +2)
     
     ; === World Bounds / Wall Bounce ===
-    LDB 7,U          ; collision_flags (RAM +7)
+    LDB 8,U          ; collision_flags (RAM +8)
     BITB #$02        ; bounce_walls flag (bit 1)
     LBEQ ULR_NEXT    ; Skip if not bouncing
     
@@ -1083,99 +1116,97 @@ ULR_Y_NOT_MIN:
     ; World bounds at LEVEL_PTR: +0=xMin(FDB), +2=xMax(FDB), +4=yMin(FDB), +6=yMax(FDB)
     
     ; --- Check X left wall (xMin) ---
-    LDB 8,U          ; collision_size (RAM +8)
+    LDB 9,U          ; collision_size (RAM +9)
     SEX              ; D = sign-extended collision_size
     PSHS D           ; Save collision_size
-    LDB 0,U          ; x (8-bit)
-    SEX              ; sign-extend x to 16-bit
-    SUBD ,S++        ; D = x - collision_size (left edge), pop
+    LDD 0,U          ; world_x (16-bit)
+    SUBD ,S++        ; D = world_x - collision_size (left edge), pop
     CMPD 0,X         ; Compare with xMin
     LBGE ULR_X_MAX_CHECK
     ; Hit left wall — bounce only if moving left (velocity_x < 0)
-    LDB 4,U
+    LDB 5,U
     CMPB #0
     LBGE ULR_X_MAX_CHECK
-    LDB 8,U          ; collision_size
+    LDB 9,U          ; collision_size
     SEX
     ADDD 0,X         ; D = xMin + collision_size
-    STB 0,U          ; x = low byte
-    LDB 4,U
+    STD 0,U          ; world_x = corrected position (16-bit)
+    LDB 5,U
     NEGB
-    STB 4,U          ; velocity_x = -velocity_x
+    STB 5,U          ; velocity_x = -velocity_x
     
     ; --- Check X right wall (xMax) ---
 ULR_X_MAX_CHECK:
-    LDB 8,U
+    LDB 9,U
     SEX
     PSHS D
-    LDB 0,U
-    SEX
-    ADDD ,S++        ; D = x + collision_size (right edge), pop
+    LDD 0,U          ; world_x (16-bit)
+    ADDD ,S++        ; D = world_x + collision_size (right edge), pop
     CMPD 2,X         ; Compare with xMax
     LBLE ULR_Y_BOUNDS
     ; Hit right wall — bounce only if moving right (velocity_x > 0)
-    LDB 4,U
+    LDB 5,U
     CMPB #0
     LBLE ULR_Y_BOUNDS
-    LDB 8,U
+    LDB 9,U
     SEX
     TFR D,Y
     LDD 2,X          ; D = xMax
     PSHS Y
     SUBD ,S++        ; D = xMax - collision_size, pop
-    STB 0,U
-    LDB 4,U
-    NEGB
-    STB 4,U
-    
-    ; --- Check Y bottom wall (yMin) ---
-ULR_Y_BOUNDS:
-    LDB 8,U
-    SEX
-    PSHS D
-    LDB 1,U
-    SEX
-    SUBD ,S++        ; D = y - collision_size, pop
-    CMPD 4,X         ; Compare with yMin
-    LBGE ULR_Y_MAX_CHECK
-    LDB 5,U
-    CMPB #0
-    LBGE ULR_Y_MAX_CHECK
-    LDB 8,U
-    SEX
-    ADDD 4,X         ; D = yMin + collision_size
-    STB 1,U
+    STD 0,U          ; world_x = corrected position (16-bit)
     LDB 5,U
     NEGB
     STB 5,U
     
-    ; --- Check Y top wall (yMax) ---
-ULR_Y_MAX_CHECK:
-    LDB 8,U
+    ; --- Check Y bottom wall (yMin) ---
+ULR_Y_BOUNDS:
+    LDB 9,U
     SEX
     PSHS D
-    LDB 1,U
+    LDB 2,U          ; y (8-bit, RAM +2)
+    SEX
+    SUBD ,S++        ; D = y - collision_size, pop
+    CMPD 4,X         ; Compare with yMin
+    LBGE ULR_Y_MAX_CHECK
+    LDB 6,U
+    CMPB #0
+    LBGE ULR_Y_MAX_CHECK
+    LDB 9,U
+    SEX
+    ADDD 4,X         ; D = yMin + collision_size
+    STB 2,U          ; y = low byte (RAM +2)
+    LDB 6,U
+    NEGB
+    STB 6,U
+    
+    ; --- Check Y top wall (yMax) ---
+ULR_Y_MAX_CHECK:
+    LDB 9,U
+    SEX
+    PSHS D
+    LDB 2,U          ; y (8-bit, RAM +2)
     SEX
     ADDD ,S++        ; D = y + collision_size, pop
     CMPD 6,X         ; Compare with yMax
     LBLE ULR_NEXT
-    LDB 5,U
+    LDB 6,U
     CMPB #0
     LBLE ULR_NEXT
-    LDB 8,U
+    LDB 9,U
     SEX
     TFR D,Y
     LDD 6,X          ; D = yMax
     PSHS Y
     SUBD ,S++        ; D = yMax - collision_size, pop
-    STB 1,U
-    LDB 5,U
+    STB 2,U          ; y = low byte (RAM +2)
+    LDB 6,U
     NEGB
-    STB 5,U
+    STB 6,U
     
 ULR_NEXT:
     PULS B           ; Restore loop counter
-    LEAU 14,U        ; Next object (14 bytes)
+    LEAU 15,U        ; Next object (15 bytes)
     DECB
     LBNE ULR_LOOP
     
@@ -1196,17 +1227,17 @@ UGPC_START:
     CLR UGPC_OUTER_IDX
     
 UGPC_OUTER_LOOP:
-    ; U = LEVEL_GP_BUFFER + (UGPC_OUTER_IDX * 14)
+    ; U = LEVEL_GP_BUFFER + (UGPC_OUTER_IDX * 15)
     LDU #LEVEL_GP_BUFFER
     LDB UGPC_OUTER_IDX
     BEQ UGPC_SKIP_OUTER_MUL
 UGPC_OUTER_MUL:
-    LEAU 14,U
+    LEAU 15,U
     DECB
     BNE UGPC_OUTER_MUL
 UGPC_SKIP_OUTER_MUL:
-    ; Check if outer object is collidable (collision_flags bit 0 at RAM +7)
-    LDB 7,U
+    ; Check if outer object is collidable (collision_flags bit 0 at RAM +8)
+    LDB 8,U
     BITB #$01
     LBEQ UGPC_NEXT_OUTER
     
@@ -1219,26 +1250,27 @@ UGPC_INNER_LOOP:
     CMPA >LEVEL_GP_COUNT
     LBHS UGPC_INNER_DONE
     
-    ; Y = LEVEL_GP_BUFFER + (UGPC_INNER_IDX * 14)
+    ; Y = LEVEL_GP_BUFFER + (UGPC_INNER_IDX * 15)
     LDY #LEVEL_GP_BUFFER
     LDB UGPC_INNER_IDX
     BEQ UGPC_SKIP_INNER_MUL
 UGPC_INNER_MUL:
-    LEAY 14,Y
+    LEAY 15,Y
     DECB
     BNE UGPC_INNER_MUL
 UGPC_SKIP_INNER_MUL:
-    ; Check inner collidable (RAM +7)
-    LDB 7,Y
+    ; Check inner collidable (RAM +8)
+    LDB 8,Y
     BITB #$01
     LBEQ UGPC_NEXT_INNER
     
     ; Manhattan distance: |x1-x2| + |y1-y2|
+    ; Use low byte of world_x (RAM +1) for approximate screen-relative collision
     ; Compute |dx| = |x1 - x2|
-    LDB 0,U          ; x1 (8-bit at RAM +0)
+    LDB 1,U          ; x1 low byte (8-bit at RAM +1)
     SEX
     PSHS D           ; Save x1 (16-bit)
-    LDB 0,Y          ; x2 (8-bit at RAM +0)
+    LDB 1,Y          ; x2 low byte (8-bit at RAM +1)
     SEX
     TFR D,X
     PULS D           ; D = x1
@@ -1246,7 +1278,7 @@ UGPC_SKIP_INNER_MUL:
     TFR X,D          ; D = x2
     PULS X
     PSHS D           ; Push x2
-    LDB 0,U
+    LDB 1,U
     SEX
     SUBD ,S++        ; x1 - x2, pop
     BPL UGPC_DX_POS
@@ -1257,10 +1289,10 @@ UGPC_DX_POS:
     STD UGPC_DX
     
     ; Compute |dy| = |y1 - y2|
-    LDB 1,U          ; y1 (8-bit at RAM +1)
+    LDB 2,U          ; y1 (8-bit at RAM +2)
     SEX
     PSHS D
-    LDB 1,Y          ; y2
+    LDB 2,Y          ; y2 (8-bit at RAM +2)
     SEX
     TFR D,X
     PULS D
@@ -1268,7 +1300,7 @@ UGPC_DX_POS:
     TFR X,D
     PULS X
     PSHS D           ; Push y2
-    LDB 1,U
+    LDB 2,U
     SEX
     SUBD ,S++        ; y1 - y2, pop
     BPL UGPC_DY_POS
@@ -1280,8 +1312,8 @@ UGPC_DY_POS:
     STD UGPC_DIST
     
     ; Sum of radii
-    LDB 8,U          ; collision_size obj1 (RAM +8)
-    ADDB 8,Y         ; + collision_size obj2
+    LDB 9,U          ; collision_size obj1 (RAM +9)
+    ADDB 9,Y         ; + collision_size obj2
     SEX              ; D = sum_radius
     CMPD UGPC_DIST
     LBHI UGPC_COLLISION
@@ -1289,14 +1321,14 @@ UGPC_DY_POS:
     
 UGPC_COLLISION:
     ; Elastic collision: swap velocities
-    LDA 4,U          ; vel_x obj1
-    LDB 4,Y          ; vel_x obj2
-    STB 4,U
-    STA 4,Y
-    LDA 5,U          ; vel_y obj1
-    LDB 5,Y          ; vel_y obj2
+    LDA 5,U          ; vel_x obj1 (RAM +5)
+    LDB 5,Y          ; vel_x obj2 (RAM +5)
     STB 5,U
     STA 5,Y
+    LDA 6,U          ; vel_y obj1 (RAM +6)
+    LDB 6,Y          ; vel_y obj2 (RAM +6)
+    STB 6,U
+    STA 6,Y
     
 UGPC_NEXT_INNER:
     INC UGPC_INNER_IDX
@@ -1326,17 +1358,17 @@ ULR_GP_FG_COLLISIONS:
     CLR UGFC_GP_IDX
     
 UGFC_GP_LOOP:
-    ; U = LEVEL_GP_BUFFER + (UGFC_GP_IDX * 14)
+    ; U = LEVEL_GP_BUFFER + (UGFC_GP_IDX * 15)
     LDU #LEVEL_GP_BUFFER
     LDB UGFC_GP_IDX
     BEQ UGFC_GP_ADDR_DONE
 UGFC_GP_MUL:
-    LEAU 14,U
+    LEAU 15,U
     DECB
     BNE UGFC_GP_MUL
 UGFC_GP_ADDR_DONE:
-    ; Check GP collidable (collision_flags bit 0 at RAM +7)
-    LDB 7,U
+    ; Check GP collidable (collision_flags bit 0 at RAM +8)
+    LDB 8,U
     BITB #$01
     LBEQ UGFC_NEXT_GP
     
@@ -1352,16 +1384,16 @@ UGFC_FG_LOOP:
     BITA #$01
     BEQ UGFC_NEXT_FG
     
-    ; |dx| = |GP.x - FG.x_lo|  (FG ROM +2 = low byte of x FDB)
-    LDA 0,U          ; GP x (RAM +0)
-    SUBA 2,X         ; A = GP.x - FG.x_lo
+    ; |dx| = |GP.x_lo - FG.x_lo|  (GP RAM +1, FG ROM +2)
+    LDA 1,U          ; GP x low byte (RAM +1, world_x low byte)
+    SUBA 2,X         ; A = GP.x_lo - FG.x_lo
     BPL UGFC_DX_POS
     NEGA
 UGFC_DX_POS:
     STA UGFC_DX
     
-    ; |dy| = |GP.y - FG.y_lo|  (FG ROM +4 = low byte of y FDB)
-    LDA 1,U          ; GP y (RAM +1)
+    ; |dy| = |GP.y - FG.y_lo|  (GP RAM +2, FG ROM +4)
+    LDA 2,U          ; GP y (RAM +2)
     SUBA 4,X         ; A = GP.y - FG.y_lo
     BPL UGFC_DY_POS
     NEGA
@@ -1369,7 +1401,7 @@ UGFC_DY_POS:
     STA UGFC_DY
     
     ; sum_r = GP.collision_size + FG.collision_size
-    LDA 8,U          ; GP collision_size (RAM +8)
+    LDA 9,U          ; GP collision_size (RAM +9)
     ADDA 13,X        ; + FG collision_size (ROM +13)
     
     ; Collision if |dx| + |dy| < sum_r
@@ -1380,12 +1412,12 @@ UGFC_DY_POS:
     BHS UGFC_NEXT_FG ; No collision
     
     ; COLLISION! Axis-split by velocity: |vy|>|vx| → vert bounce, else horiz bounce
-    LDA 5,U          ; velocity_y
+    LDA 6,U          ; velocity_y (RAM +6)
     BPL UGFC_VY_ABS
     NEGA
 UGFC_VY_ABS:
     STA UGFC_DY      ; |vy|
-    LDA 4,U          ; velocity_x
+    LDA 5,U          ; velocity_x (RAM +5)
     BPL UGFC_VX_ABS
     NEGA
 UGFC_VX_ABS:
@@ -1393,43 +1425,43 @@ UGFC_VX_ABS:
     BLT UGFC_VERT_BOUNCE ; |vx| < |vy| → vert bounce
     
 UGFC_HORIZ_BOUNCE:
-    LDA 4,U          ; velocity_x (RAM +4)
+    LDA 5,U          ; velocity_x (RAM +5)
     NEGA
-    STA 4,U
-    LDA 8,U
+    STA 5,U
+    LDA 9,U          ; collision_size (RAM +9)
     ADDA 13,X
     PSHS A           ; Save separation
-    LDA 0,U
+    LDA 1,U          ; x low byte (RAM +1)
     CMPA 2,X
     BLT UGFC_PUSH_LEFT
     LDA 2,X
     ADDA ,S+
-    STA 0,U
+    STA 1,U          ; store back x low byte (RAM +1)
     BRA UGFC_NEXT_FG
 UGFC_PUSH_LEFT:
     LDA 2,X
     SUBA ,S+
-    STA 0,U
+    STA 1,U          ; store back x low byte (RAM +1)
     BRA UGFC_NEXT_FG
     
 UGFC_VERT_BOUNCE:
-    LDA 5,U          ; velocity_y (RAM +5)
+    LDA 6,U          ; velocity_y (RAM +6)
     NEGA
-    STA 5,U
-    LDA 8,U
+    STA 6,U
+    LDA 9,U          ; collision_size (RAM +9)
     ADDA 13,X
     PSHS A
-    LDA 1,U
+    LDA 2,U          ; y (RAM +2)
     CMPA 4,X
     BLT UGFC_PUSH_DOWN
     LDA 4,X
     ADDA ,S+
-    STA 1,U
+    STA 2,U          ; store back y (RAM +2)
     BRA UGFC_NEXT_FG
 UGFC_PUSH_DOWN:
     LDA 4,X
     SUBA ,S+
-    STA 1,U
+    STA 2,U          ; store back y (RAM +2)
     
 UGFC_NEXT_FG:
     LEAX 20,X        ; Next FG object (ROM stride 20)

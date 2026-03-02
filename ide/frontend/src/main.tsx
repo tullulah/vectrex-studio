@@ -1461,7 +1461,7 @@ def loop():
           </select>
         </div>
       </header>
-      <div style={{flex:1, display:'flex', position:'relative'}}>
+      <div style={{flex:1, display:'flex', position:'relative', overflow:'hidden', minHeight:0}}>
         {/* Activity Bar (left sidebar with icons) */}
         <ActivityBar 
           activeItem={activeSidebarPanel} 
@@ -1470,7 +1470,7 @@ def loop():
         
         {/* Fullscreen Playground mode */}
         {activeSidebarPanel === 'playground' ? (
-          <div style={{flex: 1, position: 'relative'}}>
+          <div style={{flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0}}>
             <PlaygroundPanel />
           </div>
         ) : (
