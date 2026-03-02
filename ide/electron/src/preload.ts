@@ -431,11 +431,11 @@ contextBridge.exposeInMainWorld('debug', {
 // EPROM Programmer API (minipro CLI wrapper)
 contextBridge.exposeInMainWorld('eprom', {
   detect: () => ipcRenderer.invoke('eprom:detect') as Promise<{ ok: boolean; version?: string; error?: string }>,
-  write: (args: { binPath: string; chip: string; programmer: string }) =>
+  write: (args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean; skipVerify?: boolean; eraseFirst?: boolean }) =>
     ipcRenderer.invoke('eprom:write', args) as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,
-  verify: (args: { binPath: string; chip: string; programmer: string }) =>
+  verify: (args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean }) =>
     ipcRenderer.invoke('eprom:verify', args) as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,
-  blankCheck: (args: { chip: string; programmer: string }) =>
+  blankCheck: (args: { chip: string; programmer: string; skipIdCheck?: boolean }) =>
     ipcRenderer.invoke('eprom:blankCheck', args) as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,
   platform: () => ipcRenderer.invoke('eprom:platform') as Promise<{ platform: string }>,
   install: () => ipcRenderer.invoke('eprom:install') as Promise<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>,

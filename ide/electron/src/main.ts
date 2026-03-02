@@ -3328,28 +3328,36 @@ ipcMain.handle('eprom:detect', async () => {
   }
 });
 
-ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string }) => {
-  const { binPath, chip } = args;
+ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean; skipVerify?: boolean; eraseFirst?: boolean }) => {
+  const { binPath, chip, skipIdCheck, skipVerify, eraseFirst } = args;
   if (!binPath || !existsSync(binPath)) {
     return { ok: false, error: `File not found: ${binPath}`, stdout: '', stderr: '' };
   }
-  // minipro -p <chip> -w <file>
-  return runMinipro(['-p', chip, '-w', binPath]);
+  // minipro -p <chip> -w <file> [flags]
+  const flags: string[] = ['-p', chip, '-w', binPath];
+  if (skipIdCheck) flags.push('-y');
+  if (skipVerify) flags.push('-v');
+  if (eraseFirst) flags.push('-e');
+  return runMinipro(flags);
 });
 
-ipcMain.handle('eprom:verify', async (_e, args: { binPath: string; chip: string; programmer: string }) => {
-  const { binPath, chip } = args;
+ipcMain.handle('eprom:verify', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean }) => {
+  const { binPath, chip, skipIdCheck } = args;
   if (!binPath || !existsSync(binPath)) {
     return { ok: false, error: `File not found: ${binPath}`, stdout: '', stderr: '' };
   }
-  // minipro -p <chip> -m <file> (verify/check)
-  return runMinipro(['-p', chip, '-m', binPath]);
+  // minipro -p <chip> -m <file> [flags]
+  const flags: string[] = ['-p', chip, '-m', binPath];
+  if (skipIdCheck) flags.push('-y');
+  return runMinipro(flags);
 });
 
-ipcMain.handle('eprom:blankCheck', async (_e, args: { chip: string; programmer: string }) => {
-  const { chip } = args;
-  // minipro -p <chip> --blank_check
-  return runMinipro(['-p', chip, '--blank_check']);
+ipcMain.handle('eprom:blankCheck', async (_e, args: { chip: string; programmer: string; skipIdCheck?: boolean }) => {
+  const { chip, skipIdCheck } = args;
+  // minipro -p <chip> --blank_check [flags]
+  const flags: string[] = ['-p', chip, '--blank_check'];
+  if (skipIdCheck) flags.push('-y');
+  return runMinipro(flags);
 });
 
 ipcMain.handle('eprom:platform', async () => {

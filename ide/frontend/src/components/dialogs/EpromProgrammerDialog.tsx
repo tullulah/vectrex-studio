@@ -43,6 +43,10 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
   const [installing, setInstalling] = useState(false);
   const [installLog, setInstallLog] = useState<string[]>([]);
   const [platform, setPlatform] = useState<string>('');
+  // Options
+  const [skipIdCheck, setSkipIdCheck] = useState(false);
+  const [skipVerify, setSkipVerify] = useState(false);
+  const [eraseFirst, setEraseFirst] = useState(false);
 
   // Check if minipro is available on mount
   useEffect(() => {
@@ -137,6 +141,9 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
       binPath,
       chip,
       programmer,
+      skipIdCheck,
+      skipVerify,
+      eraseFirst,
     });
 
     if (result?.ok) {
@@ -176,6 +183,7 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
       binPath,
       chip,
       programmer,
+      skipIdCheck,
     });
 
     if (result?.ok) {
@@ -203,7 +211,7 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
     setLog([]);
     addLog('Checking if chip is blank...');
 
-    const result = await eprom.blankCheck({ chip, programmer });
+    const result = await eprom.blankCheck({ chip, programmer, skipIdCheck });
 
     if (result?.ok) {
       addLog('✓ Chip is blank and ready to program.');
@@ -356,6 +364,25 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
+          </div>
+
+          {/* Options */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#cccccc', cursor: 'pointer' }}>
+              <input type="checkbox" checked={skipIdCheck} onChange={e => setSkipIdCheck(e.target.checked)} disabled={isWorking}
+                style={{ accentColor: '#0098ff' }} />
+              Skip chip ID check <span style={{ color: '#858585', fontSize: 11 }}>(-y)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#cccccc', cursor: 'pointer' }}>
+              <input type="checkbox" checked={skipVerify} onChange={e => setSkipVerify(e.target.checked)} disabled={isWorking}
+                style={{ accentColor: '#0098ff' }} />
+              Skip verification after write <span style={{ color: '#858585', fontSize: 11 }}>(-v)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#cccccc', cursor: 'pointer' }}>
+              <input type="checkbox" checked={eraseFirst} onChange={e => setEraseFirst(e.target.checked)} disabled={isWorking}
+                style={{ accentColor: '#0098ff' }} />
+              Erase before write <span style={{ color: '#858585', fontSize: 11 }}>(flash chips only)</span>
+            </label>
           </div>
 
           {/* ROM file info */}
