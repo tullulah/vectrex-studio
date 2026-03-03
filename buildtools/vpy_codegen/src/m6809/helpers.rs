@@ -917,12 +917,7 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
             ; VIA Port B through states $05->$04->$01 which resets the analog hardware\n\
             ; (zero-reference sequence) and would disrupt the beam position mid-drawing.\n\
             ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_SET_INTENSITY\n\
-DSWM_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
+            LDA ,X+                 ; Read per-path intensity from vector data\n\
 DSWM_SET_INTENSITY:\n\
             STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
             STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
@@ -1022,13 +1017,8 @@ DSWM_NO_NEGATE_DX:\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Check intensity override (same logic as start)\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_NEXT_SET_INTENSITY\n\
-DSWM_NEXT_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
+            ; Read per-path intensity from vector data\n\
+            LDA ,X+                 ; Read intensity from vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
             PSHS A\n\
             LDB ,X+                 ; y_start\n\
