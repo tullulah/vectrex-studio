@@ -903,6 +903,8 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                 out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             }
             
+            // Clear intensity override so the next DRAW_VECTOR uses per-path values from .vec
+            out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
         }
         _ => {
