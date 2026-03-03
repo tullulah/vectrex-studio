@@ -913,10 +913,10 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
         ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
             ; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing\n\
-            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,\n\
-            ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (register $02),\n\
-            ; setting PB0 as an input and breaking the X/Y integrator mux completely.\n\
-            ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
+            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates\n\
+            ; VIA Port B through states $05->$04->$01 which resets the analog hardware\n\
+            ; (zero-reference sequence) and would disrupt the beam position mid-drawing.\n\
+            ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
             LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
             BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
             LDA ,X+                 ; Otherwise, read intensity from vector data\n\
@@ -924,7 +924,12 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
 DSWM_USE_OVERRIDE:\n\
             LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_SET_INTENSITY:\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
+            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
+            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            LDA #$04\n\
+            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            LDA #$01\n\
+            STA >$D000              ; Port B=$01: restore normal mux\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -1040,7 +1045,12 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
+            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
+            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            LDA #$04\n\
+            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            LDA #$01\n\
+            STA >$D000              ; Port B=$01: restore normal mux\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
