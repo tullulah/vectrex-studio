@@ -917,13 +917,7 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
             ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (register $02),\n\
             ; setting PB0 as an input and breaking the X/Y integrator mux completely.\n\
             ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
-            ; Intensity: use SET_INTENSITY ($C832) by default, or DRAW_VEC_INTENSITY if set\n\
             ; FCB per-path intensity byte is always skipped — use SET_INTENSITY() in VPy\n\
-            LDA >DRAW_VEC_INTENSITY ; Non-zero = explicit override\n\
-            BNE DSWM_INTENSITY_READY\n\
-            LDA >$C832              ; Zero = use Vec_Misc_Count (last SET_INTENSITY call)\n\
-DSWM_INTENSITY_READY:\n\
-            STA VIA_t1_cnt_lo       ; Set T1 latch directly (never overwrite $C832)\n\
             LEAX 1,X                ; Always skip FCB intensity byte\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
@@ -964,7 +958,12 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 latch set in path header — just reload and start\n\
+            ; T1: DRAW_VEC_INTENSITY if set, else $C832 (SET_INTENSITY value)\n\
+            LDA >DRAW_VEC_INTENSITY\n\
+            BNE DSWM_T1_READY\n\
+            LDA >$C832\n\
+DSWM_T1_READY:\n\
+            STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
             ; Wait for move to complete (PB=1 on exit)\n\
@@ -1016,11 +1015,6 @@ DSWM_NO_NEGATE_DX:\n\
             TFR X,D\n\
             PSHS D\n\
             ; Intensity: use SET_INTENSITY ($C832) or DRAW_VEC_INTENSITY override\n\
-            LDA >DRAW_VEC_INTENSITY\n\
-            BNE DSWM_NEXT_INTENSITY_READY\n\
-            LDA >$C832\n\
-DSWM_NEXT_INTENSITY_READY:\n\
-            STA VIA_t1_cnt_lo       ; Set T1 latch for this path\n\
             LEAX 1,X                ; Skip FCB intensity byte\n\
             LDB ,X+                 ; y_start\n\
             TST >MIRROR_Y\n\
