@@ -917,8 +917,14 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
             ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (register $02),\n\
             ; setting PB0 as an input and breaking the X/Y integrator mux completely.\n\
             ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
-            ; FCB per-path intensity byte is always skipped — use SET_INTENSITY() in VPy\n\
-            LEAX 1,X                ; Always skip FCB intensity byte\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
+            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
+            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
+            BRA DSWM_SET_INTENSITY\n\
+DSWM_USE_OVERRIDE:\n\
+            LEAX 1,X                ; Skip intensity byte in vector data\n\
+DSWM_SET_INTENSITY:\n\
+            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -958,11 +964,8 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1: DRAW_VEC_INTENSITY if set, else $C832 (SET_INTENSITY value)\n\
-            LDA >DRAW_VEC_INTENSITY\n\
-            BNE DSWM_T1_READY\n\
-            LDA >$C832\n\
-DSWM_T1_READY:\n\
+            ; Timing setup\n\
+            LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
@@ -1014,8 +1017,15 @@ DSWM_NO_NEGATE_DX:\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Intensity: use SET_INTENSITY ($C832) or DRAW_VEC_INTENSITY override\n\
-            LEAX 1,X                ; Skip FCB intensity byte\n\
+            ; Check intensity override (same logic as start)\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
+            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
+            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
+            BRA DSWM_NEXT_SET_INTENSITY\n\
+DSWM_NEXT_USE_OVERRIDE:\n\
+            LEAX 1,X                ; Skip intensity byte in vector data\n\
+DSWM_NEXT_SET_INTENSITY:\n\
+            PSHS A\n\
             LDB ,X+                 ; y_start\n\
             TST >MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
@@ -1029,6 +1039,8 @@ DSWM_NEXT_NO_NEGATE_Y:\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
+            PULS A                  ; Get intensity back\n\
+            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1056,7 +1068,8 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 latch set in path header — just reload and start\n\
+            LDA #$7F\n\
+            STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
             ; Wait for move (PB=1 on exit)\n\
