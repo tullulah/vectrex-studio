@@ -984,8 +984,11 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; Timing setup\n\
+            ; Timing: DRAW_VEC_INTENSITY (from SET_INTENSITY before DRAW_VECTOR) or $7F default\n\
+            LDA >DRAW_VEC_INTENSITY\n\
+            BNE DSWM_T1_READY\n\
             LDA #$7F\n\
+DSWM_T1_READY:\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
@@ -1088,7 +1091,10 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
+            LDA >DRAW_VEC_INTENSITY\n\
+            BNE DSWM_NEXT_T1_READY\n\
             LDA #$7F\n\
+DSWM_NEXT_T1_READY:\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\

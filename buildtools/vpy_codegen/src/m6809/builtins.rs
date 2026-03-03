@@ -880,7 +880,8 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Clear mirror flags (DRAW_VECTOR uses no mirroring)
             out.push_str("    CLR MIRROR_X\n");
             out.push_str("    CLR MIRROR_Y\n");
-            out.push_str("    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data\n");
+            out.push_str("    LDA >$C832         ; Read SET_INTENSITY value (Vec_Misc_Count, while DP=$C8)\n");
+            out.push_str("    STA DRAW_VEC_INTENSITY ; Pass to DSWM (0 = use default $7F)\n");
             
             if use_banked_assets() {
                 // MULTIBANK MODE: Use banked access via lookup tables in Bank #31
