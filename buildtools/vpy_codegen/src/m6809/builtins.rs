@@ -715,8 +715,9 @@ fn emit_set_intensity(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Evaluate intensity argument
     expressions::emit_simple_expr(&args[0], out, assets);
     
-    // Load result into A and call BIOS
+    // Load result into A, store in our own var (BIOS-safe), then call BIOS
     out.push_str("    LDA RESULT+1    ; Load intensity (8-bit)\n");
+    out.push_str("    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)\n");
     out.push_str("    JSR Intensity_a\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
@@ -880,8 +881,7 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Clear mirror flags (DRAW_VECTOR uses no mirroring)
             out.push_str("    CLR MIRROR_X\n");
             out.push_str("    CLR MIRROR_Y\n");
-            out.push_str("    LDA >$C832         ; Read SET_INTENSITY value (Vec_Misc_Count, while DP=$C8)\n");
-            out.push_str("    STA DRAW_VEC_INTENSITY ; Pass to DSWM (0 = use default $7F)\n");
+            // DRAW_VEC_INTENSITY was set by SET_INTENSITY() (or 0 = use $7F default in DSWM)
             
             if use_banked_assets() {
                 // MULTIBANK MODE: Use banked access via lookup tables in Bank #31
