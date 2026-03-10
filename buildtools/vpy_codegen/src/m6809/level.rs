@@ -448,7 +448,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; Determine ROM vs RAM offsets via stride\n");
         out.push_str("    LDA 1,S          ; Peek stride from stack (+1 because B is on top)\n");
         out.push_str("    CMPA #20\n");
-        out.push_str("    BEQ SLR_ROM_OFFSETS\n");
+        out.push_str("    LBEQ SLR_ROM_OFFSETS\n");
         out.push_str("    \n");
         out.push_str("    ; === RAM object (stride=15) ===\n");
         out.push_str("    ; Need to look up intensity from ROM counterpart\n");

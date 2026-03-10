@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "name": "marker",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [{
+    "name": "default",
+    "visible": true,
+    "paths": [
+      {
+        "name": "horizontal",
+        "intensity": 127,
+        "closed": false,
+        "points": [{"x": -8, "y": 0}, {"x": 8, "y": 0}]
+      },
+      {
+        "name": "vertical",
+        "intensity": 127,
+        "closed": false,
+        "points": [{"x": 0, "y": -8}, {"x": 0, "y": 8}]
+      }
+    ]
+  }],
+  "center_x": 0,
+  "center_y": 0
+}

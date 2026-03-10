@@ -1,0 +1,16 @@
+[project]
+name = "scrolling_level_banked"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/scrolling_level_banked.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/**/*.vec"]
+playground = ["assets/playground/**/*.vplay"]
