@@ -39,6 +39,8 @@ def loop():
         type_context: std::collections::HashMap::new(),
         output_name: None,
         buffer_requirements: None,
+        frame_groups: std::collections::HashMap::new(),
+        interleaved_frames: None,
     };
     let asm = vectrex_lang::codegen::emit_asm(&module, Target::Vectrex, &opts);
     // The main loop is generated with label "MAIN:" when auto_loop is enabled

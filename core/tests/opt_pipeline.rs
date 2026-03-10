@@ -6,7 +6,7 @@ use vectrex_lang::codegen::debug_optimize_module_for_tests;
 // This test verifies that basic constant folding still works at expression level.
 #[test]
 fn constant_folding_add_mul_identities() {
-    let f = Function { name: "main".into(), line: 0, params: vec![], body: vec![
+    let f = Function { name: "main".into(), line: 0, params: vec![], frame_group: None, body: vec![
         Stmt::Let { name: "a".into(), value: Expr::Binary { op: BinOp::Add, left: Box::new(Expr::Number(0)), right: Box::new(Expr::Number(5)) }, source_line: 0 },
         Stmt::Let { name: "b".into(), value: Expr::Binary { op: BinOp::Mul, left: Box::new(Expr::Number(1)), right: Box::new(Expr::Ident(IdentInfo { name:"a".into(), source_line: 0, col: 0 })) }, source_line: 0 },
         Stmt::Return(Some(Expr::Ident(IdentInfo { name:"b".into(), source_line: 0, col: 0 })), 0)
@@ -30,7 +30,7 @@ fn constant_folding_add_mul_identities() {
 fn dead_store_elimination_basic() {
     // x assigned then overwritten before any read; first assign should be removed.
     // However, DSE is disabled, so all statements should remain.
-    let f = Function { name: "f".into(), line: 0, params: vec![], body: vec![
+    let f = Function { name: "f".into(), line: 0, params: vec![], frame_group: None, body: vec![
         Stmt::Let { name: "x".into(), value: Expr::Number(1), source_line: 0 }, // would be dead if DSE enabled
         Stmt::Assign { target: AssignTarget::Ident { name: "x".into(), source_line: 0, col: 0 }, value: Expr::Number(2), source_line: 0 },
         Stmt::Return(Some(Expr::Ident(IdentInfo { name:"x".into(), source_line: 0, col: 0 })), 0)

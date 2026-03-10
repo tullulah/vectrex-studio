@@ -40,6 +40,8 @@ fn test_opts() -> CodegenOptions {
         structs: HashMap::new(),
         type_context: HashMap::new(),
         buffer_requirements: None,
+        frame_groups: HashMap::new(),
+        interleaved_frames: None,
     }
 }
 
@@ -48,6 +50,7 @@ fn create_function(name: &str, body: Vec<Stmt>) -> Function {
         name: name.to_string(),
         line: 1,
         params: vec![],
+        frame_group: None,
         body,
     }
 }
