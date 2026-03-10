@@ -102,6 +102,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
 
     // Level camera
     ("SET_CAMERA_X", 1),          // camera_x (16-bit scroll offset)
+    ("SET_CAMERA_Y", 1),          // camera_y (16-bit scroll offset)
 
     // Message table dispatch
     ("MSG_DEF", 4),       // id, x, y, text  — data declaration, emits no code
@@ -689,6 +690,10 @@ pub fn emit_builtin(
         }
         "SET_CAMERA_X" => {
             level::emit_set_camera_x(args, out, assets);
+            true
+        }
+        "SET_CAMERA_Y" => {
+            level::emit_set_camera_y(args, out, assets);
             true
         }
         

@@ -174,6 +174,25 @@ pub fn emit_set_camera_x(args: &[Expr], out: &mut String, assets: &[crate::Asset
     out.push_str("    STD RESULT\n");
 }
 
+/// Emit SET_CAMERA_Y(value) - Set 16-bit camera Y scroll offset
+///
+/// Evaluates the expression and stores the result into CAMERA_Y (16-bit).
+/// SHOW_LEVEL_RUNTIME subtracts CAMERA_Y from each object's world_y to get
+/// the screen-relative y position.  Default value is 0 (no scroll).
+pub fn emit_set_camera_y(args: &[Expr], out: &mut String, assets: &[crate::AssetInfo]) {
+    out.push_str("    ; ===== SET_CAMERA_Y builtin =====\n");
+    if args.is_empty() {
+        out.push_str("    ; ERROR: SET_CAMERA_Y requires 1 argument\n");
+        out.push_str("    LDD #0\n");
+        out.push_str("    STD RESULT\n");
+        return;
+    }
+    expressions::emit_simple_expr(&args[0], out, assets);
+    out.push_str("    STD >CAMERA_Y    ; Store 16-bit camera Y scroll offset\n");
+    out.push_str("    LDD #0\n");
+    out.push_str("    STD RESULT\n");
+}
+
 /// Emit runtime helpers for level system.
 /// Only emits helpers that are actually used in the code (tree shaking).
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
@@ -200,6 +219,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized\n");
         out.push_str("    LDD #0\n");
         out.push_str("    STD >CAMERA_X\n");
+        out.push_str("    STD >CAMERA_Y\n");
         out.push_str("    \n");
         out.push_str("    ; Skip world bounds (8 bytes) + time/score (4 bytes)\n");
         out.push_str("    LEAX 12,X        ; X now points to object counts (+12)\n");
@@ -483,7 +503,24 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SLR_RAM_VISIBLE:\n");
         out.push_str("    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)\n");
         out.push_str("    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)\n");
-        out.push_str("    LDB 2,X          ; y at RAM +2\n");
+        out.push_str("    ; Apply CAMERA_Y: sign-extend world_y (8-bit), subtract CAMERA_Y, cull\n");
+        out.push_str("    LDB 2,X          ; world_y (signed byte at RAM +2)\n");
+        out.push_str("    SEX              ; sign-extend B into D\n");
+        out.push_str("    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y\n");
+        out.push_str("    TSTA\n");
+        out.push_str("    BEQ SLR_RAM_Y_ZERO\n");
+        out.push_str("    INCA\n");
+        out.push_str("    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above\n");
+        out.push_str("    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)\n");
+        out.push_str("    CMPB #128\n");
+        out.push_str("    BHS SLR_RAM_Y_VISIBLE\n");
+        out.push_str("    LBRA SLR_OBJ_NEXT\n");
+        out.push_str("SLR_RAM_Y_ZERO:\n");
+        out.push_str("    ; A=0: visible if B <= 127\n");
+        out.push_str("    CMPB #127\n");
+        out.push_str("    BLS SLR_RAM_Y_VISIBLE\n");
+        out.push_str("    LBRA SLR_OBJ_NEXT\n");
+        out.push_str("SLR_RAM_Y_VISIBLE:\n");
         out.push_str("    STB >DRAW_VEC_Y\n");
         out.push_str("    LDU 11,X         ; vector_ptr at RAM +11\n");
         out.push_str("    BRA SLR_DRAW_VECTOR\n");
@@ -494,7 +531,23 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    CLR >MIRROR_Y\n");
         out.push_str("    LDA 8,X          ; intensity at ROM +8\n");
         out.push_str("    STA >DRAW_VEC_INTENSITY\n");
-        out.push_str("    LDD 3,X          ; y FDB at ROM +3; low byte into B\n");
+        out.push_str("    ; Apply CAMERA_Y: load world_y FDB at ROM +3, subtract CAMERA_Y, cull\n");
+        out.push_str("    LDD 3,X          ; world_y FDB at ROM +3 (16-bit signed)\n");
+        out.push_str("    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y\n");
+        out.push_str("    TSTA\n");
+        out.push_str("    BEQ SLR_ROM_Y_ZERO\n");
+        out.push_str("    INCA\n");
+        out.push_str("    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above\n");
+        out.push_str("    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)\n");
+        out.push_str("    CMPB #128\n");
+        out.push_str("    BHS SLR_ROM_Y_VISIBLE\n");
+        out.push_str("    LBRA SLR_OBJ_NEXT\n");
+        out.push_str("SLR_ROM_Y_ZERO:\n");
+        out.push_str("    ; A=0: visible if B <= 127\n");
+        out.push_str("    CMPB #127\n");
+        out.push_str("    BLS SLR_ROM_Y_VISIBLE\n");
+        out.push_str("    LBRA SLR_OBJ_NEXT\n");
+        out.push_str("SLR_ROM_Y_VISIBLE:\n");
         out.push_str("    STB >DRAW_VEC_Y  ; DP=$D0, must use extended addressing\n");
         out.push_str("    ; Load world_x (16-bit), subtract CAMERA_X, check visibility\n");
         out.push_str("    LDD 1,X          ; x FDB at ROM +1\n");

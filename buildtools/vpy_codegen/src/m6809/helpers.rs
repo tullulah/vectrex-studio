@@ -121,6 +121,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_GP_COUNT", 1, "GP object count");
         ram.allocate("LEVEL_FG_COUNT", 1, "FG object count");
         ram.allocate("CAMERA_X", 2, "Camera X scroll offset (16-bit signed world units)");
+        ram.allocate("CAMERA_Y", 2, "Camera Y scroll offset (16-bit signed world units)");
         ram.allocate("LEVEL_BG_ROM_PTR", 2, "BG layer ROM pointer");
         ram.allocate("LEVEL_GP_ROM_PTR", 2, "GP layer ROM pointer");
         ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");

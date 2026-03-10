@@ -1,6 +1,6 @@
 # VPy Language Manual
 
-VPy is a Python-inspired language that compiles to MC6809 assembly for the Vectrex console. It is statically typed (all values are 16-bit integers), compiled, and designed for game development on constrained hardware.
+VPy is a Python-inspired language that compiles to MC6809 assembly for the Vectrex console. It supports multiple integer types (u8, i8, u16, i16), is compiled, and is designed for game development on constrained hardware.
 
 ---
 
@@ -102,33 +102,19 @@ counter += 1
 
 ## 3. Types and Values
 
-VPy supports **variable-sized types** (⚠️ **Experimental Phase**) alongside the default 16-bit integer.
+VPy supports four integer types. Untyped variables default to `i16`.
 
-### Default type: 16-bit integer
+### Integer Types
 
-Untyped variables default to 16-bit signed (`i16`):
-
-```python
-x = 0              # i16: range -32768 to +32767
-counter += 1
-```
-
-- Truthiness: `0` is false, any other value is true.
-- No floating point.
-- No booleans (`True`/`False`) — use `1` and `0` instead.
-
-### ⚠️ Experimental: Variable-Sized Types with Type Hints
-
-VPy now supports explicit type declarations using Python's standard type hint syntax:
+Use Python type-hint syntax to declare the type of a variable:
 
 ```python
 x: u8 = 10           # 8-bit unsigned: 0–255
 y: i8 = -5           # 8-bit signed: -128 to +127
 score: u16 = 1000    # 16-bit unsigned: 0–65535
 pos: i16 = -100      # 16-bit signed: -32768 to +32767
+x = 0                # no annotation → defaults to i16
 ```
-
-**Type sizes and ranges:**
 
 | Type | Size | Signed | Range |
 |------|------|--------|-------|
@@ -137,23 +123,35 @@ pos: i16 = -100      # 16-bit signed: -32768 to +32767
 | `u16` | 2 bytes | No | 0–65535 |
 | `i16` | 2 bytes | Yes | -32768 to +32767 |
 
-**Status:** 🔧 Experimental — fully implemented in Phase 5 codegen, but not all edge cases tested. Use with caution in production games.
+- Truthiness: `0` is false, any other value is true.
+- No floating point. No booleans — use `1` and `0` instead.
 
-**Known limitation:** Const arrays with `u8` type annotation may cause runtime issues in complex games. Workaround: use untyped const arrays (defaults to `i16`).
+**Memory:** `u8`/`i8` occupy 1 byte of RAM; `u16`/`i16` occupy 2 bytes. Using smaller types saves RAM — roughly 1 byte per 8-bit variable.
 
-**Backward compatibility:** Variables without type hints default to 16-bit (`i16`), so all existing code continues working unchanged.
+**Backward compatibility:** All code without type annotations continues to work unchanged (`i16` default).
 
-**Performance benefit:** Using smaller types saves approximately **20% of available RAM** (~200 bytes per game).
+**Known limitation:** Const arrays with `u8` type annotation may cause runtime issues in complex games. Use untyped const arrays as a workaround (they default to `i16`).
 
-**Example: Typed game state**
+**Example: typed game state**
 
 ```python
-# Efficient game state using smaller types
-health: u8 = 100        # 0–255 is plenty for health
-direction: i8 = 1       # -1, 0, or +1 for left/idle/right
+health: u8 = 100        # 0–255 is sufficient for health
+direction: i8 = 1       # -1, 0, or +1
 score: u16 = 0          # 0–65535 for high scores
-x: i16 = 0              # full -32768 to +32767 range for screen coordinates
+x: i16 = 0              # full range for screen coordinates
 ```
+
+### Arrays with types
+
+Array elements use the declared element type:
+
+```python
+enemy_hp: u8 = [100, 90, 80]   # 3 bytes in RAM
+offsets: i8 = [-1, 0, 1]       # 3 bytes in RAM
+coords = [0, 100, 200]         # untyped → i16, 6 bytes in RAM
+```
+
+Stride for element access is 1 byte for `u8`/`i8`, 2 bytes for `u16`/`i16`.
 
 ### Integer literals
 
@@ -461,11 +459,95 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 | Function | Description |
 |----------|-------------|
 | `LOAD_LEVEL("name")` | Load a `.vplay` level file into memory |
-| `SHOW_LEVEL()` | Render the currently loaded level to screen |
+| `SHOW_LEVEL()` | Render the currently loaded level at the current camera position |
 | `UPDATE_LEVEL()` | Update level state (tile animations, etc.) |
+| `SET_CAMERA_X(x)` | Set the horizontal scroll offset (16-bit signed) |
+| `SET_CAMERA_Y(y)` | Set the vertical scroll offset (16-bit signed) |
 | `GET_LEVEL_WIDTH()` | Return width of current level in tiles |
 | `GET_LEVEL_HEIGHT()` | Return height of current level in tiles |
 | `GET_LEVEL_TILE(x, y)` | Return tile value at position (x, y) |
+
+#### Scrolling
+
+Levels can extend beyond the Vectrex screen (–128 to +127 on each axis). `SET_CAMERA_X` and `SET_CAMERA_Y` shift the viewport so the game can scroll through worlds larger than the screen.
+
+```python
+camera_x: i16 = 0
+camera_y: i16 = 0
+
+def loop():
+    joy_x = J1_X()
+    joy_y = J1_Y()
+    if joy_x > 20:
+        camera_x = camera_x + 2
+    if joy_x < -20:
+        camera_x = camera_x - 2
+    if joy_y > 20:
+        camera_y = camera_y + 2
+    if joy_y < -20:
+        camera_y = camera_y - 2
+
+    # Clamp to world bounds (defined in the .vplay file)
+    camera_x = clamp(camera_x, 0, 800)
+    camera_y = clamp(camera_y, -200, 0)
+
+    SET_CAMERA_X(camera_x)
+    SET_CAMERA_Y(camera_y)
+    SHOW_LEVEL()
+```
+
+- Objects are positioned in **world coordinates** in the `.vplay` file.
+- `SHOW_LEVEL()` subtracts `CAMERA_X`/`CAMERA_Y` from each object's world position to compute screen coordinates.
+- Objects outside the visible range are automatically culled (not drawn).
+- `LOAD_LEVEL()` resets both `CAMERA_X` and `CAMERA_Y` to 0.
+
+#### .vplay file format
+
+Level files are JSON (version 2.0). They are created and edited in the Playground tab of the IDE.
+
+```json
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": { "name": "entrance", ... },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 863,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [ ... ],
+    "gameplay": [ ... ],
+    "foreground": [ ... ]
+  }
+}
+```
+
+Each object in a layer:
+
+```json
+{
+  "id": "obj_unique_id",
+  "type": "enemy",
+  "vectorName": "lamp",
+  "layer": "gameplay",
+  "x": 458,
+  "y": -2,
+  "rotation": 0,
+  "scale": 1
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `vectorName` | Name of the `.vec` asset to draw (without extension) |
+| `x`, `y` | World-space position |
+| `layer` | `"background"`, `"gameplay"`, or `"foreground"` |
+| `rotation` | Rotation in degrees (stored but not yet applied at runtime) |
+| `scale` | Scale factor (stored but not yet applied at runtime) |
+
+`worldBounds` documents the intended world extents for the game logic (e.g. for clamping `CAMERA_X`); they are not enforced by the runtime.
 
 ### Math
 
