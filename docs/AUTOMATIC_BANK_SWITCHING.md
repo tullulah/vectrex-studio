@@ -1,12 +1,22 @@
 # Automatic Bank Switching Specification
 
-**Version**: 1.0
-**Date**: 2026-01-10
-**Status**: Design Phase
+**Version**: 2.0
+**Date**: 2026-03-10
+**Status**: ✅ Implemented (4-bank, 4×16 KB)
 
 ## Overview
 
-VPy implements **automatic bank switching** that is transparent to the developer. The compiler analyses the code, assigns functions to banks automatically, and generates wrappers for cross-bank calls. The developer only configures the total ROM size — the rest is automatic.
+VPy implements **automatic bank switching** that is transparent to the developer. The
+compiler analyses the code, assigns functions and assets to banks automatically, and
+generates all bank-switching wrappers. The developer only adds two `META` directives —
+the rest is automatic.
+
+**Current implementation:** 4-bank (4×16 KB = 64 KB total). Banks 0–2 are switchable
+at `$0000–$3FFF`; Bank 3 (helpers) is fixed at `$4000–$7FFF`. Bank switching uses
+`STA $DF00`.
+
+> **Note on larger configurations:** Configs with `num_banks > 4` compile but
+> cross-bank symbol resolution is incomplete. Use 4-bank for production games.
 
 ## Goals
 
@@ -35,15 +45,18 @@ RAM Variables:
 ### Bank Configuration (META Directives)
 
 ```python
-# Developer only configures total size:
-META ROM_TOTAL_SIZE = 524288   # 512KB
-META ROM_BANK_SIZE = 16384     # 16KB (default, optional)
+# 4-bank 64 KB configuration (current recommended):
+META ROM_TOTAL_SIZE = 65536    # 64 KB total
+META ROM_BANK_SIZE  = 16384    # 16 KB per bank
 
 # Compiler calculates automatically:
-# ROM_BANK_COUNT = 524288 / 16384 = 32 banks
-# FIXED_BANK = 31 (last bank, always visible at 0x4000-0x7FFF)
-# BANKED_BANKS = 0-30 (available for swapping at 0x0000-0x3FFF)
+# ROM_BANK_COUNT = 65536 / 16384 = 4 banks
+# HELPERS_BANK = 3 (last bank, fixed at $4000-$7FFF)
+# BANKED_BANKS = 0-2 (switched in at $0000-$3FFF via STA $DF00)
 ```
+
+> Larger configurations (e.g. 512 KB) are possible in principle but cross-bank
+> symbol resolution is not yet complete.
 
 ### Fixed Bank Strategy
 
@@ -682,5 +695,5 @@ First-Fit Decreasing vs Best-Fit:
 
 ---
 
-**Last Updated**: 2026-01-10
-**Status**: ✅ Ready for Implementation
+**Last Updated**: 2026-03-10
+**Status**: ✅ Implemented and working (4-bank)
