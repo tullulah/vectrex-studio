@@ -69,19 +69,20 @@ export class JsVecxCore {
   }
 
   loadProgram(bytes: Uint8Array, _base?: number){
-    // Para jsvecx, cargar en cartridge (0x0000-0x7FFF)
     if (!this.inst) return;
-    
-    // Asegurar que el cartucho existe
-    if (!this.inst.cart) {
-      this.inst.cart = new Array(0x8000).fill(0);
+
+    const romSize = bytes.length;
+
+    if (!this.inst.cart || this.inst.cart.length < romSize) {
+      this.inst.cart = new Array(Math.max(romSize, 0x8000)).fill(0);
     }
-    
-    const maxLen = Math.min(bytes.length, 0x8000);
-    for (let i = 0; i < maxLen; i++) {
+
+    for (let i = 0; i < romSize; i++) {
       this.inst.cart[i] = bytes[i];
     }
-    console.log(`[JsVecxCore] Program loaded: ${maxLen} bytes to cartridge`);
+
+    this.inst.loaded_rom_size = romSize;
+    console.log(`[JsVecxCore] Program loaded: ${romSize} bytes (${Math.ceil(romSize / 0x4000)} banks)`);
   }
 
   runFrame(_maxInstr?: number){

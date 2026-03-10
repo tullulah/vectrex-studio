@@ -47,13 +47,15 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_LINE_ARGS       EQU $C880+$0C   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$16   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$18   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$1A   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$1B   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$1C   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$1E   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$0E   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$18   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$1A   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$1C   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$1D   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$1E   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$20   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -84,8 +86,11 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     ; TODO: Statement Pass { source_line: 9 }
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -93,9 +98,7 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; ===== MOVE builtin =====
     LDA #$C4                ; X coordinate
     STA VPY_MOVE_X
@@ -105,24 +108,14 @@ LOOP_BODY:
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #40
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #-40
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
@@ -136,24 +129,14 @@ LOOP_BODY:
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #-40
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #-40
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
@@ -167,24 +150,14 @@ LOOP_BODY:
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-30
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #30
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
@@ -300,22 +273,32 @@ DLW_SEG1_DX_READY:
     LDA >VLINE_DY  ; EXTENDED
     LDB >VLINE_DX  ; EXTENDED
     JSR Draw_Line_d ; Beam moves automatically
-    ; Check if we need SEGMENT 2 (dy outside ±127 range)
+    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)
     LDD >VLINE_DY_16 ; Reload original dy - EXTENDED
     CMPD #127
     BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
     CMPD #-128
     BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
-    BRA DLW_DONE       ; dy in range ±127: no segment 2
+    LDD >VLINE_DX_16 ; Also check dx - EXTENDED
+    CMPD #127
+    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2
+    CMPD #-128
+    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2
+    BRA DLW_DONE       ; both dy and dx in range: no segment 2
 DLW_NEED_SEG2:
     ; SEGMENT 2: Draw remaining dy and dx
     ; Calculate remaining dy
     LDD >VLINE_DY_16 ; Load original full dy - EXTENDED
     CMPD #127
-    BGT DLW_SEG2_DY_POS  ; dy > 127
+    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127
+    CMPD #-128
+    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy
     ; dy < -128, so we drew -128 in segment 1
     ; remaining = dy - (-128) = dy + 128
     ADDD #128       ; Add back the -128 we already drew
+    BRA DLW_SEG2_DY_DONE
+DLW_SEG2_DY_NO_REMAIN:
+    LDD #0          ; dy in range: no remaining
     BRA DLW_SEG2_DY_DONE
 DLW_SEG2_DY_POS:
     ; dy > 127, so we drew 127 in segment 1

@@ -2643,89 +2643,93 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   const LayersPanel = () => {
-    // Only show the main drawing layer, background is handled separately
-    const mainLayer = resource.layers[0];
-    const pathCount = mainLayer?.paths.length || 0;
-    const pointCount = mainLayer?.paths.reduce((sum, p) => sum + p.points.length, 0) || 0;
-    
+    const toggleLayerVisible = (layerIdx: number) => {
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      newResource.layers[layerIdx].visible = !newResource.layers[layerIdx].visible;
+      updateResource(resource, newResource);
+    };
+
+    const addLayer = () => {
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      const n = newResource.layers.length + 1;
+      newResource.layers.push({ name: `layer_${n}`, visible: true, paths: [] });
+      updateResource(resource, newResource);
+      setCurrentLayerIndex(newResource.layers.length - 1);
+    };
+
+    const deleteLayer = (layerIdx: number) => {
+      if (resource.layers.length <= 1) return; // keep at least one
+      if (!window.confirm(`Delete layer "${resource.layers[layerIdx].name}"?`)) return;
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      newResource.layers.splice(layerIdx, 1);
+      updateResource(resource, newResource);
+      setCurrentLayerIndex(Math.min(currentLayerIndex, newResource.layers.length - 1));
+    };
+
     return (
       <div style={{ background: '#2a2a4e', padding: '8px', borderRadius: '4px' }}>
-        <div style={{ color: '#aaa', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold' }}>Layers</div>
-        
-        {/* Background image layer - only shown when image is loaded */}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ color: '#aaa', fontSize: '12px', fontWeight: 'bold', flex: 1 }}>Layers</div>
+          <button
+            onClick={addLayer}
+            title="Add layer"
+            style={{ background: '#3a5a3a', border: '1px solid #5a8a5a', color: '#8f8', borderRadius: '3px', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '1px 6px' }}
+          >+</button>
+        </div>
+
+        {/* Background image pseudo-layer */}
         {backgroundImage && (
-          <div style={{
-            padding: '6px 8px',
-            background: '#3a4a3e',
-            color: '#8f8',
-            borderRadius: '4px',
-            marginBottom: '8px',
-            fontSize: '11px',
-          }}>
+          <div style={{ padding: '6px 8px', background: '#3a4a3e', color: '#8f8', borderRadius: '4px', marginBottom: '4px', fontSize: '11px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="checkbox"
-                checked={showBackground}
-                onChange={(e) => setShowBackground(e.target.checked)}
-                style={{ margin: 0 }}
-              />
+              <input type="checkbox" checked={showBackground} onChange={(e) => setShowBackground(e.target.checked)} style={{ margin: 0 }} />
               <span>📷 Background</span>
               <button
-                onClick={() => {
-                  if (window.confirm('Remove background image?')) {
-                    setBackgroundImage(null);
-                    setShowBackground(false);
-                    setShowEdgeSettings(false);
-                    // Remove from resource
-                    const newResource = { ...resource };
-                    delete newResource.backgroundImage;
-                    updateResource(resource, newResource);
-                  }
-                }}
-                style={{
-                  marginLeft: 'auto',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#a66',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  padding: '2px 4px',
-                }}
-                title="Remove background image"
-              >
-                ✕
-              </button>
+                onClick={() => { if (window.confirm('Remove background image?')) { setBackgroundImage(null); setShowBackground(false); setShowEdgeSettings(false); const nr = { ...resource }; delete nr.backgroundImage; updateResource(resource, nr); } }}
+                style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
+              >✕</button>
             </div>
           </div>
         )}
-        
-        {/* Main drawing layer - always visible and active */}
-        <div style={{
-          padding: '6px 8px',
-          background: '#4a4a8e',
-          color: 'white',
-          borderRadius: '4px',
-          fontSize: '12px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <span>✏️ Drawing</span>
-            <span style={{ marginLeft: 'auto', color: '#aaa', fontSize: '10px' }}>active</span>
-          </div>
-          <div style={{ color: '#888', fontSize: '10px' }}>
-            {pathCount} path{pathCount !== 1 ? 's' : ''} · {pointCount} point{pointCount !== 1 ? 's' : ''}
-          </div>
-        </div>
-        
+
+        {/* All vector layers */}
+        {resource.layers.map((layer, layerIdx) => {
+          const isActive = layerIdx === currentLayerIndex;
+          const pathCount = layer.paths.length;
+          const pointCount = layer.paths.reduce((s, p) => s + p.points.length, 0);
+          return (
+            <div
+              key={layerIdx}
+              onClick={() => { setCurrentLayerIndex(layerIdx); setSelectedPoints(new Set()); setCurrentPathIndex(-1); setSelectedPointIndex(-1); }}
+              style={{ padding: '6px 8px', background: isActive ? '#4a4a8e' : '#2e2e4e', color: isActive ? 'white' : '#aaa', borderRadius: '4px', marginBottom: '4px', fontSize: '12px', cursor: 'pointer', border: isActive ? '1px solid #7a7abf' : '1px solid transparent' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="checkbox"
+                  checked={layer.visible !== false}
+                  onChange={(e) => { e.stopPropagation(); toggleLayerVisible(layerIdx); }}
+                  style={{ margin: 0 }}
+                  title="Toggle visibility"
+                />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{layer.name}</span>
+                {isActive && <span style={{ color: '#7af', fontSize: '9px', flexShrink: 0 }}>active</span>}
+                {resource.layers.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteLayer(layerIdx); }}
+                    title="Delete layer"
+                    style={{ background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '11px', padding: '0 2px', flexShrink: 0 }}
+                  >✕</button>
+                )}
+              </div>
+              <div style={{ color: '#666', fontSize: '10px', marginTop: '2px' }}>
+                {pathCount} path{pathCount !== 1 ? 's' : ''} · {pointCount} pt{pointCount !== 1 ? 's' : ''}
+              </div>
+            </div>
+          );
+        })}
+
         {/* Selection info */}
         {selectedPoints.size > 0 && (
-          <div style={{
-            marginTop: '8px',
-            padding: '6px 8px',
-            background: '#5a3a3e',
-            color: '#faa',
-            borderRadius: '4px',
-            fontSize: '11px',
-          }}>
+          <div style={{ marginTop: '8px', padding: '6px 8px', background: '#5a3a3e', color: '#faa', borderRadius: '4px', fontSize: '11px' }}>
             {selectedPoints.size} point{selectedPoints.size !== 1 ? 's' : ''} selected
           </div>
         )}
@@ -2737,15 +2741,15 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const PathPropertiesPanel = () => {
     if (currentPathIndex < 0) return null;
     
-    const mainLayer = resource.layers[0];
-    if (!mainLayer || !mainLayer.paths[currentPathIndex]) return null;
+    const activeLayer = resource.layers[currentLayerIndex];
+    if (!activeLayer || !activeLayer.paths[currentPathIndex]) return null;
     
-    const path = mainLayer.paths[currentPathIndex];
+    const path = activeLayer.paths[currentPathIndex];
     
     const handleIntensityChange = (newIntensity: number) => {
       const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
-      if (newResource.layers[0] && newResource.layers[0].paths[currentPathIndex]) {
-        newResource.layers[0].paths[currentPathIndex].intensity = newIntensity;
+      if (newResource.layers[currentLayerIndex] && newResource.layers[currentLayerIndex].paths[currentPathIndex]) {
+        newResource.layers[currentLayerIndex].paths[currentPathIndex].intensity = newIntensity;
         updateResource(resource, newResource);
       }
     };

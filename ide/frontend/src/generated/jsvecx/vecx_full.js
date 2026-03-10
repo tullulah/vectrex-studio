@@ -4534,8 +4534,12 @@ function VecX()
                 // Banked window: map to current_bank * 16KB
                 physical_address = (this.current_bank * 0x4000) + address;
             } else {
-                // Fixed bank #31: map to offset 0x7C000 (bank 31 * 16KB)
-                physical_address = 0x7C000 + (address - 0x4000);
+                // Fixed bank: last 16KB of the loaded ROM, always mapped to $4000-$7FFF
+                // For single-bank 32KB: last bank at offset 0x4000
+                // For 4-bank 64KB: last bank (bank 3) at offset 0x0C000
+                var rom_size = this.loaded_rom_size || 0x8000;
+                var fixed_bank_offset = (Math.floor(rom_size / 0x4000) - 1) * 0x4000;
+                physical_address = fixed_bank_offset + (address - 0x4000);
             }
             
             // Bounds check (support up to 4MB)

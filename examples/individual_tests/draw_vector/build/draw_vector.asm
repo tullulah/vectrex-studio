@@ -47,19 +47,22 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_VEC_X           EQU $C880+$0C   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$0D   ; Vector draw Y offset (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$0E   ; Vector intensity override (0=use vector data) (1 bytes)
-MIRROR_PAD           EQU $C880+$0F   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$1F   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$20   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$21   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$2B   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$2D   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$2F   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$30   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$33   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+DRAW_VEC_X_HI        EQU $C880+$0E   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
+DRAW_VEC_X           EQU $C880+$0F   ; Vector draw X offset (1 bytes)
+DRAW_VEC_Y           EQU $C880+$10   ; Vector draw Y offset (1 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$11   ; Vector intensity override (0=use vector data) (1 bytes)
+MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
+MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
+MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$24   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$2E   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$30   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$32   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$33   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$36   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -90,8 +93,11 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     ; TODO: Statement Pass { source_line: 10 }
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -99,18 +105,14 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: vec (index=0, 1 paths)
     LDD #0
-    STD RESULT
-    LDA RESULT+1  ; X position (low byte)
+    TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
     LDD #0
-    STD RESULT
-    LDA RESULT+1  ; Y position (low byte)
+    TFR B,A       ; Y position (low byte) — B already holds it
     STA TMPPTR+1  ; Save Y to temporary storage
     LDA TMPPTR    ; X position
     STA DRAW_VEC_X
@@ -118,11 +120,11 @@ LOOP_BODY:
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_VEC_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
     RTS
@@ -137,6 +139,7 @@ LOOP_BODY:
 ; Center: (0, 5)
 
 _VEC_WIDTH EQU 30
+_VEC_HALF_WIDTH EQU 15
 _VEC_CENTER_X EQU 0
 _VEC_CENTER_Y EQU 5
 
@@ -201,29 +204,33 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
+; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
+; VIA Port B through states $05->$04->$01 which resets the analog hardware
+; (zero-reference sequence) and would disrupt the beam position mid-drawing.
+; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
-JSR $F2AB               ; BIOS Intensity_a
+STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
+STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+LDA #$04
+STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+LDA #$01
+STA >$D000              ; Port B=$01: restore normal mux
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_Y
 NEGB                    ; ← Negate Y if flag set
 DSWM_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start from .vec (already relative to center)
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_X
 NEGA                    ; ← Negate X if flag set
 DSWM_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX             ; Save adjusted position
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX            ; Save adjusted position
 ; Reset completo
 CLR VIA_shift_reg
 LDA #$CC
@@ -238,7 +245,7 @@ STA VIA_port_b          ; repeat
 LDA #$01
 STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
 ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD TEMP_YX
+LDD >TEMP_YX
 STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
 CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
 PSHS A                  ; ~4 cycle settling delay for Y
@@ -248,7 +255,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; Timing setup
+; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -269,13 +276,13 @@ LBEQ DSWM_NEXT_PATH
 ; Draw line with conditional negations
 LDB ,X+                 ; dy
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_DY
 NEGB                    ; ← Negate dy if flag set
 DSWM_NO_NEGATE_DY:
 LDA ,X+                 ; dx
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_DX
 NEGA                    ; ← Negate dx if flag set
 DSWM_NO_NEGATE_DX:
@@ -301,30 +308,30 @@ LBRA DSWM_LOOP          ; Long branch
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Check intensity override (same logic as start)
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
+; Read per-path intensity from vector data
+LDA ,X+                 ; Read intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
 NEGB
 DSWM_NEXT_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NEXT_NO_NEGATE_X
 NEGA
 DSWM_NEXT_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX
 PULS A                  ; Get intensity back
-JSR $F2AB
+STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
+STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+LDA #$04
+STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+LDA #$01
+STA >$D000              ; Port B=$01: restore normal mux
 PULS D
 ADDD #3
 TFR D,X
@@ -342,7 +349,7 @@ STA VIA_port_b          ; repeat
 LDA #$01
 STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
 ; Moveto new start position (BIOS Moveto_d order)
-LDD TEMP_YX
+LDD >TEMP_YX
 STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
 CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
 PSHS A                  ; ~4 cycle settling delay for Y
@@ -352,6 +359,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
+; T1 fixed at $7F (constant scale; brightness set via $C832 above)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi

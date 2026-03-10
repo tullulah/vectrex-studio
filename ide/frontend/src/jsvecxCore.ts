@@ -47,8 +47,6 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
       console.log('[JsVecxCore] Original write8 function:', typeof this.inst.write8);
       const originalWrite8 = this.inst.write8.bind(this.inst);
       this.inst.write8 = (address: number, data: number) => {
-        console.log(`[DEBUG-INTERCEPT] Write attempt: ${address.toString(16)} = ${data}`);
-        
         // Interceptar escrituras al área de debug C000-C003 (unmapped gap)
         if (address >= 0xC000 && address <= 0xC003) {
           const debugAddr = address - 0xC000;
@@ -66,8 +64,6 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
         console.log('[JsVecxCore] Original read8 function:', typeof this.inst.read8);
         const originalRead8 = this.inst.read8.bind(this.inst);
         this.inst.read8 = (address: number) => {
-          console.log(`[DEBUG-INTERCEPT] Read attempt: ${address.toString(16)}`);
-          
           // Interceptar lecturas del área de debug C000-C003
           if (address >= 0xC000 && address <= 0xC003) {
             const debugAddr = address - 0xC000;
@@ -123,76 +119,10 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
         
         console.log('[JsVecxCore] jsvecx native initialization verified - rom, cart, cpu ready');
         
-        // CONFIGURAR FUNCIONES DE MEMORIA QUE JSVECX NECESITA
-        console.log('[JsVecxCore] Setting up memory bus functions...');
-        
-        // Función read8: lee de los arrays apropiados según la dirección
-        this.inst.read8 = (address: number): number => {
-          address = address & 0xFFFF; // Asegurar 16-bit
-          
-          if (address < 0x8000) {
-            // Cartridge space 0x0000-0x7FFF
-            return this.inst!.cart[address] || 0;
-          } else if (address >= 0xC800 && address < 0xD000) {
-            // RAM 0xC800-0xCFFF (1K mirrored)
-            const ramAddr = (address - 0xC800) & 0x3FF;
-            return this.inst!.ram![ramAddr] || 0;
-          } else if (address >= 0xD000 && address < 0xD800) {
-            // VIA registers 0xD000-0xD7FF (simplified)
-            return 0; // TODO: Implementar VIA si es necesario
-          } else if (address >= 0xD800 && address < 0xD900) {
-            // Debug pseudo-RAM 0xD800-0xD8FF
-            const debugAddr = address - 0xD800;
-            return this.debugRam[debugAddr] || 0;
-          } else if (address >= 0xE000) {
-            // ROM/BIOS 0xE000-0xFFFF
-            const romAddr = address - 0xE000;
-            return this.inst!.rom[romAddr] || 0;
-          }
-          
-          return 0xFF; // Unmapped memory
-        };
-        
-        // Función write8: escribe en los arrays apropiados
-        this.inst.write8 = (address: number, value: number): void => {
-          address = address & 0xFFFF;
-          value = value & 0xFF;
-          
-          if (address < 0x8000) {
-            // Cartridge space - normalmente read-only, pero permitimos por ahora
-            this.inst!.cart[address] = value;
-          } else if (address >= 0xC800 && address < 0xD000) {
-            // RAM 0xC800-0xCFFF
-            const ramAddr = (address - 0xC800) & 0x3FF;
-            if (this.inst!.ram) this.inst!.ram[ramAddr] = value;
-          } else if (address >= 0xD000 && address < 0xD800) {
-            // VIA registers 0xD000-0xD7FF - FORWARD TO JSVECX
-            // PSG está en este rango y jsvecx tiene el handler correcto
-            if (this.inst!.snd_regs && this.inst!.via_regs && this.inst!.e8910) {
-              // JSVecx tiene sound_w() que maneja el routing PSG
-              if (typeof this.inst!.sound_w === 'function') {
-                this.inst!.sound_w(address & 0x1F, value);
-                console.log(`[PSG-WRITE] VIA 0x${address.toString(16).toUpperCase()} = 0x${value.toString(16).toUpperCase()}`);
-              }
-            }
-          } else if (address >= 0xD800 && address < 0xD900) {
-            // Debug pseudo-RAM 0xD800-0xD8FF
-            const debugAddr = address - 0xD800;
-            this.debugRam[debugAddr] = value;
-            console.log(`[DEBUG-WRITE] Wrote ${value} to debug address D${(0x800 + debugAddr).toString(16).toUpperCase()}`);
-          }
-          // ROM es read-only, ignorar escrituras
-        };
-        
-        console.log('[JsVecxCore] Memory bus functions configured');
-        
-        // Asignar funciones de memoria a TODOS los contextos posibles donde jsvecx las busque
-        this.assignMemoryFunctionsToAllContexts();
-        
         // CONFIGURAR PC CORRECTAMENTE PARA ARRANQUE DE BIOS (sin hacks de cartridge)
         console.log('[JsVecxCore] Setting up proper BIOS startup...');
         
-        console.log('[JsVecxCore] Arrays initialized, attempting vecx_reset...');
+        console.log('[JsVecxCore] Attempting vecx_reset...');
         try {
           this.inst.vecx_reset();
           console.log('[JsVecxCore] vecx_reset completed successfully');
@@ -220,41 +150,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   }
 
   private recreateMemoryFunctions() {
-    if (!this.inst) return;
-    
-    this.inst.read8 = (address: number): number => {
-      address = address & 0xFFFF;
-      if (address < 0x8000) {
-        return this.inst!.cart[address] || 0;
-      } else if (address >= 0xC800 && address < 0xD000) {
-        const ramAddr = (address - 0xC800) & 0x3FF;
-        return this.inst!.ram![ramAddr] || 0;
-      } else if (address >= 0xD800 && address < 0xD900) {
-        // Debug pseudo-RAM 0xD800-0xD8FF
-        const debugAddr = address - 0xD800;
-        return this.debugRam[debugAddr] || 0;
-      } else if (address >= 0xE000) {
-        const romAddr = address - 0xE000;
-        return this.inst!.rom[romAddr] || 0;
-      }
-      return 0xFF;
-    };
-    
-    this.inst.write8 = (address: number, value: number): void => {
-      address = address & 0xFFFF;
-      value = value & 0xFF;
-      if (address < 0x8000) {
-        this.inst!.cart[address] = value;
-      } else if (address >= 0xC800 && address < 0xD000) {
-        const ramAddr = (address - 0xC800) & 0x3FF;
-        if (this.inst!.ram) this.inst!.ram[ramAddr] = value;
-      } else if (address >= 0xD800 && address < 0xD900) {
-        // Debug pseudo-RAM 0xD800-0xD8FF
-        const debugAddr = address - 0xD800;
-        this.debugRam[debugAddr] = value;
-        console.log(`[DEBUG-WRITE] Wrote ${value} to debug address D${(0x800 + debugAddr).toString(16).toUpperCase()}`);
-      }
-    };
+    // No-op: vecx_full.js read8/write8 handle all memory mapping including bank switching.
   }
 
   private assignMemoryFunctionsToAllContexts() {
@@ -532,19 +428,24 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   }
 
   loadProgram(bytes: Uint8Array, _base?: number){
-    // Para jsvecx, cargar en cartridge (0x0000-0x7FFF)
     if (!this.inst) return;
-    
-    // Asegurar que el cartucho existe
-    if (!this.inst.cart) {
-      this.inst.cart = new Array(0x8000).fill(0);
+
+    const romSize = bytes.length;
+
+    // Use the existing 4MB cart from vecx_full.js init; only reallocate if missing or too small
+    if (!this.inst.cart || this.inst.cart.length < romSize) {
+      this.inst.cart = new Array(Math.max(romSize, 0x8000)).fill(0);
     }
-    
-    const maxLen = Math.min(bytes.length, 0x8000);
-    for (let i = 0; i < maxLen; i++) {
+
+    // Load the full ROM — no 32KB truncation
+    for (let i = 0; i < romSize; i++) {
       this.inst.cart[i] = bytes[i];
     }
-    console.log(`[JsVecxCore] Program loaded: ${maxLen} bytes to cartridge`);
+
+    // Tell the emulator how large this ROM is so fixed-bank mapping works correctly
+    this.inst.loaded_rom_size = romSize;
+
+    console.log(`[JsVecxCore] Program loaded: ${romSize} bytes to cartridge (${Math.ceil(romSize / 0x4000)} banks)`);
   }
 
   runFrame(_maxInstr?: number){
