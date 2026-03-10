@@ -51,8 +51,7 @@ pub fn emit_debug_print(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
         out.push_str(&format!("    ; DEBUG_PRINT({})\n", name));
         let label_name = format!("DEBUG_LABEL_{}", name.to_uppercase());
         let skip_label = next_label();
-        
-        out.push_str("    LDD RESULT\n");
+
         out.push_str("    STA $C002\n");      // Store high byte (A) to C002
         out.push_str("    STB $C000\n");      // Store low byte (B) to C000
         out.push_str("    LDA #$FE\n");       // Marker for LABELED debug output
@@ -69,7 +68,6 @@ pub fn emit_debug_print(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     } else {
         // Simple debug output (no label)
         out.push_str("    ; DEBUG_PRINT(expression)\n");
-        out.push_str("    LDD RESULT\n");
         out.push_str("    STA $C002\n");      // Store high byte (A) to C002
         out.push_str("    STB $C000\n");      // Store low byte (B) to C000
         out.push_str("    LDA #$42\n");       // Marker for simple debug output
@@ -112,8 +110,8 @@ pub fn emit_debug_print_str(args: &[Expr], out: &mut String, assets: &[AssetInfo
         out.push_str(&format!("    ; DEBUG_PRINT_STR({})\n", name));
         let label_name = format!("DEBUG_LABEL_{}", name.to_uppercase());
         let skip_label = next_label();
-        
-        out.push_str("    LDD RESULT\n");
+
+        // D holds pointer from emit_simple_expr (Ident case)
         out.push_str("    STD $C002\n");      // Store string pointer
         out.push_str("    LDA #$FD\n");       // Marker for STRING debug output
         out.push_str("    STA $C001\n");      // Write marker
@@ -127,10 +125,9 @@ pub fn emit_debug_print_str(args: &[Expr], out: &mut String, assets: &[AssetInfo
         out.push_str("    FCB $00\n");
         out.push_str(&format!("{}:\n", skip_label));
     } else {
-        // Expression without label
+        // Expression without label — D holds value/pointer from emit_simple_expr
         out.push_str("    ; DEBUG_PRINT_STR(expression)\n");
-        out.push_str("    LDD RESULT\n");
-        out.push_str("    STD $C002\n");      // Store string pointer
+        out.push_str("    STD $C002\n");      // Store string pointer (D already valid)
         out.push_str("    LDA #$FD\n");       // Marker for STRING debug output
         out.push_str("    STA $C001\n");      // Write marker
         out.push_str("    CLR $C004\n");      // Clear label pointer
@@ -164,19 +161,16 @@ pub fn emit_print_number(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
 
     out.push_str("    ; PRINT_NUMBER(x, y, num)\n");
     
-    // Evaluate x position
+    // Evaluate x position; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD VAR_ARG0    ; X position\n");
-    
-    // Evaluate y position
+
+    // Evaluate y position; D = y after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD VAR_ARG1    ; Y position\n");
-    
-    // Evaluate number
+
+    // Evaluate number; D = num after emit
     expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD VAR_ARG2    ; Number value\n");
     
     // Call helper

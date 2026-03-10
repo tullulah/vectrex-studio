@@ -1,0 +1,15 @@
+[project]
+name = "stop_music"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/stop_music.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+music = ["assets/music/*.vmus"]

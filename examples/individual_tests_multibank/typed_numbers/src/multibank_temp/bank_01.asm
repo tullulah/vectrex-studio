@@ -1,0 +1,561 @@
+; External symbols (helpers, BIOS, and shared data)
+XFORM_RUN_A EQU $F65B
+Draw_Pat_VL_d EQU $F439
+VEC_MUSIC_WORK EQU $C83F
+PRINT_TEXT_STR_83258 EQU $4299
+CLEAR_X_B_A EQU $F552
+Draw_VLp_scale EQU $F40C
+CLEAR_X_B EQU $F53F
+DRAW_PAT_VL EQU $F437
+DELAY_B EQU $F57A
+Draw_VL_a EQU $F3DA
+Draw_VLp EQU $F410
+Compare_Score EQU $F8C7
+DP_to_D0 EQU $F1AA
+Vec_Button_2_4 EQU $C819
+VEC_JOY_MUX_2_X EQU $C821
+Abs_b EQU $F58B
+SOUND_BYTES_X EQU $F284
+VEC_COUNTER_4 EQU $C831
+DELAY_RTS EQU $F57D
+Init_OS EQU $F18B
+Obj_Will_Hit_u EQU $F8E5
+Vec_Num_Players EQU $C879
+PRINT_LIST_CHK EQU $F38C
+Init_Music_x EQU $F692
+VEC_JOY_MUX_2_Y EQU $C822
+ROT_VL_MODE_A EQU $F61F
+MUSIC6 EQU $FE76
+Dot_here EQU $F2C5
+VEC_EXPL_TIMER EQU $C877
+DRAW_VL EQU $F3DD
+Vec_Music_Wk_A EQU $C842
+Xform_Rise EQU $F663
+Rise_Run_Y EQU $F601
+PRINT_LIST EQU $F38A
+VEC_TWANG_TABLE EQU $C851
+VEC_IRQ_VECTOR EQU $CBF8
+NEW_HIGH_SCORE EQU $F8D8
+Vec_Freq_Table EQU $C84D
+MOVE_MEM_A EQU $F683
+VECTREX_PRINT_NUMBER.PN_D10 EQU $4098
+Moveto_ix_a EQU $F30E
+Vec_Expl_3 EQU $C85A
+Mov_Draw_VL_a EQU $F3B9
+J1Y_BUILTIN EQU $412A
+DOT_D EQU $F2C3
+Intensity_5F EQU $F2A5
+Vec_0Ref_Enable EQU $C824
+DRAW_VL_MODE EQU $F46E
+Explosion_Snd EQU $F92E
+VEC_EXPL_FLAG EQU $C867
+VEC_DOT_DWELL EQU $C828
+INIT_MUSIC_CHK EQU $F687
+Moveto_d_7F EQU $F2FC
+SOUND_BYTES EQU $F27D
+music6 EQU $FE76
+PRINT_SHIPS EQU $F393
+MOVETO_X_7F EQU $F2F2
+VEC_NUM_GAME EQU $C87A
+New_High_Score EQU $F8D8
+Vec_Expl_Timer EQU $C877
+PRINT_STR_HWYX EQU $F373
+Clear_Sound EQU $F272
+VEC_JOY_1_Y EQU $C81C
+Vec_Loop_Count EQU $C825
+VEC_NUM_PLAYERS EQU $C879
+Select_Game EQU $F7A9
+music9 EQU $FF26
+Mov_Draw_VLcs EQU $F3B5
+INTENSITY_7F EQU $F2A9
+VEC_DURATION EQU $C857
+VEC_BUTTON_1_2 EQU $C813
+Vec_Joy_1_X EQU $C81B
+Intensity_3F EQU $F2A1
+Clear_x_b_80 EQU $F550
+XFORM_RISE EQU $F663
+VEC_TEXT_WIDTH EQU $C82B
+ABS_A_B EQU $F584
+VEC_EXPL_2 EQU $C859
+music1 EQU $FD0D
+Set_Refresh EQU $F1A2
+Vec_Num_Game EQU $C87A
+MUSICC EQU $FF7A
+Vec_Joy_Mux EQU $C81F
+Mov_Draw_VL_d EQU $F3BE
+VEC_COUNTER_3 EQU $C830
+Moveto_ix_7F EQU $F30C
+Vec_Music_Wk_5 EQU $C847
+RESET_PEN EQU $F35B
+DELAY_1 EQU $F575
+MOVETO_IX_FF EQU $F308
+VEC_MUSIC_WK_6 EQU $C846
+XFORM_RUN EQU $F65D
+MOV_DRAW_VLCS EQU $F3B5
+RANDOM EQU $F517
+INTENSITY_3F EQU $F2A1
+VEC_MUSIC_PTR EQU $C853
+MOVETO_IX_A EQU $F30E
+CLEAR_SCORE EQU $F84F
+Vec_Counter_4 EQU $C831
+VEC_TEXT_HW EQU $C82A
+Warm_Start EQU $F06C
+Draw_VLcs EQU $F3D6
+MOD16.M16_DONE EQU $4129
+VEC_EXPL_1 EQU $C858
+musicd EQU $FF8F
+ARRAY_ROW_Y_DATA EQU $42B5
+VEC_MAX_GAMES EQU $C850
+Clear_Score EQU $F84F
+Check0Ref EQU $F34F
+VEC_EXPL_CHAN EQU $C85C
+Vec_Text_Height EQU $C82A
+Vec_Misc_Count EQU $C823
+XFORM_RISE_A EQU $F661
+ARRAY_I16_ARR_DATA EQU $42AD
+Strip_Zeros EQU $F8B7
+VEC_JOY_1_X EQU $C81B
+VECTREX_PRINT_NUMBER.PN_DIV1000 EQU $4050
+Random EQU $F517
+SOUND_BYTE_X EQU $F259
+VEC_RISE_INDEX EQU $C839
+VEC_COUNTERS EQU $C82E
+Vec_Pattern EQU $C829
+COLD_START EQU $F000
+VEC_FREQ_TABLE EQU $C84D
+Delay_RTS EQU $F57D
+Vec_Rfrsh EQU $C83D
+Vec_Angle EQU $C836
+MUSIC3 EQU $FD81
+DRAW_LINE_D EQU $F3DF
+Reset0Ref EQU $F354
+VEC_MUSIC_WK_7 EQU $C845
+Rot_VL_dft EQU $F637
+Sound_Bytes EQU $F27D
+MUSIC4 EQU $FDD3
+ROT_VL_AB EQU $F610
+Rise_Run_Angle EQU $F593
+Vec_Dot_Dwell EQU $C828
+musica EQU $FF44
+VEC_MUSIC_FLAG EQU $C856
+Vec_Text_Width EQU $C82B
+VEC_RFRSH_HI EQU $C83E
+VEC_RFRSH EQU $C83D
+VEC_MUSIC_TWANG EQU $C858
+Draw_VLp_7F EQU $F408
+Draw_VLc EQU $F3CE
+GET_RUN_IDX EQU $F5DB
+Vec_RiseRun_Len EQU $C83B
+Vec_Duration EQU $C857
+PRINT_TEXT_STR_2691 EQU $428A
+DRAW_CIRCLE_RUNTIME EQU $4142
+Vec_High_Score EQU $CBEB
+INIT_OS_RAM EQU $F164
+Vec_Rfrsh_hi EQU $C83E
+VEC_ADSR_TIMERS EQU $C85E
+RESET0REF_D0 EQU $F34A
+DRAW_VLP_SCALE EQU $F40C
+Clear_x_256 EQU $F545
+Init_Music_Buf EQU $F533
+VEC_EXPL_3 EQU $C85A
+Sound_Byte_raw EQU $F25B
+ABS_B EQU $F58B
+DRAW_VLCS EQU $F3D6
+EXPLOSION_SND EQU $F92E
+ARRAY_I8_ARR_DATA EQU $42A1
+Vec_Joy_Mux_2_Y EQU $C822
+Vec_Button_1_1 EQU $C812
+VEC_BUTTON_1_3 EQU $C814
+VEC_RUN_INDEX EQU $C837
+VEC_DEFAULT_STK EQU $CBEA
+PRINT_STR_YX EQU $F378
+VEC_COLD_FLAG EQU $CBFE
+Vec_Counter_6 EQU $C833
+Joy_Digital EQU $F1F8
+OBJ_WILL_HIT_U EQU $F8E5
+VEC_NMI_VECTOR EQU $CBFB
+INTENSITY_1F EQU $F29D
+Draw_VL EQU $F3DD
+DP_to_C8 EQU $F1AF
+DOT_IX EQU $F2C1
+VEC_RISERUN_TMP EQU $C834
+INIT_MUSIC_BUF EQU $F533
+Reset0Ref_D0 EQU $F34A
+VEC_ANGLE EQU $C836
+Print_Str_d EQU $F37A
+VEC_JOY_MUX_1_Y EQU $C820
+Vec_Btn_State EQU $C80F
+MUSIC8 EQU $FEF8
+DP_TO_D0 EQU $F1AA
+Vec_Joy_Mux_2_X EQU $C821
+RISE_RUN_ANGLE EQU $F593
+CHECK0REF EQU $F34F
+MUSIC5 EQU $FE38
+JOY_DIGITAL EQU $F1F8
+MOV_DRAW_VL_B EQU $F3B1
+VEC_RFRSH_LO EQU $C83D
+music4 EQU $FDD3
+Delay_0 EQU $F579
+DEC_6_COUNTERS EQU $F55E
+OBJ_HIT EQU $F8FF
+MOV_DRAW_VLC_A EQU $F3AD
+Delay_2 EQU $F571
+WARM_START EQU $F06C
+Draw_VL_b EQU $F3D2
+VECTREX_PRINT_NUMBER.PN_D1000 EQU $4064
+GET_RISE_RUN EQU $F5EF
+MUSIC7 EQU $FEC6
+Vec_Expl_Chans EQU $C854
+MOD16.M16_LOOP EQU $410A
+Vec_Music_Ptr EQU $C853
+Vec_Music_Wk_7 EQU $C845
+PRINT_STR_D EQU $F37A
+VEC_JOY_MUX_1_X EQU $C81F
+Init_Music EQU $F68D
+Draw_Grid_VL EQU $FF9F
+CLEAR_C8_RAM EQU $F542
+DRAW_VL_A EQU $F3DA
+Vec_Joy_2_Y EQU $C81E
+PRINT_TEXT_STR_72349 EQU $4295
+MOVETO_D EQU $F312
+MOVETO_IX EQU $F310
+DRAW_VL_B EQU $F3D2
+Intensity_7F EQU $F2A9
+JOY_ANALOG EQU $F1F5
+VEC_JOY_RESLTN EQU $C81A
+OBJ_WILL_HIT EQU $F8F3
+VECTREX_PRINT_NUMBER EQU $4030
+Print_List EQU $F38A
+PRINT_SHIPS_X EQU $F391
+Vec_Joy_2_X EQU $C81D
+VECTREX_PRINT_NUMBER.PN_L1000 EQU $4052
+Moveto_x_7F EQU $F2F2
+Wait_Recal EQU $F192
+COMPARE_SCORE EQU $F8C7
+Move_Mem_a_1 EQU $F67F
+Add_Score_d EQU $F87C
+Vec_Joy_Mux_1_Y EQU $C820
+READ_BTNS EQU $F1BA
+Vec_NMI_Vector EQU $CBFB
+Delay_3 EQU $F56D
+STRIP_ZEROS EQU $F8B7
+VEC_MUSIC_WK_5 EQU $C847
+VEC_BRIGHTNESS EQU $C827
+INIT_OS EQU $F18B
+VEC_COUNTER_6 EQU $C833
+DEC_3_COUNTERS EQU $F55A
+Init_Music_chk EQU $F687
+VEC_JOY_MUX EQU $C81F
+Vec_Button_1_2 EQU $C813
+VECTREX_PRINT_NUMBER.PN_D100 EQU $407E
+VEC_BUTTON_1_1 EQU $C812
+Clear_x_b EQU $F53F
+Vec_RiseRun_Tmp EQU $C834
+ARRAY_U8_ARR_DATA EQU $429D
+INTENSITY_5F EQU $F2A5
+Draw_VL_ab EQU $F3D8
+DO_SOUND_X EQU $F28C
+Print_Str EQU $F495
+Vec_Snd_Shadow EQU $C800
+VEC_PATTERN EQU $C829
+DCR_after_intensity EQU $417A
+RISE_RUN_Y EQU $F601
+Vec_Prev_Btns EQU $C810
+VEC_TEXT_HEIGHT EQU $C82A
+VEC_BUTTONS EQU $C811
+DCR_AFTER_INTENSITY EQU $417A
+Delay_1 EQU $F575
+Vec_Music_Twang EQU $C858
+Xform_Run_a EQU $F65B
+PRINT_LIST_HW EQU $F385
+Vec_Twang_Table EQU $C851
+Draw_Line_d EQU $F3DF
+Vec_SWI_Vector EQU $CBFB
+VEC_EXPL_CHANS EQU $C854
+Dot_ix_b EQU $F2BE
+VEC_EXPL_4 EQU $C85B
+Vec_Music_Work EQU $C83F
+Vec_Expl_ChanB EQU $C85D
+Moveto_d EQU $F312
+Vec_Text_HW EQU $C82A
+MOVETO_IX_7F EQU $F30C
+DCR_intensity_5F EQU $4177
+DRAW_VL_AB EQU $F3D8
+ROT_VL EQU $F616
+Vec_Rise_Index EQU $C839
+Vec_Button_2_1 EQU $C816
+Vec_Brightness EQU $C827
+PRINT_TEXT_STR_71921 EQU $4291
+Vec_Button_1_3 EQU $C814
+MUSICB EQU $FF62
+DELAY_3 EQU $F56D
+Vec_Button_1_4 EQU $C815
+Do_Sound_x EQU $F28C
+Intensity_1F EQU $F29D
+CLEAR_X_256 EQU $F545
+Print_Ships_x EQU $F391
+RESET0REF EQU $F354
+VEC_RISERUN_LEN EQU $C83B
+MOD16.M16_END EQU $411A
+MOD16.M16_RCHECK EQU $40FB
+WAIT_RECAL EQU $F192
+DRAW_PAT_VL_A EQU $F434
+Mov_Draw_VL EQU $F3BC
+DRAW_GRID_VL EQU $FF9F
+Reset0Int EQU $F36B
+Read_Btns_Mask EQU $F1B4
+MOD16.M16_DPOS EQU $40F3
+VEC_BTN_STATE EQU $C80F
+VEC_MUSIC_FREQ EQU $C861
+INIT_MUSIC_X EQU $F692
+Print_Str_hwyx EQU $F373
+CLEAR_SOUND EQU $F272
+Vec_Str_Ptr EQU $C82C
+MUSIC9 EQU $FF26
+Vec_FIRQ_Vector EQU $CBF5
+MOV_DRAW_VL EQU $F3BC
+Mov_Draw_VLc_a EQU $F3AD
+Dec_Counters EQU $F563
+DP_TO_C8 EQU $F1AF
+DELAY_2 EQU $F571
+DEC_COUNTERS EQU $F563
+VEC_LOOP_COUNT EQU $C825
+Dot_List_Reset EQU $F2DE
+music7 EQU $FEC6
+Vec_Joy_1_Y EQU $C81C
+music8 EQU $FEF8
+MOVE_MEM_A_1 EQU $F67F
+Get_Run_Idx EQU $F5DB
+DOT_LIST EQU $F2D5
+Dec_6_Counters EQU $F55E
+VECTREX_PRINT_NUMBER.PN_L10 EQU $4086
+VEC_MUSIC_WK_A EQU $C842
+Intensity_a EQU $F2AB
+Sound_Bytes_x EQU $F284
+VEC_SWI3_VECTOR EQU $CBF2
+MUSICD EQU $FF8F
+VEC_SEED_PTR EQU $C87B
+DRAW_VLC EQU $F3CE
+GET_RISE_IDX EQU $F5D9
+MUSIC1 EQU $FD0D
+Joy_Analog EQU $F1F5
+Moveto_ix EQU $F310
+Vec_Counters EQU $C82E
+Xform_Rise_a EQU $F661
+BITMASK_A EQU $F57E
+DOT_HERE EQU $F2C5
+Vec_Button_2_3 EQU $C818
+Get_Rise_Idx EQU $F5D9
+MOD16 EQU $40D6
+Vec_Expl_4 EQU $C85B
+DRAW_VLP_7F EQU $F408
+Vec_Expl_Flag EQU $C867
+musicb EQU $FF62
+Dec_3_Counters EQU $F55A
+DRAW_VLP_FF EQU $F404
+VEC_HIGH_SCORE EQU $CBEB
+Recalibrate EQU $F2E6
+Vec_Run_Index EQU $C837
+VEC_PREV_BTNS EQU $C810
+CLEAR_X_D EQU $F548
+Rise_Run_X EQU $F5FF
+RISE_RUN_LEN EQU $F603
+music2 EQU $FD1D
+VEC_MUSIC_CHAN EQU $C855
+ROT_VL_MODE EQU $F62B
+SOUND_BYTE_RAW EQU $F25B
+VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT EQU $40A9
+MOVETO_D_7F EQU $F2FC
+MUSIC2 EQU $FD1D
+SET_REFRESH EQU $F1A2
+Vec_Expl_ChanA EQU $C853
+Delay_b EQU $F57A
+VEC_JOY_2_X EQU $C81D
+VEC_COUNTER_5 EQU $C832
+VEC_BUTTON_2_1 EQU $C816
+VEC_MAX_PLAYERS EQU $C84F
+Random_3 EQU $F511
+Vec_Random_Seed EQU $C87D
+Sound_Byte_x EQU $F259
+Vec_Max_Players EQU $C84F
+VEC_MISC_COUNT EQU $C823
+Vec_Music_Freq EQU $C861
+Print_List_hw EQU $F385
+INIT_VIA EQU $F14C
+ROT_VL_DFT EQU $F637
+Add_Score_a EQU $F85E
+SOUND_BYTE EQU $F256
+MOD16.M16_RPOS EQU $410A
+VEC_BUTTON_1_4 EQU $C815
+Print_Ships EQU $F393
+Clear_x_d EQU $F548
+music5 EQU $FE38
+VEC_EXPL_CHANB EQU $C85D
+Rot_VL_Mode EQU $F62B
+VEC_SND_SHADOW EQU $C800
+Print_List_chk EQU $F38C
+MUSICA EQU $FF44
+Rise_Run_Len EQU $F603
+VECTREX_PRINT_TEXT EQU $4000
+Mov_Draw_VL_b EQU $F3B1
+ADD_SCORE_D EQU $F87C
+Vec_Music_Chan EQU $C855
+Vec_Default_Stk EQU $CBEA
+Vec_Cold_Flag EQU $CBFE
+PRINT_STR EQU $F495
+Draw_VLp_FF EQU $F404
+Init_OS_RAM EQU $F164
+Mov_Draw_VL_ab EQU $F3B7
+Print_Str_yx EQU $F378
+Vec_Rfrsh_lo EQU $C83D
+VEC_JOY_2_Y EQU $C81E
+VEC_COUNTER_2 EQU $C82F
+VEC_MUSIC_WK_1 EQU $C84B
+Draw_VLp_b EQU $F40E
+music3 EQU $FD81
+Vec_ADSR_Table EQU $C84F
+Vec_Expl_Chan EQU $C85C
+Vec_Joy_Resltn EQU $C81A
+Vec_Counter_2 EQU $C82F
+Reset_Pen EQU $F35B
+Read_Btns EQU $F1BA
+Get_Rise_Run EQU $F5EF
+DRAW_PAT_VL_D EQU $F439
+READ_BTNS_MASK EQU $F1B4
+Vec_IRQ_Vector EQU $CBF8
+musicc EQU $FF7A
+VEC_FIRQ_VECTOR EQU $CBF5
+ADD_SCORE_A EQU $F85E
+Cold_Start EQU $F000
+Sound_Byte EQU $F256
+Clear_x_b_a EQU $F552
+RANDOM_3 EQU $F511
+Moveto_ix_FF EQU $F308
+Init_VIA EQU $F14C
+Draw_Pat_VL_a EQU $F434
+VEC_BUTTON_2_4 EQU $C819
+Xform_Run EQU $F65D
+CLEAR_X_B_80 EQU $F550
+Abs_a_b EQU $F584
+RESET0INT EQU $F36B
+Vec_Counter_5 EQU $C832
+DOT_IX_B EQU $F2BE
+Vec_Music_Wk_1 EQU $C84B
+VEC_SWI_VECTOR EQU $CBFB
+VEC_BUTTON_2_2 EQU $C817
+Vec_Seed_Ptr EQU $C87B
+RECALIBRATE EQU $F2E6
+Rot_VL_ab EQU $F610
+Draw_Pat_VL EQU $F437
+ARRAY_U16_ARR_DATA EQU $42A5
+MOV_DRAW_VL_A EQU $F3B9
+DRAW_VLP_B EQU $F40E
+DO_SOUND EQU $F289
+DCR_INTENSITY_5F EQU $4177
+Vec_Music_Flag EQU $C856
+MOV_DRAW_VL_D EQU $F3BE
+DOT_LIST_RESET EQU $F2DE
+Vec_SWI2_Vector EQU $CBF2
+DRAW_VLP EQU $F410
+VEC_0REF_ENABLE EQU $C824
+Rot_VL_Mode_a EQU $F61F
+PRINT_TEXT_STR_71726 EQU $428D
+INIT_MUSIC EQU $F68D
+DELAY_0 EQU $F579
+Bitmask_a EQU $F57E
+Vec_Counter_3 EQU $C830
+Vec_Buttons EQU $C811
+VEC_SWI2_VECTOR EQU $CBF2
+Vec_Music_Wk_6 EQU $C846
+RISE_RUN_X EQU $F5FF
+VEC_ADSR_TABLE EQU $C84F
+Clear_C8_RAM EQU $F542
+VEC_STR_PTR EQU $C82C
+VECTREX_PRINT_NUMBER.PN_L100 EQU $406C
+Vec_Joy_Mux_1_X EQU $C81F
+Dot_List EQU $F2D5
+SELECT_GAME EQU $F7A9
+Draw_VL_mode EQU $F46E
+Vec_SWI3_Vector EQU $CBF2
+Vec_Expl_1 EQU $C858
+VEC_EXPL_CHANA EQU $C853
+Do_Sound EQU $F289
+VEC_COUNTER_1 EQU $C82E
+INTENSITY_A EQU $F2AB
+VEC_BUTTON_2_3 EQU $C818
+Obj_Will_Hit EQU $F8F3
+Vec_ADSR_Timers EQU $C85E
+Vec_Expl_2 EQU $C859
+PRINT_TEXT_STR_2058 EQU $4287
+Obj_Hit EQU $F8FF
+Move_Mem_a EQU $F683
+Vec_Max_Games EQU $C850
+MOV_DRAW_VL_AB EQU $F3B7
+Rot_VL EQU $F616
+Dot_ix EQU $F2C1
+Vec_Button_2_2 EQU $C817
+VEC_RANDOM_SEED EQU $C87D
+Vec_Counter_1 EQU $C82E
+Dot_d EQU $F2C3
+
+
+; === RAM VARIABLE DEFINITIONS ===
+;***************************************************************************
+RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
+TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
+TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
+TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
+VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+NUM_STR              EQU $C880+$0E   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$14   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$15   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$16   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$17   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$18   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$19   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$21   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$22   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$2C   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$2E   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$30   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$31   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_U8_VAL           EQU $C880+$38   ; User variable: u8_val (1 bytes)
+VAR_I8_VAL           EQU $C880+$39   ; User variable: i8_val (1 bytes)
+VAR_U16_VAL          EQU $C880+$3A   ; User variable: u16_val (2 bytes)
+VAR_I16_VAL          EQU $C880+$3C   ; User variable: i16_val (2 bytes)
+VAR_ROW_Y            EQU $C880+$3E   ; User variable: ROW_Y (2 bytes)
+VAR_SELECTED         EQU $C880+$40   ; User variable: selected (1 bytes)
+VAR_COOLDOWN         EQU $C880+$41   ; User variable: cooldown (1 bytes)
+VAR_ARR_IDX          EQU $C880+$42   ; User variable: arr_idx (1 bytes)
+VAR_ARR_TICK         EQU $C880+$43   ; User variable: arr_tick (1 bytes)
+VAR_JOY_Y            EQU $C880+$44   ; User variable: joy_y (2 bytes)
+VAR_U8_ARR           EQU $C880+$46   ; User variable: u8_arr (2 bytes)
+VAR_I8_ARR           EQU $C880+$48   ; User variable: i8_arr (2 bytes)
+VAR_U16_ARR          EQU $C880+$4A   ; User variable: u16_arr (2 bytes)
+VAR_I16_ARR          EQU $C880+$4C   ; User variable: i16_arr (2 bytes)
+VAR_U8_ARR_DATA      EQU $C880+$4E   ; Mutable array 'u8_arr' data (4 elements x 1 bytes) (4 bytes)
+VAR_I8_ARR_DATA      EQU $C880+$52   ; Mutable array 'i8_arr' data (4 elements x 1 bytes) (4 bytes)
+VAR_U16_ARR_DATA     EQU $C880+$56   ; Mutable array 'u16_arr' data (4 elements x 2 bytes) (8 bytes)
+VAR_I16_ARR_DATA     EQU $C880+$5E   ; Mutable array 'i16_arr' data (4 elements x 2 bytes) (8 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+
+
+; ================================================
+    ORG $0000  ; Sequential bank model
+    ; Reserved for future code overflow
+
+
+; ================================================

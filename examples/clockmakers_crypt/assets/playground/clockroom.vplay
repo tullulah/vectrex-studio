@@ -1,0 +1,126 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "clockroom",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-03-10"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 671,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_lamp_left",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 70,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_sarcophagus",
+        "type": "enemy",
+        "vectorName": "door_locked",
+        "layer": "gameplay",
+        "x": 190,
+        "y": -72,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_pendulum_clock",
+        "type": "enemy",
+        "vectorName": "painting",
+        "layer": "gameplay",
+        "x": 400,
+        "y": -60,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_lamp_right",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 480,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [
+    {
+      "id": "hs_sarcophagus",
+      "x": 190,
+      "y": -87,
+      "w": 40,
+      "h": 40,
+      "trigger": "player_near",
+      "label": "sarcophagus"
+    },
+    {
+      "id": "hs_clock",
+      "x": 400,
+      "y": -70,
+      "w": 35,
+      "h": 40,
+      "trigger": "player_near",
+      "label": "clock"
+    }
+  ]
+}

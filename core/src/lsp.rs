@@ -139,7 +139,14 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "LOAD_LEVEL" => Some(AritySpec::Exact(1)),            // level_index - Load level data and allocate RAM buffer if physics enabled
         "SHOW_LEVEL" => Some(AritySpec::Exact(0)),            // no arguments - Draw all level layers using pre-configured pointers
         "UPDATE_LEVEL" => Some(AritySpec::Exact(0)),          // no arguments - Update gameplay layer physics objects
-        
+
+        // Message dispatch system
+        "MSG_DEF" => Some(AritySpec::Exact(4)),               // id, x, y, text - data declaration, emits no runtime code
+        "PRINT_MSG" => Some(AritySpec::Exact(1)),             // id_expr - dispatch via ROM lookup table
+
+        // Camera / scroll
+        "SET_CAMERA_X" => Some(AritySpec::Exact(1)),          // offset (16-bit horizontal scroll)
+
         _ => None,
     }
 }
@@ -198,7 +205,17 @@ pub fn is_builtin_function(name: &str) -> bool {
     if matches!(upper.as_str(), "LOAD_LEVEL"|"SHOW_LEVEL"|"UPDATE_LEVEL") {
         return true;
     }
-    
+
+    // Message dispatch system
+    if matches!(upper.as_str(), "MSG_DEF"|"PRINT_MSG") {
+        return true;
+    }
+
+    // Camera / scroll
+    if matches!(upper.as_str(), "SET_CAMERA_X") {
+        return true;
+    }
+
     false
 }
 
@@ -270,6 +287,17 @@ fn tr(locale: &str, key: &str) -> String {
         ("es", "doc.ORIGIN") => "ORIGIN  - OBSOLETO: usar SET_ORIGIN en su lugar.",
         ("en", "doc.MOVE_TO") => "MOVE_TO x,y  - DEPRECATED: use MOVE instead.",
         ("es", "doc.MOVE_TO") => "MOVE_TO x,y  - OBSOLETO: usar MOVE en su lugar.",
+
+        // Message dispatch system
+        ("en", "doc.MSG_DEF") => "MSG_DEF(id, x, y, text)  - data declaration for message dispatch table. Registers a message with a numeric id (1-based), x/y screen coordinates, and text string. Emits no runtime code — used by PRINT_MSG.",
+        ("es", "doc.MSG_DEF") => "MSG_DEF(id, x, y, texto)  - declaración de dato para tabla de despacho de mensajes. Registra un mensaje con id numérico (base 1), coordenadas x/y y texto. No emite código en tiempo de ejecución — usado por PRINT_MSG.",
+        ("en", "doc.PRINT_MSG") => "PRINT_MSG(id_expr)  - prints the message registered with MSG_DEF for the given id. Dispatches via a ROM lookup table, replacing large if/elif chains.",
+        ("es", "doc.PRINT_MSG") => "PRINT_MSG(id_expr)  - imprime el mensaje registrado con MSG_DEF para el id dado. Despacha mediante tabla ROM, reemplazando cadenas largas de if/elif.",
+
+        // Camera / scroll
+        ("en", "doc.SET_CAMERA_X") => "SET_CAMERA_X(offset)  - sets the horizontal scroll camera offset (16-bit value).",
+        ("es", "doc.SET_CAMERA_X") => "SET_CAMERA_X(offset)  - fija el desplazamiento horizontal de cámara (valor de 16 bits).",
+
         _ => key,
     };
     val.to_string()
@@ -309,7 +337,14 @@ fn builtin_doc(locale: &str, upper: &str) -> Option<String> {
         "VECTREX_DRAW_LINE" => "doc.DRAW_LINE",
         "VECTREX_SET_ORIGIN" => "doc.SET_ORIGIN",
         "VECTREX_SET_INTENSITY" => "doc.SET_INTENSITY",
-        
+
+        // Message dispatch system
+        "MSG_DEF" => "doc.MSG_DEF",
+        "PRINT_MSG" => "doc.PRINT_MSG",
+
+        // Camera / scroll
+        "SET_CAMERA_X" => "doc.SET_CAMERA_X",
+
         _ => return None,
     };
     Some(tr(locale, key))
@@ -1342,6 +1377,10 @@ impl LanguageServer for Backend {
             // Funciones específicas de dibujo directo
             "DRAW_POLYGON","DRAW_CIRCLE","DRAW_CIRCLE_SEG","DRAW_ARC","DRAW_SPIRAL",
             "RECT","POLYGON","CIRCLE","ARC","SPIRAL","DRAW_VECTORLIST",
+            // Message dispatch system
+            "MSG_DEF","PRINT_MSG",
+            // Camera / scroll
+            "SET_CAMERA_X",
             // Declaraciones y estructuras VPy
             "VECTORLIST","CONST","VAR","META","TITLE","MUSIC","COPYRIGHT",
             // Palabras clave de control

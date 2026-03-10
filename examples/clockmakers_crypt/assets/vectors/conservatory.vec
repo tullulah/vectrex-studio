@@ -1,0 +1,118 @@
+{
+  "version": "1.0",
+  "name": "conservatory",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "floor",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -120, "y": -60},
+            {"x":  120, "y": -60}
+          ]
+        },
+        {
+          "name": "left_arch",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": -60},
+            {"x": -90, "y":  15},
+            {"x": -70, "y":  55},
+            {"x": -50, "y":  15},
+            {"x": -50, "y": -60}
+          ]
+        },
+        {
+          "name": "left_arch_inner",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -84, "y":  15},
+            {"x": -70, "y":  46},
+            {"x": -56, "y":  15}
+          ]
+        },
+        {
+          "name": "right_arch",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x":  50, "y": -60},
+            {"x":  50, "y":  15},
+            {"x":  70, "y":  55},
+            {"x":  90, "y":  15},
+            {"x":  90, "y": -60}
+          ]
+        },
+        {
+          "name": "right_arch_inner",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":  56, "y":  15},
+            {"x":  70, "y":  46},
+            {"x":  84, "y":  15}
+          ]
+        },
+        {
+          "name": "harpsichord_body",
+          "intensity": 110,
+          "closed": true,
+          "points": [
+            {"x": -32, "y": -35},
+            {"x":  24, "y": -35},
+            {"x":  38, "y": -44},
+            {"x":  32, "y": -55},
+            {"x": -32, "y": -55}
+          ]
+        },
+        {
+          "name": "harpsichord_lid",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -32, "y": -35},
+            {"x": -24, "y": -20},
+            {"x":   8, "y": -18},
+            {"x":  24, "y": -35}
+          ]
+        },
+        {
+          "name": "harpsichord_keyboard",
+          "intensity": 64,
+          "closed": false,
+          "points": [
+            {"x": -28, "y": -46},
+            {"x":  28, "y": -46}
+          ]
+        },
+        {
+          "name": "harpsichord_leg_left",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -28, "y": -55},
+            {"x": -28, "y": -60}
+          ]
+        },
+        {
+          "name": "harpsichord_leg_right",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x":  28, "y": -55},
+            {"x":  31, "y": -60}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

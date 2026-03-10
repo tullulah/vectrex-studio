@@ -1,0 +1,134 @@
+{
+  "version": "1.0",
+  "name": "vault_corridor",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "left_wall",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": -65},
+            {"x": -90, "y":  85}
+          ]
+        },
+        {
+          "name": "right_wall",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": 90, "y": -65},
+            {"x": 90, "y":  85}
+          ]
+        },
+        {
+          "name": "floor",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": -65},
+            {"x":  90, "y": -65}
+          ]
+        },
+        {
+          "name": "ceiling",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": 85},
+            {"x":  90, "y": 85}
+          ]
+        },
+        {
+          "name": "left_stone_1",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": 22},
+            {"x": -78, "y": 22}
+          ]
+        },
+        {
+          "name": "left_stone_2",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": -8},
+            {"x": -78, "y": -8}
+          ]
+        },
+        {
+          "name": "left_stone_3",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x": -90, "y": -36},
+            {"x": -78, "y": -36}
+          ]
+        },
+        {
+          "name": "right_stone_1",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x": 78, "y": 22},
+            {"x": 90, "y": 22}
+          ]
+        },
+        {
+          "name": "right_stone_2",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x": 78, "y": -8},
+            {"x": 90, "y": -8}
+          ]
+        },
+        {
+          "name": "right_stone_3",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {"x": 78, "y": -36},
+            {"x": 90, "y": -36}
+          ]
+        },
+        {
+          "name": "vault_arch",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": 58, "y": -65},
+            {"x": 58, "y": -18},
+            {"x": 62, "y":   3},
+            {"x": 74, "y":  20},
+            {"x": 86, "y":   3},
+            {"x": 90, "y": -18},
+            {"x": 90, "y": -65}
+          ]
+        },
+        {
+          "name": "vault_door_ring",
+          "intensity": 110,
+          "closed": true,
+          "points": [
+            {"x": 74, "y":   4},
+            {"x": 82, "y":   0},
+            {"x": 86, "y":  -8},
+            {"x": 82, "y": -16},
+            {"x": 74, "y": -20},
+            {"x": 66, "y": -16},
+            {"x": 62, "y":  -8},
+            {"x": 66, "y":   0}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

@@ -1,0 +1,126 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "anteroom",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-03-10"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 863,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_ant_lamp_left",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 80,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_ant_desk",
+        "type": "enemy",
+        "vectorName": "desk",
+        "layer": "gameplay",
+        "x": 300,
+        "y": -72,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_ant_lamp_right",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 530,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_ant_exit_arch",
+        "type": "enemy",
+        "vectorName": "entrance_arc",
+        "layer": "gameplay",
+        "x": 734,
+        "y": -33,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [
+    {
+      "id": "hs_diary",
+      "x": 299,
+      "y": -93,
+      "w": 40,
+      "h": 35,
+      "trigger": "player_near",
+      "label": "diary"
+    },
+    {
+      "id": "hs_exit_right",
+      "x": 735,
+      "y": -95,
+      "w": 30,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "weights_door"
+    }
+  ]
+}

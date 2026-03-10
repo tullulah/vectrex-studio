@@ -861,10 +861,12 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         
         // **CRITICAL: Detect multibank BEFORE assembling**
         // If multibank is detected, skip unified assembler and use multi_bank_linker directly
-        let is_multibank = rom_size > 32768;
-        
+        // Require at least 3 banks (2 code + 1 helpers); 2-bank configs use single-bank path.
+        let num_banks_cli = rom_size / bank_size.max(1);
+        let is_multibank = rom_size > 32768 && num_banks_cli > 2;
+
         if is_multibank {
-            println!("\n{}", format!("Multibank detected: {} KB ROM ({} banks × {} KB)", 
+            println!("\n{}", format!("Multibank detected: {} KB ROM ({} banks × {} KB)",
                 rom_size / 1024,
                 rom_size / bank_size,
                 bank_size / 1024).bright_yellow().bold());
@@ -956,27 +958,30 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
             }
         }
         println!("  {} Assembled {} bank(s)", "✓".green(), binaries.len());
-        
+
         // Phase 7: Link ROM
         println!("\n{}", "Phase 7: Link ROM".bright_cyan().bold());
-        
+
+        let code_bytes: usize = binaries.iter().map(|b| b.bytes.len()).sum();
         let rom = vpy_linker::link_unified_asm(&generated, binaries)
             .context("Failed to link ROM")?;
-        
-        println!("  {} ROM size: {} bytes", "✓".green(), rom.rom_data.len());
+        let padded_bytes = rom.rom_data.len();
+
+        println!("  {} ROM size: {} bytes", "✓".green(), padded_bytes);
+        println!("  {} Code:     {} bytes ({} bytes free)", "✓".green(), code_bytes, padded_bytes - code_bytes);
         println!("  {} Symbols: {}", "✓".green(), rom.symbols.len());
-        
+
         // Phase 8: Write binary
         println!("\n{}", "Phase 8: Write Binary".bright_cyan().bold());
-        
+
         let output_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
-        
+
         std::fs::write(&output_path, &rom.rom_data)
             .context("Failed to write binary")?;
-        
+
         println!("  {} Binary written: {}", "✓".green(), output_path.display());
-        
-        println!("\n{}", format!("✓ BUILD SUCCESS: {} bytes", rom.rom_data.len()).bright_green().bold());
+
+        println!("\n{}", format!("✓ BUILD SUCCESS: {} bytes ({} free)", padded_bytes, padded_bytes - code_bytes).bright_green().bold());
         
         return Ok(());
     }
@@ -1107,10 +1112,12 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
     
     // **CRITICAL: Detect multibank BEFORE assembling**
     // If multibank is detected, skip unified assembler and use multi_bank_linker directly
-    let is_multibank = rom_size > 32768;
-    
+    // Require at least 3 banks (2 code + 1 helpers); 2-bank configs use single-bank path.
+    let num_banks_fn = rom_size / bank_size.max(1);
+    let is_multibank = rom_size > 32768 && num_banks_fn > 2;
+
     if is_multibank {
-        println!("\n{}", format!("Multibank detected: {} KB ROM ({} banks × {} KB)", 
+        println!("\n{}", format!("Multibank detected: {} KB ROM ({} banks × {} KB)",
             rom_size / 1024,
             rom_size / bank_size,
             bank_size / 1024).bright_yellow().bold());
@@ -1200,12 +1207,15 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
     if verbose {
         println!("\n{}", "Phase 4: Linking ROM...".bright_cyan());
     }
-    
+
+    let code_bytes: usize = binaries.iter().map(|b| b.bytes.len()).sum();
     let rom = vpy_linker::link_unified_asm(&generated, binaries)
         .context("Failed to link ROM")?;
-    
+    let padded_bytes = rom.rom_data.len();
+
     if verbose {
-        println!("  ROM size: {} bytes", rom.rom_data.len());
+        println!("  ROM size: {} bytes", padded_bytes);
+        println!("  Code:     {} bytes ({} bytes free)", code_bytes, padded_bytes - code_bytes);
         println!("  Symbols: {}", rom.symbols.len());
     }
     

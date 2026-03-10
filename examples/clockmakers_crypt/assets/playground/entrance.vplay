@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-03-02"
+    "description": "Created in Playground - 2026-03-10"
   },
   "worldBounds": {
     "xMin": -96,
@@ -16,7 +16,27 @@
     "yMax": 127
   },
   "layers": {
-    "background": [],
+    "background": [
+      {
+        "id": "obj_1772461603432",
+        "type": "enemy",
+        "vectorName": "entrance_arc",
+        "layer": "background",
+        "x": -30,
+        "y": -33,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
     "gameplay": [
       {
         "id": "obj_1772392174432",
@@ -62,26 +82,7 @@
         "vectorName": "locked_door",
         "layer": "gameplay",
         "x": 738,
-        "y": -80,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_1772461603432",
-        "type": "enemy",
-        "vectorName": "entrance_arc",
-        "layer": "gameplay",
-        "x": -42,
-        "y": -83,
+        "y": -47,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -116,7 +117,7 @@
     {
       "id": "hs_1772461861596",
       "x": 738,
-      "y": -88,
+      "y": -87,
       "w": 34,
       "h": 40,
       "trigger": "player_near",

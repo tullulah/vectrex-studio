@@ -1,0 +1,12 @@
+[project]
+name = "trig_functions"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/trig_functions.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

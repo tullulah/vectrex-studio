@@ -261,16 +261,12 @@ impl CallGraph {
 /// - Function overhead: 20 bytes (label + RTS)
 fn estimate_function_size(func: &Function) -> usize {
     let stmt_count = count_statements(&func.body);
-    // NOTE: M6809 code generation is VERY verbose. Each VPy statement
-    // generates 15-30 ASM instructions on average (comparisons, conditionals,
-    // function calls, etc.). After measuring real-world code:
-    // - 484 VPy lines → 137KB of code (Bank #0 in pang_multi)
-    // - That's ~283 bytes per VPy statement including all nested code
-    //
-    // Using 180 bytes as a conservative-but-realistic estimate.
-    // This ensures the bank allocator properly distributes functions.
-    let base_size = 100; // Function overhead (prologue, epilogue, locals)
-    let stmt_avg = 180; // Average bytes per statement (M6809 is verbose!)
+    // NOTE: M6809 binary size estimate per VPy statement.
+    // Real measurement: clockmakers_crypt compiles to 32KB with ~800 statements
+    // → ~40 bytes/stmt in binary. Using 50 as a safe margin.
+    // (Previous 180-byte estimate was based on ASM text size, not binary size.)
+    let base_size = 30; // Function overhead (prologue, epilogue, locals)
+    let stmt_avg = 25; // Average binary bytes per VPy statement
     
     base_size + (stmt_count * stmt_avg)
 }

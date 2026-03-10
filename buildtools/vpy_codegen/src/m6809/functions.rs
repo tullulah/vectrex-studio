@@ -202,13 +202,25 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     // CRITICAL: Initialize joystick mux ONCE before any J1_X/J1_Y calls
     // (copied from core/src/backend/m6809/mod.rs lines 834-849)
     joystick::emit_joystick_init(&mut asm);
-    
+
+    // Prime button state at startup: call BIOS Read_Btns ($F1BA) to initialize
+    // $C80E (Vec_Prev_Btns) from the current hardware state. This ensures that
+    // on the very first game frame, $C811 (edge-detected buttons) is clean.
+    // Note: $C80E was already cleared (CLR $C80E) in START code.
+    asm.push_str("    ; Prime BIOS button state at startup\n");
+    asm.push_str("    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E\n");
+
     // Call main() if exists
     if let Some(main) = main_fn {
         asm.push_str("    ; Call main() for initialization\n");
         generate_function_body(main, &mut asm, assets)?;
     }
-    
+
+    // Force-clear Vec_Buttons ($C811) right before entering the game loop.
+    // main() may call LOAD_LEVEL/PLAY_MUSIC which could disturb the button state,
+    // and Wait_Recal in LOOP_BODY may re-arm transitions. Belt-and-suspenders.
+    asm.push_str("    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame\n");
+
     // Infinite loop calling loop()
     asm.push_str("\n.MAIN_LOOP:\n");
     asm.push_str("    JSR LOOP_BODY\n");
@@ -223,11 +235,10 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // DRAW_CIRCLE, etc.) calls Reset0Ref internally before positioning the beam.
         // Calling it here breaks PRINT_TEXT because it consumes the VIA scale factor
         // that Wait_Recal sets up ($80), leaving it at a wrong value for Print_Str_d.
-        // CRITICAL (2026-01-19): Button reading with proper DP handling
-        // This sequence MUST happen before any user code to ensure DP=$C8 for normal RAM access
-        asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
-        asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
-        asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+        // BIOS Read_Btns ($F1BA): reads PSG reg 14, inverts to active-HIGH,
+        // stores current state in $C80F, computes rising-edge in $C811, updates $C80E.
+        // More reliable on real hardware than direct PSG reads.
+        asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
         // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
         if has_beep_calls(module) {
             asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
@@ -248,19 +259,6 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
 
         // Auto-inject AUDIO_UPDATE at END if module uses PLAY_MUSIC/PLAY_SFX
         if has_audio_calls(module) {
-            if module.meta.music_timer {
-                // META MUSIC_TIMER = true: use VIA T2 to call AUDIO_UPDATE an extra time
-                // when user code took longer than one frame, keeping music in sync.
-                // T2 bit 5 of VIA_int_flags ($D00D) is set when the timer fires;
-                // Wait_Recal clears it on the next call — we must NOT clear it here.
-                // Extended addressing (>) required: DP=$C8 but VIA is at $D00D.
-                asm.push_str("    ; META MUSIC_TIMER: catch up if game frame was slow\n");
-                asm.push_str("    LDA >$D00D              ; VIA_int_flags (extended addr, DP=$C8)\n");
-                asm.push_str("    BITA #$20               ; Bit 5 = T2 elapsed (>1 frame of user code)\n");
-                asm.push_str("    BEQ MUSIC_CATCHUP_SKIP  ; On time — skip extra tick\n");
-                asm.push_str("    JSR AUDIO_UPDATE        ; Catch-up tick: game was slow\n");
-                asm.push_str("MUSIC_CATCHUP_SKIP:\n");
-            }
             asm.push_str("    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX\n");
         }
 
@@ -269,11 +267,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // Empty loop if not defined
         asm.push_str("LOOP_BODY:\n");
         asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
-        // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
-        // CRITICAL: Button reading with proper DP handling (even if no user code)
-        asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
-        asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
-        asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+        asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
         asm.push_str("    RTS\n\n");
     }
     
@@ -332,12 +326,10 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     let var_label = expressions::resolve_var_label(name);
                     let size = context::get_var_size(name);
                     if size.bytes == 1 {
-                        // 8-bit store: take low byte from RESULT and store with STB
-                        asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                        // 8-bit store: B already holds low byte from emit_simple_expr
                         asm.push_str(&format!("    STB {}\n", var_label));
                     } else {
-                        // 16-bit store: standard STD
-                        asm.push_str("    LDD RESULT\n");
+                        // 16-bit store: D already holds value from emit_simple_expr
                         asm.push_str(&format!("    STD {}\n", var_label));
                     }
                 }
@@ -354,9 +346,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     // Get element size for stride calculation
                     let element_size = context::get_var_size(array_name).bytes;
 
-                    // 1. Evaluate index first
+                    // 1. Evaluate index first; D = index after emit
                     expressions::emit_simple_expr(index, asm, assets);
-                    asm.push_str("    LDD RESULT\n");
 
                     // Stride multiply: only if element_size == 2
                     if element_size == 2 {
@@ -389,12 +380,10 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     // 5. Store value at computed address with correct width dispatch
                     asm.push_str("    LDX TMPPTR2     ; Load computed address\n");
                     if element_size == 1 {
-                        // 8-bit store: take low byte and use STB
-                        asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                        // 8-bit store: B holds low byte from emit_simple_expr (LDX doesn't modify D/B)
                         asm.push_str("    STB ,X          ; Store 8-bit value\n");
                     } else {
-                        // 16-bit store: standard STD
-                        asm.push_str("    LDD RESULT      ; Load value\n");
+                        // 16-bit store: D still holds value from emit_simple_expr (LDX doesn't modify D)
                         asm.push_str("    STD ,X          ; Store 16-bit value\n");
                     }
                 }
@@ -415,9 +404,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     asm.push_str(&format!("    LDD >{}\n", var_label));
                     asm.push_str("    STD TMPVAL          ; Save left operand\n");
 
-                    // Evaluate right side
+                    // Evaluate right side; D = value after emit
                     expressions::emit_simple_expr(value, asm, assets);
-                    asm.push_str("    LDD RESULT\n");
 
                     // Perform operation
                     match op {
@@ -445,12 +433,10 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             // 2. Store to variable with correct width dispatch
             let size = context::get_var_size(name);
             if size.bytes == 1 {
-                // 8-bit store: take low byte from RESULT and store with STB
-                asm.push_str("    LDB RESULT+1    ; Load low byte\n");
+                // 8-bit store: B already holds low byte from emit_simple_expr
                 asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
             } else {
-                // 16-bit store: standard STD
-                asm.push_str("    LDD RESULT\n");
+                // 16-bit store: D already holds value from emit_simple_expr
                 asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
             }
         }
@@ -481,18 +467,16 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             let mut next = fresh_label("IF_NEXT");
             let simple_if = elifs.is_empty() && else_body.is_none();
             expressions::emit_simple_expr(cond, asm, assets);
-            // NOTE: emit_simple_expr must return with balanced stack. The LDD below loads
-            // the condition result from RESULT. Before branching, ensure any temporary values
-            // left on the stack by complex expressions (like array indexing) are cleaned.
-            asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", next));
+            // D already holds the condition result from emit_simple_expr; branch directly.
+            asm.push_str(&format!("    LBEQ {}\n", next));
             for s in body { generate_statement(s, asm, assets)?; }
             asm.push_str(&format!("    LBRA {}\n", end));
             for (i, (c, b)) in elifs.iter().enumerate() {
                 asm.push_str(&format!("{}:\n", next));
                 let new_next = if i == elifs.len() - 1 && else_body.is_none() { end.clone() } else { fresh_label("IF_NEXT") };
                 expressions::emit_simple_expr(c, asm, assets);
-                // Stack balance check: emit_simple_expr must return with balanced stack before branch
-                asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", new_next));
+                // D already holds the condition result from emit_simple_expr; branch directly.
+                asm.push_str(&format!("    LBEQ {}\n", new_next));
                 for s in b { generate_statement(s, asm, assets)?; }
                 asm.push_str(&format!("    LBRA {}\n", end));
                 next = new_next;
@@ -514,8 +498,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             let le = fresh_label("WH_END");
             asm.push_str(&format!("{}: ; while start\n", ls));
             expressions::emit_simple_expr(cond, asm, assets);
-            // Stack balance check: emit_simple_expr must return with balanced stack before branch
-            asm.push_str(&format!("    LDD RESULT\n    LBEQ {}\n", le));
+            // D already holds the condition result from emit_simple_expr; branch directly.
+            asm.push_str(&format!("    LBEQ {}\n", le));
             for s in body { generate_statement(s, asm, assets)?; }
             asm.push_str(&format!("    LBRA {}\n{}: ; while end\n", ls, le));
         }
@@ -574,9 +558,17 @@ pub fn generate_functions_by_bank(
     bank0_asm.push_str(";***************************************************************************\n\n");
     
     bank0_asm.push_str("MAIN:\n");
-    
+
     // Initialize global variables with their initial values
     bank0_asm.push_str("    ; Initialize global variables\n");
+    bank0_asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
+    bank0_asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    if has_print_calls(module) {
+        bank0_asm.push_str("    LDA #$F8\n");
+        bank0_asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
+        bank0_asm.push_str("    LDA #$48\n");
+        bank0_asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
+    }
     let mut array_copy_counter = 0;
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
@@ -597,8 +589,9 @@ pub fn generate_functions_by_bank(
                 bank0_asm.push_str(&format!("    LDX #{}    ; Array now in RAM\n", ram_label));
                 bank0_asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
                 array_copy_counter += 1;
-            } else if let vpy_parser::Expr::Number(n) = value {
-                bank0_asm.push_str(&format!("    LDD #{}\n", n));
+            } else {
+                // Non-array: emit value (handles Number, Ident→const, expressions)
+                expressions::emit_simple_expr(value, &mut bank0_asm, assets);
                 bank0_asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
             }
         }
@@ -620,9 +613,7 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("LOOP_BODY:\n");
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
         // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
-        bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
-        bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
-        bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+        bank0_asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
         if has_beep_calls(module) {
             bank0_asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
         }
@@ -637,9 +628,7 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("LOOP_BODY:\n");
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
         // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
-        bank0_asm.push_str("    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access\n");
-        bank0_asm.push_str("    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)\n");
-        bank0_asm.push_str("    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access\n");
+        bank0_asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
         bank0_asm.push_str("    RTS\n\n");
     }
     

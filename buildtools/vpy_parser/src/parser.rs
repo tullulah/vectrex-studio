@@ -708,6 +708,20 @@ impl<'a> Parser<'a> {
                     left: Box::new(left),
                     right: Box::new(right),
                 };
+            } else if self.match_kind(&TokenKind::Amp) {
+                let right = self.unary()?;
+                left = Expr::Binary {
+                    op: BinOp::BitAnd,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                };
+            } else if self.match_kind(&TokenKind::Pipe) {
+                let right = self.unary()?;
+                left = Expr::Binary {
+                    op: BinOp::BitOr,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }

@@ -250,7 +250,7 @@ impl MusicResource {
             
             // NOTE: Do NOT skip empty frames here.
             // When noise expires with no active notes, we must still emit a silence frame
-            // (mixer=0xFF, vol=0) so the PSG stops the noise immediately.
+            // (mixer=0x3F, vol=0) so the PSG stops the noise immediately.
             // The state_changed check below prevents redundant emissions on subsequent frames.
             
             // Build current channel state and generate register writes
@@ -302,7 +302,7 @@ impl MusicResource {
             // Mixer register (enable/disable channels)
             // Bits 0-2: tone enable (0=on, 1=off) for channels A,B,C
             // Bits 3-5: noise enable (0=on, 1=off) for channels A,B,C
-            let mut mixer = 0xFF; // Start with all disabled
+            let mut mixer = 0x3F; // Start with all disabled (bits 0-5 only; bits 6-7=IOA/IOB MUST be 0=input)
             
             // Enable tones for active note channels
             for (ch_idx, maybe_note) in chan_data.iter().enumerate() {

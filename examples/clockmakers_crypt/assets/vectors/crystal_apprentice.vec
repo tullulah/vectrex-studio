@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "name": "crystal_apprentice",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "pedestal_base",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x": -14, "y": -18},
+            {"x":  14, "y": -18},
+            {"x":  14, "y": -10},
+            {"x": -14, "y": -10}
+          ]
+        },
+        {
+          "name": "torso",
+          "intensity": 110,
+          "closed": true,
+          "points": [
+            {"x": -9, "y": -10},
+            {"x":  9, "y": -10},
+            {"x":  9, "y":   4},
+            {"x": -9, "y":   4}
+          ]
+        },
+        {
+          "name": "torso_detail",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -8, "y": -2},
+            {"x":  8, "y": -2}
+          ]
+        },
+        {
+          "name": "neck",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -3, "y": 4},
+            {"x":  3, "y": 4}
+          ]
+        },
+        {
+          "name": "head",
+          "intensity": 110,
+          "closed": true,
+          "points": [
+            {"x":  0, "y": 16},
+            {"x":  5, "y": 14},
+            {"x":  6, "y": 10},
+            {"x":  5, "y":  6},
+            {"x":  0, "y":  4},
+            {"x": -5, "y":  6},
+            {"x": -6, "y": 10},
+            {"x": -5, "y": 14}
+          ]
+        },
+        {
+          "name": "eye_left",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": -4, "y": 10},
+            {"x": -2, "y": 11},
+            {"x": -4, "y": 12},
+            {"x": -6, "y": 11}
+          ]
+        },
+        {
+          "name": "eye_right",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": 4, "y": 10},
+            {"x": 6, "y": 11},
+            {"x": 4, "y": 12},
+            {"x": 2, "y": 11}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

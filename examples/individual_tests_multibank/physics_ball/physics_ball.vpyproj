@@ -1,0 +1,17 @@
+[project]
+name = "physics_ball"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/physics_ball.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+music = ["assets/music/*.vmus"]
+sfx = ["assets/sfx/*.vsfx"]
+vectors = ["assets/vectors/*.vec"]

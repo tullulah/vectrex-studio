@@ -18,6 +18,15 @@ use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
+/// A single entry from MSG_DEF(id, x, y, "text")
+#[derive(Debug, Clone)]
+pub struct MsgEntry {
+    pub id: u8,
+    pub x: i8,
+    pub y: i8,
+    pub text: String,
+}
+
 /// Unique label counter for builtin function labels
 static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -93,6 +102,10 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
 
     // Level camera
     ("SET_CAMERA_X", 1),          // camera_x (16-bit scroll offset)
+
+    // Message table dispatch
+    ("MSG_DEF", 4),       // id, x, y, text  — data declaration, emits no code
+    ("PRINT_MSG", 1),     // id_expr          — runtime dispatch via ROM table
 ];
 
 /// Get expected arity for a builtin (None if not a builtin)
@@ -121,6 +134,12 @@ fn validate_builtin_arity(name: &str, arg_count: usize) -> Result<(), String> {
         "PRINT_TEXT" => {
             if arg_count != 3 && arg_count != 5 {
                 return Err(format!("PRINT_TEXT requires 3 or 5 arguments, got {}", arg_count));
+            }
+            return Ok(());
+        }
+        "MSG_DEF" => {
+            if arg_count != 4 {
+                return Err(format!("MSG_DEF requires 4 arguments (id, x, y, text), got {}", arg_count));
             }
             return Ok(());
         }
@@ -167,20 +186,29 @@ pub fn emit_builtin(
             emit_print_text(args, out, assets);
             true
         }
+        "MSG_DEF" => {
+            // Data declaration only — collected by collect_msg_entries(), no code emitted here
+            true
+        }
+        "PRINT_MSG" => {
+            emit_print_msg(args, out, assets);
+            true
+        }
         "SET_TEXT_SIZE" => {
             // SET_TEXT_SIZE(n): n=1..8, n=8 is normal size
             // Vec_Text_Height ($C82A) = -n (signed byte: e.g. -8 = $F8 for normal)
             // Vec_Text_Width  ($C82B) = n*9 (e.g. 72 for normal)
             if let Some(arg) = args.first() {
                 expressions::emit_simple_expr(arg, out, assets);
-                out.push_str("    LDB RESULT+1    ; n = scale value (1-8)\n");
+                // B = n after emit; save to TMPPTR2 so we can restore n after NEGB
+                out.push_str("    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)\n");
                 out.push_str("    NEGB            ; B = -n -> TEXT_SCALE_H\n");
                 out.push_str("    STB >TEXT_SCALE_H\n");
-                out.push_str("    LDB RESULT+1    ; reload n\n");
+                out.push_str("    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)\n");
                 out.push_str("    ASLB            ; n*2\n");
                 out.push_str("    ASLB            ; n*4\n");
                 out.push_str("    ASLB            ; n*8\n");
-                out.push_str("    ADDB RESULT+1   ; n*8 + n = n*9 -> TEXT_SCALE_W\n");
+                out.push_str("    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W\n");
                 out.push_str("    STB >TEXT_SCALE_W\n");
             }
             true
@@ -211,53 +239,55 @@ pub fn emit_builtin(
         }
         "J1_BUTTON_1" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
-            out.push_str("    ANDA #$01      ; Test bit 0 (Button 1)\n");
-            out.push_str(&format!("    LBEQ .J1B1_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    LBRA .J1B1_{}_END\n", label_id));
-            out.push_str(&format!(".J1B1_{}_OFF:\n", label_id));
+            // $C80F = Vec_Btns_1 (BIOS Read_Btns output, active-HIGH: 1=pressed, 0=released)
+            // BNE after BITA: Z=0 when bit IS 1 (button pressed in active-HIGH)
+            out.push_str("    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed\n");
+            out.push_str("    BITA #$01\n");
+            out.push_str(&format!("    BNE .J1B1_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J1B1_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J1B1_{0}_END\n", label_id));
+            out.push_str(&format!(".J1B1_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J1B1_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J1_BUTTON_2" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
-            out.push_str("    ANDA #$02      ; Test bit 1 (Button 2)\n");
-            out.push_str(&format!("    LBEQ .J1B2_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    LBRA .J1B2_{}_END\n", label_id));
-            out.push_str(&format!(".J1B2_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed\n");
+            out.push_str("    BITA #$02\n");
+            out.push_str(&format!("    BNE .J1B2_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J1B2_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J1B2_{0}_END\n", label_id));
+            out.push_str(&format!(".J1B2_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J1B2_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J1_BUTTON_3" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
-            out.push_str("    ANDA #$04      ; Test bit 2 (Button 3)\n");
-            out.push_str(&format!("    LBEQ .J1B3_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    LBRA .J1B3_{}_END\n", label_id));
-            out.push_str(&format!(".J1B3_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed\n");
+            out.push_str("    BITA #$04\n");
+            out.push_str(&format!("    BNE .J1B3_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J1B3_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J1B3_{0}_END\n", label_id));
+            out.push_str(&format!(".J1B3_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J1B3_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J1_BUTTON_4" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)\n");
-            out.push_str("    ANDA #$08      ; Test bit 3 (Button 4)\n");
-            out.push_str(&format!("    LBEQ .J1B4_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    LBRA .J1B4_{}_END\n", label_id));
-            out.push_str(&format!(".J1B4_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns_1: bit3=1 means btn4 pressed\n");
+            out.push_str("    BITA #$08\n");
+            out.push_str(&format!("    BNE .J1B4_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J1B4_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J1B4_{0}_END\n", label_id));
+            out.push_str(&format!(".J1B4_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J1B4_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
@@ -716,7 +746,7 @@ fn emit_set_intensity(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     expressions::emit_simple_expr(&args[0], out, assets);
     
     // Load result into A, store in our own var (BIOS-safe), then call BIOS
-    out.push_str("    LDA RESULT+1    ; Load intensity (8-bit)\n");
+    out.push_str("    TFR B,A         ; Intensity (8-bit) — B already holds low byte\n");
     out.push_str("    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)\n");
     out.push_str("    JSR Intensity_a\n");
     out.push_str("    LDD #0\n");
@@ -741,14 +771,12 @@ fn emit_print_text(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     out.push_str("    ; PRINT_TEXT: Print text at position\n");
     
     // Store all 3 arguments in VAR_ARG0, VAR_ARG1, VAR_ARG2 (like core implementation)
-    // Arg 0: x coordinate
+    // Arg 0: x coordinate; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD VAR_ARG0\n");
-    
-    // Arg 1: y coordinate
+
+    // Arg 1: y coordinate; D = y after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD VAR_ARG1\n");
     
     // Arg 2: text string
@@ -760,16 +788,28 @@ fn emit_print_text(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             out.push_str("    STX VAR_ARG2\n");
         }
         _ => {
-            // Variable or expression - evaluate to pointer
+            // Variable or expression - evaluate to pointer; D = pointer after emit
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    LDD RESULT\n");
             out.push_str("    STD VAR_ARG2\n");
         }
     }
     
     // Call the helper which reads x, y, string from VAR_ARG0-2
     out.push_str("    JSR VECTREX_PRINT_TEXT\n");
-    
+
+    out.push_str("    LDD #0\n");
+    out.push_str("    STD RESULT\n");
+}
+
+fn emit_print_msg(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    if args.len() != 1 {
+        out.push_str("    ; ERROR: PRINT_MSG requires 1 argument (msg_id)\n");
+        return;
+    }
+    out.push_str("    ; PRINT_MSG: Dispatch via ROM message table\n");
+    expressions::emit_simple_expr(&args[0], out, assets);
+    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    JSR PRINT_MSG_DISPATCH\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }
@@ -799,29 +839,24 @@ fn emit_draw_line(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     out.push_str("    ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)\n");
     
     // Store all arguments in DRAW_LINE_ARGS area (10 bytes: 5 words)
-    // Arg 0: x0
+    // Arg 0: x0; D = x0 after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD DRAW_LINE_ARGS+0    ; x0\n");
-    
-    // Arg 1: y0
+
+    // Arg 1: y0; D = y0 after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD DRAW_LINE_ARGS+2    ; y0\n");
-    
-    // Arg 2: x1
+
+    // Arg 2: x1; D = x1 after emit
     expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD DRAW_LINE_ARGS+4    ; x1\n");
-    
-    // Arg 3: y1
+
+    // Arg 3: y1; D = y1 after emit
     expressions::emit_simple_expr(&args[3], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD DRAW_LINE_ARGS+6    ; y1\n");
-    
-    // Arg 4: intensity
+
+    // Arg 4: intensity; D = intensity after emit
     expressions::emit_simple_expr(&args[4], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD DRAW_LINE_ARGS+8    ; intensity\n");
     
     // Call DRAW_LINE_WRAPPER which handles DP switching and segmentation
@@ -864,12 +899,12 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             
             // Evaluate x position (arg 1) - save immediately to avoid overwrite
             expressions::emit_simple_expr(&args[1], out, assets);
-            out.push_str("    LDA RESULT+1  ; X position (low byte)\n");
+            out.push_str("    TFR B,A       ; X position (low byte) — B already holds it\n");
             out.push_str("    STA TMPPTR    ; Save X to temporary storage\n");
-            
+
             // Evaluate y position (arg 2)
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    LDA RESULT+1  ; Y position (low byte)\n");
+            out.push_str("    TFR B,A       ; Y position (low byte) — B already holds it\n");
             out.push_str("    STA TMPPTR+1  ; Save Y to temporary storage\n");
             
             // Restore X and Y from temporary storage and set positions
@@ -937,17 +972,16 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             
             // Evaluate x position (arg 1)
             expressions::emit_simple_expr(&args[1], out, assets);
-            out.push_str("    LDA RESULT+1  ; X position (low byte)\n");
+            out.push_str("    TFR B,A       ; X position (low byte) — B already holds it\n");
             out.push_str("    STA DRAW_VEC_X\n");
-            
+
             // Evaluate y position (arg 2)
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    LDA RESULT+1  ; Y position (low byte)\n");
+            out.push_str("    TFR B,A       ; Y position (low byte) — B already holds it\n");
             out.push_str("    STA DRAW_VEC_Y\n");
-            
-            // Evaluate mirror flag (arg 3)
+
+            // Evaluate mirror flag (arg 3); B already holds mirror mode after emit
             expressions::emit_simple_expr(&args[3], out, assets);
-            out.push_str("    LDB RESULT+1  ; Mirror mode (0=normal, 1=X, 2=Y, 3=both)\n");
             
             // Decode mirror mode into separate MIRROR_X and MIRROR_Y flags
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -974,7 +1008,7 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Evaluate and set intensity override (arg 4)
             out.push_str("    ; Set intensity override for drawing\n");
             expressions::emit_simple_expr(&args[4], out, assets);
-            out.push_str("    LDA RESULT+1  ; Intensity (0-127)\n");
+            out.push_str("    TFR B,A       ; Intensity (0-127) — B already holds it\n");
             out.push_str("    STA DRAW_VEC_INTENSITY  ; Store intensity override\n");
             
             // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
@@ -1145,23 +1179,23 @@ fn emit_draw_circle_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
     
     // Evaluate xc and store in DRAW_CIRCLE_XC
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDA RESULT+1\n");
+    out.push_str("    TFR B,A\n");
     out.push_str("    STA DRAW_CIRCLE_XC\n");
-    
+
     // Evaluate yc and store in DRAW_CIRCLE_YC
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDA RESULT+1\n");
+    out.push_str("    TFR B,A\n");
     out.push_str("    STA DRAW_CIRCLE_YC\n");
-    
+
     // Evaluate diam and store in DRAW_CIRCLE_DIAM
     expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    LDA RESULT+1\n");
+    out.push_str("    TFR B,A\n");
     out.push_str("    STA DRAW_CIRCLE_DIAM\n");
-    
+
     // Evaluate intensity (default $5F if not provided)
     if args.len() == 4 {
         expressions::emit_simple_expr(&args[3], out, assets);
-        out.push_str("    LDA RESULT+1\n");
+        out.push_str("    TFR B,A\n");
         out.push_str("    STA DRAW_CIRCLE_INTENSITY\n");
     } else {
         out.push_str("    LDA #$5F\n");
@@ -1180,7 +1214,7 @@ pub fn emit_print_text_strings(strings: &std::collections::BTreeMap<u64, String>
     if strings.is_empty() {
         return;
     }
-    
+
     out.push_str(";**** PRINT_TEXT String Data ****\n");
     for (hash, s) in strings {
         let label = format!("PRINT_TEXT_STR_{}", hash);
@@ -1188,4 +1222,109 @@ pub fn emit_print_text_strings(strings: &std::collections::BTreeMap<u64, String>
         out.push_str(&format!("    FCC \"{}\"\n", escape_string(s)));
         out.push_str("    FCB $80          ; Vectrex string terminator\n\n");
     }
+}
+
+/// Collect all MSG_DEF(id, x, y, "text") calls from the module
+pub fn collect_msg_entries(module: &Module) -> Vec<MsgEntry> {
+    let mut entries = Vec::new();
+    for item in &module.items {
+        if let vpy_parser::Item::Function(func) = item {
+            for stmt in &func.body {
+                collect_msg_entries_from_stmt(stmt, &mut entries);
+            }
+        }
+    }
+    entries.sort_by_key(|e| e.id);
+    entries
+}
+
+fn collect_msg_entries_from_stmt(stmt: &vpy_parser::Stmt, entries: &mut Vec<MsgEntry>) {
+    match stmt {
+        vpy_parser::Stmt::Expr(expr, _) => {
+            if let Expr::Call(call) = expr {
+                if call.name.to_uppercase() == "MSG_DEF" && call.args.len() == 4 {
+                    let id = extract_int_lit(&call.args[0]).unwrap_or(0) as u8;
+                    let x  = extract_int_lit(&call.args[1]).unwrap_or(0) as i8;
+                    let y  = extract_int_lit(&call.args[2]).unwrap_or(0) as i8;
+                    if let Expr::StringLit(s) = &call.args[3] {
+                        entries.push(MsgEntry { id, x, y, text: s.clone() });
+                    }
+                }
+            }
+        }
+        vpy_parser::Stmt::If { body, elifs, else_body, .. } => {
+            for s in body { collect_msg_entries_from_stmt(s, entries); }
+            for (_, b) in elifs { for s in b { collect_msg_entries_from_stmt(s, entries); } }
+            if let Some(eb) = else_body { for s in eb { collect_msg_entries_from_stmt(s, entries); } }
+        }
+        vpy_parser::Stmt::While { body, .. } => {
+            for s in body { collect_msg_entries_from_stmt(s, entries); }
+        }
+        vpy_parser::Stmt::For { body, .. } => {
+            for s in body { collect_msg_entries_from_stmt(s, entries); }
+        }
+        _ => {}
+    }
+}
+
+fn extract_int_lit(expr: &Expr) -> Option<i32> {
+    match expr {
+        Expr::Number(n) => Some(*n),
+        _ => None,
+    }
+}
+
+/// Emit PRINT_MSG_DISPATCH helper + PRINT_MSG_TABLE ROM data
+/// Called after emit_print_text_strings so all string labels are defined
+pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
+    if entries.is_empty() {
+        return;
+    }
+
+    let max_id = entries.iter().map(|e| e.id).max().unwrap_or(0);
+
+    // Build id → entry map
+    let mut entry_map: std::collections::HashMap<u8, &MsgEntry> = std::collections::HashMap::new();
+    for e in entries {
+        entry_map.insert(e.id, e);
+    }
+
+    // ── Dispatch helper routine ──────────────────────────────────────────────
+    out.push_str(";**** PRINT_MSG Dispatch ****\n");
+    out.push_str("PRINT_MSG_DISPATCH:\n");
+    out.push_str("    ; VAR_ARG0 = msg_id (set by PRINT_MSG caller)\n");
+    out.push_str("    LDB VAR_ARG0+1      ; B = msg_id (low byte)\n");
+    out.push_str("    BEQ PRINT_MSG_SKIP  ; id=0 → nothing to print\n");
+    out.push_str("    DECB                ; 0-based index (id starts at 1)\n");
+    out.push_str("    LSLB               ; B = index * 2\n");
+    out.push_str("    LSLB               ; B = index * 4\n");
+    out.push_str("    LDX #PRINT_MSG_TABLE\n");
+    out.push_str("    ABX                ; X = &table[index * 4]\n");
+    out.push_str("    LDB ,X+            ; B = x (signed byte)\n");
+    out.push_str("    SEX                ; D = sign-extended x\n");
+    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    LDB ,X+            ; B = y (signed byte)\n");
+    out.push_str("    SEX                ; D = sign-extended y\n");
+    out.push_str("    STD VAR_ARG1\n");
+    out.push_str("    LDX ,X             ; X = string pointer\n");
+    out.push_str("    STX VAR_ARG2\n");
+    out.push_str("    JMP VECTREX_PRINT_TEXT  ; tail call (no RTS needed)\n");
+    out.push_str("PRINT_MSG_SKIP:\n");
+    out.push_str("    RTS\n\n");
+
+    // ── Message table: 4 bytes per entry (x, y, ptr_hi, ptr_lo) ────────────
+    out.push_str("PRINT_MSG_TABLE:\n");
+    out.push_str("    ; 4 bytes/entry: x(signed), y(signed), string_ptr(2)\n");
+    for id in 1..=max_id {
+        if let Some(entry) = entry_map.get(&id) {
+            let str_label = format!("PRINT_TEXT_STR_{}", hash_string(&entry.text));
+            out.push_str(&format!(
+                "    FCB {}  ; msg {} x\n    FCB {}  ; msg {} y\n    FDB {}  ; msg {} \"{}\"\n",
+                entry.x as i32, id, entry.y as i32, id, str_label, id, entry.text
+            ));
+        } else {
+            out.push_str(&format!("    FCB 0  ; id {} unused x\n    FCB 0  ; id {} unused y\n    FDB 0  ; id {} unused ptr\n", id, id, id));
+        }
+    }
+    out.push_str("\n");
 }

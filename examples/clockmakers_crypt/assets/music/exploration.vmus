@@ -1,1 +1,494 @@
-{"version":"1.0","name":"The Clockmaker's Crypt - Exploration","author":"Vectrex Studio","tempo":60,"ticksPerBeat":24,"totalTicks":384,"notes":[{"id":"n1","note":62,"start":0,"duration":36,"velocity":9,"channel":0},{"id":"n2","note":69,"start":96,"duration":24,"velocity":8,"channel":0},{"id":"n3","note":65,"start":192,"duration":36,"velocity":9,"channel":0},{"id":"n4","note":64,"start":288,"duration":48,"velocity":8,"channel":0},{"id":"b1","note":50,"start":0,"duration":18,"velocity":6,"channel":1},{"id":"b2","note":45,"start":192,"duration":18,"velocity":6,"channel":1}],"noise":[{"id":"tick1","start":48,"duration":3,"period":8,"channels":4},{"id":"tick2","start":96,"duration":3,"period":8,"channels":4},{"id":"tick3","start":144,"duration":3,"period":8,"channels":4},{"id":"tick4","start":192,"duration":3,"period":8,"channels":4},{"id":"tick5","start":240,"duration":3,"period":8,"channels":4},{"id":"tick6","start":288,"duration":3,"period":8,"channels":4},{"id":"tick7","start":336,"duration":3,"period":8,"channels":4}],"loopStart":0,"loopEnd":384}
+{
+  "version": "1.0",
+  "name": "The Clockmaker's Crypt - Exploration",
+  "author": "Vectrex Studio",
+  "tempo": 90,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "m1",
+      "note": 74,
+      "start": 0,
+      "duration": 12,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "m2",
+      "note": 69,
+      "start": 12,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m3",
+      "note": 65,
+      "start": 24,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m4",
+      "note": 69,
+      "start": 36,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m5",
+      "note": 74,
+      "start": 48,
+      "duration": 12,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "m6",
+      "note": 72,
+      "start": 60,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m7",
+      "note": 70,
+      "start": 72,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m8",
+      "note": 69,
+      "start": 84,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m9",
+      "note": 67,
+      "start": 96,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m10",
+      "note": 65,
+      "start": 108,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m11",
+      "note": 64,
+      "start": 120,
+      "duration": 24,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m12",
+      "note": 65,
+      "start": 144,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m13",
+      "note": 67,
+      "start": 156,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m14",
+      "note": 69,
+      "start": 168,
+      "duration": 24,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m15",
+      "note": 70,
+      "start": 192,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m16",
+      "note": 69,
+      "start": 204,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m17",
+      "note": 67,
+      "start": 216,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m18",
+      "note": 65,
+      "start": 228,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m19",
+      "note": 64,
+      "start": 240,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m20",
+      "note": 62,
+      "start": 252,
+      "duration": 12,
+      "velocity": 10,
+      "channel": 0
+    },
+    {
+      "id": "m21",
+      "note": 64,
+      "start": 264,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m22",
+      "note": 65,
+      "start": 276,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m23",
+      "note": 74,
+      "start": 288,
+      "duration": 24,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "m24",
+      "note": 72,
+      "start": 312,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m25",
+      "note": 70,
+      "start": 324,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m26",
+      "note": 69,
+      "start": 336,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "m27",
+      "note": 67,
+      "start": 348,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "m28",
+      "note": 62,
+      "start": 360,
+      "duration": 24,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "b1",
+      "note": 50,
+      "start": 0,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    },
+    {
+      "id": "b2",
+      "note": 53,
+      "start": 24,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b3",
+      "note": 57,
+      "start": 48,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    },
+    {
+      "id": "b4",
+      "note": 60,
+      "start": 72,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b5",
+      "note": 50,
+      "start": 96,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    },
+    {
+      "id": "b6",
+      "note": 48,
+      "start": 120,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b7",
+      "note": 46,
+      "start": 144,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b8",
+      "note": 45,
+      "start": 168,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b9",
+      "note": 43,
+      "start": 192,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    },
+    {
+      "id": "b10",
+      "note": 46,
+      "start": 216,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b11",
+      "note": 50,
+      "start": 240,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    },
+    {
+      "id": "b12",
+      "note": 53,
+      "start": 264,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b13",
+      "note": 57,
+      "start": 288,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    },
+    {
+      "id": "b14",
+      "note": 55,
+      "start": 312,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b15",
+      "note": 53,
+      "start": 336,
+      "duration": 24,
+      "velocity": 8,
+      "channel": 1
+    },
+    {
+      "id": "b16",
+      "note": 50,
+      "start": 360,
+      "duration": 24,
+      "velocity": 9,
+      "channel": 1
+    }
+  ],
+  "noise": [
+    {
+      "id": "tk1",
+      "start": 0,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk2",
+      "start": 24,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk3",
+      "start": 48,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk4",
+      "start": 72,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk5",
+      "start": 96,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk6",
+      "start": 120,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk7",
+      "start": 144,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk8",
+      "start": 168,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk9",
+      "start": 192,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk10",
+      "start": 216,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk11",
+      "start": 240,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk12",
+      "start": 264,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk13",
+      "start": 288,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk14",
+      "start": 312,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    },
+    {
+      "id": "tk15",
+      "start": 336,
+      "duration": 4,
+      "period": 8,
+      "channels": 4,
+      "velocity": 11
+    },
+    {
+      "id": "tk16",
+      "start": 360,
+      "duration": 4,
+      "period": 12,
+      "channels": 4,
+      "velocity": 9
+    }
+  ],
+  "loopStart": 0,
+  "loopEnd": 384
+}

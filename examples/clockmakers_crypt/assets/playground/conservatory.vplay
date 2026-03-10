@@ -1,0 +1,192 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "conservatory",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-03-10"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_con_arch_left",
+        "type": "enemy",
+        "vectorName": "entrance_arc",
+        "layer": "gameplay",
+        "x": -90,
+        "y": -83,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_con_arch_right",
+        "type": "enemy",
+        "vectorName": "entrance_arc",
+        "layer": "gameplay",
+        "x": 85,
+        "y": -83,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_con_lamp_left",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": -55,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_con_lamp_right",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 55,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_con_harpsichord",
+        "type": "enemy",
+        "vectorName": "desk",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -90,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_con_portrait",
+        "type": "enemy",
+        "vectorName": "painting",
+        "layer": "gameplay",
+        "x": -15,
+        "y": 25,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_con_floor",
+        "type": "enemy",
+        "vectorName": "floor",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -115,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [
+    {
+      "id": "hs_harpsichord",
+      "x": 0,
+      "y": -100,
+      "w": 40,
+      "h": 35,
+      "trigger": "player_near",
+      "label": "harpsichord"
+    },
+    {
+      "id": "hs_portrait",
+      "x": -15,
+      "y": 10,
+      "w": 30,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "portrait"
+    },
+    {
+      "id": "hs_exit_right",
+      "x": 85,
+      "y": -100,
+      "w": 30,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "vault_corridor_door"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "item_pickup",
-  "category": "pickup",
+  "category": "coin",
   "duration_ms": 200,
 
   "oscillator": {

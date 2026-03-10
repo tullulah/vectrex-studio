@@ -1,0 +1,79 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "optics_lab",
+    "author": "",
+    "difficulty": "hard",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Optics Laboratory — prism puzzle reveals the Crystal Eye"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 575,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_opt_lamp",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 80,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_opt_pedestal",
+        "type": "enemy",
+        "vectorName": "optics_pedestal",
+        "layer": "gameplay",
+        "x": 250,
+        "y": -62,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": { "x": 50, "y": -115 }
+  },
+  "hotspots": [
+    {
+      "id": "hs_pedestal_optics",
+      "x": 250,
+      "y": -95,
+      "w": 40,
+      "h": 35,
+      "trigger": "player_near",
+      "label": "optics_pedestal"
+    },
+    {
+      "id": "hs_compartment",
+      "x": 420,
+      "y": -95,
+      "w": 30,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "hidden_compartment"
+    }
+  ]
+}

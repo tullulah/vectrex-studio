@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "name": "platform_up",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "platform_block",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -38, "y": -8, "z": 0},
+            {"x":  38, "y": -8, "z": 0},
+            {"x":  38, "y":  2, "z": 0},
+            {"x": -38, "y":  2, "z": 0},
+            {"x": -38, "y": -8, "z": 0}
+          ]
+        },
+        {
+          "name": "platform_bevel",
+          "intensity": 75,
+          "closed": false,
+          "points": [
+            {"x": -35, "y": -5, "z": 0},
+            {"x":  35, "y": -5, "z": 0}
+          ]
+        },
+        {
+          "name": "support_left",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {"x": -7, "y": 2, "z": 0},
+            {"x": -7, "y": 38, "z": 0}
+          ]
+        },
+        {
+          "name": "support_right",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {"x": 7, "y": 2, "z": 0},
+            {"x": 7, "y": 38, "z": 0}
+          ]
+        },
+        {
+          "name": "base",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -12, "y": 38, "z": 0},
+            {"x":  12, "y": 38, "z": 0}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

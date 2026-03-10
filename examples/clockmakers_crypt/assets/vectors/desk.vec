@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "name": "desk",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "desk_top",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -30, "y": -2, "z": 0},
+            {"x":  30, "y": -2, "z": 0},
+            {"x":  30, "y":  5, "z": 0},
+            {"x": -30, "y":  5, "z": 0},
+            {"x": -30, "y": -2, "z": 0}
+          ]
+        },
+        {
+          "name": "leg_left",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -26, "y": 5, "z": 0},
+            {"x": -26, "y": 30, "z": 0}
+          ]
+        },
+        {
+          "name": "leg_right",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": 26, "y": 5, "z": 0},
+            {"x": 26, "y": 30, "z": 0}
+          ]
+        },
+        {
+          "name": "brace",
+          "intensity": 75,
+          "closed": false,
+          "points": [
+            {"x": -26, "y": 18, "z": 0},
+            {"x":  26, "y": 18, "z": 0}
+          ]
+        },
+        {
+          "name": "book_body",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {"x": -14, "y": -2, "z": 0},
+            {"x": -14, "y": -16, "z": 0},
+            {"x":  14, "y": -16, "z": 0},
+            {"x":  14, "y": -2, "z": 0}
+          ]
+        },
+        {
+          "name": "book_spine",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": 0, "y": -2, "z": 0},
+            {"x": 0, "y": -16, "z": 0}
+          ]
+        },
+        {
+          "name": "page_lines_left",
+          "intensity": 55,
+          "closed": false,
+          "points": [
+            {"x": -11, "y": -6, "z": 0},
+            {"x": -2,  "y": -6, "z": 0}
+          ]
+        },
+        {
+          "name": "page_lines_right",
+          "intensity": 55,
+          "closed": false,
+          "points": [
+            {"x": 2,  "y": -6, "z": 0},
+            {"x": 11, "y": -6, "z": 0}
+          ]
+        },
+        {
+          "name": "page_lines_left2",
+          "intensity": 55,
+          "closed": false,
+          "points": [
+            {"x": -11, "y": -10, "z": 0},
+            {"x": -2,  "y": -10, "z": 0}
+          ]
+        },
+        {
+          "name": "page_lines_right2",
+          "intensity": 55,
+          "closed": false,
+          "points": [
+            {"x": 2,  "y": -10, "z": 0},
+            {"x": 11, "y": -10, "z": 0}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

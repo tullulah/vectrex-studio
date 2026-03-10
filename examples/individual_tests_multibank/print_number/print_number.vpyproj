@@ -1,0 +1,12 @@
+[project]
+name = "print_number"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/print_number.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

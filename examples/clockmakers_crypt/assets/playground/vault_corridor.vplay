@@ -1,0 +1,168 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "vault_corridor",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "The Vault Corridor — riveted stone walls, sealed vault door, Crystal Apprentice stands guard"
+  },
+  "worldBounds": {
+    "xMin": -128,
+    "xMax": 127,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_vc_lamp_left",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": -90,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_vc_lamp_right",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 90,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_vc_wall_panel_left",
+        "type": "enemy",
+        "vectorName": "wall_compartment",
+        "layer": "gameplay",
+        "x": -65,
+        "y": -45,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_vc_wall_panel_right",
+        "type": "enemy",
+        "vectorName": "wall_compartment",
+        "layer": "gameplay",
+        "x": 40,
+        "y": -45,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_vc_pedestal_npc",
+        "type": "enemy",
+        "vectorName": "optics_pedestal",
+        "layer": "gameplay",
+        "x": -30,
+        "y": -95,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_vc_vault_door",
+        "type": "enemy",
+        "vectorName": "locked_door",
+        "layer": "gameplay",
+        "x": 70,
+        "y": -90,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_vc_floor",
+        "type": "enemy",
+        "vectorName": "floor",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -115,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": { "x": 0, "y": 0 },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": { "x": -100, "y": -110 }
+  },
+  "hotspots": [
+    {
+      "id": "hs_crystal_apprentice",
+      "x": -30,
+      "y": -100,
+      "w": 30,
+      "h": 35,
+      "trigger": "player_near",
+      "label": "crystal_apprentice"
+    },
+    {
+      "id": "hs_vault_door",
+      "x": 70,
+      "y": -100,
+      "w": 35,
+      "h": 40,
+      "trigger": "player_near",
+      "label": "vault_door"
+    },
+    {
+      "id": "hs_exit_left",
+      "x": -110,
+      "y": -100,
+      "w": 25,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "conservatory_door"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "weights_room",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-03-10"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 671,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_wgt_lamp",
+        "type": "enemy",
+        "vectorName": "lamp",
+        "layer": "gameplay",
+        "x": 80,
+        "y": -5,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_wgt_pedestal_base",
+        "type": "enemy",
+        "vectorName": "canvas",
+        "layer": "gameplay",
+        "x": 280,
+        "y": -68,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_wgt_exit_arch",
+        "type": "enemy",
+        "vectorName": "entrance_arc",
+        "layer": "gameplay",
+        "x": 570,
+        "y": -34,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [
+    {
+      "id": "hs_pedestal",
+      "x": 280,
+      "y": -95,
+      "w": 40,
+      "h": 35,
+      "trigger": "player_near",
+      "label": "weight_pedestal"
+    },
+    {
+      "id": "hs_exit_right",
+      "x": 570,
+      "y": -95,
+      "w": 30,
+      "h": 30,
+      "trigger": "player_near",
+      "label": "workshop_door"
+    }
+  ]
+}
