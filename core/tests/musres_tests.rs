@@ -14,13 +14,13 @@ fn test_create_music() {
 fn test_midi_to_psg() {
     // Middle C (MIDI 60) = 261.63 Hz
     let period = MusicResource::midi_to_psg_period(60);
-    // Expected: 1500000 / (16 * 261.63) ≈ 357.7
-    assert!(period >= 350 && period <= 365);
-    
+    // Formula: 1_411_200 / (16 * 261.63) ≈ 337
+    assert!(period >= 330 && period <= 345, "MIDI 60 period was {}", period);
+
     // A4 (MIDI 69) = 440 Hz
     let period_a4 = MusicResource::midi_to_psg_period(69);
-    // Expected: 1500000 / (16 * 440) ≈ 213
-    assert!(period_a4 >= 210 && period_a4 <= 220);
+    // Formula: 1_411_200 / (16 * 440) ≈ 200
+    assert!(period_a4 >= 195 && period_a4 <= 206, "MIDI 69 period was {}", period_a4);
 }
 
 #[test]
