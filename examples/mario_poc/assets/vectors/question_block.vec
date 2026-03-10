@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "name": "question_block",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "block",
+      "visible": true,
+      "paths": [
+        {
+          "name": "border",
+          "intensity": 120,
+          "closed": true,
+          "points": [
+            { "x": -8, "y": -8 },
+            { "x": 8, "y": -8 },
+            { "x": 8, "y": 8 },
+            { "x": -8, "y": 8 },
+            { "x": -8, "y": -8 }
+          ]
+        },
+        {
+          "name": "question_arc",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            { "x": -3, "y": 4 },
+            { "x": 3, "y": 4 },
+            { "x": 4, "y": 2 },
+            { "x": 0, "y": 0 }
+          ]
+        },
+        {
+          "name": "question_dot",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            { "x": -1, "y": -4 },
+            { "x": 1, "y": -4 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

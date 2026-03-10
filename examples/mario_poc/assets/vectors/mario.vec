@@ -1,0 +1,115 @@
+{
+  "version": "1.0",
+  "name": "mario",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "body",
+      "visible": true,
+      "paths": [
+        {
+          "name": "hat_brim",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": -7, "y": 11 },
+            { "x": 7, "y": 11 }
+          ]
+        },
+        {
+          "name": "hat_left_side",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": -5, "y": 11 },
+            { "x": -5, "y": 15 }
+          ]
+        },
+        {
+          "name": "hat_right_side",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": 5, "y": 11 },
+            { "x": 5, "y": 15 }
+          ]
+        },
+        {
+          "name": "hat_top",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": -5, "y": 15 },
+            { "x": 5, "y": 15 }
+          ]
+        },
+        {
+          "name": "head",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            { "x": -6, "y": 3 },
+            { "x": 6, "y": 3 },
+            { "x": 6, "y": 11 },
+            { "x": -6, "y": 11 },
+            { "x": -6, "y": 3 }
+          ]
+        },
+        {
+          "name": "body",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            { "x": -7, "y": -5 },
+            { "x": 7, "y": -5 },
+            { "x": 7, "y": 3 },
+            { "x": -7, "y": 3 },
+            { "x": -7, "y": -5 }
+          ]
+        },
+        {
+          "name": "left_leg_down",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": -7, "y": -5 },
+            { "x": -7, "y": -11 }
+          ]
+        },
+        {
+          "name": "left_leg_foot",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": -7, "y": -11 },
+            { "x": -2, "y": -11 }
+          ]
+        },
+        {
+          "name": "right_leg_down",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": 7, "y": -5 },
+            { "x": 7, "y": -11 }
+          ]
+        },
+        {
+          "name": "right_leg_foot",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": 7, "y": -11 },
+            { "x": 2, "y": -11 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

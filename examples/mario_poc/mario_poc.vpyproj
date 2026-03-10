@@ -1,0 +1,18 @@
+[project]
+name = "mario_poc"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/mario_poc.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/**/*.vec"]
+playground = ["assets/playground/**/*.vplay"]
+music = ["assets/music/**/*.vmus"]
+sfx = ["assets/sfx/**/*.vsfx"]

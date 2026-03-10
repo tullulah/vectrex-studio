@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "name": "ground_tile",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "tile",
+      "visible": true,
+      "paths": [
+        {
+          "name": "border",
+          "intensity": 80,
+          "closed": true,
+          "points": [
+            { "x": -30, "y": -8 },
+            { "x": 30, "y": -8 },
+            { "x": 30, "y": 8 },
+            { "x": -30, "y": 8 },
+            { "x": -30, "y": -8 }
+          ]
+        },
+        {
+          "name": "cross_horizontal",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            { "x": -30, "y": 0 },
+            { "x": 30, "y": 0 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

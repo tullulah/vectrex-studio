@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "name": "pipe",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "pipe",
+      "visible": true,
+      "paths": [
+        {
+          "name": "body",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            { "x": -10, "y": -25 },
+            { "x": 10, "y": -25 },
+            { "x": 10, "y": 25 },
+            { "x": -10, "y": 25 },
+            { "x": -10, "y": -25 }
+          ]
+        },
+        {
+          "name": "cap",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            { "x": -12, "y": 15 },
+            { "x": 12, "y": 15 },
+            { "x": 12, "y": 25 },
+            { "x": -12, "y": 25 },
+            { "x": -12, "y": 15 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}
