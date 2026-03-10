@@ -339,6 +339,17 @@ impl BankAllocator {
     /// Real overflow is caught by the assembler; we only warn here.
     fn validate_assignments(&self, banks: &[BankInfo]) -> BankAllocatorResult<()> {
         let bank_size = self.config.rom_bank_size;
+
+        // Check if any individual function is too large to fit in any bank
+        for (name, node) in &self.graph.nodes {
+            if node.size_bytes > bank_size {
+                return Err(BankAllocatorError::Generic(format!(
+                    "Function '{}' is {} bytes, which exceeds bank size of {} bytes",
+                    name, node.size_bytes, bank_size
+                )));
+            }
+        }
+
         for bank in banks {
             if bank.used_bytes > bank_size {
                 eprintln!(
