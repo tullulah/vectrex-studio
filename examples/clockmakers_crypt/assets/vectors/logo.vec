@@ -1,0 +1,133 @@
+{
+  "version": "1.0",
+  "name": "logo",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "outer_border",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": -95, "y": -90},
+            {"x":  95, "y": -90},
+            {"x":  95, "y":  90},
+            {"x": -95, "y":  90}
+          ]
+        },
+        {
+          "name": "clock_face",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x":   0, "y":  40},
+            {"x":  28, "y":  28},
+            {"x":  40, "y":   0},
+            {"x":  28, "y": -28},
+            {"x":   0, "y": -40},
+            {"x": -28, "y": -28},
+            {"x": -40, "y":   0},
+            {"x": -28, "y":  28}
+          ]
+        },
+        {
+          "name": "minute_hand",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": 0, "y": 0},
+            {"x": 0, "y": 36}
+          ]
+        },
+        {
+          "name": "hour_hand",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x":   0, "y":  0},
+            {"x": -22, "y": 28}
+          ]
+        },
+        {
+          "name": "xii_x_diag1",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -16, "y": 56},
+            {"x":  -8, "y": 46}
+          ]
+        },
+        {
+          "name": "xii_x_diag2",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -16, "y": 46},
+            {"x":  -8, "y": 56}
+          ]
+        },
+        {
+          "name": "xii_i1",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -3, "y": 56},
+            {"x": -3, "y": 46}
+          ]
+        },
+        {
+          "name": "xii_i2",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": 3, "y": 56},
+            {"x": 3, "y": 46}
+          ]
+        },
+        {
+          "name": "vi_v_left",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -8, "y": -46},
+            {"x":  0, "y": -56}
+          ]
+        },
+        {
+          "name": "vi_v_right",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":  8, "y": -46},
+            {"x":  0, "y": -56}
+          ]
+        },
+        {
+          "name": "vi_i",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": 13, "y": -46},
+            {"x": 13, "y": -56}
+          ]
+        },
+        {
+          "name": "coffin_ornament",
+          "intensity": 110,
+          "closed": true,
+          "points": [
+            {"x": -10, "y":  72},
+            {"x": -16, "y":  78},
+            {"x": -10, "y":  88},
+            {"x":  10, "y":  88},
+            {"x":  16, "y":  78},
+            {"x":  10, "y":  72}
+          ]
+        }
+      ]
+    }
+  ]
+}

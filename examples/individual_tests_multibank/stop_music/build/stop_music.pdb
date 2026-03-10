@@ -1,0 +1,6955 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "stop_music.asm",
+  "binary": "stop_music.bin",
+  "entryPoint": "0x0324",
+  "symbols": {
+    "AUDIO_UPDATE": "0x013C",
+    "CT_12": "0x05F2",
+    "AU_MUSIC_WRITE_LOOP": "0x017F",
+    "IF_NEXT_11": "0x064B",
+    "IF_NEXT_7": "0x05CA",
+    "AU_MUSIC_DONE": "0x0193",
+    "J1B2_BUILTIN": "0x005E",
+    "PSG_frame_done": "0x0100",
+    "AU_MUSIC_PROCESS_WRITES": "0x017D",
+    "__Reset0Ref": "0x01BA",
+    "AU_MUSIC_READ_COUNT": "0x016A",
+    "J1B1_BUILTIN": "0x004F",
+    "AU_MUSIC_READ": "0x015B",
+    "STR_1": "0x0809",
+    "sfx_doframe": "0x01B4",
+    "IF_END_0": "0x0468",
+    "AU_DONE": "0x01B1",
+    "IF_NEXT_3": "0x0492",
+    "PSG_music_loop": "0x010A",
+    "IF_END_4": "0x04D1",
+    "_MUSIC1_MUSIC": "0x064F",
+    "J1X_BUILTIN": "0x001F",
+    "AU_MUSIC_NO_DELAY": "0x016A",
+    "DRAW_CIRCLE_RUNTIME": "0x01C7",
+    "AU_MUSIC_ENDED": "0x0198",
+    "DCR_after_intensity": "0x01FC",
+    "IF_NEXT_5": "0x04D1",
+    "AU_MUSIC_HAS_DELAY": "0x0174",
+    "AU_UPDATE_SFX": "0x01A9",
+    "BEEP_UPDATE_RUNTIME": "0x0309",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0069",
+    "UPDATE_MUSIC_PSG": "0x00B9",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0078",
+    "PSG_music_ended": "0x0105",
+    "MAIN": "0x034F",
+    "STR_2": "0x0811",
+    "CE_9": "0x04FF",
+    "J1B1_BUILTIN.J1B1_OFF": "0x005A",
+    "J1B3_BUILTIN": "0x006D",
+    "__Draw_Line_d": "0x01C2",
+    "__Moveto_d": "0x01BD",
+    "CT_8": "0x04F9",
+    "PSG_write_loop": "0x00D2",
+    "AU_SKIP_MUSIC": "0x01A7",
+    "START": "0x0324",
+    "BEEP_UPDATE_DONE": "0x0323",
+    "LOOP_BODY": "0x037C",
+    "PSG_update_done": "0x0111",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0087",
+    "VECTREX_PRINT_TEXT": "0x008B",
+    "IF_NEXT_1": "0x0468",
+    "J1Y_BUILTIN": "0x0037",
+    "CE_13": "0x05F8",
+    "IF_END_10": "0x064B",
+    "STOP_MUSIC_RUNTIME": "0x0115",
+    "STR_0": "0x0801",
+    "PLAY_MUSIC_RUNTIME": "0x00AA",
+    "STR_3": "0x0819",
+    "IF_END_6": "0x05CA",
+    "IF_END_2": "0x0492",
+    "AU_MUSIC_LOOP": "0x019D",
+    "J1B4_BUILTIN": "0x007C",
+    "__Intensity_a": "0x01B5",
+    "DCR_intensity_5F": "0x01F9"
+  },
+  "lineMap": {
+    "23": "0x0468",
+    "27": "0x0492",
+    "8": "0x0338",
+    "24": "0x0474",
+    "14": "0x038B",
+    "15": "0x03B7",
+    "11": "0x033E",
+    "28": "0x049E",
+    "17": "0x040F",
+    "19": "0x043B",
+    "21": "0x044E",
+    "31": "0x04D1",
+    "32": "0x0505",
+    "33": "0x05CA",
+    "16": "0x03E3",
+    "25": "0x047B",
+    "34": "0x05FE",
+    "20": "0x0447"
+  },
+  "vpyLineMap": {
+    "0x040F": {
+      "file": "main.vpy",
+      "address": "0x040F",
+      "line": 17
+    },
+    "0x03B7": {
+      "file": "main.vpy",
+      "address": "0x03B7",
+      "line": 15
+    },
+    "0x038B": {
+      "file": "main.vpy",
+      "address": "0x038B",
+      "line": 14
+    },
+    "0x0474": {
+      "file": "main.vpy",
+      "address": "0x0474",
+      "line": 24
+    },
+    "0x033E": {
+      "file": "main.vpy",
+      "address": "0x033E",
+      "line": 11
+    },
+    "0x0338": {
+      "file": "main.vpy",
+      "address": "0x0338",
+      "line": 8
+    },
+    "0x04D1": {
+      "file": "main.vpy",
+      "address": "0x04D1",
+      "line": 31
+    },
+    "0x049E": {
+      "file": "main.vpy",
+      "address": "0x049E",
+      "line": 28
+    },
+    "0x0468": {
+      "file": "main.vpy",
+      "address": "0x0468",
+      "line": 23
+    },
+    "0x05FE": {
+      "file": "main.vpy",
+      "address": "0x05FE",
+      "line": 34
+    },
+    "0x0447": {
+      "file": "main.vpy",
+      "address": "0x0447",
+      "line": 20
+    },
+    "0x047B": {
+      "file": "main.vpy",
+      "address": "0x047B",
+      "line": 25
+    },
+    "0x0492": {
+      "file": "main.vpy",
+      "address": "0x0492",
+      "line": 27
+    },
+    "0x044E": {
+      "file": "main.vpy",
+      "address": "0x044E",
+      "line": 21
+    },
+    "0x0505": {
+      "file": "main.vpy",
+      "address": "0x0505",
+      "line": 32
+    },
+    "0x05CA": {
+      "file": "main.vpy",
+      "address": "0x05CA",
+      "line": 33
+    },
+    "0x03E3": {
+      "file": "main.vpy",
+      "address": "0x03E3",
+      "line": 16
+    },
+    "0x043B": {
+      "file": "main.vpy",
+      "address": "0x043B",
+      "line": 19
+    }
+  },
+  "asmLineMap": {
+    "0x03BA": {
+      "file": "stop_music.asm",
+      "address": "0x03BA",
+      "line": 715
+    },
+    "0x071F": {
+      "file": "stop_music.asm",
+      "address": "0x071F",
+      "line": 1204
+    },
+    "0x07B0": {
+      "file": "stop_music.asm",
+      "address": "0x07B0",
+      "line": 1316
+    },
+    "0x037A": {
+      "file": "stop_music.asm",
+      "address": "0x037A",
+      "line": 682
+    },
+    "0x028E": {
+      "file": "stop_music.asm",
+      "address": "0x028E",
+      "line": 556
+    },
+    "0x011E": {
+      "file": "stop_music.asm",
+      "address": "0x011E",
+      "line": 284
+    },
+    "0x0754": {
+      "file": "stop_music.asm",
+      "address": "0x0754",
+      "line": 1245
+    },
+    "0x0059": {
+      "file": "stop_music.asm",
+      "address": "0x0059",
+      "line": 116
+    },
+    "0x084A": {
+      "file": "stop_music.asm",
+      "address": "0x084A",
+      "line": 1456
+    },
+    "0x02B4": {
+      "file": "stop_music.asm",
+      "address": "0x02B4",
+      "line": 577
+    },
+    "0x0230": {
+      "file": "stop_music.asm",
+      "address": "0x0230",
+      "line": 509
+    },
+    "0x065B": {
+      "file": "stop_music.asm",
+      "address": "0x065B",
+      "line": 1039
+    },
+    "0x0752": {
+      "file": "stop_music.asm",
+      "address": "0x0752",
+      "line": 1243
+    },
+    "0x0586": {
+      "file": "stop_music.asm",
+      "address": "0x0586",
+      "line": 927
+    },
+    "0x04BA": {
+      "file": "stop_music.asm",
+      "address": "0x04BA",
+      "line": 840
+    },
+    "0x01B7": {
+      "file": "stop_music.asm",
+      "address": "0x01B7",
+      "line": 410
+    },
+    "0x05B8": {
+      "file": "stop_music.asm",
+      "address": "0x05B8",
+      "line": 947
+    },
+    "0x079A": {
+      "file": "stop_music.asm",
+      "address": "0x079A",
+      "line": 1298
+    },
+    "0x04B3": {
+      "file": "stop_music.asm",
+      "address": "0x04B3",
+      "line": 837
+    },
+    "0x0436": {
+      "file": "stop_music.asm",
+      "address": "0x0436",
+      "line": 768
+    },
+    "0x00F5": {
+      "file": "stop_music.asm",
+      "address": "0x00F5",
+      "line": 245
+    },
+    "0x068E": {
+      "file": "stop_music.asm",
+      "address": "0x068E",
+      "line": 1083
+    },
+    "0x01DF": {
+      "file": "stop_music.asm",
+      "address": "0x01DF",
+      "line": 448
+    },
+    "0x0662": {
+      "file": "stop_music.asm",
+      "address": "0x0662",
+      "line": 1045
+    },
+    "0x0054": {
+      "file": "stop_music.asm",
+      "address": "0x0054",
+      "line": 113
+    },
+    "0x06AA": {
+      "file": "stop_music.asm",
+      "address": "0x06AA",
+      "line": 1107
+    },
+    "0x0705": {
+      "file": "stop_music.asm",
+      "address": "0x0705",
+      "line": 1182
+    },
+    "0x0108": {
+      "file": "stop_music.asm",
+      "address": "0x0108",
+      "line": 262
+    },
+    "0x084D": {
+      "file": "stop_music.asm",
+      "address": "0x084D",
+      "line": 1459
+    },
+    "0x06BE": {
+      "file": "stop_music.asm",
+      "address": "0x06BE",
+      "line": 1123
+    },
+    "0x01DC": {
+      "file": "stop_music.asm",
+      "address": "0x01DC",
+      "line": 447
+    },
+    "0x02C0": {
+      "file": "stop_music.asm",
+      "address": "0x02C0",
+      "line": 581
+    },
+    "0x0174": {
+      "file": "stop_music.asm",
+      "address": "0x0174",
+      "line": 352
+    },
+    "0x01BA": {
+      "file": "stop_music.asm",
+      "address": "0x01BA",
+      "line": 412
+    },
+    "0x0338": {
+      "file": "stop_music.asm",
+      "address": "0x0338",
+      "line": 650
+    },
+    "0x06C5": {
+      "file": "stop_music.asm",
+      "address": "0x06C5",
+      "line": 1127
+    },
+    "0x07C8": {
+      "file": "stop_music.asm",
+      "address": "0x07C8",
+      "line": 1336
+    },
+    "0x057E": {
+      "file": "stop_music.asm",
+      "address": "0x057E",
+      "line": 924
+    },
+    "0x05A6": {
+      "file": "stop_music.asm",
+      "address": "0x05A6",
+      "line": 940
+    },
+    "0x04E6": {
+      "file": "stop_music.asm",
+      "address": "0x04E6",
+      "line": 859
+    },
+    "0x0749": {
+      "file": "stop_music.asm",
+      "address": "0x0749",
+      "line": 1236
+    },
+    "0x0257": {
+      "file": "stop_music.asm",
+      "address": "0x0257",
+      "line": 527
+    },
+    "0x082D": {
+      "file": "stop_music.asm",
+      "address": "0x082D",
+      "line": 1427
+    },
+    "0x073B": {
+      "file": "stop_music.asm",
+      "address": "0x073B",
+      "line": 1225
+    },
+    "0x0160": {
+      "file": "stop_music.asm",
+      "address": "0x0160",
+      "line": 335
+    },
+    "0x083E": {
+      "file": "stop_music.asm",
+      "address": "0x083E",
+      "line": 1444
+    },
+    "0x06D4": {
+      "file": "stop_music.asm",
+      "address": "0x06D4",
+      "line": 1139
+    },
+    "0x07C3": {
+      "file": "stop_music.asm",
+      "address": "0x07C3",
+      "line": 1333
+    },
+    "0x07D2": {
+      "file": "stop_music.asm",
+      "address": "0x07D2",
+      "line": 1345
+    },
+    "0x019F": {
+      "file": "stop_music.asm",
+      "address": "0x019F",
+      "line": 385
+    },
+    "0x046E": {
+      "file": "stop_music.asm",
+      "address": "0x046E",
+      "line": 799
+    },
+    "0x0801": {
+      "file": "stop_music.asm",
+      "address": "0x0801",
+      "line": 1465
+    },
+    "0x02E9": {
+      "file": "stop_music.asm",
+      "address": "0x02E9",
+      "line": 602
+    },
+    "0x0822": {
+      "file": "stop_music.asm",
+      "address": "0x0822",
+      "line": 1416
+    },
+    "0x03C3": {
+      "file": "stop_music.asm",
+      "address": "0x03C3",
+      "line": 718
+    },
+    "0x0388": {
+      "file": "stop_music.asm",
+      "address": "0x0388",
+      "line": 690
+    },
+    "0x00BB": {
+      "file": "stop_music.asm",
+      "address": "0x00BB",
+      "line": 210
+    },
+    "0x0723": {
+      "file": "stop_music.asm",
+      "address": "0x0723",
+      "line": 1207
+    },
+    "0x044E": {
+      "file": "stop_music.asm",
+      "address": "0x044E",
+      "line": 785
+    },
+    "0x0828": {
+      "file": "stop_music.asm",
+      "address": "0x0828",
+      "line": 1422
+    },
+    "0x02D7": {
+      "file": "stop_music.asm",
+      "address": "0x02D7",
+      "line": 594
+    },
+    "0x0703": {
+      "file": "stop_music.asm",
+      "address": "0x0703",
+      "line": 1180
+    },
+    "0x00C8": {
+      "file": "stop_music.asm",
+      "address": "0x00C8",
+      "line": 218
+    },
+    "0x0672": {
+      "file": "stop_music.asm",
+      "address": "0x0672",
+      "line": 1059
+    },
+    "0x0069": {
+      "file": "stop_music.asm",
+      "address": "0x0069",
+      "line": 127
+    },
+    "0x035F": {
+      "file": "stop_music.asm",
+      "address": "0x035F",
+      "line": 668
+    },
+    "0x0793": {
+      "file": "stop_music.asm",
+      "address": "0x0793",
+      "line": 1293
+    },
+    "0x04DD": {
+      "file": "stop_music.asm",
+      "address": "0x04DD",
+      "line": 856
+    },
+    "0x0460": {
+      "file": "stop_music.asm",
+      "address": "0x0460",
+      "line": 791
+    },
+    "0x082F": {
+      "file": "stop_music.asm",
+      "address": "0x082F",
+      "line": 1429
+    },
+    "0x0139": {
+      "file": "stop_music.asm",
+      "address": "0x0139",
+      "line": 296
+    },
+    "0x0172": {
+      "file": "stop_music.asm",
+      "address": "0x0172",
+      "line": 348
+    },
+    "0x0095": {
+      "file": "stop_music.asm",
+      "address": "0x0095",
+      "line": 157
+    },
+    "0x0772": {
+      "file": "stop_music.asm",
+      "address": "0x0772",
+      "line": 1267
+    },
+    "0x0063": {
+      "file": "stop_music.asm",
+      "address": "0x0063",
+      "line": 123
+    },
+    "0x078C": {
+      "file": "stop_music.asm",
+      "address": "0x078C",
+      "line": 1289
+    },
+    "0x07A1": {
+      "file": "stop_music.asm",
+      "address": "0x07A1",
+      "line": 1303
+    },
+    "0x0273": {
+      "file": "stop_music.asm",
+      "address": "0x0273",
+      "line": 543
+    },
+    "0x0572": {
+      "file": "stop_music.asm",
+      "address": "0x0572",
+      "line": 919
+    },
+    "0x0397": {
+      "file": "stop_music.asm",
+      "address": "0x0397",
+      "line": 698
+    },
+    "0x05D0": {
+      "file": "stop_music.asm",
+      "address": "0x05D0",
+      "line": 958
+    },
+    "0x04EC": {
+      "file": "stop_music.asm",
+      "address": "0x04EC",
+      "line": 861
+    },
+    "0x05A4": {
+      "file": "stop_music.asm",
+      "address": "0x05A4",
+      "line": 939
+    },
+    "0x070C": {
+      "file": "stop_music.asm",
+      "address": "0x070C",
+      "line": 1187
+    },
+    "0x05A2": {
+      "file": "stop_music.asm",
+      "address": "0x05A2",
+      "line": 938
+    },
+    "0x0433": {
+      "file": "stop_music.asm",
+      "address": "0x0433",
+      "line": 767
+    },
+    "0x0654": {
+      "file": "stop_music.asm",
+      "address": "0x0654",
+      "line": 1032
+    },
+    "0x01FC": {
+      "file": "stop_music.asm",
+      "address": "0x01FC",
+      "line": 470
+    },
+    "0x04DA": {
+      "file": "stop_music.asm",
+      "address": "0x04DA",
+      "line": 855
+    },
+    "0x06A7": {
+      "file": "stop_music.asm",
+      "address": "0x06A7",
+      "line": 1104
+    },
+    "0x0163": {
+      "file": "stop_music.asm",
+      "address": "0x0163",
+      "line": 337
+    },
+    "0x0773": {
+      "file": "stop_music.asm",
+      "address": "0x0773",
+      "line": 1268
+    },
+    "0x0588": {
+      "file": "stop_music.asm",
+      "address": "0x0588",
+      "line": 928
+    },
+    "0x058B": {
+      "file": "stop_music.asm",
+      "address": "0x058B",
+      "line": 929
+    },
+    "0x080B": {
+      "file": "stop_music.asm",
+      "address": "0x080B",
+      "line": 1394
+    },
+    "0x0316": {
+      "file": "stop_music.asm",
+      "address": "0x0316",
+      "line": 628
+    },
+    "0x03F2": {
+      "file": "stop_music.asm",
+      "address": "0x03F2",
+      "line": 739
+    },
+    "0x0074": {
+      "file": "stop_music.asm",
+      "address": "0x0074",
+      "line": 134
+    },
+    "0x005E": {
+      "file": "stop_music.asm",
+      "address": "0x005E",
+      "line": 120
+    },
+    "0x0777": {
+      "file": "stop_music.asm",
+      "address": "0x0777",
+      "line": 1272
+    },
+    "0x02E6": {
+      "file": "stop_music.asm",
+      "address": "0x02E6",
+      "line": 601
+    },
+    "0x05EA": {
+      "file": "stop_music.asm",
+      "address": "0x05EA",
+      "line": 969
+    },
+    "0x0281": {
+      "file": "stop_music.asm",
+      "address": "0x0281",
+      "line": 550
+    },
+    "0x0191": {
+      "file": "stop_music.asm",
+      "address": "0x0191",
+      "line": 373
+    },
+    "0x0734": {
+      "file": "stop_music.asm",
+      "address": "0x0734",
+      "line": 1220
+    },
+    "0x06A2": {
+      "file": "stop_music.asm",
+      "address": "0x06A2",
+      "line": 1100
+    },
+    "0x079B": {
+      "file": "stop_music.asm",
+      "address": "0x079B",
+      "line": 1299
+    },
+    "0x07F6": {
+      "file": "stop_music.asm",
+      "address": "0x07F6",
+      "line": 1375
+    },
+    "0x07AB": {
+      "file": "stop_music.asm",
+      "address": "0x07AB",
+      "line": 1312
+    },
+    "0x0831": {
+      "file": "stop_music.asm",
+      "address": "0x0831",
+      "line": 1431
+    },
+    "0x0559": {
+      "file": "stop_music.asm",
+      "address": "0x0559",
+      "line": 909
+    },
+    "0x058E": {
+      "file": "stop_music.asm",
+      "address": "0x058E",
+      "line": 930
+    },
+    "0x0244": {
+      "file": "stop_music.asm",
+      "address": "0x0244",
+      "line": 518
+    },
+    "0x02C1": {
+      "file": "stop_music.asm",
+      "address": "0x02C1",
+      "line": 583
+    },
+    "0x0206": {
+      "file": "stop_music.asm",
+      "address": "0x0206",
+      "line": 476
+    },
+    "0x072D": {
+      "file": "stop_music.asm",
+      "address": "0x072D",
+      "line": 1216
+    },
+    "0x0115": {
+      "file": "stop_music.asm",
+      "address": "0x0115",
+      "line": 280
+    },
+    "0x02DA": {
+      "file": "stop_music.asm",
+      "address": "0x02DA",
+      "line": 596
+    },
+    "0x052C": {
+      "file": "stop_music.asm",
+      "address": "0x052C",
+      "line": 891
+    },
+    "0x0829": {
+      "file": "stop_music.asm",
+      "address": "0x0829",
+      "line": 1423
+    },
+    "0x0819": {
+      "file": "stop_music.asm",
+      "address": "0x0819",
+      "line": 1408
+    },
+    "0x0401": {
+      "file": "stop_music.asm",
+      "address": "0x0401",
+      "line": 744
+    },
+    "0x0087": {
+      "file": "stop_music.asm",
+      "address": "0x0087",
+      "line": 147
+    },
+    "0x06C8": {
+      "file": "stop_music.asm",
+      "address": "0x06C8",
+      "line": 1129
+    },
+    "0x06BB": {
+      "file": "stop_music.asm",
+      "address": "0x06BB",
+      "line": 1120
+    },
+    "0x0100": {
+      "file": "stop_music.asm",
+      "address": "0x0100",
+      "line": 255
+    },
+    "0x06EF": {
+      "file": "stop_music.asm",
+      "address": "0x06EF",
+      "line": 1162
+    },
+    "0x03B4": {
+      "file": "stop_music.asm",
+      "address": "0x03B4",
+      "line": 710
+    },
+    "0x0845": {
+      "file": "stop_music.asm",
+      "address": "0x0845",
+      "line": 1451
+    },
+    "0x06D1": {
+      "file": "stop_music.asm",
+      "address": "0x06D1",
+      "line": 1137
+    },
+    "0x05BD": {
+      "file": "stop_music.asm",
+      "address": "0x05BD",
+      "line": 949
+    },
+    "0x07F4": {
+      "file": "stop_music.asm",
+      "address": "0x07F4",
+      "line": 1373
+    },
+    "0x00B8": {
+      "file": "stop_music.asm",
+      "address": "0x00B8",
+      "line": 199
+    },
+    "0x07EE": {
+      "file": "stop_music.asm",
+      "address": "0x07EE",
+      "line": 1368
+    },
+    "0x038E": {
+      "file": "stop_music.asm",
+      "address": "0x038E",
+      "line": 57
+    },
+    "0x00FE": {
+      "file": "stop_music.asm",
+      "address": "0x00FE",
+      "line": 250
+    },
+    "0x0309": {
+      "file": "stop_music.asm",
+      "address": "0x0309",
+      "line": 621
+    },
+    "0x0766": {
+      "file": "stop_music.asm",
+      "address": "0x0766",
+      "line": 1259
+    },
+    "0x009E": {
+      "file": "stop_music.asm",
+      "address": "0x009E",
+      "line": 160
+    },
+    "0x07D6": {
+      "file": "stop_music.asm",
+      "address": "0x07D6",
+      "line": 1349
+    },
+    "0x02CE": {
+      "file": "stop_music.asm",
+      "address": "0x02CE",
+      "line": 591
+    },
+    "0x073A": {
+      "file": "stop_music.asm",
+      "address": "0x073A",
+      "line": 1224
+    },
+    "0x02C7": {
+      "file": "stop_music.asm",
+      "address": "0x02C7",
+      "line": 585
+    },
+    "0x0037": {
+      "file": "stop_music.asm",
+      "address": "0x0037",
+      "line": 92
+    },
+    "0x07DB": {
+      "file": "stop_music.asm",
+      "address": "0x07DB",
+      "line": 1352
+    },
+    "0x041E": {
+      "file": "stop_music.asm",
+      "address": "0x041E",
+      "line": 759
+    },
+    "0x0658": {
+      "file": "stop_music.asm",
+      "address": "0x0658",
+      "line": 1036
+    },
+    "0x082B": {
+      "file": "stop_music.asm",
+      "address": "0x082B",
+      "line": 1425
+    },
+    "0x07A5": {
+      "file": "stop_music.asm",
+      "address": "0x07A5",
+      "line": 1307
+    },
+    "0x079E": {
+      "file": "stop_music.asm",
+      "address": "0x079E",
+      "line": 1302
+    },
+    "0x02C4": {
+      "file": "stop_music.asm",
+      "address": "0x02C4",
+      "line": 584
+    },
+    "0x06A8": {
+      "file": "stop_music.asm",
+      "address": "0x06A8",
+      "line": 1105
+    },
+    "0x0681": {
+      "file": "stop_music.asm",
+      "address": "0x0681",
+      "line": 1072
+    },
+    "0x0659": {
+      "file": "stop_music.asm",
+      "address": "0x0659",
+      "line": 1037
+    },
+    "0x07CE": {
+      "file": "stop_music.asm",
+      "address": "0x07CE",
+      "line": 1341
+    },
+    "0x042A": {
+      "file": "stop_music.asm",
+      "address": "0x042A",
+      "line": 763
+    },
+    "0x0776": {
+      "file": "stop_music.asm",
+      "address": "0x0776",
+      "line": 1271
+    },
+    "0x0122": {
+      "file": "stop_music.asm",
+      "address": "0x0122",
+      "line": 286
+    },
+    "0x0134": {
+      "file": "stop_music.asm",
+      "address": "0x0134",
+      "line": 294
+    },
+    "0x018A": {
+      "file": "stop_music.asm",
+      "address": "0x018A",
+      "line": 369
+    },
+    "0x05E5": {
+      "file": "stop_music.asm",
+      "address": "0x05E5",
+      "line": 965
+    },
+    "0x003C": {
+      "file": "stop_music.asm",
+      "address": "0x003C",
+      "line": 94
+    },
+    "0x0272": {
+      "file": "stop_music.asm",
+      "address": "0x0272",
+      "line": 542
+    },
+    "0x066C": {
+      "file": "stop_music.asm",
+      "address": "0x066C",
+      "line": 1053
+    },
+    "0x01AC": {
+      "file": "stop_music.asm",
+      "address": "0x01AC",
+      "line": 395
+    },
+    "0x0839": {
+      "file": "stop_music.asm",
+      "address": "0x0839",
+      "line": 1439
+    },
+    "0x055C": {
+      "file": "stop_music.asm",
+      "address": "0x055C",
+      "line": 910
+    },
+    "0x056D": {
+      "file": "stop_music.asm",
+      "address": "0x056D",
+      "line": 917
+    },
+    "0x01C4": {
+      "file": "stop_music.asm",
+      "address": "0x01C4",
+      "line": 418
+    },
+    "0x0487": {
+      "file": "stop_music.asm",
+      "address": "0x0487",
+      "line": 812
+    },
+    "0x070D": {
+      "file": "stop_music.asm",
+      "address": "0x070D",
+      "line": 1188
+    },
+    "0x0568": {
+      "file": "stop_music.asm",
+      "address": "0x0568",
+      "line": 915
+    },
+    "0x0686": {
+      "file": "stop_music.asm",
+      "address": "0x0686",
+      "line": 1077
+    },
+    "0x06C4": {
+      "file": "stop_music.asm",
+      "address": "0x06C4",
+      "line": 1126
+    },
+    "0x07A6": {
+      "file": "stop_music.asm",
+      "address": "0x07A6",
+      "line": 1308
+    },
+    "0x05C1": {
+      "file": "stop_music.asm",
+      "address": "0x05C1",
+      "line": 951
+    },
+    "0x0750": {
+      "file": "stop_music.asm",
+      "address": "0x0750",
+      "line": 1241
+    },
+    "0x083B": {
+      "file": "stop_music.asm",
+      "address": "0x083B",
+      "line": 1441
+    },
+    "0x0664": {
+      "file": "stop_music.asm",
+      "address": "0x0664",
+      "line": 1046
+    },
+    "0x07FB": {
+      "file": "stop_music.asm",
+      "address": "0x07FB",
+      "line": 1380
+    },
+    "0x0092": {
+      "file": "stop_music.asm",
+      "address": "0x0092",
+      "line": 156
+    },
+    "0x0447": {
+      "file": "stop_music.asm",
+      "address": "0x0447",
+      "line": 780
+    },
+    "0x06E4": {
+      "file": "stop_music.asm",
+      "address": "0x06E4",
+      "line": 1153
+    },
+    "0x00C3": {
+      "file": "stop_music.asm",
+      "address": "0x00C3",
+      "line": 214
+    },
+    "0x06A1": {
+      "file": "stop_music.asm",
+      "address": "0x06A1",
+      "line": 1099
+    },
+    "0x021F": {
+      "file": "stop_music.asm",
+      "address": "0x021F",
+      "line": 492
+    },
+    "0x041B": {
+      "file": "stop_music.asm",
+      "address": "0x041B",
+      "line": 758
+    },
+    "0x06E1": {
+      "file": "stop_music.asm",
+      "address": "0x06E1",
+      "line": 1150
+    },
+    "0x06B6": {
+      "file": "stop_music.asm",
+      "address": "0x06B6",
+      "line": 1115
+    },
+    "0x0595": {
+      "file": "stop_music.asm",
+      "address": "0x0595",
+      "line": 933
+    },
+    "0x00DB": {
+      "file": "stop_music.asm",
+      "address": "0x00DB",
+      "line": 234
+    },
+    "0x00D8": {
+      "file": "stop_music.asm",
+      "address": "0x00D8",
+      "line": 233
+    },
+    "0x067E": {
+      "file": "stop_music.asm",
+      "address": "0x067E",
+      "line": 1069
+    },
+    "0x00D2": {
+      "file": "stop_music.asm",
+      "address": "0x00D2",
+      "line": 228
+    },
+    "0x00CC": {
+      "file": "stop_music.asm",
+      "address": "0x00CC",
+      "line": 220
+    },
+    "0x0154": {
+      "file": "stop_music.asm",
+      "address": "0x0154",
+      "line": 326
+    },
+    "0x0371": {
+      "file": "stop_music.asm",
+      "address": "0x0371",
+      "line": 678
+    },
+    "0x04A1": {
+      "file": "stop_music.asm",
+      "address": "0x04A1",
+      "line": 829
+    },
+    "0x07FA": {
+      "file": "stop_music.asm",
+      "address": "0x07FA",
+      "line": 1379
+    },
+    "0x06F9": {
+      "file": "stop_music.asm",
+      "address": "0x06F9",
+      "line": 1170
+    },
+    "0x06FA": {
+      "file": "stop_music.asm",
+      "address": "0x06FA",
+      "line": 1171
+    },
+    "0x040B": {
+      "file": "stop_music.asm",
+      "address": "0x040B",
+      "line": 749
+    },
+    "0x07C2": {
+      "file": "stop_music.asm",
+      "address": "0x07C2",
+      "line": 1332
+    },
+    "0x0536": {
+      "file": "stop_music.asm",
+      "address": "0x0536",
+      "line": 895
+    },
+    "0x074A": {
+      "file": "stop_music.asm",
+      "address": "0x074A",
+      "line": 1237
+    },
+    "0x0545": {
+      "file": "stop_music.asm",
+      "address": "0x0545",
+      "line": 901
+    },
+    "0x0717": {
+      "file": "stop_music.asm",
+      "address": "0x0717",
+      "line": 1198
+    },
+    "0x06DC": {
+      "file": "stop_music.asm",
+      "address": "0x06DC",
+      "line": 1145
+    },
+    "0x006D": {
+      "file": "stop_music.asm",
+      "address": "0x006D",
+      "line": 130
+    },
+    "0x0391": {
+      "file": "stop_music.asm",
+      "address": "0x0391",
+      "line": 58
+    },
+    "0x0261": {
+      "file": "stop_music.asm",
+      "address": "0x0261",
+      "line": 531
+    },
+    "0x07E1": {
+      "file": "stop_music.asm",
+      "address": "0x07E1",
+      "line": 1357
+    },
+    "0x0807": {
+      "file": "stop_music.asm",
+      "address": "0x0807",
+      "line": 1390
+    },
+    "0x06EE": {
+      "file": "stop_music.asm",
+      "address": "0x06EE",
+      "line": 1161
+    },
+    "0x06B4": {
+      "file": "stop_music.asm",
+      "address": "0x06B4",
+      "line": 1114
+    },
+    "0x02A3": {
+      "file": "stop_music.asm",
+      "address": "0x02A3",
+      "line": 568
+    },
+    "0x0820": {
+      "file": "stop_music.asm",
+      "address": "0x0820",
+      "line": 1414
+    },
+    "0x00D0": {
+      "file": "stop_music.asm",
+      "address": "0x00D0",
+      "line": 224
+    },
+    "0x0427": {
+      "file": "stop_music.asm",
+      "address": "0x0427",
+      "line": 762
+    },
+    "0x05FF": {
+      "file": "stop_music.asm",
+      "address": "0x05FF",
+      "line": 978
+    },
+    "0x0061": {
+      "file": "stop_music.asm",
+      "address": "0x0061",
+      "line": 121
+    },
+    "0x0821": {
+      "file": "stop_music.asm",
+      "address": "0x0821",
+      "line": 1415
+    },
+    "0x06BD": {
+      "file": "stop_music.asm",
+      "address": "0x06BD",
+      "line": 1122
+    },
+    "0x02DD": {
+      "file": "stop_music.asm",
+      "address": "0x02DD",
+      "line": 597
+    },
+    "0x0209": {
+      "file": "stop_music.asm",
+      "address": "0x0209",
+      "line": 477
+    },
+    "0x0684": {
+      "file": "stop_music.asm",
+      "address": "0x0684",
+      "line": 1075
+    },
+    "0x0284": {
+      "file": "stop_music.asm",
+      "address": "0x0284",
+      "line": 551
+    },
+    "0x0782": {
+      "file": "stop_music.asm",
+      "address": "0x0782",
+      "line": 1280
+    },
+    "0x0830": {
+      "file": "stop_music.asm",
+      "address": "0x0830",
+      "line": 1430
+    },
+    "0x047B": {
+      "file": "stop_music.asm",
+      "address": "0x047B",
+      "line": 808
+    },
+    "0x0748": {
+      "file": "stop_music.asm",
+      "address": "0x0748",
+      "line": 1235
+    },
+    "0x06D5": {
+      "file": "stop_music.asm",
+      "address": "0x06D5",
+      "line": 1140
+    },
+    "0x03DE": {
+      "file": "stop_music.asm",
+      "address": "0x03DE",
+      "line": 728
+    },
+    "0x065D": {
+      "file": "stop_music.asm",
+      "address": "0x065D",
+      "line": 1041
+    },
+    "0x0789": {
+      "file": "stop_music.asm",
+      "address": "0x0789",
+      "line": 1286
+    },
+    "0x014A": {
+      "file": "stop_music.asm",
+      "address": "0x014A",
+      "line": 318
+    },
+    "0x019D": {
+      "file": "stop_music.asm",
+      "address": "0x019D",
+      "line": 384
+    },
+    "0x04C8": {
+      "file": "stop_music.asm",
+      "address": "0x04C8",
+      "line": 846
+    },
+    "0x076E": {
+      "file": "stop_music.asm",
+      "address": "0x076E",
+      "line": 1264
+    },
+    "0x083F": {
+      "file": "stop_music.asm",
+      "address": "0x083F",
+      "line": 1445
+    },
+    "0x013E": {
+      "file": "stop_music.asm",
+      "address": "0x013E",
+      "line": 309
+    },
+    "0x063E": {
+      "file": "stop_music.asm",
+      "address": "0x063E",
+      "line": 1005
+    },
+    "0x01ED": {
+      "file": "stop_music.asm",
+      "address": "0x01ED",
+      "line": 459
+    },
+    "0x0813": {
+      "file": "stop_music.asm",
+      "address": "0x0813",
+      "line": 1402
+    },
+    "0x068A": {
+      "file": "stop_music.asm",
+      "address": "0x068A",
+      "line": 1079
+    },
+    "0x045D": {
+      "file": "stop_music.asm",
+      "address": "0x045D",
+      "line": 790
+    },
+    "0x07E5": {
+      "file": "stop_music.asm",
+      "address": "0x07E5",
+      "line": 1361
+    },
+    "0x0810": {
+      "file": "stop_music.asm",
+      "address": "0x0810",
+      "line": 1399
+    },
+    "0x074C": {
+      "file": "stop_music.asm",
+      "address": "0x074C",
+      "line": 1238
+    },
+    "0x07BE": {
+      "file": "stop_music.asm",
+      "address": "0x07BE",
+      "line": 1328
+    },
+    "0x05E6": {
+      "file": "stop_music.asm",
+      "address": "0x05E6",
+      "line": 966
+    },
+    "0x06FF": {
+      "file": "stop_music.asm",
+      "address": "0x06FF",
+      "line": 1176
+    },
+    "0x048D": {
+      "file": "stop_music.asm",
+      "address": "0x048D",
+      "line": 814
+    },
+    "0x049B": {
+      "file": "stop_music.asm",
+      "address": "0x049B",
+      "line": 823
+    },
+    "0x05D3": {
+      "file": "stop_music.asm",
+      "address": "0x05D3",
+      "line": 959
+    },
+    "0x0304": {
+      "file": "stop_music.asm",
+      "address": "0x0304",
+      "line": 613
+    },
+    "0x00F2": {
+      "file": "stop_music.asm",
+      "address": "0x00F2",
+      "line": 243
+    },
+    "0x04D4": {
+      "file": "stop_music.asm",
+      "address": "0x04D4",
+      "line": 853
+    },
+    "0x0740": {
+      "file": "stop_music.asm",
+      "address": "0x0740",
+      "line": 1229
+    },
+    "0x0838": {
+      "file": "stop_music.asm",
+      "address": "0x0838",
+      "line": 1438
+    },
+    "0x07B2": {
+      "file": "stop_music.asm",
+      "address": "0x07B2",
+      "line": 1318
+    },
+    "0x03E6": {
+      "file": "stop_music.asm",
+      "address": "0x03E6",
+      "line": 735
+    },
+    "0x0736": {
+      "file": "stop_music.asm",
+      "address": "0x0736",
+      "line": 1222
+    },
+    "0x0774": {
+      "file": "stop_music.asm",
+      "address": "0x0774",
+      "line": 1269
+    },
+    "0x04AC": {
+      "file": "stop_music.asm",
+      "address": "0x04AC",
+      "line": 834
+    },
+    "0x03D2": {
+      "file": "stop_music.asm",
+      "address": "0x03D2",
+      "line": 723
+    },
+    "0x03FB": {
+      "file": "stop_music.asm",
+      "address": "0x03FB",
+      "line": 742
+    },
+    "0x050D": {
+      "file": "stop_music.asm",
+      "address": "0x050D",
+      "line": 877
+    },
+    "0x031E": {
+      "file": "stop_music.asm",
+      "address": "0x031E",
+      "line": 632
+    },
+    "0x049E": {
+      "file": "stop_music.asm",
+      "address": "0x049E",
+      "line": 827
+    },
+    "0x00E2": {
+      "file": "stop_music.asm",
+      "address": "0x00E2",
+      "line": 237
+    },
+    "0x07B4": {
+      "file": "stop_music.asm",
+      "address": "0x07B4",
+      "line": 1319
+    },
+    "0x04E3": {
+      "file": "stop_music.asm",
+      "address": "0x04E3",
+      "line": 858
+    },
+    "0x073D": {
+      "file": "stop_music.asm",
+      "address": "0x073D",
+      "line": 1227
+    },
+    "0x0765": {
+      "file": "stop_music.asm",
+      "address": "0x0765",
+      "line": 1258
+    },
+    "0x017F": {
+      "file": "stop_music.asm",
+      "address": "0x017F",
+      "line": 364
+    },
+    "0x02A6": {
+      "file": "stop_music.asm",
+      "address": "0x02A6",
+      "line": 569
+    },
+    "0x0468": {
+      "file": "stop_music.asm",
+      "address": "0x0468",
+      "line": 797
+    },
+    "0x0492": {
+      "file": "stop_music.asm",
+      "address": "0x0492",
+      "line": 820
+    },
+    "0x017B": {
+      "file": "stop_music.asm",
+      "address": "0x017B",
+      "line": 355
+    },
+    "0x06CA": {
+      "file": "stop_music.asm",
+      "address": "0x06CA",
+      "line": 1131
+    },
+    "0x0669": {
+      "file": "stop_music.asm",
+      "address": "0x0669",
+      "line": 1050
+    },
+    "0x06CD": {
+      "file": "stop_music.asm",
+      "address": "0x06CD",
+      "line": 1134
+    },
+    "0x0714": {
+      "file": "stop_music.asm",
+      "address": "0x0714",
+      "line": 1195
+    },
+    "0x01F1": {
+      "file": "stop_music.asm",
+      "address": "0x01F1",
+      "line": 462
+    },
+    "0x0128": {
+      "file": "stop_music.asm",
+      "address": "0x0128",
+      "line": 289
+    },
+    "0x055E": {
+      "file": "stop_music.asm",
+      "address": "0x055E",
+      "line": 911
+    },
+    "0x04E0": {
+      "file": "stop_music.asm",
+      "address": "0x04E0",
+      "line": 857
+    },
+    "0x06FE": {
+      "file": "stop_music.asm",
+      "address": "0x06FE",
+      "line": 1175
+    },
+    "0x008D": {
+      "file": "stop_music.asm",
+      "address": "0x008D",
+      "line": 154
+    },
+    "0x06FC": {
+      "file": "stop_music.asm",
+      "address": "0x06FC",
+      "line": 1173
+    },
+    "0x025E": {
+      "file": "stop_music.asm",
+      "address": "0x025E",
+      "line": 530
+    },
+    "0x0118": {
+      "file": "stop_music.asm",
+      "address": "0x0118",
+      "line": 281
+    },
+    "0x0318": {
+      "file": "stop_music.asm",
+      "address": "0x0318",
+      "line": 629
+    },
+    "0x0683": {
+      "file": "stop_music.asm",
+      "address": "0x0683",
+      "line": 1074
+    },
+    "0x07DE": {
+      "file": "stop_music.asm",
+      "address": "0x07DE",
+      "line": 1354
+    },
+    "0x0268": {
+      "file": "stop_music.asm",
+      "address": "0x0268",
+      "line": 537
+    },
+    "0x03C9": {
+      "file": "stop_music.asm",
+      "address": "0x03C9",
+      "line": 720
+    },
+    "0x05BF": {
+      "file": "stop_music.asm",
+      "address": "0x05BF",
+      "line": 950
+    },
+    "0x040C": {
+      "file": "stop_music.asm",
+      "address": "0x040C",
+      "line": 750
+    },
+    "0x076F": {
+      "file": "stop_music.asm",
+      "address": "0x076F",
+      "line": 1265
+    },
+    "0x0685": {
+      "file": "stop_music.asm",
+      "address": "0x0685",
+      "line": 1076
+    },
+    "0x0623": {
+      "file": "stop_music.asm",
+      "address": "0x0623",
+      "line": 994
+    },
+    "0x07AD": {
+      "file": "stop_music.asm",
+      "address": "0x07AD",
+      "line": 1314
+    },
+    "0x0120": {
+      "file": "stop_music.asm",
+      "address": "0x0120",
+      "line": 285
+    },
+    "0x024E": {
+      "file": "stop_music.asm",
+      "address": "0x024E",
+      "line": 523
+    },
+    "0x06B8": {
+      "file": "stop_music.asm",
+      "address": "0x06B8",
+      "line": 1117
+    },
+    "0x0418": {
+      "file": "stop_music.asm",
+      "address": "0x0418",
+      "line": 757
+    },
+    "0x0251": {
+      "file": "stop_music.asm",
+      "address": "0x0251",
+      "line": 524
+    },
+    "0x0728": {
+      "file": "stop_music.asm",
+      "address": "0x0728",
+      "line": 1211
+    },
+    "0x009B": {
+      "file": "stop_music.asm",
+      "address": "0x009B",
+      "line": 159
+    },
+    "0x0732": {
+      "file": "stop_music.asm",
+      "address": "0x0732",
+      "line": 1219
+    },
+    "0x0193": {
+      "file": "stop_music.asm",
+      "address": "0x0193",
+      "line": 376
+    },
+    "0x07C4": {
+      "file": "stop_music.asm",
+      "address": "0x07C4",
+      "line": 1334
+    },
+    "0x01EC": {
+      "file": "stop_music.asm",
+      "address": "0x01EC",
+      "line": 456
+    },
+    "0x00C1": {
+      "file": "stop_music.asm",
+      "address": "0x00C1",
+      "line": 212
+    },
+    "0x033B": {
+      "file": "stop_music.asm",
+      "address": "0x033B",
+      "line": 651
+    },
+    "0x06ED": {
+      "file": "stop_music.asm",
+      "address": "0x06ED",
+      "line": 1160
+    },
+    "0x0738": {
+      "file": "stop_music.asm",
+      "address": "0x0738",
+      "line": 1223
+    },
+    "0x032D": {
+      "file": "stop_music.asm",
+      "address": "0x032D",
+      "line": 14
+    },
+    "0x0744": {
+      "file": "stop_music.asm",
+      "address": "0x0744",
+      "line": 1232
+    },
+    "0x0724": {
+      "file": "stop_music.asm",
+      "address": "0x0724",
+      "line": 1208
+    },
+    "0x037C": {
+      "file": "stop_music.asm",
+      "address": "0x037C",
+      "line": 51
+    },
+    "0x01A2": {
+      "file": "stop_music.asm",
+      "address": "0x01A2",
+      "line": 386
+    },
+    "0x0196": {
+      "file": "stop_music.asm",
+      "address": "0x0196",
+      "line": 377
+    },
+    "0x0627": {
+      "file": "stop_music.asm",
+      "address": "0x0627",
+      "line": 996
+    },
+    "0x082E": {
+      "file": "stop_music.asm",
+      "address": "0x082E",
+      "line": 1428
+    },
+    "0x00F7": {
+      "file": "stop_music.asm",
+      "address": "0x00F7",
+      "line": 246
+    },
+    "0x00E0": {
+      "file": "stop_music.asm",
+      "address": "0x00E0",
+      "line": 236
+    },
+    "0x07E9": {
+      "file": "stop_music.asm",
+      "address": "0x07E9",
+      "line": 1365
+    },
+    "0x073C": {
+      "file": "stop_music.asm",
+      "address": "0x073C",
+      "line": 1226
+    },
+    "0x07AE": {
+      "file": "stop_music.asm",
+      "address": "0x07AE",
+      "line": 1315
+    },
+    "0x0333": {
+      "file": "stop_music.asm",
+      "address": "0x0333",
+      "line": 644
+    },
+    "0x0298": {
+      "file": "stop_music.asm",
+      "address": "0x0298",
+      "line": 560
+    },
+    "0x0210": {
+      "file": "stop_music.asm",
+      "address": "0x0210",
+      "line": 485
+    },
+    "0x0677": {
+      "file": "stop_music.asm",
+      "address": "0x0677",
+      "line": 1062
+    },
+    "0x0761": {
+      "file": "stop_music.asm",
+      "address": "0x0761",
+      "line": 1254
+    },
+    "0x00F0": {
+      "file": "stop_music.asm",
+      "address": "0x00F0",
+      "line": 242
+    },
+    "0x015E": {
+      "file": "stop_music.asm",
+      "address": "0x015E",
+      "line": 331
+    },
+    "0x022B": {
+      "file": "stop_music.asm",
+      "address": "0x022B",
+      "line": 497
+    },
+    "0x04C3": {
+      "file": "stop_music.asm",
+      "address": "0x04C3",
+      "line": 844
+    },
+    "0x0836": {
+      "file": "stop_music.asm",
+      "address": "0x0836",
+      "line": 1436
+    },
+    "0x06EB": {
+      "file": "stop_music.asm",
+      "address": "0x06EB",
+      "line": 1158
+    },
+    "0x069D": {
+      "file": "stop_music.asm",
+      "address": "0x069D",
+      "line": 1095
+    },
+    "0x080C": {
+      "file": "stop_music.asm",
+      "address": "0x080C",
+      "line": 1395
+    },
+    "0x06FB": {
+      "file": "stop_music.asm",
+      "address": "0x06FB",
+      "line": 1172
+    },
+    "0x0231": {
+      "file": "stop_music.asm",
+      "address": "0x0231",
+      "line": 510
+    },
+    "0x07CB": {
+      "file": "stop_music.asm",
+      "address": "0x07CB",
+      "line": 1338
+    },
+    "0x0702": {
+      "file": "stop_music.asm",
+      "address": "0x0702",
+      "line": 1179
+    },
+    "0x01A7": {
+      "file": "stop_music.asm",
+      "address": "0x01A7",
+      "line": 390
+    },
+    "0x0700": {
+      "file": "stop_music.asm",
+      "address": "0x0700",
+      "line": 1177
+    },
+    "0x0692": {
+      "file": "stop_music.asm",
+      "address": "0x0692",
+      "line": 1086
+    },
+    "0x06C1": {
+      "file": "stop_music.asm",
+      "address": "0x06C1",
+      "line": 1124
+    },
+    "0x0385": {
+      "file": "stop_music.asm",
+      "address": "0x0385",
+      "line": 689
+    },
+    "0x00AD": {
+      "file": "stop_music.asm",
+      "address": "0x00AD",
+      "line": 195
+    },
+    "0x057A": {
+      "file": "stop_music.asm",
+      "address": "0x057A",
+      "line": 922
+    },
+    "0x0024": {
+      "file": "stop_music.asm",
+      "address": "0x0024",
+      "line": 80
+    },
+    "0x0048": {
+      "file": "stop_music.asm",
+      "address": "0x0048",
+      "line": 98
+    },
+    "0x06D6": {
+      "file": "stop_music.asm",
+      "address": "0x06D6",
+      "line": 1141
+    },
+    "0x0538": {
+      "file": "stop_music.asm",
+      "address": "0x0538",
+      "line": 896
+    },
+    "0x035C": {
+      "file": "stop_music.asm",
+      "address": "0x035C",
+      "line": 667
+    },
+    "0x0808": {
+      "file": "stop_music.asm",
+      "address": "0x0808",
+      "line": 1391
+    },
+    "0x02B3": {
+      "file": "stop_music.asm",
+      "address": "0x02B3",
+      "line": 575
+    },
+    "0x053B": {
+      "file": "stop_music.asm",
+      "address": "0x053B",
+      "line": 897
+    },
+    "0x030F": {
+      "file": "stop_music.asm",
+      "address": "0x030F",
+      "line": 624
+    },
+    "0x06C2": {
+      "file": "stop_music.asm",
+      "address": "0x06C2",
+      "line": 1125
+    },
+    "0x04D1": {
+      "file": "stop_music.asm",
+      "address": "0x04D1",
+      "line": 852
+    },
+    "0x07BD": {
+      "file": "stop_music.asm",
+      "address": "0x07BD",
+      "line": 1327
+    },
+    "0x04A3": {
+      "file": "stop_music.asm",
+      "address": "0x04A3",
+      "line": 830
+    },
+    "0x0039": {
+      "file": "stop_music.asm",
+      "address": "0x0039",
+      "line": 93
+    },
+    "0x06E8": {
+      "file": "stop_music.asm",
+      "address": "0x06E8",
+      "line": 1155
+    },
+    "0x062F": {
+      "file": "stop_music.asm",
+      "address": "0x062F",
+      "line": 999
+    },
+    "0x0606": {
+      "file": "stop_music.asm",
+      "address": "0x0606",
+      "line": 981
+    },
+    "0x0715": {
+      "file": "stop_music.asm",
+      "address": "0x0715",
+      "line": 1196
+    },
+    "0x072B": {
+      "file": "stop_music.asm",
+      "address": "0x072B",
+      "line": 1214
+    },
+    "0x00ED": {
+      "file": "stop_music.asm",
+      "address": "0x00ED",
+      "line": 241
+    },
+    "0x06C9": {
+      "file": "stop_music.asm",
+      "address": "0x06C9",
+      "line": 1130
+    },
+    "0x0711": {
+      "file": "stop_music.asm",
+      "address": "0x0711",
+      "line": 1192
+    },
+    "0x0826": {
+      "file": "stop_music.asm",
+      "address": "0x0826",
+      "line": 1420
+    },
+    "0x0534": {
+      "file": "stop_music.asm",
+      "address": "0x0534",
+      "line": 894
+    },
+    "0x00E5": {
+      "file": "stop_music.asm",
+      "address": "0x00E5",
+      "line": 238
+    },
+    "0x04D7": {
+      "file": "stop_music.asm",
+      "address": "0x04D7",
+      "line": 854
+    },
+    "0x0049": {
+      "file": "stop_music.asm",
+      "address": "0x0049",
+      "line": 99
+    },
+    "0x03B2": {
+      "file": "stop_music.asm",
+      "address": "0x03B2",
+      "line": 708
+    },
+    "0x0670": {
+      "file": "stop_music.asm",
+      "address": "0x0670",
+      "line": 1057
+    },
+    "0x0369": {
+      "file": "stop_music.asm",
+      "address": "0x0369",
+      "line": 672
+    },
+    "0x0328": {
+      "file": "stop_music.asm",
+      "address": "0x0328",
+      "line": 640
+    },
+    "0x03B7": {
+      "file": "stop_music.asm",
+      "address": "0x03B7",
+      "line": 714
+    },
+    "0x082C": {
+      "file": "stop_music.asm",
+      "address": "0x082C",
+      "line": 1426
+    },
+    "0x0814": {
+      "file": "stop_music.asm",
+      "address": "0x0814",
+      "line": 1403
+    },
+    "0x0033": {
+      "file": "stop_music.asm",
+      "address": "0x0033",
+      "line": 87
+    },
+    "0x02EC": {
+      "file": "stop_music.asm",
+      "address": "0x02EC",
+      "line": 603
+    },
+    "0x0706": {
+      "file": "stop_music.asm",
+      "address": "0x0706",
+      "line": 1183
+    },
+    "0x0326": {
+      "file": "stop_music.asm",
+      "address": "0x0326",
+      "line": 639
+    },
+    "0x0140": {
+      "file": "stop_music.asm",
+      "address": "0x0140",
+      "line": 310
+    },
+    "0x0783": {
+      "file": "stop_music.asm",
+      "address": "0x0783",
+      "line": 1281
+    },
+    "0x01BF": {
+      "file": "stop_music.asm",
+      "address": "0x01BF",
+      "line": 415
+    },
+    "0x0542": {
+      "file": "stop_music.asm",
+      "address": "0x0542",
+      "line": 900
+    },
+    "0x060C": {
+      "file": "stop_music.asm",
+      "address": "0x060C",
+      "line": 985
+    },
+    "0x0324": {
+      "file": "stop_music.asm",
+      "address": "0x0324",
+      "line": 638
+    },
+    "0x030C": {
+      "file": "stop_music.asm",
+      "address": "0x030C",
+      "line": 622
+    },
+    "0x031C": {
+      "file": "stop_music.asm",
+      "address": "0x031C",
+      "line": 631
+    },
+    "0x071C": {
+      "file": "stop_music.asm",
+      "address": "0x071C",
+      "line": 1203
+    },
+    "0x07B6": {
+      "file": "stop_music.asm",
+      "address": "0x07B6",
+      "line": 1321
+    },
+    "0x073E": {
+      "file": "stop_music.asm",
+      "address": "0x073E",
+      "line": 1228
+    },
+    "0x010C": {
+      "file": "stop_music.asm",
+      "address": "0x010C",
+      "line": 268
+    },
+    "0x0312": {
+      "file": "stop_music.asm",
+      "address": "0x0312",
+      "line": 625
+    },
+    "0x07A4": {
+      "file": "stop_music.asm",
+      "address": "0x07A4",
+      "line": 1306
+    },
+    "0x0213": {
+      "file": "stop_music.asm",
+      "address": "0x0213",
+      "line": 486
+    },
+    "0x0719": {
+      "file": "stop_music.asm",
+      "address": "0x0719",
+      "line": 1200
+    },
+    "0x070A": {
+      "file": "stop_music.asm",
+      "address": "0x070A",
+      "line": 1186
+    },
+    "0x034F": {
+      "file": "stop_music.asm",
+      "address": "0x034F",
+      "line": 661
+    },
+    "0x05E9": {
+      "file": "stop_music.asm",
+      "address": "0x05E9",
+      "line": 968
+    },
+    "0x0030": {
+      "file": "stop_music.asm",
+      "address": "0x0030",
+      "line": 84
+    },
+    "0x05BA": {
+      "file": "stop_music.asm",
+      "address": "0x05BA",
+      "line": 948
+    },
+    "0x0833": {
+      "file": "stop_music.asm",
+      "address": "0x0833",
+      "line": 1433
+    },
+    "0x066D": {
+      "file": "stop_music.asm",
+      "address": "0x066D",
+      "line": 1054
+    },
+    "0x0111": {
+      "file": "stop_music.asm",
+      "address": "0x0111",
+      "line": 273
+    },
+    "0x053E": {
+      "file": "stop_music.asm",
+      "address": "0x053E",
+      "line": 898
+    },
+    "0x028B": {
+      "file": "stop_music.asm",
+      "address": "0x028B",
+      "line": 554
+    },
+    "0x00FA": {
+      "file": "stop_music.asm",
+      "address": "0x00FA",
+      "line": 248
+    },
+    "0x03DF": {
+      "file": "stop_music.asm",
+      "address": "0x03DF",
+      "line": 729
+    },
+    "0x0712": {
+      "file": "stop_music.asm",
+      "address": "0x0712",
+      "line": 1193
+    },
+    "0x07C1": {
+      "file": "stop_music.asm",
+      "address": "0x07C1",
+      "line": 1331
+    },
+    "0x0495": {
+      "file": "stop_music.asm",
+      "address": "0x0495",
+      "line": 821
+    },
+    "0x016F": {
+      "file": "stop_music.asm",
+      "address": "0x016F",
+      "line": 347
+    },
+    "0x06F1": {
+      "file": "stop_music.asm",
+      "address": "0x06F1",
+      "line": 1164
+    },
+    "0x0840": {
+      "file": "stop_music.asm",
+      "address": "0x0840",
+      "line": 1446
+    },
+    "0x081E": {
+      "file": "stop_music.asm",
+      "address": "0x081E",
+      "line": 1413
+    },
+    "0x078A": {
+      "file": "stop_music.asm",
+      "address": "0x078A",
+      "line": 1287
+    },
+    "0x06B7": {
+      "file": "stop_music.asm",
+      "address": "0x06B7",
+      "line": 1116
+    },
+    "0x06A9": {
+      "file": "stop_music.asm",
+      "address": "0x06A9",
+      "line": 1106
+    },
+    "0x044B": {
+      "file": "stop_music.asm",
+      "address": "0x044B",
+      "line": 783
+    },
+    "0x03D5": {
+      "file": "stop_music.asm",
+      "address": "0x03D5",
+      "line": 724
+    },
+    "0x00A6": {
+      "file": "stop_music.asm",
+      "address": "0x00A6",
+      "line": 163
+    },
+    "0x00FC": {
+      "file": "stop_music.asm",
+      "address": "0x00FC",
+      "line": 249
+    },
+    "0x029D": {
+      "file": "stop_music.asm",
+      "address": "0x029D",
+      "line": 566
+    },
+    "0x01D9": {
+      "file": "stop_music.asm",
+      "address": "0x01D9",
+      "line": 445
+    },
+    "0x0763": {
+      "file": "stop_music.asm",
+      "address": "0x0763",
+      "line": 1256
+    },
+    "0x0247": {
+      "file": "stop_music.asm",
+      "address": "0x0247",
+      "line": 519
+    },
+    "0x0631": {
+      "file": "stop_music.asm",
+      "address": "0x0631",
+      "line": 1000
+    },
+    "0x06E0": {
+      "file": "stop_music.asm",
+      "address": "0x06E0",
+      "line": 1149
+    },
+    "0x06FD": {
+      "file": "stop_music.asm",
+      "address": "0x06FD",
+      "line": 1174
+    },
+    "0x067F": {
+      "file": "stop_music.asm",
+      "address": "0x067F",
+      "line": 1070
+    },
+    "0x05DC": {
+      "file": "stop_music.asm",
+      "address": "0x05DC",
+      "line": 962
+    },
+    "0x03D8": {
+      "file": "stop_music.asm",
+      "address": "0x03D8",
+      "line": 725
+    },
+    "0x0241": {
+      "file": "stop_music.asm",
+      "address": "0x0241",
+      "line": 517
+    },
+    "0x07D5": {
+      "file": "stop_music.asm",
+      "address": "0x07D5",
+      "line": 1348
+    },
+    "0x064F": {
+      "file": "stop_music.asm",
+      "address": "0x064F",
+      "line": 1028
+    },
+    "0x06E2": {
+      "file": "stop_music.asm",
+      "address": "0x06E2",
+      "line": 1151
+    },
+    "0x01AE": {
+      "file": "stop_music.asm",
+      "address": "0x01AE",
+      "line": 397
+    },
+    "0x0031": {
+      "file": "stop_music.asm",
+      "address": "0x0031",
+      "line": 85
+    },
+    "0x0219": {
+      "file": "stop_music.asm",
+      "address": "0x0219",
+      "line": 489
+    },
+    "0x059A": {
+      "file": "stop_music.asm",
+      "address": "0x059A",
+      "line": 935
+    },
+    "0x04BE": {
+      "file": "stop_music.asm",
+      "address": "0x04BE",
+      "line": 842
+    },
+    "0x060A": {
+      "file": "stop_music.asm",
+      "address": "0x060A",
+      "line": 984
+    },
+    "0x0415": {
+      "file": "stop_music.asm",
+      "address": "0x0415",
+      "line": 756
+    },
+    "0x0522": {
+      "file": "stop_music.asm",
+      "address": "0x0522",
+      "line": 887
+    },
+    "0x0603": {
+      "file": "stop_music.asm",
+      "address": "0x0603",
+      "line": 980
+    },
+    "0x0314": {
+      "file": "stop_music.asm",
+      "address": "0x0314",
+      "line": 627
+    },
+    "0x0812": {
+      "file": "stop_music.asm",
+      "address": "0x0812",
+      "line": 1472
+    },
+    "0x0788": {
+      "file": "stop_music.asm",
+      "address": "0x0788",
+      "line": 1285
+    },
+    "0x06CE": {
+      "file": "stop_music.asm",
+      "address": "0x06CE",
+      "line": 1135
+    },
+    "0x02CA": {
+      "file": "stop_music.asm",
+      "address": "0x02CA",
+      "line": 586
+    },
+    "0x06A6": {
+      "file": "stop_music.asm",
+      "address": "0x06A6",
+      "line": 1103
+    },
+    "0x03F5": {
+      "file": "stop_music.asm",
+      "address": "0x03F5",
+      "line": 740
+    },
+    "0x076C": {
+      "file": "stop_music.asm",
+      "address": "0x076C",
+      "line": 1262
+    },
+    "0x00A1": {
+      "file": "stop_music.asm",
+      "address": "0x00A1",
+      "line": 161
+    },
+    "0x0222": {
+      "file": "stop_music.asm",
+      "address": "0x0222",
+      "line": 493
+    },
+    "0x0710": {
+      "file": "stop_music.asm",
+      "address": "0x0710",
+      "line": 1191
+    },
+    "0x029C": {
+      "file": "stop_music.asm",
+      "address": "0x029C",
+      "line": 565
+    },
+    "0x054A": {
+      "file": "stop_music.asm",
+      "address": "0x054A",
+      "line": 903
+    },
+    "0x014C": {
+      "file": "stop_music.asm",
+      "address": "0x014C",
+      "line": 319
+    },
+    "0x0280": {
+      "file": "stop_music.asm",
+      "address": "0x0280",
+      "line": 549
+    },
+    "0x03E9": {
+      "file": "stop_music.asm",
+      "address": "0x03E9",
+      "line": 736
+    },
+    "0x02CD": {
+      "file": "stop_music.asm",
+      "address": "0x02CD",
+      "line": 587
+    },
+    "0x0798": {
+      "file": "stop_music.asm",
+      "address": "0x0798",
+      "line": 1296
+    },
+    "0x0279": {
+      "file": "stop_music.asm",
+      "address": "0x0279",
+      "line": 545
+    },
+    "0x03FE": {
+      "file": "stop_music.asm",
+      "address": "0x03FE",
+      "line": 743
+    },
+    "0x07F7": {
+      "file": "stop_music.asm",
+      "address": "0x07F7",
+      "line": 1376
+    },
+    "0x050A": {
+      "file": "stop_music.asm",
+      "address": "0x050A",
+      "line": 876
+    },
+    "0x06A0": {
+      "file": "stop_music.asm",
+      "address": "0x06A0",
+      "line": 1098
+    },
+    "0x0837": {
+      "file": "stop_music.asm",
+      "address": "0x0837",
+      "line": 1437
+    },
+    "0x06F6": {
+      "file": "stop_music.asm",
+      "address": "0x06F6",
+      "line": 1169
+    },
+    "0x0276": {
+      "file": "stop_music.asm",
+      "address": "0x0276",
+      "line": 544
+    },
+    "0x0682": {
+      "file": "stop_music.asm",
+      "address": "0x0682",
+      "line": 1073
+    },
+    "0x081A": {
+      "file": "stop_music.asm",
+      "address": "0x081A",
+      "line": 1409
+    },
+    "0x069C": {
+      "file": "stop_music.asm",
+      "address": "0x069C",
+      "line": 1094
+    },
+    "0x0661": {
+      "file": "stop_music.asm",
+      "address": "0x0661",
+      "line": 1044
+    },
+    "0x0689": {
+      "file": "stop_music.asm",
+      "address": "0x0689",
+      "line": 1078
+    },
+    "0x07CF": {
+      "file": "stop_music.asm",
+      "address": "0x07CF",
+      "line": 1342
+    },
+    "0x01B3": {
+      "file": "stop_music.asm",
+      "address": "0x01B3",
+      "line": 401
+    },
+    "0x0404": {
+      "file": "stop_music.asm",
+      "address": "0x0404",
+      "line": 745
+    },
+    "0x06F0": {
+      "file": "stop_music.asm",
+      "address": "0x06F0",
+      "line": 1163
+    },
+    "0x0642": {
+      "file": "stop_music.asm",
+      "address": "0x0642",
+      "line": 1007
+    },
+    "0x0800": {
+      "file": "stop_music.asm",
+      "address": "0x0800",
+      "line": 1383
+    },
+    "0x01B4": {
+      "file": "stop_music.asm",
+      "address": "0x01B4",
+      "line": 405
+    },
+    "0x0735": {
+      "file": "stop_music.asm",
+      "address": "0x0735",
+      "line": 1221
+    },
+    "0x0609": {
+      "file": "stop_music.asm",
+      "address": "0x0609",
+      "line": 983
+    },
+    "0x0640": {
+      "file": "stop_music.asm",
+      "address": "0x0640",
+      "line": 1006
+    },
+    "0x0823": {
+      "file": "stop_music.asm",
+      "address": "0x0823",
+      "line": 1417
+    },
+    "0x068C": {
+      "file": "stop_music.asm",
+      "address": "0x068C",
+      "line": 1081
+    },
+    "0x0045": {
+      "file": "stop_music.asm",
+      "address": "0x0045",
+      "line": 97
+    },
+    "0x0484": {
+      "file": "stop_music.asm",
+      "address": "0x0484",
+      "line": 811
+    },
+    "0x0691": {
+      "file": "stop_music.asm",
+      "address": "0x0691",
+      "line": 1085
+    },
+    "0x0843": {
+      "file": "stop_music.asm",
+      "address": "0x0843",
+      "line": 1449
+    },
+    "0x04C1": {
+      "file": "stop_music.asm",
+      "address": "0x04C1",
+      "line": 843
+    },
+    "0x0598": {
+      "file": "stop_music.asm",
+      "address": "0x0598",
+      "line": 934
+    },
+    "0x06D0": {
+      "file": "stop_music.asm",
+      "address": "0x06D0",
+      "line": 1136
+    },
+    "0x002D": {
+      "file": "stop_music.asm",
+      "address": "0x002D",
+      "line": 83
+    },
+    "0x07AC": {
+      "file": "stop_music.asm",
+      "address": "0x07AC",
+      "line": 1313
+    },
+    "0x0729": {
+      "file": "stop_music.asm",
+      "address": "0x0729",
+      "line": 1212
+    },
+    "0x028A": {
+      "file": "stop_music.asm",
+      "address": "0x028A",
+      "line": 553
+    },
+    "0x066A": {
+      "file": "stop_music.asm",
+      "address": "0x066A",
+      "line": 1051
+    },
+    "0x03CC": {
+      "file": "stop_music.asm",
+      "address": "0x03CC",
+      "line": 721
+    },
+    "0x0341": {
+      "file": "stop_music.asm",
+      "address": "0x0341",
+      "line": 29
+    },
+    "0x0701": {
+      "file": "stop_music.asm",
+      "address": "0x0701",
+      "line": 1178
+    },
+    "0x0181": {
+      "file": "stop_music.asm",
+      "address": "0x0181",
+      "line": 365
+    },
+    "0x0652": {
+      "file": "stop_music.asm",
+      "address": "0x0652",
+      "line": 1031
+    },
+    "0x0295": {
+      "file": "stop_music.asm",
+      "address": "0x0295",
+      "line": 559
+    },
+    "0x05CD": {
+      "file": "stop_music.asm",
+      "address": "0x05CD",
+      "line": 957
+    },
+    "0x019B": {
+      "file": "stop_music.asm",
+      "address": "0x019B",
+      "line": 381
+    },
+    "0x0070": {
+      "file": "stop_music.asm",
+      "address": "0x0070",
+      "line": 131
+    },
+    "0x0098": {
+      "file": "stop_music.asm",
+      "address": "0x0098",
+      "line": 158
+    },
+    "0x047E": {
+      "file": "stop_music.asm",
+      "address": "0x047E",
+      "line": 809
+    },
+    "0x0671": {
+      "file": "stop_music.asm",
+      "address": "0x0671",
+      "line": 1058
+    },
+    "0x0713": {
+      "file": "stop_music.asm",
+      "address": "0x0713",
+      "line": 1194
+    },
+    "0x0352": {
+      "file": "stop_music.asm",
+      "address": "0x0352",
+      "line": 35
+    },
+    "0x03CF": {
+      "file": "stop_music.asm",
+      "address": "0x03CF",
+      "line": 722
+    },
+    "0x0237": {
+      "file": "stop_music.asm",
+      "address": "0x0237",
+      "line": 512
+    },
+    "0x02D1": {
+      "file": "stop_music.asm",
+      "address": "0x02D1",
+      "line": 592
+    },
+    "0x0531": {
+      "file": "stop_music.asm",
+      "address": "0x0531",
+      "line": 893
+    },
+    "0x075D": {
+      "file": "stop_music.asm",
+      "address": "0x075D",
+      "line": 1251
+    },
+    "0x01D8": {
+      "file": "stop_music.asm",
+      "address": "0x01D8",
+      "line": 444
+    },
+    "0x02D4": {
+      "file": "stop_music.asm",
+      "address": "0x02D4",
+      "line": 593
+    },
+    "0x0228": {
+      "file": "stop_music.asm",
+      "address": "0x0228",
+      "line": 496
+    },
+    "0x07E4": {
+      "file": "stop_music.asm",
+      "address": "0x07E4",
+      "line": 1360
+    },
+    "0x06B2": {
+      "file": "stop_music.asm",
+      "address": "0x06B2",
+      "line": 1112
+    },
+    "0x080D": {
+      "file": "stop_music.asm",
+      "address": "0x080D",
+      "line": 1396
+    },
+    "0x0678": {
+      "file": "stop_music.asm",
+      "address": "0x0678",
+      "line": 1063
+    },
+    "0x0584": {
+      "file": "stop_music.asm",
+      "address": "0x0584",
+      "line": 926
+    },
+    "0x0805": {
+      "file": "stop_music.asm",
+      "address": "0x0805",
+      "line": 1388
+    },
+    "0x078F": {
+      "file": "stop_music.asm",
+      "address": "0x078F",
+      "line": 1290
+    },
+    "0x065A": {
+      "file": "stop_music.asm",
+      "address": "0x065A",
+      "line": 1038
+    },
+    "0x0556": {
+      "file": "stop_music.asm",
+      "address": "0x0556",
+      "line": 908
+    },
+    "0x079D": {
+      "file": "stop_music.asm",
+      "address": "0x079D",
+      "line": 1301
+    },
+    "0x0145": {
+      "file": "stop_music.asm",
+      "address": "0x0145",
+      "line": 314
+    },
+    "0x0126": {
+      "file": "stop_music.asm",
+      "address": "0x0126",
+      "line": 288
+    },
+    "0x07D8": {
+      "file": "stop_music.asm",
+      "address": "0x07D8",
+      "line": 1350
+    },
+    "0x081B": {
+      "file": "stop_music.asm",
+      "address": "0x081B",
+      "line": 1410
+    },
+    "0x0265": {
+      "file": "stop_music.asm",
+      "address": "0x0265",
+      "line": 536
+    },
+    "0x0454": {
+      "file": "stop_music.asm",
+      "address": "0x0454",
+      "line": 787
+    },
+    "0x02AA": {
+      "file": "stop_music.asm",
+      "address": "0x02AA",
+      "line": 572
+    },
+    "0x016E": {
+      "file": "stop_music.asm",
+      "address": "0x016E",
+      "line": 346
+    },
+    "0x01EE": {
+      "file": "stop_music.asm",
+      "address": "0x01EE",
+      "line": 460
+    },
+    "0x07C7": {
+      "file": "stop_music.asm",
+      "address": "0x07C7",
+      "line": 1335
+    },
+    "0x0680": {
+      "file": "stop_music.asm",
+      "address": "0x0680",
+      "line": 1071
+    },
+    "0x06B9": {
+      "file": "stop_music.asm",
+      "address": "0x06B9",
+      "line": 1118
+    },
+    "0x0704": {
+      "file": "stop_music.asm",
+      "address": "0x0704",
+      "line": 1181
+    },
+    "0x0053": {
+      "file": "stop_music.asm",
+      "address": "0x0053",
+      "line": 112
+    },
+    "0x075C": {
+      "file": "stop_music.asm",
+      "address": "0x075C",
+      "line": 1250
+    },
+    "0x0778": {
+      "file": "stop_music.asm",
+      "address": "0x0778",
+      "line": 1273
+    },
+    "0x07F8": {
+      "file": "stop_music.asm",
+      "address": "0x07F8",
+      "line": 1377
+    },
+    "0x0762": {
+      "file": "stop_music.asm",
+      "address": "0x0762",
+      "line": 1255
+    },
+    "0x0382": {
+      "file": "stop_music.asm",
+      "address": "0x0382",
+      "line": 688
+    },
+    "0x052E": {
+      "file": "stop_music.asm",
+      "address": "0x052E",
+      "line": 892
+    },
+    "0x012B": {
+      "file": "stop_music.asm",
+      "address": "0x012B",
+      "line": 290
+    },
+    "0x0849": {
+      "file": "stop_music.asm",
+      "address": "0x0849",
+      "line": 1455
+    },
+    "0x07CC": {
+      "file": "stop_music.asm",
+      "address": "0x07CC",
+      "line": 1339
+    },
+    "0x068D": {
+      "file": "stop_music.asm",
+      "address": "0x068D",
+      "line": 1082
+    },
+    "0x07B7": {
+      "file": "stop_music.asm",
+      "address": "0x07B7",
+      "line": 1322
+    },
+    "0x026F": {
+      "file": "stop_music.asm",
+      "address": "0x026F",
+      "line": 540
+    },
+    "0x0478": {
+      "file": "stop_music.asm",
+      "address": "0x0478",
+      "line": 806
+    },
+    "0x06AC": {
+      "file": "stop_music.asm",
+      "address": "0x06AC",
+      "line": 1109
+    },
+    "0x0616": {
+      "file": "stop_music.asm",
+      "address": "0x0616",
+      "line": 989
+    },
+    "0x0625": {
+      "file": "stop_music.asm",
+      "address": "0x0625",
+      "line": 995
+    },
+    "0x04CB": {
+      "file": "stop_music.asm",
+      "address": "0x04CB",
+      "line": 847
+    },
+    "0x07B1": {
+      "file": "stop_music.asm",
+      "address": "0x07B1",
+      "line": 1317
+    },
+    "0x0716": {
+      "file": "stop_music.asm",
+      "address": "0x0716",
+      "line": 1197
+    },
+    "0x061B": {
+      "file": "stop_music.asm",
+      "address": "0x061B",
+      "line": 991
+    },
+    "0x06DF": {
+      "file": "stop_music.asm",
+      "address": "0x06DF",
+      "line": 1148
+    },
+    "0x01C2": {
+      "file": "stop_music.asm",
+      "address": "0x01C2",
+      "line": 417
+    },
+    "0x014D": {
+      "file": "stop_music.asm",
+      "address": "0x014D",
+      "line": 320
+    },
+    "0x0803": {
+      "file": "stop_music.asm",
+      "address": "0x0803",
+      "line": 1386
+    },
+    "0x021E": {
+      "file": "stop_music.asm",
+      "address": "0x021E",
+      "line": 491
+    },
+    "0x062A": {
+      "file": "stop_music.asm",
+      "address": "0x062A",
+      "line": 997
+    },
+    "0x0844": {
+      "file": "stop_music.asm",
+      "address": "0x0844",
+      "line": 1450
+    },
+    "0x0361": {
+      "file": "stop_music.asm",
+      "address": "0x0361",
+      "line": 669
+    },
+    "0x03E0": {
+      "file": "stop_music.asm",
+      "address": "0x03E0",
+      "line": 730
+    },
+    "0x06BA": {
+      "file": "stop_music.asm",
+      "address": "0x06BA",
+      "line": 1119
+    },
+    "0x07CA": {
+      "file": "stop_music.asm",
+      "address": "0x07CA",
+      "line": 1337
+    },
+    "0x0722": {
+      "file": "stop_music.asm",
+      "address": "0x0722",
+      "line": 1206
+    },
+    "0x00DD": {
+      "file": "stop_music.asm",
+      "address": "0x00DD",
+      "line": 235
+    },
+    "0x0021": {
+      "file": "stop_music.asm",
+      "address": "0x0021",
+      "line": 79
+    },
+    "0x0506": {
+      "file": "stop_music.asm",
+      "address": "0x0506",
+      "line": 874
+    },
+    "0x0188": {
+      "file": "stop_music.asm",
+      "address": "0x0188",
+      "line": 368
+    },
+    "0x018D": {
+      "file": "stop_music.asm",
+      "address": "0x018D",
+      "line": 371
+    },
+    "0x0152": {
+      "file": "stop_music.asm",
+      "address": "0x0152",
+      "line": 325
+    },
+    "0x0753": {
+      "file": "stop_music.asm",
+      "address": "0x0753",
+      "line": 1244
+    },
+    "0x012F": {
+      "file": "stop_music.asm",
+      "address": "0x012F",
+      "line": 292
+    },
+    "0x01CA": {
+      "file": "stop_music.asm",
+      "address": "0x01CA",
+      "line": 435
+    },
+    "0x0202": {
+      "file": "stop_music.asm",
+      "address": "0x0202",
+      "line": 474
+    },
+    "0x0718": {
+      "file": "stop_music.asm",
+      "address": "0x0718",
+      "line": 1199
+    },
+    "0x0157": {
+      "file": "stop_music.asm",
+      "address": "0x0157",
+      "line": 327
+    },
+    "0x0816": {
+      "file": "stop_music.asm",
+      "address": "0x0816",
+      "line": 1405
+    },
+    "0x07F5": {
+      "file": "stop_music.asm",
+      "address": "0x07F5",
+      "line": 1374
+    },
+    "0x0841": {
+      "file": "stop_music.asm",
+      "address": "0x0841",
+      "line": 1447
+    },
+    "0x0527": {
+      "file": "stop_music.asm",
+      "address": "0x0527",
+      "line": 889
+    },
+    "0x018C": {
+      "file": "stop_music.asm",
+      "address": "0x018C",
+      "line": 370
+    },
+    "0x024A": {
+      "file": "stop_music.asm",
+      "address": "0x024A",
+      "line": 521
+    },
+    "0x033E": {
+      "file": "stop_music.asm",
+      "address": "0x033E",
+      "line": 653
+    },
+    "0x004F": {
+      "file": "stop_music.asm",
+      "address": "0x004F",
+      "line": 110
+    },
+    "0x036C": {
+      "file": "stop_music.asm",
+      "address": "0x036C",
+      "line": 676
+    },
+    "0x021C": {
+      "file": "stop_music.asm",
+      "address": "0x021C",
+      "line": 490
+    },
+    "0x05CA": {
+      "file": "stop_music.asm",
+      "address": "0x05CA",
+      "line": 956
+    },
+    "0x039D": {
+      "file": "stop_music.asm",
+      "address": "0x039D",
+      "line": 700
+    },
+    "0x04FF": {
+      "file": "stop_music.asm",
+      "address": "0x04FF",
+      "line": 870
+    },
+    "0x0335": {
+      "file": "stop_music.asm",
+      "address": "0x0335",
+      "line": 645
+    },
+    "0x02FE": {
+      "file": "stop_music.asm",
+      "address": "0x02FE",
+      "line": 611
+    },
+    "0x07B9": {
+      "file": "stop_music.asm",
+      "address": "0x07B9",
+      "line": 1324
+    },
+    "0x07AA": {
+      "file": "stop_music.asm",
+      "address": "0x07AA",
+      "line": 1311
+    },
+    "0x015B": {
+      "file": "stop_music.asm",
+      "address": "0x015B",
+      "line": 330
+    },
+    "0x0424": {
+      "file": "stop_music.asm",
+      "address": "0x0424",
+      "line": 761
+    },
+    "0x0668": {
+      "file": "stop_music.asm",
+      "address": "0x0668",
+      "line": 1049
+    },
+    "0x00F9": {
+      "file": "stop_music.asm",
+      "address": "0x00F9",
+      "line": 247
+    },
+    "0x0650": {
+      "file": "stop_music.asm",
+      "address": "0x0650",
+      "line": 1029
+    },
+    "0x0540": {
+      "file": "stop_music.asm",
+      "address": "0x0540",
+      "line": 899
+    },
+    "0x0347": {
+      "file": "stop_music.asm",
+      "address": "0x0347",
+      "line": 656
+    },
+    "0x07DF": {
+      "file": "stop_music.asm",
+      "address": "0x07DF",
+      "line": 1355
+    },
+    "0x066F": {
+      "file": "stop_music.asm",
+      "address": "0x066F",
+      "line": 1056
+    },
+    "0x0846": {
+      "file": "stop_music.asm",
+      "address": "0x0846",
+      "line": 1452
+    },
+    "0x03F8": {
+      "file": "stop_music.asm",
+      "address": "0x03F8",
+      "line": 741
+    },
+    "0x0299": {
+      "file": "stop_music.asm",
+      "address": "0x0299",
+      "line": 561
+    },
+    "0x0451": {
+      "file": "stop_music.asm",
+      "address": "0x0451",
+      "line": 786
+    },
+    "0x0287": {
+      "file": "stop_music.asm",
+      "address": "0x0287",
+      "line": 552
+    },
+    "0x07F1": {
+      "file": "stop_music.asm",
+      "address": "0x07F1",
+      "line": 1370
+    },
+    "0x080E": {
+      "file": "stop_music.asm",
+      "address": "0x080E",
+      "line": 1397
+    },
+    "0x0080": {
+      "file": "stop_music.asm",
+      "address": "0x0080",
+      "line": 142
+    },
+    "0x04A5": {
+      "file": "stop_music.asm",
+      "address": "0x04A5",
+      "line": 831
+    },
+    "0x031A": {
+      "file": "stop_music.asm",
+      "address": "0x031A",
+      "line": 630
+    },
+    "0x06D2": {
+      "file": "stop_music.asm",
+      "address": "0x06D2",
+      "line": 1138
+    },
+    "0x061D": {
+      "file": "stop_music.asm",
+      "address": "0x061D",
+      "line": 992
+    },
+    "0x01E3": {
+      "file": "stop_music.asm",
+      "address": "0x01E3",
+      "line": 452
+    },
+    "0x0690": {
+      "file": "stop_music.asm",
+      "address": "0x0690",
+      "line": 1084
+    },
+    "0x023A": {
+      "file": "stop_music.asm",
+      "address": "0x023A",
+      "line": 513
+    },
+    "0x0835": {
+      "file": "stop_music.asm",
+      "address": "0x0835",
+      "line": 1435
+    },
+    "0x069F": {
+      "file": "stop_music.asm",
+      "address": "0x069F",
+      "line": 1097
+    },
+    "0x024B": {
+      "file": "stop_music.asm",
+      "address": "0x024B",
+      "line": 522
+    },
+    "0x04FC": {
+      "file": "stop_music.asm",
+      "address": "0x04FC",
+      "line": 868
+    },
+    "0x0809": {
+      "file": "stop_music.asm",
+      "address": "0x0809",
+      "line": 1468
+    },
+    "0x080A": {
+      "file": "stop_music.asm",
+      "address": "0x080A",
+      "line": 1393
+    },
+    "0x01F0": {
+      "file": "stop_music.asm",
+      "address": "0x01F0",
+      "line": 461
+    },
+    "0x0574": {
+      "file": "stop_music.asm",
+      "address": "0x0574",
+      "line": 920
+    },
+    "0x06CC": {
+      "file": "stop_music.asm",
+      "address": "0x06CC",
+      "line": 1133
+    },
+    "0x032B": {
+      "file": "stop_music.asm",
+      "address": "0x032B",
+      "line": 641
+    },
+    "0x0698": {
+      "file": "stop_music.asm",
+      "address": "0x0698",
+      "line": 1092
+    },
+    "0x05FE": {
+      "file": "stop_music.asm",
+      "address": "0x05FE",
+      "line": 977
+    },
+    "0x06F2": {
+      "file": "stop_music.asm",
+      "address": "0x06F2",
+      "line": 1165
+    },
+    "0x05B3": {
+      "file": "stop_music.asm",
+      "address": "0x05B3",
+      "line": 945
+    },
+    "0x0775": {
+      "file": "stop_music.asm",
+      "address": "0x0775",
+      "line": 1270
+    },
+    "0x025B": {
+      "file": "stop_music.asm",
+      "address": "0x025B",
+      "line": 529
+    },
+    "0x0552": {
+      "file": "stop_music.asm",
+      "address": "0x0552",
+      "line": 906
+    },
+    "0x0216": {
+      "file": "stop_music.asm",
+      "address": "0x0216",
+      "line": 488
+    },
+    "0x057C": {
+      "file": "stop_music.asm",
+      "address": "0x057C",
+      "line": 923
+    },
+    "0x0185": {
+      "file": "stop_music.asm",
+      "address": "0x0185",
+      "line": 367
+    },
+    "0x07D0": {
+      "file": "stop_music.asm",
+      "address": "0x07D0",
+      "line": 1343
+    },
+    "0x04A7": {
+      "file": "stop_music.asm",
+      "address": "0x04A7",
+      "line": 832
+    },
+    "0x083A": {
+      "file": "stop_music.asm",
+      "address": "0x083A",
+      "line": 1440
+    },
+    "0x01CC": {
+      "file": "stop_music.asm",
+      "address": "0x01CC",
+      "line": 437
+    },
+    "0x0608": {
+      "file": "stop_music.asm",
+      "address": "0x0608",
+      "line": 982
+    },
+    "0x067B": {
+      "file": "stop_music.asm",
+      "address": "0x067B",
+      "line": 1066
+    },
+    "0x07A9": {
+      "file": "stop_music.asm",
+      "address": "0x07A9",
+      "line": 1310
+    },
+    "0x02BA": {
+      "file": "stop_music.asm",
+      "address": "0x02BA",
+      "line": 579
+    },
+    "0x07D1": {
+      "file": "stop_music.asm",
+      "address": "0x07D1",
+      "line": 1344
+    },
+    "0x072C": {
+      "file": "stop_music.asm",
+      "address": "0x072C",
+      "line": 1215
+    },
+    "0x05B0": {
+      "file": "stop_music.asm",
+      "address": "0x05B0",
+      "line": 944
+    },
+    "0x00D6": {
+      "file": "stop_music.asm",
+      "address": "0x00D6",
+      "line": 230
+    },
+    "0x0071": {
+      "file": "stop_music.asm",
+      "address": "0x0071",
+      "line": 132
+    },
+    "0x00A9": {
+      "file": "stop_music.asm",
+      "address": "0x00A9",
+      "line": 164
+    },
+    "0x07BF": {
+      "file": "stop_music.asm",
+      "address": "0x07BF",
+      "line": 1329
+    },
+    "0x0741": {
+      "file": "stop_music.asm",
+      "address": "0x0741",
+      "line": 1230
+    },
+    "0x065E": {
+      "file": "stop_music.asm",
+      "address": "0x065E",
+      "line": 1042
+    },
+    "0x005A": {
+      "file": "stop_music.asm",
+      "address": "0x005A",
+      "line": 117
+    },
+    "0x07B8": {
+      "file": "stop_music.asm",
+      "address": "0x07B8",
+      "line": 1323
+    },
+    "0x004B": {
+      "file": "stop_music.asm",
+      "address": "0x004B",
+      "line": 101
+    },
+    "0x0524": {
+      "file": "stop_music.asm",
+      "address": "0x0524",
+      "line": 888
+    },
+    "0x07E2": {
+      "file": "stop_music.asm",
+      "address": "0x07E2",
+      "line": 1358
+    },
+    "0x0784": {
+      "file": "stop_music.asm",
+      "address": "0x0784",
+      "line": 1282
+    },
+    "0x00B9": {
+      "file": "stop_music.asm",
+      "address": "0x00B9",
+      "line": 209
+    },
+    "0x06EA": {
+      "file": "stop_music.asm",
+      "address": "0x06EA",
+      "line": 1157
+    },
+    "0x0502": {
+      "file": "stop_music.asm",
+      "address": "0x0502",
+      "line": 871
+    },
+    "0x0592": {
+      "file": "stop_music.asm",
+      "address": "0x0592",
+      "line": 932
+    },
+    "0x03B3": {
+      "file": "stop_music.asm",
+      "address": "0x03B3",
+      "line": 709
+    },
+    "0x0103": {
+      "file": "stop_music.asm",
+      "address": "0x0103",
+      "line": 256
+    },
+    "0x05E2": {
+      "file": "stop_music.asm",
+      "address": "0x05E2",
+      "line": 964
+    },
+    "0x07DC": {
+      "file": "stop_music.asm",
+      "address": "0x07DC",
+      "line": 1353
+    },
+    "0x02B0": {
+      "file": "stop_music.asm",
+      "address": "0x02B0",
+      "line": 574
+    },
+    "0x043B": {
+      "file": "stop_music.asm",
+      "address": "0x043B",
+      "line": 774
+    },
+    "0x0481": {
+      "file": "stop_music.asm",
+      "address": "0x0481",
+      "line": 810
+    },
+    "0x0132": {
+      "file": "stop_music.asm",
+      "address": "0x0132",
+      "line": 293
+    },
+    "0x0847": {
+      "file": "stop_music.asm",
+      "address": "0x0847",
+      "line": 1453
+    },
+    "0x00B0": {
+      "file": "stop_music.asm",
+      "address": "0x00B0",
+      "line": 196
+    },
+    "0x034A": {
+      "file": "stop_music.asm",
+      "address": "0x034A",
+      "line": 657
+    },
+    "0x0142": {
+      "file": "stop_music.asm",
+      "address": "0x0142",
+      "line": 313
+    },
+    "0x0204": {
+      "file": "stop_music.asm",
+      "address": "0x0204",
+      "line": 475
+    },
+    "0x01EA": {
+      "file": "stop_music.asm",
+      "address": "0x01EA",
+      "line": 455
+    },
+    "0x0751": {
+      "file": "stop_music.asm",
+      "address": "0x0751",
+      "line": 1242
+    },
+    "0x054C": {
+      "file": "stop_music.asm",
+      "address": "0x054C",
+      "line": 904
+    },
+    "0x0264": {
+      "file": "stop_music.asm",
+      "address": "0x0264",
+      "line": 535
+    },
+    "0x020D": {
+      "file": "stop_music.asm",
+      "address": "0x020D",
+      "line": 484
+    },
+    "0x0781": {
+      "file": "stop_music.asm",
+      "address": "0x0781",
+      "line": 1279
+    },
+    "0x0292": {
+      "file": "stop_music.asm",
+      "address": "0x0292",
+      "line": 558
+    },
+    "0x077A": {
+      "file": "stop_music.asm",
+      "address": "0x077A",
+      "line": 1274
+    },
+    "0x071A": {
+      "file": "stop_music.asm",
+      "address": "0x071A",
+      "line": 1201
+    },
+    "0x01D1": {
+      "file": "stop_music.asm",
+      "address": "0x01D1",
+      "line": 440
+    },
+    "0x0198": {
+      "file": "stop_music.asm",
+      "address": "0x0198",
+      "line": 380
+    },
+    "0x042D": {
+      "file": "stop_music.asm",
+      "address": "0x042D",
+      "line": 764
+    },
+    "0x06E3": {
+      "file": "stop_music.asm",
+      "address": "0x06E3",
+      "line": 1152
+    },
+    "0x06EC": {
+      "file": "stop_music.asm",
+      "address": "0x06EC",
+      "line": 1159
+    },
+    "0x050F": {
+      "file": "stop_music.asm",
+      "address": "0x050F",
+      "line": 878
+    },
+    "0x01D5": {
+      "file": "stop_music.asm",
+      "address": "0x01D5",
+      "line": 443
+    },
+    "0x082A": {
+      "file": "stop_music.asm",
+      "address": "0x082A",
+      "line": 1424
+    },
+    "0x03A0": {
+      "file": "stop_music.asm",
+      "address": "0x03A0",
+      "line": 63
+    },
+    "0x010F": {
+      "file": "stop_music.asm",
+      "address": "0x010F",
+      "line": 270
+    },
+    "0x06DD": {
+      "file": "stop_music.asm",
+      "address": "0x06DD",
+      "line": 1146
+    },
+    "0x01E0": {
+      "file": "stop_music.asm",
+      "address": "0x01E0",
+      "line": 449
+    },
+    "0x0511": {
+      "file": "stop_music.asm",
+      "address": "0x0511",
+      "line": 880
+    },
+    "0x004A": {
+      "file": "stop_music.asm",
+      "address": "0x004A",
+      "line": 100
+    },
+    "0x06CB": {
+      "file": "stop_music.asm",
+      "address": "0x06CB",
+      "line": 1132
+    },
+    "0x07F9": {
+      "file": "stop_music.asm",
+      "address": "0x07F9",
+      "line": 1378
+    },
+    "0x034D": {
+      "file": "stop_music.asm",
+      "address": "0x034D",
+      "line": 658
+    },
+    "0x06F3": {
+      "file": "stop_music.asm",
+      "address": "0x06F3",
+      "line": 1166
+    },
+    "0x067A": {
+      "file": "stop_music.asm",
+      "address": "0x067A",
+      "line": 1065
+    },
+    "0x0258": {
+      "file": "stop_music.asm",
+      "address": "0x0258",
+      "line": 528
+    },
+    "0x01B1": {
+      "file": "stop_music.asm",
+      "address": "0x01B1",
+      "line": 400
+    },
+    "0x02F2": {
+      "file": "stop_music.asm",
+      "address": "0x02F2",
+      "line": 606
+    },
+    "0x0727": {
+      "file": "stop_music.asm",
+      "address": "0x0727",
+      "line": 1210
+    },
+    "0x0513": {
+      "file": "stop_music.asm",
+      "address": "0x0513",
+      "line": 881
+    },
+    "0x01F2": {
+      "file": "stop_music.asm",
+      "address": "0x01F2",
+      "line": 463
+    },
+    "0x00CD": {
+      "file": "stop_music.asm",
+      "address": "0x00CD",
+      "line": 221
+    },
+    "0x0637": {
+      "file": "stop_music.asm",
+      "address": "0x0637",
+      "line": 1002
+    },
+    "0x07C0": {
+      "file": "stop_music.asm",
+      "address": "0x07C0",
+      "line": 1330
+    },
+    "0x078B": {
+      "file": "stop_music.asm",
+      "address": "0x078B",
+      "line": 1288
+    },
+    "0x05F8": {
+      "file": "stop_music.asm",
+      "address": "0x05F8",
+      "line": 974
+    },
+    "0x0072": {
+      "file": "stop_music.asm",
+      "address": "0x0072",
+      "line": 133
+    },
+    "0x0078": {
+      "file": "stop_music.asm",
+      "address": "0x0078",
+      "line": 137
+    },
+    "0x0105": {
+      "file": "stop_music.asm",
+      "address": "0x0105",
+      "line": 259
+    },
+    "0x002A": {
+      "file": "stop_music.asm",
+      "address": "0x002A",
+      "line": 82
+    },
+    "0x0577": {
+      "file": "stop_music.asm",
+      "address": "0x0577",
+      "line": 921
+    },
+    "0x0811": {
+      "file": "stop_music.asm",
+      "address": "0x0811",
+      "line": 1400
+    },
+    "0x07E7": {
+      "file": "stop_music.asm",
+      "address": "0x07E7",
+      "line": 1363
+    },
+    "0x0183": {
+      "file": "stop_music.asm",
+      "address": "0x0183",
+      "line": 366
+    },
+    "0x035A": {
+      "file": "stop_music.asm",
+      "address": "0x035A",
+      "line": 38
+    },
+    "0x0655": {
+      "file": "stop_music.asm",
+      "address": "0x0655",
+      "line": 1033
+    },
+    "0x07D3": {
+      "file": "stop_music.asm",
+      "address": "0x07D3",
+      "line": 1346
+    },
+    "0x02AD": {
+      "file": "stop_music.asm",
+      "address": "0x02AD",
+      "line": 573
+    },
+    "0x064B": {
+      "file": "stop_music.asm",
+      "address": "0x064B",
+      "line": 1010
+    },
+    "0x05A9": {
+      "file": "stop_music.asm",
+      "address": "0x05A9",
+      "line": 941
+    },
+    "0x0757": {
+      "file": "stop_music.asm",
+      "address": "0x0757",
+      "line": 1246
+    },
+    "0x0815": {
+      "file": "stop_music.asm",
+      "address": "0x0815",
+      "line": 1404
+    },
+    "0x084E": {
+      "file": "stop_music.asm",
+      "address": "0x084E",
+      "line": 1460
+    },
+    "0x03BD": {
+      "file": "stop_music.asm",
+      "address": "0x03BD",
+      "line": 716
+    },
+    "0x0474": {
+      "file": "stop_music.asm",
+      "address": "0x0474",
+      "line": 804
+    },
+    "0x07FF": {
+      "file": "stop_music.asm",
+      "address": "0x07FF",
+      "line": 1382
+    },
+    "0x06F4": {
+      "file": "stop_music.asm",
+      "address": "0x06F4",
+      "line": 1167
+    },
+    "0x07A2": {
+      "file": "stop_music.asm",
+      "address": "0x07A2",
+      "line": 1304
+    },
+    "0x0166": {
+      "file": "stop_music.asm",
+      "address": "0x0166",
+      "line": 338
+    },
+    "0x06A5": {
+      "file": "stop_music.asm",
+      "address": "0x06A5",
+      "line": 1102
+    },
+    "0x016C": {
+      "file": "stop_music.asm",
+      "address": "0x016C",
+      "line": 345
+    },
+    "0x0697": {
+      "file": "stop_music.asm",
+      "address": "0x0697",
+      "line": 1091
+    },
+    "0x05D9": {
+      "file": "stop_music.asm",
+      "address": "0x05D9",
+      "line": 961
+    },
+    "0x0062": {
+      "file": "stop_music.asm",
+      "address": "0x0062",
+      "line": 122
+    },
+    "0x0720": {
+      "file": "stop_music.asm",
+      "address": "0x0720",
+      "line": 1205
+    },
+    "0x06AF": {
+      "file": "stop_music.asm",
+      "address": "0x06AF",
+      "line": 1110
+    },
+    "0x0027": {
+      "file": "stop_music.asm",
+      "address": "0x0027",
+      "line": 81
+    },
+    "0x0639": {
+      "file": "stop_music.asm",
+      "address": "0x0639",
+      "line": 1003
+    },
+    "0x0366": {
+      "file": "stop_music.asm",
+      "address": "0x0366",
+      "line": 671
+    },
+    "0x037F": {
+      "file": "stop_music.asm",
+      "address": "0x037F",
+      "line": 52
+    },
+    "0x07A8": {
+      "file": "stop_music.asm",
+      "address": "0x07A8",
+      "line": 1309
+    },
+    "0x00AA": {
+      "file": "stop_music.asm",
+      "address": "0x00AA",
+      "line": 194
+    },
+    "0x01F9": {
+      "file": "stop_music.asm",
+      "address": "0x01F9",
+      "line": 465
+    },
+    "0x01E5": {
+      "file": "stop_music.asm",
+      "address": "0x01E5",
+      "line": 453
+    },
+    "0x0225": {
+      "file": "stop_music.asm",
+      "address": "0x0225",
+      "line": 494
+    },
+    "0x070E": {
+      "file": "stop_music.asm",
+      "address": "0x070E",
+      "line": 1189
+    },
+    "0x0834": {
+      "file": "stop_music.asm",
+      "address": "0x0834",
+      "line": 1434
+    },
+    "0x03C6": {
+      "file": "stop_music.asm",
+      "address": "0x03C6",
+      "line": 719
+    },
+    "0x0746": {
+      "file": "stop_music.asm",
+      "address": "0x0746",
+      "line": 1234
+    },
+    "0x0520": {
+      "file": "stop_music.asm",
+      "address": "0x0520",
+      "line": 886
+    },
+    "0x01A9": {
+      "file": "stop_music.asm",
+      "address": "0x01A9",
+      "line": 394
+    },
+    "0x0438": {
+      "file": "stop_music.asm",
+      "address": "0x0438",
+      "line": 770
+    },
+    "0x083D": {
+      "file": "stop_music.asm",
+      "address": "0x083D",
+      "line": 1443
+    },
+    "0x01D2": {
+      "file": "stop_music.asm",
+      "address": "0x01D2",
+      "line": 441
+    },
+    "0x03A3": {
+      "file": "stop_music.asm",
+      "address": "0x03A3",
+      "line": 64
+    },
+    "0x0437": {
+      "file": "stop_music.asm",
+      "address": "0x0437",
+      "line": 769
+    },
+    "0x0430": {
+      "file": "stop_music.asm",
+      "address": "0x0430",
+      "line": 765
+    },
+    "0x0498": {
+      "file": "stop_music.asm",
+      "address": "0x0498",
+      "line": 822
+    },
+    "0x081D": {
+      "file": "stop_music.asm",
+      "address": "0x081D",
+      "line": 1412
+    },
+    "0x001F": {
+      "file": "stop_music.asm",
+      "address": "0x001F",
+      "line": 78
+    },
+    "0x0077": {
+      "file": "stop_music.asm",
+      "address": "0x0077",
+      "line": 136
+    },
+    "0x040F": {
+      "file": "stop_music.asm",
+      "address": "0x040F",
+      "line": 754
+    },
+    "0x07B5": {
+      "file": "stop_music.asm",
+      "address": "0x07B5",
+      "line": 1320
+    },
+    "0x066E": {
+      "file": "stop_music.asm",
+      "address": "0x066E",
+      "line": 1055
+    },
+    "0x0780": {
+      "file": "stop_music.asm",
+      "address": "0x0780",
+      "line": 1278
+    },
+    "0x030E": {
+      "file": "stop_music.asm",
+      "address": "0x030E",
+      "line": 623
+    },
+    "0x068B": {
+      "file": "stop_music.asm",
+      "address": "0x068B",
+      "line": 1080
+    },
+    "0x054F": {
+      "file": "stop_music.asm",
+      "address": "0x054F",
+      "line": 905
+    },
+    "0x0770": {
+      "file": "stop_music.asm",
+      "address": "0x0770",
+      "line": 1266
+    },
+    "0x05FB": {
+      "file": "stop_music.asm",
+      "address": "0x05FB",
+      "line": 975
+    },
+    "0x0150": {
+      "file": "stop_music.asm",
+      "address": "0x0150",
+      "line": 321
+    },
+    "0x07E3": {
+      "file": "stop_music.asm",
+      "address": "0x07E3",
+      "line": 1359
+    },
+    "0x02A7": {
+      "file": "stop_music.asm",
+      "address": "0x02A7",
+      "line": 571
+    },
+    "0x0167": {
+      "file": "stop_music.asm",
+      "address": "0x0167",
+      "line": 339
+    },
+    "0x043E": {
+      "file": "stop_music.asm",
+      "address": "0x043E",
+      "line": 775
+    },
+    "0x00B5": {
+      "file": "stop_music.asm",
+      "address": "0x00B5",
+      "line": 198
+    },
+    "0x084B": {
+      "file": "stop_music.asm",
+      "address": "0x084B",
+      "line": 1457
+    },
+    "0x0804": {
+      "file": "stop_music.asm",
+      "address": "0x0804",
+      "line": 1387
+    },
+    "0x0215": {
+      "file": "stop_music.asm",
+      "address": "0x0215",
+      "line": 487
+    },
+    "0x01B5": {
+      "file": "stop_music.asm",
+      "address": "0x01B5",
+      "line": 409
+    },
+    "0x01BD": {
+      "file": "stop_music.asm",
+      "address": "0x01BD",
+      "line": 414
+    },
+    "0x07EA": {
+      "file": "stop_music.asm",
+      "address": "0x07EA",
+      "line": 1366
+    },
+    "0x0065": {
+      "file": "stop_music.asm",
+      "address": "0x0065",
+      "line": 124
+    },
+    "0x06BC": {
+      "file": "stop_music.asm",
+      "address": "0x06BC",
+      "line": 1121
+    },
+    "0x06D9": {
+      "file": "stop_music.asm",
+      "address": "0x06D9",
+      "line": 1143
+    },
+    "0x077C": {
+      "file": "stop_music.asm",
+      "address": "0x077C",
+      "line": 1275
+    },
+    "0x0611": {
+      "file": "stop_music.asm",
+      "address": "0x0611",
+      "line": 987
+    },
+    "0x0560": {
+      "file": "stop_music.asm",
+      "address": "0x0560",
+      "line": 912
+    },
+    "0x0660": {
+      "file": "stop_music.asm",
+      "address": "0x0660",
+      "line": 1043
+    },
+    "0x00CA": {
+      "file": "stop_music.asm",
+      "address": "0x00CA",
+      "line": 219
+    },
+    "0x04A9": {
+      "file": "stop_music.asm",
+      "address": "0x04A9",
+      "line": 833
+    },
+    "0x011B": {
+      "file": "stop_music.asm",
+      "address": "0x011B",
+      "line": 282
+    },
+    "0x0471": {
+      "file": "stop_music.asm",
+      "address": "0x0471",
+      "line": 800
+    },
+    "0x07F3": {
+      "file": "stop_music.asm",
+      "address": "0x07F3",
+      "line": 1372
+    },
+    "0x0175": {
+      "file": "stop_music.asm",
+      "address": "0x0175",
+      "line": 353
+    },
+    "0x027D": {
+      "file": "stop_music.asm",
+      "address": "0x027D",
+      "line": 547
+    },
+    "0x0787": {
+      "file": "stop_music.asm",
+      "address": "0x0787",
+      "line": 1284
+    },
+    "0x0570": {
+      "file": "stop_music.asm",
+      "address": "0x0570",
+      "line": 918
+    },
+    "0x077D": {
+      "file": "stop_music.asm",
+      "address": "0x077D",
+      "line": 1276
+    },
+    "0x0769": {
+      "file": "stop_music.asm",
+      "address": "0x0769",
+      "line": 1260
+    },
+    "0x05F2": {
+      "file": "stop_music.asm",
+      "address": "0x05F2",
+      "line": 971
+    },
+    "0x012D": {
+      "file": "stop_music.asm",
+      "address": "0x012D",
+      "line": 291
+    },
+    "0x04F1": {
+      "file": "stop_music.asm",
+      "address": "0x04F1",
+      "line": 865
+    },
+    "0x0665": {
+      "file": "stop_music.asm",
+      "address": "0x0665",
+      "line": 1047
+    },
+    "0x0444": {
+      "file": "stop_music.asm",
+      "address": "0x0444",
+      "line": 777
+    },
+    "0x0200": {
+      "file": "stop_music.asm",
+      "address": "0x0200",
+      "line": 472
+    },
+    "0x0613": {
+      "file": "stop_music.asm",
+      "address": "0x0613",
+      "line": 988
+    },
+    "0x06DE": {
+      "file": "stop_music.asm",
+      "address": "0x06DE",
+      "line": 1147
+    },
+    "0x023D": {
+      "file": "stop_music.asm",
+      "address": "0x023D",
+      "line": 515
+    },
+    "0x016A": {
+      "file": "stop_music.asm",
+      "address": "0x016A",
+      "line": 344
+    },
+    "0x018F": {
+      "file": "stop_music.asm",
+      "address": "0x018F",
+      "line": 372
+    },
+    "0x080F": {
+      "file": "stop_music.asm",
+      "address": "0x080F",
+      "line": 1398
+    },
+    "0x051A": {
+      "file": "stop_music.asm",
+      "address": "0x051A",
+      "line": 884
+    },
+    "0x067D": {
+      "file": "stop_music.asm",
+      "address": "0x067D",
+      "line": 1068
+    },
+    "0x0374": {
+      "file": "stop_music.asm",
+      "address": "0x0374",
+      "line": 679
+    },
+    "0x00D4": {
+      "file": "stop_music.asm",
+      "address": "0x00D4",
+      "line": 229
+    },
+    "0x0505": {
+      "file": "stop_music.asm",
+      "address": "0x0505",
+      "line": 873
+    },
+    "0x0508": {
+      "file": "stop_music.asm",
+      "address": "0x0508",
+      "line": 875
+    },
+    "0x072E": {
+      "file": "stop_music.asm",
+      "address": "0x072E",
+      "line": 1217
+    },
+    "0x0032": {
+      "file": "stop_music.asm",
+      "address": "0x0032",
+      "line": 86
+    },
+    "0x038B": {
+      "file": "stop_music.asm",
+      "address": "0x038B",
+      "line": 56
+    },
+    "0x077E": {
+      "file": "stop_music.asm",
+      "address": "0x077E",
+      "line": 1277
+    },
+    "0x04BC": {
+      "file": "stop_music.asm",
+      "address": "0x04BC",
+      "line": 841
+    },
+    "0x026E": {
+      "file": "stop_music.asm",
+      "address": "0x026E",
+      "line": 539
+    },
+    "0x05AE": {
+      "file": "stop_music.asm",
+      "address": "0x05AE",
+      "line": 943
+    },
+    "0x07ED": {
+      "file": "stop_music.asm",
+      "address": "0x07ED",
+      "line": 1367
+    },
+    "0x03AC": {
+      "file": "stop_music.asm",
+      "address": "0x03AC",
+      "line": 705
+    },
+    "0x03EF": {
+      "file": "stop_music.asm",
+      "address": "0x03EF",
+      "line": 738
+    },
+    "0x01C7": {
+      "file": "stop_music.asm",
+      "address": "0x01C7",
+      "line": 434
+    },
+    "0x02BD": {
+      "file": "stop_music.asm",
+      "address": "0x02BD",
+      "line": 580
+    },
+    "0x0790": {
+      "file": "stop_music.asm",
+      "address": "0x0790",
+      "line": 1291
+    },
+    "0x059F": {
+      "file": "stop_music.asm",
+      "address": "0x059F",
+      "line": 937
+    },
+    "0x0707": {
+      "file": "stop_music.asm",
+      "address": "0x0707",
+      "line": 1184
+    },
+    "0x0796": {
+      "file": "stop_music.asm",
+      "address": "0x0796",
+      "line": 1295
+    },
+    "0x013B": {
+      "file": "stop_music.asm",
+      "address": "0x013B",
+      "line": 297
+    },
+    "0x0394": {
+      "file": "stop_music.asm",
+      "address": "0x0394",
+      "line": 697
+    },
+    "0x023E": {
+      "file": "stop_music.asm",
+      "address": "0x023E",
+      "line": 516
+    },
+    "0x036E": {
+      "file": "stop_music.asm",
+      "address": "0x036E",
+      "line": 46
+    },
+    "0x0673": {
+      "file": "stop_music.asm",
+      "address": "0x0673",
+      "line": 1060
+    },
+    "0x049F": {
+      "file": "stop_music.asm",
+      "address": "0x049F",
+      "line": 828
+    },
+    "0x01A5": {
+      "file": "stop_music.asm",
+      "address": "0x01A5",
+      "line": 387
+    },
+    "0x00BE": {
+      "file": "stop_music.asm",
+      "address": "0x00BE",
+      "line": 211
+    },
+    "0x0764": {
+      "file": "stop_music.asm",
+      "address": "0x0764",
+      "line": 1257
+    },
+    "0x01D0": {
+      "file": "stop_music.asm",
+      "address": "0x01D0",
+      "line": 439
+    },
+    "0x04E9": {
+      "file": "stop_music.asm",
+      "address": "0x04E9",
+      "line": 860
+    },
+    "0x0407": {
+      "file": "stop_music.asm",
+      "address": "0x0407",
+      "line": 747
+    },
+    "0x062D": {
+      "file": "stop_music.asm",
+      "address": "0x062D",
+      "line": 998
+    },
+    "0x067C": {
+      "file": "stop_music.asm",
+      "address": "0x067C",
+      "line": 1067
+    },
+    "0x07BA": {
+      "file": "stop_music.asm",
+      "address": "0x07BA",
+      "line": 1325
+    },
+    "0x0227": {
+      "file": "stop_music.asm",
+      "address": "0x0227",
+      "line": 495
+    },
+    "0x04F9": {
+      "file": "stop_music.asm",
+      "address": "0x04F9",
+      "line": 867
+    },
+    "0x0799": {
+      "file": "stop_music.asm",
+      "address": "0x0799",
+      "line": 1297
+    },
+    "0x022E": {
+      "file": "stop_music.asm",
+      "address": "0x022E",
+      "line": 498
+    },
+    "0x06B3": {
+      "file": "stop_music.asm",
+      "address": "0x06B3",
+      "line": 1113
+    },
+    "0x007C": {
+      "file": "stop_music.asm",
+      "address": "0x007C",
+      "line": 140
+    },
+    "0x03A9": {
+      "file": "stop_music.asm",
+      "address": "0x03A9",
+      "line": 704
+    },
+    "0x0842": {
+      "file": "stop_music.asm",
+      "address": "0x0842",
+      "line": 1448
+    },
+    "0x0321": {
+      "file": "stop_music.asm",
+      "address": "0x0321",
+      "line": 633
+    },
+    "0x056A": {
+      "file": "stop_music.asm",
+      "address": "0x056A",
+      "line": 916
+    },
+    "0x010A": {
+      "file": "stop_music.asm",
+      "address": "0x010A",
+      "line": 267
+    },
+    "0x05B6": {
+      "file": "stop_music.asm",
+      "address": "0x05B6",
+      "line": 946
+    },
+    "0x0696": {
+      "file": "stop_music.asm",
+      "address": "0x0696",
+      "line": 1090
+    },
+    "0x064E": {
+      "file": "stop_music.asm",
+      "address": "0x064E",
+      "line": 1011
+    },
+    "0x074E": {
+      "file": "stop_music.asm",
+      "address": "0x074E",
+      "line": 1239
+    },
+    "0x0825": {
+      "file": "stop_music.asm",
+      "address": "0x0825",
+      "line": 1419
+    },
+    "0x06F5": {
+      "file": "stop_music.asm",
+      "address": "0x06F5",
+      "line": 1168
+    },
+    "0x028F": {
+      "file": "stop_music.asm",
+      "address": "0x028F",
+      "line": 557
+    },
+    "0x04C5": {
+      "file": "stop_music.asm",
+      "address": "0x04C5",
+      "line": 845
+    },
+    "0x0114": {
+      "file": "stop_music.asm",
+      "address": "0x0114",
+      "line": 274
+    },
+    "0x0178": {
+      "file": "stop_music.asm",
+      "address": "0x0178",
+      "line": 354
+    },
+    "0x0794": {
+      "file": "stop_music.asm",
+      "address": "0x0794",
+      "line": 1294
+    },
+    "0x00C6": {
+      "file": "stop_music.asm",
+      "address": "0x00C6",
+      "line": 215
+    },
+    "0x04B5": {
+      "file": "stop_music.asm",
+      "address": "0x04B5",
+      "line": 838
+    },
+    "0x0758": {
+      "file": "stop_music.asm",
+      "address": "0x0758",
+      "line": 1247
+    },
+    "0x074F": {
+      "file": "stop_music.asm",
+      "address": "0x074F",
+      "line": 1240
+    },
+    "0x0323": {
+      "file": "stop_music.asm",
+      "address": "0x0323",
+      "line": 635
+    },
+    "0x040A": {
+      "file": "stop_music.asm",
+      "address": "0x040A",
+      "line": 748
+    },
+    "0x0832": {
+      "file": "stop_music.asm",
+      "address": "0x0832",
+      "line": 1432
+    },
+    "0x0708": {
+      "file": "stop_music.asm",
+      "address": "0x0708",
+      "line": 1185
+    },
+    "0x081C": {
+      "file": "stop_music.asm",
+      "address": "0x081C",
+      "line": 1411
+    },
+    "0x013C": {
+      "file": "stop_music.asm",
+      "address": "0x013C",
+      "line": 308
+    },
+    "0x072A": {
+      "file": "stop_music.asm",
+      "address": "0x072A",
+      "line": 1213
+    },
+    "0x02E3": {
+      "file": "stop_music.asm",
+      "address": "0x02E3",
+      "line": 599
+    },
+    "0x07DA": {
+      "file": "stop_music.asm",
+      "address": "0x07DA",
+      "line": 1351
+    },
+    "0x075A": {
+      "file": "stop_music.asm",
+      "address": "0x075A",
+      "line": 1248
+    },
+    "0x02F8": {
+      "file": "stop_music.asm",
+      "address": "0x02F8",
+      "line": 608
+    },
+    "0x0760": {
+      "file": "stop_music.asm",
+      "address": "0x0760",
+      "line": 1253
+    },
+    "0x0254": {
+      "file": "stop_music.asm",
+      "address": "0x0254",
+      "line": 525
+    },
+    "0x0731": {
+      "file": "stop_music.asm",
+      "address": "0x0731",
+      "line": 1218
+    },
+    "0x0657": {
+      "file": "stop_music.asm",
+      "address": "0x0657",
+      "line": 1035
+    },
+    "0x04B0": {
+      "file": "stop_music.asm",
+      "address": "0x04B0",
+      "line": 836
+    },
+    "0x05AC": {
+      "file": "stop_music.asm",
+      "address": "0x05AC",
+      "line": 942
+    },
+    "0x069A": {
+      "file": "stop_music.asm",
+      "address": "0x069A",
+      "line": 1093
+    },
+    "0x079C": {
+      "file": "stop_music.asm",
+      "address": "0x079C",
+      "line": 1300
+    },
+    "0x07FC": {
+      "file": "stop_music.asm",
+      "address": "0x07FC",
+      "line": 1381
+    },
+    "0x0786": {
+      "file": "stop_music.asm",
+      "address": "0x0786",
+      "line": 1283
+    },
+    "0x0457": {
+      "file": "stop_music.asm",
+      "address": "0x0457",
+      "line": 788
+    },
+    "0x0516": {
+      "file": "stop_music.asm",
+      "address": "0x0516",
+      "line": 882
+    },
+    "0x0563": {
+      "file": "stop_music.asm",
+      "address": "0x0563",
+      "line": 913
+    },
+    "0x060F": {
+      "file": "stop_music.asm",
+      "address": "0x060F",
+      "line": 986
+    },
+    "0x07F0": {
+      "file": "stop_music.asm",
+      "address": "0x07F0",
+      "line": 1369
+    },
+    "0x07E0": {
+      "file": "stop_music.asm",
+      "address": "0x07E0",
+      "line": 1356
+    },
+    "0x02A0": {
+      "file": "stop_music.asm",
+      "address": "0x02A0",
+      "line": 567
+    },
+    "0x017D": {
+      "file": "stop_music.asm",
+      "address": "0x017D",
+      "line": 358
+    },
+    "0x02E0": {
+      "file": "stop_music.asm",
+      "address": "0x02E0",
+      "line": 598
+    },
+    "0x008B": {
+      "file": "stop_music.asm",
+      "address": "0x008B",
+      "line": 153
+    },
+    "0x0518": {
+      "file": "stop_music.asm",
+      "address": "0x0518",
+      "line": 883
+    },
+    "0x0726": {
+      "file": "stop_music.asm",
+      "address": "0x0726",
+      "line": 1209
+    },
+    "0x0827": {
+      "file": "stop_music.asm",
+      "address": "0x0827",
+      "line": 1421
+    },
+    "0x06D8": {
+      "file": "stop_music.asm",
+      "address": "0x06D8",
+      "line": 1142
+    },
+    "0x045A": {
+      "file": "stop_music.asm",
+      "address": "0x045A",
+      "line": 789
+    },
+    "0x0656": {
+      "file": "stop_music.asm",
+      "address": "0x0656",
+      "line": 1034
+    },
+    "0x0124": {
+      "file": "stop_music.asm",
+      "address": "0x0124",
+      "line": 287
+    },
+    "0x00EB": {
+      "file": "stop_music.asm",
+      "address": "0x00EB",
+      "line": 240
+    },
+    "0x0377": {
+      "file": "stop_music.asm",
+      "address": "0x0377",
+      "line": 681
+    },
+    "0x04AE": {
+      "file": "stop_music.asm",
+      "address": "0x04AE",
+      "line": 835
+    },
+    "0x039A": {
+      "file": "stop_music.asm",
+      "address": "0x039A",
+      "line": 699
+    },
+    "0x059C": {
+      "file": "stop_music.asm",
+      "address": "0x059C",
+      "line": 936
+    },
+    "0x06A4": {
+      "file": "stop_music.asm",
+      "address": "0x06A4",
+      "line": 1101
+    },
+    "0x06B0": {
+      "file": "stop_music.asm",
+      "address": "0x06B0",
+      "line": 1111
+    },
+    "0x0848": {
+      "file": "stop_music.asm",
+      "address": "0x0848",
+      "line": 1454
+    },
+    "0x076A": {
+      "file": "stop_music.asm",
+      "address": "0x076A",
+      "line": 1261
+    },
+    "0x0802": {
+      "file": "stop_music.asm",
+      "address": "0x0802",
+      "line": 1385
+    },
+    "0x07E6": {
+      "file": "stop_music.asm",
+      "address": "0x07E6",
+      "line": 1362
+    },
+    "0x051D": {
+      "file": "stop_music.asm",
+      "address": "0x051D",
+      "line": 885
+    },
+    "0x03E3": {
+      "file": "stop_music.asm",
+      "address": "0x03E3",
+      "line": 734
+    },
+    "0x00A3": {
+      "file": "stop_music.asm",
+      "address": "0x00A3",
+      "line": 162
+    },
+    "0x065C": {
+      "file": "stop_music.asm",
+      "address": "0x065C",
+      "line": 1040
+    },
+    "0x070F": {
+      "file": "stop_music.asm",
+      "address": "0x070F",
+      "line": 1190
+    },
+    "0x0449": {
+      "file": "stop_music.asm",
+      "address": "0x0449",
+      "line": 781
+    },
+    "0x07E8": {
+      "file": "stop_music.asm",
+      "address": "0x07E8",
+      "line": 1364
+    },
+    "0x075E": {
+      "file": "stop_music.asm",
+      "address": "0x075E",
+      "line": 1252
+    },
+    "0x008F": {
+      "file": "stop_music.asm",
+      "address": "0x008F",
+      "line": 155
+    },
+    "0x076D": {
+      "file": "stop_music.asm",
+      "address": "0x076D",
+      "line": 1263
+    },
+    "0x02B7": {
+      "file": "stop_music.asm",
+      "address": "0x02B7",
+      "line": 578
+    },
+    "0x0817": {
+      "file": "stop_music.asm",
+      "address": "0x0817",
+      "line": 1406
+    },
+    "0x007F": {
+      "file": "stop_music.asm",
+      "address": "0x007F",
+      "line": 141
+    },
+    "0x05D6": {
+      "file": "stop_music.asm",
+      "address": "0x05D6",
+      "line": 960
+    },
+    "0x0510": {
+      "file": "stop_music.asm",
+      "address": "0x0510",
+      "line": 879
+    },
+    "0x0694": {
+      "file": "stop_music.asm",
+      "address": "0x0694",
+      "line": 1088
+    },
+    "0x066B": {
+      "file": "stop_music.asm",
+      "address": "0x066B",
+      "line": 1052
+    },
+    "0x0151": {
+      "file": "stop_music.asm",
+      "address": "0x0151",
+      "line": 322
+    },
+    "0x0052": {
+      "file": "stop_music.asm",
+      "address": "0x0052",
+      "line": 111
+    },
+    "0x020B": {
+      "file": "stop_music.asm",
+      "address": "0x020B",
+      "line": 483
+    },
+    "0x0086": {
+      "file": "stop_music.asm",
+      "address": "0x0086",
+      "line": 146
+    },
+    "0x063B": {
+      "file": "stop_music.asm",
+      "address": "0x063B",
+      "line": 1004
+    },
+    "0x0601": {
+      "file": "stop_music.asm",
+      "address": "0x0601",
+      "line": 979
+    },
+    "0x0554": {
+      "file": "stop_music.asm",
+      "address": "0x0554",
+      "line": 907
+    },
+    "0x0679": {
+      "file": "stop_music.asm",
+      "address": "0x0679",
+      "line": 1064
+    },
+    "0x0421": {
+      "file": "stop_music.asm",
+      "address": "0x0421",
+      "line": 760
+    },
+    "0x0083": {
+      "file": "stop_music.asm",
+      "address": "0x0083",
+      "line": 144
+    },
+    "0x084C": {
+      "file": "stop_music.asm",
+      "address": "0x084C",
+      "line": 1458
+    },
+    "0x03C0": {
+      "file": "stop_music.asm",
+      "address": "0x03C0",
+      "line": 717
+    },
+    "0x027C": {
+      "file": "stop_music.asm",
+      "address": "0x027C",
+      "line": 546
+    },
+    "0x07A3": {
+      "file": "stop_music.asm",
+      "address": "0x07A3",
+      "line": 1305
+    },
+    "0x06DA": {
+      "file": "stop_music.asm",
+      "address": "0x06DA",
+      "line": 1144
+    },
+    "0x00B3": {
+      "file": "stop_music.asm",
+      "address": "0x00B3",
+      "line": 197
+    },
+    "0x0475": {
+      "file": "stop_music.asm",
+      "address": "0x0475",
+      "line": 805
+    },
+    "0x075B": {
+      "file": "stop_music.asm",
+      "address": "0x075B",
+      "line": 1249
+    },
+    "0x04F0": {
+      "file": "stop_music.asm",
+      "address": "0x04F0",
+      "line": 864
+    },
+    "0x0201": {
+      "file": "stop_music.asm",
+      "address": "0x0201",
+      "line": 473
+    },
+    "0x0548": {
+      "file": "stop_music.asm",
+      "address": "0x0548",
+      "line": 902
+    },
+    "0x0745": {
+      "file": "stop_music.asm",
+      "address": "0x0745",
+      "line": 1233
+    },
+    "0x05E7": {
+      "file": "stop_music.asm",
+      "address": "0x05E7",
+      "line": 967
+    },
+    "0x03A6": {
+      "file": "stop_music.asm",
+      "address": "0x03A6",
+      "line": 703
+    },
+    "0x026B": {
+      "file": "stop_music.asm",
+      "address": "0x026B",
+      "line": 538
+    },
+    "0x0068": {
+      "file": "stop_music.asm",
+      "address": "0x0068",
+      "line": 126
+    },
+    "0x06E7": {
+      "file": "stop_music.asm",
+      "address": "0x06E7",
+      "line": 1154
+    },
+    "0x0344": {
+      "file": "stop_music.asm",
+      "address": "0x0344",
+      "line": 655
+    },
+    "0x07F2": {
+      "file": "stop_music.asm",
+      "address": "0x07F2",
+      "line": 1371
+    },
+    "0x03EC": {
+      "file": "stop_music.asm",
+      "address": "0x03EC",
+      "line": 737
+    },
+    "0x0056": {
+      "file": "stop_music.asm",
+      "address": "0x0056",
+      "line": 114
+    },
+    "0x0651": {
+      "file": "stop_music.asm",
+      "address": "0x0651",
+      "line": 1030
+    },
+    "0x0619": {
+      "file": "stop_music.asm",
+      "address": "0x0619",
+      "line": 990
+    },
+    "0x05F5": {
+      "file": "stop_music.asm",
+      "address": "0x05F5",
+      "line": 972
+    },
+    "0x0695": {
+      "file": "stop_music.asm",
+      "address": "0x0695",
+      "line": 1089
+    },
+    "0x0581": {
+      "file": "stop_music.asm",
+      "address": "0x0581",
+      "line": 925
+    },
+    "0x0824": {
+      "file": "stop_music.asm",
+      "address": "0x0824",
+      "line": 1418
+    },
+    "0x0042": {
+      "file": "stop_music.asm",
+      "address": "0x0042",
+      "line": 96
+    },
+    "0x0693": {
+      "file": "stop_music.asm",
+      "address": "0x0693",
+      "line": 1087
+    },
+    "0x0412": {
+      "file": "stop_music.asm",
+      "address": "0x0412",
+      "line": 755
+    },
+    "0x0674": {
+      "file": "stop_music.asm",
+      "address": "0x0674",
+      "line": 1061
+    },
+    "0x052A": {
+      "file": "stop_music.asm",
+      "address": "0x052A",
+      "line": 890
+    },
+    "0x0364": {
+      "file": "stop_music.asm",
+      "address": "0x0364",
+      "line": 670
+    },
+    "0x071B": {
+      "file": "stop_music.asm",
+      "address": "0x071B",
+      "line": 1202
+    },
+    "0x05DF": {
+      "file": "stop_music.asm",
+      "address": "0x05DF",
+      "line": 963
+    },
+    "0x06AB": {
+      "file": "stop_music.asm",
+      "address": "0x06AB",
+      "line": 1108
+    },
+    "0x02F5": {
+      "file": "stop_music.asm",
+      "address": "0x02F5",
+      "line": 607
+    },
+    "0x0136": {
+      "file": "stop_music.asm",
+      "address": "0x0136",
+      "line": 295
+    },
+    "0x07BC": {
+      "file": "stop_music.asm",
+      "address": "0x07BC",
+      "line": 1326
+    },
+    "0x069E": {
+      "file": "stop_music.asm",
+      "address": "0x069E",
+      "line": 1096
+    },
+    "0x0620": {
+      "file": "stop_music.asm",
+      "address": "0x0620",
+      "line": 993
+    },
+    "0x03AF": {
+      "file": "stop_music.asm",
+      "address": "0x03AF",
+      "line": 68
+    },
+    "0x0441": {
+      "file": "stop_music.asm",
+      "address": "0x0441",
+      "line": 776
+    },
+    "0x0806": {
+      "file": "stop_music.asm",
+      "address": "0x0806",
+      "line": 1389
+    },
+    "0x0301": {
+      "file": "stop_music.asm",
+      "address": "0x0301",
+      "line": 612
+    },
+    "0x0634": {
+      "file": "stop_music.asm",
+      "address": "0x0634",
+      "line": 1001
+    },
+    "0x083C": {
+      "file": "stop_music.asm",
+      "address": "0x083C",
+      "line": 1442
+    },
+    "0x0330": {
+      "file": "stop_music.asm",
+      "address": "0x0330",
+      "line": 643
+    },
+    "0x00E8": {
+      "file": "stop_music.asm",
+      "address": "0x00E8",
+      "line": 239
+    },
+    "0x01CF": {
+      "file": "stop_music.asm",
+      "address": "0x01CF",
+      "line": 438
+    },
+    "0x0818": {
+      "file": "stop_music.asm",
+      "address": "0x0818",
+      "line": 1407
+    },
+    "0x04EE": {
+      "file": "stop_music.asm",
+      "address": "0x04EE",
+      "line": 863
+    },
+    "0x01E7": {
+      "file": "stop_music.asm",
+      "address": "0x01E7",
+      "line": 454
+    },
+    "0x046B": {
+      "file": "stop_music.asm",
+      "address": "0x046B",
+      "line": 798
+    },
+    "0x02EF": {
+      "file": "stop_music.asm",
+      "address": "0x02EF",
+      "line": 604
+    },
+    "0x0234": {
+      "file": "stop_music.asm",
+      "address": "0x0234",
+      "line": 511
+    },
+    "0x03DB": {
+      "file": "stop_music.asm",
+      "address": "0x03DB",
+      "line": 727
+    },
+    "0x06E9": {
+      "file": "stop_music.asm",
+      "address": "0x06E9",
+      "line": 1156
+    },
+    "0x01FF": {
+      "file": "stop_music.asm",
+      "address": "0x01FF",
+      "line": 471
+    },
+    "0x0566": {
+      "file": "stop_music.asm",
+      "address": "0x0566",
+      "line": 914
+    },
+    "0x0792": {
+      "file": "stop_music.asm",
+      "address": "0x0792",
+      "line": 1292
+    },
+    "0x07D4": {
+      "file": "stop_music.asm",
+      "address": "0x07D4",
+      "line": 1347
+    },
+    "0x04ED": {
+      "file": "stop_music.asm",
+      "address": "0x04ED",
+      "line": 862
+    },
+    "0x003F": {
+      "file": "stop_music.asm",
+      "address": "0x003F",
+      "line": 95
+    },
+    "0x02FB": {
+      "file": "stop_music.asm",
+      "address": "0x02FB",
+      "line": 609
+    },
+    "0x0666": {
+      "file": "stop_music.asm",
+      "address": "0x0666",
+      "line": 1048
+    },
+    "0x04B7": {
+      "file": "stop_music.asm",
+      "address": "0x04B7",
+      "line": 839
+    },
+    "0x0162": {
+      "file": "stop_music.asm",
+      "address": "0x0162",
+      "line": 336
+    },
+    "0x0357": {
+      "file": "stop_music.asm",
+      "address": "0x0357",
+      "line": 665
+    },
+    "0x0590": {
+      "file": "stop_music.asm",
+      "address": "0x0590",
+      "line": 931
+    },
+    "0x0355": {
+      "file": "stop_music.asm",
+      "address": "0x0355",
+      "line": 664
+    },
+    "0x06C6": {
+      "file": "stop_music.asm",
+      "address": "0x06C6",
+      "line": 1128
+    },
+    "0x07CD": {
+      "file": "stop_music.asm",
+      "address": "0x07CD",
+      "line": 1340
+    },
+    "0x048A": {
+      "file": "stop_music.asm",
+      "address": "0x048A",
+      "line": 813
+    },
+    "0x044A": {
+      "file": "stop_music.asm",
+      "address": "0x044A",
+      "line": 782
+    },
+    "0x0742": {
+      "file": "stop_music.asm",
+      "address": "0x0742",
+      "line": 1231
+    },
+    "0x0081": {
+      "file": "stop_music.asm",
+      "address": "0x0081",
+      "line": 143
+    },
+    "0x0147": {
+      "file": "stop_music.asm",
+      "address": "0x0147",
+      "line": 317
+    }
+  },
+  "functions": {},
+  "nativeCalls": {
+    "27": "J1_BUTTON_3",
+    "16": "VECTREX_PRINT_TEXT",
+    "15": "VECTREX_PRINT_TEXT",
+    "19": "J1_BUTTON_1",
+    "14": "VECTREX_PRINT_TEXT",
+    "17": "VECTREX_PRINT_TEXT",
+    "24": "STOP_MUSIC",
+    "23": "J1_BUTTON_2",
+    "28": "BEEP"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "stop_music.asm",
+      "startLine": 149,
+      "endLine": 164,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {
+    "337": "0x0163",
+    "822": "0x0498",
+    "2": "0x0324",
+    "137": "0x0078",
+    "1061": "0x0674",
+    "607": "0x02F5",
+    "1193": "0x0712",
+    "1142": "0x06D8",
+    "330": "0x015B",
+    "946": "0x05B6",
+    "1149": "0x06E0",
+    "211": "0x00BE",
+    "1436": "0x0836",
+    "517": "0x0241",
+    "878": "0x050F",
+    "96": "0x0042",
+    "1006": "0x0640",
+    "989": "0x0616",
+    "1240": "0x074F",
+    "1237": "0x074A",
+    "809": "0x047E",
+    "515": "0x023D",
+    "1303": "0x07A1",
+    "1298": "0x079A",
+    "838": "0x04B5",
+    "609": "0x02FB",
+    "126": "0x0068",
+    "1103": "0x06A6",
+    "15": "0x0330",
+    "565": "0x029C",
+    "477": "0x0209",
+    "587": "0x02CD",
+    "470": "0x01FC",
+    "933": "0x0595",
+    "476": "0x0206",
+    "769": "0x0437",
+    "1355": "0x07DF",
+    "82": "0x002A",
+    "1069": "0x067E",
+    "1326": "0x07BC",
+    "593": "0x02D4",
+    "142": "0x0080",
+    "1439": "0x0839",
+    "586": "0x02CA",
+    "400": "0x01B1",
+    "230": "0x00D6",
+    "1115": "0x06B6",
+    "1207": "0x0723",
+    "1173": "0x06FC",
+    "1424": "0x082A",
+    "1224": "0x073A",
+    "931": "0x0590",
+    "966": "0x05E6",
+    "886": "0x0520",
+    "1163": "0x06F0",
+    "1253": "0x0760",
+    "942": "0x05AC",
+    "738": "0x03EF",
+    "1418": "0x0824",
+    "372": "0x018F",
+    "1455": "0x0849",
+    "1438": "0x0838",
+    "1127": "0x06C5",
+    "1357": "0x07E1",
+    "147": "0x0087",
+    "1007": "0x0642",
+    "48": "0x0374",
+    "459": "0x01ED",
+    "1104": "0x06A7",
+    "835": "0x04AE",
+    "1113": "0x06B3",
+    "852": "0x04D1",
+    "737": "0x03EC",
+    "132": "0x0071",
+    "728": "0x03DE",
+    "1300": "0x079C",
+    "1159": "0x06EC",
+    "1412": "0x081D",
+    "37": "0x0357",
+    "61": "0x039A",
+    "144": "0x0083",
+    "1148": "0x06DF",
+    "1319": "0x07B4",
+    "932": "0x0592",
+    "1257": "0x0764",
+    "759": "0x041E",
+    "1002": "0x0637",
+    "842": "0x04BE",
+    "995": "0x0625",
+    "1106": "0x06A9",
+    "783": "0x044B",
+    "897": "0x053B",
+    "545": "0x0279",
+    "1308": "0x07A6",
+    "1118": "0x06B9",
+    "155": "0x008F",
+    "580": "0x02BD",
+    "967": "0x05E7",
+    "1134": "0x06CD",
+    "721": "0x03CC",
+    "1141": "0x06D6",
+    "1474": "0x0819",
+    "936": "0x059C",
+    "44": "0x0369",
+    "898": "0x053E",
+    "679": "0x0374",
+    "196": "0x00B0",
+    "596": "0x02DA",
+    "1454": "0x0848",
+    "745": "0x0404",
+    "558": "0x0292",
+    "767": "0x0433",
+    "1175": "0x06FE",
+    "554": "0x028B",
+    "1084": "0x0690",
+    "1213": "0x072A",
+    "268": "0x010C",
+    "1318": "0x07B2",
+    "701": "0x03A0",
+    "1372": "0x07F3",
+    "1460": "0x084E",
+    "985": "0x060C",
+    "1360": "0x07E4",
+    "489": "0x0219",
+    "559": "0x0295",
+    "42": "0x0364",
+    "837": "0x04B3",
+    "780": "0x0447",
+    "345": "0x016C",
+    "857": "0x04E0",
+    "1044": "0x0661",
+    "741": "0x03F8",
+    "1217": "0x072E",
+    "130": "0x006D",
+    "1146": "0x06DD",
+    "1256": "0x0763",
+    "194": "0x00AA",
+    "92": "0x0037",
+    "1381": "0x07FC",
+    "1096": "0x069E",
+    "248": "0x00FA",
+    "36": "0x0355",
+    "1078": "0x0689",
+    "1392": "0x0809",
+    "1317": "0x07B1",
+    "1228": "0x073E",
+    "414": "0x01BD",
+    "1343": "0x07D0",
+    "696": "0x0391",
+    "94": "0x003C",
+    "1265": "0x076F",
+    "1154": "0x06E7",
+    "1209": "0x0726",
+    "1327": "0x07BD",
+    "695": "0x038E",
+    "583": "0x02C1",
+    "1445": "0x083F",
+    "1074": "0x0683",
+    "612": "0x0301",
+    "998": "0x062D",
+    "734": "0x03E3",
+    "1341": "0x07CE",
+    "654": "0x0341",
+    "97": "0x0045",
+    "909": "0x0559",
+    "1049": "0x0668",
+    "1310": "0x07A9",
+    "456": "0x01EC",
+    "1109": "0x06AC",
+    "1422": "0x0828",
+    "984": "0x060A",
+    "1288": "0x078B",
+    "742": "0x03FB",
+    "1262": "0x076C",
+    "161": "0x00A1",
+    "547": "0x027D",
+    "920": "0x0574",
+    "947": "0x05B8",
+    "978": "0x05FF",
+    "924": "0x057E",
+    "568": "0x02A3",
+    "991": "0x061B",
+    "1032": "0x0654",
+    "1208": "0x0724",
+    "1383": "0x0800",
+    "1060": "0x0673",
+    "1321": "0x07B6",
+    "354": "0x0178",
+    "1003": "0x0639",
+    "883": "0x0518",
+    "124": "0x0065",
+    "972": "0x05F5",
+    "1121": "0x06BC",
+    "355": "0x017B",
+    "1054": "0x066D",
+    "890": "0x052A",
+    "1363": "0x07E7",
+    "267": "0x010A",
+    "573": "0x02AD",
+    "740": "0x03F5",
+    "791": "0x0460",
+    "1373": "0x07F4",
+    "1312": "0x07AB",
+    "1358": "0x07E2",
+    "39": "0x035C",
+    "228": "0x00D2",
+    "1292": "0x0792",
+    "1248": "0x075A",
+    "1247": "0x0758",
+    "806": "0x0478",
+    "1001": "0x0634",
+    "1277": "0x077E",
+    "1234": "0x0746",
+    "1404": "0x0815",
+    "584": "0x02C4",
+    "1297": "0x0799",
+    "591": "0x02CE",
+    "67": "0x03AC",
+    "209": "0x00B9",
+    "608": "0x02F8",
+    "1160": "0x06ED",
+    "1289": "0x078C",
+    "259": "0x0105",
+    "43": "0x0366",
+    "579": "0x02BA",
+    "903": "0x054A",
+    "831": "0x04A5",
+    "250": "0x00FE",
+    "757": "0x0418",
+    "578": "0x02B7",
+    "881": "0x0513",
+    "1089": "0x0695",
+    "1380": "0x07FB",
+    "670": "0x0364",
+    "1269": "0x0774",
+    "635": "0x0323",
+    "50": "0x037A",
+    "293": "0x0132",
+    "761": "0x0424",
+    "455": "0x01EA",
+    "1403": "0x0814",
+    "875": "0x0508",
+    "1153": "0x06E4",
+    "965": "0x05E5",
+    "154": "0x008D",
+    "963": "0x05DF",
+    "549": "0x0280",
+    "1469": "0x080A",
+    "687": "0x037F",
+    "1214": "0x072B",
+    "529": "0x025B",
+    "724": "0x03D5",
+    "1011": "0x064E",
+    "439": "0x01D0",
+    "774": "0x043B",
+    "81": "0x0027",
+    "633": "0x0321",
+    "199": "0x00B8",
+    "755": "0x0412",
+    "98": "0x0048",
+    "496": "0x0228",
+    "417": "0x01C2",
+    "1199": "0x0718",
+    "1143": "0x06D9",
+    "1428": "0x082E",
+    "18": "0x0338",
+    "66": "0x03A9",
+    "805": "0x0475",
+    "241": "0x00ED",
+    "435": "0x01CA",
+    "1475": "0x081A",
+    "1459": "0x084D",
+    "1301": "0x079D",
+    "1275": "0x077C",
+    "1139": "0x06D4",
+    "702": "0x03A3",
+    "1315": "0x07AE",
+    "1191": "0x0710",
+    "1368": "0x07EE",
+    "832": "0x04A7",
+    "509": "0x0230",
+    "162": "0x00A3",
+    "1430": "0x0830",
+    "551": "0x0284",
+    "1035": "0x0657",
+    "1094": "0x069C",
+    "760": "0x0421",
+    "1375": "0x07F6",
+    "758": "0x041B",
+    "1110": "0x06AF",
+    "1047": "0x0665",
+    "1216": "0x072D",
+    "552": "0x0287",
+    "730": "0x03E0",
+    "498": "0x022E",
+    "1189": "0x070E",
+    "1201": "0x071A",
+    "1090": "0x0696",
+    "1144": "0x06DA",
+    "1451": "0x0845",
+    "164": "0x00A9",
+    "830": "0x04A3",
+    "847": "0x04CB",
+    "1354": "0x07DE",
+    "905": "0x054F",
+    "1183": "0x0706",
+    "1166": "0x06F3",
+    "686": "0x037C",
+    "621": "0x0309",
+    "797": "0x0468",
+    "473": "0x0201",
+    "1192": "0x0711",
+    "131": "0x0070",
+    "285": "0x0120",
+    "1270": "0x0775",
+    "988": "0x0613",
+    "30": "0x0344",
+    "1180": "0x0703",
+    "1080": "0x068B",
+    "20": "0x033E",
+    "829": "0x04A1",
+    "846": "0x04C8",
+    "57": "0x038E",
+    "11": "0x0326",
+    "239": "0x00E8",
+    "40": "0x035F",
+    "1453": "0x0847",
+    "900": "0x0542",
+    "1348": "0x07D5",
+    "1157": "0x06EA",
+    "911": "0x055E",
+    "1356": "0x07E0",
+    "62": "0x039D",
+    "127": "0x0069",
+    "34": "0x034F",
+    "516": "0x023E",
+    "606": "0x02F2",
+    "860": "0x04E9",
+    "386": "0x01A2",
+    "387": "0x01A5",
+    "1004": "0x063B",
+    "368": "0x0188",
+    "1423": "0x0829",
+    "1116": "0x06B7",
+    "1290": "0x078F",
+    "1367": "0x07ED",
+    "313": "0x0142",
+    "990": "0x0619",
+    "716": "0x03BD",
+    "632": "0x031E",
+    "888": "0x0524",
+    "309": "0x013E",
+    "64": "0x03A3",
+    "993": "0x0620",
+    "1042": "0x065E",
+    "1413": "0x081E",
+    "52": "0x037F",
+    "677": "0x036E",
+    "418": "0x01C4",
+    "1186": "0x070A",
+    "87": "0x0033",
+    "844": "0x04C3",
+    "630": "0x031A",
+    "887": "0x0522",
+    "601": "0x02E6",
+    "83": "0x002D",
+    "1043": "0x0660",
+    "444": "0x01D8",
+    "1371": "0x07F2",
+    "1447": "0x0841",
+    "1038": "0x065A",
+    "749": "0x040B",
+    "1136": "0x06D0",
+    "981": "0x0606",
+    "1129": "0x06C8",
+    "1114": "0x06B4",
+    "895": "0x0536",
+    "1169": "0x06F6",
+    "292": "0x012F",
+    "365": "0x0181",
+    "1449": "0x0843",
+    "385": "0x019F",
+    "163": "0x00A6",
+    "367": "0x0185",
+    "523": "0x024E",
+    "1441": "0x083B",
+    "727": "0x03DB",
+    "1350": "0x07D8",
+    "1241": "0x0750",
+    "443": "0x01D5",
+    "1105": "0x06A8",
+    "55": "0x0388",
+    "1284": "0x0787",
+    "1471": "0x0811",
+    "1172": "0x06FB",
+    "574": "0x02B0",
+    "1039": "0x065B",
+    "438": "0x01CF",
+    "1236": "0x0749",
+    "1225": "0x073B",
+    "1190": "0x070F",
+    "700": "0x039D",
+    "1133": "0x06CC",
+    "1466": "0x0802",
+    "1226": "0x073C",
+    "1068": "0x067D",
+    "1254": "0x0761",
+    "1215": "0x072C",
+    "521": "0x024A",
+    "1031": "0x0652",
+    "289": "0x0128",
+    "1005": "0x063E",
+    "1128": "0x06C6",
+    "1401": "0x0812",
+    "987": "0x0611",
+    "962": "0x05DC",
+    "856": "0x04DD",
+    "483": "0x020B",
+    "917": "0x056D",
+    "320": "0x014D",
+    "969": "0x05EA",
+    "1384": "0x0801",
+    "286": "0x0122",
+    "1041": "0x065D",
+    "486": "0x0213",
+    "1200": "0x0719",
+    "1271": "0x0776",
+    "249": "0x00FC",
+    "776": "0x0441",
+    "1057": "0x0670",
+    "1434": "0x0834",
+    "1239": "0x074E",
+    "682": "0x037A",
+    "218": "0x00C8",
+    "32": "0x034A",
+    "975": "0x05FB",
+    "1255": "0x0762",
+    "663": "0x0352",
+    "1076": "0x0685",
+    "256": "0x0103",
+    "800": "0x0471",
+    "242": "0x00F0",
+    "908": "0x0556",
+    "1261": "0x076A",
+    "1063": "0x0678",
+    "143": "0x0081",
+    "1131": "0x06CA",
+    "198": "0x00B5",
+    "1161": "0x06EE",
+    "93": "0x0039",
+    "598": "0x02E0",
+    "463": "0x01F2",
+    "19": "0x033B",
+    "623": "0x030E",
+    "448": "0x01DF",
+    "929": "0x058B",
+    "781": "0x0449",
+    "1072": "0x0681",
+    "827": "0x049E",
+    "1366": "0x07EA",
+    "880": "0x0511",
+    "862": "0x04ED",
+    "1204": "0x071F",
+    "116": "0x0059",
+    "13": "0x032B",
+    "54": "0x0385",
+    "910": "0x055C",
+    "296": "0x0139",
+    "295": "0x0136",
+    "1245": "0x0754",
+    "297": "0x013B",
+    "1457": "0x084B",
+    "1349": "0x07D6",
+    "957": "0x05CD",
+    "1280": "0x0782",
+    "1067": "0x067C",
+    "858": "0x04E3",
+    "1171": "0x06FA",
+    "1385": "0x0802",
+    "1227": "0x073D",
+    "472": "0x0200",
+    "1425": "0x082B",
+    "980": "0x0603",
+    "157": "0x0095",
+    "996": "0x0627",
+    "843": "0x04C1",
+    "237": "0x00E2",
+    "1362": "0x07E6",
+    "1442": "0x083C",
+    "437": "0x01CC",
+    "146": "0x0086",
+    "397": "0x01AE",
+    "1058": "0x0671",
+    "642": "0x032D",
+    "1410": "0x081B",
+    "657": "0x034A",
+    "1276": "0x077D",
+    "353": "0x0175",
+    "821": "0x0495",
+    "722": "0x03CF",
+    "370": "0x018C",
+    "16": "0x0333",
+    "1185": "0x0708",
+    "1294": "0x0794",
+    "1274": "0x077A",
+    "561": "0x0299",
+    "210": "0x00BB",
+    "894": "0x0534",
+    "930": "0x058E",
+    "1138": "0x06D2",
+    "604": "0x02EF",
+    "1249": "0x075B",
+    "1151": "0x06E2",
+    "287": "0x0124",
+    "750": "0x040C",
+    "1135": "0x06CE",
+    "864": "0x04F0",
+    "1221": "0x0735",
+    "812": "0x0487",
+    "567": "0x02A0",
+    "1162": "0x06EF",
+    "236": "0x00E0",
+    "823": "0x049B",
+    "1120": "0x06BB",
+    "1266": "0x0770",
+    "639": "0x0326",
+    "321": "0x0150",
+    "352": "0x0174",
+    "12": "0x0328",
+    "1359": "0x07E3",
+    "294": "0x0134",
+    "410": "0x01B7",
+    "494": "0x0225",
+    "220": "0x00CC",
+    "60": "0x0397",
+    "913": "0x0563",
+    "240": "0x00EB",
+    "1409": "0x081A",
+    "85": "0x0031",
+    "940": "0x05A6",
+    "982": "0x0608",
+    "1194": "0x0713",
+    "238": "0x00E5",
+    "95": "0x003F",
+    "902": "0x0548",
+    "735": "0x03E6",
+    "698": "0x0397",
+    "47": "0x0371",
+    "914": "0x0566",
+    "518": "0x0244",
+    "243": "0x00F2",
+    "1407": "0x0818",
+    "1155": "0x06E8",
+    "331": "0x015E",
+    "926": "0x0584",
+    "525": "0x0254",
+    "964": "0x05E2",
+    "1073": "0x0682",
+    "65": "0x03A6",
+    "1085": "0x0691",
+    "1147": "0x06DE",
+    "853": "0x04D4",
+    "1339": "0x07CC",
+    "308": "0x013C",
+    "1452": "0x0846",
+    "511": "0x0234",
+    "1050": "0x0669",
+    "557": "0x028F",
+    "1232": "0x0744",
+    "221": "0x00CD",
+    "1337": "0x07CA",
+    "1220": "0x0734",
+    "1282": "0x0784",
+    "405": "0x01B4",
+    "153": "0x008B",
+    "1196": "0x0715",
+    "937": "0x059F",
+    "666": "0x035A",
+    "1287": "0x078A",
+    "58": "0x0391",
+    "475": "0x0204",
+    "1406": "0x0817",
+    "1314": "0x07AD",
+    "17": "0x0335",
+    "1111": "0x06B0",
+    "1296": "0x0798",
+    "1223": "0x0738",
+    "944": "0x05B0",
+    "1170": "0x06F9",
+    "1210": "0x0727",
+    "546": "0x027C",
+    "992": "0x061D",
+    "640": "0x0328",
+    "627": "0x0314",
+    "1377": "0x07F8",
+    "1112": "0x06B2",
+    "1345": "0x07D2",
+    "1259": "0x0766",
+    "613": "0x0304",
+    "569": "0x02A6",
+    "1302": "0x079E",
+    "262": "0x0108",
+    "743": "0x03FE",
+    "1435": "0x0835",
+    "1045": "0x0662",
+    "859": "0x04E6",
+    "1376": "0x07F7",
+    "380": "0x0198",
+    "371": "0x018D",
+    "808": "0x047B",
+    "1066": "0x067B",
+    "1398": "0x080F",
+    "1322": "0x07B7",
+    "704": "0x03A9",
+    "156": "0x0092",
+    "344": "0x016A",
+    "707": "0x03AF",
+    "1132": "0x06CB",
+    "828": "0x049F",
+    "1421": "0x0827",
+    "705": "0x03AC",
+    "1448": "0x0842",
+    "1242": "0x0751",
+    "1305": "0x07A3",
+    "1386": "0x0803",
+    "1347": "0x07D4",
+    "1408": "0x0819",
+    "63": "0x03A0",
+    "1443": "0x083D",
+    "951": "0x05C1",
+    "527": "0x0257",
+    "291": "0x012D",
+    "542": "0x0272",
+    "113": "0x0054",
+    "1178": "0x0701",
+    "1379": "0x07FA",
+    "665": "0x0357",
+    "485": "0x0210",
+    "1344": "0x07D1",
+    "1340": "0x07CD",
+    "377": "0x0196",
+    "748": "0x040A",
+    "434": "0x01C7",
+    "1071": "0x0680",
+    "1100": "0x06A2",
+    "714": "0x03B7",
+    "1243": "0x0752",
+    "1206": "0x0722",
+    "971": "0x05F2",
+    "943": "0x05AE",
+    "134": "0x0074",
+    "255": "0x0100",
+    "366": "0x0183",
+    "1046": "0x0664",
+    "1388": "0x0805",
+    "747": "0x0407",
+    "1211": "0x0728",
+    "338": "0x0166",
+    "810": "0x0481",
+    "1415": "0x0821",
+    "863": "0x04EE",
+    "68": "0x03AF",
+    "1320": "0x07B5",
+    "1097": "0x069F",
+    "59": "0x0394",
+    "1352": "0x07DB",
+    "912": "0x0560",
+    "865": "0x04F1",
+    "369": "0x018A",
+    "571": "0x02A7",
+    "572": "0x02AA",
+    "1291": "0x0790",
+    "314": "0x0145",
+    "1101": "0x06A4",
+    "768": "0x0436",
+    "53": "0x0382",
+    "158": "0x0098",
+    "1273": "0x0778",
+    "112": "0x0053",
+    "70": "0x03B2",
+    "1370": "0x07F1",
+    "317": "0x0147",
+    "38": "0x035A",
+    "1307": "0x07A5",
+    "1258": "0x0765",
+    "1070": "0x067F",
+    "1285": "0x0788",
+    "918": "0x0570",
+    "1158": "0x06EB",
+    "841": "0x04BC",
+    "159": "0x009B",
+    "1387": "0x0804",
+    "1137": "0x06D1",
+    "813": "0x048A",
+    "820": "0x0492",
+    "1250": "0x075C",
+    "290": "0x012B",
+    "1055": "0x066E",
+    "1437": "0x0837",
+    "1168": "0x06F5",
+    "1086": "0x0692",
+    "697": "0x0394",
+    "923": "0x057C",
+    "941": "0x05A9",
+    "644": "0x0333",
+    "764": "0x042D",
+    "336": "0x0162",
+    "121": "0x0061",
+    "1324": "0x07B9",
+    "45": "0x036C",
+    "1167": "0x06F4",
+    "1309": "0x07A8",
+    "739": "0x03F2",
+    "1212": "0x0729",
+    "1197": "0x0716",
+    "1091": "0x0697",
+    "84": "0x0030",
+    "1203": "0x071C",
+    "1056": "0x066F",
+    "141": "0x007F",
+    "1077": "0x0686",
+    "1119": "0x06BA",
+    "1331": "0x07C1",
+    "1299": "0x079B",
+    "1394": "0x080B",
+    "1420": "0x0826",
+    "968": "0x05E9",
+    "874": "0x0506",
+    "491": "0x021E",
+    "1278": "0x0780",
+    "1092": "0x0698",
+    "997": "0x062A",
+    "1124": "0x06C1",
+    "879": "0x0510",
+    "1286": "0x0789",
+    "488": "0x0216",
+    "1334": "0x07C4",
+    "961": "0x05D9",
+    "274": "0x0114",
+    "655": "0x0344",
+    "756": "0x0415",
+    "854": "0x04D7",
+    "537": "0x0268",
+    "1034": "0x0656",
+    "904": "0x054C",
+    "986": "0x060F",
+    "544": "0x0276",
+    "401": "0x01B3",
+    "1414": "0x0820",
+    "1389": "0x0806",
+    "938": "0x05A2",
+    "1429": "0x082F",
+    "46": "0x036E",
+    "1095": "0x069D",
+    "1065": "0x067A",
+    "948": "0x05BA",
+    "80": "0x0024",
+    "1230": "0x0741",
+    "160": "0x009E",
+    "219": "0x00CA",
+    "6": "0x0324",
+    "1432": "0x0832",
+    "1202": "0x071B",
+    "1332": "0x07C2",
+    "672": "0x0369",
+    "530": "0x025E",
+    "1233": "0x0745",
+    "871": "0x0502",
+    "885": "0x051D",
+    "319": "0x014C",
+    "1037": "0x0659",
+    "974": "0x05F8",
+    "703": "0x03A6",
+    "513": "0x023A",
+    "882": "0x0516",
+    "1416": "0x0822",
+    "763": "0x042A",
+    "465": "0x01F9",
+    "1431": "0x0831",
+    "35": "0x0352",
+    "622": "0x030C",
+    "594": "0x02D7",
+    "631": "0x031C",
+    "916": "0x056A",
+    "689": "0x0385",
+    "86": "0x0032",
+    "1400": "0x0811",
+    "789": "0x045A",
+    "599": "0x02E3",
+    "906": "0x0552",
+    "891": "0x052C",
+    "688": "0x0382",
+    "1374": "0x07F5",
+    "1369": "0x07F0",
+    "1059": "0x0672",
+    "1426": "0x082C",
+    "611": "0x02FE",
+    "628": "0x0316",
+    "641": "0x032B",
+    "1102": "0x06A5",
+    "111": "0x0052",
+    "490": "0x021C",
+    "1165": "0x06F2",
+    "245": "0x00F5",
+    "214": "0x00C3",
+    "811": "0x0484",
+    "1365": "0x07E9",
+    "927": "0x0586",
+    "1325": "0x07BA",
+    "452": "0x01E3",
+    "833": "0x04A9",
+    "1122": "0x06BD",
+    "1252": "0x075E",
+    "597": "0x02DD",
+    "1198": "0x0717",
+    "462": "0x01F1",
+    "1263": "0x076D",
+    "1108": "0x06AB",
+    "1393": "0x080A",
+    "133": "0x0072",
+    "281": "0x0118",
+    "676": "0x036C",
+    "653": "0x033E",
+    "720": "0x03C9",
+    "1152": "0x06E3",
+    "487": "0x0215",
+    "661": "0x034F",
+    "122": "0x0062",
+    "977": "0x05FE",
+    "1238": "0x074C",
+    "956": "0x05CA",
+    "1218": "0x0731",
+    "1378": "0x07F9",
+    "1246": "0x0757",
+    "364": "0x017F",
+    "1053": "0x066C",
+    "29": "0x0341",
+    "540": "0x026F",
+    "1468": "0x0809",
+    "1444": "0x083E",
+    "1107": "0x06AA",
+    "1397": "0x080E",
+    "1272": "0x0777",
+    "958": "0x05D0",
+    "566": "0x029D",
+    "522": "0x024B",
+    "99": "0x0049",
+    "861": "0x04EC",
+    "1062": "0x0677",
+    "1030": "0x0651",
+    "1342": "0x07CF",
+    "41": "0x0361",
+    "921": "0x0577",
+    "120": "0x005E",
+    "651": "0x033B",
+    "497": "0x022B",
+    "33": "0x034D",
+    "979": "0x0601",
+    "531": "0x0261",
+    "1351": "0x07DA",
+    "1411": "0x081C",
+    "1130": "0x06C9",
+    "585": "0x02C7",
+    "939": "0x05A4",
+    "1093": "0x069A",
+    "699": "0x039A",
+    "280": "0x0115",
+    "512": "0x0237",
+    "556": "0x028E",
+    "524": "0x0251",
+    "1323": "0x07B8",
+    "1440": "0x083A",
+    "1182": "0x0705",
+    "229": "0x00D4",
+    "785": "0x044E",
+    "1219": "0x0732",
+    "901": "0x0545",
+    "234": "0x00DB",
+    "31": "0x0347",
+    "876": "0x050A",
+    "1306": "0x07A4",
+    "799": "0x046E",
+    "1329": "0x07BF",
+    "690": "0x0388",
+    "1205": "0x0720",
+    "1028": "0x064F",
+    "394": "0x01A9",
+    "650": "0x0338",
+    "999": "0x062F",
+    "1164": "0x06F1",
+    "1099": "0x06A1",
+    "1391": "0x0808",
+    "471": "0x01FF",
+    "868": "0x04FC",
+    "919": "0x0572",
+    "1395": "0x080C",
+    "114": "0x0056",
+    "1125": "0x06C2",
+    "550": "0x0281",
+    "804": "0x0474",
+    "770": "0x0438",
+    "412": "0x01BA",
+    "1244": "0x0753",
+    "1450": "0x0844",
+    "889": "0x0527",
+    "1293": "0x0793",
+    "560": "0x0298",
+    "233": "0x00D8",
+    "100": "0x004A",
+    "629": "0x0318",
+    "1311": "0x07AA",
+    "1184": "0x0707",
+    "1145": "0x06DC",
+    "1181": "0x0704",
+    "535": "0x0264",
+    "1456": "0x084A",
+    "1336": "0x07C8",
+    "668": "0x035F",
+    "928": "0x0588",
+    "492": "0x021F",
+    "415": "0x01BF",
+    "1390": "0x0807",
+    "327": "0x0157",
+    "123": "0x0063",
+    "1052": "0x066B",
+    "270": "0x010F",
+    "1156": "0x06E9",
+    "814": "0x048D",
+    "528": "0x0258",
+    "592": "0x02D1",
+    "1079": "0x068A",
+    "339": "0x0167",
+    "664": "0x0355",
+    "1330": "0x07C0",
+    "710": "0x03B4",
+    "1087": "0x0693",
+    "1417": "0x0823",
+    "777": "0x0444",
+    "1010": "0x064B",
+    "725": "0x03D8",
+    "1465": "0x0801",
+    "915": "0x0568",
+    "1335": "0x07C7",
+    "1396": "0x080D",
+    "136": "0x0077",
+    "1033": "0x0655",
+    "347": "0x016F",
+    "694": "0x038B",
+    "1382": "0x07FF",
+    "950": "0x05BF",
+    "117": "0x005A",
+    "453": "0x01E5",
+    "215": "0x00C6",
+    "744": "0x0401",
+    "602": "0x02E9",
+    "358": "0x017D",
+    "538": "0x026B",
+    "493": "0x0222",
+    "140": "0x007C",
+    "762": "0x0427",
+    "56": "0x038B",
+    "736": "0x03E9",
+    "577": "0x02B4",
+    "603": "0x02EC",
+    "790": "0x045D",
+    "1188": "0x070D",
+    "1295": "0x0796",
+    "460": "0x01EE",
+    "1267": "0x0772",
+    "934": "0x0598",
+    "510": "0x0231",
+    "447": "0x01DC",
+    "1000": "0x0631",
+    "197": "0x00B3",
+    "212": "0x00C1",
+    "782": "0x044A",
+    "1405": "0x0816",
+    "445": "0x01D9",
+    "1251": "0x075D",
+    "1098": "0x06A0",
+    "1279": "0x0781",
+    "14": "0x032D",
+    "1082": "0x068D",
+    "325": "0x0152",
+    "1051": "0x066A",
+    "1472": "0x0812",
+    "101": "0x004B",
+    "373": "0x0191",
+    "983": "0x0609",
+    "474": "0x0202",
+    "1419": "0x0825",
+    "1313": "0x07AC",
+    "845": "0x04C5",
+    "717": "0x03C0",
+    "1328": "0x07BE",
+    "893": "0x0531",
+    "1029": "0x0650",
+    "1260": "0x0769",
+    "1150": "0x06E1",
+    "1126": "0x06C4",
+    "1048": "0x0666",
+    "78": "0x001F",
+    "461": "0x01F0",
+    "1427": "0x082D",
+    "709": "0x03B3",
+    "658": "0x034D",
+    "79": "0x0021",
+    "288": "0x0126",
+    "754": "0x040F",
+    "1222": "0x0736",
+    "553": "0x028A",
+    "384": "0x019D",
+    "1123": "0x06BE",
+    "765": "0x0430",
+    "873": "0x0505",
+    "719": "0x03C6",
+    "110": "0x004F",
+    "907": "0x0554",
+    "1117": "0x06B8",
+    "643": "0x0330",
+    "834": "0x04AC",
+    "376": "0x0193",
+    "1281": "0x0783",
+    "409": "0x01B5",
+    "678": "0x0371",
+    "645": "0x0335",
+    "840": "0x04BA",
+    "718": "0x03C3",
+    "786": "0x0451",
+    "638": "0x0324",
+    "381": "0x019B",
+    "1064": "0x0679",
+    "318": "0x014A",
+    "1177": "0x0700",
+    "1229": "0x0740",
+    "729": "0x03DF",
+    "775": "0x043E",
+    "896": "0x0538",
+    "1402": "0x0813",
+    "1036": "0x0658",
+    "1231": "0x0742",
+    "656": "0x0347",
+    "787": "0x0454",
+    "1433": "0x0833",
+    "49": "0x0377",
+    "994": "0x0623",
+    "949": "0x05BD",
+    "960": "0x05D6",
+    "1140": "0x06D5",
+    "519": "0x0247",
+    "247": "0x00F9",
+    "246": "0x00F7",
+    "224": "0x00D0",
+    "671": "0x0366",
+    "892": "0x052E",
+    "715": "0x03BA",
+    "899": "0x0540",
+    "536": "0x0265",
+    "282": "0x011B",
+    "1195": "0x0714",
+    "1338": "0x07CB",
+    "1316": "0x07B0",
+    "945": "0x05B3",
+    "284": "0x011E",
+    "484": "0x020D",
+    "395": "0x01AC",
+    "839": "0x04B7",
+    "855": "0x04DA",
+    "708": "0x03B2",
+    "877": "0x050D",
+    "669": "0x0361",
+    "1268": "0x0773",
+    "1333": "0x07C3",
+    "335": "0x0160",
+    "1446": "0x0840",
+    "1399": "0x0810",
+    "1179": "0x0702",
+    "326": "0x0154",
+    "1283": "0x0786",
+    "935": "0x059A",
+    "1304": "0x07A2",
+    "1364": "0x07E8",
+    "870": "0x04FF",
+    "495": "0x0227",
+    "681": "0x0377",
+    "625": "0x0312",
+    "1174": "0x06FD",
+    "51": "0x037C",
+    "624": "0x030F",
+    "575": "0x02B3",
+    "346": "0x016E",
+    "1187": "0x070C",
+    "1458": "0x084C",
+    "454": "0x01E7",
+    "348": "0x0172",
+    "1040": "0x065C",
+    "723": "0x03D2",
+    "1235": "0x0748",
+    "1075": "0x0684",
+    "195": "0x00AD",
+    "543": "0x0273",
+    "310": "0x0140",
+    "884": "0x051A",
+    "1176": "0x06FF",
+    "390": "0x01A7",
+    "925": "0x0581",
+    "322": "0x0151",
+    "836": "0x04B0",
+    "440": "0x01D1",
+    "1088": "0x0694",
+    "235": "0x00DD",
+    "922": "0x057A",
+    "1353": "0x07DC",
+    "441": "0x01D2",
+    "1361": "0x07E5",
+    "788": "0x0457",
+    "1083": "0x068E",
+    "667": "0x035C",
+    "1346": "0x07D3",
+    "581": "0x02C0",
+    "959": "0x05D3",
+    "867": "0x04F9",
+    "273": "0x0111",
+    "798": "0x046B",
+    "449": "0x01E0",
+    "539": "0x026E",
+    "1264": "0x076E",
+    "1081": "0x068C"
+  },
+  "variables": {
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8BE",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_PTR_DP": {
+      "name": "PSG_MUSIC_PTR_DP",
+      "address": "0x001E",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "TMPLEFT": {
+      "name": "TMPLEFT",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_START_DP": {
+      "name": "PSG_MUSIC_START_DP",
+      "address": "0x0020",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8B0",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_FRAME_COUNT": {
+      "name": "PSG_FRAME_COUNT",
+      "address": "0xC8A4",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_IS_PLAYING": {
+      "name": "PSG_IS_PLAYING",
+      "address": "0xC8A2",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg5": {
+      "name": "arg5",
+      "address": "0xC8C6",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_FRAME_COUNT_DP": {
+      "name": "PSG_FRAME_COUNT_DP",
+      "address": "0x0024",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "PSG_MUSIC_ACTIVE_DP": {
+      "name": "PSG_MUSIC_ACTIVE_DP",
+      "address": "0x0023",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC8A7",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_ACTIVE": {
+      "name": "PSG_MUSIC_ACTIVE",
+      "address": "0xC8A3",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC8AE",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8BC",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC894",
+      "size": 10,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_START": {
+      "name": "PSG_MUSIC_START",
+      "address": "0xC8A0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC890",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8C4",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8C0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_MUSIC_PTR": {
+      "name": "PSG_MUSIC_PTR",
+      "address": "0xC89E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC893",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC88E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_DELAY_FRAMES_DP": {
+      "name": "PSG_DELAY_FRAMES_DP",
+      "address": "0x0025",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "playing": {
+      "name": "playing",
+      "address": "0xC8BA",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8B2",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8B1",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC892",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8C2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC8AF",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "PSG_IS_PLAYING_DP": {
+      "name": "PSG_IS_PLAYING_DP",
+      "address": "0x0022",
+      "size": 2,
+      "type": "audio",
+      "declLine": null
+    },
+    "PSG_DELAY_FRAMES": {
+      "name": "PSG_DELAY_FRAMES",
+      "address": "0xC8A5",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "BEEP_FRAMES_LEFT": {
+      "name": "BEEP_FRAMES_LEFT",
+      "address": "0xC8AD",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC891",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "SFX_ACTIVE": {
+      "name": "SFX_ACTIVE",
+      "address": "0xC8A6",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "version": "1.0",
+  "name": "platform_down",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "platform_block",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -38, "y": 18, "z": 0},
+            {"x":  38, "y": 18, "z": 0},
+            {"x":  38, "y": 28, "z": 0},
+            {"x": -38, "y": 28, "z": 0},
+            {"x": -38, "y": 18, "z": 0}
+          ]
+        },
+        {
+          "name": "platform_bevel",
+          "intensity": 75,
+          "closed": false,
+          "points": [
+            {"x": -35, "y": 21, "z": 0},
+            {"x":  35, "y": 21, "z": 0}
+          ]
+        },
+        {
+          "name": "support_stub_left",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -7, "y": 28, "z": 0},
+            {"x": -7, "y": 38, "z": 0}
+          ]
+        },
+        {
+          "name": "support_stub_right",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": 7, "y": 28, "z": 0},
+            {"x": 7, "y": 38, "z": 0}
+          ]
+        },
+        {
+          "name": "base",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -12, "y": 38, "z": 0},
+            {"x":  12, "y": 38, "z": 0}
+          ]
+        },
+        {
+          "name": "crack_left",
+          "intensity": 50,
+          "closed": false,
+          "points": [
+            {"x": -7, "y": 2, "z": 0},
+            {"x": -9, "y": 10, "z": 0},
+            {"x": -6, "y": 18, "z": 0}
+          ]
+        },
+        {
+          "name": "crack_right",
+          "intensity": 50,
+          "closed": false,
+          "points": [
+            {"x": 7, "y": 2, "z": 0},
+            {"x": 9, "y": 10, "z": 0},
+            {"x": 6, "y": 18, "z": 0}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

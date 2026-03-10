@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "name": "heartbeat",
+  "category": "custom",
+  "duration_ms": 280,
+
+  "oscillator": {
+    "frequency": 110,
+    "channel": 0,
+    "duty": 50
+  },
+
+  "envelope": {
+    "attack": 0,
+    "decay": 80,
+    "sustain": 7,
+    "release": 160,
+    "peak": 15
+  },
+
+  "pitch": {
+    "enabled": false,
+    "start_mult": 1.0,
+    "end_mult": 1.0,
+    "curve": 0
+  },
+
+  "noise": {
+    "enabled": false,
+    "period": 15,
+    "volume": 0,
+    "decay_ms": 100
+  },
+
+  "modulation": {
+    "arpeggio": true,
+    "arpeggio_notes": [0, 5],
+    "arpeggio_speed": 100,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 8
+  }
+}

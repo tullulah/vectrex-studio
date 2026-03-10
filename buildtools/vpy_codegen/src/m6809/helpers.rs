@@ -43,6 +43,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
     ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     ram.allocate("TEMP_YX", 2, "Temporary Y/X coordinate storage");
+    ram.allocate("BTN_PREV_STATE", 1, "Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4");
+    ram.allocate("BTN_RAW", 1, "Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern");
     
     // Conditional variables based on usage
     if needed.contains("PRINT_NUMBER") {
@@ -72,12 +74,14 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("DRAW_RECT_INTENSITY", 1, "Rectangle intensity");
     }
     
+    // DRAW_VEC_INTENSITY always needed: SET_INTENSITY writes to it unconditionally
+    ram.allocate("DRAW_VEC_INTENSITY", 1, "Vector intensity override (0=use vector data)");
+
     // DRAW_VECTOR / DRAW_VECTOR_EX variables (CRITICAL - MISSING!)
     if needed.contains("DRAW_VECTOR") || needed.contains("DRAW_VECTOR_EX") {
         ram.allocate("DRAW_VEC_X_HI", 1, "Vector draw X high byte (16-bit screen_x)");
         ram.allocate("DRAW_VEC_X", 1, "Vector draw X offset");
         ram.allocate("DRAW_VEC_Y", 1, "Vector draw Y offset");
-        ram.allocate("DRAW_VEC_INTENSITY", 1, "Vector intensity override (0=use vector data)");
         
         // CRITICAL FIX: Add padding to prevent collision with TEMP_YX (usually allocated at offset 6)
         ram.allocate("MIRROR_PAD", 16, "Safety padding to prevent MIRROR flag corruption");
@@ -104,6 +108,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         || needed.contains("UPDATE_LEVEL_RUNTIME")
     {
         ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level header");
+        ram.allocate("LEVEL_LOADED", 1, "Level loaded flag (0=not loaded, 1=loaded)");
         // Legacy tile-based vars (kept for backward compat / GET_LEVEL_WIDTH etc.)
         ram.allocate("LEVEL_WIDTH", 1, "Level width (legacy tile API)");
         ram.allocate("LEVEL_HEIGHT", 1, "Level height (legacy tile API)");
@@ -120,6 +125,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_GP_ROM_PTR", 2, "GP layer ROM pointer");
         ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");
         ram.allocate("LEVEL_GP_PTR", 2, "GP active pointer (RAM buffer after LOAD_LEVEL)");
+        ram.allocate("LEVEL_BANK", 1, "Bank ID for current level (for multibank)");
         // SHOW_LEVEL_RUNTIME draw temps (shared with DRAW_VECTOR if not already allocated)
         if !needed.contains("DRAW_VECTOR") && !needed.contains("DRAW_VECTOR_EX") {
             ram.allocate("DRAW_VEC_X_HI", 1, "SHOW_LEVEL: vector draw X high byte (16-bit)");
@@ -180,6 +186,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate_fixed("PSG_MUSIC_BANK", 0xCBF2, 1, "PSG music bank ID (for multibank)");
         ram.allocate_fixed("SFX_PTR", 0xCBF3, 2, "SFX data pointer");
         ram.allocate_fixed("SFX_ACTIVE", 0xCBF5, 1, "SFX active flag");
+        ram.allocate_fixed("SFX_BANK", 0xCBF6, 1, "SFX bank ID (for multibank)");
     }
 
     if needed.contains("BEEP") {
@@ -642,7 +649,7 @@ PMr_start_new:\n\
         LDA #$D0\n\
         TFR A,DP                ; Set DP=$D0 for Sound_Byte\n\
         LDA #7                  ; PSG reg 7 = Mixer\n\
-        LDB #$FF                ; All channels disabled\n\
+        LDB #$3F                ; All channels disabled (bits 0-5 only; bits 6-7=0=IOA/IOB input!)\n\
         JSR Sound_Byte\n\
         LDA #8                  ; PSG reg 8 = Volume channel A\n\
         LDB #0\n\
@@ -676,7 +683,6 @@ PMr_done:\n\
         BEQ PSG_update_done     ; Not playing, exit\n\
         \n\
         LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)\n\
-        BEQ PSG_update_done     ; No music loaded\n\
         \n\
         ; Read frame count byte (number of register writes)\n\
         LDB ,X+\n\
@@ -816,12 +822,10 @@ fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
         \n\
         ; Delay just reached zero, X points to count byte already\n\
         LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)\n\
-        BEQ AU_SKIP_MUSIC       ; Skip if null\n\
         BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count\n\
         \n\
         AU_MUSIC_READ:\n\
         LDX >PSG_MUSIC_PTR      ; Load music pointer\n\
-        BEQ AU_SKIP_MUSIC       ; Skip if null\n\
         \n\
         ; Check if we need to read delay or we're ready for count\n\
         ; PSG_DELAY_FRAMES just reached 0, so we read delay byte first\n\
@@ -883,8 +887,22 @@ fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
         AU_UPDATE_SFX:\n\
         LDA >SFX_ACTIVE         ; Check if SFX is active\n\
         BEQ AU_DONE             ; Skip if not active\n\
-        \n\
-        JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)\n\
+        \n"
+    );
+
+    // Multibank SFX: switch to SFX bank before reading SFX data
+    if is_multibank {
+        asm.push_str(
+            "        ; MULTIBANK: Switch to SFX bank before reading SFX data\n\
+            LDA >SFX_BANK           ; Get SFX bank ID\n\
+            STA >CURRENT_ROM_BANK   ; Update RAM tracker\n\
+            STA $DF00               ; Switch bank hardware register\n\
+            \n"
+        );
+    }
+
+    asm.push_str(
+        "        JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)\n\
         \n\
         AU_DONE:\n"
     );
@@ -913,18 +931,18 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
         ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
             ; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing\n\
-            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,\n\
-            ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (register $02),\n\
-            ; setting PB0 as an input and breaking the X/Y integrator mux completely.\n\
-            ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_SET_INTENSITY\n\
-DSWM_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
+            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates\n\
+            ; VIA Port B through states $05->$04->$01 which resets the analog hardware\n\
+            ; (zero-reference sequence) and would disrupt the beam position mid-drawing.\n\
+            ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
+            LDA ,X+                 ; Read per-path intensity from vector data\n\
 DSWM_SET_INTENSITY:\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
+            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
+            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            LDA #$04\n\
+            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            LDA #$01\n\
+            STA >$D000              ; Port B=$01: restore normal mux\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -964,7 +982,7 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; Timing setup\n\
+            ; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
@@ -1017,13 +1035,8 @@ DSWM_NO_NEGATE_DX:\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Check intensity override (same logic as start)\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_NEXT_SET_INTENSITY\n\
-DSWM_NEXT_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
+            ; Read per-path intensity from vector data\n\
+            LDA ,X+                 ; Read intensity from vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
             PSHS A\n\
             LDB ,X+                 ; y_start\n\
@@ -1040,7 +1053,12 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, avoids DDRB corruption)\n\
+            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
+            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            LDA #$04\n\
+            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            LDA #$01\n\
+            STA >$D000              ; Port B=$01: restore normal mux\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1068,6 +1086,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
+            ; T1 fixed at $7F (constant scale; brightness set via $C832 above)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\

@@ -18,7 +18,12 @@ Both backends share the same VPy language input, but differ in architecture, cap
 
 **Location:** `core/src/codegen.rs`, `core/src/lexer.rs`, `core/src/parser.rs`
 **CLI binary:** `vectrexc`
-**Status:** ✅ Stable
+**Status:** ⚠️ DEPRECATED — use Buildtools for all new projects
+
+> **Deprecation notice (v0.2.0):** The Core compiler is in maintenance mode and will
+> not receive new features. All active development targets the Buildtools pipeline.
+> Migrate existing projects by adding a `.vpyproj` file and switching the IDE backend
+> selector to **Buildtools (New)**.
 
 ### What it does
 
@@ -89,11 +94,11 @@ The assembler is built-in (no lwasm dependency). The LSP server (`core/src/lsp.r
 
 ---
 
-## Backend 2: Buildtools (New)
+## Backend 2: Buildtools (Active)
 
 **Location:** `buildtools/` (one Rust crate per phase)
-**CLI binary:** `vectrexc` (buildtools mode) via `vpy_cli`
-**Status:** ⚠️ Partial — multibank works, some edge cases remain
+**CLI binary:** `vpy_cli`
+**Status:** ✅ Active — recommended for all new projects
 
 ### Pipeline
 
@@ -114,17 +119,19 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 ### What works
 
 - Full 9-phase pipeline runs end-to-end
-- Multibank ROM generation (up to 4MB via META directives)
+- **4-bank multibank ROM** (4×16 KB = 64 KB) via `META ROM_TOTAL_SIZE`/`ROM_BANK_SIZE`
+- All builtins in banked mode: `DRAW_VECTOR`, `SHOW_LEVEL`, `UPDATE_LEVEL`, `PLAY_SFX`
 - PDB debug symbol generation (Phase 9)
 - ORG directive and two-pass assembly in `vpy_assembler`
 - Bank allocation with call graph analysis
-- ⚠️ **Experimental:** Variable-sized types (`u8`, `i8`, `u16`, `i16`) with type hints — saves ~20% RAM but not all edge cases tested (Phase 5 complete, use with caution)
+- Variable-sized types (`u8`, `i8`, `u16`, `i16`) — saves ~20% RAM; use with caution
 
 ### Known issues
 
-- Some programs that compile correctly with Core don't compile with Buildtools
-- Inter-bank symbol resolution has edge cases
-- Not all addressing modes are fully tested in `vpy_assembler`
+- Cross-bank symbol resolution incomplete for configs larger than 4×16 KB
+- Not all addressing modes fully tested in `vpy_assembler`
+- `DRAW_TO(x,y)` not yet implemented in codegen
+- `SET_SCALE()` not yet implemented
 
 ### Recently Fixed Issues
 
@@ -161,8 +168,11 @@ vpy = ["main.vpy", "player.vpy"]
 In the IDE: open the **Settings** panel and choose **Buildtools (New)** or **Core (Legacy)**. The setting is saved in localStorage and takes effect on the next build.
 
 **Which to use:**
-- Use **Core** if your game fits in 32KB and you need reliability. Output is always a 32KB ROM.
-- Use **Buildtools** if you need multibank support or are working on the compiler itself.
+- Use **Buildtools** for all new projects. It handles both single-bank (32 KB) and
+  multibank (64 KB+) games and is actively maintained.
+- Use **Core** only if you have an existing project that depends on its specific
+  output and haven't had time to migrate yet. Core is deprecated and receives no
+  new features.
 
 ---
 

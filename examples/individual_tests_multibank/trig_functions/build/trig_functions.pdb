@@ -1,0 +1,5881 @@
+{
+  "version": "1.0",
+  "source": "main.vpy",
+  "asm": "trig_functions.asm",
+  "binary": "trig_functions.bin",
+  "entryPoint": "0x01F9",
+  "symbols": {
+    "__Intensity_a": "0x00A5",
+    "DIV16_LOOP": "0x052A",
+    "J1B2_BUILTIN.J1B2_OFF": "0x0064",
+    "J1B4_BUILTIN": "0x0077",
+    "LOOP_BODY": "0x024E",
+    "DCR_after_intensity": "0x00EC",
+    "DIV16_DPOS": "0x0506",
+    "J1B1_BUILTIN": "0x004A",
+    "J1B2_BUILTIN": "0x0059",
+    "IF_NEXT_1": "0x04E9",
+    "VECTREX_PRINT_TEXT": "0x0086",
+    "J1B1_BUILTIN.J1B1_OFF": "0x0055",
+    "DIV16_STORE": "0x054D",
+    "START": "0x01F9",
+    "__Moveto_d": "0x00AD",
+    "DRAW_CIRCLE_RUNTIME": "0x00B7",
+    "DIV16_RCHECK": "0x050E",
+    "COS_TABLE": "0x0659",
+    "J1X_BUILTIN": "0x001A",
+    "J1B4_BUILTIN.J1B4_OFF": "0x0082",
+    "MAIN": "0x0221",
+    "DCR_intensity_5F": "0x00E9",
+    "J1B3_BUILTIN.J1B3_OFF": "0x0073",
+    "CE_3": "0x04CE",
+    "DIV16": "0x04EC",
+    "IF_END_0": "0x04E9",
+    "J1B3_BUILTIN": "0x0068",
+    "__Draw_Line_d": "0x00B2",
+    "DIV16_RPOS": "0x0527",
+    "TAN_TABLE": "0x0759",
+    "DIV16_DONE": "0x0540",
+    "CT_2": "0x04C8",
+    "__Reset0Ref": "0x00AA",
+    "STR_0": "0x0551",
+    "J1Y_BUILTIN": "0x0032",
+    "SIN_TABLE": "0x0559"
+  },
+  "lineMap": {
+    "19": "0x0285",
+    "33": "0x0454",
+    "20": "0x02CF",
+    "35": "0x04D4",
+    "15": "0x0259",
+    "23": "0x0315",
+    "27": "0x0371",
+    "34": "0x0484",
+    "12": "0x0210",
+    "26": "0x034C",
+    "30": "0x0395",
+    "9": "0x020A"
+  },
+  "vpyLineMap": {
+    "0x04D4": {
+      "file": "main.vpy",
+      "address": "0x04D4",
+      "line": 35
+    },
+    "0x0454": {
+      "file": "main.vpy",
+      "address": "0x0454",
+      "line": 33
+    },
+    "0x0484": {
+      "file": "main.vpy",
+      "address": "0x0484",
+      "line": 34
+    },
+    "0x0315": {
+      "file": "main.vpy",
+      "address": "0x0315",
+      "line": 23
+    },
+    "0x02CF": {
+      "file": "main.vpy",
+      "address": "0x02CF",
+      "line": 20
+    },
+    "0x0285": {
+      "file": "main.vpy",
+      "address": "0x0285",
+      "line": 19
+    },
+    "0x0210": {
+      "file": "main.vpy",
+      "address": "0x0210",
+      "line": 12
+    },
+    "0x0259": {
+      "file": "main.vpy",
+      "address": "0x0259",
+      "line": 15
+    },
+    "0x0371": {
+      "file": "main.vpy",
+      "address": "0x0371",
+      "line": 27
+    },
+    "0x0395": {
+      "file": "main.vpy",
+      "address": "0x0395",
+      "line": 30
+    },
+    "0x034C": {
+      "file": "main.vpy",
+      "address": "0x034C",
+      "line": 26
+    },
+    "0x020A": {
+      "file": "main.vpy",
+      "address": "0x020A",
+      "line": 9
+    }
+  },
+  "asmLineMap": {
+    "0x0519": {
+      "file": "trig_functions.asm",
+      "address": "0x0519",
+      "line": 718
+    },
+    "0x0594": {
+      "file": "trig_functions.asm",
+      "address": "0x0594",
+      "line": 804
+    },
+    "0x0096": {
+      "file": "trig_functions.asm",
+      "address": "0x0096",
+      "line": 148
+    },
+    "0x05BB": {
+      "file": "trig_functions.asm",
+      "address": "0x05BB",
+      "line": 832
+    },
+    "0x025F": {
+      "file": "trig_functions.asm",
+      "address": "0x025F",
+      "line": 420
+    },
+    "0x02F4": {
+      "file": "trig_functions.asm",
+      "address": "0x02F4",
+      "line": 482
+    },
+    "0x015F": {
+      "file": "trig_functions.asm",
+      "address": "0x015F",
+      "line": 287
+    },
+    "0x065A": {
+      "file": "trig_functions.asm",
+      "address": "0x065A",
+      "line": 883
+    },
+    "0x080C": {
+      "file": "trig_functions.asm",
+      "address": "0x080C",
+      "line": 1138
+    },
+    "0x03A2": {
+      "file": "trig_functions.asm",
+      "address": "0x03A2",
+      "line": 566
+    },
+    "0x078E": {
+      "file": "trig_functions.asm",
+      "address": "0x078E",
+      "line": 1056
+    },
+    "0x0470": {
+      "file": "trig_functions.asm",
+      "address": "0x0470",
+      "line": 652
+    },
+    "0x05CB": {
+      "file": "trig_functions.asm",
+      "address": "0x05CB",
+      "line": 847
+    },
+    "0x004D": {
+      "file": "trig_functions.asm",
+      "address": "0x004D",
+      "line": 100
+    },
+    "0x05B8": {
+      "file": "trig_functions.asm",
+      "address": "0x05B8",
+      "line": 829
+    },
+    "0x059C": {
+      "file": "trig_functions.asm",
+      "address": "0x059C",
+      "line": 808
+    },
+    "0x04CE": {
+      "file": "trig_functions.asm",
+      "address": "0x04CE",
+      "line": 679
+    },
+    "0x0759": {
+      "file": "trig_functions.asm",
+      "address": "0x0759",
+      "line": 1011
+    },
+    "0x0188": {
+      "file": "trig_functions.asm",
+      "address": "0x0188",
+      "line": 307
+    },
+    "0x078B": {
+      "file": "trig_functions.asm",
+      "address": "0x078B",
+      "line": 1053
+    },
+    "0x0806": {
+      "file": "trig_functions.asm",
+      "address": "0x0806",
+      "line": 1134
+    },
+    "0x0593": {
+      "file": "trig_functions.asm",
+      "address": "0x0593",
+      "line": 803
+    },
+    "0x019A": {
+      "file": "trig_functions.asm",
+      "address": "0x019A",
+      "line": 319
+    },
+    "0x01B7": {
+      "file": "trig_functions.asm",
+      "address": "0x01B7",
+      "line": 332
+    },
+    "0x01F1": {
+      "file": "trig_functions.asm",
+      "address": "0x01F1",
+      "line": 359
+    },
+    "0x05FA": {
+      "file": "trig_functions.asm",
+      "address": "0x05FA",
+      "line": 875
+    },
+    "0x01D0": {
+      "file": "trig_functions.asm",
+      "address": "0x01D0",
+      "line": 345
+    },
+    "0x0550": {
+      "file": "trig_functions.asm",
+      "address": "0x0550",
+      "line": 742
+    },
+    "0x005E": {
+      "file": "trig_functions.asm",
+      "address": "0x005E",
+      "line": 112
+    },
+    "0x059F": {
+      "file": "trig_functions.asm",
+      "address": "0x059F",
+      "line": 809
+    },
+    "0x0121": {
+      "file": "trig_functions.asm",
+      "address": "0x0121",
+      "line": 257
+    },
+    "0x0572": {
+      "file": "trig_functions.asm",
+      "address": "0x0572",
+      "line": 774
+    },
+    "0x07C7": {
+      "file": "trig_functions.asm",
+      "address": "0x07C7",
+      "line": 1089
+    },
+    "0x0467": {
+      "file": "trig_functions.asm",
+      "address": "0x0467",
+      "line": 649
+    },
+    "0x039D": {
+      "file": "trig_functions.asm",
+      "address": "0x039D",
+      "line": 564
+    },
+    "0x034A": {
+      "file": "trig_functions.asm",
+      "address": "0x034A",
+      "line": 514
+    },
+    "0x06D8": {
+      "file": "trig_functions.asm",
+      "address": "0x06D8",
+      "line": 964
+    },
+    "0x065E": {
+      "file": "trig_functions.asm",
+      "address": "0x065E",
+      "line": 885
+    },
+    "0x0680": {
+      "file": "trig_functions.asm",
+      "address": "0x0680",
+      "line": 913
+    },
+    "0x016C": {
+      "file": "trig_functions.asm",
+      "address": "0x016C",
+      "line": 293
+    },
+    "0x02D9": {
+      "file": "trig_functions.asm",
+      "address": "0x02D9",
+      "line": 471
+    },
+    "0x0088": {
+      "file": "trig_functions.asm",
+      "address": "0x0088",
+      "line": 143
+    },
+    "0x0562": {
+      "file": "trig_functions.asm",
+      "address": "0x0562",
+      "line": 762
+    },
+    "0x057D": {
+      "file": "trig_functions.asm",
+      "address": "0x057D",
+      "line": 785
+    },
+    "0x076D": {
+      "file": "trig_functions.asm",
+      "address": "0x076D",
+      "line": 1031
+    },
+    "0x036A": {
+      "file": "trig_functions.asm",
+      "address": "0x036A",
+      "line": 534
+    },
+    "0x003A": {
+      "file": "trig_functions.asm",
+      "address": "0x003A",
+      "line": 84
+    },
+    "0x03B6": {
+      "file": "trig_functions.asm",
+      "address": "0x03B6",
+      "line": 575
+    },
+    "0x0246": {
+      "file": "trig_functions.asm",
+      "address": "0x0246",
+      "line": 403
+    },
+    "0x015B": {
+      "file": "trig_functions.asm",
+      "address": "0x015B",
+      "line": 285
+    },
+    "0x024C": {
+      "file": "trig_functions.asm",
+      "address": "0x024C",
+      "line": 49
+    },
+    "0x0728": {
+      "file": "trig_functions.asm",
+      "address": "0x0728",
+      "line": 1007
+    },
+    "0x0351": {
+      "file": "trig_functions.asm",
+      "address": "0x0351",
+      "line": 519
+    },
+    "0x0112": {
+      "file": "trig_functions.asm",
+      "address": "0x0112",
+      "line": 240
+    },
+    "0x0575": {
+      "file": "trig_functions.asm",
+      "address": "0x0575",
+      "line": 777
+    },
+    "0x033B": {
+      "file": "trig_functions.asm",
+      "address": "0x033B",
+      "line": 509
+    },
+    "0x0672": {
+      "file": "trig_functions.asm",
+      "address": "0x0672",
+      "line": 902
+    },
+    "0x0347": {
+      "file": "trig_functions.asm",
+      "address": "0x0347",
+      "line": 513
+    },
+    "0x0723": {
+      "file": "trig_functions.asm",
+      "address": "0x0723",
+      "line": 1004
+    },
+    "0x0601": {
+      "file": "trig_functions.asm",
+      "address": "0x0601",
+      "line": 878
+    },
+    "0x018C": {
+      "file": "trig_functions.asm",
+      "address": "0x018C",
+      "line": 312
+    },
+    "0x0563": {
+      "file": "trig_functions.asm",
+      "address": "0x0563",
+      "line": 763
+    },
+    "0x066B": {
+      "file": "trig_functions.asm",
+      "address": "0x066B",
+      "line": 896
+    },
+    "0x021C": {
+      "file": "trig_functions.asm",
+      "address": "0x021C",
+      "line": 381
+    },
+    "0x02AA": {
+      "file": "trig_functions.asm",
+      "address": "0x02AA",
+      "line": 452
+    },
+    "0x0587": {
+      "file": "trig_functions.asm",
+      "address": "0x0587",
+      "line": 791
+    },
+    "0x0543": {
+      "file": "trig_functions.asm",
+      "address": "0x0543",
+      "line": 735
+    },
+    "0x002E": {
+      "file": "trig_functions.asm",
+      "address": "0x002E",
+      "line": 76
+    },
+    "0x03CA": {
+      "file": "trig_functions.asm",
+      "address": "0x03CA",
+      "line": 584
+    },
+    "0x0291": {
+      "file": "trig_functions.asm",
+      "address": "0x0291",
+      "line": 441
+    },
+    "0x0378": {
+      "file": "trig_functions.asm",
+      "address": "0x0378",
+      "line": 542
+    },
+    "0x077A": {
+      "file": "trig_functions.asm",
+      "address": "0x077A",
+      "line": 1041
+    },
+    "0x056F": {
+      "file": "trig_functions.asm",
+      "address": "0x056F",
+      "line": 771
+    },
+    "0x0695": {
+      "file": "trig_functions.asm",
+      "address": "0x0695",
+      "line": 930
+    },
+    "0x01BD": {
+      "file": "trig_functions.asm",
+      "address": "0x01BD",
+      "line": 334
+    },
+    "0x04EA": {
+      "file": "trig_functions.asm",
+      "address": "0x04EA",
+      "line": 692
+    },
+    "0x03B7": {
+      "file": "trig_functions.asm",
+      "address": "0x03B7",
+      "line": 576
+    },
+    "0x01B0": {
+      "file": "trig_functions.asm",
+      "address": "0x01B0",
+      "line": 328
+    },
+    "0x0769": {
+      "file": "trig_functions.asm",
+      "address": "0x0769",
+      "line": 1027
+    },
+    "0x0666": {
+      "file": "trig_functions.asm",
+      "address": "0x0666",
+      "line": 891
+    },
+    "0x020D": {
+      "file": "trig_functions.asm",
+      "address": "0x020D",
+      "line": 18
+    },
+    "0x0073": {
+      "file": "trig_functions.asm",
+      "address": "0x0073",
+      "line": 126
+    },
+    "0x0442": {
+      "file": "trig_functions.asm",
+      "address": "0x0442",
+      "line": 632
+    },
+    "0x0694": {
+      "file": "trig_functions.asm",
+      "address": "0x0694",
+      "line": 929
+    },
+    "0x03F0": {
+      "file": "trig_functions.asm",
+      "address": "0x03F0",
+      "line": 599
+    },
+    "0x0182": {
+      "file": "trig_functions.asm",
+      "address": "0x0182",
+      "line": 305
+    },
+    "0x0487": {
+      "file": "trig_functions.asm",
+      "address": "0x0487",
+      "line": 662
+    },
+    "0x017F": {
+      "file": "trig_functions.asm",
+      "address": "0x017F",
+      "line": 304
+    },
+    "0x02B3": {
+      "file": "trig_functions.asm",
+      "address": "0x02B3",
+      "line": 455
+    },
+    "0x0249": {
+      "file": "trig_functions.asm",
+      "address": "0x0249",
+      "line": 48
+    },
+    "0x03A4": {
+      "file": "trig_functions.asm",
+      "address": "0x03A4",
+      "line": 567
+    },
+    "0x070A": {
+      "file": "trig_functions.asm",
+      "address": "0x070A",
+      "line": 987
+    },
+    "0x0697": {
+      "file": "trig_functions.asm",
+      "address": "0x0697",
+      "line": 932
+    },
+    "0x01C1": {
+      "file": "trig_functions.asm",
+      "address": "0x01C1",
+      "line": 339
+    },
+    "0x0355": {
+      "file": "trig_functions.asm",
+      "address": "0x0355",
+      "line": 522
+    },
+    "0x054D": {
+      "file": "trig_functions.asm",
+      "address": "0x054D",
+      "line": 741
+    },
+    "0x034E": {
+      "file": "trig_functions.asm",
+      "address": "0x034E",
+      "line": 518
+    },
+    "0x07E5": {
+      "file": "trig_functions.asm",
+      "address": "0x07E5",
+      "line": 1107
+    },
+    "0x03E4": {
+      "file": "trig_functions.asm",
+      "address": "0x03E4",
+      "line": 594
+    },
+    "0x055E": {
+      "file": "trig_functions.asm",
+      "address": "0x055E",
+      "line": 758
+    },
+    "0x00A4": {
+      "file": "trig_functions.asm",
+      "address": "0x00A4",
+      "line": 153
+    },
+    "0x0588": {
+      "file": "trig_functions.asm",
+      "address": "0x0588",
+      "line": 792
+    },
+    "0x05B4": {
+      "file": "trig_functions.asm",
+      "address": "0x05B4",
+      "line": 827
+    },
+    "0x03AC": {
+      "file": "trig_functions.asm",
+      "address": "0x03AC",
+      "line": 570
+    },
+    "0x072B": {
+      "file": "trig_functions.asm",
+      "address": "0x072B",
+      "line": 1009
+    },
+    "0x0323": {
+      "file": "trig_functions.asm",
+      "address": "0x0323",
+      "line": 501
+    },
+    "0x0560": {
+      "file": "trig_functions.asm",
+      "address": "0x0560",
+      "line": 760
+    },
+    "0x0082": {
+      "file": "trig_functions.asm",
+      "address": "0x0082",
+      "line": 136
+    },
+    "0x0452": {
+      "file": "trig_functions.asm",
+      "address": "0x0452",
+      "line": 638
+    },
+    "0x0388": {
+      "file": "trig_functions.asm",
+      "address": "0x0388",
+      "line": 550
+    },
+    "0x071B": {
+      "file": "trig_functions.asm",
+      "address": "0x071B",
+      "line": 996
+    },
+    "0x05D3": {
+      "file": "trig_functions.asm",
+      "address": "0x05D3",
+      "line": 852
+    },
+    "0x0229": {
+      "file": "trig_functions.asm",
+      "address": "0x0229",
+      "line": 389
+    },
+    "0x02BE": {
+      "file": "trig_functions.asm",
+      "address": "0x02BE",
+      "line": 459
+    },
+    "0x06AE": {
+      "file": "trig_functions.asm",
+      "address": "0x06AE",
+      "line": 945
+    },
+    "0x0586": {
+      "file": "trig_functions.asm",
+      "address": "0x0586",
+      "line": 790
+    },
+    "0x0292": {
+      "file": "trig_functions.asm",
+      "address": "0x0292",
+      "line": 442
+    },
+    "0x00C2": {
+      "file": "trig_functions.asm",
+      "address": "0x00C2",
+      "line": 188
+    },
+    "0x05F2": {
+      "file": "trig_functions.asm",
+      "address": "0x05F2",
+      "line": 871
+    },
+    "0x00D0": {
+      "file": "trig_functions.asm",
+      "address": "0x00D0",
+      "line": 196
+    },
+    "0x07CF": {
+      "file": "trig_functions.asm",
+      "address": "0x07CF",
+      "line": 1093
+    },
+    "0x0318": {
+      "file": "trig_functions.asm",
+      "address": "0x0318",
+      "line": 497
+    },
+    "0x0538": {
+      "file": "trig_functions.asm",
+      "address": "0x0538",
+      "line": 732
+    },
+    "0x0032": {
+      "file": "trig_functions.asm",
+      "address": "0x0032",
+      "line": 81
+    },
+    "0x00A1": {
+      "file": "trig_functions.asm",
+      "address": "0x00A1",
+      "line": 152
+    },
+    "0x05C6": {
+      "file": "trig_functions.asm",
+      "address": "0x05C6",
+      "line": 843
+    },
+    "0x0427": {
+      "file": "trig_functions.asm",
+      "address": "0x0427",
+      "line": 621
+    },
+    "0x0158": {
+      "file": "trig_functions.asm",
+      "address": "0x0158",
+      "line": 284
+    },
+    "0x0353": {
+      "file": "trig_functions.asm",
+      "address": "0x0353",
+      "line": 520
+    },
+    "0x0295": {
+      "file": "trig_functions.asm",
+      "address": "0x0295",
+      "line": 443
+    },
+    "0x022E": {
+      "file": "trig_functions.asm",
+      "address": "0x022E",
+      "line": 38
+    },
+    "0x071F": {
+      "file": "trig_functions.asm",
+      "address": "0x071F",
+      "line": 1000
+    },
+    "0x03F5": {
+      "file": "trig_functions.asm",
+      "address": "0x03F5",
+      "line": 601
+    },
+    "0x03DE": {
+      "file": "trig_functions.asm",
+      "address": "0x03DE",
+      "line": 592
+    },
+    "0x0685": {
+      "file": "trig_functions.asm",
+      "address": "0x0685",
+      "line": 918
+    },
+    "0x00C1": {
+      "file": "trig_functions.asm",
+      "address": "0x00C1",
+      "line": 187
+    },
+    "0x03E8": {
+      "file": "trig_functions.asm",
+      "address": "0x03E8",
+      "line": 596
+    },
+    "0x07E6": {
+      "file": "trig_functions.asm",
+      "address": "0x07E6",
+      "line": 1108
+    },
+    "0x06B8": {
+      "file": "trig_functions.asm",
+      "address": "0x06B8",
+      "line": 950
+    },
+    "0x06F8": {
+      "file": "trig_functions.asm",
+      "address": "0x06F8",
+      "line": 979
+    },
+    "0x03AE": {
+      "file": "trig_functions.asm",
+      "address": "0x03AE",
+      "line": 571
+    },
+    "0x04E9": {
+      "file": "trig_functions.asm",
+      "address": "0x04E9",
+      "line": 691
+    },
+    "0x0546": {
+      "file": "trig_functions.asm",
+      "address": "0x0546",
+      "line": 736
+    },
+    "0x05F6": {
+      "file": "trig_functions.asm",
+      "address": "0x05F6",
+      "line": 873
+    },
+    "0x0162": {
+      "file": "trig_functions.asm",
+      "address": "0x0162",
+      "line": 289
+    },
+    "0x071D": {
+      "file": "trig_functions.asm",
+      "address": "0x071D",
+      "line": 998
+    },
+    "0x0456": {
+      "file": "trig_functions.asm",
+      "address": "0x0456",
+      "line": 642
+    },
+    "0x017E": {
+      "file": "trig_functions.asm",
+      "address": "0x017E",
+      "line": 303
+    },
+    "0x07C2": {
+      "file": "trig_functions.asm",
+      "address": "0x07C2",
+      "line": 1086
+    },
+    "0x0535": {
+      "file": "trig_functions.asm",
+      "address": "0x0535",
+      "line": 731
+    },
+    "0x00E1": {
+      "file": "trig_functions.asm",
+      "address": "0x00E1",
+      "line": 209
+    },
+    "0x027A": {
+      "file": "trig_functions.asm",
+      "address": "0x027A",
+      "line": 429
+    },
+    "0x051A": {
+      "file": "trig_functions.asm",
+      "address": "0x051A",
+      "line": 719
+    },
+    "0x07A1": {
+      "file": "trig_functions.asm",
+      "address": "0x07A1",
+      "line": 1070
+    },
+    "0x0573": {
+      "file": "trig_functions.asm",
+      "address": "0x0573",
+      "line": 775
+    },
+    "0x0516": {
+      "file": "trig_functions.asm",
+      "address": "0x0516",
+      "line": 715
+    },
+    "0x0137": {
+      "file": "trig_functions.asm",
+      "address": "0x0137",
+      "line": 266
+    },
+    "0x058C": {
+      "file": "trig_functions.asm",
+      "address": "0x058C",
+      "line": 796
+    },
+    "0x01D9": {
+      "file": "trig_functions.asm",
+      "address": "0x01D9",
+      "line": 349
+    },
+    "0x0527": {
+      "file": "trig_functions.asm",
+      "address": "0x0527",
+      "line": 723
+    },
+    "0x055F": {
+      "file": "trig_functions.asm",
+      "address": "0x055F",
+      "line": 759
+    },
+    "0x05D8": {
+      "file": "trig_functions.asm",
+      "address": "0x05D8",
+      "line": 857
+    },
+    "0x0780": {
+      "file": "trig_functions.asm",
+      "address": "0x0780",
+      "line": 1045
+    },
+    "0x03C3": {
+      "file": "trig_functions.asm",
+      "address": "0x03C3",
+      "line": 581
+    },
+    "0x0385": {
+      "file": "trig_functions.asm",
+      "address": "0x0385",
+      "line": 548
+    },
+    "0x0315": {
+      "file": "trig_functions.asm",
+      "address": "0x0315",
+      "line": 496
+    },
+    "0x07E2": {
+      "file": "trig_functions.asm",
+      "address": "0x07E2",
+      "line": 1104
+    },
+    "0x0216": {
+      "file": "trig_functions.asm",
+      "address": "0x0216",
+      "line": 29
+    },
+    "0x0479": {
+      "file": "trig_functions.asm",
+      "address": "0x0479",
+      "line": 655
+    },
+    "0x001A": {
+      "file": "trig_functions.asm",
+      "address": "0x001A",
+      "line": 67
+    },
+    "0x032C": {
+      "file": "trig_functions.asm",
+      "address": "0x032C",
+      "line": 504
+    },
+    "0x0716": {
+      "file": "trig_functions.asm",
+      "address": "0x0716",
+      "line": 993
+    },
+    "0x04D4": {
+      "file": "trig_functions.asm",
+      "address": "0x04D4",
+      "line": 682
+    },
+    "0x0151": {
+      "file": "trig_functions.asm",
+      "address": "0x0151",
+      "line": 278
+    },
+    "0x0124": {
+      "file": "trig_functions.asm",
+      "address": "0x0124",
+      "line": 258
+    },
+    "0x02B6": {
+      "file": "trig_functions.asm",
+      "address": "0x02B6",
+      "line": 456
+    },
+    "0x0398": {
+      "file": "trig_functions.asm",
+      "address": "0x0398",
+      "line": 562
+    },
+    "0x0509": {
+      "file": "trig_functions.asm",
+      "address": "0x0509",
+      "line": 708
+    },
+    "0x0163": {
+      "file": "trig_functions.asm",
+      "address": "0x0163",
+      "line": 290
+    },
+    "0x041A": {
+      "file": "trig_functions.asm",
+      "address": "0x041A",
+      "line": 616
+    },
+    "0x0674": {
+      "file": "trig_functions.asm",
+      "address": "0x0674",
+      "line": 903
+    },
+    "0x0808": {
+      "file": "trig_functions.asm",
+      "address": "0x0808",
+      "line": 1135
+    },
+    "0x024E": {
+      "file": "trig_functions.asm",
+      "address": "0x024E",
+      "line": 410
+    },
+    "0x0302": {
+      "file": "trig_functions.asm",
+      "address": "0x0302",
+      "line": 487
+    },
+    "0x0687": {
+      "file": "trig_functions.asm",
+      "address": "0x0687",
+      "line": 920
+    },
+    "0x023E": {
+      "file": "trig_functions.asm",
+      "address": "0x023E",
+      "line": 44
+    },
+    "0x02E3": {
+      "file": "trig_functions.asm",
+      "address": "0x02E3",
+      "line": 476
+    },
+    "0x0700": {
+      "file": "trig_functions.asm",
+      "address": "0x0700",
+      "line": 983
+    },
+    "0x06DC": {
+      "file": "trig_functions.asm",
+      "address": "0x06DC",
+      "line": 966
+    },
+    "0x0046": {
+      "file": "trig_functions.asm",
+      "address": "0x0046",
+      "line": 90
+    },
+    "0x0481": {
+      "file": "trig_functions.asm",
+      "address": "0x0481",
+      "line": 658
+    },
+    "0x0354": {
+      "file": "trig_functions.asm",
+      "address": "0x0354",
+      "line": 521
+    },
+    "0x0367": {
+      "file": "trig_functions.asm",
+      "address": "0x0367",
+      "line": 533
+    },
+    "0x0799": {
+      "file": "trig_functions.asm",
+      "address": "0x0799",
+      "line": 1066
+    },
+    "0x0277": {
+      "file": "trig_functions.asm",
+      "address": "0x0277",
+      "line": 428
+    },
+    "0x048C": {
+      "file": "trig_functions.asm",
+      "address": "0x048C",
+      "line": 664
+    },
+    "0x030E": {
+      "file": "trig_functions.asm",
+      "address": "0x030E",
+      "line": 491
+    },
+    "0x0335": {
+      "file": "trig_functions.asm",
+      "address": "0x0335",
+      "line": 507
+    },
+    "0x05D0": {
+      "file": "trig_functions.asm",
+      "address": "0x05D0",
+      "line": 850
+    },
+    "0x0434": {
+      "file": "trig_functions.asm",
+      "address": "0x0434",
+      "line": 626
+    },
+    "0x0326": {
+      "file": "trig_functions.asm",
+      "address": "0x0326",
+      "line": 502
+    },
+    "0x006C": {
+      "file": "trig_functions.asm",
+      "address": "0x006C",
+      "line": 121
+    },
+    "0x0576": {
+      "file": "trig_functions.asm",
+      "address": "0x0576",
+      "line": 778
+    },
+    "0x00EF": {
+      "file": "trig_functions.asm",
+      "address": "0x00EF",
+      "line": 218
+    },
+    "0x0707": {
+      "file": "trig_functions.asm",
+      "address": "0x0707",
+      "line": 986
+    },
+    "0x027D": {
+      "file": "trig_functions.asm",
+      "address": "0x027D",
+      "line": 431
+    },
+    "0x002C": {
+      "file": "trig_functions.asm",
+      "address": "0x002C",
+      "line": 74
+    },
+    "0x07CB": {
+      "file": "trig_functions.asm",
+      "address": "0x07CB",
+      "line": 1091
+    },
+    "0x0185": {
+      "file": "trig_functions.asm",
+      "address": "0x0185",
+      "line": 306
+    },
+    "0x012E": {
+      "file": "trig_functions.asm",
+      "address": "0x012E",
+      "line": 263
+    },
+    "0x07ED": {
+      "file": "trig_functions.asm",
+      "address": "0x07ED",
+      "line": 1115
+    },
+    "0x043B": {
+      "file": "trig_functions.asm",
+      "address": "0x043B",
+      "line": 629
+    },
+    "0x056B": {
+      "file": "trig_functions.asm",
+      "address": "0x056B",
+      "line": 768
+    },
+    "0x05BD": {
+      "file": "trig_functions.asm",
+      "address": "0x05BD",
+      "line": 834
+    },
+    "0x07DF": {
+      "file": "trig_functions.asm",
+      "address": "0x07DF",
+      "line": 1101
+    },
+    "0x07F2": {
+      "file": "trig_functions.asm",
+      "address": "0x07F2",
+      "line": 1120
+    },
+    "0x025C": {
+      "file": "trig_functions.asm",
+      "address": "0x025C",
+      "line": 419
+    },
+    "0x00C8": {
+      "file": "trig_functions.asm",
+      "address": "0x00C8",
+      "line": 191
+    },
+    "0x05C5": {
+      "file": "trig_functions.asm",
+      "address": "0x05C5",
+      "line": 842
+    },
+    "0x06AB": {
+      "file": "trig_functions.asm",
+      "address": "0x06AB",
+      "line": 944
+    },
+    "0x0668": {
+      "file": "trig_functions.asm",
+      "address": "0x0668",
+      "line": 893
+    },
+    "0x0679": {
+      "file": "trig_functions.asm",
+      "address": "0x0679",
+      "line": 906
+    },
+    "0x06B3": {
+      "file": "trig_functions.asm",
+      "address": "0x06B3",
+      "line": 948
+    },
+    "0x03B3": {
+      "file": "trig_functions.asm",
+      "address": "0x03B3",
+      "line": 573
+    },
+    "0x01A3": {
+      "file": "trig_functions.asm",
+      "address": "0x01A3",
+      "line": 322
+    },
+    "0x0448": {
+      "file": "trig_functions.asm",
+      "address": "0x0448",
+      "line": 634
+    },
+    "0x05D6": {
+      "file": "trig_functions.asm",
+      "address": "0x05D6",
+      "line": 855
+    },
+    "0x0796": {
+      "file": "trig_functions.asm",
+      "address": "0x0796",
+      "line": 1063
+    },
+    "0x02E0": {
+      "file": "trig_functions.asm",
+      "address": "0x02E0",
+      "line": 474
+    },
+    "0x075C": {
+      "file": "trig_functions.asm",
+      "address": "0x075C",
+      "line": 1014
+    },
+    "0x0659": {
+      "file": "trig_functions.asm",
+      "address": "0x0659",
+      "line": 882
+    },
+    "0x0540": {
+      "file": "trig_functions.asm",
+      "address": "0x0540",
+      "line": 734
+    },
+    "0x04FC": {
+      "file": "trig_functions.asm",
+      "address": "0x04FC",
+      "line": 704
+    },
+    "0x0770": {
+      "file": "trig_functions.asm",
+      "address": "0x0770",
+      "line": 1034
+    },
+    "0x0532": {
+      "file": "trig_functions.asm",
+      "address": "0x0532",
+      "line": 730
+    },
+    "0x07BA": {
+      "file": "trig_functions.asm",
+      "address": "0x07BA",
+      "line": 1082
+    },
+    "0x070B": {
+      "file": "trig_functions.asm",
+      "address": "0x070B",
+      "line": 988
+    },
+    "0x0484": {
+      "file": "trig_functions.asm",
+      "address": "0x0484",
+      "line": 661
+    },
+    "0x0591": {
+      "file": "trig_functions.asm",
+      "address": "0x0591",
+      "line": 801
+    },
+    "0x04A0": {
+      "file": "trig_functions.asm",
+      "address": "0x04A0",
+      "line": 674
+    },
+    "0x008A": {
+      "file": "trig_functions.asm",
+      "address": "0x008A",
+      "line": 144
+    },
+    "0x02B0": {
+      "file": "trig_functions.asm",
+      "address": "0x02B0",
+      "line": 454
+    },
+    "0x0577": {
+      "file": "trig_functions.asm",
+      "address": "0x0577",
+      "line": 779
+    },
+    "0x0762": {
+      "file": "trig_functions.asm",
+      "address": "0x0762",
+      "line": 1020
+    },
+    "0x06A2": {
+      "file": "trig_functions.asm",
+      "address": "0x06A2",
+      "line": 939
+    },
+    "0x05FC": {
+      "file": "trig_functions.asm",
+      "address": "0x05FC",
+      "line": 876
+    },
+    "0x011E": {
+      "file": "trig_functions.asm",
+      "address": "0x011E",
+      "line": 245
+    },
+    "0x0424": {
+      "file": "trig_functions.asm",
+      "address": "0x0424",
+      "line": 620
+    },
+    "0x0404": {
+      "file": "trig_functions.asm",
+      "address": "0x0404",
+      "line": 607
+    },
+    "0x076E": {
+      "file": "trig_functions.asm",
+      "address": "0x076E",
+      "line": 1032
+    },
+    "0x04D1": {
+      "file": "trig_functions.asm",
+      "address": "0x04D1",
+      "line": 680
+    },
+    "0x0171": {
+      "file": "trig_functions.asm",
+      "address": "0x0171",
+      "line": 297
+    },
+    "0x0231": {
+      "file": "trig_functions.asm",
+      "address": "0x0231",
+      "line": 39
+    },
+    "0x06D5": {
+      "file": "trig_functions.asm",
+      "address": "0x06D5",
+      "line": 963
+    },
+    "0x067C": {
+      "file": "trig_functions.asm",
+      "address": "0x067C",
+      "line": 909
+    },
+    "0x07E4": {
+      "file": "trig_functions.asm",
+      "address": "0x07E4",
+      "line": 1106
+    },
+    "0x03BC": {
+      "file": "trig_functions.asm",
+      "address": "0x03BC",
+      "line": 578
+    },
+    "0x0205": {
+      "file": "trig_functions.asm",
+      "address": "0x0205",
+      "line": 15
+    },
+    "0x06B2": {
+      "file": "trig_functions.asm",
+      "address": "0x06B2",
+      "line": 947
+    },
+    "0x075B": {
+      "file": "trig_functions.asm",
+      "address": "0x075B",
+      "line": 1013
+    },
+    "0x0773": {
+      "file": "trig_functions.asm",
+      "address": "0x0773",
+      "line": 1037
+    },
+    "0x07B2": {
+      "file": "trig_functions.asm",
+      "address": "0x07B2",
+      "line": 1078
+    },
+    "0x06A7": {
+      "file": "trig_functions.asm",
+      "address": "0x06A7",
+      "line": 942
+    },
+    "0x065D": {
+      "file": "trig_functions.asm",
+      "address": "0x065D",
+      "line": 884
+    },
+    "0x0208": {
+      "file": "trig_functions.asm",
+      "address": "0x0208",
+      "line": 369
+    },
+    "0x0791": {
+      "file": "trig_functions.asm",
+      "address": "0x0791",
+      "line": 1059
+    },
+    "0x05C4": {
+      "file": "trig_functions.asm",
+      "address": "0x05C4",
+      "line": 841
+    },
+    "0x03E6": {
+      "file": "trig_functions.asm",
+      "address": "0x03E6",
+      "line": 595
+    },
+    "0x02FA": {
+      "file": "trig_functions.asm",
+      "address": "0x02FA",
+      "line": 484
+    },
+    "0x00F9": {
+      "file": "trig_functions.asm",
+      "address": "0x00F9",
+      "line": 224
+    },
+    "0x06A6": {
+      "file": "trig_functions.asm",
+      "address": "0x06A6",
+      "line": 941
+    },
+    "0x05AC": {
+      "file": "trig_functions.asm",
+      "address": "0x05AC",
+      "line": 821
+    },
+    "0x078D": {
+      "file": "trig_functions.asm",
+      "address": "0x078D",
+      "line": 1055
+    },
+    "0x0772": {
+      "file": "trig_functions.asm",
+      "address": "0x0772",
+      "line": 1036
+    },
+    "0x06E1": {
+      "file": "trig_functions.asm",
+      "address": "0x06E1",
+      "line": 969
+    },
+    "0x01DC": {
+      "file": "trig_functions.asm",
+      "address": "0x01DC",
+      "line": 350
+    },
+    "0x004E": {
+      "file": "trig_functions.asm",
+      "address": "0x004E",
+      "line": 101
+    },
+    "0x00F6": {
+      "file": "trig_functions.asm",
+      "address": "0x00F6",
+      "line": 223
+    },
+    "0x02E6": {
+      "file": "trig_functions.asm",
+      "address": "0x02E6",
+      "line": 477
+    },
+    "0x067D": {
+      "file": "trig_functions.asm",
+      "address": "0x067D",
+      "line": 910
+    },
+    "0x00D7": {
+      "file": "trig_functions.asm",
+      "address": "0x00D7",
+      "line": 201
+    },
+    "0x0373": {
+      "file": "trig_functions.asm",
+      "address": "0x0373",
+      "line": 540
+    },
+    "0x031E": {
+      "file": "trig_functions.asm",
+      "address": "0x031E",
+      "line": 499
+    },
+    "0x0189": {
+      "file": "trig_functions.asm",
+      "address": "0x0189",
+      "line": 308
+    },
+    "0x05A7": {
+      "file": "trig_functions.asm",
+      "address": "0x05A7",
+      "line": 816
+    },
+    "0x040C": {
+      "file": "trig_functions.asm",
+      "address": "0x040C",
+      "line": 610
+    },
+    "0x0559": {
+      "file": "trig_functions.asm",
+      "address": "0x0559",
+      "line": 753
+    },
+    "0x03FF": {
+      "file": "trig_functions.asm",
+      "address": "0x03FF",
+      "line": 605
+    },
+    "0x0763": {
+      "file": "trig_functions.asm",
+      "address": "0x0763",
+      "line": 1021
+    },
+    "0x02E1": {
+      "file": "trig_functions.asm",
+      "address": "0x02E1",
+      "line": 475
+    },
+    "0x00A5": {
+      "file": "trig_functions.asm",
+      "address": "0x00A5",
+      "line": 156
+    },
+    "0x06E5": {
+      "file": "trig_functions.asm",
+      "address": "0x06E5",
+      "line": 971
+    },
+    "0x0265": {
+      "file": "trig_functions.asm",
+      "address": "0x0265",
+      "line": 422
+    },
+    "0x066A": {
+      "file": "trig_functions.asm",
+      "address": "0x066A",
+      "line": 895
+    },
+    "0x072A": {
+      "file": "trig_functions.asm",
+      "address": "0x072A",
+      "line": 1008
+    },
+    "0x0341": {
+      "file": "trig_functions.asm",
+      "address": "0x0341",
+      "line": 511
+    },
+    "0x028B": {
+      "file": "trig_functions.asm",
+      "address": "0x028B",
+      "line": 439
+    },
+    "0x02A8": {
+      "file": "trig_functions.asm",
+      "address": "0x02A8",
+      "line": 451
+    },
+    "0x01A0": {
+      "file": "trig_functions.asm",
+      "address": "0x01A0",
+      "line": 321
+    },
+    "0x0517": {
+      "file": "trig_functions.asm",
+      "address": "0x0517",
+      "line": 716
+    },
+    "0x07C3": {
+      "file": "trig_functions.asm",
+      "address": "0x07C3",
+      "line": 1087
+    },
+    "0x0779": {
+      "file": "trig_functions.asm",
+      "address": "0x0779",
+      "line": 1040
+    },
+    "0x04D5": {
+      "file": "trig_functions.asm",
+      "address": "0x04D5",
+      "line": 683
+    },
+    "0x045C": {
+      "file": "trig_functions.asm",
+      "address": "0x045C",
+      "line": 644
+    },
+    "0x067A": {
+      "file": "trig_functions.asm",
+      "address": "0x067A",
+      "line": 907
+    },
+    "0x012A": {
+      "file": "trig_functions.asm",
+      "address": "0x012A",
+      "line": 260
+    },
+    "0x068E": {
+      "file": "trig_functions.asm",
+      "address": "0x068E",
+      "line": 925
+    },
+    "0x05EE": {
+      "file": "trig_functions.asm",
+      "address": "0x05EE",
+      "line": 869
+    },
+    "0x0259": {
+      "file": "trig_functions.asm",
+      "address": "0x0259",
+      "line": 55
+    },
+    "0x0371": {
+      "file": "trig_functions.asm",
+      "address": "0x0371",
+      "line": 539
+    },
+    "0x0043": {
+      "file": "trig_functions.asm",
+      "address": "0x0043",
+      "line": 87
+    },
+    "0x06E9": {
+      "file": "trig_functions.asm",
+      "address": "0x06E9",
+      "line": 973
+    },
+    "0x0548": {
+      "file": "trig_functions.asm",
+      "address": "0x0548",
+      "line": 737
+    },
+    "0x07B4": {
+      "file": "trig_functions.asm",
+      "address": "0x07B4",
+      "line": 1079
+    },
+    "0x06FE": {
+      "file": "trig_functions.asm",
+      "address": "0x06FE",
+      "line": 982
+    },
+    "0x0795": {
+      "file": "trig_functions.asm",
+      "address": "0x0795",
+      "line": 1062
+    },
+    "0x0660": {
+      "file": "trig_functions.asm",
+      "address": "0x0660",
+      "line": 886
+    },
+    "0x01C7": {
+      "file": "trig_functions.asm",
+      "address": "0x01C7",
+      "line": 341
+    },
+    "0x0190": {
+      "file": "trig_functions.asm",
+      "address": "0x0190",
+      "line": 314
+    },
+    "0x045E": {
+      "file": "trig_functions.asm",
+      "address": "0x045E",
+      "line": 645
+    },
+    "0x0059": {
+      "file": "trig_functions.asm",
+      "address": "0x0059",
+      "line": 109
+    },
+    "0x05E6": {
+      "file": "trig_functions.asm",
+      "address": "0x05E6",
+      "line": 865
+    },
+    "0x03B9": {
+      "file": "trig_functions.asm",
+      "address": "0x03B9",
+      "line": 577
+    },
+    "0x0329": {
+      "file": "trig_functions.asm",
+      "address": "0x0329",
+      "line": 503
+    },
+    "0x06D0": {
+      "file": "trig_functions.asm",
+      "address": "0x06D0",
+      "line": 960
+    },
+    "0x0767": {
+      "file": "trig_functions.asm",
+      "address": "0x0767",
+      "line": 1025
+    },
+    "0x0786": {
+      "file": "trig_functions.asm",
+      "address": "0x0786",
+      "line": 1050
+    },
+    "0x07D2": {
+      "file": "trig_functions.asm",
+      "address": "0x07D2",
+      "line": 1094
+    },
+    "0x033E": {
+      "file": "trig_functions.asm",
+      "address": "0x033E",
+      "line": 510
+    },
+    "0x05E4": {
+      "file": "trig_functions.asm",
+      "address": "0x05E4",
+      "line": 864
+    },
+    "0x05D4": {
+      "file": "trig_functions.asm",
+      "address": "0x05D4",
+      "line": 853
+    },
+    "0x0463": {
+      "file": "trig_functions.asm",
+      "address": "0x0463",
+      "line": 647
+    },
+    "0x029D": {
+      "file": "trig_functions.asm",
+      "address": "0x029D",
+      "line": 447
+    },
+    "0x010F": {
+      "file": "trig_functions.asm",
+      "address": "0x010F",
+      "line": 239
+    },
+    "0x07B6": {
+      "file": "trig_functions.asm",
+      "address": "0x07B6",
+      "line": 1080
+    },
+    "0x00C5": {
+      "file": "trig_functions.asm",
+      "address": "0x00C5",
+      "line": 190
+    },
+    "0x029C": {
+      "file": "trig_functions.asm",
+      "address": "0x029C",
+      "line": 446
+    },
+    "0x0445": {
+      "file": "trig_functions.asm",
+      "address": "0x0445",
+      "line": 633
+    },
+    "0x079C": {
+      "file": "trig_functions.asm",
+      "address": "0x079C",
+      "line": 1067
+    },
+    "0x05D9": {
+      "file": "trig_functions.asm",
+      "address": "0x05D9",
+      "line": 858
+    },
+    "0x0418": {
+      "file": "trig_functions.asm",
+      "address": "0x0418",
+      "line": 615
+    },
+    "0x0704": {
+      "file": "trig_functions.asm",
+      "address": "0x0704",
+      "line": 985
+    },
+    "0x04F2": {
+      "file": "trig_functions.asm",
+      "address": "0x04F2",
+      "line": 697
+    },
+    "0x0506": {
+      "file": "trig_functions.asm",
+      "address": "0x0506",
+      "line": 707
+    },
+    "0x04FF": {
+      "file": "trig_functions.asm",
+      "address": "0x04FF",
+      "line": 705
+    },
+    "0x0681": {
+      "file": "trig_functions.asm",
+      "address": "0x0681",
+      "line": 914
+    },
+    "0x06C8": {
+      "file": "trig_functions.asm",
+      "address": "0x06C8",
+      "line": 957
+    },
+    "0x0177": {
+      "file": "trig_functions.asm",
+      "address": "0x0177",
+      "line": 299
+    },
+    "0x057A": {
+      "file": "trig_functions.asm",
+      "address": "0x057A",
+      "line": 782
+    },
+    "0x00E2": {
+      "file": "trig_functions.asm",
+      "address": "0x00E2",
+      "line": 210
+    },
+    "0x02D8": {
+      "file": "trig_functions.asm",
+      "address": "0x02D8",
+      "line": 470
+    },
+    "0x0436": {
+      "file": "trig_functions.asm",
+      "address": "0x0436",
+      "line": 627
+    },
+    "0x0170": {
+      "file": "trig_functions.asm",
+      "address": "0x0170",
+      "line": 296
+    },
+    "0x076C": {
+      "file": "trig_functions.asm",
+      "address": "0x076C",
+      "line": 1030
+    },
+    "0x0579": {
+      "file": "trig_functions.asm",
+      "address": "0x0579",
+      "line": 781
+    },
+    "0x0044": {
+      "file": "trig_functions.asm",
+      "address": "0x0044",
+      "line": 88
+    },
+    "0x06DD": {
+      "file": "trig_functions.asm",
+      "address": "0x06DD",
+      "line": 967
+    },
+    "0x06BE": {
+      "file": "trig_functions.asm",
+      "address": "0x06BE",
+      "line": 953
+    },
+    "0x0698": {
+      "file": "trig_functions.asm",
+      "address": "0x0698",
+      "line": 933
+    },
+    "0x058A": {
+      "file": "trig_functions.asm",
+      "address": "0x058A",
+      "line": 794
+    },
+    "0x07DD": {
+      "file": "trig_functions.asm",
+      "address": "0x07DD",
+      "line": 1099
+    },
+    "0x03C0": {
+      "file": "trig_functions.asm",
+      "address": "0x03C0",
+      "line": 580
+    },
+    "0x006B": {
+      "file": "trig_functions.asm",
+      "address": "0x006B",
+      "line": 120
+    },
+    "0x054A": {
+      "file": "trig_functions.asm",
+      "address": "0x054A",
+      "line": 739
+    },
+    "0x0296": {
+      "file": "trig_functions.asm",
+      "address": "0x0296",
+      "line": 444
+    },
+    "0x06E8": {
+      "file": "trig_functions.asm",
+      "address": "0x06E8",
+      "line": 972
+    },
+    "0x04CB": {
+      "file": "trig_functions.asm",
+      "address": "0x04CB",
+      "line": 677
+    },
+    "0x06BC": {
+      "file": "trig_functions.asm",
+      "address": "0x06BC",
+      "line": 952
+    },
+    "0x04F8": {
+      "file": "trig_functions.asm",
+      "address": "0x04F8",
+      "line": 700
+    },
+    "0x03F2": {
+      "file": "trig_functions.asm",
+      "address": "0x03F2",
+      "line": 600
+    },
+    "0x05BC": {
+      "file": "trig_functions.asm",
+      "address": "0x05BC",
+      "line": 833
+    },
+    "0x00BC": {
+      "file": "trig_functions.asm",
+      "address": "0x00BC",
+      "line": 184
+    },
+    "0x0338": {
+      "file": "trig_functions.asm",
+      "address": "0x0338",
+      "line": 508
+    },
+    "0x07FF": {
+      "file": "trig_functions.asm",
+      "address": "0x07FF",
+      "line": 1128
+    },
+    "0x035E": {
+      "file": "trig_functions.asm",
+      "address": "0x035E",
+      "line": 527
+    },
+    "0x055B": {
+      "file": "trig_functions.asm",
+      "address": "0x055B",
+      "line": 755
+    },
+    "0x0564": {
+      "file": "trig_functions.asm",
+      "address": "0x0564",
+      "line": 764
+    },
+    "0x00E9": {
+      "file": "trig_functions.asm",
+      "address": "0x00E9",
+      "line": 212
+    },
+    "0x05A2": {
+      "file": "trig_functions.asm",
+      "address": "0x05A2",
+      "line": 811
+    },
+    "0x07E7": {
+      "file": "trig_functions.asm",
+      "address": "0x07E7",
+      "line": 1109
+    },
+    "0x0760": {
+      "file": "trig_functions.asm",
+      "address": "0x0760",
+      "line": 1018
+    },
+    "0x0774": {
+      "file": "trig_functions.asm",
+      "address": "0x0774",
+      "line": 1038
+    },
+    "0x0240": {
+      "file": "trig_functions.asm",
+      "address": "0x0240",
+      "line": 401
+    },
+    "0x066F": {
+      "file": "trig_functions.asm",
+      "address": "0x066F",
+      "line": 900
+    },
+    "0x04D8": {
+      "file": "trig_functions.asm",
+      "address": "0x04D8",
+      "line": 684
+    },
+    "0x052A": {
+      "file": "trig_functions.asm",
+      "address": "0x052A",
+      "line": 725
+    },
+    "0x0382": {
+      "file": "trig_functions.asm",
+      "address": "0x0382",
+      "line": 546
+    },
+    "0x0460": {
+      "file": "trig_functions.asm",
+      "address": "0x0460",
+      "line": 646
+    },
+    "0x0761": {
+      "file": "trig_functions.asm",
+      "address": "0x0761",
+      "line": 1019
+    },
+    "0x07A8": {
+      "file": "trig_functions.asm",
+      "address": "0x07A8",
+      "line": 1073
+    },
+    "0x055D": {
+      "file": "trig_functions.asm",
+      "address": "0x055D",
+      "line": 757
+    },
+    "0x0771": {
+      "file": "trig_functions.asm",
+      "address": "0x0771",
+      "line": 1035
+    },
+    "0x0590": {
+      "file": "trig_functions.asm",
+      "address": "0x0590",
+      "line": 800
+    },
+    "0x03A9": {
+      "file": "trig_functions.asm",
+      "address": "0x03A9",
+      "line": 569
+    },
+    "0x069E": {
+      "file": "trig_functions.asm",
+      "address": "0x069E",
+      "line": 937
+    },
+    "0x0134": {
+      "file": "trig_functions.asm",
+      "address": "0x0134",
+      "line": 265
+    },
+    "0x00F1": {
+      "file": "trig_functions.asm",
+      "address": "0x00F1",
+      "line": 220
+    },
+    "0x02CA": {
+      "file": "trig_functions.asm",
+      "address": "0x02CA",
+      "line": 463
+    },
+    "0x0305": {
+      "file": "trig_functions.asm",
+      "address": "0x0305",
+      "line": 488
+    },
+    "0x0802": {
+      "file": "trig_functions.asm",
+      "address": "0x0802",
+      "line": 1131
+    },
+    "0x0596": {
+      "file": "trig_functions.asm",
+      "address": "0x0596",
+      "line": 805
+    },
+    "0x0684": {
+      "file": "trig_functions.asm",
+      "address": "0x0684",
+      "line": 917
+    },
+    "0x068A": {
+      "file": "trig_functions.asm",
+      "address": "0x068A",
+      "line": 922
+    },
+    "0x06E0": {
+      "file": "trig_functions.asm",
+      "address": "0x06E0",
+      "line": 968
+    },
+    "0x0662": {
+      "file": "trig_functions.asm",
+      "address": "0x0662",
+      "line": 887
+    },
+    "0x0664": {
+      "file": "trig_functions.asm",
+      "address": "0x0664",
+      "line": 889
+    },
+    "0x039B": {
+      "file": "trig_functions.asm",
+      "address": "0x039B",
+      "line": 563
+    },
+    "0x00DD": {
+      "file": "trig_functions.asm",
+      "address": "0x00DD",
+      "line": 206
+    },
+    "0x0726": {
+      "file": "trig_functions.asm",
+      "address": "0x0726",
+      "line": 1006
+    },
+    "0x0100": {
+      "file": "trig_functions.asm",
+      "address": "0x0100",
+      "line": 232
+    },
+    "0x0361": {
+      "file": "trig_functions.asm",
+      "address": "0x0361",
+      "line": 529
+    },
+    "0x06F4": {
+      "file": "trig_functions.asm",
+      "address": "0x06F4",
+      "line": 977
+    },
+    "0x005D": {
+      "file": "trig_functions.asm",
+      "address": "0x005D",
+      "line": 111
+    },
+    "0x0131": {
+      "file": "trig_functions.asm",
+      "address": "0x0131",
+      "line": 264
+    },
+    "0x0551": {
+      "file": "trig_functions.asm",
+      "address": "0x0551",
+      "line": 749
+    },
+    "0x0459": {
+      "file": "trig_functions.asm",
+      "address": "0x0459",
+      "line": 643
+    },
+    "0x0490": {
+      "file": "trig_functions.asm",
+      "address": "0x0490",
+      "line": 666
+    },
+    "0x035A": {
+      "file": "trig_functions.asm",
+      "address": "0x035A",
+      "line": 524
+    },
+    "0x0117": {
+      "file": "trig_functions.asm",
+      "address": "0x0117",
+      "line": 242
+    },
+    "0x0683": {
+      "file": "trig_functions.asm",
+      "address": "0x0683",
+      "line": 916
+    },
+    "0x068B": {
+      "file": "trig_functions.asm",
+      "address": "0x068B",
+      "line": 923
+    },
+    "0x04EC": {
+      "file": "trig_functions.asm",
+      "address": "0x04EC",
+      "line": 695
+    },
+    "0x07E3": {
+      "file": "trig_functions.asm",
+      "address": "0x07E3",
+      "line": 1105
+    },
+    "0x006F": {
+      "file": "trig_functions.asm",
+      "address": "0x006F",
+      "line": 123
+    },
+    "0x035D": {
+      "file": "trig_functions.asm",
+      "address": "0x035D",
+      "line": 526
+    },
+    "0x05AE": {
+      "file": "trig_functions.asm",
+      "address": "0x05AE",
+      "line": 823
+    },
+    "0x07F1": {
+      "file": "trig_functions.asm",
+      "address": "0x07F1",
+      "line": 1119
+    },
+    "0x01E8": {
+      "file": "trig_functions.asm",
+      "address": "0x01E8",
+      "line": 355
+    },
+    "0x036C": {
+      "file": "trig_functions.asm",
+      "address": "0x036C",
+      "line": 535
+    },
+    "0x0781": {
+      "file": "trig_functions.asm",
+      "address": "0x0781",
+      "line": 1046
+    },
+    "0x0320": {
+      "file": "trig_functions.asm",
+      "address": "0x0320",
+      "line": 500
+    },
+    "0x0118": {
+      "file": "trig_functions.asm",
+      "address": "0x0118",
+      "line": 243
+    },
+    "0x05D5": {
+      "file": "trig_functions.asm",
+      "address": "0x05D5",
+      "line": 854
+    },
+    "0x05DF": {
+      "file": "trig_functions.asm",
+      "address": "0x05DF",
+      "line": 862
+    },
+    "0x04DB": {
+      "file": "trig_functions.asm",
+      "address": "0x04DB",
+      "line": 685
+    },
+    "0x069F": {
+      "file": "trig_functions.asm",
+      "address": "0x069F",
+      "line": 938
+    },
+    "0x07F0": {
+      "file": "trig_functions.asm",
+      "address": "0x07F0",
+      "line": 1118
+    },
+    "0x0384": {
+      "file": "trig_functions.asm",
+      "address": "0x0384",
+      "line": 547
+    },
+    "0x0413": {
+      "file": "trig_functions.asm",
+      "address": "0x0413",
+      "line": 613
+    },
+    "0x00CF": {
+      "file": "trig_functions.asm",
+      "address": "0x00CF",
+      "line": 195
+    },
+    "0x038E": {
+      "file": "trig_functions.asm",
+      "address": "0x038E",
+      "line": 553
+    },
+    "0x07CA": {
+      "file": "trig_functions.asm",
+      "address": "0x07CA",
+      "line": 1090
+    },
+    "0x007C": {
+      "file": "trig_functions.asm",
+      "address": "0x007C",
+      "line": 132
+    },
+    "0x07F9": {
+      "file": "trig_functions.asm",
+      "address": "0x07F9",
+      "line": 1124
+    },
+    "0x07DC": {
+      "file": "trig_functions.asm",
+      "address": "0x07DC",
+      "line": 1098
+    },
+    "0x010C": {
+      "file": "trig_functions.asm",
+      "address": "0x010C",
+      "line": 237
+    },
+    "0x028E": {
+      "file": "trig_functions.asm",
+      "address": "0x028E",
+      "line": 440
+    },
+    "0x05A5": {
+      "file": "trig_functions.asm",
+      "address": "0x05A5",
+      "line": 814
+    },
+    "0x01A7": {
+      "file": "trig_functions.asm",
+      "address": "0x01A7",
+      "line": 325
+    },
+    "0x06E4": {
+      "file": "trig_functions.asm",
+      "address": "0x06E4",
+      "line": 970
+    },
+    "0x07A5": {
+      "file": "trig_functions.asm",
+      "address": "0x07A5",
+      "line": 1072
+    },
+    "0x051D": {
+      "file": "trig_functions.asm",
+      "address": "0x051D",
+      "line": 720
+    },
+    "0x0765": {
+      "file": "trig_functions.asm",
+      "address": "0x0765",
+      "line": 1023
+    },
+    "0x05CA": {
+      "file": "trig_functions.asm",
+      "address": "0x05CA",
+      "line": 846
+    },
+    "0x04FB": {
+      "file": "trig_functions.asm",
+      "address": "0x04FB",
+      "line": 703
+    },
+    "0x012D": {
+      "file": "trig_functions.asm",
+      "address": "0x012D",
+      "line": 262
+    },
+    "0x0494": {
+      "file": "trig_functions.asm",
+      "address": "0x0494",
+      "line": 669
+    },
+    "0x06C4": {
+      "file": "trig_functions.asm",
+      "address": "0x06C4",
+      "line": 955
+    },
+    "0x004A": {
+      "file": "trig_functions.asm",
+      "address": "0x004A",
+      "line": 99
+    },
+    "0x0797": {
+      "file": "trig_functions.asm",
+      "address": "0x0797",
+      "line": 1064
+    },
+    "0x02FF": {
+      "file": "trig_functions.asm",
+      "address": "0x02FF",
+      "line": 486
+    },
+    "0x0493": {
+      "file": "trig_functions.asm",
+      "address": "0x0493",
+      "line": 668
+    },
+    "0x0028": {
+      "file": "trig_functions.asm",
+      "address": "0x0028",
+      "line": 72
+    },
+    "0x0714": {
+      "file": "trig_functions.asm",
+      "address": "0x0714",
+      "line": 992
+    },
+    "0x067F": {
+      "file": "trig_functions.asm",
+      "address": "0x067F",
+      "line": 912
+    },
+    "0x071E": {
+      "file": "trig_functions.asm",
+      "address": "0x071E",
+      "line": 999
+    },
+    "0x066D": {
+      "file": "trig_functions.asm",
+      "address": "0x066D",
+      "line": 898
+    },
+    "0x040E": {
+      "file": "trig_functions.asm",
+      "address": "0x040E",
+      "line": 611
+    },
+    "0x07EE": {
+      "file": "trig_functions.asm",
+      "address": "0x07EE",
+      "line": 1116
+    },
+    "0x0794": {
+      "file": "trig_functions.asm",
+      "address": "0x0794",
+      "line": 1061
+    },
+    "0x06CE": {
+      "file": "trig_functions.asm",
+      "address": "0x06CE",
+      "line": 959
+    },
+    "0x05D7": {
+      "file": "trig_functions.asm",
+      "address": "0x05D7",
+      "line": 856
+    },
+    "0x0106": {
+      "file": "trig_functions.asm",
+      "address": "0x0106",
+      "line": 235
+    },
+    "0x07A0": {
+      "file": "trig_functions.asm",
+      "address": "0x07A0",
+      "line": 1069
+    },
+    "0x01A4": {
+      "file": "trig_functions.asm",
+      "address": "0x01A4",
+      "line": 324
+    },
+    "0x0200": {
+      "file": "trig_functions.asm",
+      "address": "0x0200",
+      "line": 366
+    },
+    "0x01BA": {
+      "file": "trig_functions.asm",
+      "address": "0x01BA",
+      "line": 333
+    },
+    "0x07A4": {
+      "file": "trig_functions.asm",
+      "address": "0x07A4",
+      "line": 1071
+    },
+    "0x06D1": {
+      "file": "trig_functions.asm",
+      "address": "0x06D1",
+      "line": 961
+    },
+    "0x0570": {
+      "file": "trig_functions.asm",
+      "address": "0x0570",
+      "line": 772
+    },
+    "0x044F": {
+      "file": "trig_functions.asm",
+      "address": "0x044F",
+      "line": 637
+    },
+    "0x077F": {
+      "file": "trig_functions.asm",
+      "address": "0x077F",
+      "line": 1044
+    },
+    "0x0721": {
+      "file": "trig_functions.asm",
+      "address": "0x0721",
+      "line": 1002
+    },
+    "0x01E2": {
+      "file": "trig_functions.asm",
+      "address": "0x01E2",
+      "line": 353
+    },
+    "0x0598": {
+      "file": "trig_functions.asm",
+      "address": "0x0598",
+      "line": 806
+    },
+    "0x07DB": {
+      "file": "trig_functions.asm",
+      "address": "0x07DB",
+      "line": 1097
+    },
+    "0x004F": {
+      "file": "trig_functions.asm",
+      "address": "0x004F",
+      "line": 102
+    },
+    "0x049E": {
+      "file": "trig_functions.asm",
+      "address": "0x049E",
+      "line": 673
+    },
+    "0x0549": {
+      "file": "trig_functions.asm",
+      "address": "0x0549",
+      "line": 738
+    },
+    "0x032F": {
+      "file": "trig_functions.asm",
+      "address": "0x032F",
+      "line": 505
+    },
+    "0x0578": {
+      "file": "trig_functions.asm",
+      "address": "0x0578",
+      "line": 780
+    },
+    "0x0663": {
+      "file": "trig_functions.asm",
+      "address": "0x0663",
+      "line": 888
+    },
+    "0x07F6": {
+      "file": "trig_functions.asm",
+      "address": "0x07F6",
+      "line": 1123
+    },
+    "0x009E": {
+      "file": "trig_functions.asm",
+      "address": "0x009E",
+      "line": 151
+    },
+    "0x07B8": {
+      "file": "trig_functions.asm",
+      "address": "0x07B8",
+      "line": 1081
+    },
+    "0x02D2": {
+      "file": "trig_functions.asm",
+      "address": "0x02D2",
+      "line": 468
+    },
+    "0x0154": {
+      "file": "trig_functions.asm",
+      "address": "0x0154",
+      "line": 282
+    },
+    "0x03B5": {
+      "file": "trig_functions.asm",
+      "address": "0x03B5",
+      "line": 574
+    },
+    "0x030B": {
+      "file": "trig_functions.asm",
+      "address": "0x030B",
+      "line": 490
+    },
+    "0x0722": {
+      "file": "trig_functions.asm",
+      "address": "0x0722",
+      "line": 1003
+    },
+    "0x075F": {
+      "file": "trig_functions.asm",
+      "address": "0x075F",
+      "line": 1017
+    },
+    "0x0063": {
+      "file": "trig_functions.asm",
+      "address": "0x0063",
+      "line": 115
+    },
+    "0x04E1": {
+      "file": "trig_functions.asm",
+      "address": "0x04E1",
+      "line": 687
+    },
+    "0x00E0": {
+      "file": "trig_functions.asm",
+      "address": "0x00E0",
+      "line": 208
+    },
+    "0x046D": {
+      "file": "trig_functions.asm",
+      "address": "0x046D",
+      "line": 651
+    },
+    "0x0344": {
+      "file": "trig_functions.asm",
+      "address": "0x0344",
+      "line": 512
+    },
+    "0x014B": {
+      "file": "trig_functions.asm",
+      "address": "0x014B",
+      "line": 276
+    },
+    "0x035C": {
+      "file": "trig_functions.asm",
+      "address": "0x035C",
+      "line": 525
+    },
+    "0x067B": {
+      "file": "trig_functions.asm",
+      "address": "0x067B",
+      "line": 908
+    },
+    "0x02C1": {
+      "file": "trig_functions.asm",
+      "address": "0x02C1",
+      "line": 460
+    },
+    "0x0262": {
+      "file": "trig_functions.asm",
+      "address": "0x0262",
+      "line": 59
+    },
+    "0x052F": {
+      "file": "trig_functions.asm",
+      "address": "0x052F",
+      "line": 728
+    },
+    "0x0476": {
+      "file": "trig_functions.asm",
+      "address": "0x0476",
+      "line": 654
+    },
+    "0x013A": {
+      "file": "trig_functions.asm",
+      "address": "0x013A",
+      "line": 268
+    },
+    "0x075E": {
+      "file": "trig_functions.asm",
+      "address": "0x075E",
+      "line": 1016
+    },
+    "0x055C": {
+      "file": "trig_functions.asm",
+      "address": "0x055C",
+      "line": 756
+    },
+    "0x0196": {
+      "file": "trig_functions.asm",
+      "address": "0x0196",
+      "line": 316
+    },
+    "0x0253": {
+      "file": "trig_functions.asm",
+      "address": "0x0253",
+      "line": 53
+    },
+    "0x057E": {
+      "file": "trig_functions.asm",
+      "address": "0x057E",
+      "line": 786
+    },
+    "0x05EB": {
+      "file": "trig_functions.asm",
+      "address": "0x05EB",
+      "line": 868
+    },
+    "0x001F": {
+      "file": "trig_functions.asm",
+      "address": "0x001F",
+      "line": 69
+    },
+    "0x07EA": {
+      "file": "trig_functions.asm",
+      "address": "0x07EA",
+      "line": 1112
+    },
+    "0x02C4": {
+      "file": "trig_functions.asm",
+      "address": "0x02C4",
+      "line": 461
+    },
+    "0x0268": {
+      "file": "trig_functions.asm",
+      "address": "0x0268",
+      "line": 423
+    },
+    "0x047B": {
+      "file": "trig_functions.asm",
+      "address": "0x047B",
+      "line": 656
+    },
+    "0x01BE": {
+      "file": "trig_functions.asm",
+      "address": "0x01BE",
+      "line": 338
+    },
+    "0x0465": {
+      "file": "trig_functions.asm",
+      "address": "0x0465",
+      "line": 648
+    },
+    "0x0803": {
+      "file": "trig_functions.asm",
+      "address": "0x0803",
+      "line": 1132
+    },
+    "0x05B6": {
+      "file": "trig_functions.asm",
+      "address": "0x05B6",
+      "line": 828
+    },
+    "0x03EE": {
+      "file": "trig_functions.asm",
+      "address": "0x03EE",
+      "line": 598
+    },
+    "0x04E4": {
+      "file": "trig_functions.asm",
+      "address": "0x04E4",
+      "line": 688
+    },
+    "0x05BE": {
+      "file": "trig_functions.asm",
+      "address": "0x05BE",
+      "line": 835
+    },
+    "0x0440": {
+      "file": "trig_functions.asm",
+      "address": "0x0440",
+      "line": 631
+    },
+    "0x080A": {
+      "file": "trig_functions.asm",
+      "address": "0x080A",
+      "line": 1136
+    },
+    "0x0271": {
+      "file": "trig_functions.asm",
+      "address": "0x0271",
+      "line": 426
+    },
+    "0x0782": {
+      "file": "trig_functions.asm",
+      "address": "0x0782",
+      "line": 1047
+    },
+    "0x017B": {
+      "file": "trig_functions.asm",
+      "address": "0x017B",
+      "line": 301
+    },
+    "0x076F": {
+      "file": "trig_functions.asm",
+      "address": "0x076F",
+      "line": 1033
+    },
+    "0x04F7": {
+      "file": "trig_functions.asm",
+      "address": "0x04F7",
+      "line": 699
+    },
+    "0x00C0": {
+      "file": "trig_functions.asm",
+      "address": "0x00C0",
+      "line": 186
+    },
+    "0x0667": {
+      "file": "trig_functions.asm",
+      "address": "0x0667",
+      "line": 892
+    },
+    "0x03D2": {
+      "file": "trig_functions.asm",
+      "address": "0x03D2",
+      "line": 587
+    },
+    "0x0210": {
+      "file": "trig_functions.asm",
+      "address": "0x0210",
+      "line": 377
+    },
+    "0x05B9": {
+      "file": "trig_functions.asm",
+      "address": "0x05B9",
+      "line": 830
+    },
+    "0x06D9": {
+      "file": "trig_functions.asm",
+      "address": "0x06D9",
+      "line": 965
+    },
+    "0x01FB": {
+      "file": "trig_functions.asm",
+      "address": "0x01FB",
+      "line": 364
+    },
+    "0x0390": {
+      "file": "trig_functions.asm",
+      "address": "0x0390",
+      "line": 555
+    },
+    "0x05AB": {
+      "file": "trig_functions.asm",
+      "address": "0x05AB",
+      "line": 820
+    },
+    "0x0416": {
+      "file": "trig_functions.asm",
+      "address": "0x0416",
+      "line": 614
+    },
+    "0x03D4": {
+      "file": "trig_functions.asm",
+      "address": "0x03D4",
+      "line": 588
+    },
+    "0x00EC": {
+      "file": "trig_functions.asm",
+      "address": "0x00EC",
+      "line": 217
+    },
+    "0x001C": {
+      "file": "trig_functions.asm",
+      "address": "0x001C",
+      "line": 68
+    },
+    "0x0454": {
+      "file": "trig_functions.asm",
+      "address": "0x0454",
+      "line": 641
+    },
+    "0x00FB": {
+      "file": "trig_functions.asm",
+      "address": "0x00FB",
+      "line": 230
+    },
+    "0x02EE": {
+      "file": "trig_functions.asm",
+      "address": "0x02EE",
+      "line": 480
+    },
+    "0x056A": {
+      "file": "trig_functions.asm",
+      "address": "0x056A",
+      "line": 767
+    },
+    "0x024F": {
+      "file": "trig_functions.asm",
+      "address": "0x024F",
+      "line": 411
+    },
+    "0x0420": {
+      "file": "trig_functions.asm",
+      "address": "0x0420",
+      "line": 618
+    },
+    "0x0605": {
+      "file": "trig_functions.asm",
+      "address": "0x0605",
+      "line": 880
+    },
+    "0x07EC": {
+      "file": "trig_functions.asm",
+      "address": "0x07EC",
+      "line": 1114
+    },
+    "0x0552": {
+      "file": "trig_functions.asm",
+      "address": "0x0552",
+      "line": 750
+    },
+    "0x052D": {
+      "file": "trig_functions.asm",
+      "address": "0x052D",
+      "line": 726
+    },
+    "0x0489": {
+      "file": "trig_functions.asm",
+      "address": "0x0489",
+      "line": 663
+    },
+    "0x02A2": {
+      "file": "trig_functions.asm",
+      "address": "0x02A2",
+      "line": 449
+    },
+    "0x034C": {
+      "file": "trig_functions.asm",
+      "address": "0x034C",
+      "line": 517
+    },
+    "0x06FA": {
+      "file": "trig_functions.asm",
+      "address": "0x06FA",
+      "line": 980
+    },
+    "0x00B7": {
+      "file": "trig_functions.asm",
+      "address": "0x00B7",
+      "line": 181
+    },
+    "0x02DD": {
+      "file": "trig_functions.asm",
+      "address": "0x02DD",
+      "line": 473
+    },
+    "0x0788": {
+      "file": "trig_functions.asm",
+      "address": "0x0788",
+      "line": 1051
+    },
+    "0x06D4": {
+      "file": "trig_functions.asm",
+      "address": "0x06D4",
+      "line": 962
+    },
+    "0x066E": {
+      "file": "trig_functions.asm",
+      "address": "0x066E",
+      "line": 899
+    },
+    "0x0798": {
+      "file": "trig_functions.asm",
+      "address": "0x0798",
+      "line": 1065
+    },
+    "0x05C1": {
+      "file": "trig_functions.asm",
+      "address": "0x05C1",
+      "line": 838
+    },
+    "0x03FA": {
+      "file": "trig_functions.asm",
+      "address": "0x03FA",
+      "line": 603
+    },
+    "0x02EC": {
+      "file": "trig_functions.asm",
+      "address": "0x02EC",
+      "line": 479
+    },
+    "0x06F5": {
+      "file": "trig_functions.asm",
+      "address": "0x06F5",
+      "line": 978
+    },
+    "0x056C": {
+      "file": "trig_functions.asm",
+      "address": "0x056C",
+      "line": 769
+    },
+    "0x05AD": {
+      "file": "trig_functions.asm",
+      "address": "0x05AD",
+      "line": 822
+    },
+    "0x002B": {
+      "file": "trig_functions.asm",
+      "address": "0x002B",
+      "line": 73
+    },
+    "0x077C": {
+      "file": "trig_functions.asm",
+      "address": "0x077C",
+      "line": 1043
+    },
+    "0x0077": {
+      "file": "trig_functions.asm",
+      "address": "0x0077",
+      "line": 129
+    },
+    "0x0676": {
+      "file": "trig_functions.asm",
+      "address": "0x0676",
+      "line": 904
+    },
+    "0x02F1": {
+      "file": "trig_functions.asm",
+      "address": "0x02F1",
+      "line": 481
+    },
+    "0x04FA": {
+      "file": "trig_functions.asm",
+      "address": "0x04FA",
+      "line": 702
+    },
+    "0x026B": {
+      "file": "trig_functions.asm",
+      "address": "0x026B",
+      "line": 424
+    },
+    "0x0511": {
+      "file": "trig_functions.asm",
+      "address": "0x0511",
+      "line": 712
+    },
+    "0x0393": {
+      "file": "trig_functions.asm",
+      "address": "0x0393",
+      "line": 557
+    },
+    "0x00F2": {
+      "file": "trig_functions.asm",
+      "address": "0x00F2",
+      "line": 221
+    },
+    "0x0115": {
+      "file": "trig_functions.asm",
+      "address": "0x0115",
+      "line": 241
+    },
+    "0x00AA": {
+      "file": "trig_functions.asm",
+      "address": "0x00AA",
+      "line": 159
+    },
+    "0x06C5": {
+      "file": "trig_functions.asm",
+      "address": "0x06C5",
+      "line": 956
+    },
+    "0x0696": {
+      "file": "trig_functions.asm",
+      "address": "0x0696",
+      "line": 931
+    },
+    "0x00AD": {
+      "file": "trig_functions.asm",
+      "address": "0x00AD",
+      "line": 161
+    },
+    "0x0495": {
+      "file": "trig_functions.asm",
+      "address": "0x0495",
+      "line": 670
+    },
+    "0x05DB": {
+      "file": "trig_functions.asm",
+      "address": "0x05DB",
+      "line": 860
+    },
+    "0x05E2": {
+      "file": "trig_functions.asm",
+      "address": "0x05E2",
+      "line": 863
+    },
+    "0x02AD": {
+      "file": "trig_functions.asm",
+      "address": "0x02AD",
+      "line": 453
+    },
+    "0x014E": {
+      "file": "trig_functions.asm",
+      "address": "0x014E",
+      "line": 277
+    },
+    "0x07FC": {
+      "file": "trig_functions.asm",
+      "address": "0x07FC",
+      "line": 1127
+    },
+    "0x0193": {
+      "file": "trig_functions.asm",
+      "address": "0x0193",
+      "line": 315
+    },
+    "0x057B": {
+      "file": "trig_functions.asm",
+      "address": "0x057B",
+      "line": 783
+    },
+    "0x080B": {
+      "file": "trig_functions.asm",
+      "address": "0x080B",
+      "line": 1137
+    },
+    "0x050E": {
+      "file": "trig_functions.asm",
+      "address": "0x050E",
+      "line": 711
+    },
+    "0x023B": {
+      "file": "trig_functions.asm",
+      "address": "0x023B",
+      "line": 396
+    },
+    "0x05A3": {
+      "file": "trig_functions.asm",
+      "address": "0x05A3",
+      "line": 812
+    },
+    "0x04EF": {
+      "file": "trig_functions.asm",
+      "address": "0x04EF",
+      "line": 696
+    },
+    "0x058E": {
+      "file": "trig_functions.asm",
+      "address": "0x058E",
+      "line": 798
+    },
+    "0x05F8": {
+      "file": "trig_functions.asm",
+      "address": "0x05F8",
+      "line": 874
+    },
+    "0x05A4": {
+      "file": "trig_functions.asm",
+      "address": "0x05A4",
+      "line": 813
+    },
+    "0x056E": {
+      "file": "trig_functions.asm",
+      "address": "0x056E",
+      "line": 770
+    },
+    "0x0099": {
+      "file": "trig_functions.asm",
+      "address": "0x0099",
+      "line": 149
+    },
+    "0x0174": {
+      "file": "trig_functions.asm",
+      "address": "0x0174",
+      "line": 298
+    },
+    "0x0438": {
+      "file": "trig_functions.asm",
+      "address": "0x0438",
+      "line": 628
+    },
+    "0x046A": {
+      "file": "trig_functions.asm",
+      "address": "0x046A",
+      "line": 650
+    },
+    "0x0081": {
+      "file": "trig_functions.asm",
+      "address": "0x0081",
+      "line": 135
+    },
+    "0x0284": {
+      "file": "trig_functions.asm",
+      "address": "0x0284",
+      "line": 434
+    },
+    "0x03DA": {
+      "file": "trig_functions.asm",
+      "address": "0x03DA",
+      "line": 590
+    },
+    "0x013E": {
+      "file": "trig_functions.asm",
+      "address": "0x013E",
+      "line": 270
+    },
+    "0x07AE": {
+      "file": "trig_functions.asm",
+      "address": "0x07AE",
+      "line": 1076
+    },
+    "0x019D": {
+      "file": "trig_functions.asm",
+      "address": "0x019D",
+      "line": 320
+    },
+    "0x0402": {
+      "file": "trig_functions.asm",
+      "address": "0x0402",
+      "line": 606
+    },
+    "0x06F2": {
+      "file": "trig_functions.asm",
+      "address": "0x06F2",
+      "line": 976
+    },
+    "0x01AA": {
+      "file": "trig_functions.asm",
+      "address": "0x01AA",
+      "line": 326
+    },
+    "0x05C2": {
+      "file": "trig_functions.asm",
+      "address": "0x05C2",
+      "line": 839
+    },
+    "0x038D": {
+      "file": "trig_functions.asm",
+      "address": "0x038D",
+      "line": 552
+    },
+    "0x0530": {
+      "file": "trig_functions.asm",
+      "address": "0x0530",
+      "line": 729
+    },
+    "0x009C": {
+      "file": "trig_functions.asm",
+      "address": "0x009C",
+      "line": 150
+    },
+    "0x07EB": {
+      "file": "trig_functions.asm",
+      "address": "0x07EB",
+      "line": 1113
+    },
+    "0x07A9": {
+      "file": "trig_functions.asm",
+      "address": "0x07A9",
+      "line": 1074
+    },
+    "0x0717": {
+      "file": "trig_functions.asm",
+      "address": "0x0717",
+      "line": 994
+    },
+    "0x0256": {
+      "file": "trig_functions.asm",
+      "address": "0x0256",
+      "line": 414
+    },
+    "0x005C": {
+      "file": "trig_functions.asm",
+      "address": "0x005C",
+      "line": 110
+    },
+    "0x016D": {
+      "file": "trig_functions.asm",
+      "address": "0x016D",
+      "line": 294
+    },
+    "0x04F9": {
+      "file": "trig_functions.asm",
+      "address": "0x04F9",
+      "line": 701
+    },
+    "0x048F": {
+      "file": "trig_functions.asm",
+      "address": "0x048F",
+      "line": 665
+    },
+    "0x058F": {
+      "file": "trig_functions.asm",
+      "address": "0x058F",
+      "line": 799
+    },
+    "0x01F4": {
+      "file": "trig_functions.asm",
+      "address": "0x01F4",
+      "line": 360
+    },
+    "0x0561": {
+      "file": "trig_functions.asm",
+      "address": "0x0561",
+      "line": 761
+    },
+    "0x00C9": {
+      "file": "trig_functions.asm",
+      "address": "0x00C9",
+      "line": 192
+    },
+    "0x06EF": {
+      "file": "trig_functions.asm",
+      "address": "0x06EF",
+      "line": 975
+    },
+    "0x015E": {
+      "file": "trig_functions.asm",
+      "address": "0x015E",
+      "line": 286
+    },
+    "0x05C7": {
+      "file": "trig_functions.asm",
+      "address": "0x05C7",
+      "line": 844
+    },
+    "0x0166": {
+      "file": "trig_functions.asm",
+      "address": "0x0166",
+      "line": 291
+    },
+    "0x0243": {
+      "file": "trig_functions.asm",
+      "address": "0x0243",
+      "line": 402
+    },
+    "0x0491": {
+      "file": "trig_functions.asm",
+      "address": "0x0491",
+      "line": 667
+    },
+    "0x018D": {
+      "file": "trig_functions.asm",
+      "address": "0x018D",
+      "line": 313
+    },
+    "0x0169": {
+      "file": "trig_functions.asm",
+      "address": "0x0169",
+      "line": 292
+    },
+    "0x026E": {
+      "file": "trig_functions.asm",
+      "address": "0x026E",
+      "line": 425
+    },
+    "0x0147": {
+      "file": "trig_functions.asm",
+      "address": "0x0147",
+      "line": 274
+    },
+    "0x07BE": {
+      "file": "trig_functions.asm",
+      "address": "0x07BE",
+      "line": 1084
+    },
+    "0x076B": {
+      "file": "trig_functions.asm",
+      "address": "0x076B",
+      "line": 1029
+    },
+    "0x058B": {
+      "file": "trig_functions.asm",
+      "address": "0x058B",
+      "line": 795
+    },
+    "0x01F9": {
+      "file": "trig_functions.asm",
+      "address": "0x01F9",
+      "line": 2
+    },
+    "0x0025": {
+      "file": "trig_functions.asm",
+      "address": "0x0025",
+      "line": 71
+    },
+    "0x03BE": {
+      "file": "trig_functions.asm",
+      "address": "0x03BE",
+      "line": 579
+    },
+    "0x052E": {
+      "file": "trig_functions.asm",
+      "address": "0x052E",
+      "line": 727
+    },
+    "0x03C6": {
+      "file": "trig_functions.asm",
+      "address": "0x03C6",
+      "line": 582
+    },
+    "0x04F5": {
+      "file": "trig_functions.asm",
+      "address": "0x04F5",
+      "line": 698
+    },
+    "0x02C7": {
+      "file": "trig_functions.asm",
+      "address": "0x02C7",
+      "line": 462
+    },
+    "0x076A": {
+      "file": "trig_functions.asm",
+      "address": "0x076A",
+      "line": 1028
+    },
+    "0x07D5": {
+      "file": "trig_functions.asm",
+      "address": "0x07D5",
+      "line": 1095
+    },
+    "0x0392": {
+      "file": "trig_functions.asm",
+      "address": "0x0392",
+      "line": 556
+    },
+    "0x031B": {
+      "file": "trig_functions.asm",
+      "address": "0x031B",
+      "line": 498
+    },
+    "0x0571": {
+      "file": "trig_functions.asm",
+      "address": "0x0571",
+      "line": 773
+    },
+    "0x03FC": {
+      "file": "trig_functions.asm",
+      "address": "0x03FC",
+      "line": 604
+    },
+    "0x0584": {
+      "file": "trig_functions.asm",
+      "address": "0x0584",
+      "line": 789
+    },
+    "0x05DA": {
+      "file": "trig_functions.asm",
+      "address": "0x05DA",
+      "line": 859
+    },
+    "0x00DE": {
+      "file": "trig_functions.asm",
+      "address": "0x00DE",
+      "line": 207
+    },
+    "0x05AA": {
+      "file": "trig_functions.asm",
+      "address": "0x05AA",
+      "line": 819
+    },
+    "0x0792": {
+      "file": "trig_functions.asm",
+      "address": "0x0792",
+      "line": 1060
+    },
+    "0x0127": {
+      "file": "trig_functions.asm",
+      "address": "0x0127",
+      "line": 259
+    },
+    "0x0701": {
+      "file": "trig_functions.asm",
+      "address": "0x0701",
+      "line": 984
+    },
+    "0x0034": {
+      "file": "trig_functions.asm",
+      "address": "0x0034",
+      "line": 82
+    },
+    "0x0105": {
+      "file": "trig_functions.asm",
+      "address": "0x0105",
+      "line": 234
+    },
+    "0x0712": {
+      "file": "trig_functions.asm",
+      "address": "0x0712",
+      "line": 991
+    },
+    "0x00BF": {
+      "file": "trig_functions.asm",
+      "address": "0x00BF",
+      "line": 185
+    },
+    "0x05AF": {
+      "file": "trig_functions.asm",
+      "address": "0x05AF",
+      "line": 824
+    },
+    "0x0766": {
+      "file": "trig_functions.asm",
+      "address": "0x0766",
+      "line": 1024
+    },
+    "0x02BB": {
+      "file": "trig_functions.asm",
+      "address": "0x02BB",
+      "line": 458
+    },
+    "0x0308": {
+      "file": "trig_functions.asm",
+      "address": "0x0308",
+      "line": 489
+    },
+    "0x079D": {
+      "file": "trig_functions.asm",
+      "address": "0x079D",
+      "line": 1068
+    },
+    "0x008D": {
+      "file": "trig_functions.asm",
+      "address": "0x008D",
+      "line": 145
+    },
+    "0x07D8": {
+      "file": "trig_functions.asm",
+      "address": "0x07D8",
+      "line": 1096
+    },
+    "0x05CE": {
+      "file": "trig_functions.asm",
+      "address": "0x05CE",
+      "line": 849
+    },
+    "0x05A6": {
+      "file": "trig_functions.asm",
+      "address": "0x05A6",
+      "line": 815
+    },
+    "0x070E": {
+      "file": "trig_functions.asm",
+      "address": "0x070E",
+      "line": 989
+    },
+    "0x0068": {
+      "file": "trig_functions.asm",
+      "address": "0x0068",
+      "line": 119
+    },
+    "0x020A": {
+      "file": "trig_functions.asm",
+      "address": "0x020A",
+      "line": 17
+    },
+    "0x037D": {
+      "file": "trig_functions.asm",
+      "address": "0x037D",
+      "line": 544
+    },
+    "0x04DE": {
+      "file": "trig_functions.asm",
+      "address": "0x04DE",
+      "line": 686
+    },
+    "0x0364": {
+      "file": "trig_functions.asm",
+      "address": "0x0364",
+      "line": 532
+    },
+    "0x036E": {
+      "file": "trig_functions.asm",
+      "address": "0x036E",
+      "line": 536
+    },
+    "0x00A7": {
+      "file": "trig_functions.asm",
+      "address": "0x00A7",
+      "line": 157
+    },
+    "0x078C": {
+      "file": "trig_functions.asm",
+      "address": "0x078C",
+      "line": 1054
+    },
+    "0x0148": {
+      "file": "trig_functions.asm",
+      "address": "0x0148",
+      "line": 275
+    },
+    "0x01CA": {
+      "file": "trig_functions.asm",
+      "address": "0x01CA",
+      "line": 343
+    },
+    "0x06AF": {
+      "file": "trig_functions.asm",
+      "address": "0x06AF",
+      "line": 946
+    },
+    "0x0574": {
+      "file": "trig_functions.asm",
+      "address": "0x0574",
+      "line": 776
+    },
+    "0x03E1": {
+      "file": "trig_functions.asm",
+      "address": "0x03E1",
+      "line": 593
+    },
+    "0x02D5": {
+      "file": "trig_functions.asm",
+      "address": "0x02D5",
+      "line": 469
+    },
+    "0x00FD": {
+      "file": "trig_functions.asm",
+      "address": "0x00FD",
+      "line": 231
+    },
+    "0x0589": {
+      "file": "trig_functions.asm",
+      "address": "0x0589",
+      "line": 793
+    },
+    "0x01DF": {
+      "file": "trig_functions.asm",
+      "address": "0x01DF",
+      "line": 351
+    },
+    "0x03CD": {
+      "file": "trig_functions.asm",
+      "address": "0x03CD",
+      "line": 585
+    },
+    "0x037B": {
+      "file": "trig_functions.asm",
+      "address": "0x037B",
+      "line": 543
+    },
+    "0x017A": {
+      "file": "trig_functions.asm",
+      "address": "0x017A",
+      "line": 300
+    },
+    "0x0568": {
+      "file": "trig_functions.asm",
+      "address": "0x0568",
+      "line": 766
+    },
+    "0x06FC": {
+      "file": "trig_functions.asm",
+      "address": "0x06FC",
+      "line": 981
+    },
+    "0x07BC": {
+      "file": "trig_functions.asm",
+      "address": "0x07BC",
+      "line": 1083
+    },
+    "0x02CF": {
+      "file": "trig_functions.asm",
+      "address": "0x02CF",
+      "line": 467
+    },
+    "0x0693": {
+      "file": "trig_functions.asm",
+      "address": "0x0693",
+      "line": 928
+    },
+    "0x0410": {
+      "file": "trig_functions.asm",
+      "address": "0x0410",
+      "line": 612
+    },
+    "0x05D2": {
+      "file": "trig_functions.asm",
+      "address": "0x05D2",
+      "line": 851
+    },
+    "0x0720": {
+      "file": "trig_functions.asm",
+      "address": "0x0720",
+      "line": 1001
+    },
+    "0x0238": {
+      "file": "trig_functions.asm",
+      "address": "0x0238",
+      "line": 42
+    },
+    "0x0357": {
+      "file": "trig_functions.asm",
+      "address": "0x0357",
+      "line": 523
+    },
+    "0x038B": {
+      "file": "trig_functions.asm",
+      "address": "0x038B",
+      "line": 551
+    },
+    "0x0604": {
+      "file": "trig_functions.asm",
+      "address": "0x0604",
+      "line": 879
+    },
+    "0x06CB": {
+      "file": "trig_functions.asm",
+      "address": "0x06CB",
+      "line": 958
+    },
+    "0x0473": {
+      "file": "trig_functions.asm",
+      "address": "0x0473",
+      "line": 653
+    },
+    "0x02F7": {
+      "file": "trig_functions.asm",
+      "address": "0x02F7",
+      "line": 483
+    },
+    "0x059B": {
+      "file": "trig_functions.asm",
+      "address": "0x059B",
+      "line": 807
+    },
+    "0x07BF": {
+      "file": "trig_functions.asm",
+      "address": "0x07BF",
+      "line": 1085
+    },
+    "0x0580": {
+      "file": "trig_functions.asm",
+      "address": "0x0580",
+      "line": 787
+    },
+    "0x044C": {
+      "file": "trig_functions.asm",
+      "address": "0x044C",
+      "line": 636
+    },
+    "0x0197": {
+      "file": "trig_functions.asm",
+      "address": "0x0197",
+      "line": 318
+    },
+    "0x03A6": {
+      "file": "trig_functions.asm",
+      "address": "0x03A6",
+      "line": 568
+    },
+    "0x011B": {
+      "file": "trig_functions.asm",
+      "address": "0x011B",
+      "line": 244
+    },
+    "0x0386": {
+      "file": "trig_functions.asm",
+      "address": "0x0386",
+      "line": 549
+    },
+    "0x013B": {
+      "file": "trig_functions.asm",
+      "address": "0x013B",
+      "line": 269
+    },
+    "0x0311": {
+      "file": "trig_functions.asm",
+      "address": "0x0311",
+      "line": 492
+    },
+    "0x03B0": {
+      "file": "trig_functions.asm",
+      "address": "0x03B0",
+      "line": 572
+    },
+    "0x03D0": {
+      "file": "trig_functions.asm",
+      "address": "0x03D0",
+      "line": 586
+    },
+    "0x01D3": {
+      "file": "trig_functions.asm",
+      "address": "0x01D3",
+      "line": 346
+    },
+    "0x03EB": {
+      "file": "trig_functions.asm",
+      "address": "0x03EB",
+      "line": 597
+    },
+    "0x044A": {
+      "file": "trig_functions.asm",
+      "address": "0x044A",
+      "line": 635
+    },
+    "0x0283": {
+      "file": "trig_functions.asm",
+      "address": "0x0283",
+      "line": 433
+    },
+    "0x0678": {
+      "file": "trig_functions.asm",
+      "address": "0x0678",
+      "line": 905
+    },
+    "0x02E9": {
+      "file": "trig_functions.asm",
+      "address": "0x02E9",
+      "line": 478
+    },
+    "0x07AF": {
+      "file": "trig_functions.asm",
+      "address": "0x07AF",
+      "line": 1077
+    },
+    "0x0515": {
+      "file": "trig_functions.asm",
+      "address": "0x0515",
+      "line": 714
+    },
+    "0x01FD": {
+      "file": "trig_functions.asm",
+      "address": "0x01FD",
+      "line": 12
+    },
+    "0x0395": {
+      "file": "trig_functions.asm",
+      "address": "0x0395",
+      "line": 561
+    },
+    "0x05A9": {
+      "file": "trig_functions.asm",
+      "address": "0x05A9",
+      "line": 818
+    },
+    "0x05B0": {
+      "file": "trig_functions.asm",
+      "address": "0x05B0",
+      "line": 825
+    },
+    "0x0155": {
+      "file": "trig_functions.asm",
+      "address": "0x0155",
+      "line": 283
+    },
+    "0x0221": {
+      "file": "trig_functions.asm",
+      "address": "0x0221",
+      "line": 33
+    },
+    "0x0582": {
+      "file": "trig_functions.asm",
+      "address": "0x0582",
+      "line": 788
+    },
+    "0x07DE": {
+      "file": "trig_functions.asm",
+      "address": "0x07DE",
+      "line": 1100
+    },
+    "0x003D": {
+      "file": "trig_functions.asm",
+      "address": "0x003D",
+      "line": 85
+    },
+    "0x0313": {
+      "file": "trig_functions.asm",
+      "address": "0x0313",
+      "line": 493
+    },
+    "0x05E7": {
+      "file": "trig_functions.asm",
+      "address": "0x05E7",
+      "line": 866
+    },
+    "0x05A0": {
+      "file": "trig_functions.asm",
+      "address": "0x05A0",
+      "line": 810
+    },
+    "0x07E1": {
+      "file": "trig_functions.asm",
+      "address": "0x07E1",
+      "line": 1103
+    },
+    "0x049B": {
+      "file": "trig_functions.asm",
+      "address": "0x049B",
+      "line": 672
+    },
+    "0x01AD": {
+      "file": "trig_functions.asm",
+      "address": "0x01AD",
+      "line": 327
+    },
+    "0x01B1": {
+      "file": "trig_functions.asm",
+      "address": "0x01B1",
+      "line": 330
+    },
+    "0x0299": {
+      "file": "trig_functions.asm",
+      "address": "0x0299",
+      "line": 445
+    },
+    "0x070F": {
+      "file": "trig_functions.asm",
+      "address": "0x070F",
+      "line": 990
+    },
+    "0x0064": {
+      "file": "trig_functions.asm",
+      "address": "0x0064",
+      "line": 116
+    },
+    "0x0800": {
+      "file": "trig_functions.asm",
+      "address": "0x0800",
+      "line": 1129
+    },
+    "0x0086": {
+      "file": "trig_functions.asm",
+      "address": "0x0086",
+      "line": 142
+    },
+    "0x0422": {
+      "file": "trig_functions.asm",
+      "address": "0x0422",
+      "line": 619
+    },
+    "0x06AA": {
+      "file": "trig_functions.asm",
+      "address": "0x06AA",
+      "line": 943
+    },
+    "0x037F": {
+      "file": "trig_functions.asm",
+      "address": "0x037F",
+      "line": 545
+    },
+    "0x07F4": {
+      "file": "trig_functions.asm",
+      "address": "0x07F4",
+      "line": 1122
+    },
+    "0x0801": {
+      "file": "trig_functions.asm",
+      "address": "0x0801",
+      "line": 1130
+    },
+    "0x03C8": {
+      "file": "trig_functions.asm",
+      "address": "0x03C8",
+      "line": 583
+    },
+    "0x0566": {
+      "file": "trig_functions.asm",
+      "address": "0x0566",
+      "line": 765
+    },
+    "0x0120": {
+      "file": "trig_functions.asm",
+      "address": "0x0120",
+      "line": 256
+    },
+    "0x055A": {
+      "file": "trig_functions.asm",
+      "address": "0x055A",
+      "line": 754
+    },
+    "0x0682": {
+      "file": "trig_functions.asm",
+      "address": "0x0682",
+      "line": 915
+    },
+    "0x0692": {
+      "file": "trig_functions.asm",
+      "address": "0x0692",
+      "line": 927
+    },
+    "0x038F": {
+      "file": "trig_functions.asm",
+      "address": "0x038F",
+      "line": 554
+    },
+    "0x029F": {
+      "file": "trig_functions.asm",
+      "address": "0x029F",
+      "line": 448
+    },
+    "0x0022": {
+      "file": "trig_functions.asm",
+      "address": "0x0022",
+      "line": 70
+    },
+    "0x0688": {
+      "file": "trig_functions.asm",
+      "address": "0x0688",
+      "line": 921
+    },
+    "0x07F3": {
+      "file": "trig_functions.asm",
+      "address": "0x07F3",
+      "line": 1121
+    },
+    "0x07FB": {
+      "file": "trig_functions.asm",
+      "address": "0x07FB",
+      "line": 1126
+    },
+    "0x022C": {
+      "file": "trig_functions.asm",
+      "address": "0x022C",
+      "line": 390
+    },
+    "0x0783": {
+      "file": "trig_functions.asm",
+      "address": "0x0783",
+      "line": 1048
+    },
+    "0x007B": {
+      "file": "trig_functions.asm",
+      "address": "0x007B",
+      "line": 131
+    },
+    "0x0518": {
+      "file": "trig_functions.asm",
+      "address": "0x0518",
+      "line": 717
+    },
+    "0x0406": {
+      "file": "trig_functions.asm",
+      "address": "0x0406",
+      "line": 608
+    },
+    "0x075A": {
+      "file": "trig_functions.asm",
+      "address": "0x075A",
+      "line": 1012
+    },
+    "0x071A": {
+      "file": "trig_functions.asm",
+      "address": "0x071A",
+      "line": 995
+    },
+    "0x02FC": {
+      "file": "trig_functions.asm",
+      "address": "0x02FC",
+      "line": 485
+    },
+    "0x05BF": {
+      "file": "trig_functions.asm",
+      "address": "0x05BF",
+      "line": 836
+    },
+    "0x02B8": {
+      "file": "trig_functions.asm",
+      "address": "0x02B8",
+      "line": 457
+    },
+    "0x05DE": {
+      "file": "trig_functions.asm",
+      "address": "0x05DE",
+      "line": 861
+    },
+    "0x0784": {
+      "file": "trig_functions.asm",
+      "address": "0x0784",
+      "line": 1049
+    },
+    "0x042C": {
+      "file": "trig_functions.asm",
+      "address": "0x042C",
+      "line": 623
+    },
+    "0x0280": {
+      "file": "trig_functions.asm",
+      "address": "0x0280",
+      "line": 432
+    },
+    "0x0394": {
+      "file": "trig_functions.asm",
+      "address": "0x0394",
+      "line": 558
+    },
+    "0x01E5": {
+      "file": "trig_functions.asm",
+      "address": "0x01E5",
+      "line": 354
+    },
+    "0x035F": {
+      "file": "trig_functions.asm",
+      "address": "0x035F",
+      "line": 528
+    },
+    "0x07E9": {
+      "file": "trig_functions.asm",
+      "address": "0x07E9",
+      "line": 1111
+    },
+    "0x05EF": {
+      "file": "trig_functions.asm",
+      "address": "0x05EF",
+      "line": 870
+    },
+    "0x0409": {
+      "file": "trig_functions.asm",
+      "address": "0x0409",
+      "line": 609
+    },
+    "0x00F4": {
+      "file": "trig_functions.asm",
+      "address": "0x00F4",
+      "line": 222
+    },
+    "0x04C8": {
+      "file": "trig_functions.asm",
+      "address": "0x04C8",
+      "line": 676
+    },
+    "0x0699": {
+      "file": "trig_functions.asm",
+      "address": "0x0699",
+      "line": 934
+    },
+    "0x0072": {
+      "file": "trig_functions.asm",
+      "address": "0x0072",
+      "line": 125
+    },
+    "0x02A5": {
+      "file": "trig_functions.asm",
+      "address": "0x02A5",
+      "line": 450
+    },
+    "0x05A8": {
+      "file": "trig_functions.asm",
+      "address": "0x05A8",
+      "line": 817
+    },
+    "0x047E": {
+      "file": "trig_functions.asm",
+      "address": "0x047E",
+      "line": 657
+    },
+    "0x02CD": {
+      "file": "trig_functions.asm",
+      "address": "0x02CD",
+      "line": 464
+    },
+    "0x007A": {
+      "file": "trig_functions.asm",
+      "address": "0x007A",
+      "line": 130
+    },
+    "0x07FA": {
+      "file": "trig_functions.asm",
+      "address": "0x07FA",
+      "line": 1125
+    },
+    "0x01C4": {
+      "file": "trig_functions.asm",
+      "address": "0x01C4",
+      "line": 340
+    },
+    "0x00D5": {
+      "file": "trig_functions.asm",
+      "address": "0x00D5",
+      "line": 200
+    },
+    "0x0363": {
+      "file": "trig_functions.asm",
+      "address": "0x0363",
+      "line": 531
+    },
+    "0x00B2": {
+      "file": "trig_functions.asm",
+      "address": "0x00B2",
+      "line": 164
+    },
+    "0x02DC": {
+      "file": "trig_functions.asm",
+      "address": "0x02DC",
+      "line": 472
+    },
+    "0x01D6": {
+      "file": "trig_functions.asm",
+      "address": "0x01D6",
+      "line": 348
+    },
+    "0x0362": {
+      "file": "trig_functions.asm",
+      "address": "0x0362",
+      "line": 530
+    },
+    "0x05BA": {
+      "file": "trig_functions.asm",
+      "address": "0x05BA",
+      "line": 831
+    },
+    "0x006D": {
+      "file": "trig_functions.asm",
+      "address": "0x006D",
+      "line": 122
+    },
+    "0x0037": {
+      "file": "trig_functions.asm",
+      "address": "0x0037",
+      "line": 83
+    },
+    "0x042A": {
+      "file": "trig_functions.asm",
+      "address": "0x042A",
+      "line": 622
+    },
+    "0x042E": {
+      "file": "trig_functions.asm",
+      "address": "0x042E",
+      "line": 624
+    },
+    "0x0093": {
+      "file": "trig_functions.asm",
+      "address": "0x0093",
+      "line": 147
+    },
+    "0x0288": {
+      "file": "trig_functions.asm",
+      "address": "0x0288",
+      "line": 438
+    },
+    "0x069A": {
+      "file": "trig_functions.asm",
+      "address": "0x069A",
+      "line": 935
+    },
+    "0x0513": {
+      "file": "trig_functions.asm",
+      "address": "0x0513",
+      "line": 713
+    },
+    "0x0690": {
+      "file": "trig_functions.asm",
+      "address": "0x0690",
+      "line": 926
+    },
+    "0x05EA": {
+      "file": "trig_functions.asm",
+      "address": "0x05EA",
+      "line": 867
+    },
+    "0x00DA": {
+      "file": "trig_functions.asm",
+      "address": "0x00DA",
+      "line": 202
+    },
+    "0x0724": {
+      "file": "trig_functions.asm",
+      "address": "0x0724",
+      "line": 1005
+    },
+    "0x05B2": {
+      "file": "trig_functions.asm",
+      "address": "0x05B2",
+      "line": 826
+    },
+    "0x0665": {
+      "file": "trig_functions.asm",
+      "address": "0x0665",
+      "line": 890
+    },
+    "0x06C1": {
+      "file": "trig_functions.asm",
+      "address": "0x06C1",
+      "line": 954
+    },
+    "0x007E": {
+      "file": "trig_functions.asm",
+      "address": "0x007E",
+      "line": 133
+    },
+    "0x03D7": {
+      "file": "trig_functions.asm",
+      "address": "0x03D7",
+      "line": 589
+    },
+    "0x0431": {
+      "file": "trig_functions.asm",
+      "address": "0x0431",
+      "line": 625
+    },
+    "0x07CE": {
+      "file": "trig_functions.asm",
+      "address": "0x07CE",
+      "line": 1092
+    },
+    "0x0054": {
+      "file": "trig_functions.asm",
+      "address": "0x0054",
+      "line": 105
+    },
+    "0x0040": {
+      "file": "trig_functions.asm",
+      "address": "0x0040",
+      "line": 86
+    },
+    "0x075D": {
+      "file": "trig_functions.asm",
+      "address": "0x075D",
+      "line": 1015
+    },
+    "0x0332": {
+      "file": "trig_functions.asm",
+      "address": "0x0332",
+      "line": 506
+    },
+    "0x0592": {
+      "file": "trig_functions.asm",
+      "address": "0x0592",
+      "line": 802
+    },
+    "0x06EC": {
+      "file": "trig_functions.asm",
+      "address": "0x06EC",
+      "line": 974
+    },
+    "0x07C6": {
+      "file": "trig_functions.asm",
+      "address": "0x07C6",
+      "line": 1088
+    },
+    "0x06B6": {
+      "file": "trig_functions.asm",
+      "address": "0x06B6",
+      "line": 949
+    },
+    "0x00CC": {
+      "file": "trig_functions.asm",
+      "address": "0x00CC",
+      "line": 194
+    },
+    "0x0776": {
+      "file": "trig_functions.asm",
+      "address": "0x0776",
+      "line": 1039
+    },
+    "0x050B": {
+      "file": "trig_functions.asm",
+      "address": "0x050B",
+      "line": 709
+    },
+    "0x0669": {
+      "file": "trig_functions.asm",
+      "address": "0x0669",
+      "line": 894
+    },
+    "0x01CD": {
+      "file": "trig_functions.asm",
+      "address": "0x01CD",
+      "line": 344
+    },
+    "0x021F": {
+      "file": "trig_functions.asm",
+      "address": "0x021F",
+      "line": 382
+    },
+    "0x0285": {
+      "file": "trig_functions.asm",
+      "address": "0x0285",
+      "line": 437
+    },
+    "0x00BA": {
+      "file": "trig_functions.asm",
+      "address": "0x00BA",
+      "line": 182
+    },
+    "0x0233": {
+      "file": "trig_functions.asm",
+      "address": "0x0233",
+      "line": 393
+    },
+    "0x06BA": {
+      "file": "trig_functions.asm",
+      "address": "0x06BA",
+      "line": 951
+    },
+    "0x0045": {
+      "file": "trig_functions.asm",
+      "address": "0x0045",
+      "line": 89
+    },
+    "0x01B4": {
+      "file": "trig_functions.asm",
+      "address": "0x01B4",
+      "line": 331
+    },
+    "0x0213": {
+      "file": "trig_functions.asm",
+      "address": "0x0213",
+      "line": 20
+    },
+    "0x0686": {
+      "file": "trig_functions.asm",
+      "address": "0x0686",
+      "line": 919
+    },
+    "0x0055": {
+      "file": "trig_functions.asm",
+      "address": "0x0055",
+      "line": 106
+    },
+    "0x067E": {
+      "file": "trig_functions.asm",
+      "address": "0x067E",
+      "line": 911
+    },
+    "0x00AF": {
+      "file": "trig_functions.asm",
+      "address": "0x00AF",
+      "line": 162
+    },
+    "0x0498": {
+      "file": "trig_functions.asm",
+      "address": "0x0498",
+      "line": 671
+    },
+    "0x066C": {
+      "file": "trig_functions.asm",
+      "address": "0x066C",
+      "line": 897
+    },
+    "0x077B": {
+      "file": "trig_functions.asm",
+      "address": "0x077B",
+      "line": 1042
+    },
+    "0x06A4": {
+      "file": "trig_functions.asm",
+      "address": "0x06A4",
+      "line": 940
+    },
+    "0x002D": {
+      "file": "trig_functions.asm",
+      "address": "0x002D",
+      "line": 75
+    },
+    "0x00D3": {
+      "file": "trig_functions.asm",
+      "address": "0x00D3",
+      "line": 199
+    },
+    "0x0224": {
+      "file": "trig_functions.asm",
+      "address": "0x0224",
+      "line": 34
+    },
+    "0x05F3": {
+      "file": "trig_functions.asm",
+      "address": "0x05F3",
+      "line": 872
+    },
+    "0x07EF": {
+      "file": "trig_functions.asm",
+      "address": "0x07EF",
+      "line": 1117
+    },
+    "0x0790": {
+      "file": "trig_functions.asm",
+      "address": "0x0790",
+      "line": 1058
+    },
+    "0x00F0": {
+      "file": "trig_functions.asm",
+      "address": "0x00F0",
+      "line": 219
+    },
+    "0x0202": {
+      "file": "trig_functions.asm",
+      "address": "0x0202",
+      "line": 367
+    },
+    "0x05C3": {
+      "file": "trig_functions.asm",
+      "address": "0x05C3",
+      "line": 840
+    },
+    "0x0227": {
+      "file": "trig_functions.asm",
+      "address": "0x0227",
+      "line": 388
+    },
+    "0x068C": {
+      "file": "trig_functions.asm",
+      "address": "0x068C",
+      "line": 924
+    },
+    "0x078F": {
+      "file": "trig_functions.asm",
+      "address": "0x078F",
+      "line": 1057
+    },
+    "0x0144": {
+      "file": "trig_functions.asm",
+      "address": "0x0144",
+      "line": 272
+    },
+    "0x0109": {
+      "file": "trig_functions.asm",
+      "address": "0x0109",
+      "line": 236
+    },
+    "0x0219": {
+      "file": "trig_functions.asm",
+      "address": "0x0219",
+      "line": 30
+    },
+    "0x078A": {
+      "file": "trig_functions.asm",
+      "address": "0x078A",
+      "line": 1052
+    },
+    "0x07AC": {
+      "file": "trig_functions.asm",
+      "address": "0x07AC",
+      "line": 1075
+    },
+    "0x010E": {
+      "file": "trig_functions.asm",
+      "address": "0x010E",
+      "line": 238
+    },
+    "0x07E8": {
+      "file": "trig_functions.asm",
+      "address": "0x07E8",
+      "line": 1110
+    },
+    "0x03F8": {
+      "file": "trig_functions.asm",
+      "address": "0x03F8",
+      "line": 602
+    },
+    "0x0141": {
+      "file": "trig_functions.asm",
+      "address": "0x0141",
+      "line": 271
+    },
+    "0x0051": {
+      "file": "trig_functions.asm",
+      "address": "0x0051",
+      "line": 103
+    },
+    "0x0250": {
+      "file": "trig_functions.asm",
+      "address": "0x0250",
+      "line": 52
+    },
+    "0x05C0": {
+      "file": "trig_functions.asm",
+      "address": "0x05C0",
+      "line": 837
+    },
+    "0x071C": {
+      "file": "trig_functions.asm",
+      "address": "0x071C",
+      "line": 997
+    },
+    "0x03DC": {
+      "file": "trig_functions.asm",
+      "address": "0x03DC",
+      "line": 591
+    },
+    "0x05FE": {
+      "file": "trig_functions.asm",
+      "address": "0x05FE",
+      "line": 877
+    },
+    "0x039F": {
+      "file": "trig_functions.asm",
+      "address": "0x039F",
+      "line": 565
+    },
+    "0x041D": {
+      "file": "trig_functions.asm",
+      "address": "0x041D",
+      "line": 617
+    },
+    "0x043E": {
+      "file": "trig_functions.asm",
+      "address": "0x043E",
+      "line": 630
+    },
+    "0x01EE": {
+      "file": "trig_functions.asm",
+      "address": "0x01EE",
+      "line": 358
+    },
+    "0x0060": {
+      "file": "trig_functions.asm",
+      "address": "0x0060",
+      "line": 113
+    },
+    "0x0090": {
+      "file": "trig_functions.asm",
+      "address": "0x0090",
+      "line": 146
+    },
+    "0x0375": {
+      "file": "trig_functions.asm",
+      "address": "0x0375",
+      "line": 541
+    },
+    "0x05C8": {
+      "file": "trig_functions.asm",
+      "address": "0x05C8",
+      "line": 845
+    },
+    "0x058D": {
+      "file": "trig_functions.asm",
+      "address": "0x058D",
+      "line": 797
+    },
+    "0x0764": {
+      "file": "trig_functions.asm",
+      "address": "0x0764",
+      "line": 1022
+    },
+    "0x01EB": {
+      "file": "trig_functions.asm",
+      "address": "0x01EB",
+      "line": 356
+    },
+    "0x0670": {
+      "file": "trig_functions.asm",
+      "address": "0x0670",
+      "line": 901
+    },
+    "0x05CC": {
+      "file": "trig_functions.asm",
+      "address": "0x05CC",
+      "line": 848
+    },
+    "0x00DC": {
+      "file": "trig_functions.asm",
+      "address": "0x00DC",
+      "line": 203
+    },
+    "0x0103": {
+      "file": "trig_functions.asm",
+      "address": "0x0103",
+      "line": 233
+    },
+    "0x0804": {
+      "file": "trig_functions.asm",
+      "address": "0x0804",
+      "line": 1133
+    },
+    "0x0236": {
+      "file": "trig_functions.asm",
+      "address": "0x0236",
+      "line": 41
+    },
+    "0x069B": {
+      "file": "trig_functions.asm",
+      "address": "0x069B",
+      "line": 936
+    },
+    "0x07E0": {
+      "file": "trig_functions.asm",
+      "address": "0x07E0",
+      "line": 1102
+    },
+    "0x0520": {
+      "file": "trig_functions.asm",
+      "address": "0x0520",
+      "line": 721
+    },
+    "0x00B4": {
+      "file": "trig_functions.asm",
+      "address": "0x00B4",
+      "line": 165
+    },
+    "0x0768": {
+      "file": "trig_functions.asm",
+      "address": "0x0768",
+      "line": 1026
+    },
+    "0x0274": {
+      "file": "trig_functions.asm",
+      "address": "0x0274",
+      "line": 427
+    },
+    "0x057C": {
+      "file": "trig_functions.asm",
+      "address": "0x057C",
+      "line": 784
+    }
+  },
+  "functions": {},
+  "nativeCalls": {
+    "15": "VECTREX_PRINT_TEXT"
+  },
+  "asmFunctions": {
+    "VECTREX_PRINT_TEXT": {
+      "name": "VECTREX_PRINT_TEXT",
+      "file": "trig_functions.asm",
+      "startLine": 138,
+      "endLine": 153,
+      "type": "native"
+    }
+  },
+  "asmAddressMap": {
+    "1110": "0x07E8",
+    "624": "0x042E",
+    "623": "0x042C",
+    "940": "0x06A4",
+    "463": "0x02CA",
+    "869": "0x05EE",
+    "54": "0x0256",
+    "161": "0x00AD",
+    "1102": "0x07E0",
+    "1054": "0x078C",
+    "293": "0x016C",
+    "406": "0x024C",
+    "284": "0x0158",
+    "800": "0x0590",
+    "935": "0x069A",
+    "1138": "0x080C",
+    "682": "0x04D4",
+    "188": "0x00C2",
+    "650": "0x046A",
+    "395": "0x0238",
+    "119": "0x0068",
+    "572": "0x03B0",
+    "312": "0x018C",
+    "583": "0x03C8",
+    "602": "0x03F8",
+    "488": "0x0305",
+    "663": "0x0489",
+    "1133": "0x0804",
+    "592": "0x03DE",
+    "285": "0x015B",
+    "319": "0x019A",
+    "603": "0x03FA",
+    "272": "0x0144",
+    "593": "0x03E1",
+    "350": "0x01DC",
+    "43": "0x023B",
+    "19": "0x0210",
+    "1007": "0x0728",
+    "263": "0x012E",
+    "861": "0x05DE",
+    "467": "0x02CF",
+    "729": "0x0530",
+    "510": "0x033E",
+    "509": "0x033B",
+    "103": "0x0051",
+    "1132": "0x0803",
+    "1048": "0x0783",
+    "985": "0x0704",
+    "449": "0x02A2",
+    "699": "0x04F7",
+    "301": "0x017B",
+    "628": "0x0438",
+    "587": "0x03D2",
+    "830": "0x05B9",
+    "773": "0x0571",
+    "1081": "0x07B8",
+    "674": "0x04A0",
+    "1056": "0x078E",
+    "931": "0x0696",
+    "287": "0x015F",
+    "543": "0x037B",
+    "562": "0x0398",
+    "481": "0x02F1",
+    "201": "0x00D7",
+    "580": "0x03C0",
+    "305": "0x0182",
+    "385": "0x0221",
+    "377": "0x0210",
+    "1045": "0x0780",
+    "231": "0x00FD",
+    "135": "0x0081",
+    "1025": "0x0767",
+    "775": "0x0573",
+    "328": "0x01B0",
+    "529": "0x0361",
+    "596": "0x03E8",
+    "1070": "0x07A1",
+    "379": "0x0216",
+    "887": "0x0662",
+    "199": "0x00D3",
+    "769": "0x056C",
+    "421": "0x0262",
+    "236": "0x0109",
+    "487": "0x0302",
+    "814": "0x05A5",
+    "1122": "0x07F4",
+    "1063": "0x0796",
+    "732": "0x0538",
+    "854": "0x05D5",
+    "486": "0x02FF",
+    "219": "0x00F0",
+    "907": "0x067A",
+    "423": "0x0268",
+    "318": "0x0197",
+    "975": "0x06EF",
+    "360": "0x01F4",
+    "1107": "0x07E5",
+    "586": "0x03D0",
+    "770": "0x056E",
+    "656": "0x047B",
+    "1040": "0x0779",
+    "1091": "0x07CB",
+    "845": "0x05C8",
+    "983": "0x0700",
+    "1026": "0x0768",
+    "533": "0x0367",
+    "808": "0x059C",
+    "1038": "0x0774",
+    "591": "0x03DC",
+    "838": "0x05C1",
+    "1118": "0x07F0",
+    "921": "0x0688",
+    "345": "0x01D0",
+    "793": "0x0589",
+    "547": "0x0384",
+    "1112": "0x07EA",
+    "1027": "0x0769",
+    "325": "0x01A7",
+    "432": "0x0280",
+    "68": "0x001C",
+    "344": "0x01CD",
+    "458": "0x02BB",
+    "87": "0x0043",
+    "646": "0x0460",
+    "554": "0x038F",
+    "81": "0x0032",
+    "959": "0x06CE",
+    "856": "0x05D7",
+    "574": "0x03B5",
+    "375": "0x020D",
+    "441": "0x0291",
+    "834": "0x05BD",
+    "636": "0x044C",
+    "858": "0x05D9",
+    "1011": "0x0759",
+    "546": "0x0382",
+    "341": "0x01C7",
+    "440": "0x028E",
+    "714": "0x0515",
+    "351": "0x01DF",
+    "760": "0x0560",
+    "697": "0x04F2",
+    "1037": "0x0773",
+    "165": "0x00B4",
+    "303": "0x017E",
+    "801": "0x0591",
+    "900": "0x066F",
+    "565": "0x039F",
+    "405": "0x0249",
+    "136": "0x0082",
+    "865": "0x05E6",
+    "439": "0x028B",
+    "796": "0x058C",
+    "1061": "0x0794",
+    "885": "0x065E",
+    "191": "0x00C8",
+    "955": "0x06C4",
+    "202": "0x00DA",
+    "585": "0x03CD",
+    "268": "0x013A",
+    "700": "0x04F8",
+    "568": "0x03A6",
+    "48": "0x0249",
+    "1137": "0x080B",
+    "816": "0x05A7",
+    "894": "0x0669",
+    "326": "0x01AA",
+    "36": "0x0229",
+    "629": "0x043B",
+    "848": "0x05CC",
+    "582": "0x03C6",
+    "569": "0x03A9",
+    "648": "0x0465",
+    "725": "0x052A",
+    "768": "0x056B",
+    "573": "0x03B3",
+    "460": "0x02C1",
+    "908": "0x067B",
+    "484": "0x02FA",
+    "941": "0x06A6",
+    "651": "0x046D",
+    "132": "0x007C",
+    "355": "0x01E8",
+    "877": "0x05FE",
+    "241": "0x0115",
+    "1019": "0x0761",
+    "532": "0x0364",
+    "891": "0x0666",
+    "296": "0x0170",
+    "1115": "0x07ED",
+    "897": "0x066C",
+    "11": "0x01FB",
+    "555": "0x0390",
+    "512": "0x0344",
+    "589": "0x03D7",
+    "802": "0x0592",
+    "1097": "0x07DB",
+    "670": "0x0495",
+    "1096": "0x07D8",
+    "45": "0x0240",
+    "424": "0x026B",
+    "705": "0x04FF",
+    "186": "0x00C0",
+    "976": "0x06F2",
+    "349": "0x01D9",
+    "1046": "0x0781",
+    "89": "0x0045",
+    "818": "0x05A9",
+    "457": "0x02B8",
+    "1034": "0x0770",
+    "422": "0x0265",
+    "37": "0x022C",
+    "343": "0x01CA",
+    "265": "0x0134",
+    "676": "0x04C8",
+    "609": "0x0409",
+    "243": "0x0118",
+    "433": "0x0283",
+    "150": "0x009C",
+    "1103": "0x07E1",
+    "566": "0x03A2",
+    "111": "0x005D",
+    "156": "0x00A5",
+    "558": "0x0394",
+    "1093": "0x07CF",
+    "212": "0x00E9",
+    "314": "0x0190",
+    "437": "0x0285",
+    "365": "0x01FD",
+    "1124": "0x07F9",
+    "378": "0x0213",
+    "374": "0x020A",
+    "735": "0x0543",
+    "625": "0x0431",
+    "13": "0x0200",
+    "677": "0x04CB",
+    "994": "0x0717",
+    "956": "0x06C5",
+    "645": "0x045E",
+    "759": "0x055F",
+    "353": "0x01E2",
+    "761": "0x0561",
+    "238": "0x010E",
+    "426": "0x0271",
+    "88": "0x0044",
+    "588": "0x03D4",
+    "687": "0x04E1",
+    "479": "0x02EC",
+    "626": "0x0434",
+    "794": "0x058A",
+    "159": "0x00AA",
+    "262": "0x012D",
+    "1079": "0x07B4",
+    "1117": "0x07EF",
+    "266": "0x0137",
+    "489": "0x0308",
+    "1042": "0x077B",
+    "536": "0x036E",
+    "981": "0x06FC",
+    "1064": "0x0797",
+    "1035": "0x0771",
+    "780": "0x0578",
+    "860": "0x05DB",
+    "1087": "0x07C3",
+    "130": "0x007A",
+    "667": "0x0491",
+    "1109": "0x07E7",
+    "653": "0x0473",
+    "828": "0x05B6",
+    "1053": "0x078B",
+    "527": "0x035E",
+    "806": "0x0598",
+    "75": "0x002D",
+    "148": "0x0096",
+    "210": "0x00E2",
+    "82": "0x0034",
+    "1083": "0x07BC",
+    "739": "0x054A",
+    "1069": "0x07A0",
+    "581": "0x03C3",
+    "829": "0x05B8",
+    "282": "0x0154",
+    "754": "0x055A",
+    "297": "0x0171",
+    "32": "0x021F",
+    "391": "0x022E",
+    "1084": "0x07BE",
+    "190": "0x00C5",
+    "16": "0x0208",
+    "832": "0x05BB",
+    "47": "0x0246",
+    "498": "0x031B",
+    "1090": "0x07CA",
+    "937": "0x069E",
+    "387": "0x0224",
+    "445": "0x0299",
+    "957": "0x06C8",
+    "230": "0x00FB",
+    "930": "0x0695",
+    "642": "0x0456",
+    "606": "0x0402",
+    "444": "0x0296",
+    "471": "0x02D9",
+    "461": "0x02C4",
+    "1024": "0x0766",
+    "600": "0x03F2",
+    "321": "0x01A0",
+    "196": "0x00D0",
+    "939": "0x06A2",
+    "1125": "0x07FA",
+    "340": "0x01C4",
+    "644": "0x045C",
+    "300": "0x017A",
+    "567": "0x03A4",
+    "359": "0x01F1",
+    "738": "0x0549",
+    "766": "0x0568",
+    "260": "0x012A",
+    "664": "0x048C",
+    "51": "0x024F",
+    "90": "0x0046",
+    "662": "0x0487",
+    "840": "0x05C3",
+    "1098": "0x07DC",
+    "778": "0x0576",
+    "396": "0x023B",
+    "615": "0x0418",
+    "31": "0x021C",
+    "577": "0x03B9",
+    "776": "0x0574",
+    "792": "0x0588",
+    "1074": "0x07A9",
+    "207": "0x00DE",
+    "414": "0x0256",
+    "113": "0x0060",
+    "429": "0x027A",
+    "233": "0x0103",
+    "307": "0x0188",
+    "354": "0x01E5",
+    "50": "0x024E",
+    "290": "0x0163",
+    "631": "0x0440",
+    "711": "0x050E",
+    "131": "0x007B",
+    "996": "0x071B",
+    "339": "0x01C1",
+    "1015": "0x075D",
+    "121": "0x006C",
+    "1134": "0x0806",
+    "157": "0x00A7",
+    "960": "0x06D0",
+    "1036": "0x0772",
+    "472": "0x02DC",
+    "655": "0x0479",
+    "950": "0x06B8",
+    "182": "0x00BA",
+    "1099": "0x07DD",
+    "218": "0x00EF",
+    "315": "0x0193",
+    "807": "0x059B",
+    "665": "0x048F",
+    "83": "0x0037",
+    "1120": "0x07F2",
+    "1086": "0x07C2",
+    "278": "0x0151",
+    "1047": "0x0782",
+    "715": "0x0516",
+    "1126": "0x07FB",
+    "990": "0x070F",
+    "898": "0x066D",
+    "831": "0x05BA",
+    "871": "0x05F2",
+    "271": "0x0141",
+    "782": "0x057A",
+    "696": "0x04EF",
+    "6": "0x01F9",
+    "578": "0x03BC",
+    "356": "0x01EB",
+    "256": "0x0120",
+    "46": "0x0243",
+    "473": "0x02DD",
+    "490": "0x030B",
+    "446": "0x029C",
+    "962": "0x06D4",
+    "756": "0x055C",
+    "849": "0x05CE",
+    "915": "0x0682",
+    "1121": "0x07F3",
+    "731": "0x0535",
+    "33": "0x0221",
+    "620": "0x0424",
+    "1089": "0x07C7",
+    "579": "0x03BE",
+    "234": "0x0105",
+    "822": "0x05AD",
+    "813": "0x05A4",
+    "928": "0x0693",
+    "14": "0x0202",
+    "332": "0x01B7",
+    "786": "0x057E",
+    "701": "0x04F9",
+    "621": "0x0427",
+    "917": "0x0684",
+    "299": "0x0177",
+    "380": "0x0219",
+    "1008": "0x072A",
+    "571": "0x03AE",
+    "34": "0x0224",
+    "492": "0x0311",
+    "709": "0x050B",
+    "235": "0x0106",
+    "692": "0x04EA",
+    "304": "0x017F",
+    "970": "0x06E4",
+    "810": "0x05A0",
+    "269": "0x013B",
+    "181": "0x00B7",
+    "392": "0x0231",
+    "402": "0x0243",
+    "333": "0x01BA",
+    "622": "0x042A",
+    "598": "0x03EE",
+    "120": "0x006B",
+    "896": "0x066B",
+    "989": "0x070E",
+    "534": "0x036A",
+    "652": "0x0470",
+    "542": "0x0378",
+    "447": "0x029D",
+    "886": "0x0660",
+    "1049": "0x0784",
+    "842": "0x05C5",
+    "821": "0x05AC",
+    "450": "0x02A5",
+    "126": "0x0073",
+    "289": "0x0162",
+    "146": "0x0090",
+    "85": "0x003D",
+    "719": "0x051A",
+    "763": "0x0563",
+    "1066": "0x0799",
+    "618": "0x0420",
+    "470": "0x02D8",
+    "221": "0x00F2",
+    "1013": "0x075B",
+    "147": "0x0093",
+    "686": "0x04DE",
+    "758": "0x055E",
+    "638": "0x0452",
+    "658": "0x0481",
+    "105": "0x0054",
+    "264": "0x0131",
+    "535": "0x036C",
+    "971": "0x06E5",
+    "870": "0x05EF",
+    "112": "0x005E",
+    "954": "0x06C1",
+    "969": "0x06E1",
+    "1100": "0x07DE",
+    "208": "0x00E0",
+    "986": "0x0707",
+    "513": "0x0347",
+    "530": "0x0362",
+    "1004": "0x0723",
+    "965": "0x06D9",
+    "938": "0x069F",
+    "358": "0x01EE",
+    "451": "0x02A8",
+    "904": "0x0676",
+    "716": "0x0517",
+    "934": "0x0699",
+    "671": "0x0498",
+    "514": "0x034A",
+    "1071": "0x07A4",
+    "997": "0x071C",
+    "364": "0x01FB",
+    "503": "0x0329",
+    "275": "0x0148",
+    "322": "0x01A3",
+    "400": "0x023E",
+    "839": "0x05C2",
+    "949": "0x06B6",
+    "867": "0x05EA",
+    "306": "0x0185",
+    "1129": "0x0800",
+    "1119": "0x07F1",
+    "152": "0x00A1",
+    "418": "0x0259",
+    "44": "0x023E",
+    "522": "0x0355",
+    "774": "0x0572",
+    "850": "0x05D0",
+    "412": "0x0250",
+    "1113": "0x07EB",
+    "888": "0x0663",
+    "110": "0x005C",
+    "40": "0x0233",
+    "987": "0x070A",
+    "783": "0x057B",
+    "1065": "0x0798",
+    "220": "0x00F1",
+    "721": "0x0520",
+    "779": "0x0577",
+    "448": "0x029F",
+    "967": "0x06DD",
+    "76": "0x002E",
+    "294": "0x016D",
+    "812": "0x05A3",
+    "478": "0x02E9",
+    "611": "0x040E",
+    "661": "0x0484",
+    "635": "0x044A",
+    "283": "0x0155",
+    "70": "0x0022",
+    "502": "0x0326",
+    "979": "0x06F8",
+    "923": "0x068B",
+    "1123": "0x07F6",
+    "518": "0x034E",
+    "1028": "0x076A",
+    "1080": "0x07B6",
+    "982": "0x06FE",
+    "102": "0x004F",
+    "1058": "0x0790",
+    "57": "0x025F",
+    "964": "0x06D8",
+    "504": "0x032C",
+    "410": "0x024E",
+    "477": "0x02E6",
+    "476": "0x02E3",
+    "1055": "0x078D",
+    "918": "0x0685",
+    "728": "0x052F",
+    "142": "0x0086",
+    "483": "0x02F7",
+    "961": "0x06D1",
+    "195": "0x00CF",
+    "539": "0x0371",
+    "1029": "0x076B",
+    "507": "0x0335",
+    "1094": "0x07D2",
+    "434": "0x0284",
+    "741": "0x054D",
+    "1114": "0x07EC",
+    "200": "0x00D5",
+    "750": "0x0552",
+    "947": "0x06B2",
+    "394": "0x0236",
+    "420": "0x025F",
+    "39": "0x0231",
+    "206": "0x00DD",
+    "35": "0x0227",
+    "905": "0x0678",
+    "564": "0x039D",
+    "762": "0x0562",
+    "257": "0x0121",
+    "1020": "0x0762",
+    "576": "0x03B7",
+    "520": "0x0353",
+    "42": "0x0238",
+    "232": "0x0100",
+    "523": "0x0357",
+    "1078": "0x07B2",
+    "1050": "0x0786",
+    "833": "0x05BC",
+    "525": "0x035C",
+    "790": "0x0586",
+    "749": "0x0551",
+    "703": "0x04FB",
+    "187": "0x00C1",
+    "184": "0x00BC",
+    "1016": "0x075E",
+    "56": "0x025C",
+    "1018": "0x0760",
+    "390": "0x022C",
+    "952": "0x06BC",
+    "84": "0x003A",
+    "431": "0x027D",
+    "563": "0x039B",
+    "508": "0x0338",
+    "727": "0x052E",
+    "143": "0x0088",
+    "837": "0x05C0",
+    "784": "0x057C",
+    "52": "0x0250",
+    "634": "0x0448",
+    "413": "0x0253",
+    "797": "0x058D",
+    "556": "0x0392",
+    "528": "0x035F",
+    "468": "0x02D2",
+    "59": "0x0262",
+    "1067": "0x079C",
+    "617": "0x041D",
+    "164": "0x00B2",
+    "712": "0x0511",
+    "1033": "0x076F",
+    "974": "0x06EC",
+    "932": "0x0697",
+    "823": "0x05AE",
+    "72": "0x0028",
+    "685": "0x04DB",
+    "331": "0x01B4",
+    "12": "0x01FD",
+    "30": "0x0219",
+    "695": "0x04EC",
+    "1073": "0x07A8",
+    "38": "0x022E",
+    "944": "0x06AB",
+    "895": "0x066A",
+    "1005": "0x0724",
+    "614": "0x0416",
+    "874": "0x05F8",
+    "99": "0x004A",
+    "194": "0x00CC",
+    "480": "0x02EE",
+    "474": "0x02E0",
+    "737": "0x0548",
+    "519": "0x0351",
+    "313": "0x018D",
+    "491": "0x030E",
+    "604": "0x03FC",
+    "893": "0x0668",
+    "892": "0x0667",
+    "308": "0x0189",
+    "919": "0x0686",
+    "1002": "0x0721",
+    "972": "0x06E8",
+    "455": "0x02B3",
+    "884": "0x065D",
+    "53": "0x0253",
+    "1006": "0x0726",
+    "852": "0x05D3",
+    "338": "0x01BE",
+    "1023": "0x0765",
+    "517": "0x034C",
+    "878": "0x0601",
+    "767": "0x056A",
+    "1130": "0x0801",
+    "863": "0x05E2",
+    "71": "0x0025",
+    "258": "0x0124",
+    "684": "0x04D8",
+    "880": "0x0605",
+    "101": "0x004E",
+    "595": "0x03E6",
+    "1062": "0x0795",
+    "1128": "0x07FF",
+    "425": "0x026E",
+    "438": "0x0288",
+    "240": "0x0112",
+    "991": "0x0712",
+    "902": "0x0672",
+    "995": "0x071A",
+    "548": "0x0385",
+    "428": "0x0277",
+    "501": "0x0323",
+    "612": "0x0410",
+    "411": "0x024F",
+    "851": "0x05D2",
+    "1068": "0x079D",
+    "500": "0x0320",
+    "122": "0x006D",
+    "1076": "0x07AE",
+    "276": "0x014B",
+    "825": "0x05B0",
+    "948": "0x06B3",
+    "846": "0x05CA",
+    "683": "0x04D5",
+    "913": "0x0680",
+    "521": "0x0354",
+    "67": "0x001A",
+    "270": "0x013E",
+    "524": "0x035A",
+    "641": "0x0454",
+    "419": "0x025C",
+    "835": "0x05BE",
+    "1111": "0x07E9",
+    "999": "0x071E",
+    "1072": "0x07A5",
+    "497": "0x0318",
+    "717": "0x0518",
+    "777": "0x0575",
+    "859": "0x05DA",
+    "320": "0x019D",
+    "381": "0x021C",
+    "116": "0x0064",
+    "708": "0x0509",
+    "590": "0x03DA",
+    "100": "0x004D",
+    "292": "0x0169",
+    "496": "0x0315",
+    "237": "0x010C",
+    "922": "0x068A",
+    "633": "0x0445",
+    "393": "0x0233",
+    "541": "0x0375",
+    "153": "0x00A4",
+    "475": "0x02E1",
+    "875": "0x05FA",
+    "552": "0x038D",
+    "841": "0x05C4",
+    "673": "0x049E",
+    "298": "0x0174",
+    "144": "0x008A",
+    "927": "0x0692",
+    "239": "0x010F",
+    "1057": "0x078F",
+    "55": "0x0259",
+    "868": "0x05EB",
+    "1052": "0x078A",
+    "771": "0x056F",
+    "906": "0x0679",
+    "505": "0x032F",
+    "74": "0x002C",
+    "1032": "0x076E",
+    "330": "0x01B1",
+    "106": "0x0055",
+    "691": "0x04E9",
+    "988": "0x070B",
+    "855": "0x05D6",
+    "984": "0x0701",
+    "531": "0x0363",
+    "936": "0x069B",
+    "853": "0x05D4",
+    "1041": "0x077A",
+    "910": "0x067D",
+    "757": "0x055D",
+    "942": "0x06A7",
+    "755": "0x055B",
+    "389": "0x0229",
+    "765": "0x0566",
+    "1095": "0x07D5",
+    "817": "0x05A8",
+    "1031": "0x076D",
+    "916": "0x0683",
+    "607": "0x0404",
+    "324": "0x01A4",
+    "557": "0x0393",
+    "736": "0x0546",
+    "753": "0x0559",
+    "627": "0x0436",
+    "616": "0x041A",
+    "149": "0x0099",
+    "805": "0x0596",
+    "890": "0x0665",
+    "882": "0x0659",
+    "1085": "0x07BF",
+    "720": "0x051D",
+    "334": "0x01BD",
+    "819": "0x05AA",
+    "911": "0x067E",
+    "456": "0x02B6",
+    "1030": "0x076C",
+    "1131": "0x0802",
+    "109": "0x0059",
+    "864": "0x05E4",
+    "348": "0x01D6",
+    "242": "0x0117",
+    "707": "0x0506",
+    "327": "0x01AD",
+    "217": "0x00EC",
+    "815": "0x05A6",
+    "718": "0x0519",
+    "883": "0x065A",
+    "672": "0x049B",
+    "980": "0x06FA",
+    "799": "0x058F",
+    "857": "0x05D8",
+    "511": "0x0341",
+    "946": "0x06AF",
+    "945": "0x06AE",
+    "575": "0x03B6",
+    "613": "0x0413",
+    "366": "0x0200",
+    "125": "0x0072",
+    "963": "0x06D5",
+    "903": "0x0674",
+    "459": "0x02BE",
+    "901": "0x0670",
+    "1012": "0x075A",
+    "551": "0x038B",
+    "1092": "0x07CE",
+    "914": "0x0681",
+    "1022": "0x0764",
+    "1135": "0x0808",
+    "403": "0x0246",
+    "453": "0x02AD",
+    "632": "0x0442",
+    "764": "0x0564",
+    "654": "0x0476",
+    "1043": "0x077C",
+    "482": "0x02F4",
+    "1101": "0x07DF",
+    "1001": "0x0720",
+    "277": "0x014E",
+    "742": "0x0550",
+    "388": "0x0227",
+    "836": "0x05BF",
+    "929": "0x0694",
+    "787": "0x0580",
+    "274": "0x0147",
+    "259": "0x0127",
+    "129": "0x0077",
+    "286": "0x015E",
+    "993": "0x0716",
+    "951": "0x06BA",
+    "442": "0x0292",
+    "924": "0x068C",
+    "454": "0x02B0",
+    "291": "0x0166",
+    "680": "0x04D1",
+    "698": "0x04F5",
+    "788": "0x0582",
+    "973": "0x06E9",
+    "1075": "0x07AC",
+    "977": "0x06F4",
+    "462": "0x02C7",
+    "968": "0x06E0",
+    "1021": "0x0763",
+    "86": "0x0040",
+    "368": "0x0205",
+    "499": "0x031E",
+    "369": "0x0208",
+    "493": "0x0313",
+    "594": "0x03E4",
+    "452": "0x02AA",
+    "669": "0x0494",
+    "363": "0x01F9",
+    "544": "0x037D",
+    "20": "0x0213",
+    "734": "0x0540",
+    "820": "0x05AB",
+    "584": "0x03CA",
+    "570": "0x03AC",
+    "909": "0x067C",
+    "912": "0x067F",
+    "597": "0x03EB",
+    "549": "0x0386",
+    "798": "0x058E",
+    "772": "0x0570",
+    "1051": "0x0788",
+    "1082": "0x07BA",
+    "540": "0x0373",
+    "1009": "0x072B",
+    "203": "0x00DC",
+    "649": "0x0467",
+    "382": "0x021F",
+    "804": "0x0594",
+    "224": "0x00F9",
+    "115": "0x0063",
+    "827": "0x05B4",
+    "73": "0x002B",
+    "561": "0x0395",
+    "599": "0x03F0",
+    "998": "0x071D",
+    "145": "0x008D",
+    "506": "0x0332",
+    "992": "0x0714",
+    "605": "0x03FF",
+    "49": "0x024C",
+    "803": "0x0593",
+    "1108": "0x07E6",
+    "550": "0x0388",
+    "876": "0x05FC",
+    "2": "0x01F9",
+    "730": "0x0532",
+    "920": "0x0687",
+    "1116": "0x07EE",
+    "1104": "0x07E2",
+    "666": "0x0490",
+    "245": "0x011E",
+    "15": "0x0205",
+    "1039": "0x0776",
+    "824": "0x05AF",
+    "485": "0x02FC",
+    "162": "0x00AF",
+    "926": "0x0690",
+    "1060": "0x0792",
+    "185": "0x00BF",
+    "1106": "0x07E4",
+    "844": "0x05C7",
+    "69": "0x001F",
+    "209": "0x00E1",
+    "443": "0x0295",
+    "469": "0x02D5",
+    "1077": "0x07AF",
+    "18": "0x020D",
+    "545": "0x037F",
+    "401": "0x0240",
+    "123": "0x006F",
+    "601": "0x03F5",
+    "427": "0x0274",
+    "29": "0x0216",
+    "702": "0x04FA",
+    "826": "0x05B2",
+    "1014": "0x075C",
+    "526": "0x035D",
+    "978": "0x06F5",
+    "151": "0x009E",
+    "1105": "0x07E3",
+    "953": "0x06BE",
+    "637": "0x044F",
+    "608": "0x0406",
+    "872": "0x05F3",
+    "657": "0x047E",
+    "679": "0x04CE",
+    "726": "0x052D",
+    "843": "0x05C6",
+    "1136": "0x080A",
+    "346": "0x01D3",
+    "791": "0x0587",
+    "41": "0x0236",
+    "873": "0x05F6",
+    "630": "0x043E",
+    "879": "0x0604",
+    "811": "0x05A2",
+    "966": "0x06DC",
+    "789": "0x0584",
+    "1127": "0x07FC",
+    "785": "0x057D",
+    "223": "0x00F6",
+    "795": "0x058B",
+    "1059": "0x0791",
+    "192": "0x00C9",
+    "866": "0x05E7",
+    "619": "0x0422",
+    "688": "0x04E4",
+    "316": "0x0196",
+    "133": "0x007E",
+    "713": "0x0513",
+    "1017": "0x075F",
+    "367": "0x0202",
+    "862": "0x05DF",
+    "610": "0x040C",
+    "889": "0x0664",
+    "647": "0x0463",
+    "17": "0x020A",
+    "1000": "0x071F",
+    "781": "0x0579",
+    "899": "0x066E",
+    "643": "0x0459",
+    "553": "0x038E",
+    "704": "0x04FC",
+    "668": "0x0493",
+    "1044": "0x077F",
+    "723": "0x0527",
+    "943": "0x06AA",
+    "464": "0x02CD",
+    "1088": "0x07C6",
+    "1003": "0x0722",
+    "222": "0x00F4",
+    "244": "0x011B",
+    "958": "0x06CB",
+    "809": "0x059F",
+    "925": "0x068E",
+    "933": "0x0698",
+    "847": "0x05CB"
+  },
+  "variables": {
+    "DRAW_LINE_ARGS": {
+      "name": "DRAW_LINE_ARGS",
+      "address": "0xC89C",
+      "size": 10,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_Y": {
+      "name": "TEMP_Y",
+      "address": "0xC899",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT": {
+      "name": "TMPRIGHT",
+      "address": "0xC886",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_Y": {
+      "name": "VPY_MOVE_Y",
+      "address": "0xC89B",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_TEMP": {
+      "name": "DRAW_CIRCLE_TEMP",
+      "address": "0xC8B0",
+      "size": 8,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_INTENSITY": {
+      "name": "DRAW_CIRCLE_INTENSITY",
+      "address": "0xC8AF",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg4": {
+      "name": "arg4",
+      "address": "0xC8C2",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "VPY_MOVE_X": {
+      "name": "VPY_MOVE_X",
+      "address": "0xC89A",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "angle": {
+      "name": "angle",
+      "address": "0xC8B8",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_XC": {
+      "name": "DRAW_CIRCLE_XC",
+      "address": "0xC8AC",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_A": {
+      "name": "DIV_A",
+      "address": "0xC88E",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_X": {
+      "name": "TEMP_X",
+      "address": "0xC898",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg1": {
+      "name": "arg1",
+      "address": "0xC8BC",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg0": {
+      "name": "arg0",
+      "address": "0xC8BA",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_R": {
+      "name": "DIV_R",
+      "address": "0xC894",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR2": {
+      "name": "TMPPTR2",
+      "address": "0xC88C",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg3": {
+      "name": "arg3",
+      "address": "0xC8C0",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPRIGHT2": {
+      "name": "TMPRIGHT2",
+      "address": "0xC888",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "RESULT": {
+      "name": "RESULT",
+      "address": "0xC880",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "arg2": {
+      "name": "arg2",
+      "address": "0xC8BE",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TEMP_YX": {
+      "name": "TEMP_YX",
+      "address": "0xC896",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_Q": {
+      "name": "DIV_Q",
+      "address": "0xC892",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DIV_B": {
+      "name": "DIV_B",
+      "address": "0xC890",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT2": {
+      "name": "TMPLEFT2",
+      "address": "0xC884",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_YC": {
+      "name": "DRAW_CIRCLE_YC",
+      "address": "0xC8AD",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPPTR": {
+      "name": "TMPPTR",
+      "address": "0xC88A",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "NUM_STR": {
+      "name": "NUM_STR",
+      "address": "0xC8A6",
+      "size": 6,
+      "type": "unknown",
+      "declLine": null
+    },
+    "TMPLEFT": {
+      "name": "TMPLEFT",
+      "address": "0xC882",
+      "size": 2,
+      "type": "unknown",
+      "declLine": null
+    },
+    "DRAW_CIRCLE_DIAM": {
+      "name": "DRAW_CIRCLE_DIAM",
+      "address": "0xC8AE",
+      "size": 1,
+      "type": "unknown",
+      "declLine": null
+    }
+  }
+}

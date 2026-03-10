@@ -1,0 +1,81 @@
+{
+  "version": "1.0",
+  "name": "caretaker",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "head",
+          "intensity": 80,
+          "closed": true,
+          "points": [
+            {"x": -5, "y": 14},
+            {"x":  2, "y": 14},
+            {"x":  2, "y": 19},
+            {"x": -5, "y": 19}
+          ]
+        },
+        {
+          "name": "torso",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -1, "y": 14},
+            {"x":  2, "y":  6},
+            {"x":  3, "y": -4}
+          ]
+        },
+        {
+          "name": "left_arm",
+          "intensity": 75,
+          "closed": false,
+          "points": [
+            {"x":  1, "y": 10},
+            {"x": -7, "y":  4}
+          ]
+        },
+        {
+          "name": "cane_arm",
+          "intensity": 75,
+          "closed": false,
+          "points": [
+            {"x": 2, "y": 8},
+            {"x": 5, "y": 1}
+          ]
+        },
+        {
+          "name": "cane",
+          "intensity": 70,
+          "closed": false,
+          "points": [
+            {"x":  5, "y":  1},
+            {"x": 10, "y": -13}
+          ]
+        },
+        {
+          "name": "left_leg",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x":  1, "y": -4},
+            {"x": -1, "y": -14}
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": 3, "y": -4},
+            {"x": 5, "y": -14}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

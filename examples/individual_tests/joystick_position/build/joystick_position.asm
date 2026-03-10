@@ -47,32 +47,30 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
-BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
-NUM_STR              EQU $C880+$0E   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$14   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$15   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$16   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$17   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$18   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$19   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_LINE_ARGS       EQU $C880+$21   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$2B   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$2D   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$2F   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$30   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$33   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$35   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$36   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_X                EQU $C880+$37   ; User variable: X (2 bytes)
-VAR_Y                EQU $C880+$39   ; User variable: Y (2 bytes)
-VAR_CIRCLE_X         EQU $C880+$3B   ; User variable: CIRCLE_X (2 bytes)
-VAR_CIRCLE_Y         EQU $C880+$3D   ; User variable: CIRCLE_Y (2 bytes)
-VAR_BTN1             EQU $C880+$3F   ; User variable: BTN1 (2 bytes)
-VAR_BTN2             EQU $C880+$41   ; User variable: BTN2 (2 bytes)
-VAR_BTN3             EQU $C880+$43   ; User variable: BTN3 (2 bytes)
-VAR_BTN4             EQU $C880+$45   ; User variable: BTN4 (2 bytes)
+NUM_STR              EQU $C880+$0C   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$12   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$13   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$14   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$15   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$16   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$17   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1F   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$29   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$2B   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$33   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$34   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_X                EQU $C880+$35   ; User variable: X (2 bytes)
+VAR_Y                EQU $C880+$37   ; User variable: Y (2 bytes)
+VAR_CIRCLE_X         EQU $C880+$39   ; User variable: CIRCLE_X (2 bytes)
+VAR_CIRCLE_Y         EQU $C880+$3B   ; User variable: CIRCLE_Y (2 bytes)
+VAR_BTN1             EQU $C880+$3D   ; User variable: BTN1 (2 bytes)
+VAR_BTN2             EQU $C880+$3F   ; User variable: BTN2 (2 bytes)
+VAR_BTN3             EQU $C880+$41   ; User variable: BTN3 (2 bytes)
+VAR_BTN4             EQU $C880+$43   ; User variable: BTN4 (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -94,12 +92,16 @@ MAIN:
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDD #0
+    STD RESULT
     STD VAR_X
     LDD #0
+    STD RESULT
     STD VAR_Y
     LDD #0
+    STD RESULT
     STD VAR_CIRCLE_X
     LDD #0
+    STD RESULT
     STD VAR_CIRCLE_Y
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
@@ -115,11 +117,8 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
-    ; Prime BIOS button state at startup
-    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     ; TODO: Statement Pass { source_line: 15 }
-    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -127,17 +126,25 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
+    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
+    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
     JSR J1X_BUILTIN
     STD RESULT
+    LDD RESULT
     STD VAR_X
     JSR J1Y_BUILTIN
     STD RESULT
+    LDD RESULT
     STD VAR_Y
     ; PRINT_TEXT: Print text at position
     LDD #-60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0
     LDD #80
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1
     LDX #PRINT_TEXT_STR_76316012      ; Pointer to string in helpers bank
     STX VAR_ARG2
@@ -146,18 +153,28 @@ LOOP_BODY:
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #10
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0    ; X position
     LDD #80
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1    ; Y position
     LDD >VAR_X
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0
     LDD #60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1
     LDX #PRINT_TEXT_STR_76316013      ; Pointer to string in helpers bank
     STX VAR_ARG2
@@ -166,86 +183,116 @@ LOOP_BODY:
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #10
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0    ; X position
     LDD #60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1    ; Y position
     LDD >VAR_Y
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     LDD >VAR_X
+    STD RESULT
+    LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #2
+    STD RESULT
+    LDD RESULT
     LDX TMPVAL      ; Get left into X from TMPVAL
     JSR DIV16       ; D = X / D
+    STD RESULT
+    LDD RESULT
     STD VAR_CIRCLE_X
     LDD >VAR_Y
+    STD RESULT
+    LDD RESULT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #2
+    STD RESULT
+    LDD RESULT
     LDX TMPVAL      ; Get left into X from TMPVAL
     JSR DIV16       ; D = X / D
+    STD RESULT
+    LDD RESULT
     STD VAR_CIRCLE_Y
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_CIRCLE_X
-    TFR B,A
+    STD RESULT
+    LDA RESULT+1
     STA DRAW_CIRCLE_XC
     LDD >VAR_CIRCLE_Y
-    TFR B,A
+    STD RESULT
+    LDA RESULT+1
     STA DRAW_CIRCLE_YC
     LDD #15
-    TFR B,A
+    STD RESULT
+    LDA RESULT+1
     STA DRAW_CIRCLE_DIAM
     LDD #80
-    TFR B,A
+    STD RESULT
+    LDA RESULT+1
     STA DRAW_CIRCLE_INTENSITY
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_0_ON
-    LDD #0
-    BRA .J1B1_0_END
-.J1B1_0_ON:
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$01      ; Test bit 0 (Button 1)
+    LBEQ .J1B1_0_OFF
     LDD #1
+    LBRA .J1B1_0_END
+.J1B1_0_OFF:
+    LDD #0
 .J1B1_0_END:
     STD RESULT
+    LDD RESULT
     STD VAR_BTN1
-    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
-    BITA #$02
-    BNE .J1B2_1_ON
-    LDD #0
-    BRA .J1B2_1_END
-.J1B2_1_ON:
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$02      ; Test bit 1 (Button 2)
+    LBEQ .J1B2_1_OFF
     LDD #1
+    LBRA .J1B2_1_END
+.J1B2_1_OFF:
+    LDD #0
 .J1B2_1_END:
     STD RESULT
+    LDD RESULT
     STD VAR_BTN2
-    LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed
-    BITA #$04
-    BNE .J1B3_2_ON
-    LDD #0
-    BRA .J1B3_2_END
-.J1B3_2_ON:
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$04      ; Test bit 2 (Button 3)
+    LBEQ .J1B3_2_OFF
     LDD #1
+    LBRA .J1B3_2_END
+.J1B3_2_OFF:
+    LDD #0
 .J1B3_2_END:
     STD RESULT
+    LDD RESULT
     STD VAR_BTN3
-    LDA >$C80F   ; Vec_Btns_1: bit3=1 means btn4 pressed
-    BITA #$08
-    BNE .J1B4_3_ON
-    LDD #0
-    BRA .J1B4_3_END
-.J1B4_3_ON:
+    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
+    ANDA #$08      ; Test bit 3 (Button 4)
+    LBEQ .J1B4_3_OFF
     LDD #1
+    LBRA .J1B4_3_END
+.J1B4_3_OFF:
+    LDD #0
 .J1B4_3_END:
     STD RESULT
+    LDD RESULT
     STD VAR_BTN4
     ; PRINT_TEXT: Print text at position
     LDD #-60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0
     LDD #40
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1
     LDX #PRINT_TEXT_STR_2049397      ; Pointer to string in helpers bank
     STX VAR_ARG2
@@ -254,18 +301,28 @@ LOOP_BODY:
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0    ; X position
     LDD #40
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1    ; Y position
     LDD >VAR_BTN1
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0
     LDD #20
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1
     LDX #PRINT_TEXT_STR_2049398      ; Pointer to string in helpers bank
     STX VAR_ARG2
@@ -274,18 +331,28 @@ LOOP_BODY:
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0    ; X position
     LDD #20
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1    ; Y position
     LDD >VAR_BTN2
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0
     LDD #0
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1
     LDX #PRINT_TEXT_STR_2049399      ; Pointer to string in helpers bank
     STX VAR_ARG2
@@ -294,18 +361,28 @@ LOOP_BODY:
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0    ; X position
     LDD #0
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1    ; Y position
     LDD >VAR_BTN3
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0
     LDD #-20
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1
     LDX #PRINT_TEXT_STR_2049400      ; Pointer to string in helpers bank
     STX VAR_ARG2
@@ -314,10 +391,16 @@ LOOP_BODY:
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG0    ; X position
     LDD #-20
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG1    ; Y position
     LDD >VAR_BTN4
+    STD RESULT
+    LDD RESULT
     STD VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0

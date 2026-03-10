@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "name": "wall_compartment",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "compartment_box",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -20, "y": -25, "z": 0},
+            {"x":  20, "y": -25, "z": 0},
+            {"x":  20, "y":   5, "z": 0},
+            {"x": -20, "y":   5, "z": 0},
+            {"x": -20, "y": -25, "z": 0}
+          ]
+        },
+        {
+          "name": "lid_open",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {"x": -20, "y": -25, "z": 0},
+            {"x": -20, "y": -38, "z": 0},
+            {"x":  20, "y": -38, "z": 0}
+          ]
+        },
+        {
+          "name": "eye_outer",
+          "intensity": 120,
+          "closed": true,
+          "points": [
+            {"x":  0,  "y": -22, "z": 0},
+            {"x": -10, "y": -15, "z": 0},
+            {"x":  0,  "y":  -8, "z": 0},
+            {"x":  10, "y": -15, "z": 0}
+          ]
+        },
+        {
+          "name": "eye_pupil",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x":  0, "y": -18, "z": 0},
+            {"x": -4, "y": -15, "z": 0},
+            {"x":  0, "y": -12, "z": 0},
+            {"x":  4, "y": -15, "z": 0}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

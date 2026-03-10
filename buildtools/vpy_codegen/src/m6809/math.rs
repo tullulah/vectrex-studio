@@ -22,11 +22,10 @@ pub fn emit_abs(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
     out.push_str("    ; ABS: Absolute value\n");
     
-    // Evaluate argument
+    // Evaluate argument; D = arg after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    
+
     // Check if negative (test high bit of A)
-    out.push_str("    LDD RESULT\n");
     out.push_str("    TSTA           ; Test sign bit\n");
     out.push_str(&format!("    BPL .ABS_{}_POS   ; Branch if positive\n", label_id));
     
@@ -48,26 +47,28 @@ pub fn emit_min(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
     out.push_str("    ; MIN: Return minimum of two values\n");
-    
-    // Evaluate first argument -> store in TMPPTR
+
+    // Evaluate first argument -> store in TMPPTR; D = first arg after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR     ; Save first value\n");
-    
-    // Evaluate second argument -> RESULT
+
+    // Evaluate second argument; save to TMPPTR2 explicitly (no RESULT dependency)
     expressions::emit_simple_expr(&args[1], out, assets);
-    
-    // Compare: TMPPTR vs RESULT (signed comparison)
+    out.push_str("    STD TMPPTR2    ; Save second value\n");
+
+    // Compare: first (TMPPTR) vs second (TMPPTR2)
     out.push_str("    LDD TMPPTR     ; Load first value\n");
-    out.push_str("    CMPD RESULT    ; Compare with second\n");
+    out.push_str("    CMPD TMPPTR2   ; Compare first vs second\n");
     out.push_str(&format!("    BLE .MIN_{}_FIRST ; Branch if first <= second\n", label_id));
-    
-    // Second is smaller, already in RESULT
+
+    // Second is smaller: load and store from TMPPTR2
+    out.push_str("    LDD TMPPTR2    ; Second is smaller\n");
+    out.push_str("    STD RESULT\n");
     out.push_str(&format!("    BRA .MIN_{}_END\n", label_id));
-    
+
     out.push_str(&format!(".MIN_{}_FIRST:\n", label_id));
-    out.push_str("    STD RESULT     ; First is smaller\n");
-    
+    out.push_str("    STD RESULT     ; First is smaller (D still = first from LDD TMPPTR)\n");
+
     out.push_str(&format!(".MIN_{}_END:\n", label_id));
 }
 
@@ -80,26 +81,28 @@ pub fn emit_max(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
     out.push_str("    ; MAX: Return maximum of two values\n");
-    
-    // Evaluate first argument -> store in TMPPTR
+
+    // Evaluate first argument -> store in TMPPTR; D = first arg after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR     ; Save first value\n");
-    
-    // Evaluate second argument -> RESULT
+
+    // Evaluate second argument; save to TMPPTR2 explicitly (no RESULT dependency)
     expressions::emit_simple_expr(&args[1], out, assets);
-    
-    // Compare: TMPPTR vs RESULT (signed comparison)
+    out.push_str("    STD TMPPTR2    ; Save second value\n");
+
+    // Compare: first (TMPPTR) vs second (TMPPTR2)
     out.push_str("    LDD TMPPTR     ; Load first value\n");
-    out.push_str("    CMPD RESULT    ; Compare with second\n");
+    out.push_str("    CMPD TMPPTR2   ; Compare first vs second\n");
     out.push_str(&format!("    BGE .MAX_{}_FIRST ; Branch if first >= second\n", label_id));
-    
-    // Second is larger, already in RESULT
+
+    // Second is larger: load and store from TMPPTR2
+    out.push_str("    LDD TMPPTR2    ; Second is larger\n");
+    out.push_str("    STD RESULT\n");
     out.push_str(&format!("    BRA .MAX_{}_END\n", label_id));
-    
+
     out.push_str(&format!(".MAX_{}_FIRST:\n", label_id));
-    out.push_str("    STD RESULT     ; First is larger\n");
-    
+    out.push_str("    STD RESULT     ; First is larger (D still = first from LDD TMPPTR)\n");
+
     out.push_str(&format!(".MAX_{}_END:\n", label_id));
 }
 
@@ -113,19 +116,16 @@ pub fn emit_clamp(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
     out.push_str("    ; CLAMP: Clamp value to range [min, max]\n");
     
-    // Evaluate value (arg 0)
+    // Evaluate value (arg 0); D = value after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR     ; Save value\n");
-    
-    // Evaluate min (arg 1)
+
+    // Evaluate min (arg 1); D = min after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR+2   ; Save min\n");
-    
-    // Evaluate max (arg 2)
+
+    // Evaluate max (arg 2); D = max after emit
     expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR+4   ; Save max\n");
     
     // Compare value with min

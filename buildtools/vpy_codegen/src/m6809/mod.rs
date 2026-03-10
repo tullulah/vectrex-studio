@@ -250,7 +250,7 @@ pub fn generate_m6809_asm(
     module: &Module,
     title: &str,
     rom_size: usize,
-    _bank_size: usize,
+    bank_size_meta: usize,
     assets: &[crate::AssetInfo],
 ) -> Result<String, String> {
     let mut asm = String::new();
@@ -281,16 +281,21 @@ pub fn generate_m6809_asm(
     }
 
     // Calculate bank configuration dynamically
-    let bank_size = 16384; // Standard Vectrex bank size (16KB)
-    
-    // Detect if this is a multibank ROM (>32KB)
-    let is_multibank = rom_size > 32768;
-    
+    // Use META ROM_BANK_SIZE if provided; default to 16KB for single-bank ROMs
+    let bank_size = if bank_size_meta > 0 { bank_size_meta } else { 16384 };
+
+    // Require at least 3 banks (2 code + 1 helpers) for true multibank.
+    // 2-bank ROMs (1 code + 1 helpers) use single-bank code generation —
+    // cross-bank symbol resolution for the helpers bank is not yet implemented.
+    let num_banks = rom_size / bank_size.max(1);
+    let is_multibank = rom_size > 32768 && num_banks > 2;
+
     // Set multibank mode for builtins (affects asset reference generation)
     builtins::set_multibank_mode(is_multibank);
-    
-    let num_banks = if is_multibank { rom_size / bank_size } else { 1 };
+
     let helpers_bank = if is_multibank { num_banks - 1 } else { 0 };
+    // Number of code banks (excludes helpers bank)
+    let code_banks_count = if is_multibank { num_banks.saturating_sub(1) } else { 1 };
     
     // Generate header comments
     asm.push_str(&format!("; VPy M6809 Assembly (Vectrex)\n"));
@@ -353,6 +358,11 @@ pub fn generate_m6809_asm(
     asm.push_str("    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)\n");
     asm.push_str("    LDA #0\n");
     asm.push_str("    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot\n");
+    // Initialize LEVEL_LOADED to 0 if the level system is used
+    // This prevents SHOW_LEVEL/UPDATE_LEVEL from drawing before a level is loaded
+    if crate::m6809::level::needs_level_runtime(module) {
+        asm.push_str("    CLR >LEVEL_LOADED       ; No level loaded yet (flag, not a pointer)\n");
+    }
     
     // CRITICAL: Initialize SFX system variables to prevent garbage data interference
     if has_audio_calls(module) {
@@ -363,6 +373,7 @@ pub fn generate_m6809_asm(
         // Always initialize PSG_MUSIC_BANK=0: AUDIO_UPDATE compares it with
         // CURRENT_ROM_BANK every frame; garbage != 0 causes STA $DF00 corruption.
         asm.push_str("    STA >PSG_MUSIC_BANK     ; Bank 0 for music (prevents garbage bank switch in emulator)\n");
+        asm.push_str("    STA >SFX_BANK           ; Bank 0 for SFX (prevents garbage bank switch in emulator)\n");
         // CRITICAL: Initialize PSG music playback state variables.
         // If PSG_IS_PLAYING is garbage (non-zero) at boot, AUDIO_UPDATE immediately
         // tries to play music from a garbage PSG_MUSIC_PTR, sending random bytes to
@@ -401,7 +412,10 @@ pub fn generate_m6809_asm(
     //   - Banks 1-30: Overflow code + ALL assets (no threshold)
     //   - Bank 31: Helpers + lookup tables + global constants
     // This ensures bank switching is always tested, even with small projects
-    let should_distribute_assets = is_multibank && !assets.is_empty();
+    // Only distribute assets when there are multiple code banks to distribute across.
+    // With only 1 code bank (2-bank ROM), assets stay in bank 0 with direct labels —
+    // cross-bank symbol resolution from helpers bank is not yet supported.
+    let mut should_distribute_assets = is_multibank && !assets.is_empty() && code_banks_count > 1;
     
     // Set banked assets mode BEFORE generating any function code
     // This affects asset reference generation in builtins (DRAW_VECTOR, PLAY_MUSIC, etc.)
@@ -435,7 +449,11 @@ pub fn generate_m6809_asm(
             Err(e) => {
                 eprintln!("[CODEGEN] Warning: BankAllocator failed: {:?}", e);
                 eprintln!("[CODEGEN] Falling back to single-bank function generation");
-                
+
+                // Reset banked assets mode — single-bank fallback uses direct labels
+                builtins::set_banked_assets_mode(false);
+                should_distribute_assets = false;
+
                 // Fall back to single bank
                 let mut fb = std::collections::HashMap::new();
                 fb.insert(0u8, functions::generate_functions(module, &assets)?);
@@ -462,6 +480,7 @@ pub fn generate_m6809_asm(
     // in the middle of code, and LDX #PRINT_TEXT_STR references fail in assembler
     // Solution: Collect now, emit at END (after helpers, before vectors) like CORE does
     let print_text_strings = builtins::collect_print_text_strings(module);
+    let msg_entries = builtins::collect_msg_entries(module);
     
     // Asset distribution across banks for multibank support
     // For single-bank: all assets go in Bank #0 (existing behavior)
@@ -476,7 +495,7 @@ pub fn generate_m6809_asm(
             
             let (bank_asm_map, lookup_tables) = assets::generate_distributed_assets_asm(
                 &assets,
-                _bank_size as usize,
+                bank_size,
                 helpers_bank as u8,
             ).map_err(|e| format!("Asset distribution failed: {}", e))?;
             
@@ -544,28 +563,26 @@ pub fn generate_m6809_asm(
             }
         }
         
-        // Emit helpers bank (last bank) with proper marker
-        // IMPORTANT: Bank #31 is HELPERS ONLY - NO assets here!
-        // Assets are distributed across Banks #1-#30 (switchable window)
+        // Emit helpers bank section marker (always present for multibank linker)
         asm.push_str(&format!("\n; ================================================\n"));
         asm.push_str(&format!("; BANK #{} - 0 function(s) [HELPERS ONLY]\n", helpers_bank));
         asm.push_str(&format!("; ================================================\n"));
         asm.push_str("    ORG $4000  ; Fixed bank (always visible at $4000-$7FFF)\n");
         asm.push_str(&format!("    ; Runtime helpers (accessible from all banks)\n\n"));
-        
+
         // Emit asset lookup tables (ASSET_BANK_TABLE, ASSET_ADDR_TABLE, DRAW_VECTOR_BANKED)
-        // These tables reference assets in Banks #1-#30 via cross-bank addressing
+        // These tables reference assets in Banks #1-#(helpers_bank-1) via cross-bank addressing
         if !distributed_lookup_tables.is_empty() {
             asm.push_str(&distributed_lookup_tables);
         }
-        
+
         // NOTE: VAR_ARG0-4 are already defined in SYSTEM RAM VARIABLES section above
-        // (before bank split). No need to redefine them here in Bank #31.
-        
+        // (before bank split). No need to redefine them here in helpers bank.
+
         let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
         asm.push_str(&helpers_asm);
     }
-    
+
     // For single-bank: Emit helpers normally
     if !is_multibank {
         let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
@@ -589,6 +606,10 @@ pub fn generate_m6809_asm(
     // Matches CORE architecture where strings are emitted at end
     if !print_text_strings.is_empty() {
         builtins::emit_print_text_strings(&print_text_strings, &mut asm);
+    }
+
+    if !msg_entries.is_empty() {
+        builtins::emit_msg_table(&msg_entries, &mut asm);
     }
     
     // NOTE: Assets already emitted BEFORE intermediate banks (see above)

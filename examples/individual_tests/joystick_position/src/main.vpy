@@ -31,3 +31,23 @@ def loop():
     circle_x = x / 2
     circle_y = y / 2
     DRAW_CIRCLE(circle_x, circle_y, 15, 80)
+
+     # Read button states
+    btn1 = J1_BUTTON_1()
+    btn2 = J1_BUTTON_2()
+    btn3 = J1_BUTTON_3()
+    btn4 = J1_BUTTON_4()
+
+    # Display button states
+    PRINT_TEXT(-60, 40, "BTN1")
+    PRINT_NUMBER(0, 40, btn1)
+
+    PRINT_TEXT(-60, 20, "BTN2")
+    PRINT_NUMBER(0, 20, btn2)
+
+    PRINT_TEXT(-60, 0, "BTN3")
+    PRINT_NUMBER(0, 0, btn3)
+
+    PRINT_TEXT(-60, -20, "BTN4")
+    PRINT_NUMBER(0, -20, btn4)
+

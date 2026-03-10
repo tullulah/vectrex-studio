@@ -1,0 +1,16 @@
+[project]
+name = "music_sfx_mix"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/music_sfx_mix.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+music = ["assets/music/*.vmus"]
+sfx = ["assets/sfx/*.vsfx"]

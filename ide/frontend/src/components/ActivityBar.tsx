@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import './ActivityBar.css';
 
-export type ActivityBarItem = 'files' | 'git' | 'playground' | 'settings' | null;
+export type ActivityBarItem = 'files' | 'git' | 'playground' | 'eprom' | 'settings' | null;
 
 interface ActivityBarProps {
   activeItem: ActivityBarItem;
@@ -57,6 +57,26 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeItem, onItemClic
       </div>
 
       <div className="activity-bar-bottom">
+        <button
+          className={`activity-bar-item ${activeItem === 'eprom' ? 'active' : ''}`}
+          onClick={() => handleClick('eprom')}
+          title={t('panel.eprom', 'EPROM Programmer')}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="5" y="2" width="14" height="20" rx="1"/>
+            <line x1="5" y1="6" x2="3" y2="6"/>
+            <line x1="5" y1="10" x2="3" y2="10"/>
+            <line x1="5" y1="14" x2="3" y2="14"/>
+            <line x1="5" y1="18" x2="3" y2="18"/>
+            <line x1="19" y1="6" x2="21" y2="6"/>
+            <line x1="19" y1="10" x2="21" y2="10"/>
+            <line x1="19" y1="14" x2="21" y2="14"/>
+            <line x1="19" y1="18" x2="21" y2="18"/>
+            <circle cx="12" cy="9" r="2"/>
+            <path d="M10 18h4"/>
+          </svg>
+        </button>
+
         <button
           className={`activity-bar-item ${activeItem === 'settings' ? 'active' : ''}`}
           onClick={() => handleClick('settings')}

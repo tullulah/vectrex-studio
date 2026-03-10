@@ -547,6 +547,8 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
         "LBLE" => emit_lble(emitter, operand, last_global_label),
         "LBMI" => emit_lbmi(emitter, operand, last_global_label),
         "LBPL" => emit_lbpl(emitter, operand, last_global_label),
+        "LBVS" => emit_lbvs(emitter, operand, last_global_label),
+        "LBVC" => emit_lbvc(emitter, operand, last_global_label),
         
         // === ARITHMETIC ===
         "ADDA" => emit_adda(emitter, operand, equates),
@@ -1531,6 +1533,40 @@ fn emit_lbpl(emitter: &mut BinaryEmitter, operand: &str, last_global: &str) -> R
         let offset = parse_signed(operand)?;
         emitter.emit(0x10);
         emitter.emit(0x2A);
+        emitter.emit_word(offset as u16);
+        Ok(())
+    }
+}
+
+fn emit_lbvs(emitter: &mut BinaryEmitter, operand: &str, last_global: &str) -> Result<(), String> {
+    if is_label(operand) {
+        emitter.emit(0x10);
+        emitter.emit(0x29); // BVS condition
+        let full_label = expand_local_label(operand, last_global);
+        emitter.add_symbol_ref(&full_label, true, 2);
+        emitter.emit_word(0x0000);
+        Ok(())
+    } else {
+        let offset = parse_signed(operand)?;
+        emitter.emit(0x10);
+        emitter.emit(0x29);
+        emitter.emit_word(offset as u16);
+        Ok(())
+    }
+}
+
+fn emit_lbvc(emitter: &mut BinaryEmitter, operand: &str, last_global: &str) -> Result<(), String> {
+    if is_label(operand) {
+        emitter.emit(0x10);
+        emitter.emit(0x28); // BVC condition
+        let full_label = expand_local_label(operand, last_global);
+        emitter.add_symbol_ref(&full_label, true, 2);
+        emitter.emit_word(0x0000);
+        Ok(())
+    } else {
+        let offset = parse_signed(operand)?;
+        emitter.emit(0x10);
+        emitter.emit(0x28);
         emitter.emit_word(offset as u16);
         Ok(())
     }

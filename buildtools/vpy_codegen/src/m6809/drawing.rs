@@ -933,18 +933,18 @@ DCR_after_intensity:\n\
         ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
             ; NOTE: Caller must ensure DP=$D0 for VIA access\n\
-            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! With DP=$D0,\n\
-            ; Intensity_a does STA <$32 which hits $D032 = VIA DDRB (reg $02),\n\
-            ; setting PB0 as input and breaking the X/Y integrator mux entirely.\n\
-            ; Fix: write Vec_Misc_Count ($C832) directly via extended addressing.\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_SET_INTENSITY\n\
-DSWM_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
+            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates\n\
+            ; VIA Port B through states $05->$04->$01 which resets the analog hardware\n\
+            ; (zero-reference sequence) and would disrupt the beam position mid-drawing.\n\
+            ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
+            LDA ,X+                 ; Read per-path intensity from vector data\n\
 DSWM_SET_INTENSITY:\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)\n\
+            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
+            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            LDA #$04\n\
+            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            LDA #$01\n\
+            STA >$D000              ; Port B=$01: restore normal mux\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -984,7 +984,7 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; Timing setup\n\
+            ; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
@@ -1037,13 +1037,8 @@ DSWM_NO_NEGATE_DX:\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Check intensity override (same logic as start)\n\
-            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
-            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
-            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
-            BRA DSWM_NEXT_SET_INTENSITY\n\
-DSWM_NEXT_USE_OVERRIDE:\n\
-            LEAX 1,X                ; Skip intensity byte in vector data\n\
+            ; Read per-path intensity from vector data\n\
+            LDA ,X+                 ; Read intensity from vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
             PSHS A\n\
             LDB ,X+                 ; y_start\n\
@@ -1060,7 +1055,12 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            STA >$C832              ; Set Vec_Misc_Count directly (DP-safe, no DDRB corruption)\n\
+            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
+            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            LDA #$04\n\
+            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            LDA #$01\n\
+            STA >$D000              ; Port B=$01: restore normal mux\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1088,6 +1088,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
+            ; T1 fixed at $7F (constant scale; brightness set via $C832 above)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\

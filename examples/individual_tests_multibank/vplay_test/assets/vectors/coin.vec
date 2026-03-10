@@ -1,0 +1,64 @@
+{
+  "version": "1.0",
+  "name": "coin",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "coin",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {
+              "x": 0,
+              "y": 7
+            },
+            {
+              "x": 5,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": -7
+            },
+            {
+              "x": -5,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1772214883332",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -12,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": -9,
+              "y": 13,
+              "z": 0
+            },
+            {
+              "x": -9,
+              "y": 13,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": -3,
+  "center_y": 3
+}

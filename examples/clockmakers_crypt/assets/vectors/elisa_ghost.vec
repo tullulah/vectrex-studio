@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "name": "elisa_ghost",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "outline",
+          "intensity": 90,
+          "closed": true,
+          "points": [
+            {"x": -7, "y": 12},
+            {"x":  0, "y": 15},
+            {"x":  7, "y": 12},
+            {"x": 10, "y":  2},
+            {"x":  4, "y": -10},
+            {"x": -6, "y": -13},
+            {"x": -10, "y":  0}
+          ]
+        },
+        {
+          "name": "wisp_right",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x":  4, "y": -10},
+            {"x":  7, "y": -17}
+          ]
+        },
+        {
+          "name": "wisp_left",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": -6, "y": -13},
+            {"x": -4, "y": -19}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

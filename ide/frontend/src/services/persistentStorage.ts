@@ -42,6 +42,9 @@ export const StorageKey = {
   // Emulator
   EMU_BACKEND: 'emu_backend.json',
   
+  // EPROM programmer
+  EPROM_CHIP_CONFIGS: 'eprom_chip_configs.json',
+  
   // Logging
   LOG_CONFIG: 'log_config.json',
 } as const;

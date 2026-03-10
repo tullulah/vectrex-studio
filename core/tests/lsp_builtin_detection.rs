@@ -27,6 +27,13 @@ fn test_lsp_builtin_detection() {
     // Funciones no existentes no deben ser detectadas
     assert!(!is_builtin_function("NOT_A_FUNCTION"));
     assert!(!is_builtin_function("MY_CUSTOM_FUNC"));
+
+    // Message dispatch system
+    assert!(is_builtin_function("MSG_DEF"));
+    assert!(is_builtin_function("PRINT_MSG"));
+
+    // Camera / scroll
+    assert!(is_builtin_function("SET_CAMERA_X"));
 }
 
 #[test]
@@ -52,4 +59,11 @@ fn test_lsp_builtin_arity() {
     
     // Funciones inexistentes
     assert!(get_builtin_arity("NOT_A_FUNCTION").is_none());
+
+    // Message dispatch system
+    assert!(matches!(get_builtin_arity("MSG_DEF"), Some(AritySpec::Exact(4))));
+    assert!(matches!(get_builtin_arity("PRINT_MSG"), Some(AritySpec::Exact(1))));
+
+    // Camera / scroll
+    assert!(matches!(get_builtin_arity("SET_CAMERA_X"), Some(AritySpec::Exact(1))));
 }

@@ -68,11 +68,10 @@ pub fn emit_sin(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     out.push_str("    ; SIN: Sine lookup\n");
     
-    // Evaluate angle -> RESULT
+    // Evaluate angle; D = angle after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    
+
     // Mask to 0-127 range
-    out.push_str("    LDD RESULT\n");
     out.push_str("    ANDB #$7F      ; Mask to 0-127\n");
     out.push_str("    CLRA           ; Clear high byte\n");
     
@@ -98,8 +97,7 @@ pub fn emit_cos(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     out.push_str("    ; COS: Cosine lookup\n");
     
     expressions::emit_simple_expr(&args[0], out, assets);
-    
-    out.push_str("    LDD RESULT\n");
+
     out.push_str("    ANDB #$7F\n");
     out.push_str("    CLRA\n");
     out.push_str("    ASLB\n");
@@ -121,8 +119,7 @@ pub fn emit_tan(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     out.push_str("    ; TAN: Tangent lookup\n");
     
     expressions::emit_simple_expr(&args[0], out, assets);
-    
-    out.push_str("    LDD RESULT\n");
+
     out.push_str("    ANDB #$7F\n");
     out.push_str("    CLRA\n");
     out.push_str("    ASLB\n");
@@ -147,11 +144,10 @@ pub fn emit_sqrt(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     out.push_str("    ; SQRT: Square root (Newton-Raphson)\n");
     
-    // Evaluate x
+    // Evaluate x; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    
-    // Call helper
-    out.push_str("    LDD RESULT\n");
+
+    // Call helper (D passes value directly)
     out.push_str("    JSR SQRT_HELPER\n");
     out.push_str("    STD RESULT\n");
 }
@@ -166,14 +162,12 @@ pub fn emit_pow(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     out.push_str("    ; POW: Power (base ^ exp)\n");
     
-    // Evaluate base
+    // Evaluate base; D = base after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR     ; Save base\n");
-    
-    // Evaluate exponent
+
+    // Evaluate exponent; D = exp after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR2    ; Save exponent\n");
     
     // Call helper
@@ -191,14 +185,12 @@ pub fn emit_atan2(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     out.push_str("    ; ATAN2: Arctangent (y, x)\n");
     
-    // Evaluate y
+    // Evaluate y; D = y after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR     ; Save y\n");
-    
-    // Evaluate x
+
+    // Evaluate x; D = x after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR2    ; Save x\n");
     
     // Call helper
@@ -226,14 +218,12 @@ pub fn emit_rand_range(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     out.push_str("    ; RAND_RANGE: Random in range [min, max]\n");
     
-    // Evaluate min
+    // Evaluate min; D = min after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR     ; Save min\n");
-    
-    // Evaluate max
+
+    // Evaluate max; D = max after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD TMPPTR2    ; Save max\n");
     
     // Call helper

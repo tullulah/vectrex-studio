@@ -7,9 +7,202 @@
 /// Each bank is assembled with ORG $0000, then concatenated to form final ROM.
 /// No "fixed bank" concept - all banks have same addressing model.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+
+/// Generate cross-bank trampolines for user functions split across switchable banks.
+///
+/// When functions are split across switchable banks (0..helpers_bank-1), calls from
+/// bank N to a function in bank M (N≠M) must go through a trampoline in the helpers
+/// bank (always visible at $4000-$7FFF). The trampoline saves the current bank, switches
+/// to the target bank, calls the function, then restores the original bank.
+///
+/// This function:
+/// 1. Builds a label→bank map for all switchable banks
+/// 2. Scans each bank's code for `JSR LABEL` crossing banks
+/// 3. Replaces those JSRs with `JSR TRAMP_LABEL`
+/// 4. Returns the trampoline ASM to be appended to the helpers bank
+fn generate_cross_bank_trampolines(
+    sections: &mut HashMap<u8, BankSection>,
+    helpers_bank: u8,
+) -> String {
+    // Step 1: Build label→bank map for switchable banks only (not helpers bank)
+    let mut label_to_bank: HashMap<String, u8> = HashMap::new();
+    for (bank_id, section) in sections.iter() {
+        if *bank_id == helpers_bank { continue; }
+        for line in section.asm_code.lines() {
+            let trimmed = line.trim();
+            // Skip EQU definitions and empty/comment lines
+            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.contains(" EQU ") {
+                continue;
+            }
+            // Match "LABEL_NAME:" pattern (label definitions, not JSR targets)
+            if let Some(colon_pos) = trimmed.find(':') {
+                let label = trimmed[..colon_pos].trim();
+                // Must be a non-empty identifier without spaces or dots (skip local labels)
+                if !label.is_empty()
+                    && !label.contains(' ')
+                    && !label.starts_with('.')
+                    && label.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false)
+                {
+                    label_to_bank.entry(label.to_string()).or_insert(*bank_id);
+                }
+            }
+        }
+    }
+
+    if label_to_bank.is_empty() {
+        return String::new();
+    }
+
+    // Step 2: Scan each switchable bank for cross-bank JSR calls and patch them
+    let mut trampolines = String::new();
+    let mut generated_trampolines: HashSet<String> = HashSet::new();
+
+    let bank_ids: Vec<u8> = sections.keys().cloned().collect();
+
+    for bank_id in bank_ids {
+        if bank_id == helpers_bank { continue; }
+
+        let new_code = {
+            let section = sections.get(&bank_id).unwrap();
+            let mut new_code = String::new();
+
+            for line in section.asm_code.lines() {
+                let trimmed = line.trim();
+
+                // Match "JSR LABEL" (not JSR $xxxx, not JSR ,X, etc.)
+                if let Some(after_jsr) = trimmed.strip_prefix("JSR ") {
+                    let target = after_jsr.trim().split(|c: char| c.is_whitespace() || c == ';').next().unwrap_or("");
+
+                    // Only intercept named labels (not $ addresses, not empty)
+                    if !target.is_empty() && !target.starts_with('$') && !target.starts_with(',') {
+                        if let Some(&target_bank) = label_to_bank.get(target) {
+                            if target_bank != bank_id {
+                                let tramp_name = format!("TRAMP_{}", target);
+                                let indent = &line[..line.len() - line.trim_start().len()];
+                                new_code.push_str(&format!(
+                                    "{}JSR {}  ; cross-bank trampoline (bank #{} -> bank #{})\n",
+                                    indent, tramp_name, bank_id, target_bank
+                                ));
+
+                                // Generate the trampoline stub once
+                                if generated_trampolines.insert(tramp_name.clone()) {
+                                    eprintln!(
+                                        "[LINKER] Cross-bank call: bank#{} -> bank#{} ({}), trampoline generated",
+                                        bank_id, target_bank, target
+                                    );
+                                    trampolines.push_str(&format!("{}:\n", tramp_name));
+                                    trampolines.push_str("    LDA CURRENT_ROM_BANK  ; save caller's bank\n");
+                                    trampolines.push_str("    PSHS A\n");
+                                    trampolines.push_str(&format!("    LDA #${:02X}  ; switch to bank #{}\n", target_bank, target_bank));
+                                    trampolines.push_str("    STA CURRENT_ROM_BANK\n");
+                                    trampolines.push_str("    STA $DF00\n");
+                                    trampolines.push_str(&format!("    JSR {}\n", target));
+                                    trampolines.push_str("    PULS A\n");
+                                    trampolines.push_str("    STA CURRENT_ROM_BANK  ; restore caller's bank\n");
+                                    trampolines.push_str("    STA $DF00\n");
+                                    trampolines.push_str("    RTS\n");
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                new_code.push_str(line);
+                new_code.push('\n');
+            }
+            new_code
+        };
+
+        sections.get_mut(&bank_id).unwrap().asm_code = new_code;
+    }
+
+    trampolines
+}
+
+/// Relocate ARRAY_XXX_DATA const-array ROM blocks from bank 0 to helpers bank.
+///
+/// In multibank mode, functions may run in any switchable bank (0-2). Const arrays
+/// have their ROM data in bank 0 ($0000-based). When a function runs in bank 1 or 2,
+/// the $0XXX address points to the wrong bank's memory.
+///
+/// Moving ARRAY_XXX_DATA blocks to helpers bank (fixed at $4000-$7FFF) makes them
+/// accessible from any bank. MAIN's initialization code sets VAR_XXX = #ARRAY_XXX_DATA
+/// which will now resolve to $4XXX (always valid).
+fn relocate_array_data_to_helpers(sections: &mut HashMap<u8, BankSection>, helpers_bank: u8) {
+    let bank0_code = match sections.get(&0) {
+        Some(b) => b.asm_code.clone(),
+        None => return,
+    };
+
+    let mut new_bank0_code = String::new();
+    let mut array_data = String::new();
+    let mut in_array_block = false;
+    let mut pending = String::new();  // accumulate current line being decided
+
+    for line in bank0_code.lines() {
+        let trimmed = line.trim();
+
+        if !in_array_block {
+            // Detect ARRAY_XXX_DATA: label (start of a const/mutable array ROM block)
+            if trimmed.starts_with("ARRAY_") && trimmed.ends_with("DATA:") {
+                in_array_block = true;
+                pending.push_str(line);
+                pending.push('\n');
+            } else {
+                new_bank0_code.push_str(line);
+                new_bank0_code.push('\n');
+            }
+        } else {
+            // Inside array block: collect FCB/FDB data lines
+            if trimmed.starts_with("FCB ")
+                || trimmed.starts_with("FDB ")
+                || trimmed.starts_with(';')
+                || trimmed.is_empty()
+            {
+                pending.push_str(line);
+                pending.push('\n');
+            } else {
+                // Non-data line: flush current block to array_data
+                array_data.push_str(&pending);
+                pending.clear();
+                // If this line itself starts a new array block, start it immediately
+                // (rather than sending it to new_bank0_code where it would be missed)
+                if trimmed.starts_with("ARRAY_") && trimmed.ends_with("DATA:") {
+                    in_array_block = true;
+                    pending.push_str(line);
+                    pending.push('\n');
+                } else {
+                    in_array_block = false;
+                    new_bank0_code.push_str(line);
+                    new_bank0_code.push('\n');
+                }
+            }
+        }
+    }
+    // Flush any remaining array block
+    array_data.push_str(&pending);
+
+    if array_data.is_empty() {
+        return;
+    }
+
+    eprintln!("[LINKER] Relocating const array data ({} chars) from bank 0 to helpers bank #{}", array_data.len(), helpers_bank);
+
+    // Update bank 0 (strip array data)
+    if let Some(b0) = sections.get_mut(&0) {
+        b0.asm_code = new_bank0_code;
+    }
+
+    // Append array data to helpers bank (always visible at $4000+)
+    if let Some(helpers) = sections.get_mut(&helpers_bank) {
+        helpers.asm_code.push_str("\n; === CONST ARRAY DATA (relocated to fixed bank - accessible from any bank) ===\n");
+        helpers.asm_code.push_str(&array_data);
+    }
+}
 
 /// Simple label extractor - extracts labels from ASM without full assembly
 /// Returns map of label_name -> offset_in_bytes (approximation)
@@ -483,13 +676,13 @@ impl MultiBankLinker {
                 if bank_id == helpers_bank {
                     format!("{}{}\n{}\n{}\n{}\n{}", org_directive, custom_reset_code, include_directives, definitions, clean_runtime_helpers, clean_remaining_code)
                 } else {
-                    format!("{}{}\n{}\n{}\n{}", org_directive, include_directives, definitions, clean_runtime_helpers, clean_code_without_org)
+                    format!("{}{}\n{}\n{}", org_directive, include_directives, definitions, clean_code_without_org)
                 }
             } else {
                 if bank_id == helpers_bank {
                     format!("{}{}\n{}\n{}\n{}\n{}", org_line, custom_reset_code, include_directives, definitions, clean_runtime_helpers, clean_remaining_code)
                 } else {
-                    format!("{}{}\n{}\n{}\n{}", org_line, include_directives, definitions, clean_runtime_helpers, clean_code_without_org)
+                    format!("{}{}\n{}\n{}", org_line, include_directives, definitions, clean_code_without_org)
                 }
             };
             let size = full_code.len();
@@ -637,8 +830,24 @@ impl MultiBankLinker {
         // Prepend external symbol definitions from helper bank and shared data
         // This is needed for all banks to reference symbols from helpers and arrays/consts
         if !helper_symbols.is_empty() {
+            // Collect locally-defined labels so we don't shadow them with injected EQUs
+            let local_labels: HashSet<String> = full_asm.lines()
+                .filter_map(|line| {
+                    let t = line.trim();
+                    if t.is_empty() || t.starts_with(';') || t.contains(" EQU ") { return None; }
+                    if let Some(pos) = t.find(':') {
+                        let label = t[..pos].trim();
+                        if !label.is_empty() && !label.contains(' ') && !label.starts_with('.') {
+                            return Some(label.to_string());
+                        }
+                    }
+                    None
+                })
+                .collect();
+
             let mut external_symbols = String::from("; External symbols (helpers, BIOS, and shared data)\n");
             for (symbol, address) in helper_symbols {
+                if local_labels.contains(symbol) { continue; }
                 external_symbols.push_str(&format!("{} EQU ${:04X}\n", symbol, address));
             }
             external_symbols.push_str("\n");
@@ -860,8 +1069,26 @@ impl MultiBankLinker {
             .map_err(|e| format!("Failed to read ASM from {:?}: {}", asm_path, e))?;
         
         // Split by bank
-        let sections = self.split_asm_by_bank(&asm_content)?;
-        
+        let mut sections = self.split_asm_by_bank(&asm_content)?;
+
+        // Generate cross-bank trampolines for user functions split across switchable banks.
+        // Must happen BEFORE multi-pass assembly so the patched JSRs and trampoline labels
+        // are present when symbols are collected.
+        let helper_bank_id_for_tramp = (self.rom_bank_count - 1) as u8;
+        let trampolines = generate_cross_bank_trampolines(&mut sections, helper_bank_id_for_tramp);
+        if !trampolines.is_empty() {
+            if let Some(helpers) = sections.get_mut(&helper_bank_id_for_tramp) {
+                helpers.asm_code.push_str("\n; === CROSS-BANK USER FUNCTION TRAMPOLINES ===\n");
+                helpers.asm_code.push_str(&trampolines);
+            }
+        }
+
+        // Relocate const array ROM data from bank 0 to helpers bank so it's always accessible.
+        // Functions split to banks 1-2 need array data at fixed addresses ($4000+).
+        if sections.len() > 2 {
+            relocate_array_data_to_helpers(&mut sections, helper_bank_id_for_tramp);
+        }
+
         // **PASS 1**: Iteratively extract global symbol table from all banks
         // This allows cross-bank references (e.g., CUSTOM_RESET referencing START)
         // We do this iteratively because some symbols may depend on others being defined first.
@@ -916,8 +1143,25 @@ impl MultiBankLinker {
                     
                     // Inject previously found symbols into this bank's ASM
                     if !all_symbols.is_empty() {
+                        // Collect labels locally defined in this bank's code (to avoid overriding them with EQUs)
+                        let local_labels: HashSet<String> = bank_asm.lines()
+                            .filter_map(|line| {
+                                let t = line.trim();
+                                if t.is_empty() || t.starts_with(';') || t.contains(" EQU ") { return None; }
+                                if let Some(pos) = t.find(':') {
+                                    let label = t[..pos].trim();
+                                    if !label.is_empty() && !label.contains(' ') && !label.starts_with('.') {
+                                        return Some(label.to_string());
+                                    }
+                                }
+                                None
+                            })
+                            .collect();
+
                         let mut external_symbols = String::from("; External symbols (cross-bank references and BIOS)\n");
                         for (symbol, address) in &all_symbols {
+                            // Skip symbols defined locally in this bank — injecting an EQU would shadow the real label
+                            if local_labels.contains(symbol) { continue; }
                             external_symbols.push_str(&format!("{} EQU ${:04X}\n", symbol, address));
                         }
                         external_symbols.push_str("\n");
@@ -947,8 +1191,10 @@ impl MultiBankLinker {
                         }
                     }
                     
-                    // Try to assemble with available symbols
-                    match vpy_assembler::m6809::asm_to_binary::assemble_m6809(&bank_asm, 0x0000, false, false) {
+                    // Try to assemble with available symbols.
+                    // Use object_mode=true so banks can contribute their defined labels
+                    // even when some external symbols are still unresolved (deadlock prevention).
+                    match vpy_assembler::m6809::asm_to_binary::assemble_m6809(&bank_asm, 0x0000, true, false) {
                         Ok((_, _, symbol_table, _)) => {
                             
                             // Calculate runtime address for each symbol based on bank
@@ -958,15 +1204,16 @@ impl MultiBankLinker {
                             // So we DON'T add bank_base - the addresses are already correct!
                             
                             for (label, addr) in symbol_table {
-                                // CRITICAL FIX (2026-01-20): DON'T skip asset symbols from Banks #1-#30
-                                // Assets are distributed across banks by allocator - they're NOT duplicates
-                                // Each asset has a unique address in its assigned bank ($0000-$3FFF switchable window)
-                                // These symbols MUST be in all_symbols for cross-bank references to work
-                                
                                 let runtime_addr = addr;  // Use address as-is (ORG already included)
-                                
-                                // Prefer symbols from fixed bank (#31) in case of conflicts
-                                if !all_symbols.contains_key(&label) || bank_id as u8 == helper_bank_id {
+
+                                // Symbol merge rules:
+                                // - New symbol (not yet seen): always add
+                                // - Helpers bank with non-zero addr: update (helpers knows its own symbols; ORG=$4000 so real symbols are ≥$4000)
+                                // - Helpers bank with addr=$0000: SKIP — this is an object_mode unresolved placeholder, not a real definition
+                                // - Other banks: first-come-first-served (don't override already-resolved symbols)
+                                if !all_symbols.contains_key(&label) {
+                                    all_symbols.insert(label, runtime_addr);
+                                } else if bank_id as u8 == helper_bank_id && runtime_addr != 0 {
                                     all_symbols.insert(label, runtime_addr);
                                 }
                             }

@@ -2,10 +2,35 @@
 // vplay-aware level loading, rendering, and physics
 
 use std::collections::HashSet;
-use vpy_parser::Expr;
-use super::builtins::is_multibank;
+use vpy_parser::{Expr, Module, Stmt};
 use super::expressions;
 use crate::AssetInfo;
+
+/// Returns true if the module uses LOAD_LEVEL, SHOW_LEVEL, or UPDATE_LEVEL
+pub fn needs_level_runtime(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        if let Expr::Call(c) = expr {
+            matches!(c.name.as_str(), "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL")
+        } else { false }
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(e, _) => check_expr(e),
+            Stmt::If { cond, body, elifs, else_body, .. } =>
+                check_expr(cond) || body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e,b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |b| b.iter().any(check_stmt)),
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::Assign { value, .. } => check_expr(value),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else { false }
+    })
+}
 
 /// Emit LOAD_LEVEL(level_name) - Load level data from ROM
 ///
@@ -34,8 +59,8 @@ pub fn emit_load_level(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     if let Expr::StringLit(level_name) = &args[0] {
         out.push_str(&format!("    ; Load level: '{}'\n", level_name));
 
-        if is_multibank() {
-            // Multibank mode: use LOAD_LEVEL_BANKED with index
+        if crate::m6809::builtins::use_banked_assets() {
+            // Multibank mode with distributed assets: use LOAD_LEVEL_BANKED with index
             let level_assets: Vec<_> = assets.iter()
                 .filter(|a| matches!(a.asset_type, crate::AssetType::Level))
                 .collect();
@@ -144,7 +169,6 @@ pub fn emit_set_camera_x(args: &[Expr], out: &mut String, assets: &[crate::Asset
         return;
     }
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    LDD RESULT\n");
     out.push_str("    STD >CAMERA_X    ; Store 16-bit camera X scroll offset\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
@@ -168,8 +192,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("LOAD_LEVEL_RUNTIME:\n");
         out.push_str("    PSHS D,X,Y,U     ; Preserve registers\n");
         out.push_str("    \n");
-        out.push_str("    ; Store level pointer persistently\n");
+        out.push_str("    ; Store level pointer and mark as loaded\n");
         out.push_str("    STX >LEVEL_PTR\n");
+        out.push_str("    LDA #1\n");
+        out.push_str("    STA >LEVEL_LOADED    ; Mark level as loaded\n");
         out.push_str("    \n");
         out.push_str("    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized\n");
         out.push_str("    LDD #0\n");
@@ -319,11 +345,19 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SHOW_LEVEL_RUNTIME:\n");
         out.push_str("    PSHS D,X,Y,U     ; Preserve registers\n");
         out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Switch to level bank so ROM pointers are valid\n");
+            out.push_str("    LDA >CURRENT_ROM_BANK\n");
+            out.push_str("    PSHS A              ; Save current bank\n");
+            out.push_str("    LDA >LEVEL_BANK\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Switch to level bank\n");
+        }
         out.push_str("    \n");
         out.push_str("    ; Check if level is loaded\n");
-        out.push_str("    LDX >LEVEL_PTR\n");
-        out.push_str("    CMPX #0\n");
+        out.push_str("    TST >LEVEL_LOADED\n");
         out.push_str("    BEQ SLR_DONE     ; No level loaded, skip\n");
+        out.push_str("    LDX >LEVEL_PTR\n");
         out.push_str("    \n");
         out.push_str("    ; Re-read object counts from header\n");
         out.push_str("    LEAX 12,X        ; X points to counts (+12)\n");
@@ -367,6 +401,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
         out.push_str("SLR_DONE:\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Restore original bank\n");
+            out.push_str("    PULS A              ; A = saved bank\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Restore bank\n");
+        }
         out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
         out.push_str("    PULS D,X,Y,U,PC  ; Restore and return\n");
         out.push_str("    \n");
@@ -694,6 +734,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; Only the GP layer (RAM buffer) is updated — BG/FG are static ROM.\n");
         out.push_str("UPDATE_LEVEL_RUNTIME:\n");
         out.push_str("    PSHS U,X,Y,D     ; Preserve all registers\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Switch to level bank so FG ROM pointers are valid\n");
+            out.push_str("    LDA >CURRENT_ROM_BANK\n");
+            out.push_str("    PSHS A              ; Save current bank\n");
+            out.push_str("    LDA >LEVEL_BANK\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Switch to level bank\n");
+        }
         out.push_str("    \n");
         out.push_str("    ; === Update Gameplay Objects ===\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
@@ -708,6 +756,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    JSR ULR_GP_FG_COLLISIONS\n");
         out.push_str("    \n");
         out.push_str("ULR_EXIT:\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Restore original bank\n");
+            out.push_str("    PULS A              ; A = saved bank\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Restore bank\n");
+        }
         out.push_str("    PULS D,Y,X,U     ; Restore registers\n");
         out.push_str("    RTS\n");
         out.push_str("\n");
@@ -720,9 +774,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str(";   +5: velocity_x  +6: velocity_y  +7: physics_flags  +8: collision_flags\n");
         out.push_str(";   +9: collision_size  +10: spawn_delay_lo  +11-12: vector_ptr  +13-14: props_ptr\n");
         out.push_str("ULR_UPDATE_LAYER:\n");
+        out.push_str("    TST >LEVEL_LOADED\n");
+        out.push_str("    LBEQ ULR_LAYER_EXIT  ; No level loaded, skip\n");
         out.push_str("    LDX >LEVEL_PTR   ; Load level pointer for world bounds\n");
-        out.push_str("    CMPX #0\n");
-        out.push_str("    LBEQ ULR_LAYER_EXIT\n");
         out.push_str("    \n");
         out.push_str("ULR_LOOP:\n");
         out.push_str("    PSHS B           ; Save loop counter\n");

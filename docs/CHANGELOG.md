@@ -12,6 +12,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement LEA instructions (LEAX, LEAY, LEAU, LEAS)
 - Indexed addressing with numeric offsets (5,X, -2,Y)
 - Auto-increment/decrement (,X+, ,-X)
+- `DRAW_TO(x,y)` builtin (parsed but codegen unimplemented)
+- `SET_SCALE()` builtin (missing)
+- `len()` returns hardcoded 0 (stub)
+- `GET_TIME()` placeholder only
+
+---
+
+## [v0.2.0] — 2026-03-10
+
+### Added — IDE: EPROM Programmer
+
+- **EPROM programmer integration** (TL866II+ via minipro): New dialog in the IDE to
+  write compiled `.bin` ROMs directly to a physical EPROM. Supports TL866II+ hardware
+  programmer via the open-source `minipro` CLI tool.
+- **One-click minipro install**: macOS button to install minipro via Homebrew without
+  leaving the IDE.
+- **Advanced options panel**: Checkboxes for `--skip-erase`, `--skip-verify`, and
+  `--unprotect` persisted across sessions.
+- **Button debounce** in `loop()`: Input reads are now debounced to avoid false triggers
+  on the first frame.
+
+### Fixed — Buildtools: DRAW_VECTOR Brightness
+
+A series of fixes to make `SET_INTENSITY()` correctly control `DRAW_VECTOR` brightness:
+
+- **VIA Port A + Z-axis mux strobe**: `DSWM` now writes the brightness value to VIA
+  Port A and strobes the Z-axis MUX (CB2) so the real hardware DAC receives the value.
+- **T1 timer coupling**: `DSWM` T1 setup is now adjacent to `CLR VIA_t1_cnt_hi` as
+  required by hardware; `Vec_Misc_Count` drives the T1 timer for correct line length.
+- **Per-path intensity from `.vec` data**: `DSWM` reads the per-segment FCB intensity
+  byte from the vector data on every path, not just the first.
+- **`DRAW_VEC_INTENSITY` lifecycle**: `SET_INTENSITY` writes the value before the BIOS
+  call; `DRAW_VECTOR` clears `DRAW_VEC_INTENSITY` after drawing so the next frame
+  starts clean.
+- **Brightness decoupled from line scale**: T1 is hardcoded to `$7F` (maximum line
+  length); brightness is independent.
+
+### Fixed — Buildtools: 4-Bank Multibank (4×16 KB)
+
+- **`LEVEL_LOADED` flag**: `SHOW_LEVEL_RUNTIME` previously used `CMPX #0; BEQ DONE`
+  to detect "no level loaded". When the level asset happened to be the first object in
+  its bank (`ORG $0000`), the pointer was `$0000` and the guard fired spuriously.
+  Fixed with a dedicated 1-byte `LEVEL_LOADED` flag set by `LOAD_LEVEL_RUNTIME`.
+- **`LOAD_LEVEL_BANKED` full init**: Bank tracking variable `LEVEL_BANK` is written
+  on every `LOAD_LEVEL` call, not just the first.
+- **`SHOW_LEVEL_RUNTIME` bank switching**: Switches to `LEVEL_BANK` before reading ROM
+  level data, returns to helpers bank afterward.
+- **`UPDATE_LEVEL_RUNTIME` bank switching**: Same bank-switch pattern as `SHOW_LEVEL`.
+- **`DRAW_VECTOR_BANKED` path loop**: Correctly iterates all paths in the `.vec` asset
+  when the asset lives in a banked ROM.
+- **`PLAY_SFX_BANKED` bank tracking**: Records which bank holds the SFX data so the
+  audio update routine switches banks correctly on subsequent frames.
+
+### Added — Buildtools Assembler
+
+- **`LBVS`** (`$10 $29`) and **`LBVC`** (`$10 $28`) long branch opcodes.
+- **`ADCA`** immediate/direct/indexed/extended — used by tile-based `SHOW_LEVEL_RUNTIME`
+  to propagate carry from `MUL + ADDB`.
 
 ---
 

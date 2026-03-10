@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "name": "optics_pedestal",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "capital",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -14, "y": -30, "z": 0},
+            {"x":  14, "y": -30, "z": 0},
+            {"x":  14, "y": -24, "z": 0},
+            {"x": -14, "y": -24, "z": 0},
+            {"x": -14, "y": -30, "z": 0}
+          ]
+        },
+        {
+          "name": "shaft",
+          "intensity": 90,
+          "closed": false,
+          "points": [
+            {"x": -9, "y": -24, "z": 0},
+            {"x": -9, "y":  20, "z": 0},
+            {"x":  9, "y":  20, "z": 0},
+            {"x":  9, "y": -24, "z": 0}
+          ]
+        },
+        {
+          "name": "base",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -16, "y": 20, "z": 0},
+            {"x":  16, "y": 20, "z": 0},
+            {"x":  16, "y": 28, "z": 0},
+            {"x": -16, "y": 28, "z": 0},
+            {"x": -16, "y": 20, "z": 0}
+          ]
+        },
+        {
+          "name": "prism_slot",
+          "intensity": 110,
+          "closed": false,
+          "points": [
+            {"x":  0,  "y": -40, "z": 0},
+            {"x": -10, "y": -30, "z": 0},
+            {"x":  10, "y": -30, "z": 0},
+            {"x":   0, "y": -40, "z": 0}
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}
