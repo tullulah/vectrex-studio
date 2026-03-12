@@ -118,7 +118,7 @@ jobs:
         shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          npm version --no-git-tag-version "$TAG_VERSION"
+          npm version --no-git-tag-version --allow-same-version "$TAG_VERSION"
 
       # Install dependencies
       - name: Install frontend dependencies
