@@ -1,6 +1,6 @@
 {
   "name": "vpy-ide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Vectrex Studio - A visual programming environment for Vectrex game development",
   "author": {
