@@ -12,6 +12,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   NODE_VERSION: '22'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ============================================
@@ -114,11 +115,15 @@ jobs:
       # Sync version from git tag (e.g. v0.2.0 → "0.2.0" in package.json)
       - name: Sync version from tag
         if: startsWith(github.ref, 'refs/tags/v')
-        working-directory: ide/electron
         shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          npm version --no-git-tag-version --allow-same-version "$TAG_VERSION"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('ide/electron/package.json'));
+            pkg.version = '$TAG_VERSION';
+            fs.writeFileSync('ide/electron/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
 
       # Install dependencies
       - name: Install frontend dependencies
