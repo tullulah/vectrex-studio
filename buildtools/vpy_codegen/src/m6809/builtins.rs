@@ -73,6 +73,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Vector asset functions
     ("DRAW_VECTOR", 3),     // name, x, y
     ("DRAW_VECTOR_EX", 5),  // name, x, y, mirror, intensity
+    ("DRAW_VECTOR_3D", 4),  // name, ax, ay, az
     
     // Audio functions
     ("PLAY_MUSIC", 1),      // name
@@ -103,6 +104,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Level camera
     ("SET_CAMERA_X", 1),          // camera_x (16-bit scroll offset)
     ("SET_CAMERA_Y", 1),          // camera_y (16-bit scroll offset)
+    ("LEVEL_COLLISION_Y", 3),     // player_x, player_y, player_half_height → returns tile_top + player_hh
 
     // Message table dispatch
     ("MSG_DEF", 4),       // id, x, y, text  — data declaration, emits no code
@@ -563,6 +565,10 @@ pub fn emit_builtin(
             emit_draw_vector_ex(args, out, assets);
             true
         }
+        "DRAW_VECTOR_3D" => {
+            emit_draw_vector_3d(args, out, assets);
+            true
+        }
         
         
         // ===== Math Functions =====
@@ -696,7 +702,11 @@ pub fn emit_builtin(
             level::emit_set_camera_y(args, out, assets);
             true
         }
-        
+        "LEVEL_COLLISION_Y" => {
+            level::emit_level_collision_y(args, out, assets);
+            true
+        }
+
         // Utilities (9 builtins)
         "MOVE" => {
             utilities::emit_move(args, out);
@@ -1033,6 +1043,45 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
         }
         _ => {
             out.push_str("    ; ERROR: DRAW_VECTOR_EX first argument must be string literal\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+        }
+    }
+}
+
+
+fn emit_draw_vector_3d(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    // Arity already validated by emit_builtin: DRAW_VECTOR_3D("name", ax, ay, az)
+    out.push_str("    ; DRAW_VECTOR_3D: Draw vector asset with 3D rotation\n");
+
+    match &args[0] {
+        Expr::StringLit(asset_name) => {
+            let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
+            out.push_str(&format!("    ; Asset: {} (3D rotation)\n", asset_name));
+
+            // Store raw angles to RAM — trig lookup happens inside DRAW_VECTOR_3D_RUNTIME
+            // (runtime is in helpers bank where SIN_TABLE/COS_TABLE live)
+            expressions::emit_simple_expr(&args[1], out, assets);
+            out.push_str("    STB >ROT3D_AX       ; angle X (0-127)\n");
+            expressions::emit_simple_expr(&args[2], out, assets);
+            out.push_str("    STB >ROT3D_AY       ; angle Y (0-127)\n");
+            expressions::emit_simple_expr(&args[3], out, assets);
+            out.push_str("    STB >ROT3D_AZ       ; angle Z (0-127)\n");
+
+            // Set draw offsets from DRAW_VEC_X/Y (set by MOVE or default 0)
+            out.push_str("    LDA >DRAW_VEC_X\n");
+            out.push_str("    STA >ROT3D_OX\n");
+            out.push_str("    LDA >DRAW_VEC_Y\n");
+            out.push_str("    STA >ROT3D_OY\n");
+
+            // Load 3D data pointer and call runtime
+            // Runtime sets DP=$D0 itself for BIOS calls, restores DP=$C8 at end
+            out.push_str(&format!("    LDX #{}_3D_DATA  ; pointer to 3D data table\n", symbol));
+            out.push_str("    JSR DRAW_VECTOR_3D_RUNTIME\n");
+
+            out.push_str("    LDD #0\n    STD RESULT\n");
+        }
+        _ => {
+            out.push_str("    ; ERROR: DRAW_VECTOR_3D first argument must be string literal\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
         }
     }

@@ -113,7 +113,7 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
         Expr::Call(vpy_parser::CallInfo { name, args, .. }) => {
             // Check if it's an asset-loading builtin
             let up = name.to_uppercase();
-            if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || 
+            if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
@@ -771,17 +771,18 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm.push_str("    CLR DRAW_VEC_INTENSITY\n");
     asm.push_str("    JSR $F1AA            ; DP_to_D0\n");
     asm.push_str("\n");
-    asm.push_str("    ; Loop over all paths (header byte 0 = path_count, +1.. = FDB table)\n");
-    asm.push_str("    LDB ,X               ; B = path_count\n");
+    asm.push_str("    ; Loop over all paths (header bytes 0-1 = path_count FDB, +2.. = FDB table)\n");
+    asm.push_str("    LDD ,X               ; D = path_count (16-bit)\n");
+    asm.push_str("    CMPD #0\n");
     asm.push_str("    LBEQ DVB_DONE        ; No paths\n");
-    asm.push_str("    LEAY 1,X             ; Y = pointer to first FDB entry\n");
+    asm.push_str("    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)\n");
     asm.push_str("DVB_PATH_LOOP:\n");
-    asm.push_str("    PSHS B               ; Save remaining path count\n");
+    asm.push_str("    PSHS D               ; Save remaining path count (2 bytes)\n");
     asm.push_str("    LDX ,Y               ; X = path data address (FDB entry)\n");
     asm.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
     asm.push_str("    LEAY 2,Y             ; Advance to next FDB entry\n");
-    asm.push_str("    PULS B               ; Restore count\n");
-    asm.push_str("    DECB\n");
+    asm.push_str("    PULS D               ; Restore count\n");
+    asm.push_str("    SUBD #1\n");
     asm.push_str("    BNE DVB_PATH_LOOP\n");
     asm.push_str("DVB_DONE:\n");
     asm.push_str("\n");
@@ -949,6 +950,32 @@ fn generate_load_level_banked_wrapper() -> String {
     asm.push_str("\n");
     asm.push_str("    RTS\n");
     asm.push_str("\n");
-    
+
     asm
+}
+
+/// Generate compact 3D data tables for all vector assets used by DRAW_VECTOR_3D.
+/// These are emitted in bank_00 so the fixed helpers bank runtime can always read them
+/// (helpers bank runs with the calling bank still mapped at $0000-$3FFF).
+pub fn generate_3d_data_asm(assets: &[AssetInfo]) -> String {
+    let mut out = String::new();
+    let vec_assets: Vec<_> = assets.iter().filter(|a| matches!(a.asset_type, AssetType::Vector)).collect();
+    if vec_assets.is_empty() {
+        return out;
+    }
+    out.push_str(";***************************************************************************\n");
+    out.push_str("; 3D COMPACT DATA TABLES (for DRAW_VECTOR_3D)\n");
+    out.push_str(";***************************************************************************\n\n");
+    for asset in vec_assets {
+        match crate::vecres::VecResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&resource.compile_to_3d_asm_with_name(Some(&asset.name)));
+                out.push_str("\n");
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load vector asset for 3D table '{}': {}", asset.name, e);
+            }
+        }
+    }
+    out
 }
