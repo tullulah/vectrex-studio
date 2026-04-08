@@ -109,11 +109,14 @@ pub struct VecPath {
 
 fn default_intensity() -> u8 { 127 }
 
-/// A point in 2D space
+/// A point in 2D/3D space
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Point {
     pub x: i16,
     pub y: i16,
+    /// Optional Z coordinate for 3D vector assets (-127 to 127)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub z: Option<i16>,
     /// Optional intensity override for this specific point (0-255)
     /// If present, triggers Intensity_a call before drawing to this point
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -221,15 +224,32 @@ impl VecResource {
             .flat_map(|l| l.paths.iter())
             .flat_map(|p| p.points.iter())
             .collect();
-        
+
         if all_points.is_empty() {
             return (0, 0);
         }
-        
+
         let min_x = all_points.iter().map(|p| p.x).min().unwrap_or(0);
         let max_x = all_points.iter().map(|p| p.x).max().unwrap_or(0);
-        
+
         (min_x, max_x)
+    }
+
+    /// Calculate Y bounds (min_y, max_y) across all points - needed for collision half_height
+    pub fn calculate_y_bounds(&self) -> (i16, i16) {
+        let all_points: Vec<_> = self.layers.iter()
+            .flat_map(|l| l.paths.iter())
+            .flat_map(|p| p.points.iter())
+            .collect();
+
+        if all_points.is_empty() {
+            return (0, 0);
+        }
+
+        let min_y = all_points.iter().map(|p| p.y).min().unwrap_or(0);
+        let max_y = all_points.iter().map(|p| p.y).max().unwrap_or(0);
+
+        (min_y, max_y)
     }
     
     /// Calculate center coordinates (design time)
@@ -294,9 +314,15 @@ impl VecResource {
         asm.push_str(&format!("; Center: ({}, {})\n", center_x, center_y));
         asm.push_str("\n");
         
+        // Calculate asset height for collision half_height
+        let (min_y, max_y) = self.calculate_y_bounds();
+        let height = (max_y - min_y) as i32;
+
         // Emit asset constants for runtime calculations
         asm.push_str(&format!("_{}_WIDTH EQU {}\n", symbol_name, width));
         asm.push_str(&format!("_{}_HALF_WIDTH EQU {}\n", symbol_name, width / 2));
+        asm.push_str(&format!("_{}_HEIGHT EQU {}\n", symbol_name, height));
+        asm.push_str(&format!("_{}_HALF_HEIGHT EQU {}\n", symbol_name, height / 2));
         asm.push_str(&format!("_{}_CENTER_X EQU {}\n", symbol_name, center_x));
         asm.push_str(&format!("_{}_CENTER_Y EQU {}\n", symbol_name, center_y));
         asm.push_str("\n");
@@ -313,7 +339,7 @@ impl VecResource {
         let path_count = self.visible_paths().len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
-        asm.push_str(&format!("    FCB {}               ; path_count (runtime metadata)\n", path_count));
+        asm.push_str(&format!("    FDB {}               ; path_count (runtime metadata, 2 bytes)\n", path_count));
         
         // Emit pointer table for all paths (allows runtime iteration)
         for path_idx in 0..path_count {
@@ -372,10 +398,47 @@ impl VecResource {
                 asm.push_str("\n");  // Blank line between paths
             }
         }
-        
+
         asm
     }
     
+    /// Compile to compact 3D data table for DRAW_VECTOR_3D_RUNTIME
+    /// Format: FCB path_count; per path: FCB point_count, closed; FCB x,y,z per point
+    pub fn compile_to_3d_asm_with_name(&self, override_name: Option<&str>) -> String {
+        let mut asm = String::new();
+        let name_to_use = override_name.unwrap_or(&self.name);
+        let symbol_name = name_to_use.to_uppercase().replace("-", "_").replace(" ", "_");
+
+        let visible = self.visible_paths();
+        if visible.is_empty() {
+            asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
+            asm.push_str("    FCB 0               ; 3D: no paths\n");
+            return asm;
+        }
+
+        asm.push_str(&format!("\n; 3D data table for DRAW_VECTOR_3D\n"));
+        asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
+        asm.push_str(&format!("    FCB {}               ; path count\n", visible.len()));
+
+        for path in &visible {
+            if path.points.is_empty() {
+                continue;
+            }
+            asm.push_str(&format!("    FCB {}               ; point count\n", path.points.len()));
+            asm.push_str(&format!("    FCB {}               ; closed flag\n", if path.closed { 1 } else { 0 }));
+            for pt in &path.points {
+                let x = pt.x.clamp(-127, 127) as i8;
+                let y = pt.y.clamp(-127, 127) as i8;
+                let z = pt.z.unwrap_or(0).clamp(-127, 127) as i8;
+                asm.push_str(&format!("    FCB {},{},{}          ; x={},y={},z={}\n",
+                    Self::format_byte(x), Self::format_byte(y), Self::format_byte(z),
+                    x, y, z));
+            }
+        }
+
+        asm
+    }
+
     /// Split a long segment (|dx| or |dy| > 127) into multiple FCB $FF sub-segments.
     /// Each sub-segment stays within the ±127 Vectrex beam range.
     fn emit_split_segment(asm: &mut String, dx: i16, dy: i16, label: &str) {
@@ -433,8 +496,8 @@ impl VecResource {
         
         let mut size = 0;
         
-        // Header: path_count (1 byte) + pointers (2 bytes each)
-        size += 1 + path_count * 2;
+        // Header: path_count (2 bytes FDB) + pointers (2 bytes each)
+        size += 2 + path_count * 2;
         
         // EQU constants: _WIDTH, _CENTER_X, _CENTER_Y (0 bytes - just labels)
         
