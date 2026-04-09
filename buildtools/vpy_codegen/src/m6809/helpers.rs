@@ -1367,35 +1367,30 @@ SMUL8_POSPOS:\n\
 ; ============================================================================\n\
 ; SMUL_LUT - LUT-based signed 8×8 multiply, result = (A * sin(B*2π/128)) / 128\n\
 ; ============================================================================\n\
-; Input:  A = val (i8, but |val| must be ≤63 — vertex coords clamped to ±63)\n\
-;         B = angle index (0-127)\n\
+; Input:  A = val (i8, |val|≤63), B = angle index (0-127)\n\
+;         Y = SMUL_PROD base address (caller pre-loads: LDY #SMUL_PROD)\n\
 ; Output: A = result (i8)\n\
-; Strategy: LSRA trick — val/2 is the row offset (stride=128), bit0 sets B[$80]\n\
-;           D = (|val|/2)*256 + (angle | (val_bit0 * 128)) → correct table offset\n\
-; Destroys: B\n\
+; Strategy: LSRA trick — D = (|val|/2)*256 + (angle | (bit0*128)) → table offset\n\
+;           LDA D,Y — 7 cycles vs LDX+LEAX+LDA = 12 cycles. Saves 5c per call.\n\
+; Destroys: B  (Y preserved)\n\
 SMUL_LUT:\n\
     TSTA\n\
     BPL SMUL_LUT_P      ; A >= 0 ?\n\
-    ; --- negative val branch ---\n\
+    ; --- negative val ---\n\
     NEGA                ; A = |val|\n\
     LSRA                ; A = |val|/2,  C = |val| bit0\n\
     BCC SMUL_LUT_N1\n\
-    ORB #$80            ; set angle bit7 = val_bit0 * 128\n\
+    ORB #$80\n\
 SMUL_LUT_N1:\n\
-    LDX #SMUL_PROD\n\
-    LEAX D,X            ; X = &SMUL_PROD[|val|/2][angle]\n\
-    LDA ,X\n\
-    NEGA                ; table stores positive-val result; negate for negative input\n\
+    LDA D,Y             ; table[|val|/2][angle]\n\
+    NEGA\n\
     RTS\n\
-    ; --- positive val branch ---\n\
 SMUL_LUT_P:\n\
     LSRA                ; A = val/2,  C = val bit0\n\
     BCC SMUL_LUT_P1\n\
     ORB #$80\n\
 SMUL_LUT_P1:\n\
-    LDX #SMUL_PROD\n\
-    LEAX D,X\n\
-    LDA ,X\n\
+    LDA D,Y\n\
     RTS\n\
 \n\
 ; ============================================================================\n\
@@ -1406,8 +1401,9 @@ SMUL_LUT_P1:\n\
 ;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F\n\
 ;         ROT3D_OX, ROT3D_OY (i8 screen offsets)\n\
 ; Output: ROT3D_SCR_X, ROT3D_SCR_Y\n\
-; Destroys: A, B, X, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
+; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
 DV3D_ROTATE:\n\
+    LDY #SMUL_PROD      ; Y = table base — shared by all SMUL_LUT calls\n\
     ; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --\n\
     LDA >ROT3D_RY\n\
     LDB >ROT3D_COS_X\n\
@@ -1569,9 +1565,9 @@ DV3D_VERT_LOOP:\n\
     STA >ROT3D_RY\n\
     LDA ,U+\n\
     STA >ROT3D_RZ\n\
-    PSHS X,U            ; save VBUF write ptr and ROM data ptr (DV3D_ROTATE uses X)\n\
+    PSHS X,U            ; save VBUF write ptr and ROM data ptr (DV3D_ROTATE uses X,Y)\n\
     JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y\n\
-    PULS X,U\n\
+    PULS X,U            ; Y was clobbered but not needed outside DV3D_ROTATE\n\
     LDA >ROT3D_SCR_X\n\
     STA ,X+\n\
     LDA >ROT3D_SCR_Y\n\
@@ -1655,30 +1651,27 @@ DV3D_PATH_LOOP:\n\
 \n\
 DV3D_SEG_LOOP:\n\
     TST >ROT3D_PT_REM\n\
-    LBEQ DV3D_CLOSE_CHECK\n\
+    BEQ DV3D_CLOSE_CHECK\n\
     DEC >ROT3D_PT_REM\n\
 \n\
     LDB ,U+             ; B = vertex index\n\
     ASLB\n\
     LDX #ROT3D_VBUF\n\
-    ABX\n\
-    LDA ,X\n\
-    STA >ROT3D_SCR_X\n\
-    LDA 1,X\n\
-    STA >ROT3D_SCR_Y\n\
-\n\
-    LDA >ROT3D_SCR_Y\n\
-    SUBA >ROT3D_PREV_Y\n\
-    STA >ROT3D_TEMP     ; dy\n\
-    LDA >ROT3D_SCR_X\n\
-    SUBA >ROT3D_PREV_X\n\
-    STA >ROT3D_TEMP2    ; dx\n\
-    LDA >ROT3D_SCR_Y\n\
-    STA >ROT3D_PREV_Y\n\
-    LDA >ROT3D_SCR_X\n\
+    ABX                 ; X = &VBUF[idx*2]\n\
+    ; Compute dx, update PREV_X: new_X - PREV_X = dx; new_X = dx + PREV_X\n\
+    LDA ,X              ; new_X\n\
+    SUBA >ROT3D_PREV_X  ; A = dx\n\
+    STA >ROT3D_TEMP2    ; save dx\n\
+    ADDA >ROT3D_PREV_X  ; A = new_X again\n\
     STA >ROT3D_PREV_X\n\
-    JSR DV3D_DRAWLINE   ; direct VIA draw\n\
-    LBRA DV3D_SEG_LOOP\n\
+    ; Compute dy, update PREV_Y\n\
+    LDA 1,X             ; new_Y\n\
+    SUBA >ROT3D_PREV_Y  ; A = dy\n\
+    STA >ROT3D_TEMP     ; save dy\n\
+    ADDA >ROT3D_PREV_Y  ; A = new_Y again\n\
+    STA >ROT3D_PREV_Y\n\
+    JSR DV3D_DRAWLINE\n\
+    BRA DV3D_SEG_LOOP\n\
 \n\
 DV3D_CLOSE_CHECK:\n\
     TST >ROT3D_CLOSED\n\
