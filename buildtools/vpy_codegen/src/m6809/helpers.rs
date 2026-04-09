@@ -1319,6 +1319,123 @@ BEEP_UPDATE_DONE:\n\
     );
 }
 
+/// Generate one inlined SMUL_LUT body with unique labels (index n = 0..9).
+/// Saves 14c JSR/RTS overhead per call vs JSR SMUL_LUT.
+/// Caller must pre-load Y = #SMUL_PROD before first call (shared across all).
+/// Input: A = val (i8, |val|≤63), B = angle index (0-127), Y = SMUL_PROD base
+/// Output: A = result (i8)  — same contract as SMUL_LUT subroutine
+fn inline_smul_lut(n: usize) -> String {
+    format!(
+        "    TSTA\n\
+         BPL SL_P_{n}\n\
+         NEGA\n\
+         LSRA\n\
+         BCC SL_N1_{n}\n\
+         ORB #$80\n\
+SL_N1_{n}:\n\
+         LDA D,Y\n\
+         NEGA\n\
+         BRA SL_END_{n}\n\
+SL_P_{n}:\n\
+         LSRA\n\
+         BCC SL_P1_{n}\n\
+         ORB #$80\n\
+SL_P1_{n}:\n\
+         LDA D,Y\n\
+SL_END_{n}:\n",
+        n = n
+    )
+}
+
+/// Emit DV3D_ROTATE with all 10 SMUL_LUT calls inlined (no JSR/RTS overhead).
+/// Saves 14c × 10 calls = 140c per vertex rotation.
+fn emit_dv3d_rotate_inlined() -> String {
+    let mut s = String::new();
+    s.push_str(
+"; ============================================================================\n\
+; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point (inlined LUT)\n\
+; ============================================================================\n\
+; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords, |val|≤63)\n\
+;         ROT3D_AX/AY/AZ = raw sin angle indices (0-127)\n\
+;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F\n\
+;         ROT3D_OX, ROT3D_OY (i8 screen offsets)\n\
+; Output: ROT3D_SCR_X, ROT3D_SCR_Y\n\
+; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
+DV3D_ROTATE:\n\
+    LDY #SMUL_PROD      ; Y = table base — shared by all inlined SMUL_LUT calls\n\
+    ; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --\n\
+    LDA >ROT3D_RY\n\
+    LDB >ROT3D_COS_X\n");
+    s.push_str(&inline_smul_lut(0));  // A = RY*cX
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_RZ\n\
+    LDB >ROT3D_AX\n");
+    s.push_str(&inline_smul_lut(1));  // A = RZ*sX
+    s.push_str(
+"    STA >ROT3D_TEMP2\n\
+    LDA >ROT3D_TEMP\n\
+    SUBA >ROT3D_TEMP2\n\
+    STA >ROT3D_Y1\n\
+\n\
+    LDA >ROT3D_RY\n\
+    LDB >ROT3D_AX\n");
+    s.push_str(&inline_smul_lut(2));  // A = RY*sX
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_RZ\n\
+    LDB >ROT3D_COS_X\n");
+    s.push_str(&inline_smul_lut(3));  // A = RZ*cX
+    s.push_str(
+"    ADDA >ROT3D_TEMP\n\
+    STA >ROT3D_Z1\n\
+\n\
+    ; -- Y-axis rotation: x2 = x*cY + z1*sY --\n\
+    LDA >ROT3D_RX\n\
+    LDB >ROT3D_COS_Y\n");
+    s.push_str(&inline_smul_lut(4));  // A = RX*cY
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_Z1\n\
+    LDB >ROT3D_AY\n");
+    s.push_str(&inline_smul_lut(5));  // A = Z1*sY
+    s.push_str(
+"    ADDA >ROT3D_TEMP\n\
+    STA >ROT3D_X2\n\
+\n\
+    ; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --\n\
+    LDA >ROT3D_X2\n\
+    LDB >ROT3D_COS_Z\n");
+    s.push_str(&inline_smul_lut(6));  // A = X2*cZ
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_Y1\n\
+    LDB >ROT3D_AZ\n");
+    s.push_str(&inline_smul_lut(7));  // A = Y1*sZ
+    s.push_str(
+"    STA >ROT3D_TEMP2\n\
+    LDA >ROT3D_TEMP\n\
+    SUBA >ROT3D_TEMP2\n\
+    ADDA >ROT3D_OX\n\
+    STA >ROT3D_SCR_X\n\
+\n\
+    LDA >ROT3D_X2\n\
+    LDB >ROT3D_AZ\n");
+    s.push_str(&inline_smul_lut(8));  // A = X2*sZ
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_Y1\n\
+    LDB >ROT3D_COS_Z\n");
+    s.push_str(&inline_smul_lut(9));  // A = Y1*cZ
+    s.push_str(
+"    ADDA >ROT3D_TEMP\n\
+    ADDA >ROT3D_OY\n\
+    STA >ROT3D_SCR_Y\n\
+    RTS\n\
+\n");
+    s
+}
+
 /// Emit SMUL8 (kept for backward compat), SMUL_LUT, SMUL_PROD table,
 /// updated DV3D_ROTATE, and new vertex-dedup DRAW_VECTOR_3D_RUNTIME.
 fn emit_draw_vector_3d_runtime(asm: &mut String) {
@@ -1391,80 +1508,10 @@ SMUL_LUT_P:\n\
     ORB #$80\n\
 SMUL_LUT_P1:\n\
     LDA D,Y\n\
-    RTS\n\
-\n\
-; ============================================================================\n\
-; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point (LUT version)\n\
-; ============================================================================\n\
-; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords, |val|≤63)\n\
-;         ROT3D_AX/AY/AZ = raw sin angle indices (0-127)\n\
-;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F\n\
-;         ROT3D_OX, ROT3D_OY (i8 screen offsets)\n\
-; Output: ROT3D_SCR_X, ROT3D_SCR_Y\n\
-; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
-DV3D_ROTATE:\n\
-    LDY #SMUL_PROD      ; Y = table base — shared by all SMUL_LUT calls\n\
-    ; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --\n\
-    LDA >ROT3D_RY\n\
-    LDB >ROT3D_COS_X\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP\n\
-    LDA >ROT3D_RZ\n\
-    LDB >ROT3D_AX\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP2\n\
-    LDA >ROT3D_TEMP\n\
-    SUBA >ROT3D_TEMP2\n\
-    STA >ROT3D_Y1\n\
-\n\
-    LDA >ROT3D_RY\n\
-    LDB >ROT3D_AX\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP\n\
-    LDA >ROT3D_RZ\n\
-    LDB >ROT3D_COS_X\n\
-    JSR SMUL_LUT\n\
-    ADDA >ROT3D_TEMP\n\
-    STA >ROT3D_Z1\n\
-\n\
-    ; -- Y-axis rotation: x2 = x*cY + z1*sY --\n\
-    LDA >ROT3D_RX\n\
-    LDB >ROT3D_COS_Y\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP\n\
-    LDA >ROT3D_Z1\n\
-    LDB >ROT3D_AY\n\
-    JSR SMUL_LUT\n\
-    ADDA >ROT3D_TEMP\n\
-    STA >ROT3D_X2\n\
-\n\
-    ; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --\n\
-    LDA >ROT3D_X2\n\
-    LDB >ROT3D_COS_Z\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP\n\
-    LDA >ROT3D_Y1\n\
-    LDB >ROT3D_AZ\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP2\n\
-    LDA >ROT3D_TEMP\n\
-    SUBA >ROT3D_TEMP2\n\
-    ADDA >ROT3D_OX\n\
-    STA >ROT3D_SCR_X\n\
-\n\
-    LDA >ROT3D_X2\n\
-    LDB >ROT3D_AZ\n\
-    JSR SMUL_LUT\n\
-    STA >ROT3D_TEMP\n\
-    LDA >ROT3D_Y1\n\
-    LDB >ROT3D_COS_Z\n\
-    JSR SMUL_LUT\n\
-    ADDA >ROT3D_TEMP\n\
-    ADDA >ROT3D_OY\n\
-    STA >ROT3D_SCR_Y\n\
-    RTS\n\
-\n\
-; ============================================================================\n\
+    RTS\n\n");
+    asm.push_str(&emit_dv3d_rotate_inlined());
+    asm.push_str(
+"; ============================================================================\n\
 ; DV3D_MOVETO - Move beam to absolute (X,Y) using direct VIA (same as DSWM)\n\
 ; ============================================================================\n\
 ; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx (delta from current beam pos)\n\

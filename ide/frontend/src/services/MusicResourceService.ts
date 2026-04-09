@@ -17,6 +17,7 @@ export interface NoiseEvent {
   duration: number;
   period: number;    // 0-31
   channels: number;  // Bitmask: which channels use noise
+  velocity?: number; // 0-15, PSG volume (optional, default 12)
 }
 
 export interface MusicResource {

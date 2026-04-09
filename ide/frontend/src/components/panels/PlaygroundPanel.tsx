@@ -859,15 +859,16 @@ export function PlaygroundPanel() {
           
           return layer.paths.map((path, pathIdx) => {
             const points = path.points.map(p => `${p.x},${-p.y}`).join(' ');
-            const opacity = path.intensity / 255;
+            // Map intensity to opacity with a minimum floor so dim vecs stay visible
+            const opacity = 0.5 + (path.intensity / 255) * 0.5;
             // Color coding: green=selected, blue=collidable, cyan=non-collidable
-            let color = '#00ff0080'; // default cyan (non-collidable)
+            let color = '#00ffff'; // default cyan (non-collidable)
             if (isSelected) {
               color = '#00ff00'; // bright green when selected
             } else if (obj.collidable === true) {
-              color = '#4080ff80'; // blue for collidable
+              color = '#6699ff'; // blue for collidable
             }
-            
+
             if (path.closed) {
               // Closed polygon
               return (
@@ -876,7 +877,7 @@ export function PlaygroundPanel() {
                   points={points}
                   fill="none"
                   stroke={color}
-                  strokeWidth="1"
+                  strokeWidth="1.5"
                   opacity={opacity}
                 />
               );
@@ -888,7 +889,7 @@ export function PlaygroundPanel() {
                   points={points}
                   fill="none"
                   stroke={color}
-                  strokeWidth="1"
+                  strokeWidth="1.5"
                   opacity={opacity}
                 />
               );

@@ -1038,7 +1038,20 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
           style={{ ...btnStyle, background: viewChannel === 'noise' ? '#d84' : '#3a3a5e', fontWeight: viewChannel === 'noise' ? 'bold' : 'normal', minWidth: '52px', padding: '6px 8px' }}>
           🥁 N
         </button>
-        
+        {resource.noise.length > 0 && <>
+          <span style={{ color: '#888', fontSize: '12px' }}>🥁 Vol:</span>
+          <input type="range" min="0" max="15" step="1"
+            value={resource.noise[0]?.velocity ?? 8}
+            onChange={(e) => {
+              const v = parseInt(e.target.value);
+              updateResource({ ...resource, noise: resource.noise.map(n => ({ ...n, velocity: v })) });
+            }}
+            style={{ width: '60px' }} />
+          <span style={{ color: '#aaa', fontSize: '11px', minWidth: '16px' }}>
+            {resource.noise[0]?.velocity ?? 8}
+          </span>
+        </>}
+
         <div style={{ width: '1px', height: '24px', background: '#4a4a6e' }} />
         
         <span style={{ color: '#888', fontSize: '12px' }}>BPM:</span>

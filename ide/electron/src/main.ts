@@ -3314,6 +3314,35 @@ function runMinipro(args: string[]): Promise<{ ok: boolean; stdout: string; stde
   });
 }
 
+function runMiniproStreaming(
+  wc: Electron.WebContents,
+  args: string[],
+): Promise<{ ok: boolean; stdout: string; stderr: string; error?: string }> {
+  return new Promise((resolve) => {
+    const proc = spawn('minipro', args, { timeout: 180000 });
+    let stdout = '';
+    let stderr = '';
+
+    const sendLines = (raw: string) => {
+      // minipro uses \r for progress updates — split on both \r and \n
+      raw.split(/[\r\n]/).forEach(line => {
+        const trimmed = line.replace(/^\[K/, '').trim(); // strip VT100 erase-line escape
+        if (trimmed) wc.send('eprom://progress', trimmed);
+      });
+    };
+
+    proc.stdout.on('data', (d: Buffer) => { const s = d.toString(); stdout += s; sendLines(s); });
+    proc.stderr.on('data', (d: Buffer) => { const s = d.toString(); stderr += s; sendLines(s); });
+    proc.on('error', (err: Error) => {
+      resolve({ ok: false, stdout, stderr, error: err.message });
+    });
+    proc.on('close', (code: number | null) => {
+      if (code === 0) resolve({ ok: true, stdout, stderr });
+      else resolve({ ok: false, stdout, stderr, error: `minipro exited with code ${code}` });
+    });
+  });
+}
+
 ipcMain.handle('eprom:detect', async () => {
   try {
     const result = await runMinipro(['--version']);
@@ -3328,13 +3357,15 @@ ipcMain.handle('eprom:detect', async () => {
   }
 });
 
-ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean; skipVerify?: boolean; eraseFirst?: boolean; vpp?: string; vdd?: string; vcc?: string; pulse?: string }) => {
-  const { binPath, chip, skipIdCheck, skipVerify, eraseFirst, vpp, vdd, vcc, pulse } = args;
+ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean; skipVerify?: boolean; eraseFirst?: boolean; unprotect?: boolean; vpp?: string; vdd?: string; vcc?: string; pulse?: string }) => {
+  const { binPath, chip, skipIdCheck, skipVerify, eraseFirst, unprotect, vpp, vdd, vcc, pulse } = args;
   if (!binPath || !existsSync(binPath)) {
     return { ok: false, error: `File not found: ${binPath}`, stdout: '', stderr: '' };
   }
-  // minipro -p <chip> -w <file> [flags]
-  const flags: string[] = ['-p', chip, '-w', binPath];
+  // minipro -p <chip> [-u] -w <file> [flags]
+  const flags: string[] = ['-p', chip];
+  if (unprotect) flags.push('-u');
+  flags.push('-w', binPath);
   if (skipIdCheck) flags.push('-y');
   if (skipVerify) flags.push('-v');
   if (eraseFirst) flags.push('-e');
@@ -3342,7 +3373,7 @@ ipcMain.handle('eprom:write', async (_e, args: { binPath: string; chip: string; 
   if (vdd) flags.push('--vdd', vdd);
   if (vcc) flags.push('--vcc', vcc);
   if (pulse) flags.push('--pulse', pulse);
-  return runMinipro(flags);
+  return runMiniproStreaming(_e.sender, flags);
 });
 
 ipcMain.handle('eprom:verify', async (_e, args: { binPath: string; chip: string; programmer: string; skipIdCheck?: boolean }) => {
@@ -3353,7 +3384,7 @@ ipcMain.handle('eprom:verify', async (_e, args: { binPath: string; chip: string;
   // minipro -p <chip> -m <file> [flags]
   const flags: string[] = ['-p', chip, '-m', binPath];
   if (skipIdCheck) flags.push('-y');
-  return runMinipro(flags);
+  return runMiniproStreaming(_e.sender, flags);
 });
 
 ipcMain.handle('eprom:blankCheck', async (_e, args: { chip: string; programmer: string; skipIdCheck?: boolean }) => {
@@ -3361,7 +3392,17 @@ ipcMain.handle('eprom:blankCheck', async (_e, args: { chip: string; programmer: 
   // minipro -p <chip> --blank_check [flags]
   const flags: string[] = ['-p', chip, '--blank_check'];
   if (skipIdCheck) flags.push('-y');
-  return runMinipro(flags);
+  return runMiniproStreaming(_e.sender, flags);
+});
+
+ipcMain.handle('eprom:erase', async (_e, args: { chip: string; programmer: string; skipIdCheck?: boolean; unprotect?: boolean }) => {
+  const { chip, skipIdCheck, unprotect } = args;
+  // minipro -p <chip> [-u] -E
+  const flags: string[] = ['-p', chip];
+  if (unprotect) flags.push('-u');
+  flags.push('-E');
+  if (skipIdCheck) flags.push('-y');
+  return runMiniproStreaming(_e.sender, flags);
 });
 
 ipcMain.handle('eprom:platform', async () => {

@@ -10,6 +10,7 @@ const CHIP_PRESETS = [
   { label: '27C010 (128 KB)', value: 'W27C010@DIP32' },
   { label: '27C020 (256 KB)', value: 'W27C020@DIP32' },
   { label: '27C040 (512 KB)', value: 'W27C040@DIP32' },
+  { label: 'AT29C256 (32 KB EEPROM)', value: 'AT29C256@DIP28' },
   { label: 'SST39SF010A (128 KB)', value: 'SST39SF010A@DIP32' },
   { label: 'SST39SF020A (256 KB)', value: 'SST39SF020A@DIP32' },
   { label: 'SST39SF040 (512 KB)', value: 'SST39SF040@DIP32' },
@@ -23,7 +24,7 @@ const PROGRAMMERS = [
   { label: 'T56', value: 'T56' },
 ];
 
-type ProgramStatus = 'idle' | 'detecting' | 'writing' | 'verifying' | 'success' | 'error';
+type ProgramStatus = 'idle' | 'detecting' | 'writing' | 'verifying' | 'erasing' | 'success' | 'error';
 
 interface EpromProgrammerDialogProps {
   binPath: string | null;
@@ -48,6 +49,7 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
   const [skipIdCheck, setSkipIdCheck] = useState(false);
   const [skipVerify, setSkipVerify] = useState(false);
   const [eraseFirst, setEraseFirst] = useState(false);
+  const [unprotect, setUnprotect] = useState(false);
   // Advanced: voltage & timing overrides (write mode only)
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [vpp, setVpp] = useState('');
@@ -67,10 +69,11 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
         if (cfg.skipIdCheck !== undefined) setSkipIdCheck(cfg.skipIdCheck);
         if (cfg.skipVerify  !== undefined) setSkipVerify(cfg.skipVerify);
         if (cfg.eraseFirst  !== undefined) setEraseFirst(cfg.eraseFirst);
+        if (cfg.unprotect   !== undefined) setUnprotect(cfg.unprotect);
       } else {
         // Reset to defaults when switching to a chip with no saved config
         setVpp(''); setVdd(''); setVcc(''); setPulse('');
-        setSkipIdCheck(false); setSkipVerify(false); setEraseFirst(false);
+        setSkipIdCheck(false); setSkipVerify(false); setEraseFirst(false); setUnprotect(false);
       }
     });
   }, [chip]);
@@ -81,10 +84,27 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const all = (await storageGet<Record<string, any>>(StorageKey.EPROM_CHIP_CONFIGS)) ?? {};
-      all[chip] = { vpp, vdd, vcc, pulse, skipIdCheck, skipVerify, eraseFirst };
+      all[chip] = { vpp, vdd, vcc, pulse, skipIdCheck, skipVerify, eraseFirst, unprotect };
       storageSet(StorageKey.EPROM_CHIP_CONFIGS, all);
     }, 400);
-  }, [chip, vpp, vdd, vcc, pulse, skipIdCheck, skipVerify, eraseFirst]);
+  }, [chip, vpp, vdd, vcc, pulse, skipIdCheck, skipVerify, eraseFirst, unprotect]);
+
+  const [selectionLoaded, setSelectionLoaded] = useState(false);
+
+  // Load saved chip/programmer selection on mount
+  useEffect(() => {
+    storageGet<{ chip?: string; programmer?: string }>(StorageKey.EPROM_SELECTION).then(sel => {
+      if (sel?.chip && CHIP_PRESETS.some(c => c.value === sel.chip)) setChip(sel.chip);
+      if (sel?.programmer && PROGRAMMERS.some(p => p.value === sel.programmer)) setProgrammer(sel.programmer);
+      setSelectionLoaded(true);
+    });
+  }, []);
+
+  // Save chip/programmer whenever they change (only after initial load to avoid overwriting saved value)
+  useEffect(() => {
+    if (!selectionLoaded) return;
+    storageSet(StorageKey.EPROM_SELECTION, { chip, programmer });
+  }, [chip, programmer, selectionLoaded]);
 
   useEffect(() => {
     const checkMinipro = async () => {
@@ -117,6 +137,16 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
     const cleanup = eprom.onInstallProgress((chunk: string) => {
       const lines = chunk.split('\n').filter((l: string) => l.trim());
       setInstallLog(prev => [...prev, ...lines]);
+    });
+    return cleanup;
+  }, []);
+
+  // Stream live minipro output into the log during write/erase/verify/blankCheck
+  useEffect(() => {
+    const eprom = (window as any).eprom;
+    if (!eprom?.onProgress) return;
+    const cleanup = eprom.onProgress((line: string) => {
+      setLog(prev => [...prev, line]);
     });
     return cleanup;
   }, []);
@@ -181,6 +211,7 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
       skipIdCheck,
       skipVerify,
       eraseFirst,
+      unprotect,
       vpp: vpp || undefined,
       vdd: vdd || undefined,
       vcc: vcc || undefined,
@@ -188,18 +219,10 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
     });
 
     if (result?.ok) {
-      addLog('');
       addLog('✓ Write complete!');
-      if (result.stdout) {
-        result.stdout.split('\n').filter((l: string) => l.trim()).forEach((l: string) => addLog(l));
-      }
       setStatus('success');
     } else {
-      addLog('');
       addLog('✗ Write failed!');
-      if (result?.stderr) {
-        result.stderr.split('\n').filter((l: string) => l.trim()).forEach((l: string) => addLog(l));
-      }
       setError(result?.error || 'Write failed');
       setStatus('error');
     }
@@ -229,15 +252,9 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
 
     if (result?.ok) {
       addLog('✓ Verification passed!');
-      if (result.stdout) {
-        result.stdout.split('\n').filter((l: string) => l.trim()).forEach((l: string) => addLog(l));
-      }
       setStatus('success');
     } else {
       addLog('✗ Verification failed!');
-      if (result?.stderr) {
-        result.stderr.split('\n').filter((l: string) => l.trim()).forEach((l: string) => addLog(l));
-      }
       setError(result?.error || 'Verification failed');
       setStatus('error');
     }
@@ -259,15 +276,36 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
       setStatus('idle');
     } else {
       addLog('✗ Chip is NOT blank.');
-      if (result?.stderr) {
-        result.stderr.split('\n').filter((l: string) => l.trim()).forEach((l: string) => addLog(l));
-      }
       setError(result?.error || 'Chip is not blank');
       setStatus('error');
     }
   };
 
-  const isWorking = status === 'writing' || status === 'verifying' || status === 'detecting' || installing;
+  const handleErase = async () => {
+    const eprom = (window as any).eprom;
+    if (!eprom) return;
+
+    setStatus('erasing');
+    setError(null);
+    setLog([]);
+    addLog(`Programmer: ${programmer}`);
+    addLog(`Chip: ${chip}`);
+    addLog('');
+    addLog('Erasing...');
+
+    const result = await eprom.erase({ chip, programmer, skipIdCheck, unprotect });
+
+    if (result?.ok) {
+      addLog('✓ Erase complete!');
+      setStatus('success');
+    } else {
+      addLog('✗ Erase failed!');
+      setError(result?.error || 'Erase failed');
+      setStatus('error');
+    }
+  };
+
+  const isWorking = status === 'writing' || status === 'verifying' || status === 'detecting' || status === 'erasing' || installing;
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
@@ -424,6 +462,11 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
                 style={{ accentColor: '#0098ff' }} />
               Erase before write <span style={{ color: '#858585', fontSize: 11 }}>(flash chips only)</span>
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#cccccc', cursor: 'pointer' }}>
+              <input type="checkbox" checked={unprotect} onChange={e => setUnprotect(e.target.checked)} disabled={isWorking}
+                style={{ accentColor: '#0098ff' }} />
+              Disable write protection (-u) <span style={{ color: '#858585', fontSize: 11 }}>(SDP bypass — AT29C256 etc.)</span>
+            </label>
           </div>
 
           {/* Advanced — voltage & timing overrides (write mode only) */}
@@ -499,14 +542,23 @@ export const EpromProgrammerDialog: React.FC<EpromProgrammerDialogProps> = ({
         </div>
 
         <div className="dialog-actions" style={{ justifyContent: 'space-between' }}>
-          <button
-            className="dialog-cancel-btn"
-            onClick={handleBlankCheck}
-            disabled={isWorking || !miniproFound}
-            style={{ marginRight: 'auto' }}
-          >
-            Blank Check
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="dialog-cancel-btn"
+              onClick={handleBlankCheck}
+              disabled={isWorking || !miniproFound}
+            >
+              Blank Check
+            </button>
+            <button
+              className="dialog-cancel-btn"
+              onClick={handleErase}
+              disabled={isWorking || !miniproFound}
+              style={{ color: '#f48771' }}
+            >
+              {status === 'erasing' ? 'Erasing...' : 'Erase EEPROM'}
+            </button>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               className="dialog-cancel-btn"

@@ -44,6 +44,7 @@ export const StorageKey = {
   
   // EPROM programmer
   EPROM_CHIP_CONFIGS: 'eprom_chip_configs.json',
+  EPROM_SELECTION: 'eprom_selection.json',
   
   // Logging
   LOG_CONFIG: 'log_config.json',

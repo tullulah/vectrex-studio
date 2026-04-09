@@ -94,23 +94,30 @@ LEVEL_FG_ROM_PTR     EQU $C880+$4C   ; FG layer ROM pointer (2 bytes)
 LEVEL_GP_PTR         EQU $C880+$4E   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
 LEVEL_BANK           EQU $C880+$50   ; Bank ID for current level (for multibank) (1 bytes)
 SLR_CUR_X            EQU $C880+$51   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
-UGPC_OUTER_IDX       EQU $C880+$CA   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$CB   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$CC   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$CD   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$CF   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$D1   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$D2   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$D3   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$D4   ; GP-FG |dy| (1 bytes)
-VAR_PLAYER_X         EQU $C880+$D5   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$D7   ; User variable: PLAYER_Y (2 bytes)
-VAR_VEL_Y            EQU $C880+$D9   ; User variable: VEL_Y (1 bytes)
-VAR_ON_GROUND        EQU $C880+$DA   ; User variable: ON_GROUND (1 bytes)
-VAR_CAMERA_X         EQU $C880+$DB   ; User variable: CAMERA_X (2 bytes)
-VAR_JOY_X            EQU $C880+$DD   ; User variable: JOY_X (2 bytes)
-VAR_BTN_JUMP         EQU $C880+$DF   ; User variable: BTN_JUMP (2 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$232   ; LEVEL_COLLISION_Y player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$234   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
+LCOL_PY              EQU $C880+$235   ; LEVEL_COLLISION_Y player feet Y (player_y - player_hh) (1 bytes)
+LCOL_PHH             EQU $C880+$236   ; LEVEL_COLLISION_Y player half_height (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$237   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$238   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$239   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$23A   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$23C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$23E   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$23F   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$240   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$241   ; GP-FG |dy| (1 bytes)
+VAR_MARIO_HH         EQU $C880+$242   ; User variable: MARIO_HH (2 bytes)
+VAR_PLAYER_X         EQU $C880+$244   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$246   ; User variable: PLAYER_Y (2 bytes)
+VAR_VEL_Y            EQU $C880+$248   ; User variable: VEL_Y (2 bytes)
+VAR_ON_GROUND        EQU $C880+$24A   ; User variable: ON_GROUND (1 bytes)
+VAR_PREV_Y           EQU $C880+$24B   ; User variable: PREV_Y (2 bytes)
+VAR_CAMERA_X         EQU $C880+$24D   ; User variable: CAMERA_X (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$24F   ; User variable: FLOOR_Y (2 bytes)
+VAR_JOY_X            EQU $C880+$251   ; User variable: JOY_X (2 bytes)
+VAR_BTN_JUMP         EQU $C880+$253   ; User variable: BTN_JUMP (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -138,14 +145,18 @@ MAIN:
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
     LDD #0
     STD VAR_PLAYER_X
-    LDD #-70
+    LDD #-57
     STD VAR_PLAYER_Y
     LDD #0
     STD VAR_VEL_Y
     LDD #1
     STD VAR_ON_GROUND
+    LDD #-57
+    STD VAR_PREV_Y
     LDD #0
     STD VAR_CAMERA_X
+    LDD #-57
+    STD VAR_FLOOR_Y
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -167,11 +178,6 @@ MAIN:
     ; Load level: 'world_1_1'
     LDX #_WORLD_1_1_LEVEL          ; Pointer to level data in ROM
     JSR LOAD_LEVEL_RUNTIME
-    ; PLAY_MUSIC("overworld") - play music asset (index=0)
-    LDX #_OVERWORLD_MUSIC  ; Load music data pointer
-    JSR PLAY_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
@@ -283,7 +289,7 @@ IF_END_2:
 .CMP_3_END:
     LBEQ IF_NEXT_7
     LDD #12
-    STB VAR_VEL_Y
+    STD VAR_VEL_Y
     LDD #0
     STB VAR_ON_GROUND
     ; PLAY_SFX("jump") - play SFX asset (index=0)
@@ -310,20 +316,45 @@ IF_END_4:
 .CMP_4_END:
     LBEQ IF_NEXT_9
     LDD >VAR_PLAYER_Y
+    STD VAR_PREV_Y
+    LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDB >VAR_VEL_Y
-    SEX             ; Sign-extend B -> D
+    LDD >VAR_VEL_Y
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_PLAYER_Y
-    LDB >VAR_VEL_Y
-    SEX             ; Sign-extend B -> D
+    LDD >VAR_VEL_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD TMPPTR      ; Save right operand to TMPPTR
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
-    STB VAR_VEL_Y
-    LDD #-70
+    STD VAR_VEL_Y
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_PLAYER_X
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #13  ; const MARIO_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PREV_Y
+    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom
+    STB >LCOL_PY         ; store player feet Y for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR_Y
+    ; MAX: Return maximum of two values
+    LDD >VAR_FLOOR_Y
+    STD TMPPTR     ; Save first value
+    LDD #-57
+    STD TMPPTR2    ; Save second value
+    LDD TMPPTR     ; Load first value
+    CMPD TMPPTR2   ; Compare first vs second
+    BGE .MAX_1_FIRST ; Branch if first >= second
+    LDD TMPPTR2    ; Second is larger
+    STD RESULT
+    BRA .MAX_1_END
+.MAX_1_FIRST:
+    STD RESULT     ; First is larger (D still = first from LDD TMPPTR)
+.MAX_1_END:
+    STD VAR_FLOOR_Y
+    LDD >VAR_FLOOR_Y
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_Y
     CMPD TMPVAL
@@ -334,10 +365,10 @@ IF_END_4:
     LDD #1
 .CMP_5_END:
     LBEQ IF_NEXT_11
-    LDD #-70
+    LDD >VAR_FLOOR_Y
     STD VAR_PLAYER_Y
     LDD #0
-    STB VAR_VEL_Y
+    STD VAR_VEL_Y
     LDD #1
     STB VAR_ON_GROUND
     LBRA IF_END_10
@@ -346,6 +377,62 @@ IF_END_10:
     LBRA IF_END_8
 IF_NEXT_9:
 IF_END_8:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDB >VAR_ON_GROUND
+    CLRA            ; Zero-extend: A=0, B=value
+    CMPD TMPVAL
+    LBEQ .CMP_6_TRUE
+    LDD #0
+    LBRA .CMP_6_END
+.CMP_6_TRUE:
+    LDD #1
+.CMP_6_END:
+    LBEQ IF_NEXT_13
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_PLAYER_X
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #13  ; const MARIO_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PLAYER_Y
+    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom
+    STB >LCOL_PY         ; store player feet Y for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR_Y
+    ; MAX: Return maximum of two values
+    LDD >VAR_FLOOR_Y
+    STD TMPPTR     ; Save first value
+    LDD #-57
+    STD TMPPTR2    ; Save second value
+    LDD TMPPTR     ; Load first value
+    CMPD TMPPTR2   ; Compare first vs second
+    BGE .MAX_2_FIRST ; Branch if first >= second
+    LDD TMPPTR2    ; Second is larger
+    STD RESULT
+    BRA .MAX_2_END
+.MAX_2_FIRST:
+    STD RESULT     ; First is larger (D still = first from LDD TMPPTR)
+.MAX_2_END:
+    STD VAR_FLOOR_Y
+    LDD >VAR_FLOOR_Y
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBGT .CMP_7_TRUE
+    LDD #0
+    LBRA .CMP_7_END
+.CMP_7_TRUE:
+    LDD #1
+.CMP_7_END:
+    LBEQ IF_NEXT_15
+    LDD #0
+    STB VAR_ON_GROUND
+    LBRA IF_END_14
+IF_NEXT_15:
+IF_END_14:
+    LBRA IF_END_12
+IF_NEXT_13:
+IF_END_12:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #30
@@ -360,21 +447,21 @@ IF_END_8:
     STD TMPPTR+4   ; Save max
     LDD TMPPTR     ; Load value
     CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_1_CHK_MAX ; Branch if value >= min
+    BGE .CLAMP_3_CHK_MAX ; Branch if value >= min
     LDD TMPPTR+2
     STD RESULT
-    BRA .CLAMP_1_END
-.CLAMP_1_CHK_MAX:
+    BRA .CLAMP_3_END
+.CLAMP_3_CHK_MAX:
     LDD TMPPTR     ; Load value again
     CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_1_OK  ; Branch if value <= max
+    BLE .CLAMP_3_OK  ; Branch if value <= max
     LDD TMPPTR+4
     STD RESULT
-    BRA .CLAMP_1_END
-.CLAMP_1_OK:
+    BRA .CLAMP_3_END
+.CLAMP_3_OK:
     LDD TMPPTR
     STD RESULT
-.CLAMP_1_END:
+.CLAMP_3_END:
     STD VAR_CAMERA_X
     ; ===== SET_CAMERA_X builtin =====
     LDD >VAR_CAMERA_X
@@ -386,7 +473,7 @@ IF_END_8:
     LDD #0
     STD RESULT
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: mario (index=1, 10 paths)
+    ; Asset: mario (index=2, 10 paths)
     LDD #-30
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
@@ -424,6 +511,36 @@ IF_END_8:
     CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
+    LDD >VAR_FLOOR_Y
+    ; DEBUG_PRINT(FLOOR_Y)
+    STA $C002
+    STB $C000
+    LDA #$FE
+    STA $C001
+    LDX #DEBUG_LABEL_FLOOR_Y
+    STX $C004
+    BRA DEBUG_SKIP_0
+DEBUG_LABEL_FLOOR_Y:
+    FCC "FLOOR_Y"
+    FCB $00
+DEBUG_SKIP_0:
+    LDD #0
+    STD RESULT
+    LDD >VAR_PLAYER_Y
+    ; DEBUG_PRINT(PLAYER_Y)
+    STA $C002
+    STB $C000
+    LDA #$FE
+    STA $C001
+    LDX #DEBUG_LABEL_PLAYER_Y
+    STX $C004
+    BRA DEBUG_SKIP_1
+DEBUG_LABEL_PLAYER_Y:
+    FCC "PLAYER_Y"
+    FCB $00
+DEBUG_SKIP_1:
+    LDD #0
+    STD RESULT
     JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
     RTS
 
@@ -431,6 +548,38 @@ IF_END_8:
 ; EMBEDDED ASSETS (vectors, music, levels, SFX)
 ;***************************************************************************
 
+; Generated from cloud.vec (Malban Draw_Sync_List format)
+; Total paths: 1, points: 12
+; X bounds: min=-25, max=25, width=50
+; Center: (0, 0)
+
+_CLOUD_WIDTH EQU 50
+_CLOUD_HALF_WIDTH EQU 25
+_CLOUD_HEIGHT EQU 20
+_CLOUD_HALF_HEIGHT EQU 10
+_CLOUD_CENTER_X EQU 0
+_CLOUD_CENTER_Y EQU 0
+
+_CLOUD_VECTORS:  ; Main entry (header + 1 path(s))
+    FCB 1               ; path_count (runtime metadata)
+    FDB _CLOUD_PATH0        ; pointer to path 0
+
+_CLOUD_PATH0:    ; Path 0
+    FCB 55              ; path0: intensity
+    FCB $F6,$E7,0,0        ; path0: header (y=-10, x=-25, relative to center)
+    FCB $FF,$00,$32          ; flag=-1, dy=0, dx=50
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB 2                ; End marker (path complete)
 ; Generated from ground_tile.vec (Malban Draw_Sync_List format)
 ; Total paths: 2, points: 7
 ; X bounds: min=-30, max=30, width=60
@@ -438,6 +587,8 @@ IF_END_8:
 
 _GROUND_TILE_WIDTH EQU 60
 _GROUND_TILE_HALF_WIDTH EQU 30
+_GROUND_TILE_HEIGHT EQU 16
+_GROUND_TILE_HALF_HEIGHT EQU 8
 _GROUND_TILE_CENTER_X EQU 0
 _GROUND_TILE_CENTER_Y EQU 0
 
@@ -468,6 +619,8 @@ _GROUND_TILE_PATH1:    ; Path 1
 
 _MARIO_WIDTH EQU 14
 _MARIO_HALF_WIDTH EQU 7
+_MARIO_HEIGHT EQU 26
+_MARIO_HALF_HEIGHT EQU 13
 _MARIO_CENTER_X EQU 0
 _MARIO_CENTER_Y EQU 2
 
@@ -551,6 +704,45 @@ _MARIO_PATH9:    ; Path 9
     FCB $F3,$07,0,0        ; path9: header (y=-13, x=7, relative to center)
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB 2                ; End marker (path complete)
+; Generated from mountain.vec (Malban Draw_Sync_List format)
+; Total paths: 1, points: 19
+; X bounds: min=-30, max=30, width=60
+; Center: (0, 0)
+
+_MOUNTAIN_WIDTH EQU 60
+_MOUNTAIN_HALF_WIDTH EQU 30
+_MOUNTAIN_HEIGHT EQU 38
+_MOUNTAIN_HALF_HEIGHT EQU 19
+_MOUNTAIN_CENTER_X EQU 0
+_MOUNTAIN_CENTER_Y EQU 0
+
+_MOUNTAIN_VECTORS:  ; Main entry (header + 1 path(s))
+    FCB 1               ; path_count (runtime metadata)
+    FDB _MOUNTAIN_PATH0        ; pointer to path 0
+
+_MOUNTAIN_PATH0:    ; Path 0
+    FCB 45              ; path0: intensity
+    FCB $ED,$E2,0,0        ; path0: header (y=-19, x=-30, relative to center)
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$08,$FA          ; flag=-1, dy=8, dx=-6
+    FCB $FF,$F8,$FA          ; flag=-1, dy=-8, dx=-6
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB 2                ; End marker (path complete)
 ; Generated from pipe.vec (Malban Draw_Sync_List format)
 ; Total paths: 2, points: 10
 ; X bounds: min=-12, max=12, width=24
@@ -558,6 +750,8 @@ _MARIO_PATH9:    ; Path 9
 
 _PIPE_WIDTH EQU 24
 _PIPE_HALF_WIDTH EQU 12
+_PIPE_HEIGHT EQU 50
+_PIPE_HALF_HEIGHT EQU 25
 _PIPE_CENTER_X EQU 0
 _PIPE_CENTER_Y EQU 0
 
@@ -592,6 +786,8 @@ _PIPE_PATH1:    ; Path 1
 
 _QUESTION_BLOCK_WIDTH EQU 16
 _QUESTION_BLOCK_HALF_WIDTH EQU 8
+_QUESTION_BLOCK_HEIGHT EQU 16
+_QUESTION_BLOCK_HALF_HEIGHT EQU 8
 _QUESTION_BLOCK_CENTER_X EQU 0
 _QUESTION_BLOCK_CENTER_Y EQU 0
 
@@ -624,575 +820,95 @@ _QUESTION_BLOCK_PATH2:    ; Path 2
     FCB $FC,$FF,0,0        ; path2: header (y=-4, x=-1, relative to center)
     FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
     FCB 2                ; End marker (path complete)
-; Generated from overworld.vmus (internal name: Super Mario Bros Overworld Theme)
-; Tempo: 200 BPM, Total events: 24 (PSG Direct format)
-; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
-
-_OVERWORLD_MUSIC:
-    ; Frame-based PSG register writes
-    FCB     0              ; Delay 0 frames (maintain previous state)
-    FCB     6              ; Frame 0 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     4              ; Frame 3 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     4              ; Delay 4 frames (maintain previous state)
-    FCB     6              ; Frame 7 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     4              ; Delay 4 frames (maintain previous state)
-    FCB     4              ; Frame 11 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     4              ; Delay 4 frames (maintain previous state)
-    FCB     6              ; Frame 15 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     6              ; Frame 18 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     4              ; Delay 4 frames (maintain previous state)
-    FCB     6              ; Frame 22 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     6              ; Frame 30 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 45 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     6              ; Frame 60 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 75 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     6              ; Frame 90 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 105 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     6              ; Frame 120 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 135 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     6              ; Frame 150 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $0B             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $01             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 165 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 172 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     6              ; Frame 180 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B2             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 187 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $BD             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     4              ; Delay 4 frames (maintain previous state)
-    FCB     6              ; Frame 191 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 198 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     6              ; Frame 210 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     11              ; Delay 11 frames (maintain previous state)
-    FCB     6              ; Frame 221 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 228 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 243 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     6              ; Frame 251 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 258 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     4              ; Frame 266 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 273 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames (maintain previous state)
-    FCB     4              ; Frame 288 - 4 register writes
-    FCB     8               ; Reg 8 number
-    FCB     $00             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3F             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     6              ; Frame 296 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     7              ; Delay 7 frames (maintain previous state)
-    FCB     6              ; Frame 303 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     6              ; Frame 311 - 6 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $B2             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3E             ; Reg 7 value
-    FCB     15              ; Delay 15 frames before loop
-    FCB     $FF             ; Loop command ($FF never valid as count)
-    FDB     _OVERWORLD_MUSIC       ; Jump to start (absolute address)
-
 ; ==== Level: WORLD_1_1 ====
 ; Author: 
-; Difficulty: easy
+; Difficulty: medium
 
 _WORLD_1_1_LEVEL:
-    FDB -128  ; World bounds: xMin (16-bit signed)
-    FDB 1100  ; xMax (16-bit signed)
-    FDB -200  ; yMin (16-bit signed)
-    FDB 200  ; yMax (16-bit signed)
+    FDB -96  ; World bounds: xMin (16-bit signed)
+    FDB 1055  ; xMax (16-bit signed)
+    FDB -384  ; yMin (16-bit signed)
+    FDB 127  ; yMax (16-bit signed)
     FDB 0  ; Time limit (seconds)
     FDB 0  ; Target score
-    FCB 19  ; Background object count
-    FCB 8  ; Gameplay object count
+    FCB 5  ; Background object count
+    FCB 29  ; Gameplay object count
     FCB 0  ; Foreground object count
     FDB _WORLD_1_1_BG_OBJECTS
     FDB _WORLD_1_1_GAMEPLAY_OBJECTS
     FDB _WORLD_1_1_FG_OBJECTS
 
 _WORLD_1_1_BG_OBJECTS:
-; Object: obj_bg_1 (enemy)
-    FCB 1  ; type
-    FDB -90  ; x
-    FDB -78  ; y
+; Object: obj_bg_cloud_1 (decoration)
+    FCB 255  ; type
+    FDB 100  ; x
+    FDB 30  ; y
     FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
+    FCB 0  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FDB _CLOUD_VECTORS  ; vector_ptr
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_2 (enemy)
-    FCB 1  ; type
-    FDB -30  ; x
-    FDB -78  ; y
+; Object: obj_bg_cloud_2 (decoration)
+    FCB 255  ; type
+    FDB 350  ; x
+    FDB 45  ; y
     FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
+    FCB 0  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FDB _CLOUD_VECTORS  ; vector_ptr
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_3 (enemy)
-    FCB 1  ; type
-    FDB 30  ; x
-    FDB -78  ; y
+; Object: obj_bg_cloud_3 (decoration)
+    FCB 255  ; type
+    FDB 600  ; x
+    FDB 20  ; y
     FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
+    FCB 0  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FDB _CLOUD_VECTORS  ; vector_ptr
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_4 (enemy)
-    FCB 1  ; type
-    FDB 90  ; x
-    FDB -78  ; y
+; Object: obj_bg_cloud_4 (decoration)
+    FCB 255  ; type
+    FDB 850  ; x
+    FDB 38  ; y
     FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
+    FCB 0  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FDB _CLOUD_VECTORS  ; vector_ptr
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_5 (enemy)
-    FCB 1  ; type
-    FDB 150  ; x
-    FDB -78  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_bg_6 (enemy)
-    FCB 1  ; type
-    FDB 210  ; x
-    FDB -78  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_bg_7 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_7 (tile)
+    FCB 255  ; type
     FDB 270  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1206,10 +922,165 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_8 (enemy)
+
+_WORLD_1_1_GAMEPLAY_OBJECTS:
+; Object: obj_bg_mountain_2 (decoration)
+    FCB 255  ; type
+    FDB 570  ; x
+    FDB -50  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MOUNTAIN_VECTORS  ; vector_ptr
+    FCB _MOUNTAIN_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _MOUNTAIN_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_mountain_3 (decoration)
+    FCB 255  ; type
+    FDB 750  ; x
+    FDB -50  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MOUNTAIN_VECTORS  ; vector_ptr
+    FCB _MOUNTAIN_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _MOUNTAIN_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_1773216572040 (enemy)
     FCB 1  ; type
+    FDB 270  ; x
+    FDB -50  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MOUNTAIN_VECTORS  ; vector_ptr
+    FCB _MOUNTAIN_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _MOUNTAIN_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_1 (tile)
+    FCB 255  ; type
+    FDB -90  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_2 (tile)
+    FCB 255  ; type
+    FDB -30  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_3 (tile)
+    FCB 255  ; type
+    FDB 30  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_4 (tile)
+    FCB 255  ; type
+    FDB 90  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_5 (tile)
+    FCB 255  ; type
+    FDB 150  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_6 (tile)
+    FCB 255  ; type
+    FDB 210  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_8 (tile)
+    FCB 255  ; type
     FDB 330  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1223,10 +1094,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_9 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_9 (tile)
+    FCB 255  ; type
     FDB 390  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1240,10 +1111,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_10 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_10 (tile)
+    FCB 255  ; type
     FDB 450  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1257,10 +1128,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_11 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_11 (tile)
+    FCB 255  ; type
     FDB 510  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1274,11 +1145,11 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_12 (enemy)
-    FCB 1  ; type
-    FDB 570  ; x
+; Object: obj_bg_12 (tile)
+    FCB 255  ; type
+    FDB 571  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
@@ -1291,10 +1162,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_13 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_13 (tile)
+    FCB 255  ; type
     FDB 630  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1308,10 +1179,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_14 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_14 (tile)
+    FCB 255  ; type
     FDB 690  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1325,10 +1196,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_15 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_15 (tile)
+    FCB 255  ; type
     FDB 750  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1342,10 +1213,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_16 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_16 (tile)
+    FCB 255  ; type
     FDB 810  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1359,10 +1230,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_17 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_17 (tile)
+    FCB 255  ; type
     FDB 870  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1376,10 +1247,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_18 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_18 (tile)
+    FCB 255  ; type
     FDB 930  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1393,10 +1264,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_19 (enemy)
-    FCB 1  ; type
+; Object: obj_bg_19 (tile)
+    FCB 255  ; type
     FDB 990  ; x
     FDB -78  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1410,12 +1281,10 @@ _WORLD_1_1_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
     FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-
-_WORLD_1_1_GAMEPLAY_OBJECTS:
-; Object: obj_gp_pipe_1 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_pipe_1 (obstacle)
+    FCB 2  ; type
     FDB 200  ; x
     FDB -45  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1429,10 +1298,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
     FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_pipe_2 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_pipe_2 (obstacle)
+    FCB 2  ; type
     FDB 420  ; x
     FDB -45  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1446,10 +1315,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
     FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_pipe_3 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_pipe_3 (obstacle)
+    FCB 2  ; type
     FDB 680  ; x
     FDB -45  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1463,10 +1332,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
     FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_pipe_4 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_pipe_4 (obstacle)
+    FCB 2  ; type
     FDB 850  ; x
     FDB -45  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1480,10 +1349,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
     FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_qblock_1 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_qblock_1 (item)
+    FCB 255  ; type
     FDB 130  ; x
     FDB -10  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1497,10 +1366,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
     FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_qblock_2 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_qblock_2 (item)
+    FCB 255  ; type
     FDB 260  ; x
     FDB -10  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1514,10 +1383,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
     FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_qblock_3 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_qblock_3 (item)
+    FCB 255  ; type
     FDB 500  ; x
     FDB -10  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1531,10 +1400,10 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
     FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_gp_qblock_4 (enemy)
-    FCB 1  ; type
+; Object: obj_gp_qblock_4 (item)
+    FCB 255  ; type
     FDB 760  ; x
     FDB -10  ; y
     FDB 256  ; scale (8.8 fixed)
@@ -1548,34 +1417,38 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
     FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 
 _WORLD_1_1_FG_OBJECTS:
 
 _JUMP_SFX:
     ; SFX: jump (jump)
-    ; Duration: 200ms (10fr), Freq: 659Hz, Channel: 0
-    FCB $A0         ; Frame 0 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $42  ; Tone period = 66 (big-endian)
-    FCB $A0         ; Frame 1 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $49  ; Tone period = 73 (big-endian)
-    FCB $A0         ; Frame 2 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $51  ; Tone period = 81 (big-endian)
+    ; Duration: 250ms (12fr), Freq: 440Hz, Channel: 0
+    FCB $AF         ; Frame 0 - flags (vol=15, noisevol=0, tone=Y, noise=N)
+    FCB $00, $96  ; Tone period = 150 (big-endian)
+    FCB $AA         ; Frame 1 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $AC  ; Tone period = 172 (big-endian)
+    FCB $A5         ; Frame 2 - flags (vol=5, noisevol=0, tone=Y, noise=N)
+    FCB $00, $C3  ; Tone period = 195 (big-endian)
     FCB $A0         ; Frame 3 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $58  ; Tone period = 88 (big-endian)
+    FCB $00, $DA  ; Tone period = 218 (big-endian)
     FCB $A0         ; Frame 4 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $60  ; Tone period = 96 (big-endian)
+    FCB $00, $F0  ; Tone period = 240 (big-endian)
     FCB $A0         ; Frame 5 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $67  ; Tone period = 103 (big-endian)
+    FCB $01, $07  ; Tone period = 263 (big-endian)
     FCB $A0         ; Frame 6 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $6E  ; Tone period = 110 (big-endian)
+    FCB $01, $1E  ; Tone period = 286 (big-endian)
     FCB $A0         ; Frame 7 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $76  ; Tone period = 118 (big-endian)
+    FCB $01, $35  ; Tone period = 309 (big-endian)
     FCB $A0         ; Frame 8 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $7D  ; Tone period = 125 (big-endian)
+    FCB $01, $4B  ; Tone period = 331 (big-endian)
     FCB $A0         ; Frame 9 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $85  ; Tone period = 133 (big-endian)
+    FCB $01, $62  ; Tone period = 354 (big-endian)
+    FCB $A0         ; Frame 10 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $79  ; Tone period = 377 (big-endian)
+    FCB $A0         ; Frame 11 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $90  ; Tone period = 400 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
 ;***************************************************************************
@@ -1858,7 +1731,7 @@ LOAD_LEVEL_RUNTIME:
     ; Clear GP buffer with $FF marker (empty sentinel)
     LDA #$FF
     LDU #LEVEL_GP_BUFFER
-    LDB #8           ; Max 8 objects
+    LDB #32          ; Max 32 objects
 LLR_CLR_GP_LOOP:
     STA ,U           ; Write $FF to first byte of object slot
     LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
@@ -1890,11 +1763,11 @@ LLR_SKIP_GP:
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved
+;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
-;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:
@@ -2338,6 +2211,93 @@ SDCP_W_MOVE:
 SDCP_DONE:
     RTS
 
+; === LEVEL_COLLISION_Y_RUNTIME ===
+; Find the highest collidable floor Y at player_x in the GP layer.
+; Input:  LCOL_PX (16-bit) = player world_x
+;         LCOL_PY (i8) = player_y lo-byte; surfaces above this are ignored
+; Output: RESULT = highest floor surface_top (i16, sign-extended from i8)
+;         Returns $FF80 (-128) if no collidable surface found at that X.
+; Algorithm: for each collidable GP object, check X AABB overlap,
+;   compute surface_top = obj_y + half_height (both i8), track max.
+; RAM object offsets used: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,
+;   +13=half_width, +14=half_height
+LEVEL_COLLISION_Y_RUNTIME:
+    PSHS X,Y,U       ; Save regs (NOT D - result returns in D)
+    
+    ; Initialize best_floor = -128 (no floor found)
+    LDA #$80         ; -128 as unsigned byte
+    STA >LCOL_BEST_Y
+    
+    ; Check level loaded
+    TST >LEVEL_LOADED
+    BEQ LCOL_Y_DONE
+    
+    LDB >LEVEL_GP_COUNT
+    BEQ LCOL_Y_DONE
+    LDX >LEVEL_GP_PTR  ; X = GP buffer
+    
+LCOL_Y_LOOP:
+    TSTB
+    BEQ LCOL_Y_DONE
+    PSHS B           ; save count
+    
+    ; --- Check collision flag (bit 0 at RAM+8) ---
+    LDA 8,X
+    BITA #$01
+    BEQ LCOL_Y_NEXT  ; not collidable
+    
+    ; --- X AABB overlap: obj_x - hw <= player_x <= obj_x + hw ---
+    ; Compute left_edge = obj_x - 0:hw (16-bit)
+    LDA 0,X          ; obj_x high byte
+    LDB 1,X          ; obj_x low byte
+    SUBB 13,X        ; B = obj_x_lo - half_width
+    SBCA #0          ; A = obj_x_hi - borrow
+    STD >TMPVAL      ; TMPVAL = left_edge
+    
+    ; Compare player_x >= left_edge (signed 16-bit)
+    LDD >LCOL_PX
+    CMPD >TMPVAL
+    LBLT LCOL_Y_NEXT ; player_x < left_edge → no overlap
+    
+    ; Compute right_edge = obj_x + 0:hw (16-bit)
+    LDA 0,X
+    LDB 1,X
+    ADDB 13,X        ; B = obj_x_lo + half_width
+    ADCA #0          ; A = obj_x_hi + carry
+    STD >TMPVAL      ; TMPVAL = right_edge
+    
+    ; Compare player_x <= right_edge (signed 16-bit)
+    LDD >LCOL_PX
+    CMPD >TMPVAL
+    LBGT LCOL_Y_NEXT ; player_x > right_edge → no overlap
+    
+    ; --- X overlaps — compute surface_top = obj_y + tile_half_height ---
+    LDA 2,X          ; A = obj_y (signed byte)
+    ADDA 14,X        ; A = tile surface_top = obj_y + tile_half_height
+    ; Filter: skip surfaces above the player's feet (surface_top > player_bottom)
+    CMPA >LCOL_PY    ; signed compare surface_top to player_bottom
+    BGT LCOL_Y_NEXT  ; surface_top > player_bottom → above player → skip
+    ; Compute landing Y = surface_top + player_half_height
+    ADDA >LCOL_PHH   ; A = tile_top + player_hh = where player center lands
+    ; Update best_floor if this landing Y > current best
+    CMPA >LCOL_BEST_Y
+    BLE LCOL_Y_NEXT  ; not better
+    STA >LCOL_BEST_Y ; new best landing Y
+    
+LCOL_Y_NEXT:
+    LEAX 15,X        ; next object (stride 15)
+    PULS B
+    DECB
+    BRA LCOL_Y_LOOP
+    
+LCOL_Y_DONE:
+    ; Sign-extend best_floor (i8) → RESULT (i16)
+    LDB >LCOL_BEST_Y
+    SEX              ; D = sign_extend(B)
+    STD RESULT
+    
+    PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)
+
 ; ============================================================================
 ; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
 ; ============================================================================
@@ -2399,35 +2359,52 @@ RTS
 
 ; ============================================================================
 ; UPDATE_MUSIC_PSG - Update PSG (call every frame)
+; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
+; delay = frames since previous event (0 = apply immediately)
+; End marker: FCB 0 after last event's count
+; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
+; PSG_DELAY_FRAMES counts down to the next event fire point.
+; PSG_MUSIC_PTR always points to delay byte of next pending event.
 ; ============================================================================
 UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
 LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done     ; Not playing, exit
+STA >PSG_MUSIC_ACTIVE   ; Mark music system active
+LDA >PSG_IS_PLAYING
+LBEQ PSG_update_done    ; Not playing
 
-LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)
+; Check if delay counter is running
+LDA >PSG_DELAY_FRAMES
+BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
+DECA
+STA >PSG_DELAY_FRAMES
+LBNE PSG_update_done    ; Still waiting
+BRA PSG_process_event   ; Counter just hit 0: apply the event
 
-; Read frame count byte (number of register writes)
+PSG_read_delay:
+LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
+LDB ,X+                 ; Consume delay byte, X → count byte
+CMPB #$FF
+LBEQ PSG_music_loop_d   ; $FF as delay = loop command
+STB >PSG_DELAY_FRAMES   ; Store delay count
+STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
+BEQ PSG_process_event   ; delay=0: apply immediately
+DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
+LBRA PSG_update_done    ; Wait
+
+PSG_process_event:
+LDX >PSG_MUSIC_PTR      ; PTR is at count byte
 LDB ,X+
-BEQ PSG_music_ended     ; Count=0 means end (no loop)
-CMPB #$FF               ; Check for loop command
-BEQ PSG_music_loop      ; $FF means loop (never valid as count)
+LBEQ PSG_music_ended    ; Count=0 means end
+CMPB #$FF
+LBEQ PSG_music_loop     ; Count=$FF means loop
 
-; Process frame - push counter to stack
 PSHS B                  ; Save count on stack
-
-; Write register/value pairs to PSG
 PSG_write_loop:
 LDA ,X+                 ; Load register number
 LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer (after reads)
+PSHS X                  ; Save pointer
 
-; WRITE_PSG sequence
+; WRITE_PSG sequence (direct VIA access)
 STA VIA_port_a          ; Store register number
 LDA #$19                ; BDIR=1, BC1=1 (LATCH)
 STA VIA_port_b
@@ -2442,30 +2419,32 @@ STB VIA_port_b
 
 PULS X                  ; Restore pointer
 PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ PSG_frame_done      ; Done with this frame
+DECB
+BEQ PSG_event_done      ; Done with this event
 PSHS B                  ; Save counter back
 BRA PSG_write_loop
 
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR      ; Update pointer (force extended)
-BRA PSG_update_done
+PSG_event_done:
+STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
+CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
+LBRA PSG_update_done
 
 PSG_music_ended:
-CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
+CLR >PSG_IS_PLAYING
+LBRA PSG_update_done
 
 PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                  ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR      ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
+; count=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
+LBRA PSG_update_done
+
+PSG_music_loop_d:
+; delay=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
 
 PSG_update_done:
 CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
@@ -2544,6 +2523,7 @@ BRA AU_MUSIC_PROCESS_WRITES
 AU_MUSIC_HAS_DELAY:
 ; B has delay > 0, store it and skip to next frame
 DECB                    ; Delay-1 (we consume this frame)
+BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
 STB >PSG_DELAY_FRAMES   ; Save delay counter
 STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
@@ -2707,10 +2687,6 @@ PRINT_TEXT_STR_3273774:
 
 PRINT_TEXT_STR_103666436:
     FCC "mario"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_98010408534846:
-    FCC "overworld"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_104652296222070:
