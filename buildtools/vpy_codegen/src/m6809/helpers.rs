@@ -119,7 +119,6 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("ROT3D_PREV_Y", 1, "3D previous screen y");
         ram.allocate("ROT3D_FIRST_X", 1, "3D first screen x (for closed path)");
         ram.allocate("ROT3D_FIRST_Y", 1, "3D first screen y (for closed path)");
-        ram.allocate("ROT3D_SIGN", 1, "SMUL8 sign tracking byte");
         ram.allocate("ROT3D_TEMP", 1, "3D rotation temp 1");
         ram.allocate("ROT3D_TEMP2", 1, "3D rotation temp 2");
     }
@@ -1328,29 +1327,37 @@ fn emit_draw_vector_3d_runtime(asm: &mut String) {
 ; ============================================================================\n\
 ; Input:  A = op1 (i8), B = op2 (i8)\n\
 ; Output: A = result (i8)\n\
-; Destroys: B, ROT3D_SIGN\n\
+; Destroys: B  (no RAM touched — sign tracked with branches)\n\
 SMUL8:\n\
-    CLR >ROT3D_SIGN\n\
     TSTA\n\
-    BPL SMUL8_AP\n\
+    BPL SMUL8_AP        ; A >= 0?\n\
     NEGA\n\
-    INC >ROT3D_SIGN\n\
-SMUL8_AP:\n\
     TSTB\n\
-    BPL SMUL8_BP\n\
-    NEGB\n\
-    INC >ROT3D_SIGN\n\
-SMUL8_BP:\n\
-    MUL             ; D = |A|*|B| unsigned (0..16129)\n\
-    ASLB            ; C <- B[7] (high bit of low byte)\n\
-    ROLA            ; A = (D >> 7) = result/128 magnitude\n\
-    PSHS A          ; save magnitude on stack (PSHS does not touch C)\n\
-    LDA >ROT3D_SIGN\n\
-    LSRA            ; C = bit0 of SIGN (odd count = negative)\n\
-    PULS A          ; restore magnitude (PULS A does not touch C on MC6809)\n\
-    BCC SMUL8_END\n\
+    BPL SMUL8_NEGNEG    ; A<0, B: check sign\n\
+    NEGB                ; A<0, B<0 -> result positive\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
+    RTS\n\
+SMUL8_NEGNEG:           ; A<0, B>=0 -> result negative\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
     NEGA\n\
-SMUL8_END:\n\
+    RTS\n\
+SMUL8_AP:               ; A >= 0\n\
+    TSTB\n\
+    BPL SMUL8_POSPOS    ; A>=0, B>=0 -> result positive\n\
+    NEGB                ; A>=0, B<0 -> result negative\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
+    NEGA\n\
+    RTS\n\
+SMUL8_POSPOS:\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
     RTS\n\
 \n\
 ; ============================================================================\n\
@@ -1428,7 +1435,7 @@ DV3D_ROTATE:\n\
 ; Input:  X = pointer to _NAME_3D_DATA\n\
 ;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = raw angles (0-127)\n\
 ;         ROT3D_OX, ROT3D_OY = screen offsets\n\
-;         DP must be $D0 on entry (caller does JSR $F1AA before this)\n\
+; Data: FCB path_count; per path: FCB pt_count, closed; FCB x,y,z per point\n\
 ; Destroys: A, B, X, all ROT3D_* vars\n\
 DRAW_VECTOR_3D_RUNTIME:\n\
     ; --- Compute sin/cos for each axis from LUT (tables in this bank) ---\n\
@@ -1483,16 +1490,24 @@ DRAW_VECTOR_3D_RUNTIME:\n\
     STA >ROT3D_COS_Z\n\
     PULS X              ; restore data pointer\n\
 \n\
-    ; Use BIOS for drawing — Reset0Ref/Moveto_d/Draw_Line_d require DP=$D0\n\
-    LDA #$D0\n\
-    TFR A,DP\n\
-\n\
-    ; Save data pointer in U (free to use, caller doesn't depend on it)\n\
+    ; Save data pointer in U\n\
     TFR X,U\n\
+\n\
+    ; Keep DP=$C8 (caller default) — BIOS routines need it for $C8xx internal vars.\n\
+    ; All our own RAM accesses use extended (>) addressing so DP value doesn't matter.\n\
 \n\
     ; Set intensity $7F in BIOS shadow so Intensity_a picks it up\n\
     LDA #$7F\n\
-    STA >$C832          ; Vec_Brightness\n\
+    STA >$C832          ; Vec_Brightness (extended addr)\n\
+\n\
+    ; Reset integrators ONCE for the entire draw call\n\
+    JSR $F354           ; Reset0Ref — zeros integrators, sets ACR (needs DP=$C8)\n\
+    LDA >$C832\n\
+    JSR $F2AB           ; Intensity_a\n\
+\n\
+    ; Beam is now at (0,0) after Reset0Ref — init PREV to track it\n\
+    CLR >ROT3D_PREV_X\n\
+    CLR >ROT3D_PREV_Y\n\
 \n\
     LDB ,U+             ; B = path count\n\
     STB >ROT3D_PC\n\
@@ -1508,11 +1523,6 @@ DV3D_PATH_LOOP:\n\
     LDA ,U+             ; A = closed flag\n\
     STA >ROT3D_CLOSED\n\
 \n\
-    ; Reset integrators to origin via BIOS\n\
-    JSR $F354           ; Reset0Ref — zeros integrators, sets ACR\n\
-    LDA >$C832          ; A = brightness\n\
-    JSR $F2AB           ; Intensity_a\n\
-\n\
     ; --- Load and rotate first point ---\n\
     TFR U,X\n\
     LDA ,X+\n\
@@ -1524,12 +1534,17 @@ DV3D_PATH_LOOP:\n\
     TFR X,U             ; U now past first point\n\
     JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y\n\
 \n\
-    ; Moveto first rotated point (absolute, beam off)\n\
-    LDA >ROT3D_SCR_Y    ; A = absolute Y\n\
-    LDB >ROT3D_SCR_X    ; B = absolute X\n\
-    JSR $F312           ; Moveto_d\n\
+    ; Moveto_d is RELATIVE — compute delta from current beam position (PREV)\n\
+    LDA >ROT3D_SCR_Y\n\
+    SUBA >ROT3D_PREV_Y  ; dy = first_Y - beam_Y\n\
+    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_SCR_X\n\
+    SUBA >ROT3D_PREV_X  ; dx = first_X - beam_X\n\
+    TFR A,B             ; B = dx\n\
+    LDA >ROT3D_TEMP     ; A = dy\n\
+    JSR $F312           ; Moveto_d (relative)\n\
 \n\
-    ; Save first and prev\n\
+    ; Save first and prev — beam is now at SCR_X/Y\n\
     LDA >ROT3D_SCR_X\n\
     STA >ROT3D_FIRST_X\n\
     STA >ROT3D_PREV_X\n\
@@ -1578,14 +1593,6 @@ DV3D_CLOSE_CHECK:\n\
 \n\
     ; Draw closing segment to first point\n\
     LDA >ROT3D_FIRST_Y\n\
-    SUBA >ROT3D_PREV_Y\n\
-    STA >ROT3D_TEMP\n\
-    LDA >ROT3D_FIRST_X\n\
-    SUBA >ROT3D_PREV_X\n\
-    LDA >ROT3D_TEMP     ; A = dy\n\
-    LDB >ROT3D_TEMP2    ; B = dx (still in TEMP2 from last store... no, clobbered)\n\
-    ; Recalculate\n\
-    LDA >ROT3D_FIRST_Y\n\
     SUBA >ROT3D_PREV_Y  ; A = closing dy\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_FIRST_X\n\
@@ -1593,12 +1600,16 @@ DV3D_CLOSE_CHECK:\n\
     TFR A,B             ; B = closing dx\n\
     LDA >ROT3D_TEMP     ; A = closing dy\n\
     JSR $F3DF           ; Draw_Line_d\n\
+    ; Beam is now back at first vertex — update PREV so next path Moveto is correct\n\
+    LDA >ROT3D_FIRST_X\n\
+    STA >ROT3D_PREV_X\n\
+    LDA >ROT3D_FIRST_Y\n\
+    STA >ROT3D_PREV_Y\n\
 \n\
 DV3D_NEXT_PATH:\n\
     LBRA DV3D_PATH_LOOP\n\
 \n\
 DV3D_ALL_DONE:\n\
-    JSR $F1AF           ; DP_to_C8: restore DP=$C8 for RAM access\n\
     RTS\n\n"
     );
 }

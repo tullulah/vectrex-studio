@@ -91,7 +91,7 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         "FRAME_BEGIN" => None,
         "SET_INTENSITY" => Some(1),
         "DRAW_VECTOR_EX" => Some(4),
-        "DRAW_VECTOR_3D" => Some(4),
+        "DRAW_VECTOR_3D" => Some(6),
 
         _ => None,
     }
