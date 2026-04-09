@@ -348,11 +348,24 @@ impl MusicResource {
             if state_changed {
                 // Calculate how many frames to wait before applying this change
                 let frames_since_last = current_frame - last_emitted_frame;
-                
+
                 // ALWAYS emit delay counter first (0 for first frame, >0 for subsequent)
                 // This makes format consistent: FCB delay, FCB count, pairs...
+                // Handle delays > 254: emit filler events (repeating last state) in 254-frame chunks
+                // ($FF is reserved as loop marker, so max valid delay byte is $FE = 254)
+                let mut remaining = frames_since_last;
+                while remaining > 254 {
+                    asm.push_str(&format!("    FCB     254             ; Delay 254 frames (filler chunk)\n"));
+                    asm.push_str(&format!("    FCB     {}              ; {} register writes (repeat state)\n",
+                        last_reg_writes.len(), last_reg_writes.len()));
+                    for (reg, val) in &last_reg_writes {
+                        asm.push_str(&format!("    FCB     {}               ; Reg {} number\n", reg, reg));
+                        asm.push_str(&format!("    FCB     ${:02X}             ; Reg {} value\n", val, reg));
+                    }
+                    remaining -= 254;
+                }
                 asm.push_str(&format!("    FCB     {}              ; Delay {} frames (maintain previous state)\n",
-                    frames_since_last, frames_since_last));
+                    remaining, remaining));
                 
                 // Emit frame data (number of register writes)
                 asm.push_str(&format!("    FCB     {}              ; Frame {} - {} register writes\n", 
@@ -392,8 +405,20 @@ impl MusicResource {
             
             if frames_until_loop > 0 {
                 // Emit delay before loop marker to maintain last note duration
+                // Handle delays > 254 with filler repeat-state chunks
+                let mut remaining = frames_until_loop;
+                while remaining > 254 {
+                    asm.push_str(&format!("    FCB     254             ; Delay 254 frames (filler chunk)\n"));
+                    asm.push_str(&format!("    FCB     {}              ; {} register writes (repeat state)\n",
+                        last_reg_writes.len(), last_reg_writes.len()));
+                    for (reg, val) in &last_reg_writes {
+                        asm.push_str(&format!("    FCB     {}               ; Reg {} number\n", reg, reg));
+                        asm.push_str(&format!("    FCB     ${:02X}             ; Reg {} value\n", val, reg));
+                    }
+                    remaining -= 254;
+                }
                 asm.push_str(&format!("    FCB     {}              ; Delay {} frames before loop\n",
-                    frames_until_loop, frames_until_loop));
+                    remaining, remaining));
             }
             
             // Loop marker: FCB $FF (special value that can't be a frame count), FDB address

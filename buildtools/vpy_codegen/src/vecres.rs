@@ -109,11 +109,14 @@ pub struct VecPath {
 
 fn default_intensity() -> u8 { 127 }
 
-/// A point in 2D space
+/// A point in 2D/3D space
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Point {
     pub x: i16,
     pub y: i16,
+    /// Optional Z coordinate for 3D vector assets (-127 to 127)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub z: Option<i16>,
     /// Optional intensity override for this specific point (0-255)
     /// If present, triggers Intensity_a call before drawing to this point
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -221,15 +224,32 @@ impl VecResource {
             .flat_map(|l| l.paths.iter())
             .flat_map(|p| p.points.iter())
             .collect();
-        
+
         if all_points.is_empty() {
             return (0, 0);
         }
-        
+
         let min_x = all_points.iter().map(|p| p.x).min().unwrap_or(0);
         let max_x = all_points.iter().map(|p| p.x).max().unwrap_or(0);
-        
+
         (min_x, max_x)
+    }
+
+    /// Calculate Y bounds (min_y, max_y) across all points - needed for collision half_height
+    pub fn calculate_y_bounds(&self) -> (i16, i16) {
+        let all_points: Vec<_> = self.layers.iter()
+            .flat_map(|l| l.paths.iter())
+            .flat_map(|p| p.points.iter())
+            .collect();
+
+        if all_points.is_empty() {
+            return (0, 0);
+        }
+
+        let min_y = all_points.iter().map(|p| p.y).min().unwrap_or(0);
+        let max_y = all_points.iter().map(|p| p.y).max().unwrap_or(0);
+
+        (min_y, max_y)
     }
     
     /// Calculate center coordinates (design time)
@@ -294,9 +314,15 @@ impl VecResource {
         asm.push_str(&format!("; Center: ({}, {})\n", center_x, center_y));
         asm.push_str("\n");
         
+        // Calculate asset height for collision half_height
+        let (min_y, max_y) = self.calculate_y_bounds();
+        let height = (max_y - min_y) as i32;
+
         // Emit asset constants for runtime calculations
         asm.push_str(&format!("_{}_WIDTH EQU {}\n", symbol_name, width));
         asm.push_str(&format!("_{}_HALF_WIDTH EQU {}\n", symbol_name, width / 2));
+        asm.push_str(&format!("_{}_HEIGHT EQU {}\n", symbol_name, height));
+        asm.push_str(&format!("_{}_HALF_HEIGHT EQU {}\n", symbol_name, height / 2));
         asm.push_str(&format!("_{}_CENTER_X EQU {}\n", symbol_name, center_x));
         asm.push_str(&format!("_{}_CENTER_Y EQU {}\n", symbol_name, center_y));
         asm.push_str("\n");
@@ -313,7 +339,7 @@ impl VecResource {
         let path_count = self.visible_paths().len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
-        asm.push_str(&format!("    FCB {}               ; path_count (runtime metadata)\n", path_count));
+        asm.push_str(&format!("    FDB {}               ; path_count (runtime metadata, 2 bytes)\n", path_count));
         
         // Emit pointer table for all paths (allows runtime iteration)
         for path_idx in 0..path_count {
@@ -372,10 +398,111 @@ impl VecResource {
                 asm.push_str("\n");  // Blank line between paths
             }
         }
-        
+
         asm
     }
     
+    /// Compile to vertex-indexed 3D data table for DRAW_VECTOR_3D_RUNTIME (optimized)
+    ///
+    /// Format:
+    ///   FDB vertex_count          ; total unique vertices (2 bytes, high byte first)
+    ///   FCB x,y,z × vertex_count  ; vertex table (3 bytes each), coords clamped to ±63
+    ///   FDB path_count            ; number of paths (2 bytes)
+    ///   per path: FCB pt_count, closed, idx0, idx1, ...
+    ///     each idx is a 0-based byte index into the vertex table
+    ///
+    /// Vertices are deduplicated: if the same (x,y,z) appears multiple times across
+    /// all paths, it is stored once and referenced by index.  Coords are clamped to
+    /// ±63 so the SMUL_LUT table (val=0..63 stride=128) works correctly.
+    pub fn compile_to_3d_asm_with_name(&self, override_name: Option<&str>) -> String {
+        let mut asm = String::new();
+        let name_to_use = override_name.unwrap_or(&self.name);
+        let symbol_name = name_to_use.to_uppercase().replace("-", "_").replace(" ", "_");
+
+        let visible = self.visible_paths();
+        if visible.is_empty() {
+            asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
+            asm.push_str("    FDB 0               ; 3D vertex-indexed: no vertices\n");
+            asm.push_str("    FDB 0               ; no paths\n");
+            return asm;
+        }
+
+        // --- Build deduplicated vertex table ---
+        // Key = (x_clamped, y_clamped, z_clamped) as i8 tuple
+        // Value = 0-based index in the vertex array
+        let mut vertex_map: std::collections::HashMap<(i8, i8, i8), u8> =
+            std::collections::HashMap::new();
+        let mut vertices: Vec<(i8, i8, i8)> = Vec::new();
+
+        // Helper closure: get-or-insert a vertex, return its index
+        let mut get_vertex = |x: i8, y: i8, z: i8| -> u8 {
+            let key = (x, y, z);
+            if let Some(&idx) = vertex_map.get(&key) {
+                idx
+            } else {
+                let idx = vertices.len() as u8;
+                vertices.push(key);
+                vertex_map.insert(key, idx);
+                idx
+            }
+        };
+
+        // Build path index lists while filling the vertex table
+        struct PathData {
+            closed: bool,
+            indices: Vec<u8>,
+        }
+        let mut path_data: Vec<PathData> = Vec::new();
+
+        for path in &visible {
+            if path.points.is_empty() {
+                continue;
+            }
+            let mut indices = Vec::new();
+            for pt in &path.points {
+                let x = pt.x.clamp(-63, 63) as i8;
+                let y = pt.y.clamp(-63, 63) as i8;
+                let z = pt.z.unwrap_or(0).clamp(-63, 63) as i8;
+                let idx = get_vertex(x, y, z);
+                indices.push(idx);
+            }
+            path_data.push(PathData { closed: path.closed, indices });
+        }
+
+        let total_pts: usize = path_data.iter().map(|p| p.indices.len()).sum();
+        asm.push_str(&format!(
+            "\n; 3D vertex-indexed data for DRAW_VECTOR_3D ({} unique verts, {} paths, {} total point refs)\n",
+            vertices.len(), path_data.len(), total_pts
+        ));
+        asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
+
+        // Emit vertex count as FDB (2 bytes, big-endian; high byte always 0 for ≤127 verts)
+        asm.push_str(&format!("    FDB {}               ; vertex count (unique)\n", vertices.len()));
+
+        // Emit vertex table: 3 bytes each (x, y, z), clamped to ±63
+        for (i, &(x, y, z)) in vertices.iter().enumerate() {
+            asm.push_str(&format!("    FCB {},{},{}          ; vert {}: x={},y={},z={}\n",
+                Self::format_byte(x), Self::format_byte(y), Self::format_byte(z),
+                i, x, y, z));
+        }
+
+        // Emit path count as FDB
+        asm.push_str(&format!("    FDB {}               ; path count\n", path_data.len()));
+
+        // Emit per-path data: pt_count, closed, idx0, idx1, ...
+        for (pi, pd) in path_data.iter().enumerate() {
+            asm.push_str(&format!("    FCB {}               ; path {}: point count\n",
+                pd.indices.len(), pi));
+            asm.push_str(&format!("    FCB {}               ; path {}: closed flag\n",
+                if pd.closed { 1 } else { 0 }, pi));
+            for &idx in &pd.indices {
+                asm.push_str(&format!("    FCB {}               ; vertex index\n", idx));
+            }
+        }
+
+        asm
+    }
+
     /// Split a long segment (|dx| or |dy| > 127) into multiple FCB $FF sub-segments.
     /// Each sub-segment stays within the ±127 Vectrex beam range.
     fn emit_split_segment(asm: &mut String, dx: i16, dy: i16, label: &str) {
@@ -433,8 +560,8 @@ impl VecResource {
         
         let mut size = 0;
         
-        // Header: path_count (1 byte) + pointers (2 bytes each)
-        size += 1 + path_count * 2;
+        // Header: path_count (2 bytes FDB) + pointers (2 bytes each)
+        size += 2 + path_count * 2;
         
         // EQU constants: _WIDTH, _CENTER_X, _CENTER_Y (0 bytes - just labels)
         

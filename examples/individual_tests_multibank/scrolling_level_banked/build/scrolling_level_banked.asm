@@ -89,20 +89,24 @@ LEVEL_FG_ROM_PTR     EQU $C880+$4C   ; FG layer ROM pointer (2 bytes)
 LEVEL_GP_PTR         EQU $C880+$4E   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
 LEVEL_BANK           EQU $C880+$50   ; Bank ID for current level (for multibank) (1 bytes)
 SLR_CUR_X            EQU $C880+$51   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
-UGPC_OUTER_IDX       EQU $C880+$CA   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$CB   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$CC   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$CD   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$CF   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$D1   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$D2   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$D3   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$D4   ; GP-FG |dy| (1 bytes)
-VAR_CAMERA_X         EQU $C880+$D5   ; User variable: CAMERA_X (2 bytes)
-VAR_CAMERA_Y         EQU $C880+$D7   ; User variable: CAMERA_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$D9   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$DB   ; User variable: JOY_Y (2 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$232   ; LEVEL_COLLISION_Y player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$234   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
+LCOL_PY              EQU $C880+$235   ; LEVEL_COLLISION_Y player feet Y (player_y - player_hh) (1 bytes)
+LCOL_PHH             EQU $C880+$236   ; LEVEL_COLLISION_Y player half_height (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$237   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$238   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$239   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$23A   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$23C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$23E   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$23F   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$240   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$241   ; GP-FG |dy| (1 bytes)
+VAR_CAMERA_X         EQU $C880+$242   ; User variable: camera_x (2 bytes)
+VAR_CAMERA_Y         EQU $C880+$244   ; User variable: camera_y (2 bytes)
+VAR_JOY_X            EQU $C880+$246   ; User variable: joy_x (2 bytes)
+VAR_JOY_Y            EQU $C880+$248   ; User variable: joy_y (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -366,7 +370,7 @@ _WORLD_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_VECTORS  ; vector_ptr
     FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_2 (enemy)
     FCB 1  ; type
@@ -383,7 +387,7 @@ _WORLD_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_VECTORS  ; vector_ptr
     FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_3 (enemy)
     FCB 1  ; type
@@ -400,7 +404,7 @@ _WORLD_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_VECTORS  ; vector_ptr
     FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_4 (enemy)
     FCB 1  ; type
@@ -417,7 +421,7 @@ _WORLD_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_VECTORS  ; vector_ptr
     FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_5 (enemy)
     FCB 1  ; type
@@ -434,7 +438,7 @@ _WORLD_BG_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _GROUND_VECTORS  ; vector_ptr
     FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _GROUND_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 
 _WORLD_GAMEPLAY_OBJECTS:
@@ -453,7 +457,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_7 (enemy)
     FCB 1  ; type
@@ -470,7 +474,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_8 (enemy)
     FCB 1  ; type
@@ -487,7 +491,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_9 (enemy)
     FCB 1  ; type
@@ -504,7 +508,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_10 (enemy)
     FCB 1  ; type
@@ -521,7 +525,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_11 (enemy)
     FCB 1  ; type
@@ -538,7 +542,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_12 (enemy)
     FCB 1  ; type
@@ -555,7 +559,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_13 (enemy)
     FCB 1  ; type
@@ -572,7 +576,7 @@ _WORLD_GAMEPLAY_OBJECTS:
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
     FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB _TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 
 _WORLD_FG_OBJECTS:
@@ -585,11 +589,13 @@ _WORLD_FG_OBJECTS:
 
 _MARKER_WIDTH EQU 16
 _MARKER_HALF_WIDTH EQU 8
+_MARKER_HEIGHT EQU 16
+_MARKER_HALF_HEIGHT EQU 8
 _MARKER_CENTER_X EQU 0
 _MARKER_CENTER_Y EQU 0
 
 _MARKER_VECTORS:  ; Main entry (header + 2 path(s))
-    FCB 2               ; path_count (runtime metadata)
+    FDB 2               ; path_count (runtime metadata, 2 bytes)
     FDB _MARKER_PATH0        ; pointer to path 0
     FDB _MARKER_PATH1        ; pointer to path 1
 
@@ -612,11 +618,13 @@ _MARKER_PATH1:    ; Path 1
 
 _TILE_WIDTH EQU 20
 _TILE_HALF_WIDTH EQU 10
+_TILE_HEIGHT EQU 20
+_TILE_HALF_HEIGHT EQU 10
 _TILE_CENTER_X EQU 0
 _TILE_CENTER_Y EQU 0
 
 _TILE_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (runtime metadata, 2 bytes)
     FDB _TILE_PATH0        ; pointer to path 0
 
 _TILE_PATH0:    ; Path 0
@@ -635,11 +643,13 @@ _TILE_PATH0:    ; Path 0
 
 _GROUND_WIDTH EQU 60
 _GROUND_HALF_WIDTH EQU 30
+_GROUND_HEIGHT EQU 0
+_GROUND_HALF_HEIGHT EQU 0
 _GROUND_CENTER_X EQU 0
 _GROUND_CENTER_Y EQU 0
 
 _GROUND_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (runtime metadata, 2 bytes)
     FDB _GROUND_PATH0        ; pointer to path 0
 
 _GROUND_PATH0:    ; Path 0
@@ -738,17 +748,18 @@ DRAW_VECTOR_BANKED:
     CLR DRAW_VEC_INTENSITY
     JSR $F1AA            ; DP_to_D0
 
-    ; Loop over all paths (header byte 0 = path_count, +1.. = FDB table)
-    LDB ,X               ; B = path_count
+    ; Loop over all paths (header bytes 0-1 = path_count FDB, +2.. = FDB table)
+    LDD ,X               ; D = path_count (16-bit)
+    CMPD #0
     LBEQ DVB_DONE        ; No paths
-    LEAY 1,X             ; Y = pointer to first FDB entry
+    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)
 DVB_PATH_LOOP:
-    PSHS B               ; Save remaining path count
+    PSHS D               ; Save remaining path count (2 bytes)
     LDX ,Y               ; X = path data address (FDB entry)
     JSR Draw_Sync_List_At_With_Mirrors
     LEAY 2,Y             ; Advance to next FDB entry
-    PULS B               ; Restore count
-    DECB
+    PULS D               ; Restore count
+    SUBD #1
     BNE DVB_PATH_LOOP
 DVB_DONE:
 
@@ -1097,7 +1108,7 @@ LOAD_LEVEL_RUNTIME:
     ; Clear GP buffer with $FF marker (empty sentinel)
     LDA #$FF
     LDU #LEVEL_GP_BUFFER
-    LDB #8           ; Max 8 objects
+    LDB #32          ; Max 32 objects
 LLR_CLR_GP_LOOP:
     STA ,U           ; Write $FF to first byte of object slot
     LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
@@ -1129,11 +1140,11 @@ LLR_SKIP_GP:
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved
+;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
-;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:

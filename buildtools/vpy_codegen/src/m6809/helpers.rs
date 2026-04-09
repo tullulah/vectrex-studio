@@ -90,6 +90,39 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("MIRROR_Y", 1, "Y mirror flag (0=normal, 1=flip)");
     }
     
+    // DRAW_VECTOR_3D rotation scratch variables
+    if needed.contains("DRAW_VECTOR_3D") {
+        ram.allocate("ROT3D_AX", 1, "3D raw angle X (0-127)");
+        ram.allocate("ROT3D_AY", 1, "3D raw angle Y (0-127)");
+        ram.allocate("ROT3D_AZ", 1, "3D raw angle Z (0-127)");
+        // ROT3D_COS_X/Y/Z repurposed: now store (angle+32)&0x7F for cos-offset LUT lookup
+        // (sin angle is ROT3D_AX/AY/AZ directly; cos = sin(angle+32))
+        ram.allocate("ROT3D_COS_X", 1, "3D cos angle offset for X axis: (AX+32)&0x7F");
+        ram.allocate("ROT3D_COS_Y", 1, "3D cos angle offset for Y axis: (AY+32)&0x7F");
+        ram.allocate("ROT3D_COS_Z", 1, "3D cos angle offset for Z axis: (AZ+32)&0x7F");
+        ram.allocate("ROT3D_OX", 1, "3D draw X offset");
+        ram.allocate("ROT3D_OY", 1, "3D draw Y offset");
+        ram.allocate("ROT3D_PC", 1, "3D path/vertex count remaining");
+        ram.allocate("ROT3D_PT_REM", 1, "3D remaining points in current path");
+        ram.allocate("ROT3D_CLOSED", 1, "3D path closed flag");
+        ram.allocate("ROT3D_RX", 1, "3D raw x");
+        ram.allocate("ROT3D_RY", 1, "3D raw y");
+        ram.allocate("ROT3D_RZ", 1, "3D raw z");
+        ram.allocate("ROT3D_Y1", 1, "3D intermediate y after X-axis rotation");
+        ram.allocate("ROT3D_Z1", 1, "3D intermediate z after X-axis rotation");
+        ram.allocate("ROT3D_X2", 1, "3D intermediate x after Y-axis rotation");
+        ram.allocate("ROT3D_SCR_X", 1, "3D final screen x");
+        ram.allocate("ROT3D_SCR_Y", 1, "3D final screen y");
+        ram.allocate("ROT3D_PREV_X", 1, "3D previous screen x");
+        ram.allocate("ROT3D_PREV_Y", 1, "3D previous screen y");
+        ram.allocate("ROT3D_FIRST_X", 1, "3D first screen x (for closed path)");
+        ram.allocate("ROT3D_FIRST_Y", 1, "3D first screen y (for closed path)");
+        ram.allocate("ROT3D_TEMP", 1, "3D rotation temp 1");
+        ram.allocate("ROT3D_TEMP2", 1, "3D rotation temp 2");
+        // Rotated vertex cache: up to 127 unique vertices × 2 bytes (x', y')
+        ram.allocate("ROT3D_VBUF", 254, "3D rotated vertex cache (127 verts × 2 bytes: x',y')");
+    }
+
     // DRAW_LINE argument buffer (10 bytes: x0, y0, x1, y1, intensity)
     ram.allocate("DRAW_LINE_ARGS", 10, "DRAW_LINE argument buffer (x0,y0,x1,y1,intensity)");
     
@@ -106,6 +139,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     if needed.contains("SHOW_LEVEL") || needed.contains("SHOW_LEVEL_RUNTIME")
         || needed.contains("LOAD_LEVEL") || needed.contains("LOAD_LEVEL_RUNTIME")
         || needed.contains("UPDATE_LEVEL_RUNTIME")
+        || needed.contains("LEVEL_COLLISION_Y_RUNTIME")
     {
         ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level header");
         ram.allocate("LEVEL_LOADED", 1, "Level loaded flag (0=not loaded, 1=loaded)");
@@ -138,8 +172,13 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         }
         // Clipped-path draw loop tracker
         ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: tracked beam X for per-segment clipping");
-        // GP objects RAM buffer (max 8 objects × 15 bytes)
-        ram.allocate("LEVEL_GP_BUFFER", 8 * 15, "GP objects RAM buffer (max 8 objects × 15 bytes)");
+        // GP objects RAM buffer (max 32 objects × 15 bytes)
+        ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
+        // LEVEL_COLLISION_Y input/scratch variables
+        ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION_Y player world_x input (16-bit)");
+        ram.allocate("LCOL_BEST_Y", 1, "LEVEL_COLLISION_Y best floor y found (signed byte)");
+        ram.allocate("LCOL_PY", 1, "LEVEL_COLLISION_Y player feet Y (player_y - player_hh)");
+        ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION_Y player half_height");
         // Physics / collision temporaries
         ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
         ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
@@ -296,6 +335,10 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             if name_upper == "DRAW_VECTOR_EX" {
                 needed.insert("DRAW_VECTOR_EX".to_string());
             }
+            if name_upper == "DRAW_VECTOR_3D" {
+                needed.insert("DRAW_VECTOR_3D".to_string());
+                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+            }
             
             // Joystick helpers: Always needed when called
             if name_upper == "J1_X" {
@@ -324,6 +367,9 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             }
             if name_upper == "UPDATE_LEVEL" {
                 needed.insert("UPDATE_LEVEL_RUNTIME".to_string());
+            }
+            if name_upper == "LEVEL_COLLISION_Y" {
+                needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
             }
             
 // Math helpers: Need runtime if operands contain variables
@@ -604,6 +650,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         emit_beep_update_runtime(&mut asm);
     }
 
+    // DRAW_VECTOR_3D_RUNTIME: 3D rotation and drawing
+    if needed.contains("DRAW_VECTOR_3D") {
+        emit_draw_vector_3d_runtime(&mut asm);
+    }
+
     Ok(asm)
 }
 
@@ -672,35 +723,52 @@ PMr_done:\n\
         \n\
         ; ============================================================================\n\
         ; UPDATE_MUSIC_PSG - Update PSG (call every frame)\n\
+        ; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N\n\
+        ; delay = frames since previous event (0 = apply immediately)\n\
+        ; End marker: FCB 0 after last event's count\n\
+        ; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr\n\
+        ; PSG_DELAY_FRAMES counts down to the next event fire point.\n\
+        ; PSG_MUSIC_PTR always points to delay byte of next pending event.\n\
         ; ============================================================================\n\
         UPDATE_MUSIC_PSG:\n\
-        ; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)\n\
-        ; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)\n\
-        ; LDA #$00       ; VIA_cntl = $00 (PSG mode)\n\
-        ; STA >$D00C     ; VIA_cntl\n\
         LDA #$01\n\
-        STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)\n\
-        LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)\n\
-        BEQ PSG_update_done     ; Not playing, exit\n\
+        STA >PSG_MUSIC_ACTIVE   ; Mark music system active\n\
+        LDA >PSG_IS_PLAYING\n\
+        LBEQ PSG_update_done    ; Not playing\n\
         \n\
-        LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)\n\
+        ; Check if delay counter is running\n\
+        LDA >PSG_DELAY_FRAMES\n\
+        BEQ PSG_read_delay      ; Counter=0: time to read next delay byte\n\
+        DECA\n\
+        STA >PSG_DELAY_FRAMES\n\
+        LBNE PSG_update_done    ; Still waiting\n\
+        BRA PSG_process_event   ; Counter just hit 0: apply the event\n\
         \n\
-        ; Read frame count byte (number of register writes)\n\
+        PSG_read_delay:\n\
+        LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event\n\
+        LDB ,X+                 ; Consume delay byte, X → count byte\n\
+        CMPB #$FF\n\
+        LBEQ PSG_music_loop_d   ; $FF as delay = loop command\n\
+        STB >PSG_DELAY_FRAMES   ; Store delay count\n\
+        STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)\n\
+        BEQ PSG_process_event   ; delay=0: apply immediately\n\
+        DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)\n\
+        LBRA PSG_update_done    ; Wait\n\
+        \n\
+        PSG_process_event:\n\
+        LDX >PSG_MUSIC_PTR      ; PTR is at count byte\n\
         LDB ,X+\n\
-        BEQ PSG_music_ended     ; Count=0 means end (no loop)\n\
-        CMPB #$FF               ; Check for loop command\n\
-        BEQ PSG_music_loop      ; $FF means loop (never valid as count)\n\
+        LBEQ PSG_music_ended    ; Count=0 means end\n\
+        CMPB #$FF\n\
+        LBEQ PSG_music_loop     ; Count=$FF means loop\n\
         \n\
-        ; Process frame - push counter to stack\n\
         PSHS B                  ; Save count on stack\n\
-        \n\
-        ; Write register/value pairs to PSG\n\
         PSG_write_loop:\n\
         LDA ,X+                 ; Load register number\n\
         LDB ,X+                 ; Load register value\n\
-        PSHS X                  ; Save pointer (after reads)\n\
+        PSHS X                  ; Save pointer\n\
         \n\
-        ; WRITE_PSG sequence\n\
+        ; WRITE_PSG sequence (direct VIA access)\n\
         STA VIA_port_a          ; Store register number\n\
         LDA #$19                ; BDIR=1, BC1=1 (LATCH)\n\
         STA VIA_port_b\n\
@@ -715,30 +783,32 @@ PMr_done:\n\
         \n\
         PULS X                  ; Restore pointer\n\
         PULS B                  ; Get counter\n\
-        DECB                    ; Decrement\n\
-        BEQ PSG_frame_done      ; Done with this frame\n\
+        DECB\n\
+        BEQ PSG_event_done      ; Done with this event\n\
         PSHS B                  ; Save counter back\n\
         BRA PSG_write_loop\n\
         \n\
-        PSG_frame_done:\n\
-        \n\
-        ; Frame complete - update pointer and done\n\
-        STX >PSG_MUSIC_PTR      ; Update pointer (force extended)\n\
-        BRA PSG_update_done\n\
+        PSG_event_done:\n\
+        STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event\n\
+        CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame\n\
+        LBRA PSG_update_done\n\
         \n\
         PSG_music_ended:\n\
-        CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)\n\
-        ; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing\n\
-        ; Music will fade naturally as frame data stops updating\n\
-        BRA PSG_update_done\n\
+        CLR >PSG_IS_PLAYING\n\
+        LBRA PSG_update_done\n\
         \n\
         PSG_music_loop:\n\
-        ; Loop command: $FF followed by 2-byte address (FDB)\n\
-        ; X points past $FF, read the target address\n\
-        LDD ,X                  ; Load 2-byte loop target address\n\
-        STD >PSG_MUSIC_PTR      ; Update pointer to loop start\n\
-        ; Exit - next frame will start from loop target\n\
-        BRA PSG_update_done\n\
+        ; count=$FF: X points after $FF, at FDB loop address\n\
+        LDD ,X\n\
+        STD >PSG_MUSIC_PTR\n\
+        CLR >PSG_DELAY_FRAMES\n\
+        LBRA PSG_update_done\n\
+        \n\
+        PSG_music_loop_d:\n\
+        ; delay=$FF: X points after $FF, at FDB loop address\n\
+        LDD ,X\n\
+        STD >PSG_MUSIC_PTR\n\
+        CLR >PSG_DELAY_FRAMES\n\
         \n\
         PSG_update_done:\n\
         CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)\n\
@@ -848,6 +918,7 @@ fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
         AU_MUSIC_HAS_DELAY:\n\
         ; B has delay > 0, store it and skip to next frame\n\
         DECB                    ; Delay-1 (we consume this frame)\n\
+        BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately\n\
         STB >PSG_DELAY_FRAMES   ; Save delay counter\n\
         STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)\n\
         BRA AU_UPDATE_SFX       ; Skip reading data this frame\n\
@@ -1246,5 +1317,472 @@ fn emit_beep_update_runtime(asm: &mut String) {
 BEEP_UPDATE_DONE:\n\
         RTS\n\n"
     );
+}
+
+/// Generate one inlined SMUL_LUT body with unique labels (index n = 0..9).
+/// Saves 14c JSR/RTS overhead per call vs JSR SMUL_LUT.
+/// Caller must pre-load Y = #SMUL_PROD before first call (shared across all).
+/// Input: A = val (i8, |val|≤63), B = angle index (0-127), Y = SMUL_PROD base
+/// Output: A = result (i8)  — same contract as SMUL_LUT subroutine
+fn inline_smul_lut(n: usize) -> String {
+    format!(
+        "    TSTA\n\
+         BPL SL_P_{n}\n\
+         NEGA\n\
+         LSRA\n\
+         BCC SL_N1_{n}\n\
+         ORB #$80\n\
+SL_N1_{n}:\n\
+         LDA D,Y\n\
+         NEGA\n\
+         BRA SL_END_{n}\n\
+SL_P_{n}:\n\
+         LSRA\n\
+         BCC SL_P1_{n}\n\
+         ORB #$80\n\
+SL_P1_{n}:\n\
+         LDA D,Y\n\
+SL_END_{n}:\n",
+        n = n
+    )
+}
+
+/// Emit DV3D_ROTATE with all 10 SMUL_LUT calls inlined (no JSR/RTS overhead).
+/// Saves 14c × 10 calls = 140c per vertex rotation.
+fn emit_dv3d_rotate_inlined() -> String {
+    let mut s = String::new();
+    s.push_str(
+"; ============================================================================\n\
+; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point (inlined LUT)\n\
+; ============================================================================\n\
+; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords, |val|≤63)\n\
+;         ROT3D_AX/AY/AZ = raw sin angle indices (0-127)\n\
+;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F\n\
+;         ROT3D_OX, ROT3D_OY (i8 screen offsets)\n\
+; Output: ROT3D_SCR_X, ROT3D_SCR_Y\n\
+; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
+DV3D_ROTATE:\n\
+    LDY #SMUL_PROD      ; Y = table base — shared by all inlined SMUL_LUT calls\n\
+    ; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --\n\
+    LDA >ROT3D_RY\n\
+    LDB >ROT3D_COS_X\n");
+    s.push_str(&inline_smul_lut(0));  // A = RY*cX
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_RZ\n\
+    LDB >ROT3D_AX\n");
+    s.push_str(&inline_smul_lut(1));  // A = RZ*sX
+    s.push_str(
+"    STA >ROT3D_TEMP2\n\
+    LDA >ROT3D_TEMP\n\
+    SUBA >ROT3D_TEMP2\n\
+    STA >ROT3D_Y1\n\
+\n\
+    LDA >ROT3D_RY\n\
+    LDB >ROT3D_AX\n");
+    s.push_str(&inline_smul_lut(2));  // A = RY*sX
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_RZ\n\
+    LDB >ROT3D_COS_X\n");
+    s.push_str(&inline_smul_lut(3));  // A = RZ*cX
+    s.push_str(
+"    ADDA >ROT3D_TEMP\n\
+    STA >ROT3D_Z1\n\
+\n\
+    ; -- Y-axis rotation: x2 = x*cY + z1*sY --\n\
+    LDA >ROT3D_RX\n\
+    LDB >ROT3D_COS_Y\n");
+    s.push_str(&inline_smul_lut(4));  // A = RX*cY
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_Z1\n\
+    LDB >ROT3D_AY\n");
+    s.push_str(&inline_smul_lut(5));  // A = Z1*sY
+    s.push_str(
+"    ADDA >ROT3D_TEMP\n\
+    STA >ROT3D_X2\n\
+\n\
+    ; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --\n\
+    LDA >ROT3D_X2\n\
+    LDB >ROT3D_COS_Z\n");
+    s.push_str(&inline_smul_lut(6));  // A = X2*cZ
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_Y1\n\
+    LDB >ROT3D_AZ\n");
+    s.push_str(&inline_smul_lut(7));  // A = Y1*sZ
+    s.push_str(
+"    STA >ROT3D_TEMP2\n\
+    LDA >ROT3D_TEMP\n\
+    SUBA >ROT3D_TEMP2\n\
+    ADDA >ROT3D_OX\n\
+    STA >ROT3D_SCR_X\n\
+\n\
+    LDA >ROT3D_X2\n\
+    LDB >ROT3D_AZ\n");
+    s.push_str(&inline_smul_lut(8));  // A = X2*sZ
+    s.push_str(
+"    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_Y1\n\
+    LDB >ROT3D_COS_Z\n");
+    s.push_str(&inline_smul_lut(9));  // A = Y1*cZ
+    s.push_str(
+"    ADDA >ROT3D_TEMP\n\
+    ADDA >ROT3D_OY\n\
+    STA >ROT3D_SCR_Y\n\
+    RTS\n\
+\n");
+    s
+}
+
+/// Emit SMUL8 (kept for backward compat), SMUL_LUT, SMUL_PROD table,
+/// updated DV3D_ROTATE, and new vertex-dedup DRAW_VECTOR_3D_RUNTIME.
+fn emit_draw_vector_3d_runtime(asm: &mut String) {
+    // Emit SMUL_PROD table first (8192 bytes)
+    asm.push_str(&emit_smul_prod_table());
+
+    asm.push_str(
+"; ============================================================================\n\
+; SMUL8 - Signed 8x8 multiply, result = (A * B) / 128  (i8)  [kept for compat]\n\
+; ============================================================================\n\
+; Input:  A = op1 (i8), B = op2 (i8)\n\
+; Output: A = result (i8)\n\
+; Destroys: B  (no RAM touched — sign tracked with branches)\n\
+SMUL8:\n\
+    TSTA\n\
+    BPL SMUL8_AP        ; A >= 0?\n\
+    NEGA\n\
+    TSTB\n\
+    BPL SMUL8_NEGNEG    ; A<0, B: check sign\n\
+    NEGB                ; A<0, B<0 -> result positive\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
+    RTS\n\
+SMUL8_NEGNEG:           ; A<0, B>=0 -> result negative\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
+    NEGA\n\
+    RTS\n\
+SMUL8_AP:               ; A >= 0\n\
+    TSTB\n\
+    BPL SMUL8_POSPOS    ; A>=0, B>=0 -> result positive\n\
+    NEGB                ; A>=0, B<0 -> result negative\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
+    NEGA\n\
+    RTS\n\
+SMUL8_POSPOS:\n\
+    MUL\n\
+    ASLB\n\
+    ROLA\n\
+    RTS\n\
+\n\
+; ============================================================================\n\
+; SMUL_LUT - LUT-based signed 8×8 multiply, result = (A * sin(B*2π/128)) / 128\n\
+; ============================================================================\n\
+; Input:  A = val (i8, |val|≤63), B = angle index (0-127)\n\
+;         Y = SMUL_PROD base address (caller pre-loads: LDY #SMUL_PROD)\n\
+; Output: A = result (i8)\n\
+; Strategy: LSRA trick — D = (|val|/2)*256 + (angle | (bit0*128)) → table offset\n\
+;           LDA D,Y — 7 cycles vs LDX+LEAX+LDA = 12 cycles. Saves 5c per call.\n\
+; Destroys: B  (Y preserved)\n\
+SMUL_LUT:\n\
+    TSTA\n\
+    BPL SMUL_LUT_P      ; A >= 0 ?\n\
+    ; --- negative val ---\n\
+    NEGA                ; A = |val|\n\
+    LSRA                ; A = |val|/2,  C = |val| bit0\n\
+    BCC SMUL_LUT_N1\n\
+    ORB #$80\n\
+SMUL_LUT_N1:\n\
+    LDA D,Y             ; table[|val|/2][angle]\n\
+    NEGA\n\
+    RTS\n\
+SMUL_LUT_P:\n\
+    LSRA                ; A = val/2,  C = val bit0\n\
+    BCC SMUL_LUT_P1\n\
+    ORB #$80\n\
+SMUL_LUT_P1:\n\
+    LDA D,Y\n\
+    RTS\n\n");
+    asm.push_str(&emit_dv3d_rotate_inlined());
+    asm.push_str(
+"; ============================================================================\n\
+; DV3D_MOVETO - Move beam to absolute (X,Y) using direct VIA (same as DSWM)\n\
+; ============================================================================\n\
+; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx (delta from current beam pos)\n\
+;         DP must be $D0 on entry\n\
+; Destroys: A\n\
+; On exit: PB=1 (ready for draw loop)\n\
+DV3D_MOVETO:\n\
+    LDA >ROT3D_TEMP     ; dy\n\
+    STA VIA_port_a      ; Y to DAC\n\
+    CLR VIA_port_b      ; PB=0: enable mux, beam tracks Y\n\
+    NOP                 ; settling\n\
+    LDA #$CE\n\
+    STA VIA_cntl        ; PCR=$CE: /ZERO high, integrators active\n\
+    CLR VIA_shift_reg   ; SR=0: beam off during move\n\
+    INC VIA_port_b      ; PB=1: lock direction\n\
+    LDA >ROT3D_TEMP2    ; dx\n\
+    STA VIA_port_a      ; X to DAC\n\
+    LDA #$7F\n\
+    STA VIA_t1_cnt_lo   ; T1=$7F — same scale as DSWM\n\
+    CLR VIA_t1_cnt_hi   ; start timer (ramp)\n\
+DV3D_MOVETO_WAIT:\n\
+    LDA VIA_int_flags\n\
+    ANDA #$40\n\
+    BEQ DV3D_MOVETO_WAIT\n\
+    RTS\n\
+\n\
+; ============================================================================\n\
+; DV3D_DRAWLINE - Draw line with delta (dy,dx) using direct VIA (same as DSWM)\n\
+; ============================================================================\n\
+; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx\n\
+;         PB=1 on entry (left by previous moveto or drawline)\n\
+;         DP must be $D0 on entry\n\
+; Destroys: A\n\
+; On exit: PB=1\n\
+DV3D_DRAWLINE:\n\
+    LDA >ROT3D_TEMP     ; dy\n\
+    STA VIA_port_a      ; DY to DAC (PB=1: integrators hold)\n\
+    CLR VIA_port_b      ; PB=0: enable mux, set direction\n\
+    NOP\n\
+    NOP\n\
+    NOP                 ; settling (~same as DSWM)\n\
+    INC VIA_port_b      ; PB=1: lock direction\n\
+    LDA >ROT3D_TEMP2    ; dx\n\
+    STA VIA_port_a      ; DX to DAC\n\
+    LDA #$FF\n\
+    STA VIA_shift_reg   ; SR=$FF: beam ON\n\
+    CLR VIA_t1_cnt_hi   ; start T1 ramp (lo already $7F from moveto — reuse)\n\
+DV3D_DRAWLINE_WAIT:\n\
+    LDA VIA_int_flags\n\
+    ANDA #$40\n\
+    BEQ DV3D_DRAWLINE_WAIT\n\
+    CLR VIA_shift_reg   ; beam OFF\n\
+    RTS\n\
+\n\
+; ============================================================================\n\
+; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector (vertex-dedup + LUT version)\n\
+; ============================================================================\n\
+; Input:  X = pointer to _NAME_3D_DATA (vertex-indexed format)\n\
+;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = raw angles (0-127)\n\
+;         ROT3D_OX, ROT3D_OY = screen offsets\n\
+; Data format:\n\
+;   FDB vertex_count         ; unique vertex count (high byte skipped)\n\
+;   FCB x,y,z × count        ; vertex table (coords ±63)\n\
+;   FDB path_count           ; path count (high byte skipped)\n\
+;   per path: FCB pt_count, closed, idx0, idx1, ...\n\
+; Uses direct VIA access (DP=$D0 required) — same scale as DRAW_VECTOR/DSWM.\n\
+; Destroys: A, B, X, U, all ROT3D_* vars\n\
+DRAW_VECTOR_3D_RUNTIME:\n\
+    TFR X,U             ; U = ROM data pointer\n\
+\n\
+    ; --- Compute cos angle offsets: ROT3D_COS_X = (AX+32)&0x7F, etc. ---\n\
+    LDA >ROT3D_AX\n\
+    ADDA #32\n\
+    ANDA #$7F\n\
+    STA >ROT3D_COS_X\n\
+    LDA >ROT3D_AY\n\
+    ADDA #32\n\
+    ANDA #$7F\n\
+    STA >ROT3D_COS_Y\n\
+    LDA >ROT3D_AZ\n\
+    ADDA #32\n\
+    ANDA #$7F\n\
+    STA >ROT3D_COS_Z\n\
+\n\
+    ; --- Phase 1: rotate unique vertices → ROT3D_VBUF ---\n\
+    LDA ,U+             ; skip high byte of FDB vertex_count\n\
+    LDB ,U+             ; B = vertex count\n\
+    STB >ROT3D_PC\n\
+    LDX #ROT3D_VBUF     ; X = write ptr into RAM cache\n\
+\n\
+DV3D_VERT_LOOP:\n\
+    TST >ROT3D_PC\n\
+    BEQ DV3D_VERTS_DONE\n\
+    DEC >ROT3D_PC\n\
+    LDA ,U+\n\
+    STA >ROT3D_RX\n\
+    LDA ,U+\n\
+    STA >ROT3D_RY\n\
+    LDA ,U+\n\
+    STA >ROT3D_RZ\n\
+    PSHS X,U            ; save VBUF write ptr and ROM data ptr (DV3D_ROTATE uses X,Y)\n\
+    JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y\n\
+    PULS X,U            ; Y was clobbered but not needed outside DV3D_ROTATE\n\
+    LDA >ROT3D_SCR_X\n\
+    STA ,X+\n\
+    LDA >ROT3D_SCR_Y\n\
+    STA ,X+\n\
+    BRA DV3D_VERT_LOOP\n\
+\n\
+DV3D_VERTS_DONE:\n\
+    ; U now points to FDB path_count in ROM\n\
+    ; Switch to DP=$D0 for direct VIA access (same as DSWM)\n\
+    LDA #$D0\n\
+    TFR A,DP\n\
+\n\
+    ; --- Reset integrators (DSWM-style: PB sequence + PCR) ---\n\
+    CLR VIA_shift_reg\n\
+    LDA #$CC\n\
+    STA VIA_cntl\n\
+    CLR VIA_port_a\n\
+    LDA #$03\n\
+    STA VIA_port_b\n\
+    LDA #$02\n\
+    STA VIA_port_b\n\
+    LDA #$02\n\
+    STA VIA_port_b\n\
+    LDA #$01\n\
+    STA VIA_port_b\n\
+\n\
+    ; Set intensity ($7F) via Port A + Z-axis strobe (DSWM-style)\n\
+    LDA #$7F\n\
+    STA VIA_port_a\n\
+    LDA #$04\n\
+    STA VIA_port_b\n\
+    LDA #$01\n\
+    STA VIA_port_b\n\
+\n\
+    ; Beam at (0,0) after reset — PREV tracks beam position\n\
+    CLR >ROT3D_PREV_X\n\
+    CLR >ROT3D_PREV_Y\n\
+    ; T1 lo pre-loaded — reused by DV3D_DRAWLINE\n\
+    LDA #$7F\n\
+    STA VIA_t1_cnt_lo\n\
+\n\
+    ; --- Phase 2: draw paths using VBUF lookup ---\n\
+    LDA ,U+             ; skip high byte of FDB path_count\n\
+    LDB ,U+             ; B = path count\n\
+    STB >ROT3D_PC\n\
+\n\
+DV3D_PATH_LOOP:\n\
+    TST >ROT3D_PC\n\
+    LBEQ DV3D_ALL_DONE\n\
+    DEC >ROT3D_PC\n\
+\n\
+    LDB ,U+             ; B = point count for this path\n\
+    STB >ROT3D_PT_REM\n\
+    LDA ,U+             ; A = closed flag\n\
+    STA >ROT3D_CLOSED\n\
+\n\
+    ; Look up first vertex from VBUF\n\
+    LDB ,U+             ; B = vertex index\n\
+    ASLB                ; B = index*2 (VBUF stride = 2 bytes: x', y')\n\
+    LDX #ROT3D_VBUF\n\
+    ABX                 ; X = &VBUF[idx*2]\n\
+    LDA ,X\n\
+    STA >ROT3D_FIRST_X\n\
+    LDA 1,X\n\
+    STA >ROT3D_FIRST_Y\n\
+\n\
+    ; Moveto: delta from current beam position (PREV)\n\
+    LDA >ROT3D_FIRST_Y\n\
+    SUBA >ROT3D_PREV_Y\n\
+    STA >ROT3D_TEMP     ; dy\n\
+    LDA >ROT3D_FIRST_X\n\
+    SUBA >ROT3D_PREV_X\n\
+    STA >ROT3D_TEMP2    ; dx\n\
+    JSR DV3D_MOVETO     ; direct VIA move (T1=$7F, same scale as DSWM)\n\
+\n\
+    LDA >ROT3D_FIRST_X\n\
+    STA >ROT3D_PREV_X\n\
+    LDA >ROT3D_FIRST_Y\n\
+    STA >ROT3D_PREV_Y\n\
+    DEC >ROT3D_PT_REM\n\
+\n\
+DV3D_SEG_LOOP:\n\
+    TST >ROT3D_PT_REM\n\
+    BEQ DV3D_CLOSE_CHECK\n\
+    DEC >ROT3D_PT_REM\n\
+\n\
+    LDB ,U+             ; B = vertex index\n\
+    ASLB\n\
+    LDX #ROT3D_VBUF\n\
+    ABX                 ; X = &VBUF[idx*2]\n\
+    ; Compute dx, update PREV_X: new_X - PREV_X = dx; new_X = dx + PREV_X\n\
+    LDA ,X              ; new_X\n\
+    SUBA >ROT3D_PREV_X  ; A = dx\n\
+    STA >ROT3D_TEMP2    ; save dx\n\
+    ADDA >ROT3D_PREV_X  ; A = new_X again\n\
+    STA >ROT3D_PREV_X\n\
+    ; Compute dy, update PREV_Y\n\
+    LDA 1,X             ; new_Y\n\
+    SUBA >ROT3D_PREV_Y  ; A = dy\n\
+    STA >ROT3D_TEMP     ; save dy\n\
+    ADDA >ROT3D_PREV_Y  ; A = new_Y again\n\
+    STA >ROT3D_PREV_Y\n\
+    JSR DV3D_DRAWLINE\n\
+    BRA DV3D_SEG_LOOP\n\
+\n\
+DV3D_CLOSE_CHECK:\n\
+    TST >ROT3D_CLOSED\n\
+    BEQ DV3D_NEXT_PATH\n\
+\n\
+    LDA >ROT3D_FIRST_Y\n\
+    SUBA >ROT3D_PREV_Y\n\
+    STA >ROT3D_TEMP\n\
+    LDA >ROT3D_FIRST_X\n\
+    SUBA >ROT3D_PREV_X\n\
+    STA >ROT3D_TEMP2\n\
+    JSR DV3D_DRAWLINE\n\
+    LDA >ROT3D_FIRST_X\n\
+    STA >ROT3D_PREV_X\n\
+    LDA >ROT3D_FIRST_Y\n\
+    STA >ROT3D_PREV_Y\n\
+\n\
+DV3D_NEXT_PATH:\n\
+    LBRA DV3D_PATH_LOOP\n\
+\n\
+DV3D_ALL_DONE:\n\
+    ; Restore DP=$C8 for normal RAM access\n\
+    JSR $F1AF\n\
+    RTS\n\n"
+    );
+}
+
+/// Generate SMUL_PROD lookup table: 64 rows × 128 columns = 8192 bytes
+/// SMUL_PROD[val][angle] = (val * sin(angle * 2π/128)) rounded and clamped to i8
+/// val = 0..63 (row, stride=128), angle = 0..127 (column within each row)
+/// LSRA trick: A=|val|/2, B=angle|(bit0*0x80) → D=|val|*128+angle ✓
+/// Vertex coords must be clamped to ±63 before use.
+fn emit_smul_prod_table() -> String {
+    use std::f64::consts::PI;
+    let mut asm = String::new();
+    asm.push_str("; ============================================================================\n");
+    asm.push_str("; SMUL_PROD - Product lookup table for SMUL_LUT\n");
+    asm.push_str("; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)\n");
+    asm.push_str("; val=row (0-63, stride=128), angle=col (0-127) — 8KB total\n");
+    asm.push_str("; For cos: use angle=(ax+32)&0x7F — same table, shifted column\n");
+    asm.push_str("; Vertex coords must be ≤63 (clamped at data emit time)\n");
+    asm.push_str("SMUL_PROD:\n");
+    for val in 0i32..64 {
+        let mut row_bytes = Vec::with_capacity(128);
+        for angle in 0i32..128 {
+            let sin_f = f64::sin(angle as f64 * 2.0 * PI / 128.0);
+            let sin_i8 = (sin_f * 127.0).round() as i32;
+            let raw = val * sin_i8;
+            // Round-toward-nearest with +64 bias, then divide by 128
+            let prod = if raw >= 0 {
+                (raw + 64) / 128
+            } else {
+                -( (raw.abs() + 64) / 128 )
+            };
+            let prod = prod.clamp(-127, 127) as i8;
+            row_bytes.push(prod);
+        }
+        // Emit as one FCB line per row (128 bytes)
+        let bytes_str: Vec<String> = row_bytes.iter()
+            .map(|&b| format!("${:02X}", b as u8))
+            .collect();
+        asm.push_str(&format!("    FCB {}  ; val={}\n", bytes_str.join(","), val));
+    }
+    asm.push_str("\n");
+    asm
 }
 

@@ -33,6 +33,7 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "GET_LEVEL_BOUNDS"
             | "SET_CAMERA_X"
             | "SET_CAMERA_Y"
+            | "LEVEL_COLLISION_Y"
             // Multi-arg builtins
             | "MOVE"
             | "PRINT_TEXT"
@@ -60,6 +61,7 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "DRAW_POLYGON"
             | "DRAW_ARC"
             | "DRAW_ELLIPSE"
+            | "DRAW_VECTOR_3D"
     )
 }
 
@@ -74,13 +76,14 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         | "UPDATE_LEVEL" | "GET_LEVEL_BOUNDS" => Some(0),
 
         // 1-argument builtins
-        "DRAW_VECTOR" | "PLAY_MUSIC" | "PLAY_SFX" | "ABS" | "LEN" | "ASM" | "SET_CAMERA_X" | "SET_CAMERA_Y" => Some(1),
+        "DRAW_VECTOR" | "PLAY_MUSIC" | "PLAY_SFX" | "ABS" | "LEN" | "ASM"
+        | "SET_CAMERA_X" | "SET_CAMERA_Y" => Some(1),
 
         // 2-argument builtins
         "MOVE" | "DRAW_TO" => Some(2),
 
         // 3-argument builtins
-        "DRAW_LINE" | "PRINT_TEXT" | "PRINT_NUMBER" => Some(3),
+        "DRAW_LINE" | "PRINT_TEXT" | "PRINT_NUMBER" | "LEVEL_COLLISION_Y" => Some(3),
 
         // Variable-argument or context-dependent
         "DEBUG_PRINT" | "DEBUG_PRINT_LABELED" | "DEBUG_PRINT_STR" => None,
@@ -88,6 +91,7 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         "FRAME_BEGIN" => None,
         "SET_INTENSITY" => Some(1),
         "DRAW_VECTOR_EX" => Some(4),
+        "DRAW_VECTOR_3D" => Some(6),
 
         _ => None,
     }

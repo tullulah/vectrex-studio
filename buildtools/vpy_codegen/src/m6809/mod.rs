@@ -232,7 +232,7 @@ fn check_expr_trig(expr: &Expr) -> bool {
     match expr {
         Expr::Call(CallInfo { name, args, .. }) => {
             let upper = name.to_uppercase();
-            upper == "SIN" || upper == "COS" || upper == "TAN"
+            upper == "SIN" || upper == "COS" || upper == "TAN" || upper == "DRAW_VECTOR_3D"
                 || args.iter().any(check_expr_trig)
         }
         Expr::Binary { left, right, .. } => check_expr_trig(left) || check_expr_trig(right),
@@ -611,7 +611,21 @@ pub fn generate_m6809_asm(
     if !msg_entries.is_empty() {
         builtins::emit_msg_table(&msg_entries, &mut asm);
     }
-    
+
+    // Emit compact 3D data tables in bank_00 for DRAW_VECTOR_3D.
+    // Must be in the same bank as user code so the fixed helpers bank runtime
+    // can read them (the calling bank stays mapped at $0000-$3FFF during the JSR).
+    let uses_draw_vector_3d = module.items.iter().any(|item| {
+        if let Item::Function(f) = item {
+            check_trig_usage(&f.body) // already returns true for DRAW_VECTOR_3D
+        } else {
+            false
+        }
+    });
+    if uses_draw_vector_3d && !assets.is_empty() {
+        asm.push_str(&assets::generate_3d_data_asm(&assets));
+    }
+
     // NOTE: Assets already emitted BEFORE intermediate banks (see above)
     // Do NOT emit them again here
     

@@ -1,19 +1,26 @@
 META TITLE = "SUPER MARIO POC"
 
-# Player world position
+# Mario half-height (from mario.vec HALF_HEIGHT = 13)
+const MARIO_HH = 13
+
+# Player world position (player_y = center of mario sprite)
 player_x: i16 = 0
-player_y: i16 = -70
+player_y: i16 = -57   # starts on ground: tile_top(-70) + MARIO_HH(13)
 
 # Physics
-vel_y: i8 = 0
+vel_y: i16 = 0
 on_ground: u8 = 1
+prev_y: i16 = -57
 
 # Camera
 camera_x: i16 = 0
 
+# Collision result (floor_y = where player center lands = tile_top + MARIO_HH)
+floor_y: i16 = -57
+
 def main():
     LOAD_LEVEL("world_1_1")
-    PLAY_MUSIC("overworld")
+    #PLAY_MUSIC("theme")
 
 def loop():
     joy_x = J1_X()
@@ -37,14 +44,28 @@ def loop():
 
     # Apply gravity when airborne
     if on_ground == 0:
+        prev_y = player_y
         player_y = player_y + vel_y
         vel_y = vel_y - 1
 
-        # Ground collision
-        if player_y <= -70:
-            player_y = -70
+        # Find highest surface at prev_y using full AABB (3rd arg = mario half_height)
+        # Returns tile_top + MARIO_HH → where player center should land
+        floor_y = LEVEL_COLLISION_Y(player_x, prev_y, MARIO_HH)
+        # Absolute ground floor: tile_top=-70, so landing y = -70 + 13 = -57
+        floor_y = max(floor_y, -57)
+
+        # Land on solid surface
+        if player_y <= floor_y:
+            player_y = floor_y
             vel_y = 0
             on_ground = 1
+
+    # When grounded, check if surface still exists (walk off platform edge)
+    if on_ground == 1:
+        floor_y = LEVEL_COLLISION_Y(player_x, player_y, MARIO_HH)
+        floor_y = max(floor_y, -57)
+        if player_y > floor_y:
+            on_ground = 0
 
     # Camera follows player (player appears at screen_x = -30)
     camera_x = player_x + 30
@@ -53,5 +74,7 @@ def loop():
     SET_CAMERA_X(camera_x)
     SHOW_LEVEL()
 
-    # Draw player at fixed screen position
+    # Draw player at fixed screen position (player_y = sprite center)
     DRAW_VECTOR("mario", -30, player_y)
+    debug_print(floor_y)
+    debug_print(player_y)
