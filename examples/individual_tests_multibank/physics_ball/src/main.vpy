@@ -4,8 +4,8 @@
 
 META TITLE = "3D ROTATE"
 META MUSIC = music1
-META ROM_TOTAL_SIZE = 65536
-META ROM_BANK_SIZE = 16384
+# META ROM_TOTAL_SIZE = 65536
+# META ROM_BANK_SIZE = 16384
 
 angle_x = 0
 angle_y = 0
@@ -17,12 +17,13 @@ def main():
     angle_z = 0
 
 def loop():
-    angle_x = angle_x + 1
+    #angle_x = angle_x + 1
     angle_y = angle_y + 2
-    angle_z = angle_z + 1
+    #angle_z = angle_z + 1
 
-    PRINT_TEXT(0,0,"HOLA")
-
-    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z)
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, 100, -100)
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, -100, -100)
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, 100, 100)
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, -100, 100)
 
 
