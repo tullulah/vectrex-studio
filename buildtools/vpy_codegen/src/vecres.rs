@@ -537,7 +537,7 @@ impl VecResource {
     ///
     /// Format:
     ///   FDB vertex_count          ; total unique vertices (2 bytes, high byte first)
-    ///   FCB x,y,z × vertex_count  ; vertex table (3 bytes each), coords clamped to ±127
+    ///   FCB x,y,z × vertex_count  ; vertex table (3 bytes each), coords clamped to ±63
     ///   FDB path_count            ; number of paths (2 bytes)
     ///   per path: FCB pt_count, closed, idx0, idx1, ...
     ///     each idx is a 0-based byte index into the vertex table
@@ -591,9 +591,9 @@ impl VecResource {
             }
             let mut indices = Vec::new();
             for pt in &path.points {
-                let x = pt.x.clamp(-127, 127) as i8;
-                let y = pt.y.clamp(-127, 127) as i8;
-                let z = pt.z.unwrap_or(0).clamp(-127, 127) as i8;
+                let x = pt.x.clamp(-63, 63) as i8;
+                let y = pt.y.clamp(-63, 63) as i8;
+                let z = pt.z.unwrap_or(0).clamp(-63, 63) as i8;
                 let idx = get_vertex(x, y, z);
                 indices.push(idx);
             }

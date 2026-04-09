@@ -32,8 +32,6 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
-    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
-
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -93,16 +91,16 @@ VLINE_DY_REMAINING   EQU $C880+$14B   ; DRAW_LINE remaining dy for segment 2 (16
 VLINE_DX_REMAINING   EQU $C880+$14D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$14F   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$150   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$151   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_ANGLE_X          EQU $C880+$152   ; User variable: angle_x (2 bytes)
-VAR_ANGLE_Y          EQU $C880+$154   ; User variable: angle_y (2 bytes)
-VAR_ANGLE_Z          EQU $C880+$156   ; User variable: angle_z (2 bytes)
-VAR_ARG0             EQU $C880+$158   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$15A   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$15C   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$15E   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$160   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$162   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ANGLE_X          EQU $C880+$151   ; User variable: angle_x (2 bytes)
+VAR_ANGLE_Y          EQU $C880+$153   ; User variable: angle_y (2 bytes)
+VAR_ANGLE_Z          EQU $C880+$155   ; User variable: angle_z (2 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -220,7 +218,7 @@ _3DVECTOR_CENTER_X EQU 0
 _3DVECTOR_CENTER_Y EQU 0
 
 _3DVECTOR_VECTORS:  ; Main entry (header + 9 path(s))
-    FCB 9               ; path_count (runtime metadata)
+    FDB 9               ; path_count (runtime metadata, 2 bytes)
     FDB _3DVECTOR_PATH0        ; pointer to path 0
     FDB _3DVECTOR_PATH1        ; pointer to path 1
     FDB _3DVECTOR_PATH2        ; pointer to path 2
@@ -233,39 +231,13 @@ _3DVECTOR_VECTORS:  ; Main entry (header + 9 path(s))
 
 _3DVECTOR_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $00,$0A,0,0        ; path0: header (y=0, x=10)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $F6,$06,0,0        ; path0: header (y=-10, x=6, relative to center)
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
     FCB 2                ; End marker (path complete)
 
 _3DVECTOR_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $0A,$0A,0,0        ; path1: header (y=10, x=10)
-    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
-    FCB 2                ; End marker (path complete)
-
-_3DVECTOR_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $0A,$F6,0,0        ; path2: header (y=10, x=-10)
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB 2                ; End marker (path complete)
-
-_3DVECTOR_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $FA,$0A,0,0        ; path3: header (y=-6, x=10)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_3DVECTOR_PATH4:    ; Path 4
-    FCB 127              ; path4: intensity
-    FCB $F6,$06,0,0        ; path4: header (y=-10, x=6)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_3DVECTOR_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $F6,$06,0,0        ; path5: header (y=-10, x=6)
+    FCB $F6,$06,0,0        ; path1: header (y=-10, x=6, relative to center)
     FCB $FF,$04,$04          ; flag=-1, dy=4, dx=4
     FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
     FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
@@ -274,9 +246,9 @@ _3DVECTOR_PATH5:    ; Path 5
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
-_3DVECTOR_PATH6:    ; Path 6
-    FCB 127              ; path6: intensity
-    FCB $F6,$06,0,0        ; path6: header (y=-10, x=6)
+_3DVECTOR_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $F6,$06,0,0        ; path2: header (y=-10, x=6, relative to center)
     FCB $FF,$04,$04          ; flag=-1, dy=4, dx=4
     FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
@@ -285,18 +257,44 @@ _3DVECTOR_PATH6:    ; Path 6
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
+_3DVECTOR_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $FA,$0A,0,0        ; path3: header (y=-6, x=10, relative to center)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_3DVECTOR_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $F6,$F6,0,0        ; path4: header (y=-10, x=-10, relative to center)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_3DVECTOR_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $06,$0A,0,0        ; path5: header (y=6, x=10, relative to center)
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_3DVECTOR_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $06,$F6,0,0        ; path6: header (y=6, x=-10, relative to center)
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
 _3DVECTOR_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
-    FCB $F6,$F6,0,0        ; path7: header (y=-10, x=-10)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $0A,$F6,0,0        ; path7: header (y=10, x=-10, relative to center)
+    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
     FCB 2                ; End marker (path complete)
 
 _3DVECTOR_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
-    FCB $00,$F6,0,0        ; path8: header (y=0, x=-10)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $0A,$0A,0,0        ; path8: header (y=10, x=10, relative to center)
+    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
     FCB 2                ; End marker (path complete)
 ; Generated from logo.vec (Malban Draw_Sync_List format)
 ; Total paths: 18, points: 62
@@ -311,7 +309,7 @@ _LOGO_CENTER_X EQU 0
 _LOGO_CENTER_Y EQU 0
 
 _LOGO_VECTORS:  ; Main entry (header + 18 path(s))
-    FCB 18               ; path_count (runtime metadata)
+    FDB 18               ; path_count (runtime metadata, 2 bytes)
     FDB _LOGO_PATH0        ; pointer to path 0
     FDB _LOGO_PATH1        ; pointer to path 1
     FDB _LOGO_PATH2        ; pointer to path 2
@@ -333,140 +331,140 @@ _LOGO_VECTORS:  ; Main entry (header + 18 path(s))
 
 _LOGO_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $05,$FB,0,0        ; path0: header (y=5, x=-5)
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
-    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB $FF,$EF,$00          ; flag=-1, dy=-17, dx=0
+    FCB $26,$EB,0,0        ; path0: header (y=38, x=-21, relative to center)
     FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
-    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
     FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB $FF,$1A,$00          ; flag=-1, dy=26, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
+    FCB $FF,$E5,$00          ; flag=-1, dy=-27, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
     FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$E5          ; flag=-1, dy=0, dx=-27
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$1B,$00          ; flag=-1, dy=27, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $0D,$FD,0,0        ; path1: header (y=13, x=-3)
-    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
+    FCB $16,$05,0,0        ; path1: header (y=22, x=5, relative to center)
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
-    FCB $0D,$17,0,0        ; path2: header (y=13, x=23)
-    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $16,$0D,0,0        ; path2: header (y=22, x=13, relative to center)
+    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
-    FCB $05,$1D,0,0        ; path3: header (y=5, x=29)
-    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
+    FCB $F3,$EA,0,0        ; path3: header (y=-13, x=-22, relative to center)
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
-    FCB $E5,$11,0,0        ; path4: header (y=-27, x=17)
-    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
-    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
-    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
-    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $F3,$03,0,0        ; path4: header (y=-13, x=3, relative to center)
+    FCB $FF,$00,$E7          ; flag=-1, dy=0, dx=-25
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
-    FCB $DA,$15,0,0        ; path5: header (y=-38, x=21)
-    FCB $FF,$00,$E8          ; flag=-1, dy=0, dx=-24
+    FCB $26,$EB,0,0        ; path5: header (y=38, x=-21, relative to center)
+    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
-    FCB $EB,$FB,0,0        ; path6: header (y=-21, x=-5)
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FB,$E3,0,0        ; path6: header (y=-5, x=-29, relative to center)
+    FCB $FF,$1B,$00          ; flag=-1, dy=27, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
-    FCB $EB,$F3,0,0        ; path7: header (y=-21, x=-13)
-    FCB $FF,$19,$00          ; flag=-1, dy=25, dx=0
+    FCB $16,$05,0,0        ; path7: header (y=22, x=5, relative to center)
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
-    FCB $FA,$EA,0,0        ; path8: header (y=-6, x=-22)
+    FCB $22,$EF,0,0        ; path8: header (y=34, x=-17, relative to center)
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
     FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
-    FCB $F3,$EA,0,0        ; path9: header (y=-13, x=-22)
-    FCB $FF,$00,$19          ; flag=-1, dy=0, dx=25
+    FCB $0D,$FB,0,0        ; path9: header (y=13, x=-5, relative to center)
+    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
+    FCB $FF,$11,$00          ; flag=-1, dy=17, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$1A,$00          ; flag=-1, dy=26, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
-    FCB $EB,$FB,0,0        ; path10: header (y=-21, x=-5)
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $EB,$F3,0,0        ; path10: header (y=-21, x=-13, relative to center)
+    FCB $FF,$19,$00          ; flag=-1, dy=25, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
-    FCB $FB,$E3,0,0        ; path11: header (y=-5, x=-29)
-    FCB $FF,$1B,$00          ; flag=-1, dy=27, dx=0
+    FCB $DA,$15,0,0        ; path11: header (y=-38, x=21, relative to center)
+    FCB $FF,$00,$E8          ; flag=-1, dy=0, dx=-24
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
-    FCB $17,$EB,0,0        ; path12: header (y=23, x=-21)
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
-    FCB $FF,$E5,$00          ; flag=-1, dy=-27, dx=0
+    FCB $E5,$11,0,0        ; path12: header (y=-27, x=17, relative to center)
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$1B          ; flag=-1, dy=0, dx=27
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB $FF,$1B,$00          ; flag=-1, dy=27, dx=0
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
-    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
-    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
-    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
-    FCB $26,$EB,0,0        ; path13: header (y=38, x=-21)
-    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
+    FCB $EB,$FB,0,0        ; path13: header (y=-21, x=-5, relative to center)
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
-    FCB $16,$05,0,0        ; path14: header (y=22, x=5)
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $05,$1D,0,0        ; path14: header (y=5, x=29, relative to center)
+    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
-    FCB $16,$0D,0,0        ; path15: header (y=22, x=13)
-    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
+    FCB $0D,$FD,0,0        ; path15: header (y=13, x=-3, relative to center)
+    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
-    FCB $16,$0D,0,0        ; path16: header (y=22, x=13)
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $0D,$17,0,0        ; path16: header (y=13, x=23, relative to center)
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH17:    ; Path 17
     FCB 127              ; path17: intensity
-    FCB $1B,$EF,0,0        ; path17: header (y=27, x=-17)
-    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
-    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
-    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
-    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $EB,$FB,0,0        ; path17: header (y=-21, x=-5, relative to center)
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
     FCB 2                ; End marker (path complete)
 ;***************************************************************************
 ; RUNTIME HELPERS
@@ -542,15 +540,19 @@ MOD16:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
+; NOTE: Caller must ensure DP=$D0 for VIA access
+; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
+; VIA Port B through states $05->$04->$01 which resets the analog hardware
+; (zero-reference sequence) and would disrupt the beam position mid-drawing.
+; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
+STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
+STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+LDA #$04
+STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+LDA #$01
+STA >$D000              ; Port B=$01: restore normal mux
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -590,7 +592,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
+; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -637,20 +639,14 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_port_a          ; stop X integrator drift between segments
 CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Check intensity override (same logic as start)
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
+; Read per-path intensity from vector data
+LDA ,X+                 ; Read intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
@@ -667,7 +663,12 @@ DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
 PULS A                  ; Get intensity back
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
+STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
+STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+LDA #$04
+STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+LDA #$01
+STA >$D000              ; Port B=$01: restore normal mux
 PULS D
 ADDD #3
 TFR D,X
@@ -695,7 +696,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
+; T1 fixed at $7F (constant scale; brightness set via $C832 above)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi

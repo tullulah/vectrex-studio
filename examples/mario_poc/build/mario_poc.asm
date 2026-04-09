@@ -33,8 +33,6 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
-    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
-
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -90,72 +88,52 @@ LEVEL_GP_COUNT       EQU $C880+$42   ; GP object count (1 bytes)
 LEVEL_FG_COUNT       EQU $C880+$43   ; FG object count (1 bytes)
 CAMERA_X             EQU $C880+$44   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
 CAMERA_Y             EQU $C880+$46   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
-SCROLL_LIMIT_LEFT    EQU $C880+$48   ; Camera scroll limit: left world X (2 bytes)
-SCROLL_LIMIT_RIGHT   EQU $C880+$4A   ; Camera scroll limit: right world X (2 bytes)
-SCROLL_LIMIT_TOP     EQU $C880+$4C   ; Camera scroll limit: top world Y (2 bytes)
-SCROLL_LIMIT_BOTTOM  EQU $C880+$4E   ; Camera scroll limit: bottom world Y (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$50   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$52   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$54   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$56   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$58   ; Bank ID for current level (for multibank) (1 bytes)
-LEVEL_ENEMY_COUNT    EQU $C880+$59   ; Enemy count from current level header (1 bytes)
-LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5A   ; Ptr to enemy instances table in level bank (2 bytes)
-SLR_CUR_X            EQU $C880+$5C   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-DRAW_T1_SCALED       EQU $C880+$5D   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$5E   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
-LCOL_PX              EQU $C880+$23E   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$240   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
-LCOL_PY              EQU $C880+$242   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
-LCOL_PHH             EQU $C880+$244   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$245   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$246   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$247   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$248   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$249   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$24A   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$24C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$24E   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$24F   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$250   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$251   ; GP-FG |dy| (1 bytes)
-ANIM_MARIO_WALK_STATE EQU $C880+$252   ; DRAW_ANIM state for MARIO_WALK (frame_idx, ticks_left) (2 bytes)
-DRAW_ANIM_MIRROR_X   EQU $C880+$254   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
-DRAW_ANIM_SCALE      EQU $C880+$255   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
-DRAW_ANIM_SPEED_MUL  EQU $C880+$256   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$257   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_MARIO_HH         EQU $C880+$258   ; User variable: MARIO_HH (2 bytes)
-VAR_MARIO_HW         EQU $C880+$25A   ; User variable: MARIO_HW (2 bytes)
-VAR_PLAYER_X         EQU $C880+$25C   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$25E   ; User variable: PLAYER_Y (2 bytes)
-VAR_VEL_Y            EQU $C880+$260   ; User variable: VEL_Y (2 bytes)
-VAR_ON_GROUND        EQU $C880+$262   ; User variable: ON_GROUND (1 bytes)
-VAR_PREV_Y           EQU $C880+$263   ; User variable: PREV_Y (2 bytes)
-VAR_CAMERA_X         EQU $C880+$265   ; User variable: CAMERA_X (2 bytes)
-VAR_SCROLL_LEFT      EQU $C880+$267   ; User variable: SCROLL_LEFT (2 bytes)
-VAR_SCROLL_RIGHT     EQU $C880+$269   ; User variable: SCROLL_RIGHT (2 bytes)
-VAR_SCROLL_RIGHT_EDGE EQU $C880+$26B   ; User variable: SCROLL_RIGHT_EDGE (2 bytes)
-VAR_SCREEN_X         EQU $C880+$26D   ; User variable: SCREEN_X (2 bytes)
-VAR_IS_WALKING       EQU $C880+$26F   ; User variable: IS_WALKING (1 bytes)
-VAR_FLOOR_Y          EQU $C880+$270   ; User variable: FLOOR_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$272   ; User variable: JOY_X (2 bytes)
-VAR_BTN_JUMP         EQU $C880+$274   ; User variable: BTN_JUMP (2 bytes)
-VAR_DX_PUSH          EQU $C880+$276   ; User variable: DX_PUSH (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$278   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$27A   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$27C   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$27D   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$27E   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$27F   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$280   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$282   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$283   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$284   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$286   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$288   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$28A   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$28C   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$28E   ; Current ROM bank ID (multibank tracking) (1 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$48   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$4A   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$4C   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$4E   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$50   ; Bank ID for current level (for multibank) (1 bytes)
+SLR_CUR_X            EQU $C880+$51   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$232   ; LEVEL_COLLISION_Y player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$234   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
+LCOL_PY              EQU $C880+$235   ; LEVEL_COLLISION_Y player feet Y (player_y - player_hh) (1 bytes)
+LCOL_PHH             EQU $C880+$236   ; LEVEL_COLLISION_Y player half_height (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$237   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$238   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$239   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$23A   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$23C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$23E   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$23F   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$240   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$241   ; GP-FG |dy| (1 bytes)
+VAR_MARIO_HH         EQU $C880+$242   ; User variable: MARIO_HH (2 bytes)
+VAR_PLAYER_X         EQU $C880+$244   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$246   ; User variable: PLAYER_Y (2 bytes)
+VAR_VEL_Y            EQU $C880+$248   ; User variable: VEL_Y (2 bytes)
+VAR_ON_GROUND        EQU $C880+$24A   ; User variable: ON_GROUND (1 bytes)
+VAR_PREV_Y           EQU $C880+$24B   ; User variable: PREV_Y (2 bytes)
+VAR_CAMERA_X         EQU $C880+$24D   ; User variable: CAMERA_X (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$24F   ; User variable: FLOOR_Y (2 bytes)
+VAR_JOY_X            EQU $C880+$251   ; User variable: JOY_X (2 bytes)
+VAR_BTN_JUMP         EQU $C880+$253   ; User variable: BTN_JUMP (2 bytes)
+VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+PSG_MUSIC_PTR        EQU $CBEB   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $CBED   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $CBEF   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $CBF0   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $CBF1   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
+
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -165,36 +143,19 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
-    LDA #$7F
-    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
-    LDA #$7F
-    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)
-    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)
-    CLR ANIM_MARIO_WALK_STATE     ; frame_idx = 0
-    CLR ANIM_MARIO_WALK_STATE+1   ; ticks_left = 0 (forces DAR_INIT)
     LDD #0
     STD VAR_PLAYER_X
-    LDD #-62
+    LDD #-57
     STD VAR_PLAYER_Y
     LDD #0
     STD VAR_VEL_Y
     LDD #1
     STD VAR_ON_GROUND
-    LDD #-62
+    LDD #-57
     STD VAR_PREV_Y
     LDD #0
     STD VAR_CAMERA_X
-    LDD #0
-    STD VAR_SCROLL_LEFT
-    LDD #0
-    STD VAR_SCROLL_RIGHT
-    LDD #0
-    STD VAR_SCROLL_RIGHT_EDGE
-    LDD #-30
-    STD VAR_SCREEN_X
-    LDD #0
-    STD VAR_IS_WALKING
-    LDD #-62
+    LDD #-57
     STD VAR_FLOOR_Y
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
@@ -217,21 +178,6 @@ MAIN:
     ; Load level: 'world_1_1'
     LDX #_WORLD_1_1_LEVEL          ; Pointer to level data in ROM
     JSR LOAD_LEVEL_RUNTIME
-    ; ===== GET_SCROLL_LIMIT_LEFT builtin =====
-    LDD >SCROLL_LIMIT_LEFT
-    STD RESULT
-    STD VAR_SCROLL_LEFT
-    ; ===== GET_SCROLL_LIMIT_RIGHT builtin =====
-    LDD >SCROLL_LIMIT_RIGHT
-    STD RESULT
-    STD VAR_SCROLL_RIGHT
-    LDD >VAR_SCROLL_RIGHT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #192
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SCROLL_RIGHT_EDGE
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
@@ -254,8 +200,6 @@ LOOP_BODY:
 .J1B1_0_END:
     STD RESULT
     STD VAR_BTN_JUMP
-    LDD #0
-    STB VAR_IS_WALKING
     LDD #20
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_JOY_X
@@ -272,8 +216,6 @@ LOOP_BODY:
     LDD #3
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_PLAYER_X
-    LDD #1
-    STB VAR_IS_WALKING
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
@@ -295,15 +237,13 @@ IF_END_0:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_PLAYER_X
-    LDD #1
-    STB VAR_IS_WALKING
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
     ; CLAMP: Clamp value to range [min, max]
     LDD >VAR_PLAYER_X
     STD TMPPTR     ; Save value
-    LDD #-62
+    LDD #-100
     STD TMPPTR+2   ; Save min
     LDD #1050
     STD TMPPTR+4   ; Save max
@@ -325,39 +265,21 @@ IF_END_2:
     STD RESULT
 .CLAMP_0_END:
     STD VAR_PLAYER_X
-    LDD #0
+    LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_VEL_Y
+    LDD >VAR_BTN_JUMP
     CMPD TMPVAL
-    LBLE .CMP_2_TRUE
+    LBEQ .CMP_2_TRUE
     LDD #0
     LBRA .CMP_2_END
 .CMP_2_TRUE:
     LDD #1
 .CMP_2_END:
     LBEQ IF_NEXT_5
-    ; ===== LEVEL_COLLISION_X builtin =====
-    LDD >VAR_PLAYER_X
-    STD >LCOL_PX         ; store player world_x (16-bit)
-    LDD #8  ; const MARIO_HW
-    STB >LCOL_PHW        ; store player half_width
-    LDD #13  ; const MARIO_HH
-    STB >LCOL_PHH        ; store player half_height for Y-overlap check
-    LDD >VAR_PLAYER_Y
-    STD >LCOL_PY         ; store player_y (16-bit)
-    JSR LEVEL_COLLISION_X_RUNTIME
-    STD VAR_DX_PUSH
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DX_PUSH
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_PLAYER_X
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BTN_JUMP
+    LDB >VAR_ON_GROUND
+    CLRA            ; Zero-extend: A=0, B=value
     CMPD TMPVAL
     LBEQ .CMP_3_TRUE
     LDD #0
@@ -366,7 +288,22 @@ IF_END_4:
     LDD #1
 .CMP_3_END:
     LBEQ IF_NEXT_7
-    LDD #1
+    LDD #12
+    STD VAR_VEL_Y
+    LDD #0
+    STB VAR_ON_GROUND
+    ; PLAY_SFX("jump") - play SFX asset (index=0)
+    LDX #_JUMP_SFX  ; Load SFX data pointer
+    JSR PLAY_SFX_RUNTIME
+    LDD #0
+    STD RESULT
+    LBRA IF_END_6
+IF_NEXT_7:
+IF_END_6:
+    LBRA IF_END_4
+IF_NEXT_5:
+IF_END_4:
+    LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_ON_GROUND
     CLRA            ; Zero-extend: A=0, B=value
@@ -378,33 +315,6 @@ IF_END_4:
     LDD #1
 .CMP_4_END:
     LBEQ IF_NEXT_9
-    LDD #12
-    STD VAR_VEL_Y
-    LDD #0
-    STB VAR_ON_GROUND
-    ; PLAY_SFX("jump") - play SFX asset (index=0)
-    LDX #_JUMP_SFX  ; Load SFX data pointer
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_8
-IF_NEXT_9:
-IF_END_8:
-    LBRA IF_END_6
-IF_NEXT_7:
-IF_END_6:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDB >VAR_ON_GROUND
-    CLRA            ; Zero-extend: A=0, B=value
-    CMPD TMPVAL
-    LBEQ .CMP_5_TRUE
-    LDD #0
-    LBRA .CMP_5_END
-.CMP_5_TRUE:
-    LDD #1
-.CMP_5_END:
-    LBEQ IF_NEXT_11
     LDD >VAR_PLAYER_Y
     STD VAR_PREV_Y
     LDD >VAR_PLAYER_Y
@@ -425,16 +335,14 @@ IF_END_6:
     LDD #13  ; const MARIO_HH
     STB >LCOL_PHH        ; store player half_height
     LDD >VAR_PREV_Y
-    ; Compute player_top = player_y + player_hh (16-bit)
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
-    ADCA #0              ; propagate carry to high byte
-    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
+    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom
+    STB >LCOL_PY         ; store player feet Y for surface filter
     JSR LEVEL_COLLISION_Y_RUNTIME
     STD VAR_FLOOR_Y
     ; MAX: Return maximum of two values
     LDD >VAR_FLOOR_Y
     STD TMPPTR     ; Save first value
-    LDD #-120
+    LDD #-57
     STD TMPPTR2    ; Save second value
     LDD TMPPTR     ; Load first value
     CMPD TMPPTR2   ; Compare first vs second
@@ -450,53 +358,51 @@ IF_END_6:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_Y
     CMPD TMPVAL
-    LBLE .CMP_6_TRUE
+    LBLE .CMP_5_TRUE
     LDD #0
-    LBRA .CMP_6_END
-.CMP_6_TRUE:
+    LBRA .CMP_5_END
+.CMP_5_TRUE:
     LDD #1
-.CMP_6_END:
-    LBEQ IF_NEXT_13
+.CMP_5_END:
+    LBEQ IF_NEXT_11
     LDD >VAR_FLOOR_Y
     STD VAR_PLAYER_Y
     LDD #0
     STD VAR_VEL_Y
     LDD #1
     STB VAR_ON_GROUND
-    LBRA IF_END_12
-IF_NEXT_13:
-IF_END_12:
     LBRA IF_END_10
 IF_NEXT_11:
 IF_END_10:
+    LBRA IF_END_8
+IF_NEXT_9:
+IF_END_8:
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_ON_GROUND
     CLRA            ; Zero-extend: A=0, B=value
     CMPD TMPVAL
-    LBEQ .CMP_7_TRUE
+    LBEQ .CMP_6_TRUE
     LDD #0
-    LBRA .CMP_7_END
-.CMP_7_TRUE:
+    LBRA .CMP_6_END
+.CMP_6_TRUE:
     LDD #1
-.CMP_7_END:
-    LBEQ IF_NEXT_15
+.CMP_6_END:
+    LBEQ IF_NEXT_13
     ; ===== LEVEL_COLLISION_Y builtin =====
     LDD >VAR_PLAYER_X
     STD >LCOL_PX         ; store player world_x (16-bit)
     LDD #13  ; const MARIO_HH
     STB >LCOL_PHH        ; store player half_height
     LDD >VAR_PLAYER_Y
-    ; Compute player_top = player_y + player_hh (16-bit)
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
-    ADCA #0              ; propagate carry to high byte
-    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
+    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom
+    STB >LCOL_PY         ; store player feet Y for surface filter
     JSR LEVEL_COLLISION_Y_RUNTIME
     STD VAR_FLOOR_Y
     ; MAX: Return maximum of two values
     LDD >VAR_FLOOR_Y
     STD TMPPTR     ; Save first value
-    LDD #-120
+    LDD #-57
     STD TMPPTR2    ; Save second value
     LDD TMPPTR     ; Load first value
     CMPD TMPPTR2   ; Compare first vs second
@@ -512,21 +418,21 @@ IF_END_10:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_Y
     CMPD TMPVAL
-    LBGT .CMP_8_TRUE
+    LBGT .CMP_7_TRUE
     LDD #0
-    LBRA .CMP_8_END
-.CMP_8_TRUE:
+    LBRA .CMP_7_END
+.CMP_7_TRUE:
     LDD #1
-.CMP_8_END:
-    LBEQ IF_NEXT_17
+.CMP_7_END:
+    LBEQ IF_NEXT_15
     LDD #0
     STB VAR_ON_GROUND
-    LBRA IF_END_16
-IF_NEXT_17:
-IF_END_16:
     LBRA IF_END_14
 IF_NEXT_15:
 IF_END_14:
+    LBRA IF_END_12
+IF_NEXT_13:
+IF_END_12:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #30
@@ -535,9 +441,9 @@ IF_END_14:
     ; CLAMP: Clamp value to range [min, max]
     LDD >VAR_CAMERA_X
     STD TMPPTR     ; Save value
-    LDD >VAR_SCROLL_LEFT
+    LDD #0
     STD TMPPTR+2   ; Save min
-    LDD >VAR_SCROLL_RIGHT_EDGE
+    LDD #970
     STD TMPPTR+4   ; Save max
     LDD TMPPTR     ; Load value
     CMPD TMPPTR+2  ; Compare with min
@@ -566,48 +472,9 @@ IF_END_14:
     JSR SHOW_LEVEL_RUNTIME
     LDD #0
     STD RESULT
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CAMERA_X
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SCREEN_X
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDB >VAR_IS_WALKING
-    CLRA            ; Zero-extend: A=0, B=value
-    CMPD TMPVAL
-    LBEQ .CMP_9_TRUE
-    LDD #0
-    LBRA .CMP_9_END
-.CMP_9_TRUE:
-    LDD #1
-.CMP_9_END:
-    LBEQ IF_NEXT_19
-    ; DRAW_ANIM: draw animation 'mario_walk'
-    LDD >VAR_SCREEN_X
-    TFR B,A
-    STA DRAW_VEC_X
-    LDD >VAR_PLAYER_Y
-    TFR B,A
-    STA DRAW_VEC_Y
-    CLR >MIRROR_X
-    CLR >DRAW_ANIM_MIRROR_X
-    CLR >MIRROR_Y
-    LDA #$7F
-    STA DRAW_ANIM_SCALE
-    CLR DRAW_ANIM_SPEED_MUL
-    LDX #_ANIM_MARIO_WALK
-    LDU #ANIM_MARIO_WALK_STATE
-    JSR DRAW_ANIM_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_18
-IF_NEXT_19:
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: mario_body (index=2, 6 paths)
-    LDD >VAR_SCREEN_X
+    ; Asset: mario (index=2, 10 paths)
+    LDD #-30
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
     LDD >VAR_PLAYER_Y
@@ -619,47 +486,31 @@ IF_NEXT_19:
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_MARIO_BODY_PATH0  ; Load path 0
+    LDX #_MARIO_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_BODY_PATH1  ; Load path 1
+    LDX #_MARIO_PATH1  ; Load path 1
     JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_BODY_PATH2  ; Load path 2
+    LDX #_MARIO_PATH2  ; Load path 2
     JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_BODY_PATH3  ; Load path 3
+    LDX #_MARIO_PATH3  ; Load path 3
     JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_BODY_PATH4  ; Load path 4
+    LDX #_MARIO_PATH4  ; Load path 4
     JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_BODY_PATH5  ; Load path 5
+    LDX #_MARIO_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MARIO_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MARIO_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MARIO_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_MARIO_PATH9  ; Load path 9
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: mario_legs_straight (index=3, 2 paths)
-    LDD >VAR_SCREEN_X
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_PLAYER_Y
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_MARIO_LEGS_STRAIGHT_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_LEGS_STRAIGHT_PATH1  ; Load path 1
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    LDD #0
-    STD RESULT
-IF_END_18:
     LDD >VAR_FLOOR_Y
     ; DEBUG_PRINT(FLOOR_Y)
     STA $C002
@@ -715,7 +566,7 @@ _CLOUD_VECTORS:  ; Main entry (header + 1 path(s))
 
 _CLOUD_PATH0:    ; Path 0
     FCB 55              ; path0: intensity
-    FCB $F6,$E7,0,0        ; path0: header (y=-10, x=-25)
+    FCB $F6,$E7,0,0        ; path0: header (y=-10, x=-25, relative to center)
     FCB $FF,$00,$32          ; flag=-1, dy=0, dx=50
     FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
@@ -730,7 +581,7 @@ _CLOUD_PATH0:    ; Path 0
     FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from ground_tile.vec (Malban Draw_Sync_List format)
-; Total paths: 7, points: 17
+; Total paths: 2, points: 7
 ; X bounds: min=-30, max=30, width=60
 ; Center: (0, 0)
 
@@ -741,43 +592,14 @@ _GROUND_TILE_HALF_HEIGHT EQU 8
 _GROUND_TILE_CENTER_X EQU 0
 _GROUND_TILE_CENTER_Y EQU 0
 
-_GROUND_TILE_VECTORS:  ; Main entry (header + 7 path(s))
-    FCB 7               ; path_count (runtime metadata)
+_GROUND_TILE_VECTORS:  ; Main entry (header + 2 path(s))
+    FCB 2               ; path_count (runtime metadata)
     FDB _GROUND_TILE_PATH0        ; pointer to path 0
     FDB _GROUND_TILE_PATH1        ; pointer to path 1
-    FDB _GROUND_TILE_PATH2        ; pointer to path 2
-    FDB _GROUND_TILE_PATH3        ; pointer to path 3
-    FDB _GROUND_TILE_PATH4        ; pointer to path 4
-    FDB _GROUND_TILE_PATH5        ; pointer to path 5
-    FDB _GROUND_TILE_PATH6        ; pointer to path 6
 
 _GROUND_TILE_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $00,$02,0,0        ; path0: header (y=0, x=2)
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $00,$0B,0,0        ; path1: header (y=0, x=11)
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $00,$17,0,0        ; path2: header (y=0, x=23)
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH3:    ; Path 3
-    FCB 60              ; path3: intensity
-    FCB $00,$1E,0,0        ; path3: header (y=0, x=30)
-    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH4:    ; Path 4
-    FCB 80              ; path4: intensity
-    FCB $F8,$E2,0,0        ; path4: header (y=-8, x=-30)
+    FCB 80              ; path0: intensity
+    FCB $F8,$E2,0,0        ; path0: header (y=-8, x=-30, relative to center)
     FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
     FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
     FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
@@ -785,41 +607,63 @@ _GROUND_TILE_PATH4:    ; Path 4
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
-_GROUND_TILE_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $00,$EC,0,0        ; path5: header (y=0, x=-20)
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+_GROUND_TILE_PATH1:    ; Path 1
+    FCB 60              ; path1: intensity
+    FCB $00,$E2,0,0        ; path1: header (y=0, x=-30, relative to center)
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
     FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH6:    ; Path 6
-    FCB 127              ; path6: intensity
-    FCB $00,$F7,0,0        ; path6: header (y=0, x=-9)
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from mario_body.vec (Malban Draw_Sync_List format)
-; Total paths: 6, points: 18
+; Generated from mario.vec (Malban Draw_Sync_List format)
+; Total paths: 10, points: 26
 ; X bounds: min=-7, max=7, width=14
-; Center: (0, 6)
+; Center: (0, 2)
 
-_MARIO_BODY_WIDTH EQU 14
-_MARIO_BODY_HALF_WIDTH EQU 7
-_MARIO_BODY_HEIGHT EQU 18
-_MARIO_BODY_HALF_HEIGHT EQU 9
-_MARIO_BODY_CENTER_X EQU 0
-_MARIO_BODY_CENTER_Y EQU 6
+_MARIO_WIDTH EQU 14
+_MARIO_HALF_WIDTH EQU 7
+_MARIO_HEIGHT EQU 26
+_MARIO_HALF_HEIGHT EQU 13
+_MARIO_CENTER_X EQU 0
+_MARIO_CENTER_Y EQU 2
 
-_MARIO_BODY_VECTORS:  ; Main entry (header + 6 path(s))
-    FCB 6               ; path_count (runtime metadata)
-    FDB _MARIO_BODY_PATH0        ; pointer to path 0
-    FDB _MARIO_BODY_PATH1        ; pointer to path 1
-    FDB _MARIO_BODY_PATH2        ; pointer to path 2
-    FDB _MARIO_BODY_PATH3        ; pointer to path 3
-    FDB _MARIO_BODY_PATH4        ; pointer to path 4
-    FDB _MARIO_BODY_PATH5        ; pointer to path 5
+_MARIO_VECTORS:  ; Main entry (header + 10 path(s))
+    FCB 10               ; path_count (runtime metadata)
+    FDB _MARIO_PATH0        ; pointer to path 0
+    FDB _MARIO_PATH1        ; pointer to path 1
+    FDB _MARIO_PATH2        ; pointer to path 2
+    FDB _MARIO_PATH3        ; pointer to path 3
+    FDB _MARIO_PATH4        ; pointer to path 4
+    FDB _MARIO_PATH5        ; pointer to path 5
+    FDB _MARIO_PATH6        ; pointer to path 6
+    FDB _MARIO_PATH7        ; pointer to path 7
+    FDB _MARIO_PATH8        ; pointer to path 8
+    FDB _MARIO_PATH9        ; pointer to path 9
 
-_MARIO_BODY_PATH0:    ; Path 0
+_MARIO_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $FD,$FA,0,0        ; path0: header (y=-3, x=-6)
+    FCB $09,$F9,0,0        ; path0: header (y=9, x=-7, relative to center)
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB 2                ; End marker (path complete)
+
+_MARIO_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $09,$FB,0,0        ; path1: header (y=9, x=-5, relative to center)
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB 2                ; End marker (path complete)
+
+_MARIO_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $09,$05,0,0        ; path2: header (y=9, x=5, relative to center)
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB 2                ; End marker (path complete)
+
+_MARIO_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $0D,$FB,0,0        ; path3: header (y=13, x=-5, relative to center)
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB 2                ; End marker (path complete)
+
+_MARIO_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $01,$FA,0,0        ; path4: header (y=1, x=-6, relative to center)
     FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
@@ -827,128 +671,38 @@ _MARIO_BODY_PATH0:    ; Path 0
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
-_MARIO_BODY_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $F7,$F9,0,0        ; path1: header (y=-9, x=-7)
+_MARIO_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $F9,$F9,0,0        ; path5: header (y=-7, x=-7, relative to center)
     FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
-_MARIO_BODY_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $05,$F9,0,0        ; path2: header (y=5, x=-7)
-    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+_MARIO_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $F9,$F9,0,0        ; path6: header (y=-7, x=-7, relative to center)
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
     FCB 2                ; End marker (path complete)
 
-_MARIO_BODY_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $05,$05,0,0        ; path3: header (y=5, x=5)
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_BODY_PATH4:    ; Path 4
-    FCB 127              ; path4: intensity
-    FCB $09,$05,0,0        ; path4: header (y=9, x=5)
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB 2                ; End marker (path complete)
-
-_MARIO_BODY_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $09,$FB,0,0        ; path5: header (y=9, x=-5)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from mario_legs_straight.vec (Malban Draw_Sync_List format)
-; Total paths: 2, points: 6
-; X bounds: min=-7, max=7, width=14
-; Center: (0, -8)
-
-_MARIO_LEGS_STRAIGHT_WIDTH EQU 14
-_MARIO_LEGS_STRAIGHT_HALF_WIDTH EQU 7
-_MARIO_LEGS_STRAIGHT_HEIGHT EQU 10
-_MARIO_LEGS_STRAIGHT_HALF_HEIGHT EQU 5
-_MARIO_LEGS_STRAIGHT_CENTER_X EQU 0
-_MARIO_LEGS_STRAIGHT_CENTER_Y EQU -8
-
-_MARIO_LEGS_STRAIGHT_VECTORS:  ; Main entry (header + 2 path(s))
-    FCB 2               ; path_count (runtime metadata)
-    FDB _MARIO_LEGS_STRAIGHT_PATH0        ; pointer to path 0
-    FDB _MARIO_LEGS_STRAIGHT_PATH1        ; pointer to path 1
-
-_MARIO_LEGS_STRAIGHT_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $05,$F9,0,0        ; path0: header (y=5, x=-7)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+_MARIO_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $F3,$F9,0,0        ; path7: header (y=-13, x=-7, relative to center)
     FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
     FCB 2                ; End marker (path complete)
 
-_MARIO_LEGS_STRAIGHT_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $FB,$02,0,0        ; path1: header (y=-5, x=2)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from mario_legs_stride_a.vec (Malban Draw_Sync_List format)
-; Total paths: 2, points: 6
-; X bounds: min=-11, max=9, width=20
-; Center: (-1, -8)
-
-_MARIO_LEGS_STRIDE_A_WIDTH EQU 20
-_MARIO_LEGS_STRIDE_A_HALF_WIDTH EQU 10
-_MARIO_LEGS_STRIDE_A_HEIGHT EQU 10
-_MARIO_LEGS_STRIDE_A_HALF_HEIGHT EQU 5
-_MARIO_LEGS_STRIDE_A_CENTER_X EQU -1
-_MARIO_LEGS_STRIDE_A_CENTER_Y EQU -8
-
-_MARIO_LEGS_STRIDE_A_VECTORS:  ; Main entry (header + 2 path(s))
-    FCB 2               ; path_count (runtime metadata)
-    FDB _MARIO_LEGS_STRIDE_A_PATH0        ; pointer to path 0
-    FDB _MARIO_LEGS_STRIDE_A_PATH1        ; pointer to path 1
-
-_MARIO_LEGS_STRIDE_A_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $05,$FA,0,0        ; path0: header (y=5, x=-6)
-    FCB $FF,$F6,$FC          ; flag=-1, dy=-10, dx=-4
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+_MARIO_PATH8:    ; Path 8
+    FCB 127              ; path8: intensity
+    FCB $F9,$07,0,0        ; path8: header (y=-7, x=7, relative to center)
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
     FCB 2                ; End marker (path complete)
 
-_MARIO_LEGS_STRIDE_A_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $FB,$0A,0,0        ; path1: header (y=-5, x=10)
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$0A,$04          ; flag=-1, dy=10, dx=4
-    FCB 2                ; End marker (path complete)
-; Generated from mario_legs_stride_b.vec (Malban Draw_Sync_List format)
-; Total paths: 2, points: 6
-; X bounds: min=-7, max=11, width=18
-; Center: (2, -8)
-
-_MARIO_LEGS_STRIDE_B_WIDTH EQU 18
-_MARIO_LEGS_STRIDE_B_HALF_WIDTH EQU 9
-_MARIO_LEGS_STRIDE_B_HEIGHT EQU 10
-_MARIO_LEGS_STRIDE_B_HALF_HEIGHT EQU 5
-_MARIO_LEGS_STRIDE_B_CENTER_X EQU 2
-_MARIO_LEGS_STRIDE_B_CENTER_Y EQU -8
-
-_MARIO_LEGS_STRIDE_B_VECTORS:  ; Main entry (header + 2 path(s))
-    FCB 2               ; path_count (runtime metadata)
-    FDB _MARIO_LEGS_STRIDE_B_PATH0        ; pointer to path 0
-    FDB _MARIO_LEGS_STRIDE_B_PATH1        ; pointer to path 1
-
-_MARIO_LEGS_STRIDE_B_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $05,$F7,0,0        ; path0: header (y=5, x=-9)
-    FCB $FF,$F6,$04          ; flag=-1, dy=-10, dx=4
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB 2                ; End marker (path complete)
-
-_MARIO_LEGS_STRIDE_B_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $FB,$03,0,0        ; path1: header (y=-5, x=3)
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$0A,$FC          ; flag=-1, dy=10, dx=-4
+_MARIO_PATH9:    ; Path 9
+    FCB 127              ; path9: intensity
+    FCB $F3,$07,0,0        ; path9: header (y=-13, x=7, relative to center)
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB 2                ; End marker (path complete)
 ; Generated from mountain.vec (Malban Draw_Sync_List format)
 ; Total paths: 1, points: 19
@@ -968,7 +722,7 @@ _MOUNTAIN_VECTORS:  ; Main entry (header + 1 path(s))
 
 _MOUNTAIN_PATH0:    ; Path 0
     FCB 45              ; path0: intensity
-    FCB $ED,$E2,0,0        ; path0: header (y=-19, x=-30)
+    FCB $ED,$E2,0,0        ; path0: header (y=-19, x=-30, relative to center)
     FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
     FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
@@ -990,42 +744,39 @@ _MOUNTAIN_PATH0:    ; Path 0
     FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from pipe.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 9
-; X bounds: min=-12, max=10, width=22
-; Center: (-1, 0)
+; Total paths: 2, points: 10
+; X bounds: min=-12, max=12, width=24
+; Center: (0, 0)
 
-_PIPE_WIDTH EQU 22
-_PIPE_HALF_WIDTH EQU 11
+_PIPE_WIDTH EQU 24
+_PIPE_HALF_WIDTH EQU 12
 _PIPE_HEIGHT EQU 50
 _PIPE_HALF_HEIGHT EQU 25
-_PIPE_CENTER_X EQU -1
+_PIPE_CENTER_X EQU 0
 _PIPE_CENTER_Y EQU 0
 
-_PIPE_VECTORS:  ; Main entry (header + 3 path(s))
-    FCB 3               ; path_count (runtime metadata)
+_PIPE_VECTORS:  ; Main entry (header + 2 path(s))
+    FCB 2               ; path_count (runtime metadata)
     FDB _PIPE_PATH0        ; pointer to path 0
     FDB _PIPE_PATH1        ; pointer to path 1
-    FDB _PIPE_PATH2        ; pointer to path 2
 
 _PIPE_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
-    FCB $14,$F5,0,0        ; path0: header (y=20, x=-11)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PIPE_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $19,$F7,0,0        ; path1: header (y=25, x=-9)
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB 2                ; End marker (path complete)
-
-_PIPE_PATH2:    ; Path 2
-    FCB 100              ; path2: intensity
-    FCB $E7,$F7,0,0        ; path2: header (y=-25, x=-9)
+    FCB $E7,$F6,0,0        ; path0: header (y=-25, x=-10, relative to center)
     FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
     FCB $FF,$32,$00          ; flag=-1, dy=50, dx=0
     FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
     FCB $FF,$CE,$00          ; flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PIPE_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $0F,$F4,0,0        ; path1: header (y=15, x=-12, relative to center)
+    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$E8          ; flag=-1, dy=0, dx=-24
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from question_block.vec (Malban Draw_Sync_List format)
@@ -1047,27 +798,27 @@ _QUESTION_BLOCK_VECTORS:  ; Main entry (header + 3 path(s))
     FDB _QUESTION_BLOCK_PATH2        ; pointer to path 2
 
 _QUESTION_BLOCK_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $00,$00,0,0        ; path0: header (y=0, x=0)
-    FCB $FF,$02,$04          ; flag=-1, dy=2, dx=4
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB 2                ; End marker (path complete)
-
-_QUESTION_BLOCK_PATH1:    ; Path 1
-    FCB 100              ; path1: intensity
-    FCB $FC,$FF,0,0        ; path1: header (y=-4, x=-1)
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB 2                ; End marker (path complete)
-
-_QUESTION_BLOCK_PATH2:    ; Path 2
-    FCB 120              ; path2: intensity
-    FCB $F8,$F8,0,0        ; path2: header (y=-8, x=-8)
+    FCB 120              ; path0: intensity
+    FCB $F8,$F8,0,0        ; path0: header (y=-8, x=-8, relative to center)
     FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
     FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
     FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
     FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_QUESTION_BLOCK_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $04,$FD,0,0        ; path1: header (y=4, x=-3, relative to center)
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_QUESTION_BLOCK_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $FC,$FF,0,0        ; path2: header (y=-4, x=-1, relative to center)
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
     FCB 2                ; End marker (path complete)
 ; ==== Level: WORLD_1_1 ====
 ; Author: 
@@ -1075,30 +826,24 @@ _QUESTION_BLOCK_PATH2:    ; Path 2
 
 _WORLD_1_1_LEVEL:
     FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 2207  ; xMax (16-bit signed)
+    FDB 1055  ; xMax (16-bit signed)
     FDB -384  ; yMin (16-bit signed)
     FDB 127  ; yMax (16-bit signed)
     FDB 0  ; Time limit (seconds)
     FDB 0  ; Target score
-    FCB 4  ; Background object count
+    FCB 5  ; Background object count
     FCB 29  ; Gameplay object count
     FCB 0  ; Foreground object count
     FDB _WORLD_1_1_BG_OBJECTS
     FDB _WORLD_1_1_GAMEPLAY_OBJECTS
     FDB _WORLD_1_1_FG_OBJECTS
-    FDB -96  ; scrollLimit left (camera left cannot go below this)
-    FDB 1063  ; scrollLimit right (camera right cannot exceed this)
-    FDB 127  ; scrollLimit top
-    FDB -384  ; scrollLimit bottom
-    FCB 0  ; enemy_count
-    FDB 0  ; enemy_instances_ptr (0 if none)
 
 _WORLD_1_1_BG_OBJECTS:
 ; Object: obj_bg_cloud_1 (decoration)
     FCB 255  ; type
-    FDB 225  ; x
-    FDB 63  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 100  ; x
+    FDB 30  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1108,14 +853,14 @@ _WORLD_1_1_BG_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _CLOUD_VECTORS  ; vector_ptr
-    FCB 25  ; half_width (1.00x, ROM+18)
-    FCB 10  ; half_height (1.00x, ROM+19)
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_cloud_2 (decoration)
     FCB 255  ; type
     FDB 350  ; x
     FDB 45  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1125,14 +870,14 @@ _WORLD_1_1_BG_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _CLOUD_VECTORS  ; vector_ptr
-    FCB 25  ; half_width (1.00x, ROM+18)
-    FCB 10  ; half_height (1.00x, ROM+19)
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_cloud_3 (decoration)
     FCB 255  ; type
     FDB 600  ; x
     FDB 20  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1142,14 +887,14 @@ _WORLD_1_1_BG_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _CLOUD_VECTORS  ; vector_ptr
-    FCB 25  ; half_width (1.00x, ROM+18)
-    FCB 10  ; half_height (1.00x, ROM+19)
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_cloud_4 (decoration)
     FCB 255  ; type
     FDB 850  ; x
     FDB 38  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1159,8 +904,25 @@ _WORLD_1_1_BG_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _CLOUD_VECTORS  ; vector_ptr
-    FCB 25  ; half_width (1.00x, ROM+18)
-    FCB 10  ; half_height (1.00x, ROM+19)
+    FCB _CLOUD_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _CLOUD_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
+
+; Object: obj_bg_7 (tile)
+    FCB 255  ; type
+    FDB 270  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_TILE_VECTORS  ; vector_ptr
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 
 _WORLD_1_1_GAMEPLAY_OBJECTS:
@@ -1168,7 +930,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 255  ; type
     FDB 570  ; x
     FDB -50  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1178,14 +940,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _MOUNTAIN_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 19  ; half_height (1.00x, ROM+19)
+    FCB _MOUNTAIN_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _MOUNTAIN_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_mountain_3 (decoration)
     FCB 255  ; type
-    FDB 730  ; x
-    FDB 6  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 750  ; x
+    FDB -50  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1195,31 +957,31 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _MOUNTAIN_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 19  ; half_height (1.00x, ROM+19)
+    FCB _MOUNTAIN_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _MOUNTAIN_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
-; Object: obj_bg_7 (tile)
-    FCB 255  ; type
-    FDB 300  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+; Object: obj_1773216572040 (enemy)
+    FCB 1  ; type
+    FDB 270  ; x
+    FDB -50  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
+    FCB 0  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FDB _MOUNTAIN_VECTORS  ; vector_ptr
+    FCB _MOUNTAIN_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _MOUNTAIN_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_1 (tile)
     FCB 255  ; type
-    FDB -65  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB -90  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1229,14 +991,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_2 (tile)
     FCB 255  ; type
-    FDB -4  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB -30  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1246,14 +1008,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_3 (tile)
     FCB 255  ; type
-    FDB 56  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 30  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1263,14 +1025,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_4 (tile)
     FCB 255  ; type
-    FDB 117  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 90  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1280,14 +1042,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_5 (tile)
     FCB 255  ; type
-    FDB 178  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 150  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1297,14 +1059,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_6 (tile)
     FCB 255  ; type
-    FDB 239  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 210  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1314,14 +1076,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_8 (tile)
     FCB 255  ; type
-    FDB 361  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 330  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1331,14 +1093,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_9 (tile)
     FCB 255  ; type
-    FDB 422  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 390  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1348,14 +1110,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_10 (tile)
     FCB 255  ; type
-    FDB 483  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 450  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1365,14 +1127,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_11 (tile)
     FCB 255  ; type
-    FDB 544  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 510  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1382,14 +1144,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_12 (tile)
     FCB 255  ; type
-    FDB 605  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 571  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1399,14 +1161,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_13 (tile)
     FCB 255  ; type
-    FDB 666  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 630  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1416,14 +1178,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_14 (tile)
     FCB 255  ; type
-    FDB 727  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 690  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1433,14 +1195,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_15 (tile)
     FCB 255  ; type
-    FDB 788  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 750  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1450,14 +1212,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_16 (tile)
     FCB 255  ; type
-    FDB 849  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 810  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1467,14 +1229,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_17 (tile)
     FCB 255  ; type
-    FDB 910  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 870  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1484,14 +1246,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_18 (tile)
     FCB 255  ; type
-    FDB 971  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 930  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1501,14 +1263,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_bg_19 (tile)
     FCB 255  ; type
-    FDB 1032  ; x
-    FDB -120  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 990  ; x
+    FDB -78  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1518,14 +1280,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _GROUND_TILE_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _GROUND_TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _GROUND_TILE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_pipe_1 (obstacle)
     FCB 2  ; type
-    FDB 217  ; x
-    FDB -85  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 200  ; x
+    FDB -45  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1535,14 +1297,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
-    FCB 11  ; half_width (1.00x, ROM+18)
-    FCB 25  ; half_height (1.00x, ROM+19)
+    FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_pipe_2 (obstacle)
     FCB 2  ; type
     FDB 420  ; x
-    FDB -85  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB -45  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1552,14 +1314,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
-    FCB 11  ; half_width (1.00x, ROM+18)
-    FCB 25  ; half_height (1.00x, ROM+19)
+    FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_pipe_3 (obstacle)
     FCB 2  ; type
-    FDB 682  ; x
-    FDB -85  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 680  ; x
+    FDB -45  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1569,14 +1331,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
-    FCB 11  ; half_width (1.00x, ROM+18)
-    FCB 25  ; half_height (1.00x, ROM+19)
+    FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_pipe_4 (obstacle)
     FCB 2  ; type
     FDB 850  ; x
-    FDB -85  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB -45  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1586,14 +1348,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _PIPE_VECTORS  ; vector_ptr
-    FCB 11  ; half_width (1.00x, ROM+18)
-    FCB 25  ; half_height (1.00x, ROM+19)
+    FCB _PIPE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _PIPE_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_qblock_1 (item)
     FCB 255  ; type
-    FDB 84  ; x
-    FDB -88  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 130  ; x
+    FDB -10  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1603,14 +1365,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
-    FCB 8  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_qblock_2 (item)
     FCB 255  ; type
-    FDB 145  ; x
-    FDB -49  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 260  ; x
+    FDB -10  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1620,14 +1382,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
-    FCB 8  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_qblock_3 (item)
     FCB 255  ; type
-    FDB 492  ; x
-    FDB -88  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 500  ; x
+    FDB -10  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1637,14 +1399,14 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
-    FCB 8  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 ; Object: obj_gp_qblock_4 (item)
     FCB 255  ; type
-    FDB 808  ; x
-    FDB -88  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
+    FDB 760  ; x
+    FDB -10  ; y
+    FDB 256  ; scale (8.8 fixed)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -1654,79 +1416,40 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr
-    FCB 8  ; half_width (1.00x, ROM+18)
-    FCB 8  ; half_height (1.00x, ROM+19)
+    FCB _QUESTION_BLOCK_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
+    FCB _QUESTION_BLOCK_HALF_HEIGHT  ; half_height (collision AABB, ROM+19)
 
 
 _WORLD_1_1_FG_OBJECTS:
-
-_WORLD_1_1_ENEMY_COUNT EQU 0
 
 _JUMP_SFX:
     ; SFX: jump (jump)
     ; Duration: 250ms (12fr), Freq: 440Hz, Channel: 0
     FCB $AF         ; Frame 0 - flags (vol=15, noisevol=0, tone=Y, noise=N)
-    FCB $01, $0B  ; Tone period = 267 (big-endian)
-    FCB $AE         ; Frame 1 - flags (vol=14, noisevol=0, tone=Y, noise=N)
-    FCB $00, $E8  ; Tone period = 232 (big-endian)
-    FCB $AD         ; Frame 2 - flags (vol=13, noisevol=0, tone=Y, noise=N)
-    FCB $00, $CD  ; Tone period = 205 (big-endian)
-    FCB $AB         ; Frame 3 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $B8  ; Tone period = 184 (big-endian)
-    FCB $AA         ; Frame 4 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $A6  ; Tone period = 166 (big-endian)
-    FCB $A9         ; Frame 5 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $00, $98  ; Tone period = 152 (big-endian)
-    FCB $A7         ; Frame 6 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $8C  ; Tone period = 140 (big-endian)
-    FCB $A6         ; Frame 7 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $00, $82  ; Tone period = 130 (big-endian)
-    FCB $A5         ; Frame 8 - flags (vol=5, noisevol=0, tone=Y, noise=N)
-    FCB $00, $79  ; Tone period = 121 (big-endian)
-    FCB $A3         ; Frame 9 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $00, $71  ; Tone period = 113 (big-endian)
-    FCB $A2         ; Frame 10 - flags (vol=2, noisevol=0, tone=Y, noise=N)
-    FCB $00, $6A  ; Tone period = 106 (big-endian)
+    FCB $00, $96  ; Tone period = 150 (big-endian)
+    FCB $AA         ; Frame 1 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $AC  ; Tone period = 172 (big-endian)
+    FCB $A5         ; Frame 2 - flags (vol=5, noisevol=0, tone=Y, noise=N)
+    FCB $00, $C3  ; Tone period = 195 (big-endian)
+    FCB $A0         ; Frame 3 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $00, $DA  ; Tone period = 218 (big-endian)
+    FCB $A0         ; Frame 4 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $00, $F0  ; Tone period = 240 (big-endian)
+    FCB $A0         ; Frame 5 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $07  ; Tone period = 263 (big-endian)
+    FCB $A0         ; Frame 6 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $1E  ; Tone period = 286 (big-endian)
+    FCB $A0         ; Frame 7 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $35  ; Tone period = 309 (big-endian)
+    FCB $A0         ; Frame 8 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $4B  ; Tone period = 331 (big-endian)
+    FCB $A0         ; Frame 9 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $62  ; Tone period = 354 (big-endian)
+    FCB $A0         ; Frame 10 - flags (vol=0, noisevol=0, tone=Y, noise=N)
+    FCB $01, $79  ; Tone period = 377 (big-endian)
     FCB $A0         ; Frame 11 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $01, $90  ; Tone period = 400 (big-endian)
     FCB $D0, $20    ; End of effect marker
-
-; .vanim animation data: mario_walk (4 frames, loop=true, base_refs=1)
-
-_ANIM_MARIO_WALK:
-    FCB 4               ; frame_count
-    FCB 1               ; loop flag (1=loop, 0=freeze)
-    FCB 1               ; base_ref_count
-    FCB 6               ; frame_table_offset
-    FDB _MARIO_BODY_VECTORS      ; base_ref: mario_body
-    FDB _ANIM_MARIO_WALK_F0       ; frame 0 pointer
-    FDB _ANIM_MARIO_WALK_F1       ; frame 1 pointer
-    FDB _ANIM_MARIO_WALK_F2       ; frame 2 pointer
-    FDB _ANIM_MARIO_WALK_F3       ; frame 3 pointer
-
-_ANIM_MARIO_WALK_F0:
-    FCB 6               ; duration_ticks
-    FCB 1               ; vec_ref_count
-    FDB _MARIO_LEGS_STRAIGHT_VECTORS      ; vec_ref: mario_legs_straight
-    FCB 0               ; inline_path_count
-
-_ANIM_MARIO_WALK_F1:
-    FCB 6               ; duration_ticks
-    FCB 1               ; vec_ref_count
-    FDB _MARIO_LEGS_STRIDE_A_VECTORS      ; vec_ref: mario_legs_stride_a
-    FCB 0               ; inline_path_count
-
-_ANIM_MARIO_WALK_F2:
-    FCB 6               ; duration_ticks
-    FCB 1               ; vec_ref_count
-    FDB _MARIO_LEGS_STRAIGHT_VECTORS      ; vec_ref: mario_legs_straight
-    FCB 0               ; inline_path_count
-
-_ANIM_MARIO_WALK_F3:
-    FCB 6               ; duration_ticks
-    FCB 1               ; vec_ref_count
-    FDB _MARIO_LEGS_STRIDE_B_VECTORS      ; vec_ref: mario_legs_stride_b
-    FCB 0               ; inline_path_count
 
 ;***************************************************************************
 ; RUNTIME HELPERS
@@ -1792,15 +1515,19 @@ J1X_BUILTIN:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
+; NOTE: Caller must ensure DP=$D0 for VIA access
+; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
+; VIA Port B through states $05->$04->$01 which resets the analog hardware
+; (zero-reference sequence) and would disrupt the beam position mid-drawing.
+; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
+STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
+STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+LDA #$04
+STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+LDA #$01
+STA >$D000              ; Port B=$01: restore normal mux
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -1840,7 +1567,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
+; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -1887,20 +1614,14 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_port_a          ; stop X integrator drift between segments
 CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Check intensity override (same logic as start)
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
+; Read per-path intensity from vector data
+LDA ,X+                 ; Read intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
@@ -1917,7 +1638,12 @@ DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
 PULS A                  ; Get intensity back
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
+STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
+STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+LDA #$04
+STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+LDA #$01
+STA >$D000              ; Port B=$01: restore normal mux
 PULS D
 ADDD #3
 TFR D,X
@@ -1945,7 +1671,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
+; T1 fixed at $7F (constant scale; brightness set via $C832 above)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -1998,29 +1724,29 @@ LOAD_LEVEL_RUNTIME:
     LDD ,X++         ; D = fgObjectsPtr
     STD >LEVEL_FG_ROM_PTR
     
-    ; Read scroll limits from ROM header (+21..+28)
-    ; X is now at +21 (right after the 3 FDB layer pointers)
-    LDD ,X++         ; D = scrollLimit left
-    STD >SCROLL_LIMIT_LEFT
-    LDD ,X++         ; D = scrollLimit right
-    STD >SCROLL_LIMIT_RIGHT
-    LDD ,X++         ; D = scrollLimit top
-    STD >SCROLL_LIMIT_TOP
-    LDD ,X++         ; D = scrollLimit bottom
-    STD >SCROLL_LIMIT_BOTTOM
-    
-    ; Read enemy data from header (+29: count, +30,+31: instances_ptr)
-    LDB ,X+         ; B = enemy_count
-    STB >LEVEL_ENEMY_COUNT
-    LDD ,X          ; D = enemy_instances_ptr
-    STD >LEVEL_ENEMY_INSTANCES_PTR
-    
-    ; === Setup GP pointer: point directly to ROM (matches core) ===
-    ; GP objects are read from ROM with stride=20, same as BG/FG
+    ; === Copy GP objects from ROM to RAM buffer ===
     LDB >LEVEL_GP_COUNT
     BEQ LLR_SKIP_GP  ; Skip if no GP objects
-    LDD >LEVEL_GP_ROM_PTR ; Just point to ROM
-    STD >LEVEL_GP_PTR    ; Store ROM pointer
+    
+    ; Clear GP buffer with $FF marker (empty sentinel)
+    LDA #$FF
+    LDU #LEVEL_GP_BUFFER
+    LDB #32          ; Max 32 objects
+LLR_CLR_GP_LOOP:
+    STA ,U           ; Write $FF to first byte of object slot
+    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
+    DECB
+    BNE LLR_CLR_GP_LOOP
+    
+    ; Copy GP objects: ROM (20 bytes each) → RAM buffer (14 bytes each)
+    LDB >LEVEL_GP_COUNT   ; Reload count after clear loop
+    LDX >LEVEL_GP_ROM_PTR ; X = source (ROM)
+    LDU #LEVEL_GP_BUFFER  ; U = destination (RAM)
+    PSHS U               ; Save buffer start
+    JSR LLR_COPY_OBJECTS  ; Copy B objects from X(ROM) to U(RAM)
+    PULS D               ; Restore buffer start into D
+    STD >LEVEL_GP_PTR    ; LEVEL_GP_PTR → RAM buffer
+    BRA LLR_GP_DONE
     
 LLR_GP_DONE:
 LLR_SKIP_GP:
@@ -2148,7 +1874,7 @@ SLR_GP_COUNT:
     LDB >LEVEL_GP_COUNT
     CMPB #0
     BEQ SLR_FOREGROUND
-    LDA #20          ; GP objects read from ROM (20 bytes)
+    LDA #15          ; RAM object stride (15 bytes)
     LDX >LEVEL_GP_PTR
     JSR SLR_DRAW_OBJECTS
     
@@ -2259,8 +1985,6 @@ SLR_RAM_Y_ZERO:
 SLR_RAM_Y_VISIBLE:
     STB >DRAW_VEC_Y
     LDU 11,X         ; vector_ptr at RAM +11
-    LDA 3,X          ; scale_t1 from RAM +3 (pre-computed T1 = scale*127)
-    STA >DRAW_T1_SCALED
     BRA SLR_DRAW_VECTOR
     
 SLR_ROM_OFFSETS:
@@ -2317,14 +2041,12 @@ SLR_ROM_VISIBLE:
     LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
     STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
     LDU 16,X         ; vector_ptr FDB at ROM +16
-    LDA 6,X          ; scale_t1 from ROM +6 (low byte of scale FDB; pre-computed T1 = scale*127)
-    STA >DRAW_T1_SCALED
     
 SLR_DRAW_VECTOR:
     PSHS X           ; Save object pointer
     TFR U,X          ; X = vector data pointer (header)
     
-    ; Read path_count from vector header (FCB = 1 byte)
+    ; Read path_count from vector header byte 0
     LDB ,X+          ; B = path_count, X now at pointer table
     
     ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)
@@ -2336,7 +2058,7 @@ SLR_PATH_LOOP:
     LDU ,X++         ; U = path pointer, X advances to next entry
     PSHS X           ; Save pointer table position
     TFR U,X          ; X = actual path data
-    JSR Draw_Sync_List_At_With_Mirrors  ; Draw this path
+    JSR SLR_DRAW_CLIPPED_PATH
     PULS X           ; Restore pointer table position
     PULS B           ; Restore count
     BRA SLR_PATH_LOOP
@@ -2427,7 +2149,7 @@ SDCP_ABS_OK:
     INC VIA_port_b          ; PB=1: lock Y direction
     PULS A                  ; restore abs_x
     STA VIA_port_a          ; DX → DAC
-    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
+    LDA #$7F
     STA VIA_t1_cnt_lo       ; load T1 latch
     LEAX 2,X                ; skip next_y, next_x (the 0,0)
     CLR VIA_t1_cnt_hi       ; start T1 → ramp
@@ -2492,19 +2214,19 @@ SDCP_DONE:
 ; === LEVEL_COLLISION_Y_RUNTIME ===
 ; Find the highest collidable floor Y at player_x in the GP layer.
 ; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (16-bit) = player_top (player_y + player_hh)
-; Output: RESULT = highest floor landing Y (i16)
+;         LCOL_PY (i8) = player_y lo-byte; surfaces above this are ignored
+; Output: RESULT = highest floor surface_top (i16, sign-extended from i8)
 ;         Returns $FF80 (-128) if no collidable surface found at that X.
 ; Algorithm: for each collidable GP object, check X AABB overlap,
-;   compute surface_top = obj_y(16) + half_height, track max (16-bit).
-; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,
-;   +18=half_width, +19=half_height. Stride=20.
+;   compute surface_top = obj_y + half_height (both i8), track max.
+; RAM object offsets used: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,
+;   +13=half_width, +14=half_height
 LEVEL_COLLISION_Y_RUNTIME:
     PSHS X,Y,U       ; Save regs (NOT D - result returns in D)
     
-    ; Initialize best_floor = -32768 ($8000, no floor found)
-    LDD #$8000
-    STD >LCOL_BEST_Y
+    ; Initialize best_floor = -128 (no floor found)
+    LDA #$80         ; -128 as unsigned byte
+    STA >LCOL_BEST_Y
     
     ; Check level loaded
     TST >LEVEL_LOADED
@@ -2512,23 +2234,24 @@ LEVEL_COLLISION_Y_RUNTIME:
     
     LDB >LEVEL_GP_COUNT
     BEQ LCOL_Y_DONE
-    LDX >LEVEL_GP_PTR  ; X = ROM GP objects
+    LDX >LEVEL_GP_PTR  ; X = GP buffer
     
 LCOL_Y_LOOP:
     TSTB
     BEQ LCOL_Y_DONE
     PSHS B           ; save count
     
-    ; --- Check collision flag (bit 0 at ROM+12) ---
-    LDA 12,X
+    ; --- Check collision flag (bit 0 at RAM+8) ---
+    LDA 8,X
     BITA #$01
     BEQ LCOL_Y_NEXT  ; not collidable
     
     ; --- X AABB overlap: obj_x - hw <= player_x <= obj_x + hw ---
-    ; Compute left_edge = obj_x - hw (16-bit, ROM+1=x FDB, ROM+18=half_width)
-    LDD 1,X          ; D = world_x FDB (ROM+1-2)
-    SUBB 18,X        ; B = world_x_lo - half_width
-    SBCA #0          ; A = world_x_hi - borrow
+    ; Compute left_edge = obj_x - 0:hw (16-bit)
+    LDA 0,X          ; obj_x high byte
+    LDB 1,X          ; obj_x low byte
+    SUBB 13,X        ; B = obj_x_lo - half_width
+    SBCA #0          ; A = obj_x_hi - borrow
     STD >TMPVAL      ; TMPVAL = left_edge
     
     ; Compare player_x >= left_edge (signed 16-bit)
@@ -2536,10 +2259,11 @@ LCOL_Y_LOOP:
     CMPD >TMPVAL
     LBLT LCOL_Y_NEXT ; player_x < left_edge → no overlap
     
-    ; Compute right_edge = obj_x + hw (16-bit)
-    LDD 1,X          ; D = world_x FDB
-    ADDB 18,X        ; B = world_x_lo + half_width
-    ADCA #0          ; A = world_x_hi + carry
+    ; Compute right_edge = obj_x + 0:hw (16-bit)
+    LDA 0,X
+    LDB 1,X
+    ADDB 13,X        ; B = obj_x_lo + half_width
+    ADCA #0          ; A = obj_x_hi + carry
     STD >TMPVAL      ; TMPVAL = right_edge
     
     ; Compare player_x <= right_edge (signed 16-bit)
@@ -2547,132 +2271,32 @@ LCOL_Y_LOOP:
     CMPD >TMPVAL
     LBGT LCOL_Y_NEXT ; player_x > right_edge → no overlap
     
-    ; --- X overlaps — compute surface_top = obj_y(16-bit) + half_height ---
-    LDD 3,X          ; D = world_y FDB (ROM+3-4, full 16-bit signed)
-    ADDB 19,X        ; B = world_y_lo + half_height
-    ADCA #0          ; propagate carry to high byte
-    STD >TMPVAL      ; TMPVAL = surface_top (16-bit)
-    ; Filter: skip surfaces above the player's head (surface_top > player_top)
-    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_top
-    BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip
-    ; Compute landing Y = surface_top + player_half_height (16-bit)
-    LDD >TMPVAL      ; reload surface_top
-    ADDB >LCOL_PHH   ; add player_hh to low byte
-    ADCA #0          ; propagate carry
-    ; Update best_floor if this landing Y > current best (16-bit signed)
-    CMPD >LCOL_BEST_Y
+    ; --- X overlaps — compute surface_top = obj_y + tile_half_height ---
+    LDA 2,X          ; A = obj_y (signed byte)
+    ADDA 14,X        ; A = tile surface_top = obj_y + tile_half_height
+    ; Filter: skip surfaces above the player's feet (surface_top > player_bottom)
+    CMPA >LCOL_PY    ; signed compare surface_top to player_bottom
+    BGT LCOL_Y_NEXT  ; surface_top > player_bottom → above player → skip
+    ; Compute landing Y = surface_top + player_half_height
+    ADDA >LCOL_PHH   ; A = tile_top + player_hh = where player center lands
+    ; Update best_floor if this landing Y > current best
+    CMPA >LCOL_BEST_Y
     BLE LCOL_Y_NEXT  ; not better
-    STD >LCOL_BEST_Y ; new best landing Y (16-bit)
+    STA >LCOL_BEST_Y ; new best landing Y
     
 LCOL_Y_NEXT:
-    LEAX 20,X        ; next ROM object (stride 20)
+    LEAX 15,X        ; next object (stride 15)
     PULS B
     DECB
     BRA LCOL_Y_LOOP
     
 LCOL_Y_DONE:
-    ; Return best_floor as RESULT (16-bit)
-    LDD >LCOL_BEST_Y
-    ; If no floor found ($8000), return -128 for backward compat
-    CMPD #$8000
-    BNE LCOL_Y_RET
-    LDD #$FF80       ; -128
-LCOL_Y_RET:
+    ; Sign-extend best_floor (i8) → RESULT (i16)
+    LDB >LCOL_BEST_Y
+    SEX              ; D = sign_extend(B)
     STD RESULT
     
     PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)
-
-; === LEVEL_COLLISION_X_RUNTIME ===
-; Find first collidable GP object overlapping player horizontally.
-; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (16-bit) = player world_y
-;         LCOL_PHW (u8) = player half_width
-; Output: RESULT = signed push-out dx (16-bit). Positive=right, negative=left.
-; Returns 0 if no overlap found.
-; Scratch: uses LCOL_THW for total_hw (preserves LCOL_PHH=player_hh across iterations).
-; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,
-;   +18=half_width, +19=half_height. Stride=20.
-LEVEL_COLLISION_X_RUNTIME:
-    PSHS X,Y,U
-    LDD #0
-    STD RESULT
-    TST >LEVEL_LOADED
-    LBEQ LCOL_X_DONE
-    LDB >LEVEL_GP_COUNT
-    LBEQ LCOL_X_DONE
-    LDX >LEVEL_GP_PTR
-LCOL_X_LOOP:
-    TSTB
-    LBEQ LCOL_X_DONE
-    PSHS B
-    LDA 12,X
-    BITA #$01
-    LBEQ LCOL_X_NEXT
-    LDD >LCOL_PY     ; D = player_y (16-bit)
-    SUBD 3,X         ; D = player_y - obj_y (16-bit, ROM+3-4)
-    BPL LCOL_X_DYPOS
-    COMA
-    COMB
-    ADDD #1
-LCOL_X_DYPOS:
-    TSTA             ; if |dy| > 255, definitely no overlap
-    LBNE LCOL_X_NEXT
-    LDA 19,X         ; A = obj_half_height (ROM+19)
-    ADDA >LCOL_PHH   ; A = threshold = obj_hh + player_hh
-    STB >TMPVAL      ; save |dy| lo byte
-    LDB >TMPVAL      ; B = |dy| lo byte
-    STA >TMPVAL+1    ; save threshold
-    CMPB >TMPVAL+1   ; |dy| vs threshold
-    LBGE LCOL_X_NEXT ; |dy| >= threshold → no Y overlap
-    LDA >LCOL_PHW
-    ADDA 18,X
-    STA >LCOL_THW
-    LDD 1,X
-    SUBB >LCOL_THW
-    SBCA #0
-    STD >TMPVAL
-    LDD >LCOL_PX
-    CMPD >TMPVAL
-    LBLT LCOL_X_NEXT
-    LDD 1,X
-    ADDB >LCOL_THW
-    ADCA #0
-    STD >TMPVAL
-    LDD >LCOL_PX
-    CMPD >TMPVAL
-    LBGT LCOL_X_NEXT
-    LDD >LCOL_PX
-    SUBB 2,X
-    STB >TMPVAL
-    TSTB
-    BPL LCOL_X_DXABS
-    NEGB
-LCOL_X_DXABS:
-    NEGB
-    ADDB >LCOL_THW
-    TFR B,A
-    LDB >TMPVAL
-    BMI LCOL_X_PUSH_LEFT
-    TFR A,B
-    SEX
-    STD RESULT
-    PULS B
-    LBRA LCOL_X_DONE
-LCOL_X_PUSH_LEFT:
-    NEGA
-    TFR A,B
-    SEX
-    STD RESULT
-    PULS B
-    LBRA LCOL_X_DONE
-LCOL_X_NEXT:
-    LEAX 20,X
-    PULS B
-    DECB
-    LBRA LCOL_X_LOOP
-LCOL_X_DONE:
-    LDD RESULT
-    PULS X,Y,U,PC
 
 ; ============================================================================
 ; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
@@ -3056,209 +2680,16 @@ LDD #$0000
 STD >SFX_PTR            ; Clear pointer
 RTS
 
-; ============================================================================
-; DRAW_ANIM_RUNTIME
-; Input: X = animation ROM header (_ANIM_XXX)
-;        U = 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)
-;
-; Header layout:
-;   byte 0: frame_count
-;   byte 1: loop_flag (1=loop, 0=freeze)
-;   byte 2: base_ref_count  (static cel layer — drawn before every frame)
-;   byte 3: frame_table_offset (= 4 + base_ref_count*2)
-;   bytes 4..: FDB ptrs to base_ref _VECNAME_VECTORS
-;   at frame_table_offset: FDB ptrs to per-frame data
-; ============================================================================
-DRAW_ANIM_RUNTIME:
-; NOTE: do NOT set ACR here. DRAW_VECTOR works without touching ACR;
-; setting ACR=$18 (T1 no PB7) breaks T1 timing inside DSWM and hangs.
-PSHS D,X,Y,U
-; --- Refresh MIRROR_X from saved arg (re-assert before any BIOS call can corrupt A) ---
-LDA >DRAW_ANIM_MIRROR_X
-STA >MIRROR_X
-; --- Apply scale: copy DRAW_ANIM_SCALE to DRAW_SCALE for DSWM ---
-LDA >DRAW_ANIM_SCALE
-STA >DRAW_SCALE
-; --- Draw base_refs (static cel layer, drawn before every frame) ---
-LDB 2,X             ; base_ref_count
-BEQ DAR_TICK        ; none: skip to tick management
-LEAY 4,X            ; Y = first base_ref FDB entry
-DAR_BASE_LOOP:
-PSHS B,X,Y
-LDX ,Y              ; X = _VECNAME_VECTORS header
-CLR >MIRROR_Y
-JSR $F1AA           ; DP_to_D0
-CLRA                ; path_count is 1 byte (FCB), high byte = 0
-LDB ,X              ; B = path_count (8-bit FCB)
-BEQ DAR_BASE_SKIP
-LEAY 1,X            ; Y = first path FDB in vec table (skip 1-byte count)
-DAR_BASE_PATH_LOOP:
-PSHS D,Y
-LDX ,Y
-JSR Draw_Sync_List_At_With_Mirrors
-PULS D,Y
-LEAY 2,Y
-SUBD #1
-BNE DAR_BASE_PATH_LOOP
-DAR_BASE_SKIP:
-JSR $F1AF           ; DP_to_C8
-PULS B,X,Y
-LEAY 2,Y            ; next base_ref FDB
-DECB
-LBNE DAR_BASE_LOOP
-; --- Tick counter management ---
-DAR_TICK:
-LDU 6,S             ; reload U from stack — BIOS may corrupt live U
-LDA 1,U             ; ticks_left
-BEQ DAR_INIT        ; 0 = first call: initialize frame 0
-DECA
-BNE DAR_DRAW        ; still on this frame: skip frame advance
-; ticks exhausted: advance frame index
-LDB ,U              ; current frame_idx
-INCB
-CMPB ,X             ; frame_count (byte 0)
-BLT DAR_NO_WRAP
-LDA 1,X             ; loop flag (byte 1)
-BEQ DAR_FREEZE      ; loop=0: freeze on last frame
-CLRB                ; loop=1: back to frame 0
-DAR_NO_WRAP:
-STB ,U              ; save new frame_idx
-; frame_ptr = X + frame_table_offset + frame_idx*2
-LDB ,U              ; new frame_idx
-CLRA
-LSLB
-ROLA                ; D = frame_idx*2
-ADDB 3,X            ; D += frame_table_offset (byte 3)
-ADCA #0
-LEAY D,X            ; Y = &frame_table[frame_idx]
-LDY ,Y              ; Y = frame data ptr
-LDA ,Y              ; A = duration_ticks from vanim
-LDB >DRAW_ANIM_SPEED_MUL
-BEQ DAR_SPEED1      ; speed=0: use vanim's duration_ticks as-is
-TFR B,A             ; speed>0: override with ticks_per_frame directly
-DAR_SPEED1:
-CMPA #1
-BHS DAR_SPEED1_OK
-LDA #1
-DAR_SPEED1_OK:
-STA 1,U             ; reset ticks_remaining
-BRA DAR_EMIT
-DAR_FREEZE:
-LDA #1
-STA 1,U
-LDB ,U              ; last frame_idx
-CLRA
-LSLB
-ROLA
-ADDB 3,X
-ADCA #0
-LEAY D,X
-LDY ,Y
-BRA DAR_EMIT
-DAR_INIT:
-; First call: frame_idx=0, load frame 0 duration and draw it
-CLRB                ; frame_idx = 0
-STB ,U
-CLRA                ; D = 0 (frame_idx*2 = 0)
-ADDB 3,X            ; B = frame_table_offset (frame 0 offset from header)
-ADCA #0
-LEAY D,X            ; Y = frame_table[0] entry
-LDY ,Y              ; Y = frame 0 data ptr
-LDA ,Y              ; A = duration_ticks from vanim
-LDB >DRAW_ANIM_SPEED_MUL
-BEQ DAR_SPEED2      ; speed=0: use vanim's duration_ticks as-is
-TFR B,A             ; speed>0: override with ticks_per_frame directly
-DAR_SPEED2:
-CMPA #1
-BHS DAR_SPEED2_OK
-LDA #1
-DAR_SPEED2_OK:
-STA 1,U             ; ticks_left = ticks_per_frame
-BRA DAR_EMIT
-DAR_DRAW:
-STA 1,U             ; save decremented ticks
-LDB ,U              ; frame_idx
-CLRA
-LSLB
-ROLA
-ADDB 3,X
-ADCA #0
-LEAY D,X
-LDY ,Y              ; Y = frame data ptr
-DAR_EMIT:
-; frame data: byte 0=duration_ticks (skip), byte 1=vec_ref_count
-LEAY 1,Y
-LDB ,Y+             ; B = vec_ref_count, Y at first vec ptr
-BEQ DAR_INLINE
-DAR_VEC_LOOP:
-PSHS B,Y
-LDX ,Y
-JSR $F1AA           ; DP_to_D0
-CLRA                ; path_count is 1 byte (FCB), high byte = 0
-LDB ,X              ; B = path_count (8-bit FCB)
-BEQ DAR_VEC_DONE
-LEAY 1,X            ; Y = first path FDB (skip 1-byte count)
-DAR_VEC_PATH_LOOP:
-PSHS D,Y
-LDX ,Y
-JSR Draw_Sync_List_At_With_Mirrors
-PULS D,Y
-LEAY 2,Y
-SUBD #1
-BNE DAR_VEC_PATH_LOOP
-DAR_VEC_DONE:
-JSR $F1AF           ; DP_to_C8
-PULS B,Y
-LEAY 2,Y
-DECB
-BNE DAR_VEC_LOOP
-DAR_INLINE:
-LDB ,Y+             ; B = inline_path_count
-BEQ DAR_DONE
-DAR_PATH_LOOP:
-PSHS B
-TFR Y,X
-JSR $F1AA           ; DP_to_D0
-JSR Draw_Sync_List_At_With_Mirrors
-JSR $F1AF           ; DP_to_C8
-LEAY 5,Y            ; skip intensity + 4-byte header
-DAR_SCAN:
-LDA ,Y+
-CMPA #2
-BEQ DAR_PATH_DONE
-CMPA #$FF
-BNE DAR_SCAN
-LEAY 2,Y
-BRA DAR_SCAN
-DAR_PATH_DONE:
-PULS B
-DECB
-BNE DAR_PATH_LOOP
-DAR_DONE:
-; Restore DRAW_SCALE to default ($7F) after animation draw
-LDA #$7F
-STA >DRAW_SCALE
-PULS D,X,Y,U
-RTS
-
 ;**** PRINT_TEXT String Data ****
 PRINT_TEXT_STR_3273774:
     FCC "jump"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_103666436:
+    FCC "mario"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_104652296222070:
     FCC "world_1_1"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2967882140639741:
-    FCC "mario_body"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2967882141252132:
-    FCC "mario_walk"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_16466524589896934361:
-    FCC "mario_legs_straight"
     FCB $80          ; Vectrex string terminator
 
