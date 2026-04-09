@@ -1629,20 +1629,20 @@ DV3D_ALL_DONE:\n\
     );
 }
 
-/// Generate SMUL_PROD lookup table: 64 rows × 128 columns = 8192 bytes
+/// Generate SMUL_PROD lookup table: 128 rows × 128 columns = 16384 bytes
 /// SMUL_PROD[val][angle] = (val * sin(angle * 2π/128)) rounded and clamped to i8
-/// val = 0..63 (row), angle = 0..127 (column within each row)
+/// val = 0..127 (row, stride=128), angle = 0..127 (column within each row)
+/// LSRA trick still works: A=val>>1, B=angle|(bit0*0x80) → D=val*128+angle ✓
 fn emit_smul_prod_table() -> String {
     use std::f64::consts::PI;
     let mut asm = String::new();
     asm.push_str("; ============================================================================\n");
     asm.push_str("; SMUL_PROD - Product lookup table for SMUL_LUT\n");
     asm.push_str("; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)\n");
-    asm.push_str("; val=row (0-63, stride=128), angle=col (0-127)\n");
+    asm.push_str("; val=row (0-127, stride=128), angle=col (0-127) — 16KB total\n");
     asm.push_str("; For cos: use angle=(ax+32)&0x7F — same table, shifted column\n");
-    asm.push_str("; IMPORTANT: vertex coords must be ≤63 for correct lookup\n");
     asm.push_str("SMUL_PROD:\n");
-    for val in 0i32..64 {
+    for val in 0i32..128 {
         let mut row_bytes = Vec::with_capacity(128);
         for angle in 0i32..128 {
             let sin_f = f64::sin(angle as f64 * 2.0 * PI / 128.0);
