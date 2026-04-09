@@ -1,0 +1,2 @@
+cargo:rerun-if-changed=memory.x
+cargo:rustc-link-search=/Users/daniel/projects/vectrex-pseudo-python/hardware/debug_cart/firmware

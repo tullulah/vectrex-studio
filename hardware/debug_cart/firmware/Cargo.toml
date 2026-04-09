@@ -1,0 +1,34 @@
+[workspace]  # isolate from the VPy compiler workspace
+
+[package]
+name = "vectrex-cart"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "vectrex-cart"
+test = false
+bench = false
+
+[dependencies]
+# RP2040 HAL + runtime
+rp2040-hal    = { version = "0.10", features = ["rt", "critical-section-impl"] }
+rp2040-boot2  = "0.3"
+cortex-m      = { version = "0.7" }  # no critical-section-single-core — rp2040-hal provides it
+cortex-m-rt   = "0.7"
+embedded-hal  = "1.0"
+
+# USB CDC (serial over USB)
+usb-device    = "0.3"
+usbd-serial   = "0.2"
+
+# Utilities
+heapless      = "0.8"       # fixed-size collections (no alloc needed)
+fugit         = "0.3"       # type-safe frequency/duration arithmetic
+panic-halt    = "0.2"       # on panic: halt — swap for panic-probe when using SWD
+
+[profile.release]
+opt-level     = "s"         # optimize for size
+lto           = true
+codegen-units = 1
+debug         = true        # keep debug symbols for probe-rs

@@ -1,0 +1,3 @@
+cargo:rustc-link-search=/Users/daniel/projects/vectrex-pseudo-python/hardware/debug_cart/firmware/target/thumbv6m-none-eabi/debug/build/rp2040-pac-61b67e9cf1c4d53a/out
+cargo:rerun-if-changed=device.x
+cargo:rerun-if-changed=build.rs

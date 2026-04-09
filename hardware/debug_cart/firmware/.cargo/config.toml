@@ -1,0 +1,13 @@
+[target.thumbv6m-none-eabi]
+# Flash and run via probe-rs (SWD debug probe):
+runner = "probe-rs run --chip RP2040"
+rustflags = [
+    "-C", "link-arg=--nmagic",
+    "-C", "link-arg=-Tlink.x",
+]
+
+[build]
+target = "thumbv6m-none-eabi"
+
+# To flash via UF2 (no debugger needed — hold BOOTSEL, connect USB):
+# runner = "elf2uf2-rs --deploy --serial"
