@@ -402,8 +402,18 @@ impl VecResource {
         asm
     }
     
-    /// Compile to compact 3D data table for DRAW_VECTOR_3D_RUNTIME
-    /// Format: FCB path_count; per path: FCB point_count, closed; FCB x,y,z per point
+    /// Compile to vertex-indexed 3D data table for DRAW_VECTOR_3D_RUNTIME (optimized)
+    ///
+    /// Format:
+    ///   FDB vertex_count          ; total unique vertices (2 bytes, high byte first)
+    ///   FCB x,y,z × vertex_count  ; vertex table (3 bytes each), coords clamped to ±63
+    ///   FDB path_count            ; number of paths (2 bytes)
+    ///   per path: FCB pt_count, closed, idx0, idx1, ...
+    ///     each idx is a 0-based byte index into the vertex table
+    ///
+    /// Vertices are deduplicated: if the same (x,y,z) appears multiple times across
+    /// all paths, it is stored once and referenced by index.  Coords are clamped to
+    /// ±63 so the SMUL_LUT table (val=0..63 stride=128) works correctly.
     pub fn compile_to_3d_asm_with_name(&self, override_name: Option<&str>) -> String {
         let mut asm = String::new();
         let name_to_use = override_name.unwrap_or(&self.name);
@@ -412,27 +422,81 @@ impl VecResource {
         let visible = self.visible_paths();
         if visible.is_empty() {
             asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
-            asm.push_str("    FCB 0               ; 3D: no paths\n");
+            asm.push_str("    FDB 0               ; 3D vertex-indexed: no vertices\n");
+            asm.push_str("    FDB 0               ; no paths\n");
             return asm;
         }
 
-        asm.push_str(&format!("\n; 3D data table for DRAW_VECTOR_3D ({} paths)\n", visible.len()));
-        asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
-        asm.push_str(&format!("    FCB {}               ; path count\n", visible.len()));
+        // --- Build deduplicated vertex table ---
+        // Key = (x_clamped, y_clamped, z_clamped) as i8 tuple
+        // Value = 0-based index in the vertex array
+        let mut vertex_map: std::collections::HashMap<(i8, i8, i8), u8> =
+            std::collections::HashMap::new();
+        let mut vertices: Vec<(i8, i8, i8)> = Vec::new();
+
+        // Helper closure: get-or-insert a vertex, return its index
+        let mut get_vertex = |x: i8, y: i8, z: i8| -> u8 {
+            let key = (x, y, z);
+            if let Some(&idx) = vertex_map.get(&key) {
+                idx
+            } else {
+                let idx = vertices.len() as u8;
+                vertices.push(key);
+                vertex_map.insert(key, idx);
+                idx
+            }
+        };
+
+        // Build path index lists while filling the vertex table
+        struct PathData {
+            closed: bool,
+            indices: Vec<u8>,
+        }
+        let mut path_data: Vec<PathData> = Vec::new();
 
         for path in &visible {
             if path.points.is_empty() {
                 continue;
             }
-            asm.push_str(&format!("    FCB {}               ; point count\n", path.points.len()));
-            asm.push_str(&format!("    FCB {}               ; closed flag\n", if path.closed { 1 } else { 0 }));
+            let mut indices = Vec::new();
             for pt in &path.points {
-                let x = pt.x.clamp(-127, 127) as i8;
-                let y = pt.y.clamp(-127, 127) as i8;
-                let z = pt.z.unwrap_or(0).clamp(-127, 127) as i8;
-                asm.push_str(&format!("    FCB {},{},{}          ; x={},y={},z={}\n",
-                    Self::format_byte(x), Self::format_byte(y), Self::format_byte(z),
-                    x, y, z));
+                let x = pt.x.clamp(-63, 63) as i8;
+                let y = pt.y.clamp(-63, 63) as i8;
+                let z = pt.z.unwrap_or(0).clamp(-63, 63) as i8;
+                let idx = get_vertex(x, y, z);
+                indices.push(idx);
+            }
+            path_data.push(PathData { closed: path.closed, indices });
+        }
+
+        let total_pts: usize = path_data.iter().map(|p| p.indices.len()).sum();
+        asm.push_str(&format!(
+            "\n; 3D vertex-indexed data for DRAW_VECTOR_3D ({} unique verts, {} paths, {} total point refs)\n",
+            vertices.len(), path_data.len(), total_pts
+        ));
+        asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
+
+        // Emit vertex count as FDB (2 bytes, big-endian; high byte always 0 for ≤127 verts)
+        asm.push_str(&format!("    FDB {}               ; vertex count (unique)\n", vertices.len()));
+
+        // Emit vertex table: 3 bytes each (x, y, z), clamped to ±63
+        for (i, &(x, y, z)) in vertices.iter().enumerate() {
+            asm.push_str(&format!("    FCB {},{},{}          ; vert {}: x={},y={},z={}\n",
+                Self::format_byte(x), Self::format_byte(y), Self::format_byte(z),
+                i, x, y, z));
+        }
+
+        // Emit path count as FDB
+        asm.push_str(&format!("    FDB {}               ; path count\n", path_data.len()));
+
+        // Emit per-path data: pt_count, closed, idx0, idx1, ...
+        for (pi, pd) in path_data.iter().enumerate() {
+            asm.push_str(&format!("    FCB {}               ; path {}: point count\n",
+                pd.indices.len(), pi));
+            asm.push_str(&format!("    FCB {}               ; path {}: closed flag\n",
+                if pd.closed { 1 } else { 0 }, pi));
+            for &idx in &pd.indices {
+                asm.push_str(&format!("    FCB {}               ; vertex index\n", idx));
             }
         }
 

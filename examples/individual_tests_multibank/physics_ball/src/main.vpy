@@ -10,7 +10,7 @@ META MUSIC = music1
 angle_x = 0
 angle_y = 0
 angle_z = 0
-
+    
 def main():
     angle_x = 0
     angle_y = 0
@@ -21,9 +21,12 @@ def loop():
     angle_y = angle_y + 2
     #angle_z = angle_z + 1
 
-    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, 100, -100)
-    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, -100, -100)
-    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, 100, 100)
-    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, -100, 100)
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, 0, 0)
+
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, -40, -40)
+
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, 40, 40)
+
+    DRAW_VECTOR_3D("dtest", angle_x, angle_y, angle_z, -40, 40)
 
 

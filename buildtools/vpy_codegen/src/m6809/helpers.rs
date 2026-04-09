@@ -95,17 +95,15 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("ROT3D_AX", 1, "3D raw angle X (0-127)");
         ram.allocate("ROT3D_AY", 1, "3D raw angle Y (0-127)");
         ram.allocate("ROT3D_AZ", 1, "3D raw angle Z (0-127)");
-        ram.allocate("ROT3D_SIN_X", 1, "3D rotation sin(ax) i8");
-        ram.allocate("ROT3D_COS_X", 1, "3D rotation cos(ax) i8");
-        ram.allocate("ROT3D_SIN_Y", 1, "3D rotation sin(ay) i8");
-        ram.allocate("ROT3D_COS_Y", 1, "3D rotation cos(ay) i8");
-        ram.allocate("ROT3D_SIN_Z", 1, "3D rotation sin(az) i8");
-        ram.allocate("ROT3D_COS_Z", 1, "3D rotation cos(az) i8");
+        // ROT3D_COS_X/Y/Z repurposed: now store (angle+32)&0x7F for cos-offset LUT lookup
+        // (sin angle is ROT3D_AX/AY/AZ directly; cos = sin(angle+32))
+        ram.allocate("ROT3D_COS_X", 1, "3D cos angle offset for X axis: (AX+32)&0x7F");
+        ram.allocate("ROT3D_COS_Y", 1, "3D cos angle offset for Y axis: (AY+32)&0x7F");
+        ram.allocate("ROT3D_COS_Z", 1, "3D cos angle offset for Z axis: (AZ+32)&0x7F");
         ram.allocate("ROT3D_OX", 1, "3D draw X offset");
         ram.allocate("ROT3D_OY", 1, "3D draw Y offset");
-        ram.allocate("ROT3D_PC", 1, "3D path count remaining");
-        ram.allocate("ROT3D_PT_TOTAL", 1, "3D total points in path");
-        ram.allocate("ROT3D_PT_REM", 1, "3D remaining points");
+        ram.allocate("ROT3D_PC", 1, "3D path/vertex count remaining");
+        ram.allocate("ROT3D_PT_REM", 1, "3D remaining points in current path");
         ram.allocate("ROT3D_CLOSED", 1, "3D path closed flag");
         ram.allocate("ROT3D_RX", 1, "3D raw x");
         ram.allocate("ROT3D_RY", 1, "3D raw y");
@@ -121,6 +119,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("ROT3D_FIRST_Y", 1, "3D first screen y (for closed path)");
         ram.allocate("ROT3D_TEMP", 1, "3D rotation temp 1");
         ram.allocate("ROT3D_TEMP2", 1, "3D rotation temp 2");
+        // Rotated vertex cache: up to 127 unique vertices × 2 bytes (x', y')
+        ram.allocate("ROT3D_VBUF", 254, "3D rotated vertex cache (127 verts × 2 bytes: x',y')");
     }
 
     // DRAW_LINE argument buffer (10 bytes: x0, y0, x1, y1, intensity)
@@ -1319,11 +1319,15 @@ BEEP_UPDATE_DONE:\n\
     );
 }
 
-/// Emit SMUL8 (signed 8×8 → 8, normalized /128) and DRAW_VECTOR_3D_RUNTIME
+/// Emit SMUL8 (kept for backward compat), SMUL_LUT, SMUL_PROD table,
+/// updated DV3D_ROTATE, and new vertex-dedup DRAW_VECTOR_3D_RUNTIME.
 fn emit_draw_vector_3d_runtime(asm: &mut String) {
+    // Emit SMUL_PROD table first (8192 bytes)
+    asm.push_str(&emit_smul_prod_table());
+
     asm.push_str(
 "; ============================================================================\n\
-; SMUL8 - Signed 8x8 multiply, result = (A * B) / 128  (i8)\n\
+; SMUL8 - Signed 8x8 multiply, result = (A * B) / 128  (i8)  [kept for compat]\n\
 ; ============================================================================\n\
 ; Input:  A = op1 (i8), B = op2 (i8)\n\
 ; Output: A = result (i8)\n\
@@ -1361,56 +1365,91 @@ SMUL8_POSPOS:\n\
     RTS\n\
 \n\
 ; ============================================================================\n\
-; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point\n\
+; SMUL_LUT - LUT-based signed 8×8 multiply, result = (A * sin(B*2π/128)) / 128\n\
 ; ============================================================================\n\
-; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords)\n\
-;         ROT3D_SIN/COS_X/Y/Z (i8 rotation factors)\n\
+; Input:  A = val (i8, but |val| must be ≤63 — vertex coords clamped to ±63)\n\
+;         B = angle index (0-127)\n\
+; Output: A = result (i8)\n\
+; Strategy: LSRA trick — val/2 is the row offset (stride=128), bit0 sets B[$80]\n\
+;           D = (|val|/2)*256 + (angle | (val_bit0 * 128)) → correct table offset\n\
+; Destroys: B\n\
+SMUL_LUT:\n\
+    TSTA\n\
+    BPL SMUL_LUT_P      ; A >= 0 ?\n\
+    ; --- negative val branch ---\n\
+    NEGA                ; A = |val|\n\
+    LSRA                ; A = |val|/2,  C = |val| bit0\n\
+    BCC SMUL_LUT_N1\n\
+    ORB #$80            ; set angle bit7 = val_bit0 * 128\n\
+SMUL_LUT_N1:\n\
+    LDX #SMUL_PROD\n\
+    LEAX D,X            ; X = &SMUL_PROD[|val|/2][angle]\n\
+    LDA ,X\n\
+    NEGA                ; table stores positive-val result; negate for negative input\n\
+    RTS\n\
+    ; --- positive val branch ---\n\
+SMUL_LUT_P:\n\
+    LSRA                ; A = val/2,  C = val bit0\n\
+    BCC SMUL_LUT_P1\n\
+    ORB #$80\n\
+SMUL_LUT_P1:\n\
+    LDX #SMUL_PROD\n\
+    LEAX D,X\n\
+    LDA ,X\n\
+    RTS\n\
+\n\
+; ============================================================================\n\
+; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point (LUT version)\n\
+; ============================================================================\n\
+; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords, |val|≤63)\n\
+;         ROT3D_AX/AY/AZ = raw sin angle indices (0-127)\n\
+;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F\n\
 ;         ROT3D_OX, ROT3D_OY (i8 screen offsets)\n\
-; Output: ROT3D_SCR_X, ROT3D_SCR_Y (screen coordinates with offset)\n\
-; Destroys: A, B, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
+; Output: ROT3D_SCR_X, ROT3D_SCR_Y\n\
+; Destroys: A, B, X, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2\n\
 DV3D_ROTATE:\n\
     ; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --\n\
     LDA >ROT3D_RY\n\
     LDB >ROT3D_COS_X\n\
-    JSR SMUL8\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_RZ\n\
-    LDB >ROT3D_SIN_X\n\
-    JSR SMUL8\n\
+    LDB >ROT3D_AX\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP2\n\
     LDA >ROT3D_TEMP\n\
     SUBA >ROT3D_TEMP2\n\
     STA >ROT3D_Y1\n\
 \n\
     LDA >ROT3D_RY\n\
-    LDB >ROT3D_SIN_X\n\
-    JSR SMUL8\n\
+    LDB >ROT3D_AX\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_RZ\n\
     LDB >ROT3D_COS_X\n\
-    JSR SMUL8\n\
+    JSR SMUL_LUT\n\
     ADDA >ROT3D_TEMP\n\
     STA >ROT3D_Z1\n\
 \n\
     ; -- Y-axis rotation: x2 = x*cY + z1*sY --\n\
     LDA >ROT3D_RX\n\
     LDB >ROT3D_COS_Y\n\
-    JSR SMUL8\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_Z1\n\
-    LDB >ROT3D_SIN_Y\n\
-    JSR SMUL8\n\
+    LDB >ROT3D_AY\n\
+    JSR SMUL_LUT\n\
     ADDA >ROT3D_TEMP\n\
     STA >ROT3D_X2\n\
 \n\
     ; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --\n\
     LDA >ROT3D_X2\n\
     LDB >ROT3D_COS_Z\n\
-    JSR SMUL8\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_Y1\n\
-    LDB >ROT3D_SIN_Z\n\
-    JSR SMUL8\n\
+    LDB >ROT3D_AZ\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP2\n\
     LDA >ROT3D_TEMP\n\
     SUBA >ROT3D_TEMP2\n\
@@ -1418,97 +1457,85 @@ DV3D_ROTATE:\n\
     STA >ROT3D_SCR_X\n\
 \n\
     LDA >ROT3D_X2\n\
-    LDB >ROT3D_SIN_Z\n\
-    JSR SMUL8\n\
+    LDB >ROT3D_AZ\n\
+    JSR SMUL_LUT\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_Y1\n\
     LDB >ROT3D_COS_Z\n\
-    JSR SMUL8\n\
+    JSR SMUL_LUT\n\
     ADDA >ROT3D_TEMP\n\
     ADDA >ROT3D_OY\n\
     STA >ROT3D_SCR_Y\n\
     RTS\n\
 \n\
 ; ============================================================================\n\
-; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector from compact data table\n\
+; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector (vertex-dedup + LUT version)\n\
 ; ============================================================================\n\
-; Input:  X = pointer to _NAME_3D_DATA\n\
+; Input:  X = pointer to _NAME_3D_DATA (vertex-indexed format)\n\
 ;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = raw angles (0-127)\n\
 ;         ROT3D_OX, ROT3D_OY = screen offsets\n\
-; Data: FCB path_count; per path: FCB pt_count, closed; FCB x,y,z per point\n\
-; Destroys: A, B, X, all ROT3D_* vars\n\
+; Data format:\n\
+;   FDB vertex_count         ; unique vertex count (high byte skipped)\n\
+;   FCB x,y,z × count        ; vertex table (coords ±63)\n\
+;   FDB path_count           ; path count (high byte skipped)\n\
+;   per path: FCB pt_count, closed, idx0, idx1, ...\n\
+; Destroys: A, B, X, U, all ROT3D_* vars\n\
 DRAW_VECTOR_3D_RUNTIME:\n\
-    ; --- Compute sin/cos for each axis from LUT (tables in this bank) ---\n\
-    PSHS X              ; save data pointer\n\
-    ; angle X\n\
-    LDB >ROT3D_AX\n\
-    ANDB #$7F           ; mask to 0-127\n\
-    CLRA\n\
-    ASLB\n\
-    ROLA                ; D = angle*2 (FDB byte offset)\n\
-    STD >TMPVAL\n\
-    LDX #SIN_TABLE\n\
-    LEAX D,X\n\
-    LDA 1,X             ; low byte of FDB = i8 sin\n\
-    STA >ROT3D_SIN_X\n\
-    LDD >TMPVAL\n\
-    LDX #COS_TABLE\n\
-    LEAX D,X\n\
-    LDA 1,X\n\
+    TFR X,U             ; U = ROM data pointer\n\
+\n\
+    ; --- Compute cos angle offsets: ROT3D_COS_X = (AX+32)&0x7F, etc. ---\n\
+    LDA >ROT3D_AX\n\
+    ADDA #32\n\
+    ANDA #$7F\n\
     STA >ROT3D_COS_X\n\
-    ; angle Y\n\
-    LDB >ROT3D_AY\n\
-    ANDB #$7F\n\
-    CLRA\n\
-    ASLB\n\
-    ROLA\n\
-    STD >TMPVAL\n\
-    LDX #SIN_TABLE\n\
-    LEAX D,X\n\
-    LDA 1,X\n\
-    STA >ROT3D_SIN_Y\n\
-    LDD >TMPVAL\n\
-    LDX #COS_TABLE\n\
-    LEAX D,X\n\
-    LDA 1,X\n\
+    LDA >ROT3D_AY\n\
+    ADDA #32\n\
+    ANDA #$7F\n\
     STA >ROT3D_COS_Y\n\
-    ; angle Z\n\
-    LDB >ROT3D_AZ\n\
-    ANDB #$7F\n\
-    CLRA\n\
-    ASLB\n\
-    ROLA\n\
-    STD >TMPVAL\n\
-    LDX #SIN_TABLE\n\
-    LEAX D,X\n\
-    LDA 1,X\n\
-    STA >ROT3D_SIN_Z\n\
-    LDD >TMPVAL\n\
-    LDX #COS_TABLE\n\
-    LEAX D,X\n\
-    LDA 1,X\n\
+    LDA >ROT3D_AZ\n\
+    ADDA #32\n\
+    ANDA #$7F\n\
     STA >ROT3D_COS_Z\n\
-    PULS X              ; restore data pointer\n\
 \n\
-    ; Save data pointer in U\n\
-    TFR X,U\n\
+    ; --- Phase 1: rotate unique vertices → ROT3D_VBUF ---\n\
+    LDA ,U+             ; skip high byte of FDB vertex_count\n\
+    LDB ,U+             ; B = vertex count\n\
+    STB >ROT3D_PC\n\
+    LDX #ROT3D_VBUF     ; X = write ptr into RAM cache\n\
 \n\
-    ; Keep DP=$C8 (caller default) — BIOS routines need it for $C8xx internal vars.\n\
-    ; All our own RAM accesses use extended (>) addressing so DP value doesn't matter.\n\
+DV3D_VERT_LOOP:\n\
+    TST >ROT3D_PC\n\
+    BEQ DV3D_VERTS_DONE\n\
+    DEC >ROT3D_PC\n\
+    LDA ,U+\n\
+    STA >ROT3D_RX\n\
+    LDA ,U+\n\
+    STA >ROT3D_RY\n\
+    LDA ,U+\n\
+    STA >ROT3D_RZ\n\
+    PSHS X,U            ; save VBUF write ptr and ROM data ptr (DV3D_ROTATE uses X)\n\
+    JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y\n\
+    PULS X,U\n\
+    LDA >ROT3D_SCR_X\n\
+    STA ,X+\n\
+    LDA >ROT3D_SCR_Y\n\
+    STA ,X+\n\
+    BRA DV3D_VERT_LOOP\n\
 \n\
-    ; Set intensity $7F in BIOS shadow so Intensity_a picks it up\n\
+DV3D_VERTS_DONE:\n\
+    ; U now points to FDB path_count in ROM\n\
+\n\
+    ; --- BIOS setup (once for entire draw call) ---\n\
     LDA #$7F\n\
-    STA >$C832          ; Vec_Brightness (extended addr)\n\
-\n\
-    ; Reset integrators ONCE for the entire draw call\n\
-    JSR $F354           ; Reset0Ref — zeros integrators, sets ACR (needs DP=$C8)\n\
+    STA >$C832          ; Vec_Brightness\n\
+    JSR $F354           ; Reset0Ref\n\
     LDA >$C832\n\
     JSR $F2AB           ; Intensity_a\n\
-\n\
-    ; Beam is now at (0,0) after Reset0Ref — init PREV to track it\n\
     CLR >ROT3D_PREV_X\n\
     CLR >ROT3D_PREV_Y\n\
 \n\
+    ; --- Phase 2: draw paths using VBUF lookup ---\n\
+    LDA ,U+             ; skip high byte of FDB path_count\n\
     LDB ,U+             ; B = path count\n\
     STB >ROT3D_PC\n\
 \n\
@@ -1517,41 +1544,35 @@ DV3D_PATH_LOOP:\n\
     LBEQ DV3D_ALL_DONE\n\
     DEC >ROT3D_PC\n\
 \n\
-    LDB ,U+             ; B = point count\n\
-    STB >ROT3D_PT_TOTAL\n\
+    LDB ,U+             ; B = point count for this path\n\
     STB >ROT3D_PT_REM\n\
     LDA ,U+             ; A = closed flag\n\
     STA >ROT3D_CLOSED\n\
 \n\
-    ; --- Load and rotate first point ---\n\
-    TFR U,X\n\
-    LDA ,X+\n\
-    STA >ROT3D_RX\n\
-    LDA ,X+\n\
-    STA >ROT3D_RY\n\
-    LDA ,X+\n\
-    STA >ROT3D_RZ\n\
-    TFR X,U             ; U now past first point\n\
-    JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y\n\
+    ; Look up first vertex from VBUF\n\
+    LDB ,U+             ; B = vertex index\n\
+    ASLB                ; B = index*2 (VBUF stride = 2 bytes: x', y')\n\
+    LDX #ROT3D_VBUF\n\
+    ABX                 ; X = &VBUF[idx*2]\n\
+    LDA ,X\n\
+    STA >ROT3D_FIRST_X\n\
+    LDA 1,X\n\
+    STA >ROT3D_FIRST_Y\n\
 \n\
-    ; Moveto_d is RELATIVE — compute delta from current beam position (PREV)\n\
-    LDA >ROT3D_SCR_Y\n\
-    SUBA >ROT3D_PREV_Y  ; dy = first_Y - beam_Y\n\
+    ; Moveto_d is RELATIVE — delta from current beam position (PREV)\n\
+    LDA >ROT3D_FIRST_Y\n\
+    SUBA >ROT3D_PREV_Y\n\
     STA >ROT3D_TEMP\n\
-    LDA >ROT3D_SCR_X\n\
-    SUBA >ROT3D_PREV_X  ; dx = first_X - beam_X\n\
+    LDA >ROT3D_FIRST_X\n\
+    SUBA >ROT3D_PREV_X\n\
     TFR A,B             ; B = dx\n\
     LDA >ROT3D_TEMP     ; A = dy\n\
-    JSR $F312           ; Moveto_d (relative)\n\
+    JSR $F312           ; Moveto_d\n\
 \n\
-    ; Save first and prev — beam is now at SCR_X/Y\n\
-    LDA >ROT3D_SCR_X\n\
-    STA >ROT3D_FIRST_X\n\
+    LDA >ROT3D_FIRST_X\n\
     STA >ROT3D_PREV_X\n\
-    LDA >ROT3D_SCR_Y\n\
-    STA >ROT3D_FIRST_Y\n\
+    LDA >ROT3D_FIRST_Y\n\
     STA >ROT3D_PREV_Y\n\
-\n\
     DEC >ROT3D_PT_REM\n\
 \n\
 DV3D_SEG_LOOP:\n\
@@ -1559,29 +1580,25 @@ DV3D_SEG_LOOP:\n\
     LBEQ DV3D_CLOSE_CHECK\n\
     DEC >ROT3D_PT_REM\n\
 \n\
-    TFR U,X\n\
-    LDA ,X+\n\
-    STA >ROT3D_RX\n\
-    LDA ,X+\n\
-    STA >ROT3D_RY\n\
-    LDA ,X+\n\
-    STA >ROT3D_RZ\n\
-    TFR X,U\n\
-    JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y\n\
+    LDB ,U+             ; B = vertex index\n\
+    ASLB\n\
+    LDX #ROT3D_VBUF\n\
+    ABX\n\
+    LDA ,X\n\
+    STA >ROT3D_SCR_X\n\
+    LDA 1,X\n\
+    STA >ROT3D_SCR_Y\n\
 \n\
-    ; Compute deltas\n\
     LDA >ROT3D_SCR_Y\n\
     SUBA >ROT3D_PREV_Y\n\
-    STA >ROT3D_TEMP     ; dy\n\
+    STA >ROT3D_TEMP\n\
     LDA >ROT3D_SCR_X\n\
     SUBA >ROT3D_PREV_X\n\
-    STA >ROT3D_TEMP2    ; dx\n\
+    STA >ROT3D_TEMP2\n\
     LDA >ROT3D_SCR_Y\n\
     STA >ROT3D_PREV_Y\n\
     LDA >ROT3D_SCR_X\n\
     STA >ROT3D_PREV_X\n\
-\n\
-    ; Draw segment via BIOS\n\
     LDA >ROT3D_TEMP     ; A = dy\n\
     LDB >ROT3D_TEMP2    ; B = dx\n\
     JSR $F3DF           ; Draw_Line_d\n\
@@ -1591,16 +1608,14 @@ DV3D_CLOSE_CHECK:\n\
     TST >ROT3D_CLOSED\n\
     BEQ DV3D_NEXT_PATH\n\
 \n\
-    ; Draw closing segment to first point\n\
     LDA >ROT3D_FIRST_Y\n\
-    SUBA >ROT3D_PREV_Y  ; A = closing dy\n\
+    SUBA >ROT3D_PREV_Y\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_FIRST_X\n\
-    SUBA >ROT3D_PREV_X  ; A = closing dx\n\
-    TFR A,B             ; B = closing dx\n\
-    LDA >ROT3D_TEMP     ; A = closing dy\n\
-    JSR $F3DF           ; Draw_Line_d\n\
-    ; Beam is now back at first vertex — update PREV so next path Moveto is correct\n\
+    SUBA >ROT3D_PREV_X\n\
+    TFR A,B\n\
+    LDA >ROT3D_TEMP\n\
+    JSR $F3DF\n\
     LDA >ROT3D_FIRST_X\n\
     STA >ROT3D_PREV_X\n\
     LDA >ROT3D_FIRST_Y\n\
@@ -1612,5 +1627,43 @@ DV3D_NEXT_PATH:\n\
 DV3D_ALL_DONE:\n\
     RTS\n\n"
     );
+}
+
+/// Generate SMUL_PROD lookup table: 64 rows × 128 columns = 8192 bytes
+/// SMUL_PROD[val][angle] = (val * sin(angle * 2π/128)) rounded and clamped to i8
+/// val = 0..63 (row), angle = 0..127 (column within each row)
+fn emit_smul_prod_table() -> String {
+    use std::f64::consts::PI;
+    let mut asm = String::new();
+    asm.push_str("; ============================================================================\n");
+    asm.push_str("; SMUL_PROD - Product lookup table for SMUL_LUT\n");
+    asm.push_str("; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)\n");
+    asm.push_str("; val=row (0-63, stride=128), angle=col (0-127)\n");
+    asm.push_str("; For cos: use angle=(ax+32)&0x7F — same table, shifted column\n");
+    asm.push_str("; IMPORTANT: vertex coords must be ≤63 for correct lookup\n");
+    asm.push_str("SMUL_PROD:\n");
+    for val in 0i32..64 {
+        let mut row_bytes = Vec::with_capacity(128);
+        for angle in 0i32..128 {
+            let sin_f = f64::sin(angle as f64 * 2.0 * PI / 128.0);
+            let sin_i8 = (sin_f * 127.0).round() as i32;
+            let raw = val * sin_i8;
+            // Round-toward-nearest with +64 bias, then divide by 128
+            let prod = if raw >= 0 {
+                (raw + 64) / 128
+            } else {
+                -( (raw.abs() + 64) / 128 )
+            };
+            let prod = prod.clamp(-127, 127) as i8;
+            row_bytes.push(prod);
+        }
+        // Emit as one FCB line per row (128 bytes)
+        let bytes_str: Vec<String> = row_bytes.iter()
+            .map(|&b| format!("${:02X}", b as u8))
+            .collect();
+        asm.push_str(&format!("    FCB {}  ; val={}\n", bytes_str.join(","), val));
+    }
+    asm.push_str("\n");
+    asm
 }
 
