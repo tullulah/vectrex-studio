@@ -1469,6 +1469,61 @@ DV3D_ROTATE:\n\
     RTS\n\
 \n\
 ; ============================================================================\n\
+; DV3D_MOVETO - Move beam to absolute (X,Y) using direct VIA (same as DSWM)\n\
+; ============================================================================\n\
+; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx (delta from current beam pos)\n\
+;         DP must be $D0 on entry\n\
+; Destroys: A\n\
+; On exit: PB=1 (ready for draw loop)\n\
+DV3D_MOVETO:\n\
+    LDA >ROT3D_TEMP     ; dy\n\
+    STA VIA_port_a      ; Y to DAC\n\
+    CLR VIA_port_b      ; PB=0: enable mux, beam tracks Y\n\
+    NOP                 ; settling\n\
+    LDA #$CE\n\
+    STA VIA_cntl        ; PCR=$CE: /ZERO high, integrators active\n\
+    CLR VIA_shift_reg   ; SR=0: beam off during move\n\
+    INC VIA_port_b      ; PB=1: lock direction\n\
+    LDA >ROT3D_TEMP2    ; dx\n\
+    STA VIA_port_a      ; X to DAC\n\
+    LDA #$7F\n\
+    STA VIA_t1_cnt_lo   ; T1=$7F — same scale as DSWM\n\
+    CLR VIA_t1_cnt_hi   ; start timer (ramp)\n\
+DV3D_MOVETO_WAIT:\n\
+    LDA VIA_int_flags\n\
+    ANDA #$40\n\
+    BEQ DV3D_MOVETO_WAIT\n\
+    RTS\n\
+\n\
+; ============================================================================\n\
+; DV3D_DRAWLINE - Draw line with delta (dy,dx) using direct VIA (same as DSWM)\n\
+; ============================================================================\n\
+; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx\n\
+;         PB=1 on entry (left by previous moveto or drawline)\n\
+;         DP must be $D0 on entry\n\
+; Destroys: A\n\
+; On exit: PB=1\n\
+DV3D_DRAWLINE:\n\
+    LDA >ROT3D_TEMP     ; dy\n\
+    STA VIA_port_a      ; DY to DAC (PB=1: integrators hold)\n\
+    CLR VIA_port_b      ; PB=0: enable mux, set direction\n\
+    NOP\n\
+    NOP\n\
+    NOP                 ; settling (~same as DSWM)\n\
+    INC VIA_port_b      ; PB=1: lock direction\n\
+    LDA >ROT3D_TEMP2    ; dx\n\
+    STA VIA_port_a      ; DX to DAC\n\
+    LDA #$FF\n\
+    STA VIA_shift_reg   ; SR=$FF: beam ON\n\
+    CLR VIA_t1_cnt_hi   ; start T1 ramp (lo already $7F from moveto — reuse)\n\
+DV3D_DRAWLINE_WAIT:\n\
+    LDA VIA_int_flags\n\
+    ANDA #$40\n\
+    BEQ DV3D_DRAWLINE_WAIT\n\
+    CLR VIA_shift_reg   ; beam OFF\n\
+    RTS\n\
+\n\
+; ============================================================================\n\
 ; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector (vertex-dedup + LUT version)\n\
 ; ============================================================================\n\
 ; Input:  X = pointer to _NAME_3D_DATA (vertex-indexed format)\n\
@@ -1479,6 +1534,7 @@ DV3D_ROTATE:\n\
 ;   FCB x,y,z × count        ; vertex table (coords ±63)\n\
 ;   FDB path_count           ; path count (high byte skipped)\n\
 ;   per path: FCB pt_count, closed, idx0, idx1, ...\n\
+; Uses direct VIA access (DP=$D0 required) — same scale as DRAW_VECTOR/DSWM.\n\
 ; Destroys: A, B, X, U, all ROT3D_* vars\n\
 DRAW_VECTOR_3D_RUNTIME:\n\
     TFR X,U             ; U = ROM data pointer\n\
@@ -1524,15 +1580,38 @@ DV3D_VERT_LOOP:\n\
 \n\
 DV3D_VERTS_DONE:\n\
     ; U now points to FDB path_count in ROM\n\
+    ; Switch to DP=$D0 for direct VIA access (same as DSWM)\n\
+    LDA #$D0\n\
+    TFR A,DP\n\
 \n\
-    ; --- BIOS setup (once for entire draw call) ---\n\
+    ; --- Reset integrators (DSWM-style: PB sequence + PCR) ---\n\
+    CLR VIA_shift_reg\n\
+    LDA #$CC\n\
+    STA VIA_cntl\n\
+    CLR VIA_port_a\n\
+    LDA #$03\n\
+    STA VIA_port_b\n\
+    LDA #$02\n\
+    STA VIA_port_b\n\
+    LDA #$02\n\
+    STA VIA_port_b\n\
+    LDA #$01\n\
+    STA VIA_port_b\n\
+\n\
+    ; Set intensity ($7F) via Port A + Z-axis strobe (DSWM-style)\n\
     LDA #$7F\n\
-    STA >$C832          ; Vec_Brightness\n\
-    JSR $F354           ; Reset0Ref\n\
-    LDA >$C832\n\
-    JSR $F2AB           ; Intensity_a\n\
+    STA VIA_port_a\n\
+    LDA #$04\n\
+    STA VIA_port_b\n\
+    LDA #$01\n\
+    STA VIA_port_b\n\
+\n\
+    ; Beam at (0,0) after reset — PREV tracks beam position\n\
     CLR >ROT3D_PREV_X\n\
     CLR >ROT3D_PREV_Y\n\
+    ; T1 lo pre-loaded — reused by DV3D_DRAWLINE\n\
+    LDA #$7F\n\
+    STA VIA_t1_cnt_lo\n\
 \n\
     ; --- Phase 2: draw paths using VBUF lookup ---\n\
     LDA ,U+             ; skip high byte of FDB path_count\n\
@@ -1559,15 +1638,14 @@ DV3D_PATH_LOOP:\n\
     LDA 1,X\n\
     STA >ROT3D_FIRST_Y\n\
 \n\
-    ; Moveto_d is RELATIVE — delta from current beam position (PREV)\n\
+    ; Moveto: delta from current beam position (PREV)\n\
     LDA >ROT3D_FIRST_Y\n\
     SUBA >ROT3D_PREV_Y\n\
-    STA >ROT3D_TEMP\n\
+    STA >ROT3D_TEMP     ; dy\n\
     LDA >ROT3D_FIRST_X\n\
     SUBA >ROT3D_PREV_X\n\
-    TFR A,B             ; B = dx\n\
-    LDA >ROT3D_TEMP     ; A = dy\n\
-    JSR $F312           ; Moveto_d\n\
+    STA >ROT3D_TEMP2    ; dx\n\
+    JSR DV3D_MOVETO     ; direct VIA move (T1=$7F, same scale as DSWM)\n\
 \n\
     LDA >ROT3D_FIRST_X\n\
     STA >ROT3D_PREV_X\n\
@@ -1591,17 +1669,15 @@ DV3D_SEG_LOOP:\n\
 \n\
     LDA >ROT3D_SCR_Y\n\
     SUBA >ROT3D_PREV_Y\n\
-    STA >ROT3D_TEMP\n\
+    STA >ROT3D_TEMP     ; dy\n\
     LDA >ROT3D_SCR_X\n\
     SUBA >ROT3D_PREV_X\n\
-    STA >ROT3D_TEMP2\n\
+    STA >ROT3D_TEMP2    ; dx\n\
     LDA >ROT3D_SCR_Y\n\
     STA >ROT3D_PREV_Y\n\
     LDA >ROT3D_SCR_X\n\
     STA >ROT3D_PREV_X\n\
-    LDA >ROT3D_TEMP     ; A = dy\n\
-    LDB >ROT3D_TEMP2    ; B = dx\n\
-    JSR $F3DF           ; Draw_Line_d\n\
+    JSR DV3D_DRAWLINE   ; direct VIA draw\n\
     LBRA DV3D_SEG_LOOP\n\
 \n\
 DV3D_CLOSE_CHECK:\n\
@@ -1613,9 +1689,8 @@ DV3D_CLOSE_CHECK:\n\
     STA >ROT3D_TEMP\n\
     LDA >ROT3D_FIRST_X\n\
     SUBA >ROT3D_PREV_X\n\
-    TFR A,B\n\
-    LDA >ROT3D_TEMP\n\
-    JSR $F3DF\n\
+    STA >ROT3D_TEMP2\n\
+    JSR DV3D_DRAWLINE\n\
     LDA >ROT3D_FIRST_X\n\
     STA >ROT3D_PREV_X\n\
     LDA >ROT3D_FIRST_Y\n\
@@ -1625,24 +1700,28 @@ DV3D_NEXT_PATH:\n\
     LBRA DV3D_PATH_LOOP\n\
 \n\
 DV3D_ALL_DONE:\n\
+    ; Restore DP=$C8 for normal RAM access\n\
+    JSR $F1AF\n\
     RTS\n\n"
     );
 }
 
-/// Generate SMUL_PROD lookup table: 128 rows × 128 columns = 16384 bytes
+/// Generate SMUL_PROD lookup table: 64 rows × 128 columns = 8192 bytes
 /// SMUL_PROD[val][angle] = (val * sin(angle * 2π/128)) rounded and clamped to i8
-/// val = 0..127 (row, stride=128), angle = 0..127 (column within each row)
-/// LSRA trick still works: A=val>>1, B=angle|(bit0*0x80) → D=val*128+angle ✓
+/// val = 0..63 (row, stride=128), angle = 0..127 (column within each row)
+/// LSRA trick: A=|val|/2, B=angle|(bit0*0x80) → D=|val|*128+angle ✓
+/// Vertex coords must be clamped to ±63 before use.
 fn emit_smul_prod_table() -> String {
     use std::f64::consts::PI;
     let mut asm = String::new();
     asm.push_str("; ============================================================================\n");
     asm.push_str("; SMUL_PROD - Product lookup table for SMUL_LUT\n");
     asm.push_str("; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)\n");
-    asm.push_str("; val=row (0-127, stride=128), angle=col (0-127) — 16KB total\n");
+    asm.push_str("; val=row (0-63, stride=128), angle=col (0-127) — 8KB total\n");
     asm.push_str("; For cos: use angle=(ax+32)&0x7F — same table, shifted column\n");
+    asm.push_str("; Vertex coords must be ≤63 (clamped at data emit time)\n");
     asm.push_str("SMUL_PROD:\n");
-    for val in 0i32..128 {
+    for val in 0i32..64 {
         let mut row_bytes = Vec::with_capacity(128);
         for angle in 0i32..128 {
             let sin_f = f64::sin(angle as f64 * 2.0 * PI / 128.0);
