@@ -80,3 +80,4 @@ VRelease_2017_04_29/
 # WIP projects (local only, not ready for version control)
 examples/clockmakers_crypt/
 examples/clockmakers_crypt_web/
+hardware/
