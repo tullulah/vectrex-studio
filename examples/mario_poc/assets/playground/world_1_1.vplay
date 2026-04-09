@@ -4,452 +4,666 @@
   "metadata": {
     "name": "world_1_1",
     "author": "",
-    "difficulty": "easy",
+    "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Super Mario POC - World 1-1"
+    "description": "Created in Playground - 2026-03-11"
   },
   "worldBounds": {
-    "xMin": -128,
-    "xMax": 1100,
-    "yMin": -200,
-    "yMax": 200
+    "xMin": -96,
+    "xMax": 1055,
+    "yMin": -384,
+    "yMax": 127
   },
   "layers": {
     "background": [
       {
-        "id": "obj_bg_1",
-        "type": "enemy",
-        "vectorName": "ground_tile",
+        "id": "obj_bg_cloud_1",
+        "type": "decoration",
+        "vectorName": "cloud",
         "layer": "background",
-        "x": -90,
-        "y": -78,
+        "x": 100,
+        "y": 30,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "collidable": false,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
       },
       {
-        "id": "obj_bg_2",
-        "type": "enemy",
-        "vectorName": "ground_tile",
+        "id": "obj_bg_cloud_2",
+        "type": "decoration",
+        "vectorName": "cloud",
         "layer": "background",
-        "x": -30,
-        "y": -78,
+        "x": 350,
+        "y": 45,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "collidable": false,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
       },
       {
-        "id": "obj_bg_3",
-        "type": "enemy",
-        "vectorName": "ground_tile",
+        "id": "obj_bg_cloud_3",
+        "type": "decoration",
+        "vectorName": "cloud",
         "layer": "background",
-        "x": 30,
-        "y": -78,
+        "x": 600,
+        "y": 20,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "collidable": false,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
       },
       {
-        "id": "obj_bg_4",
-        "type": "enemy",
-        "vectorName": "ground_tile",
+        "id": "obj_bg_cloud_4",
+        "type": "decoration",
+        "vectorName": "cloud",
         "layer": "background",
-        "x": 90,
-        "y": -78,
+        "x": 850,
+        "y": 38,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_5",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 150,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_6",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 210,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "collidable": false,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
       },
       {
         "id": "obj_bg_7",
-        "type": "enemy",
+        "type": "tile",
         "vectorName": "ground_tile",
         "layer": "background",
         "x": 270,
         "y": -78,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_8",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 330,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_9",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 390,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_10",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 450,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_11",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 510,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_12",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 570,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_13",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 630,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_14",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 690,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_15",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 750,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_16",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 810,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_17",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 870,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_18",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 930,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_bg_19",
-        "type": "enemy",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 990,
-        "y": -78,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       }
     ],
     "gameplay": [
       {
-        "id": "obj_gp_pipe_1",
+        "id": "obj_bg_mountain_2",
+        "type": "decoration",
+        "vectorName": "mountain",
+        "layer": "gameplay",
+        "x": 570,
+        "y": -50,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_mountain_3",
+        "type": "decoration",
+        "vectorName": "mountain",
+        "layer": "gameplay",
+        "x": 750,
+        "y": -50,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1773216572040",
         "type": "enemy",
+        "vectorName": "mountain",
+        "layer": "gameplay",
+        "x": 270,
+        "y": -50,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": false,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_bg_1",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": -90,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_2",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": -30,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_3",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 30,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_4",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 90,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_5",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 150,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_6",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 210,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_8",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 330,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_9",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 390,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_10",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 450,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_11",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 510,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_12",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 571,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_13",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 630,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_14",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 690,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_15",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 750,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_16",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 810,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_17",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 870,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_18",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 930,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_bg_19",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 990,
+        "y": -78,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_gp_pipe_1",
+        "type": "obstacle",
         "vectorName": "pipe",
         "layer": "gameplay",
         "x": 200,
         "y": -45,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_pipe_2",
-        "type": "enemy",
+        "type": "obstacle",
         "vectorName": "pipe",
         "layer": "gameplay",
         "x": 420,
         "y": -45,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_pipe_3",
-        "type": "enemy",
+        "type": "obstacle",
         "vectorName": "pipe",
         "layer": "gameplay",
         "x": 680,
         "y": -45,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_pipe_4",
-        "type": "enemy",
+        "type": "obstacle",
         "vectorName": "pipe",
         "layer": "gameplay",
         "x": 850,
         "y": -45,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_qblock_1",
-        "type": "enemy",
+        "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
         "x": 130,
         "y": -10,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_qblock_2",
-        "type": "enemy",
+        "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
         "x": 260,
         "y": -10,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_qblock_3",
-        "type": "enemy",
+        "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
         "x": 500,
         "y": -10,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       },
       {
         "id": "obj_gp_qblock_4",
-        "type": "enemy",
+        "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
         "x": 760,
         "y": -10,
         "rotation": 0,
         "scale": 1,
-        "velocity": { "x": 0, "y": 0 },
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "static"
       }
     ],
     "foreground": []
@@ -457,7 +671,7 @@
   "spawnPoints": {
     "player": {
       "x": 0,
-      "y": -70
+      "y": -100
     }
   },
   "hotspots": []

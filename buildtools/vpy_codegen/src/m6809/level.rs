@@ -6,11 +6,12 @@ use vpy_parser::{Expr, Module, Stmt};
 use super::expressions;
 use crate::AssetInfo;
 
-/// Returns true if the module uses LOAD_LEVEL, SHOW_LEVEL, or UPDATE_LEVEL
+/// Returns true if the module uses any level system builtins
 pub fn needs_level_runtime(module: &Module) -> bool {
     fn check_expr(expr: &Expr) -> bool {
         if let Expr::Call(c) = expr {
-            matches!(c.name.as_str(), "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL")
+            matches!(c.name.as_str(),
+                "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "LEVEL_COLLISION_Y")
         } else { false }
     }
     fn check_stmt(stmt: &Stmt) -> bool {
@@ -193,6 +194,36 @@ pub fn emit_set_camera_y(args: &[Expr], out: &mut String, assets: &[crate::Asset
     out.push_str("    STD RESULT\n");
 }
 
+/// Emit LEVEL_COLLISION_Y(player_x, player_y) → highest floor Y at player_x in the GP layer
+///
+/// Scans all collidable GP objects (collision_flags bit 0 set) and returns the top Y
+/// Returns tile_top + player_half_height (the Y where player CENTER should be to stand on the surface).
+/// Only considers surfaces whose top <= player_bottom (player_y - player_half_height).
+/// Returns -128 + player_half_height if no surface found.
+/// Caller usage:
+///   floor_y = LEVEL_COLLISION_Y(player_x, player_y, player_half_height)
+///   if player_y <= floor_y: player_y = floor_y; land()
+pub fn emit_level_collision_y(args: &[Expr], out: &mut String, assets: &[crate::AssetInfo]) {
+    out.push_str("    ; ===== LEVEL_COLLISION_Y builtin =====\n");
+    if args.len() < 3 {
+        out.push_str("    ; ERROR: LEVEL_COLLISION_Y requires 3 arguments (player_x, player_y, player_half_height)\n");
+        out.push_str("    LDD #0\n");
+        out.push_str("    STD RESULT\n");
+        return;
+    }
+    // arg[0]: player_x → LCOL_PX
+    expressions::emit_simple_expr(&args[0], out, assets);
+    out.push_str("    STD >LCOL_PX         ; store player world_x (16-bit)\n");
+    // arg[2]: player_half_height → LCOL_PHH (evaluate first so B is available for subtraction)
+    expressions::emit_simple_expr(&args[2], out, assets);
+    out.push_str("    STB >LCOL_PHH        ; store player half_height\n");
+    // arg[1]: player_y lo-byte minus player_hh → LCOL_PY (player's feet)
+    expressions::emit_simple_expr(&args[1], out, assets);
+    out.push_str("    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom\n");
+    out.push_str("    STB >LCOL_PY         ; store player feet Y for surface filter\n");
+    out.push_str("    JSR LEVEL_COLLISION_Y_RUNTIME\n");
+}
+
 /// Emit runtime helpers for level system.
 /// Only emits helpers that are actually used in the code (tree shaking).
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
@@ -247,7 +278,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; Clear GP buffer with $FF marker (empty sentinel)\n");
         out.push_str("    LDA #$FF\n");
         out.push_str("    LDU #LEVEL_GP_BUFFER\n");
-        out.push_str("    LDB #8           ; Max 8 objects\n");
+        out.push_str("    LDB #32          ; Max 32 objects\n");
         out.push_str("LLR_CLR_GP_LOOP:\n");
         out.push_str("    STA ,U           ; Write $FF to first byte of object slot\n");
         out.push_str("    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)\n");
@@ -280,11 +311,11 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str(";   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),\n");
         out.push_str(";   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,\n");
         out.push_str(";   +11: physics_flags, +12: collision_flags, +13: collision_size,\n");
-        out.push_str(";   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved\n");
+        out.push_str(";   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height\n");
         out.push_str("; RAM object layout (15 bytes):\n");
         out.push_str(";   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,\n");
         out.push_str(";   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,\n");
-        out.push_str(";   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved\n");
+        out.push_str(";   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height\n");
         out.push_str("; Clobbers: A, B, X, U\n");
         out.push_str("LLR_COPY_OBJECTS:\n");
         out.push_str("LLR_COPY_LOOP:\n");
@@ -1257,6 +1288,99 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("UGFC_EXIT:\n");
         out.push_str("    RTS\n");
+        out.push_str("\n");
+    }
+
+    // =========================================================================
+    // LEVEL_COLLISION_Y_RUNTIME
+    // =========================================================================
+    if needed.contains("LEVEL_COLLISION_Y_RUNTIME") {
+        out.push_str("; === LEVEL_COLLISION_Y_RUNTIME ===\n");
+        out.push_str("; Find the highest collidable floor Y at player_x in the GP layer.\n");
+        out.push_str("; Input:  LCOL_PX (16-bit) = player world_x\n");
+        out.push_str(";         LCOL_PY (i8) = player_y lo-byte; surfaces above this are ignored\n");
+        out.push_str("; Output: RESULT = highest floor surface_top (i16, sign-extended from i8)\n");
+        out.push_str(";         Returns $FF80 (-128) if no collidable surface found at that X.\n");
+        out.push_str("; Algorithm: for each collidable GP object, check X AABB overlap,\n");
+        out.push_str(";   compute surface_top = obj_y + half_height (both i8), track max.\n");
+        out.push_str("; RAM object offsets used: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,\n");
+        out.push_str(";   +13=half_width, +14=half_height\n");
+        out.push_str("LEVEL_COLLISION_Y_RUNTIME:\n");
+        out.push_str("    PSHS X,Y,U       ; Save regs (NOT D - result returns in D)\n");
+        out.push_str("    \n");
+        out.push_str("    ; Initialize best_floor = -128 (no floor found)\n");
+        out.push_str("    LDA #$80         ; -128 as unsigned byte\n");
+        out.push_str("    STA >LCOL_BEST_Y\n");
+        out.push_str("    \n");
+        out.push_str("    ; Check level loaded\n");
+        out.push_str("    TST >LEVEL_LOADED\n");
+        out.push_str("    BEQ LCOL_Y_DONE\n");
+        out.push_str("    \n");
+        out.push_str("    LDB >LEVEL_GP_COUNT\n");
+        out.push_str("    BEQ LCOL_Y_DONE\n");
+        out.push_str("    LDX >LEVEL_GP_PTR  ; X = GP buffer\n");
+        out.push_str("    \n");
+        out.push_str("LCOL_Y_LOOP:\n");
+        out.push_str("    TSTB\n");
+        out.push_str("    BEQ LCOL_Y_DONE\n");
+        out.push_str("    PSHS B           ; save count\n");
+        out.push_str("    \n");
+        out.push_str("    ; --- Check collision flag (bit 0 at RAM+8) ---\n");
+        out.push_str("    LDA 8,X\n");
+        out.push_str("    BITA #$01\n");
+        out.push_str("    BEQ LCOL_Y_NEXT  ; not collidable\n");
+        out.push_str("    \n");
+        out.push_str("    ; --- X AABB overlap: obj_x - hw <= player_x <= obj_x + hw ---\n");
+        out.push_str("    ; Compute left_edge = obj_x - 0:hw (16-bit)\n");
+        out.push_str("    LDA 0,X          ; obj_x high byte\n");
+        out.push_str("    LDB 1,X          ; obj_x low byte\n");
+        out.push_str("    SUBB 13,X        ; B = obj_x_lo - half_width\n");
+        out.push_str("    SBCA #0          ; A = obj_x_hi - borrow\n");
+        out.push_str("    STD >TMPVAL      ; TMPVAL = left_edge\n");
+        out.push_str("    \n");
+        out.push_str("    ; Compare player_x >= left_edge (signed 16-bit)\n");
+        out.push_str("    LDD >LCOL_PX\n");
+        out.push_str("    CMPD >TMPVAL\n");
+        out.push_str("    LBLT LCOL_Y_NEXT ; player_x < left_edge → no overlap\n");
+        out.push_str("    \n");
+        out.push_str("    ; Compute right_edge = obj_x + 0:hw (16-bit)\n");
+        out.push_str("    LDA 0,X\n");
+        out.push_str("    LDB 1,X\n");
+        out.push_str("    ADDB 13,X        ; B = obj_x_lo + half_width\n");
+        out.push_str("    ADCA #0          ; A = obj_x_hi + carry\n");
+        out.push_str("    STD >TMPVAL      ; TMPVAL = right_edge\n");
+        out.push_str("    \n");
+        out.push_str("    ; Compare player_x <= right_edge (signed 16-bit)\n");
+        out.push_str("    LDD >LCOL_PX\n");
+        out.push_str("    CMPD >TMPVAL\n");
+        out.push_str("    LBGT LCOL_Y_NEXT ; player_x > right_edge → no overlap\n");
+        out.push_str("    \n");
+        out.push_str("    ; --- X overlaps — compute surface_top = obj_y + tile_half_height ---\n");
+        out.push_str("    LDA 2,X          ; A = obj_y (signed byte)\n");
+        out.push_str("    ADDA 14,X        ; A = tile surface_top = obj_y + tile_half_height\n");
+        out.push_str("    ; Filter: skip surfaces above the player's feet (surface_top > player_bottom)\n");
+        out.push_str("    CMPA >LCOL_PY    ; signed compare surface_top to player_bottom\n");
+        out.push_str("    BGT LCOL_Y_NEXT  ; surface_top > player_bottom → above player → skip\n");
+        out.push_str("    ; Compute landing Y = surface_top + player_half_height\n");
+        out.push_str("    ADDA >LCOL_PHH   ; A = tile_top + player_hh = where player center lands\n");
+        out.push_str("    ; Update best_floor if this landing Y > current best\n");
+        out.push_str("    CMPA >LCOL_BEST_Y\n");
+        out.push_str("    BLE LCOL_Y_NEXT  ; not better\n");
+        out.push_str("    STA >LCOL_BEST_Y ; new best landing Y\n");
+        out.push_str("    \n");
+        out.push_str("LCOL_Y_NEXT:\n");
+        out.push_str("    LEAX 15,X        ; next object (stride 15)\n");
+        out.push_str("    PULS B\n");
+        out.push_str("    DECB\n");
+        out.push_str("    BRA LCOL_Y_LOOP\n");
+        out.push_str("    \n");
+        out.push_str("LCOL_Y_DONE:\n");
+        out.push_str("    ; Sign-extend best_floor (i8) → RESULT (i16)\n");
+        out.push_str("    LDB >LCOL_BEST_Y\n");
+        out.push_str("    SEX              ; D = sign_extend(B)\n");
+        out.push_str("    STD RESULT\n");
+        out.push_str("    \n");
+        out.push_str("    PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)\n");
         out.push_str("\n");
     }
 }

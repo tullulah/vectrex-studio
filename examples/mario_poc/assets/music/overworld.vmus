@@ -4,202 +4,190 @@
   "author": "Vectrex Studio",
   "tempo": 200,
   "ticksPerBeat": 48,
-  "totalTicks": 1044,
+  "totalTicks": 1728,
   "notes": [
-    {
-      "id": "n1",
-      "note": 76,
-      "start": 0,
-      "duration": 12,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n2",
-      "note": 76,
-      "start": 24,
-      "duration": 12,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n3",
-      "note": 76,
-      "start": 48,
-      "duration": 12,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n4",
-      "note": 72,
-      "start": 60,
-      "duration": 12,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n5",
-      "note": 76,
-      "start": 72,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n6",
-      "note": 79,
-      "start": 96,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n7",
-      "note": 67,
-      "start": 192,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n8",
-      "note": 72,
-      "start": 288,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n9",
-      "note": 67,
-      "start": 384,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n10",
-      "note": 64,
-      "start": 480,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n11",
-      "note": 69,
-      "start": 552,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n12",
-      "note": 71,
-      "start": 576,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n13",
-      "note": 70,
-      "start": 600,
-      "duration": 12,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n14",
-      "note": 69,
-      "start": 612,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n15",
-      "note": 67,
-      "start": 636,
-      "duration": 36,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n16",
-      "note": 76,
-      "start": 672,
-      "duration": 36,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n17",
-      "note": 79,
-      "start": 708,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n18",
-      "note": 81,
-      "start": 732,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n19",
-      "note": 77,
-      "start": 804,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n20",
-      "note": 79,
-      "start": 828,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n21",
-      "note": 76,
-      "start": 876,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n22",
-      "note": 72,
-      "start": 948,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n23",
-      "note": 74,
-      "start": 972,
-      "duration": 24,
-      "velocity": 12,
-      "channel": 0
-    },
-    {
-      "id": "n24",
-      "note": 71,
-      "start": 996,
-      "duration": 48,
-      "velocity": 12,
-      "channel": 0
-    }
+    // ── Channel 0: Melody (velocity 15) ─────────────────────────────
+    // Pass 1 – Intro
+    {"id": "n1",  "note": 76, "start": 0,    "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n2",  "note": 76, "start": 24,   "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n3",  "note": 76, "start": 48,   "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n4",  "note": 72, "start": 60,   "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n5",  "note": 76, "start": 72,   "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n6",  "note": 79, "start": 96,   "duration": 46, "velocity": 15, "channel": 0},
+    {"id": "n7",  "note": 67, "start": 192,  "duration": 46, "velocity": 15, "channel": 0},
+    // Pass 1 – B section
+    {"id": "n8",  "note": 72, "start": 288,  "duration": 46, "velocity": 15, "channel": 0},
+    {"id": "n9",  "note": 67, "start": 360,  "duration": 46, "velocity": 15, "channel": 0},
+    {"id": "n10", "note": 64, "start": 432,  "duration": 70, "velocity": 15, "channel": 0},
+    {"id": "n11", "note": 69, "start": 504,  "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n12", "note": 71, "start": 528,  "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n13", "note": 70, "start": 552,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n14", "note": 69, "start": 564,  "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n15", "note": 67, "start": 588,  "duration": 35, "velocity": 15, "channel": 0},
+    {"id": "n16", "note": 76, "start": 624,  "duration": 35, "velocity": 15, "channel": 0},
+    {"id": "n17", "note": 79, "start": 660,  "duration": 35, "velocity": 15, "channel": 0},
+    {"id": "n18", "note": 81, "start": 696,  "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n19", "note": 77, "start": 720,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n20", "note": 79, "start": 732,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n21", "note": 76, "start": 744,  "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n22", "note": 72, "start": 768,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n23", "note": 74, "start": 780,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n24", "note": 71, "start": 792,  "duration": 46, "velocity": 15, "channel": 0},
+    // Pass 2 – Intro
+    {"id": "n25", "note": 76, "start": 864,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n26", "note": 76, "start": 888,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n27", "note": 76, "start": 912,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n28", "note": 72, "start": 924,  "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n29", "note": 76, "start": 936,  "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n30", "note": 79, "start": 960,  "duration": 46, "velocity": 15, "channel": 0},
+    {"id": "n31", "note": 67, "start": 1056, "duration": 46, "velocity": 15, "channel": 0},
+    // Pass 2 – B section
+    {"id": "n32", "note": 72, "start": 1152, "duration": 46, "velocity": 15, "channel": 0},
+    {"id": "n33", "note": 67, "start": 1224, "duration": 46, "velocity": 15, "channel": 0},
+    {"id": "n34", "note": 64, "start": 1296, "duration": 70, "velocity": 15, "channel": 0},
+    {"id": "n35", "note": 69, "start": 1368, "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n36", "note": 71, "start": 1392, "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n37", "note": 70, "start": 1416, "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n38", "note": 69, "start": 1428, "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n39", "note": 67, "start": 1452, "duration": 35, "velocity": 15, "channel": 0},
+    {"id": "n40", "note": 76, "start": 1488, "duration": 35, "velocity": 15, "channel": 0},
+    {"id": "n41", "note": 79, "start": 1524, "duration": 35, "velocity": 15, "channel": 0},
+    {"id": "n42", "note": 81, "start": 1560, "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n43", "note": 77, "start": 1584, "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n44", "note": 79, "start": 1596, "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n45", "note": 76, "start": 1608, "duration": 23, "velocity": 15, "channel": 0},
+    {"id": "n46", "note": 72, "start": 1632, "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n47", "note": 74, "start": 1644, "duration": 11, "velocity": 15, "channel": 0},
+    {"id": "n48", "note": 71, "start": 1656, "duration": 46, "velocity": 15, "channel": 0},
+
+    // ── Channel 1: Bass (velocity 10, only on key chord changes) ─────
+    // Bajo en C3/G3/A3/F3 — una nota por acorde, duración larga
+    // Pass 1 – Intro: empieza en el G5 (silencio durante los staccatos)
+    {"id": "b1",  "note": 55, "start": 96,   "duration": 96,  "velocity": 10, "channel": 1},
+    {"id": "b2",  "note": 55, "start": 192,  "duration": 96,  "velocity": 10, "channel": 1},
+    // Pass 1 – B section:
+    {"id": "b3",  "note": 48, "start": 288,  "duration": 72,  "velocity": 10, "channel": 1},
+    {"id": "b4",  "note": 55, "start": 360,  "duration": 144, "velocity": 10, "channel": 1},
+    {"id": "b5",  "note": 57, "start": 504,  "duration": 84,  "velocity": 10, "channel": 1},
+    {"id": "b6",  "note": 55, "start": 588,  "duration": 108, "velocity": 10, "channel": 1},
+    {"id": "b7",  "note": 53, "start": 696,  "duration": 48,  "velocity": 10, "channel": 1},
+    {"id": "b8",  "note": 48, "start": 744,  "duration": 96,  "velocity": 10, "channel": 1},
+    // Pass 2 – Intro
+    {"id": "b9",  "note": 55, "start": 960,  "duration": 96,  "velocity": 10, "channel": 1},
+    {"id": "b10", "note": 55, "start": 1056, "duration": 96,  "velocity": 10, "channel": 1},
+    // Pass 2 – B section
+    {"id": "b11", "note": 48, "start": 1152, "duration": 72,  "velocity": 10, "channel": 1},
+    {"id": "b12", "note": 55, "start": 1224, "duration": 144, "velocity": 10, "channel": 1},
+    {"id": "b13", "note": 57, "start": 1368, "duration": 84,  "velocity": 10, "channel": 1},
+    {"id": "b14", "note": 55, "start": 1452, "duration": 108, "velocity": 10, "channel": 1},
+    {"id": "b15", "note": 53, "start": 1560, "duration": 48,  "velocity": 10, "channel": 1},
+    {"id": "b16", "note": 48, "start": 1608, "duration": 96,  "velocity": 10, "channel": 1},
+
+    // ── Channel 2: Arpegio (velocity 7, muy suave) ───────────────────
+    // Solo durante el B section, arpegios rápidos de 16th (12 ticks) sobre el acorde
+    // Pass 1 B: arpegia C-E-G sobre C major (t=288), G-B-D sobre G major (t=360), etc.
+    // C major arpeggio: C4(60) E4(64) G4(67)
+    {"id": "a1",  "note": 60, "start": 288,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a2",  "note": 64, "start": 300,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a3",  "note": 67, "start": 312,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a4",  "note": 60, "start": 324,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a5",  "note": 64, "start": 336,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a6",  "note": 67, "start": 348,  "duration": 11, "velocity": 7, "channel": 2},
+    // G major arpeggio: G3(55) B3(59) D4(62) — duración 144 ticks = 12 repeticiones
+    {"id": "a7",  "note": 55, "start": 360,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a8",  "note": 59, "start": 372,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a9",  "note": 62, "start": 384,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a10", "note": 55, "start": 396,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a11", "note": 59, "start": 408,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a12", "note": 62, "start": 420,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a13", "note": 55, "start": 432,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a14", "note": 59, "start": 444,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a15", "note": 62, "start": 456,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a16", "note": 55, "start": 468,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a17", "note": 59, "start": 480,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a18", "note": 62, "start": 492,  "duration": 11, "velocity": 7, "channel": 2},
+    // A minor arpeggio: A3(57) C4(60) E4(64)
+    {"id": "a19", "note": 57, "start": 504,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a20", "note": 60, "start": 516,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a21", "note": 64, "start": 528,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a22", "note": 57, "start": 540,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a23", "note": 60, "start": 552,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a24", "note": 64, "start": 564,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a25", "note": 57, "start": 576,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a26", "note": 60, "start": 588,  "duration": 11, "velocity": 7, "channel": 2},
+    // G major arpeggio through triplet run: G3(55) D4(62) G4(67)
+    {"id": "a27", "note": 55, "start": 600,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a28", "note": 62, "start": 612,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a29", "note": 67, "start": 624,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a30", "note": 55, "start": 636,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a31", "note": 62, "start": 648,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a32", "note": 67, "start": 660,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a33", "note": 55, "start": 672,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a34", "note": 62, "start": 684,  "duration": 11, "velocity": 7, "channel": 2},
+    // C major arpeggio for final phrase: C4(60) E4(64) G4(67)
+    {"id": "a35", "note": 60, "start": 696,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a36", "note": 64, "start": 708,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a37", "note": 67, "start": 720,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a38", "note": 60, "start": 732,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a39", "note": 64, "start": 744,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a40", "note": 67, "start": 756,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a41", "note": 60, "start": 768,  "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a42", "note": 64, "start": 780,  "duration": 11, "velocity": 7, "channel": 2},
+    // Pass 2 B: same arpeggios offset +864
+    {"id": "a43", "note": 60, "start": 1152, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a44", "note": 64, "start": 1164, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a45", "note": 67, "start": 1176, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a46", "note": 60, "start": 1188, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a47", "note": 64, "start": 1200, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a48", "note": 67, "start": 1212, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a49", "note": 55, "start": 1224, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a50", "note": 59, "start": 1236, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a51", "note": 62, "start": 1248, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a52", "note": 55, "start": 1260, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a53", "note": 59, "start": 1272, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a54", "note": 62, "start": 1284, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a55", "note": 55, "start": 1296, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a56", "note": 59, "start": 1308, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a57", "note": 62, "start": 1320, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a58", "note": 55, "start": 1332, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a59", "note": 59, "start": 1344, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a60", "note": 62, "start": 1356, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a61", "note": 57, "start": 1368, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a62", "note": 60, "start": 1380, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a63", "note": 64, "start": 1392, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a64", "note": 57, "start": 1404, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a65", "note": 60, "start": 1416, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a66", "note": 64, "start": 1428, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a67", "note": 57, "start": 1440, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a68", "note": 60, "start": 1452, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a69", "note": 55, "start": 1464, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a70", "note": 62, "start": 1476, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a71", "note": 67, "start": 1488, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a72", "note": 55, "start": 1500, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a73", "note": 62, "start": 1512, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a74", "note": 67, "start": 1524, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a75", "note": 55, "start": 1536, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a76", "note": 62, "start": 1548, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a77", "note": 60, "start": 1560, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a78", "note": 64, "start": 1572, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a79", "note": 67, "start": 1584, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a80", "note": 60, "start": 1596, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a81", "note": 64, "start": 1608, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a82", "note": 67, "start": 1620, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a83", "note": 60, "start": 1632, "duration": 11, "velocity": 7, "channel": 2},
+    {"id": "a84", "note": 64, "start": 1644, "duration": 11, "velocity": 7, "channel": 2}
   ],
-  "noise": [],
+  "noise": [
+    {"id": "k1", "start": 0,    "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k2", "start": 192,  "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k3", "start": 384,  "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k4", "start": 576,  "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k5", "start": 768,  "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k6", "start": 864,  "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k7", "start": 1056, "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k8", "start": 1248, "duration": 8,  "period": 15, "channels": 1, "velocity": 6},
+    {"id": "k9", "start": 1440, "duration": 8,  "period": 15, "channels": 1, "velocity": 6}
+  ],
   "loopStart": 0,
-  "loopEnd": 1044
+  "loopEnd": 1728
 }

@@ -1,0 +1,17 @@
+[project]
+name = "3d_test"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/3d_test.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+music = ["assets/music/*.vmus"]
+sfx = ["assets/sfx/*.vsfx"]
+vectors = ["assets/vectors/*.vec"]

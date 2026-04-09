@@ -2,26 +2,26 @@
   "version": "1.0",
   "name": "jump",
   "category": "jump",
-  "duration_ms": 200,
+  "duration_ms": 250,
 
   "oscillator": {
-    "frequency": 659,
+    "frequency": 440,
     "channel": 0,
     "duty": 50
   },
 
   "envelope": {
     "attack": 0,
-    "decay": 0,
+    "decay": 220,
     "sustain": 0,
-    "release": 180,
+    "release": 30,
     "peak": 15
   },
 
   "pitch": {
     "enabled": true,
-    "start_mult": 0.5,
-    "end_mult": 1.0,
+    "start_mult": 0.75,
+    "end_mult": 2.0,
     "curve": 2
   },
 
