@@ -11,6 +11,8 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useEditorStore } from '../state/editorStore.js';
+import DxfParser from 'dxf-parser';
+import type { IEntity } from 'dxf-parser';
 
 // Types from the .vec format
 interface Point {
@@ -540,8 +542,12 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dxfInputRef = useRef<HTMLInputElement>(null);
+  const objInputRef = useRef<HTMLInputElement>(null);
   const mousePenPosRef = useRef<{ x: number; y: number } | null>(null);
   const circlePreviewRef = useRef<{ center: { x: number; y: number }; radius: number; tool: string } | null>(null);
+  // Nearest vertex to the current mouse position (for hover highlight & pen snapping)
+  const hoveredVertexRef = useRef<{ point: Point; canvasX: number; canvasY: number } | null>(null);
 
   // Dynamic canvas size — updated by ResizeObserver; all coordinate logic reads these
   const [width, setWidth] = useState(propWidth);
@@ -615,6 +621,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [currentPathIndex, setCurrentPathIndex] = useState(-1);
   const [selectedPointIndex, setSelectedPointIndex] = useState(-1);
   const [selectedPoints, setSelectedPoints] = useState<Set<string>>(new Set()); // "pathIdx-pointIdx" format
+  // Tree panel selection: "layerIdx-pathIdx" key, or null
+  const [selectedTreePathKey, setSelectedTreePathKey] = useState<string | null>(null);
+  // Which paths are expanded in the tree to show individual points: "layerIdx-pathIdx" keys
+  const [expandedTreePaths, setExpandedTreePaths] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewMode, setViewMode] = useState<ViewMode>('xy');
@@ -633,6 +643,17 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // Undo/Redo history
   const [history, setHistory] = useState<VecResource[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // 3D import dialog state (shared by DXF and OBJ)
+  interface RawPath { pts: Point[]; closed: boolean }
+  interface ImportDialogState {
+    source: 'DXF' | 'OBJ';
+    rawPaths: RawPath[];
+    bbox: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
+    referencePlane: 'xy' | 'xz' | 'yz' | 'manual';
+    manualScale: number;
+  }
+  const [dxfImport, setDxfImport] = useState<ImportDialogState | null>(null);
   
   // Track if we're the source of changes to avoid loops
   const isInternalChange = useRef(false);
@@ -919,31 +940,31 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   }, [width, height, resource.canvas.width, pan, zoom, viewMode]);
 
   // Project 3D point to 2D based on current view
-  const project3DTo2D = useCallback((point: Point): { x: number; y: number } => {
+  const project3DTo2D = useCallback((point: Point): { x: number; y: number; z: number } => {
     const x = point.x || 0;
     const y = point.y || 0;
     const z = point.z || 0;
     
     if (viewMode === 'xy') {
-      return { x, y };
+      return { x, y, z: 0 };
     } else if (viewMode === 'xz') {
-      return { x, y: z };
+      return { x, y: z, z: 0 };
     } else if (viewMode === 'yz') {
-      return { x: y, y: z };
+      return { x: y, y: z, z: 0 };
     } else { // 3D perspective
       const pitch = (rotation3D.pitch * Math.PI) / 180;
       const yaw = (rotation3D.yaw * Math.PI) / 180;
-      
+
       // Rotate around Y axis (yaw)
       const x1 = x * Math.cos(yaw) - z * Math.sin(yaw);
       const z1 = x * Math.sin(yaw) + z * Math.cos(yaw);
-      
+
       // Rotate around X axis (pitch)
       const y2 = y * Math.cos(pitch) - z1 * Math.sin(pitch);
       const z2 = y * Math.sin(pitch) + z1 * Math.cos(pitch);
-      
-      // Simple orthographic projection (ignore z2 for depth)
-      return { x: x1, y: y2 };
+
+      // Orthographic projection — z2 is depth (smaller = closer to viewer)
+      return { x: x1, y: y2, z: z2 };
     }
   }, [viewMode, rotation3D]);
   
@@ -960,6 +981,49 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       y: centerY - projected.y * scale * zoom + pan.y,
     };
   }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D]);
+
+  // Like resourceToCanvas but also returns z depth (for 3D hit-testing)
+  const resourceToCanvasWithDepth = useCallback((point: Point): { x: number; y: number; z: number } => {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const scale = Math.min(width, height) / resource.canvas.width;
+    const projected = project3DTo2D(point);
+    return {
+      x: centerX + projected.x * scale * zoom + pan.x,
+      y: centerY - projected.y * scale * zoom + pan.y,
+      z: projected.z,
+    };
+  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D]);
+
+  // Find the nearest vertex (across all layers) within snapRadius canvas pixels.
+  // Returns the 3D resource point and its projected canvas position, or null.
+  const findNearestVertex = useCallback((canvasX: number, canvasY: number, snapRadius = 14): { point: Point; canvasX: number; canvasY: number } | null => {
+    let best: { point: Point; canvasX: number; canvasY: number } | null = null;
+    let bestDist = snapRadius;
+    let bestZ = Infinity;
+
+    for (const layer of resource.layers) {
+      if (!layer || !layer.visible || !Array.isArray(layer.paths)) continue;
+      for (const path of layer.paths) {
+        if (!path || !Array.isArray(path.points)) continue;
+        for (const pt of path.points) {
+          if (!pt) continue;
+          const c = resourceToCanvasWithDepth(pt);
+          const dist = Math.sqrt((c.x - canvasX) ** 2 + (c.y - canvasY) ** 2);
+          if (dist < snapRadius) {
+            const betterDist = dist < bestDist - 0.5;
+            const sameDist = Math.abs(dist - bestDist) <= 0.5;
+            if (betterDist || (sameDist && c.z < bestZ)) {
+              bestDist = dist;
+              bestZ = c.z;
+              best = { point: pt, canvasX: c.x, canvasY: c.y };
+            }
+          }
+        }
+      }
+    }
+    return best;
+  }, [resource, resourceToCanvasWithDepth]);
 
   // Helper function to calculate distance from point to line segment
   const pointToLineDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number): number => {
@@ -993,15 +1057,33 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     if (backgroundImage && showBackground) {
       ctx.save();
       ctx.globalAlpha = backgroundOpacity;
-      
-      // Stretch image to fill 100% of the canvas area, centered so zoom scales from center
-      const drawWidth = width * zoom;
-      const drawHeight = height * zoom;
-      const drawX = (width - drawWidth) / 2 + pan.x + backgroundOffset.x;
-      const drawY = (height - drawHeight) / 2 + pan.y + backgroundOffset.y;
-      
+
+      // Fit image inside the Vectrex screen rect (3:4 portrait, object-fit: contain)
+      const screenL = resourceToCanvas({ x: -96, y: 0 });
+      const screenR = resourceToCanvas({ x: 95, y: 0 });
+      const screenT = resourceToCanvas({ x: 0, y: 127 });
+      const screenB = resourceToCanvas({ x: 0, y: -128 });
+      const rectX = screenL.x + backgroundOffset.x;
+      const rectY = screenT.y + backgroundOffset.y;
+      const rectW = screenR.x - screenL.x;
+      const rectH = screenB.y - screenT.y;
+
+      // Scale image to fit inside rect while preserving aspect ratio
+      const imgAspect = backgroundImage.naturalWidth / backgroundImage.naturalHeight;
+      const rectAspect = rectW / rectH;
+      let drawWidth: number, drawHeight: number;
+      if (imgAspect > rectAspect) {
+        drawWidth = rectW;
+        drawHeight = rectW / imgAspect;
+      } else {
+        drawHeight = rectH;
+        drawWidth = rectH * imgAspect;
+      }
+      const drawX = rectX + (rectW - drawWidth) / 2;
+      const drawY = rectY + (rectH - drawHeight) / 2;
+
       ctx.drawImage(backgroundImage, drawX, drawY, drawWidth, drawHeight);
-      
+
       // Draw selection highlight if background is selected
       if (isBackgroundSelected) {
         ctx.strokeStyle = '#00ff00';
@@ -1010,7 +1092,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.strokeRect(drawX, drawY, drawWidth, drawHeight);
         ctx.setLineDash([]);
       }
-      
+
       ctx.restore();
     }
 
@@ -1065,11 +1147,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]); // Dashed line
       
-      // Screen boundaries: X: -127 to 126, Y: -120 to 120
-      const screenLeft = resourceToCanvas({ x: -127, y: 0 });
-      const screenRight = resourceToCanvas({ x: 126, y: 0 });
-      const screenTop = resourceToCanvas({ x: 0, y: 120 });
-      const screenBottom = resourceToCanvas({ x: 0, y: -120 });
+      // Vectrex screen: 3:4 portrait — X: -96 to +95 (192 units), Y: -128 to +127 (256 units)
+      const screenLeft = resourceToCanvas({ x: -96, y: 0 });
+      const screenRight = resourceToCanvas({ x: 95, y: 0 });
+      const screenTop = resourceToCanvas({ x: 0, y: 127 });
+      const screenBottom = resourceToCanvas({ x: 0, y: -128 });
       
       ctx.beginPath();
       ctx.rect(
@@ -1117,6 +1199,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           ctx.closePath();
         }
         ctx.stroke();
+
+        // Tree-panel selection highlight: cyan stroke override
+        const treeKey = `${layerIdx}-${pathIdx}`;
+        const isTreeSelected = selectedTreePathKey === treeKey;
+        if (isTreeSelected) {
+          ctx.strokeStyle = '#00ffff';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          const sp = path.points[0];
+          if (sp) {
+            const sc = resourceToCanvas(sp);
+            ctx.moveTo(sc.x, sc.y);
+            for (let i = 1; i < path.points.length; i++) {
+              const pp = path.points[i];
+              if (!pp) continue;
+              const pc = resourceToCanvas(pp);
+              ctx.lineTo(pc.x, pc.y);
+            }
+            if (path.closed) ctx.closePath();
+          }
+          ctx.stroke();
+        }
 
         if (layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
           ctx.fillStyle = '#ffff00';
@@ -1332,7 +1436,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode]);
+
+    // Draw hovered vertex highlight (cyan ring — always on top)
+    const hv = hoveredVertexRef.current;
+    if (hv) {
+      ctx.save();
+      ctx.strokeStyle = '#00ffff';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(hv.canvasX, hv.canvasY, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey]);
 
   useEffect(() => {
     draw();
@@ -1360,6 +1477,284 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     reader.readAsDataURL(file);
   };
   
+  // DXF: approximate arc/circle as polygon points (shared helper)
+  const dxfArcPoints = (cx: number, cy: number, cz: number, r: number, startDeg: number, endDeg: number, steps = 24): Point[] => {
+    const pts: Point[] = [];
+    let a0 = (startDeg * Math.PI) / 180;
+    let a1 = (endDeg * Math.PI) / 180;
+    if (a1 <= a0) a1 += 2 * Math.PI;
+    for (let i = 0; i <= steps; i++) {
+      const a = a0 + (a1 - a0) * (i / steps);
+      pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), z: cz });
+    }
+    return pts;
+  };
+
+  // Phase 1: parse DXF file and open the import dialog
+  const handleDxfImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        const parser = new DxfParser();
+        const dxf = parser.parseSync(text);
+        if (!dxf || !dxf.entities) { alert('Could not parse DXF file.'); return; }
+
+        const rawPaths: RawPath[] = [];
+        for (const entity of dxf.entities as IEntity[]) {
+          const ent = entity as any;
+          switch (entity.type) {
+            case 'LINE':
+              rawPaths.push({ pts: (ent.vertices as any[]).map((v: any) => ({ x: v.x, y: v.y, z: v.z ?? 0 })), closed: false });
+              break;
+            case 'LWPOLYLINE':
+              rawPaths.push({ pts: (ent.vertices as any[]).map((v: any) => ({ x: v.x, y: v.y, z: ent.elevation ?? 0 })), closed: !!ent.shape });
+              break;
+            case 'POLYLINE':
+              rawPaths.push({ pts: (ent.vertices as any[]).map((v: any) => ({ x: v.x, y: v.y, z: v.z ?? 0 })), closed: !!ent.shape });
+              break;
+            case 'ARC':
+              rawPaths.push({ pts: dxfArcPoints(ent.center.x, ent.center.y, ent.center.z ?? 0, ent.radius, ent.startAngle, ent.endAngle), closed: false });
+              break;
+            case 'CIRCLE':
+              rawPaths.push({ pts: dxfArcPoints(ent.center.x, ent.center.y, ent.center.z ?? 0, ent.radius, 0, 360), closed: true });
+              break;
+            case 'SPLINE': {
+              const pts: any[] = ent.fitPoints?.length ? ent.fitPoints : (ent.controlPoints ?? []);
+              if (pts.length >= 2) rawPaths.push({ pts: pts.map((v: any) => ({ x: v.x, y: v.y, z: v.z ?? 0 })), closed: !!ent.closed });
+              break;
+            }
+            default: break;
+          }
+        }
+
+        if (rawPaths.length === 0) { alert('No supported geometry found in DXF.'); return; }
+
+        // Compute 3D bounding box
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const rp of rawPaths) {
+          for (const p of rp.pts) {
+            if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+            const pz = p.z ?? 0;
+            if (pz < minZ) minZ = pz; if (pz > maxZ) maxZ = pz;
+          }
+        }
+
+        // Default scale: fit XY plane to ±127
+        const defaultScale = 254 / Math.max(maxX - minX || 1, maxY - minY || 1);
+        setDxfImport({ source: 'DXF', rawPaths, bbox: { minX, maxX, minY, maxY, minZ, maxZ }, referencePlane: 'xy', manualScale: parseFloat(defaultScale.toFixed(4)) });
+      } catch (err) {
+        alert('Error reading DXF: ' + (err as Error).message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Phase 2: apply scale and add paths to the current layer
+  const confirmDxfImport = () => {
+    if (!dxfImport) return;
+    const { rawPaths, bbox, referencePlane, manualScale } = dxfImport;
+    const { minX, maxX, minY, maxY, minZ, maxZ } = bbox;
+    const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1, rangeZ = maxZ - minZ || 1;
+
+    let scale: number;
+    if (referencePlane === 'xy') scale = 254 / Math.max(rangeX, rangeY);
+    else if (referencePlane === 'xz') scale = 254 / Math.max(rangeX, rangeZ);
+    else if (referencePlane === 'yz') scale = 254 / Math.max(rangeY, rangeZ);
+    else scale = manualScale;
+
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+    const clamp = (v: number) => Math.max(-127, Math.min(127, v));
+    const prefix = dxfImport.source.toLowerCase();
+    const newPaths: VecPath[] = rawPaths.map((rp, idx) => ({
+      name: `${prefix}_${idx}`,
+      intensity: 127,
+      closed: rp.closed,
+      points: rp.pts.map((p) => ({
+        x: clamp(Math.round((p.x - cx) * scale)),
+        y: clamp(Math.round((p.y - cy) * scale)),
+        z: clamp(Math.round(((p.z ?? 0) - cz) * scale)),
+      })),
+    }));
+
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    newResource.layers[currentLayerIndex].paths.push(...newPaths);
+    updateResource(resource, newResource);
+    setDxfImport(null);
+  };
+
+  // Handle OBJ import — extracts hard edges only (filters triangulation by dihedral angle)
+  const handleObjImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        type Vec3 = [number, number, number];
+        const verts: Vec3[] = [];
+        const faces: number[][] = [];  // each face = list of vertex indices
+        const linesExplicit: [number, number][] = [];
+
+        for (const line of text.split('\n')) {
+          const parts = line.trim().split(/\s+/);
+          if (parts[0] === 'v') {
+            verts.push([parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0]);
+          } else if (parts[0] === 'f') {
+            const indices = parts.slice(1).map((p) => parseInt(p.split('/')[0]) - 1);
+            if (indices.length >= 3) faces.push(indices);
+          } else if (parts[0] === 'l') {
+            const indices = parts.slice(1).map((p) => parseInt(p) - 1);
+            for (let i = 0; i < indices.length - 1; i++) linesExplicit.push([indices[i], indices[i + 1]]);
+          }
+        }
+
+        if (verts.length === 0) { alert('No geometry found in OBJ file.'); return; }
+
+        // Face normal helper
+        const faceNormal = (face: number[]): Vec3 => {
+          const [ax, ay, az] = verts[face[0]];
+          const [bx, by, bz] = verts[face[1]];
+          const [cx, cy, cz] = verts[face[2]];
+          const ux = bx - ax, uy = by - ay, uz = bz - az;
+          const vx = cx - ax, vy = cy - ay, vz = cz - az;
+          const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+          const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+          return [nx / len, ny / len, nz / len];
+        };
+
+        // Map each edge key → list of face normals sharing it
+        const edgeFaces = new Map<string, Vec3[]>();
+        for (const face of faces) {
+          const n = faceNormal(face);
+          for (let i = 0; i < face.length; i++) {
+            const a = face[i], b = face[(i + 1) % face.length];
+            if (a < 0 || b < 0 || a >= verts.length || b >= verts.length) continue;
+            const key = `${Math.min(a, b)},${Math.max(a, b)}`;
+            if (!edgeFaces.has(key)) edgeFaces.set(key, []);
+            edgeFaces.get(key)!.push(n);
+          }
+        }
+
+        // Keep edge if: border (only 1 face) OR dihedral angle > threshold
+        const ANGLE_THRESHOLD_DEG = 25;
+        const cosThreshold = Math.cos((ANGLE_THRESHOLD_DEG * Math.PI) / 180);
+        const hardEdges: [number, number][] = [];
+
+        for (const [key, normals] of edgeFaces) {
+          const [a, b] = key.split(',').map(Number);
+          if (normals.length === 1) {
+            // Border edge — always keep
+            hardEdges.push([a, b]);
+          } else {
+            // Check dihedral angle between the two adjacent faces
+            const [n1, n2] = normals;
+            const dot = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2];
+            if (dot < cosThreshold) hardEdges.push([a, b]);
+          }
+        }
+
+        // Also add any explicit 'l' lines from the OBJ
+        for (const [a, b] of linesExplicit) {
+          if (a >= 0 && b >= 0 && a < verts.length && b < verts.length) hardEdges.push([a, b]);
+        }
+
+        if (hardEdges.length === 0) { alert('No hard edges found. Try lowering the angle threshold or check the OBJ file.'); return; }
+
+        // Chain edges into polylines to minimize path count.
+        // Build adjacency: vertex → list of connected vertices (only for vertices with degree ≤ 2,
+        // which form simple chains; vertices with degree > 2 are junctions and break chains there).
+        const adj = new Map<number, number[]>();
+        const edgeDegree = new Map<number, number>();
+        for (const [a, b] of hardEdges) {
+          edgeDegree.set(a, (edgeDegree.get(a) ?? 0) + 1);
+          edgeDegree.set(b, (edgeDegree.get(b) ?? 0) + 1);
+        }
+        for (const [a, b] of hardEdges) {
+          // Only chain through vertices with exactly degree 2 (pure chain vertices)
+          if (!adj.has(a)) adj.set(a, []);
+          if (!adj.has(b)) adj.set(b, []);
+          adj.get(a)!.push(b);
+          adj.get(b)!.push(a);
+        }
+
+        const usedEdges = new Set<string>();
+        const edgeKey = (a: number, b: number) => `${Math.min(a,b)},${Math.max(a,b)}`;
+        const rawPaths: RawPath[] = [];
+
+        // Walk chains starting from endpoints (degree 1) or junction vertices (degree > 2)
+        const startVerts = [...edgeDegree.entries()]
+          .filter(([, d]) => d !== 2)
+          .map(([v]) => v);
+        // Also include any isolated cycle verts not reachable from startVerts
+        const allVerts = [...edgeDegree.keys()];
+
+        const walkChain = (start: number, firstNext: number) => {
+          const chain: number[] = [start, firstNext];
+          usedEdges.add(edgeKey(start, firstNext));
+          let cur = firstNext;
+          let prev = start;
+          while (true) {
+            const neighbors = adj.get(cur) ?? [];
+            const nextCandidates = neighbors.filter(n => n !== prev && !usedEdges.has(edgeKey(cur, n)));
+            // Only continue if exactly 1 unused neighbor and cur is a chain vertex (degree 2)
+            if (nextCandidates.length === 1 && (edgeDegree.get(cur) ?? 0) === 2) {
+              const next = nextCandidates[0];
+              usedEdges.add(edgeKey(cur, next));
+              chain.push(next);
+              prev = cur;
+              cur = next;
+            } else {
+              break;
+            }
+          }
+          const closed = chain[0] === chain[chain.length - 1];
+          rawPaths.push({
+            pts: chain.map(v => ({ x: verts[v][0], y: verts[v][1], z: verts[v][2] })),
+            closed,
+          });
+        };
+
+        // Process chains from endpoints/junctions first
+        for (const sv of startVerts) {
+          for (const nb of (adj.get(sv) ?? [])) {
+            if (!usedEdges.has(edgeKey(sv, nb))) {
+              walkChain(sv, nb);
+            }
+          }
+        }
+
+        // Process any remaining edges (closed loops with all degree-2 verts)
+        for (const v of allVerts) {
+          for (const nb of (adj.get(v) ?? [])) {
+            if (!usedEdges.has(edgeKey(v, nb))) {
+              walkChain(v, nb);
+            }
+          }
+        }
+
+        // Compute 3D bounding box
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const [px, py, pz] of verts) {
+          if (px < minX) minX = px; if (px > maxX) maxX = px;
+          if (py < minY) minY = py; if (py > maxY) maxY = py;
+          if (pz < minZ) minZ = pz; if (pz > maxZ) maxZ = pz;
+        }
+
+        const defaultScale = 254 / Math.max(maxX - minX || 1, maxY - minY || 1, maxZ - minZ || 1);
+        setDxfImport({ source: 'OBJ', rawPaths, bbox: { minX, maxX, minY, maxY, minZ, maxZ }, referencePlane: 'xy', manualScale: parseFloat(defaultScale.toFixed(4)) });
+      } catch (err) {
+        alert('Error reading OBJ: ' + (err as Error).message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // Restore background image from resource on load
   useEffect(() => {
     if (resource.backgroundImage && !backgroundImage) {
@@ -1463,7 +1858,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const point = canvasToResource(canvasX, canvasY);
 
     if (currentTool === 'pen') {
-      setTempPoints([...tempPoints, point]);
+      // Snap to nearest existing vertex if within snap radius (preserves full 3D coords)
+      const snapped = hoveredVertexRef.current;
+      const penPoint = snapped ? { x: snapped.point.x, y: snapped.point.y, z: snapped.point.z ?? 0 } : point;
+      setTempPoints([...tempPoints, penPoint]);
       setIsDrawing(true);
     } else if (currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') {
       // Start drawing circle/arc/polygon - set center
@@ -1481,18 +1879,27 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       if (!layer || !Array.isArray(layer.paths)) return;
       
       // First check for point clicks
+      // In 3D mode use a slightly larger threshold and prefer front vertices (smaller z = closer)
+      const hitThreshold = viewMode === '3d' ? 14 : 10;
+      let closestZ = Infinity;
       for (let pathIdx = 0; pathIdx < layer.paths.length; pathIdx++) {
         const path = layer.paths[pathIdx];
         if (!path || !Array.isArray(path.points)) continue;
         for (let pointIdx = 0; pointIdx < path.points.length; pointIdx++) {
           const ptRaw = path.points[pointIdx];
           if (!ptRaw) continue;
-          const pt = resourceToCanvas(ptRaw);
+          const pt = resourceToCanvasWithDepth(ptRaw);
           const dist = Math.sqrt((pt.x - canvasX) ** 2 + (pt.y - canvasY) ** 2);
-          if (dist < closestDist && dist < 10) {
-            closestDist = dist;
-            closestPath = pathIdx;
-            closestPoint = pointIdx;
+          if (dist < hitThreshold) {
+            // Prefer the vertex that is strictly closer on screen; break ties by depth
+            const betterDist = dist < closestDist - 0.5;
+            const sameDist = Math.abs(dist - closestDist) <= 0.5;
+            if (betterDist || (sameDist && pt.z < closestZ)) {
+              closestDist = dist;
+              closestZ = pt.z;
+              closestPath = pathIdx;
+              closestPoint = pointIdx;
+            }
           }
         }
       }
@@ -1598,7 +2005,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
     // Track mouse position for rubber-band preview; redraw if pen is mid-path
     mousePenPosRef.current = { x: canvasX, y: canvasY };
-    if (currentTool === 'pen' && tempPoints.length > 0) {
+
+    // Update hovered vertex (highlight nearest vertex within snap radius)
+    const prev = hoveredVertexRef.current;
+    const nearest = findNearestVertex(canvasX, canvasY);
+    hoveredVertexRef.current = nearest;
+    if (nearest !== null || prev !== null) {
+      draw(); // redraw to show/hide highlight
+    } else if (currentTool === 'pen' && tempPoints.length > 0) {
       draw();
     }
 
@@ -2036,6 +2450,116 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     updateResource(resource, newResource);
   }, [resource, updateResource]);
 
+  // Chain edges — merge 2-point open paths that share endpoints into polylines
+  const chainEdges = useCallback(() => {
+    const layer = resource.layers[currentLayerIndex];
+    if (!layer) return;
+
+    // Separate paths into 2-point edges (candidates) and everything else (keep as-is)
+    const edgePaths: VecPath[] = [];
+    const otherPaths: VecPath[] = [];
+    for (const path of layer.paths) {
+      if (!path.closed && path.points.length === 2) {
+        edgePaths.push(path);
+      } else {
+        otherPaths.push(path);
+      }
+    }
+
+    if (edgePaths.length < 2) return; // nothing to chain
+
+    // Build vertex pool: unique coordinate keys → index
+    const coordKey = (p: Point) => `${p.x},${p.y},${p.z ?? 0}`;
+    const vertMap = new Map<string, number>();
+    const vertList: Point[] = [];
+    const getVert = (p: Point): number => {
+      const k = coordKey(p);
+      if (!vertMap.has(k)) { vertMap.set(k, vertList.length); vertList.push(p); }
+      return vertMap.get(k)!;
+    };
+
+    // Build edge list as [vertA, vertB] index pairs
+    const edges: [number, number][] = edgePaths.map(p => [getVert(p.points[0]), getVert(p.points[1])]);
+
+    // Degree per vertex
+    const degree = new Map<number, number>();
+    for (const [a, b] of edges) {
+      degree.set(a, (degree.get(a) ?? 0) + 1);
+      degree.set(b, (degree.get(b) ?? 0) + 1);
+    }
+
+    // Adjacency list
+    const adj = new Map<number, number[]>();
+    for (const [a, b] of edges) {
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a)!.push(b);
+      adj.get(b)!.push(a);
+    }
+
+    const usedEdges = new Set<string>();
+    const ek = (a: number, b: number) => `${Math.min(a,b)},${Math.max(a,b)}`;
+    const chainedPaths: VecPath[] = [];
+
+    const walkChain = (start: number, firstNext: number, name: string) => {
+      const chain: number[] = [start, firstNext];
+      usedEdges.add(ek(start, firstNext));
+      let cur = firstNext, prev = start;
+      while (true) {
+        const neighbors = (adj.get(cur) ?? []).filter(n => n !== prev && !usedEdges.has(ek(cur, n)));
+        if (neighbors.length === 0) break;
+        const d = degree.get(cur) ?? 0;
+        if (d === 2 && neighbors.length === 1) {
+          // Simple chain continuation — no junction
+          usedEdges.add(ek(cur, neighbors[0]));
+          chain.push(neighbors[0]);
+          prev = cur; cur = neighbors[0];
+        } else {
+          // Junction (degree > 2): prefer the neighbor that continues the same
+          // Z-motion as the incoming edge. This lets coplanar edges chain through
+          // junction vertices that also connect to cross-plane edges.
+          const dzIn = (vertList[cur].z ?? 0) - (vertList[prev].z ?? 0);
+          let bestN = -1, bestScore = Infinity, tie = false;
+          for (const n of neighbors) {
+            const dzOut = (vertList[n].z ?? 0) - (vertList[cur].z ?? 0);
+            const score = Math.abs(dzOut - dzIn);
+            if (score < bestScore) { bestScore = score; bestN = n; tie = false; }
+            else if (score === bestScore) { tie = true; }
+          }
+          if (!tie && bestN !== -1) {
+            usedEdges.add(ek(cur, bestN));
+            chain.push(bestN);
+            prev = cur; cur = bestN;
+          } else break; // ambiguous junction — stop here
+        }
+      }
+      const closed = chain[0] === chain[chain.length - 1];
+      chainedPaths.push({
+        name,
+        intensity: edgePaths[0]?.intensity ?? 127,
+        closed,
+        points: chain.map(v => ({ ...vertList[v] })),
+      });
+    };
+
+    // Start from endpoints/junctions first, then handle closed loops
+    const startVerts = [...degree.entries()].filter(([, d]) => d !== 2).map(([v]) => v);
+    for (const sv of startVerts) {
+      for (const nb of (adj.get(sv) ?? [])) {
+        if (!usedEdges.has(ek(sv, nb))) walkChain(sv, nb, `chain_${chainedPaths.length}`);
+      }
+    }
+    for (const [v] of degree) {
+      for (const nb of (adj.get(v) ?? [])) {
+        if (!usedEdges.has(ek(v, nb))) walkChain(v, nb, `chain_${chainedPaths.length}`);
+      }
+    }
+
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    newResource.layers[currentLayerIndex].paths = [...otherPaths, ...chainedPaths];
+    updateResource(resource, newResource);
+  }, [resource, currentLayerIndex, updateResource]);
+
   // Mirror vector Y - flip vertically (negate Y coordinates only)
   const mirrorVectorY = useCallback(() => {
     const newResource = { ...resource };
@@ -2295,7 +2819,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       >
         ⇅ Mirror Y
       </button>
-      
+      <button
+        onClick={chainEdges}
+        style={{ padding: '8px 12px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Chain edges — merge 2-point paths that share endpoints into polylines, reducing path count"
+      >
+        🔗 Chain Edges
+      </button>
+
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
       
       <button
@@ -2311,7 +2842,35 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         onChange={handleImageUpload}
         style={{ display: 'none' }}
       />
-      
+      <button
+        onClick={() => dxfInputRef.current?.click()}
+        style={{ padding: '8px 12px', background: '#3a4a5a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Import DXF geometry as new paths on current layer"
+      >
+        📐 Import DXF
+      </button>
+      <input
+        ref={dxfInputRef}
+        type="file"
+        accept=".dxf"
+        onChange={handleDxfImport}
+        style={{ display: 'none' }}
+      />
+      <button
+        onClick={() => objInputRef.current?.click()}
+        style={{ padding: '8px 12px', background: '#3a4a5a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Import OBJ 3D mesh wireframe as paths (Fusion 360, Blender, etc.)"
+      >
+        📦 Import OBJ
+      </button>
+      <input
+        ref={objInputRef}
+        type="file"
+        accept=".obj"
+        onChange={handleObjImport}
+        style={{ display: 'none' }}
+      />
+
       {backgroundImage && (
         <>
           <button
@@ -2691,38 +3250,134 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           </div>
         )}
 
-        {/* All vector layers */}
+        {/* All vector layers + path tree */}
         {resource.layers.map((layer, layerIdx) => {
           const isActive = layerIdx === currentLayerIndex;
           const pathCount = layer.paths.length;
           const pointCount = layer.paths.reduce((s, p) => s + p.points.length, 0);
           return (
-            <div
-              key={layerIdx}
-              onClick={() => { setCurrentLayerIndex(layerIdx); setSelectedPoints(new Set()); setCurrentPathIndex(-1); setSelectedPointIndex(-1); }}
-              style={{ padding: '6px 8px', background: isActive ? '#4a4a8e' : '#2e2e4e', color: isActive ? 'white' : '#aaa', borderRadius: '4px', marginBottom: '4px', fontSize: '12px', cursor: 'pointer', border: isActive ? '1px solid #7a7abf' : '1px solid transparent' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  type="checkbox"
-                  checked={layer.visible !== false}
-                  onChange={(e) => { e.stopPropagation(); toggleLayerVisible(layerIdx); }}
-                  style={{ margin: 0 }}
-                  title="Toggle visibility"
-                />
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{layer.name}</span>
-                {isActive && <span style={{ color: '#7af', fontSize: '9px', flexShrink: 0 }}>active</span>}
-                {resource.layers.length > 1 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteLayer(layerIdx); }}
-                    title="Delete layer"
-                    style={{ background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '11px', padding: '0 2px', flexShrink: 0 }}
-                  >✕</button>
-                )}
+            <div key={layerIdx} style={{ marginBottom: '4px' }}>
+              {/* Layer row */}
+              <div
+                onClick={() => { setCurrentLayerIndex(layerIdx); setSelectedPoints(new Set()); setCurrentPathIndex(-1); setSelectedPointIndex(-1); }}
+                style={{ padding: '6px 8px', background: isActive ? '#4a4a8e' : '#2e2e4e', color: isActive ? 'white' : '#aaa', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', border: isActive ? '1px solid #7a7abf' : '1px solid transparent' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    type="checkbox"
+                    checked={layer.visible !== false}
+                    onChange={(e) => { e.stopPropagation(); toggleLayerVisible(layerIdx); }}
+                    style={{ margin: 0 }}
+                    title="Toggle visibility"
+                  />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{layer.name}</span>
+                  {isActive && <span style={{ color: '#7af', fontSize: '9px', flexShrink: 0 }}>active</span>}
+                  {resource.layers.length > 1 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteLayer(layerIdx); }}
+                      title="Delete layer"
+                      style={{ background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '11px', padding: '0 2px', flexShrink: 0 }}
+                    >✕</button>
+                  )}
+                </div>
+                <div style={{ color: '#666', fontSize: '10px', marginTop: '2px' }}>
+                  {pathCount} path{pathCount !== 1 ? 's' : ''} · {pointCount} pt{pointCount !== 1 ? 's' : ''}
+                </div>
               </div>
-              <div style={{ color: '#666', fontSize: '10px', marginTop: '2px' }}>
-                {pathCount} path{pathCount !== 1 ? 's' : ''} · {pointCount} pt{pointCount !== 1 ? 's' : ''}
-              </div>
+
+              {/* Path tree — only shown when layer is active */}
+              {isActive && layer.paths.length > 0 && (
+                <div style={{ marginLeft: '12px', marginTop: '2px' }}>
+                  {layer.paths.map((p, pathIdx) => {
+                    const treeKey = `${layerIdx}-${pathIdx}`;
+                    const isTreeSelected = selectedTreePathKey === treeKey;
+                    const isExpanded = expandedTreePaths.has(treeKey);
+                    return (
+                      <div key={pathIdx}>
+                        {/* Path row */}
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTreePathKey(isTreeSelected ? null : treeKey);
+                            // Also make this the active path for editing
+                            setCurrentLayerIndex(layerIdx);
+                            setCurrentPathIndex(pathIdx);
+                            setSelectedPointIndex(-1);
+                            setSelectedPoints(new Set());
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 6px',
+                            background: isTreeSelected ? '#1a4a5a' : 'transparent',
+                            color: isTreeSelected ? '#00ffff' : '#99aaaa',
+                            borderRadius: '3px',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            border: isTreeSelected ? '1px solid #007090' : '1px solid transparent',
+                            marginBottom: '1px',
+                          }}
+                        >
+                          {/* Expand toggle */}
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedTreePaths(prev => {
+                                const next = new Set(prev);
+                                if (next.has(treeKey)) next.delete(treeKey);
+                                else next.add(treeKey);
+                                return next;
+                              });
+                            }}
+                            style={{ fontSize: '9px', width: '10px', flexShrink: 0, opacity: 0.7, userSelect: 'none' }}
+                          >
+                            {isExpanded ? '▼' : '▶'}
+                          </span>
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {p.name || `path_${pathIdx}`}
+                          </span>
+                          <span style={{ color: '#556', fontSize: '9px', flexShrink: 0 }}>
+                            {p.points.length}pt
+                          </span>
+                        </div>
+
+                        {/* Point sub-rows */}
+                        {isExpanded && (
+                          <div style={{ marginLeft: '16px' }}>
+                            {p.points.map((pt, ptIdx) => (
+                              <div
+                                key={ptIdx}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentLayerIndex(layerIdx);
+                                  setCurrentPathIndex(pathIdx);
+                                  setSelectedPointIndex(ptIdx);
+                                  setSelectedPoints(new Set());
+                                  setSelectedTreePathKey(treeKey);
+                                }}
+                                style={{
+                                  padding: '2px 4px',
+                                  fontSize: '10px',
+                                  color: selectedPointIndex === ptIdx && currentPathIndex === pathIdx ? '#ffff00' : '#667',
+                                  cursor: 'pointer',
+                                  borderRadius: '2px',
+                                  background: selectedPointIndex === ptIdx && currentPathIndex === pathIdx ? '#3a3a1a' : 'transparent',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {ptIdx}: ({pt.x}, {pt.y}{pt.z !== undefined ? `, ${pt.z}` : ''})
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
@@ -3095,6 +3750,97 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
         </span>
       </div>
+
+      {/* DXF Import Dialog */}
+      {dxfImport && (() => {
+        const { bbox, referencePlane, manualScale, rawPaths } = dxfImport;
+        const { minX, maxX, minY, maxY, minZ, maxZ } = bbox;
+        const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1, rangeZ = maxZ - minZ || 1;
+
+        let scale: number;
+        if (referencePlane === 'xy') scale = 254 / Math.max(rangeX, rangeY);
+        else if (referencePlane === 'xz') scale = 254 / Math.max(rangeX, rangeZ);
+        else if (referencePlane === 'yz') scale = 254 / Math.max(rangeY, rangeZ);
+        else scale = manualScale;
+
+        const fmt = (v: number) => (v * scale).toFixed(1);
+
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              background: '#1e1e3a', border: '2px solid #4a4a8e', borderRadius: '8px',
+              padding: '24px', minWidth: '380px', maxWidth: '480px', color: 'white', fontFamily: 'monospace',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+            }}>
+              <h3 style={{ margin: '0 0 16px', color: '#aaaaff' }}>{dxfImport.source === 'OBJ' ? '📦' : '📐'} Import {dxfImport.source}</h3>
+
+              {/* Bounding box info */}
+              <div style={{ background: '#2a2a4e', borderRadius: '4px', padding: '10px', marginBottom: '16px', fontSize: '12px' }}>
+                <div style={{ marginBottom: '4px', color: '#888' }}>DXF bounding box (original units):</div>
+                <div>X: {minX.toFixed(2)} → {maxX.toFixed(2)} <span style={{ color: '#aaa' }}>({rangeX.toFixed(2)})</span></div>
+                <div>Y: {minY.toFixed(2)} → {maxY.toFixed(2)} <span style={{ color: '#aaa' }}>({rangeY.toFixed(2)})</span></div>
+                <div>Z: {minZ.toFixed(2)} → {maxZ.toFixed(2)} <span style={{ color: '#aaa' }}>({rangeZ.toFixed(2)})</span></div>
+                <div style={{ marginTop: '6px', color: '#888' }}>{rawPaths.length} {dxfImport.source === 'OBJ' ? 'edge(s)' : 'path(s)'} found</div>
+              </div>
+
+              {/* Reference plane selector */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ marginBottom: '8px', fontSize: '13px' }}>Fit to plane (scaled to ±127):</div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {(['xy', 'xz', 'yz', 'manual'] as const).map((p) => (
+                    <button key={p} onClick={() => setDxfImport({ ...dxfImport, referencePlane: p })}
+                      style={{
+                        padding: '6px 12px', borderRadius: '4px', border: '1px solid #4a4a8e', cursor: 'pointer',
+                        background: referencePlane === p ? '#4a4a8e' : '#2a2a4e', color: 'white', fontSize: '12px',
+                      }}>
+                      {p === 'manual' ? 'Manual scale' : p.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manual scale input */}
+              {referencePlane === 'manual' && (
+                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                  <label>Scale factor:</label>
+                  <input type="number" min="0.0001" step="0.001"
+                    value={manualScale}
+                    onChange={(ev) => setDxfImport({ ...dxfImport, manualScale: parseFloat(ev.target.value) || manualScale })}
+                    style={{ width: '100px', background: '#2a2a4e', border: '1px solid #4a4a8e', color: 'white', padding: '4px 8px', borderRadius: '4px' }}
+                  />
+                  <span style={{ color: '#888' }}>Vectrex units / DXF unit</span>
+                </div>
+              )}
+
+              {/* Result preview */}
+              <div style={{ background: '#2a2a4e', borderRadius: '4px', padding: '10px', marginBottom: '20px', fontSize: '12px' }}>
+                <div style={{ marginBottom: '4px', color: '#888' }}>Result size in Vectrex units (scale = {scale.toFixed(4)}):</div>
+                <div style={{ color: Math.abs(parseFloat(fmt(rangeX))) > 254 ? '#ff6666' : '#6f6' }}>X: ±{(parseFloat(fmt(rangeX)) / 2).toFixed(1)}</div>
+                <div style={{ color: Math.abs(parseFloat(fmt(rangeY))) > 254 ? '#ff6666' : '#6f6' }}>Y: ±{(parseFloat(fmt(rangeY)) / 2).toFixed(1)}</div>
+                <div style={{ color: Math.abs(parseFloat(fmt(rangeZ))) > 254 ? '#ff6666' : '#6af' }}>Z: ±{(parseFloat(fmt(rangeZ)) / 2).toFixed(1)}</div>
+                {(parseFloat(fmt(rangeX)) > 254 || parseFloat(fmt(rangeY)) > 254) && (
+                  <div style={{ color: '#ff9966', marginTop: '4px' }}>⚠ Values exceeding ±127 will be clamped</div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setDxfImport(null)}
+                  style={{ padding: '8px 16px', background: '#3a3a5e', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={confirmDxfImport}
+                  style={{ padding: '8px 16px', background: '#3a6a8e', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Import
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

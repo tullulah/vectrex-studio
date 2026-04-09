@@ -416,7 +416,7 @@ impl VecResource {
             return asm;
         }
 
-        asm.push_str(&format!("\n; 3D data table for DRAW_VECTOR_3D\n"));
+        asm.push_str(&format!("\n; 3D data table for DRAW_VECTOR_3D ({} paths)\n", visible.len()));
         asm.push_str(&format!("_{}_3D_DATA:\n", symbol_name));
         asm.push_str(&format!("    FCB {}               ; path count\n", visible.len()));
 

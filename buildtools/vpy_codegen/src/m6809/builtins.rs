@@ -73,7 +73,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Vector asset functions
     ("DRAW_VECTOR", 3),     // name, x, y
     ("DRAW_VECTOR_EX", 5),  // name, x, y, mirror, intensity
-    ("DRAW_VECTOR_3D", 4),  // name, ax, ay, az
+    ("DRAW_VECTOR_3D", 6),  // name, ax, ay, az, x, y
     
     // Audio functions
     ("PLAY_MUSIC", 1),      // name
@@ -1067,14 +1067,13 @@ fn emit_draw_vector_3d(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             expressions::emit_simple_expr(&args[3], out, assets);
             out.push_str("    STB >ROT3D_AZ       ; angle Z (0-127)\n");
 
-            // Set draw offsets from DRAW_VEC_X/Y (set by MOVE or default 0)
-            out.push_str("    LDA >DRAW_VEC_X\n");
-            out.push_str("    STA >ROT3D_OX\n");
-            out.push_str("    LDA >DRAW_VEC_Y\n");
-            out.push_str("    STA >ROT3D_OY\n");
+            // Set screen position from args[4]=x, args[5]=y
+            expressions::emit_simple_expr(&args[4], out, assets);
+            out.push_str("    STB >ROT3D_OX       ; screen X offset\n");
+            expressions::emit_simple_expr(&args[5], out, assets);
+            out.push_str("    STB >ROT3D_OY       ; screen Y offset\n");
 
-            // Load 3D data pointer and call runtime
-            // Runtime sets DP=$D0 itself for BIOS calls, restores DP=$C8 at end
+            // Load 3D data pointer and call runtime (DP stays $C8, runtime uses extended addressing)
             out.push_str(&format!("    LDX #{}_3D_DATA  ; pointer to 3D data table\n", symbol));
             out.push_str("    JSR DRAW_VECTOR_3D_RUNTIME\n");
 
