@@ -274,6 +274,11 @@ function osint()
         this.lPitch = this.bytes_per_pixel * this.screen_x;
         this.osint_defaults();
         this.canvas = document.getElementById('screen');
+        if( !this.canvas )
+        {
+            console.error('[osint] Canvas element #screen not found — display init deferred');
+            return;
+        }
         this.ctx = this.canvas.getContext('2d');
         this.imageData = this.ctx.getImageData(0, 0, this.screen_x, this.screen_y);
         this.data = this.imageData.data;

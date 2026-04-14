@@ -413,15 +413,27 @@ export const EmulatorPanel: React.FC = () => {
       console.log(`[EmulatorPanel] Initializing JSVecX with canvas size: ${canvasSize.width}x${canvasSize.height} (visible: ${rect.width}x${rect.height})`);
       
       try {
+      // CRITICAL: Ensure osint display + CPU are initialized with the canvas element.
+      // index.html only creates the vecx instance — it does NOT call vecx.main() because
+      // the canvas doesn't exist yet at DOMContentLoaded time (React renders it later).
+      // We perform the equivalent of vecx.main() here, minus auto-start.
+      if (!vecx.osint?.ctx) {
+        console.log('[EmulatorPanel] Initializing osint display with canvas...');
+        vecx.osint.init(vecx);
+        console.log('[EmulatorPanel] ✓ osint.init() successful');
+      }
+      if (!vecx.e6809?.vecx) {
+        console.log('[EmulatorPanel] Initializing e6809 CPU...');
+        vecx.e6809.init(vecx);
+        console.log('[EmulatorPanel] ✓ e6809.init() successful');
+      }
+
       console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: JSVecX initialization');
-      // console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack); // Debug only
-      vecx.reset();
-      console.log('[EmulatorPanel] ✓ vecx.reset() successful');
+      vecx.vecx_reset();
+      vecx.osint.osint_clearscreen();
+      console.log('[EmulatorPanel] ✓ vecx reset successful');
         
-        // DO NOT auto-start - user controls when to start manually
-        // vecx.main() would start emulator immediately
-        // vecx.debugState = 'stopped'; // Don't set running yet
-        console.log('[EmulatorPanel] ✓ JSVecx initialized (stopped, ready for manual start)');
+      console.log('[EmulatorPanel] ✓ JSVecx initialized (stopped, ready for manual start)');
         
         jsVecxInitialized.current = true; // Mark as initialized
         
@@ -2299,35 +2311,34 @@ export const EmulatorPanel: React.FC = () => {
         }
         
         // CRITICAL: Verificar que JSVecX esté completamente inicializado antes de reset
-        // Si el panel del emulador no estaba visible, JSVecX puede no estar inicializado
+        // Check osint.ctx (display) and e6809.vecx (CPU) — NOT vecx.ram which always exists
         console.log('[EmulatorPanel] Checking JSVecX initialization...');
-        const isInitialized = vecx.ram && vecx.ram.length > 0;
+        const isDisplayInitialized = !!vecx.osint?.ctx;
+        const isCpuInitialized = !!vecx.e6809?.vecx;
         
-        if (!isInitialized) {
-          console.warn('[EmulatorPanel] JSVecX not initialized - running full initialization...');
-          // Inicializar JSVecX completamente (igual que cuando el panel es visible)
+        if (!isDisplayInitialized || !isCpuInitialized) {
+          console.warn('[EmulatorPanel] JSVecX not fully initialized - running initialization...');
           try {
-            // Fase 1: Reset inicial
-            vecx.reset();
+            if (!isDisplayInitialized) {
+              vecx.osint.init(vecx);
+              console.log('[EmulatorPanel] ✓ osint.init() successful');
+            }
+            if (!isCpuInitialized) {
+              vecx.e6809.init(vecx);
+              console.log('[EmulatorPanel] ✓ e6809.init() successful');
+            }
+            
+            vecx.vecx_reset();
+            vecx.osint.osint_clearscreen();
             console.log('[EmulatorPanel] ✓ JSVecX reset successful');
             
-            // Fase 2: Main initialization (necesario para setup completo)
-            vecx.main();
-            console.log('[EmulatorPanel] ✓ JSVecX main() successful');
-            
-            // CRITICAL: Set debugState to 'running' after initialization
-            vecx.debugState = 'running';
-            console.log('[EmulatorPanel] ✓ JSVecx debugState set to running (after main)');
-            
-            // Fase 3: CRITICAL - Inicializar joystick input state a valores neutros
-            // Sin esto, las variables de joystick contienen basura y causan movimiento fantasma
+            // Inicializar joystick input state a valores neutros
             vecx.leftHeld = false;
             vecx.rightHeld = false;
             vecx.upHeld = false;
             vecx.downHeld = false;
-            vecx.shadow_snd_regs14 = 0xFF; // PSG: 0xFF = all buttons released (active low)
-            vecx.write8(0xC80F, 0x00);     // Vec_Btn_State: 0x00 = all buttons released (active high)
-            // console.log('[EmulatorPanel] ✓ Joystick state initialized to neutral');
+            vecx.shadow_snd_regs14 = 0xFF;
+            vecx.write8(0xC80F, 0x00);
             
             // console.log('[EmulatorPanel] ✓ JSVecX fully initialized in background');
           } catch (e) {
