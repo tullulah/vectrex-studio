@@ -779,19 +779,31 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
     let build_dir = project_dir.join("build");
     std::fs::create_dir_all(&build_dir)?;
 
-    let project_name = project_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("output");
+    // Derive project name (priority: --output stem > vpyproj name > directory name).
+    // This avoids spaces when the directory is "3d test" but the project is "3d_test".
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(input))
+        .unwrap_or_else(|| {
+            project_dir.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("output")
+                .to_string()
+        });
 
-    let s_path = build_dir.join(format!("{}.s", project_name));
-    let o_path = build_dir.join(format!("{}.o", project_name));
+    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let asm_path = build_dir.join(format!("{}.asm", project_name)); // alias for IDE STATUS check
+    let o_path   = build_dir.join(format!("{}.o",   project_name));
     let elf_path = build_dir.join(format!("{}.elf", project_name));
     let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
 
-    // Write .s file
+    // Write .s file and .asm alias (IDE STATUS check expects .asm)
     std::fs::write(&s_path, &generated.asm_source)
         .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    std::fs::copy(&s_path, &asm_path)
+        .with_context(|| format!("Failed to write {}", asm_path.display()))?;
     println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
 
     // Find linker script
@@ -919,20 +931,77 @@ fn find_project_root_from(start: &Path) -> PathBuf {
     }
 }
 
-/// Find linker script by walking up from project dir looking for
+/// Find linker script by walking up from project dir and binary location looking for
 /// hardware/debug_cart/firmware/rp2350_game.ld
 fn find_rp2350_ld(project_dir: &Path) -> Option<PathBuf> {
-    let mut current = project_dir;
-    loop {
-        let candidate = current.join("hardware/debug_cart/firmware/rp2350_game.ld");
-        if candidate.exists() {
-            return Some(candidate);
-        }
-        match current.parent() {
-            Some(p) => current = p,
-            None => return None,
+    // Helper: walk up from a starting path
+    fn walk_up(start: &Path) -> Option<PathBuf> {
+        let mut current = start;
+        loop {
+            let candidate = current.join("hardware/debug_cart/firmware/rp2350_game.ld");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+            match current.parent() {
+                Some(p) => current = p,
+                None => return None,
+            }
         }
     }
+
+    // 1. Walk up from the project directory
+    if let Some(found) = walk_up(project_dir) {
+        return Some(found);
+    }
+
+    // 2. Walk up from the CLI binary location (covers running from buildtools/target/debug/)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            if let Some(found) = walk_up(exe_dir) {
+                return Some(found);
+            }
+        }
+    }
+
+    // 3. Walk up from the current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(found) = walk_up(&cwd) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+/// Extract project name from a .vpyproj file without pulling in the full toml crate.
+/// Tries [build] output stem first, then [project] name, returns None on any failure.
+fn vpyproj_project_name(vpyproj: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(vpyproj).ok()?;
+    // Look for:  output = "build/3d_test.bin"  →  "3d_test"
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with("output") {
+            if let Some(val) = t.splitn(2, '=').nth(1) {
+                let val = val.trim().trim_matches('"');
+                let stem = std::path::Path::new(val)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string());
+                if stem.is_some() { return stem; }
+            }
+        }
+    }
+    // Fallback: [project] name = "3d_test"
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with("name") {
+            if let Some(val) = t.splitn(2, '=').nth(1) {
+                let val = val.trim().trim_matches('"').to_string();
+                if !val.is_empty() { return Some(val); }
+            }
+        }
+    }
+    None
 }
 
 fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String) -> Result<()> {
