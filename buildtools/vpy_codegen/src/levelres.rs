@@ -224,7 +224,134 @@ impl VPlayLevel {
         out
     }
 
-    /// Compile a single object to assembly
+    /// Compile level data to ARM Thumb2 assembly.
+    ///
+    /// ARM object layout (16 bytes, little-endian):
+    ///   +0  x (i16 LE)
+    ///   +2  y (i16 LE)
+    ///   +4  scale (u8, scale*8; 8=1:1)
+    ///   +5  intensity (u8)
+    ///   +6  flags (u8): bit0=physics, bit1=gravity, bit4=collidable, bit5=bounce
+    ///   +7  type (u8)
+    ///   +8  vector_ptr (u32 LE absolute address)
+    ///   +12 half_w (u8, collision/cull half-width)
+    ///   +13 half_h (u8, collision/cull half-height)
+    ///   +14 vel_x_init (i8)
+    ///   +15 vel_y_init (i8)
+    ///
+    /// Header layout (24 bytes):
+    ///   +0  xMin (i16)
+    ///   +2  xMax (i16)
+    ///   +4  yMin (i16)
+    ///   +6  yMax (i16)
+    ///   +8  bgCount (u8)
+    ///   +9  gpCount (u8)
+    ///   +10 fgCount (u8)
+    ///   +11 pad (u8)
+    ///   +12 bgObjectsPtr (u32)
+    ///   +16 gpObjectsPtr (u32)
+    ///   +20 fgObjectsPtr (u32)
+    pub fn compile_to_arm_asm(&self) -> String {
+        let mut out = String::new();
+        let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
+
+        out.push_str(&format!("@ ==== ARM Level: {} ====\n", name));
+        out.push_str(&format!(".global _{name}_LEVEL\n_{name}_LEVEL:\n"));
+        // World bounds
+        out.push_str(&format!("    .hword {}  @ xMin\n", self.world_bounds.x_min));
+        out.push_str(&format!("    .hword {}  @ xMax\n", self.world_bounds.x_max));
+        out.push_str(&format!("    .hword {}  @ yMin\n", self.world_bounds.y_min));
+        out.push_str(&format!("    .hword {}  @ yMax\n", self.world_bounds.y_max));
+        out.push_str(&format!("    .byte {}   @ bgCount\n", self.layers.background.len()));
+        out.push_str(&format!("    .byte {}   @ gpCount\n", self.layers.gameplay.len()));
+        out.push_str(&format!("    .byte {}   @ fgCount\n", self.layers.foreground.len()));
+        out.push_str("    .byte 0    @ pad\n");
+        out.push_str(&format!("    .word _{name}_BG_OBJECTS\n"));
+        out.push_str(&format!("    .word _{name}_GP_OBJECTS\n"));
+        out.push_str(&format!("    .word _{name}_FG_OBJECTS\n"));
+        out.push_str("\n");
+
+        out.push_str(&format!("_{name}_BG_OBJECTS:\n"));
+        for obj in &self.layers.background { out.push_str(&self.compile_arm_object(obj)); }
+        out.push_str("\n");
+
+        out.push_str(&format!("_{name}_GP_OBJECTS:\n"));
+        for obj in &self.layers.gameplay { out.push_str(&self.compile_arm_object(obj)); }
+        out.push_str("\n");
+
+        out.push_str(&format!("_{name}_FG_OBJECTS:\n"));
+        for obj in &self.layers.foreground { out.push_str(&self.compile_arm_object(obj)); }
+        out.push_str("\n");
+
+        out
+    }
+
+    /// Compile a single object for the ARM binary format (16 bytes).
+    fn compile_arm_object(&self, obj: &VPlayObject) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("    @ {} ({})\n", obj.id, obj.obj_type));
+
+        // +0,+2: position
+        out.push_str(&format!("    .hword {}  @ x\n", obj.x));
+        out.push_str(&format!("    .hword {}  @ y\n", obj.y));
+
+        // +4: scale (scale*8, clamped 1-255; 8=1:1)
+        let scale_u8 = (obj.scale * 8.0).round().clamp(1.0, 255.0) as u8;
+        out.push_str(&format!("    .byte {}   @ scale (x8)\n", scale_u8));
+
+        // +5: intensity
+        let intensity = obj.intensity.unwrap_or(127);
+        out.push_str(&format!("    .byte {}   @ intensity\n", intensity));
+
+        // +6: flags
+        let mut flags: u8 = 0;
+        // physics / gravity
+        let has_physics = obj.physics_enabled || obj.physics.as_ref().map_or(false, |p| p.physics_type == "dynamic");
+        if has_physics { flags |= 0x01; }
+        let has_gravity = obj.gravity != 0.0
+            || obj.physics.as_ref().map_or(false, |p| p.gravity != 0.0)
+            || obj.physics_type.as_ref().map_or(false, |t| t == "gravity" || t == "projectile");
+        if has_gravity { flags |= 0x02; }
+        // collidable (bit4)
+        let collidable = obj.collidable || obj.collision.as_ref().map_or(false, |c| c.enabled);
+        if collidable { flags |= 0x10; }
+        // bounce (bit5)
+        let bounce = obj.bounce_damping != 0.0
+            || obj.physics_type.as_ref().map_or(false, |t| t == "bounce" || t == "gravity")
+            || obj.collision.as_ref().map_or(false, |c| c.bounce_walls);
+        if bounce { flags |= 0x20; }
+        out.push_str(&format!("    .byte 0x{:02X}  @ flags\n", flags));
+
+        // +7: type
+        let type_byte = match obj.obj_type.as_str() {
+            "player_start" => 0u8,
+            "enemy"        => 1,
+            "obstacle"     => 2,
+            "collectible"  => 3,
+            "background"   => 4,
+            "trigger"      => 5,
+            _              => 255,
+        };
+        out.push_str(&format!("    .byte {}   @ type\n", type_byte));
+
+        // +8: vector_ptr (32-bit absolute address, resolved at link time)
+        let vec_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase().replace('-', "_").replace(' ', "_"));
+        out.push_str(&format!("    .word {vec_label}  @ vector_ptr\n"));
+
+        // +12,+13: half_w, half_h (default 16 each for now)
+        out.push_str("    .byte 16   @ half_w\n");
+        out.push_str("    .byte 16   @ half_h\n");
+
+        // +14,+15: initial velocity (i8)
+        let vx = obj.velocity.x.clamp(-128.0, 127.0) as i8;
+        let vy = obj.velocity.y.clamp(-128.0, 127.0) as i8;
+        out.push_str(&format!("    .byte {}   @ vel_x_init\n", vx as u8));
+        out.push_str(&format!("    .byte {}   @ vel_y_init\n\n", vy as u8));
+
+        out
+    }
+
+    /// Compile a single object to assembly (M6809 format)
     fn compile_object(&self, obj: &VPlayObject) -> String {
         let mut out = String::new();
         

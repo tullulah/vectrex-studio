@@ -81,18 +81,22 @@ enum Commands {
     Asm {
         /// Entry point VPy file or .vpyproj
         input: PathBuf,
-        
+
         /// ROM total size (e.g. 524288 for 512KB)
         #[arg(long, default_value = "32768")]
         rom_size: usize,
-        
+
         /// ROM bank size (e.g. 16384 for 16KB)
         #[arg(long, default_value = "32768")]
         bank_size: usize,
-        
+
         /// Output ASM file (optional)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Compilation target (m6809 or rp2350)
+        #[arg(long, default_value = "m6809")]
+        target: String,
     },
     
     /// Allocate functions to banks
@@ -129,26 +133,30 @@ enum Commands {
     Build {
         /// Entry point VPy file or .vpyproj
         input: PathBuf,
-        
+
         /// Output ROM file
         #[arg(short, long)]
         output: Option<PathBuf>,
-        
+
         /// ROM total size (e.g. 524288 for 512KB multibank)
         #[arg(long, default_value = "32768")]
         rom_size: usize,
-        
+
         /// ROM bank size (e.g. 16384 for 16KB banks)
         #[arg(long, default_value = "32768")]
         bank_size: usize,
-        
+
         /// Generate debug symbols (.pdb)
         #[arg(long)]
         debug: bool,
-        
+
         /// Show intermediate outputs
         #[arg(short, long)]
         verbose: bool,
+
+        /// Compilation target (m6809 or rp2350)
+        #[arg(long, default_value = "m6809")]
+        target: String,
     },
 }
 
@@ -171,9 +179,9 @@ fn main() -> Result<()> {
             cmd_codegen(&input, &format)?;
         }
         
-        Commands::Asm { input, rom_size, bank_size, output } => {
+        Commands::Asm { input, rom_size, bank_size, output, target } => {
             println!("{}", "=== GENERATE UNIFIED ASM ===".bright_cyan().bold());
-            cmd_asm(&input, rom_size, bank_size, output)?;
+            cmd_asm(&input, rom_size, bank_size, output, target)?;
         }
         
         Commands::Allocate { input, graph } => {
@@ -191,9 +199,9 @@ fn main() -> Result<()> {
             cmd_link(&input, output)?;
         }
         
-        Commands::Build { input, output, rom_size, bank_size, debug, verbose } => {
+        Commands::Build { input, output, rom_size, bank_size, debug, verbose, target } => {
             println!("{}", "=== FULL BUILD PIPELINE ===".bright_green().bold());
-            cmd_build(&input, output, rom_size, bank_size, debug, verbose)?;
+            cmd_build(&input, output, rom_size, bank_size, debug, verbose, target)?;
         }
     }
     
@@ -589,7 +597,7 @@ fn cmd_codegen(input: &PathBuf, _format: &str) -> Result<()> {
     Ok(())
 }
 
-fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<PathBuf>) -> Result<()> {
+fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<PathBuf>, target: String) -> Result<()> {
     // Parse project or single file
     let source_path = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
         println!("{}", "Detected .vpyproj - loading project...".bright_cyan());
@@ -647,12 +655,18 @@ fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<Pa
     }
     
     println!("\n{}", "Generating unified ASM...".bright_white());
-    
+
+    let build_target = match target.as_str() {
+        "rp2350" => vpy_codegen::Target::Rp2350,
+        _ => vpy_codegen::Target::M6809,
+    };
+    println!("  Target: {}", target.bright_yellow());
+
     // Discover assets (vectors, music, sfx, levels)
     let assets = discover_assets(&source_path);
-    
-    // Generate unified ASM using real M6809 backend
-    let generated = vpy_codegen::generate_from_module(&module, &bank_config, title, &assets)
+
+    // Generate unified ASM using selected backend
+    let generated = vpy_codegen::generate_from_module_with_target(&module, &bank_config, title, &assets, &build_target)
         .context("Failed to generate ASM")?;
     
     println!("  ASM size: {} bytes", generated.asm_source.len());
@@ -705,7 +719,228 @@ fn cmd_link(_input: &PathBuf, _output: Option<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool) -> Result<()> {
+fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    println!("{}", "Target: RP2350 (ARM Thumb2)".bright_yellow().bold());
+
+    // Phase 1: Load project or single file
+    let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+        let project_info = vpy_loader::load_project(input)
+            .context("Failed to load project")?;
+        let dir = input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        (project_info.entry_point, dir)
+    } else {
+        let dir = {
+            let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+            if parent.file_name().and_then(|n| n.to_str()) == Some("src") {
+                parent.parent().unwrap_or(parent).to_path_buf()
+            } else {
+                find_project_root_from(parent)
+            }
+        };
+        (input.clone(), dir)
+    };
+
+    // Phase 2: Parse
+    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
+    let source = std::fs::read_to_string(&source_path)
+        .context("Failed to read source file")?;
+    let tokens = vpy_parser::lex(&source)
+        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
+    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
+        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+    println!("  {} Parsed {} items", "✓".green(), module.items.len());
+
+    // Phase 3: Unify (single file — wrap in identity unifier)
+    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
+    let mut modules_map = std::collections::HashMap::new();
+    let module_name = source_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("main")
+        .to_string();
+    modules_map.insert(module_name.clone(), module);
+    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
+        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+
+    // Phase 4: ARM codegen — always single-bank for RP2350
+    println!("\n{}", "Phase 3: ARM Codegen".bright_cyan().bold());
+    let title = unified.meta.title_override.as_deref().unwrap_or("VPY GAME");
+    let bank_config = vpy_codegen::BankConfig::single_bank();
+    let assets = discover_assets(&source_path);
+
+    let generated = vpy_codegen::generate_from_module_with_target(
+        &unified, &bank_config, title, &assets, &vpy_codegen::Target::Rp2350,
+    ).context("ARM codegen failed")?;
+    println!("  {} Generated {} bytes of ARM assembly", "✓".green(), generated.asm_source.len());
+
+    // Determine output paths
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+
+    let project_name = project_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("output");
+
+    let s_path = build_dir.join(format!("{}.s", project_name));
+    let o_path = build_dir.join(format!("{}.o", project_name));
+    let elf_path = build_dir.join(format!("{}.elf", project_name));
+    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
+
+    // Write .s file
+    std::fs::write(&s_path, &generated.asm_source)
+        .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
+
+    // Find linker script
+    let ld_path = find_rp2350_ld(&project_dir)
+        .ok_or_else(|| anyhow::anyhow!(
+            "Could not find hardware/debug_cart/firmware/rp2350_game.ld — \
+             ensure the hardware/ directory is present in the workspace root"
+        ))?;
+    if verbose {
+        println!("  Linker script: {}", ld_path.display());
+    }
+
+    // Phase 5: Assemble with arm-none-eabi-as
+    println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
+    let as_result = Command::new("arm-none-eabi-as")
+        .args([
+            "-mthumb",
+            "-mcpu=cortex-m33",
+            "-mfpu=fpv5-sp-d16",
+            s_path.to_str().unwrap(),
+            "-o",
+            o_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match as_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-as not found on PATH.\n\
+                 Install the ARM GNU toolchain: https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads\n\
+                 On macOS: brew install --cask gcc-arm-embedded\n\
+                 On Ubuntu: sudo apt install gcc-arm-none-eabi"
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-as: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}", stderr));
+            }
+            println!("  {} Assembled: {}", "✓".green(), o_path.display());
+        }
+    }
+
+    // Phase 6: Link with arm-none-eabi-ld
+    println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
+    let ld_result = Command::new("arm-none-eabi-ld")
+        .args([
+            "-T",
+            ld_path.to_str().unwrap(),
+            o_path.to_str().unwrap(),
+            "-o",
+            elf_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match ld_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-ld not found on PATH.\n\
+                 Install the ARM GNU toolchain (same package as arm-none-eabi-as)."
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-ld: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-ld failed:\n{}", stderr));
+            }
+            println!("  {} Linked: {}", "✓".green(), elf_path.display());
+        }
+    }
+
+    // Phase 7: Extract binary with arm-none-eabi-objcopy
+    println!("\n{}", "Phase 6: Extract Binary".bright_cyan().bold());
+    let objcopy_result = Command::new("arm-none-eabi-objcopy")
+        .args([
+            "-O",
+            "binary",
+            elf_path.to_str().unwrap(),
+            bin_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match objcopy_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-objcopy not found on PATH.\n\
+                 Install the ARM GNU toolchain (same package as arm-none-eabi-as)."
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-objcopy: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}", stderr));
+            }
+        }
+    }
+
+    let bin_size = std::fs::metadata(&bin_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Binary written: {} ({} bytes)", "✓".green(), bin_path.display(), bin_size);
+    println!("\n{}", format!("✓ BUILD SUCCESS (rp2350): {} bytes written to {}",
+        bin_size,
+        bin_path.display()).bright_green().bold());
+
+    Ok(())
+}
+
+fn find_project_root_from(start: &Path) -> PathBuf {
+    let mut current = start;
+    loop {
+        if let Ok(entries) = std::fs::read_dir(current) {
+            let has_vpyproj = entries
+                .flatten()
+                .any(|e| e.path().extension().and_then(|s| s.to_str()) == Some("vpyproj"));
+            if has_vpyproj {
+                return current.to_path_buf();
+            }
+        }
+        match current.parent() {
+            Some(p) => current = p,
+            None => return start.to_path_buf(),
+        }
+    }
+}
+
+/// Find linker script by walking up from project dir looking for
+/// hardware/debug_cart/firmware/rp2350_game.ld
+fn find_rp2350_ld(project_dir: &Path) -> Option<PathBuf> {
+    let mut current = project_dir;
+    loop {
+        let candidate = current.join("hardware/debug_cart/firmware/rp2350_game.ld");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        match current.parent() {
+            Some(p) => current = p,
+            None => return None,
+        }
+    }
+}
+
+fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String) -> Result<()> {
+    // RP2350 target: separate path — no banks, ARM toolchain invocation
+    if target == "rp2350" {
+        return cmd_build_rp2350(input, output, verbose);
+    }
+
     // Check if this is a multi-module project
     let is_multimodule = input.extension().and_then(|s| s.to_str()) == Some("vpyproj");
     

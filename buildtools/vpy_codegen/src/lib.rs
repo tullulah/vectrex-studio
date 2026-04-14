@@ -1,14 +1,26 @@
-//! vpy_codegen: Generate M6809 assembly
+//! vpy_codegen: Generate assembly for multiple targets.
 //!
 //! Phase 5 of the compilation pipeline.
-//! Produces assembly code per bank with metadata.
+//! Targets:
+//!   - M6809 (Vectrex BIOS, cartridge ROM)
+//!   - ARM Thumb2 / RP2350 (bare metal, bus master)
 
 pub mod m6809;
+pub mod arm;
 pub mod vecres;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;
 pub mod stack_validator;
+
+/// Compilation target selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Target {
+    /// Vectrex original hardware — MC6809 assembly + BIOS
+    M6809,
+    /// RP2350 debug cartridge — ARM Thumb2 + bus master VIA access
+    Rp2350,
+}
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -149,6 +161,31 @@ pub fn generate_from_module(
     title: &str,
     assets: &[AssetInfo],
 ) -> Result<GeneratedASM, CodegenError> {
+    generate_from_module_with_target(module, bank_config, title, assets, &Target::M6809)
+}
+
+/// Generate assembly for a specific target.
+pub fn generate_from_module_with_target(
+    module: &Module,
+    bank_config: &BankConfig,
+    title: &str,
+    assets: &[AssetInfo],
+    target: &Target,
+) -> Result<GeneratedASM, CodegenError> {
+    match target {
+        Target::Rp2350 => {
+            let asm_source = arm::generate_arm_asm(module, title, assets)
+                .map_err(CodegenError::Error)?;
+            return Ok(GeneratedASM {
+                asm_source,
+                bank_config: bank_config.clone(),
+                symbols: HashMap::new(),
+                external_refs: Vec::new(),
+            });
+        }
+        Target::M6809 => {} // fall through to M6809 path
+    }
+
     // Use real M6809 backend
     let asm_source = m6809::generate_m6809_asm(
         module,
