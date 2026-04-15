@@ -1,8 +1,22 @@
 # Rust / Cargo build artifacts
 /target/
 buildtools/target/
+core/target/
 **/*.rs.bk
 emulator_v2/target/
+
+# Debug cart firmware build artifacts (cross-compilation target dir)
+hardware/debug_cart/firmware/target/
+
+# Examples: intermediate build artifacts (keep .asm/.bin, ignore linker/assembler temps)
+examples/**/*.elf
+examples/**/*.o
+examples/**/*.s
+examples/**/src/*.bin
+# Stray test binaries at examples root
+examples/test_arm.bin
+# RP2350 generated ASM (intermediate, not needed alongside the 6809 .asm)
+examples/**/*_rp2350.asm
 
 # Generated assembly outputs (use redirection to keep if needed)
 /*.asm
