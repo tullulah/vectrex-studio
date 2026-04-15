@@ -37,12 +37,15 @@ struct VmusNote {
     channel: u8,
 }
 
+fn default_max_velocity() -> u8 { 127 }
+
 #[derive(Deserialize)]
 struct VmusNoise {
     start: f64,
     duration: f64,
     period: u8,
     channels: u8,
+    #[serde(default = "default_max_velocity")]
     velocity: u8,
 }
 
@@ -96,7 +99,7 @@ struct VsfxPitch {
     end_mult: f64,
     #[serde(default)]
     #[allow(dead_code)]
-    curve: u8,
+    curve: i8,
 }
 
 #[derive(Deserialize, Default)]

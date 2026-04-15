@@ -144,10 +144,76 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         Expr::Index { target, index } => {
             emit_index(target, index, out, assets);
         }
-        
+
+        Expr::MethodCall(info) => {
+            let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
+            match info.method_name.as_str() {
+                "abs" => {
+                    emit_simple_expr(&info.target, out, assets);
+                    // abs(D): if A < 0 (sign bit set), two's complement negate
+                    out.push_str(&format!("    TSTA                ; check sign\n"));
+                    out.push_str(&format!("    BPL .ABS_{id}_END   ; already positive\n"));
+                    out.push_str("    NEGB\n");
+                    out.push_str("    NEGA\n");
+                    out.push_str("    SBCA #0             ; 16-bit negate: ~D + 1\n");
+                    out.push_str(&format!(".ABS_{id}_END:\n"));
+                }
+                "clamp" => {
+                    let lo = &info.args[0];
+                    let hi = &info.args[1];
+                    // val → TMPVAL; lo → TMPPTR; if val < lo: val = lo
+                    emit_simple_expr(&info.target, out, assets);
+                    out.push_str("    STD >TMPVAL         ; val\n");
+                    emit_simple_expr(lo, out, assets);
+                    out.push_str("    STD >TMPPTR         ; lo\n");
+                    out.push_str("    LDD >TMPVAL\n");
+                    out.push_str("    CMPD >TMPPTR        ; val - lo\n");
+                    out.push_str(&format!("    BGE .CLAMP_{id}_HI  ; val >= lo: skip\n"));
+                    out.push_str("    LDD >TMPPTR\n");
+                    out.push_str("    STD >TMPVAL         ; val = lo\n");
+                    out.push_str(&format!(".CLAMP_{id}_HI:\n"));
+                    // hi → TMPPTR; if val > hi: val = hi
+                    emit_simple_expr(hi, out, assets);
+                    out.push_str("    STD >TMPPTR         ; hi\n");
+                    out.push_str("    LDD >TMPVAL\n");
+                    out.push_str("    CMPD >TMPPTR        ; val - hi\n");
+                    out.push_str(&format!("    BLE .CLAMP_{id}_END ; val <= hi: done\n"));
+                    out.push_str("    LDD >TMPPTR         ; val = hi\n");
+                    out.push_str(&format!(".CLAMP_{id}_END:\n"));
+                }
+                "min" => {
+                    let arg = &info.args[0];
+                    emit_simple_expr(&info.target, out, assets);
+                    out.push_str("    STD >TMPVAL         ; a\n");
+                    emit_simple_expr(arg, out, assets);
+                    out.push_str("    STD >TMPPTR         ; b\n");
+                    out.push_str("    LDD >TMPVAL\n");
+                    out.push_str("    CMPD >TMPPTR        ; a - b\n");
+                    out.push_str(&format!("    BLE .MIN_{id}_END   ; a <= b: keep a\n"));
+                    out.push_str("    LDD >TMPPTR         ; D = b (smaller)\n");
+                    out.push_str(&format!(".MIN_{id}_END:\n"));
+                }
+                "max" => {
+                    let arg = &info.args[0];
+                    emit_simple_expr(&info.target, out, assets);
+                    out.push_str("    STD >TMPVAL         ; a\n");
+                    emit_simple_expr(arg, out, assets);
+                    out.push_str("    STD >TMPPTR         ; b\n");
+                    out.push_str("    LDD >TMPVAL\n");
+                    out.push_str("    CMPD >TMPPTR        ; a - b\n");
+                    out.push_str(&format!("    BGE .MAX_{id}_END   ; a >= b: keep a\n"));
+                    out.push_str("    LDD >TMPPTR         ; D = b (larger)\n");
+                    out.push_str(&format!(".MAX_{id}_END:\n"));
+                }
+                other => {
+                    out.push_str(&format!("    ; Unimplemented method call: .{other}()\n"));
+                    out.push_str("    LDD #0\n");
+                }
+            }
+        }
+
         _ => {
-            // Unimplemented expression types (List, StructInit, FieldAccess, MethodCall)
-            // These should likely be transformed before codegen or are not supported yet
+            // Unimplemented expression types (List, StructInit, FieldAccess)
             out.push_str(&format!("    ; Unimplemented Expr {:?}\n", expr));
             out.push_str("    LDD #0\n");
         }

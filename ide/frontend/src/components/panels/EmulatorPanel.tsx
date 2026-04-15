@@ -6,10 +6,12 @@ import { useDebugStore } from '../../state/debugStore';
 import type { PdbData } from '../../state/debugStore';
 import { useJoystickStore } from '../../state/joystickStore';
 import { useProjectStore } from '../../state/projectStore';
+import { useSettings } from '../../state/settingsStore';
 import { JoystickConfigDialog } from '../dialogs/JoystickConfigDialog';
 import { psgAudio } from '../../psgAudio';
 import { inputManager } from '../../inputManager';
 import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
+import { emuCore } from '../../emulatorCoreSingleton';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -310,6 +312,9 @@ export const EmulatorPanel: React.FC = () => {
   const debugState = useDebugStore(s => s.state);
   const pdbData = useDebugStore(s => s.pdbData);
   const breakpointCheckIntervalRef = useRef<number | null>(null);
+
+  // rp2350 requestAnimationFrame loop handle
+  const rp2350LoopRef = useRef<number | null>(null);
   
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
@@ -322,6 +327,10 @@ export const EmulatorPanel: React.FC = () => {
     // console.log('📍 [EmulatorPanel] Mount stack trace:', new Error().stack); // Debug only
     return () => {
       console.log('💀 [EmulatorPanel] COMPONENT UNMOUNTING');
+      if (rp2350LoopRef.current !== null) {
+        cancelAnimationFrame(rp2350LoopRef.current);
+        rp2350LoopRef.current = null;
+      }
     };
   }, []);
 
@@ -937,21 +946,27 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-continue':
           console.log('[EmulatorPanel] 🟢 Debug: Continue execution');
-          
+
           // Clear current line highlight
           const debugStoreForContinue = useDebugStore.getState();
           debugStoreForContinue.setCurrentVpyLine(null);
           debugStoreForContinue.setState('running');
-          
+
+          if (rp2350LoopRef.current !== null) {
+            // rp2350 mode: RAF loop resumes automatically via state check
+            console.log('[EmulatorPanel] ✓ rp2350 RAF loop will resume (state=running)');
+            break;
+          }
+
           // CRITICAL: Check if paused by breakpoint BEFORE changing state
           const wasPausedByBreakpoint = vecx.isPausedByBreakpoint && vecx.isPausedByBreakpoint();
-          
+
           // Now set debugState to 'running' AFTER checking pause state
           vecx.debugState = 'running';
           vecx.stepMode = null; // Clear any step mode
           vecx.stepTargetAddress = null;
           console.log('[EmulatorPanel] ✓ JSVecx debugState set to running, step mode cleared');
-          
+
           // Resume from breakpoint if it was paused by one
           if (wasPausedByBreakpoint) {
             console.log('[EmulatorPanel] 🔓 Resuming from breakpoint');
@@ -980,17 +995,24 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-pause':
           console.log('[EmulatorPanel] ⏸️  Debug: Pause execution');
-          if (vecx.running) {
+          if (rp2350LoopRef.current !== null) {
+            // rp2350 mode: RAF loop skips frames automatically via state check
+            console.log('[EmulatorPanel] ✓ rp2350 RAF loop paused (state=paused)');
+          } else if (vecx.running) {
             vecx.stop();
           }
           break;
-          
+
         case 'debug-stop':
           console.log('[EmulatorPanel] 🛑 Debug: Stop execution');
-          if (vecx.running) {
-            vecx.stop();
+          if (rp2350LoopRef.current !== null) {
+            // rp2350 mode: reset ARM system; RAF loop skips frames via state check
+            emuCore.reset();
+            console.log('[EmulatorPanel] ✓ rp2350 system reset');
+          } else {
+            if (vecx.running) vecx.stop();
+            vecx.reset();
           }
-          vecx.reset();
           break;
           
         case 'debug-step-over':
@@ -2152,7 +2174,12 @@ export const EmulatorPanel: React.FC = () => {
       END DISABLED AUTO-LOAD */
       
       // Skip loading compiled ROM - go straight to default Minestorm
-      
+      // But only for the M6809 path — rp2350 has no use for a 6809 ROM.
+      if (useSettings.getState().buildTarget === 'rp2350') {
+        defaultOverlayLoaded.current = true;
+        return;
+      }
+
       // Fallback: Cargar Minestorm
       console.log('[EmulatorPanel] Loading default: Minestorm');
       await loadOverlay('minestorm.bin');
@@ -2231,8 +2258,8 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = (payload: { base64: string; size: number; binPath: string; pdbData?: any }) => {
-      console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes)`);
+    const handleCompiledBin = (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350'; elfBase64?: string | null }) => {
+      console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
       
       // Guardar última ROM compilada con su proyecto
       const projectState = (window as any).__projectStore__?.getState?.();
@@ -2270,9 +2297,74 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
+      // ── rp2350 path: route through Rp2350System instead of M6809/JSVecX ──
+      if (payload.target === 'rp2350') {
+        try {
+          const bin = Uint8Array.from(atob(payload.base64), c => c.charCodeAt(0));
+          const elf = payload.elfBase64
+            ? Uint8Array.from(atob(payload.elfBase64), c => c.charCodeAt(0))
+            : undefined;
+          console.log(`[EmulatorPanel] rp2350: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
+          if (typeof emuCore.loadArm === 'function') {
+            // Pass the shared canvas so Rp2350System renders directly to it
+            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined);
+            console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+
+            // Stop JSVecX internal loop (it drives the M6809 path)
+            const vecx = (window as any).vecx;
+            if (vecx) vecx.stop();
+
+            // Cancel any previous rp2350 RAF loop
+            if (rp2350LoopRef.current !== null) {
+              cancelAnimationFrame(rp2350LoopRef.current);
+              rp2350LoopRef.current = null;
+            }
+
+            // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
+            if (canvasRef.current) {
+              const ctx = canvasRef.current.getContext('2d');
+              if (ctx) {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+              }
+            }
+
+            // Start our own requestAnimationFrame loop capped at 60 fps.
+            // RAF fires at the display refresh rate (120/144 Hz on many monitors).
+            // Without a cap the game logic would run proportionally faster than
+            // the M6809 path, which is driven by the Vectrex 60 Hz VIA timer.
+            const TARGET_MS = 1000 / 60;  // 16.667 ms per frame
+            let rp2350FrameCount = 0;
+            let lastFrameTs = 0;
+            const loop = (ts: number) => {
+              rp2350LoopRef.current = requestAnimationFrame(loop);
+              const elapsed = ts - lastFrameTs;
+              if (elapsed < TARGET_MS) return;          // too soon — skip
+              lastFrameTs = ts - (elapsed % TARGET_MS); // align to 60 Hz grid
+              // Honour pause/stop from debug controls
+              if (useDebugStore.getState().state !== 'running') return;
+              rp2350FrameCount++;
+              if (rp2350FrameCount <= 5 || rp2350FrameCount % 120 === 0) {
+                console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
+              }
+              emuCore.runFrame();
+            };
+            // Mark as running so the RAF loop doesn't bail on the first check.
+            useDebugStore.getState().setState('running');
+            rp2350LoopRef.current = requestAnimationFrame(loop);
+            console.log('[EmulatorPanel] ✓ rp2350 rAF loop started');
+          } else {
+            console.error('[EmulatorPanel] loadArm not available on emuCore');
+          }
+        } catch (e) {
+          console.error('[EmulatorPanel] Failed to load ARM binary:', e);
+        }
+        return;
+      }
+
       // Verificar si estamos cargando para debug session (no auto-start)
       const loadingForDebug = useDebugStore.getState().loadingForDebug;
-      
+
       try {
         // Convertir base64 a bytes y cargar en JSVecX
         const binaryData = atob(payload.base64);
@@ -2283,8 +2375,13 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
 
-        // Detener emulador antes de cargar
+        // Detener emulador antes de cargar (y cancelar loop rp2350 si estaba activo)
         console.log('[EmulatorPanel] Stopping emulator before load...');
+        if (rp2350LoopRef.current !== null) {
+          cancelAnimationFrame(rp2350LoopRef.current);
+          rp2350LoopRef.current = null;
+          console.log('[EmulatorPanel] rp2350 rAF loop cancelled');
+        }
         vecx.stop();
         console.log('[EmulatorPanel] Emulator stopped');
         

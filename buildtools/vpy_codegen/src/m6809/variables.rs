@@ -93,6 +93,34 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
     Ok(asm)
 }
 
+/// Emit ARRAY_{NAME}_LEN EQU constants for all arrays.
+/// These are needed by ForIn loops to determine the iteration count at assemble time.
+pub fn emit_array_len_equates(module: &Module) -> String {
+    let mut asm = String::new();
+    let mut has_any = false;
+    for item in &module.items {
+        match item {
+            Item::GlobalLet { name, value, .. } | Item::Const { name, value, .. } => {
+                if let Expr::List(elements) = value {
+                    if !has_any {
+                        asm.push_str("; Array length constants\n");
+                        has_any = true;
+                    }
+                    asm.push_str(&format!(
+                        "ARRAY_{}_LEN         EQU {}   ; {} elements\n",
+                        name.to_uppercase(),
+                        elements.len(),
+                        elements.len()
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    if has_any { asm.push('\n'); }
+    asm
+}
+
 /// Emit array data sections (must be called AFTER EQU definitions, BEFORE code)
 /// Arrays stored in ROM with ARRAY_{name}_DATA labels
 /// At runtime, main() initializes VAR_{name} (RAM pointer) to point to this ROM data
@@ -398,13 +426,32 @@ fn collect_identifiers_from_stmts(stmts: &[Stmt], vars: &mut Vec<(String, usize)
                 }
                 collect_identifiers_from_stmts(body, vars);
             }
-            Stmt::ForIn { var, iterable, body, .. } => {
+            Stmt::ForIn { var, iterable, body, source_line, .. } => {
                 // ForIn loop variables default to 16-bit if not already registered
                 if !vars.iter().any(|(n, _)| n == var) {
                     vars.push((var.clone(), 2));
                 }
+                // Synthetic counter, base ptr, and len variables for array iteration
+                let ctr_name  = format!("_fi_{source_line}");
+                let base_name = format!("_fi_{source_line}_base");
+                let len_name  = format!("_fi_{source_line}_len");
+                for synthetic in [&ctr_name, &base_name, &len_name] {
+                    if !vars.iter().any(|(n, _)| n == synthetic) {
+                        vars.push((synthetic.clone(), 2));
+                    }
+                }
                 collect_identifiers_from_expr(iterable, vars);
                 collect_identifiers_from_stmts(body, vars);
+            }
+            Stmt::Switch { expr, cases, default, .. } => {
+                collect_identifiers_from_expr(expr, vars);
+                for (case_val, case_body) in cases {
+                    collect_identifiers_from_expr(case_val, vars);
+                    collect_identifiers_from_stmts(case_body, vars);
+                }
+                if let Some(def) = default {
+                    collect_identifiers_from_stmts(def, vars);
+                }
             }
             Stmt::Return(value, _) => {
                 if let Some(expr) = value {

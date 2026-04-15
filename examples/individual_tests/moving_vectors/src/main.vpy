@@ -30,6 +30,8 @@ def main():
 
 def loop():
     PRINT_TEXT(-60, 110, "MOVING VEC")
+    PRINT_NUMBER(-60, 90, ball_x)
+    PRINT_NUMBER(-60, 70, ball_vx)
 
     # Move ball
     ball_x = ball_x + ball_vx

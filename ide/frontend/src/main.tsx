@@ -47,6 +47,7 @@ function App() {
   
   // Settings
   const compilerBackend = useSettings(s => s.compiler);
+  const buildTarget = useSettings(s => s.buildTarget);
 
   const initializedRef = useRef(false);
 
@@ -488,9 +489,10 @@ function App() {
       const args: any = {
         path: filePath,
         autoStart: autoRun,
-        compilerBackend // from useSettings
+        compilerBackend, // from useSettings
+        target: buildTarget // from useSettings
       };
-      
+
       // If building from project, include output path
       if (projectState.vpyProject) {
         const outputPath = projectState.getOutputPath();
@@ -584,7 +586,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend]);
+  }, [documents, compilerBackend, buildTarget]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -784,7 +786,8 @@ def loop():
           const args: any = {
             path: filePath,
             autoStart: false,  // No auto-run, queremos control manual
-            compilerBackend // from useSettings
+            compilerBackend, // from useSettings
+            target: buildTarget // from useSettings
           };
 
           // Si el documento está sucio, enviarlo para que se guarde antes de compilar

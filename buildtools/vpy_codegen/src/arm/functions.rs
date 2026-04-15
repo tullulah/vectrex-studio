@@ -19,10 +19,12 @@ pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, 
     s.push_str(&var_decls);
     s.push('\n');
 
-    // Emit user-defined functions (skip main/loop)
+    // Emit user-defined functions (skip main/loop — inlined by emit_game_main).
+    // After unification all names are uppercase, so compare against "MAIN"/"LOOP".
     for item in &module.items {
         if let Item::Function(func) = item {
-            if func.name == "main" || func.name == "loop" {
+            let n = func.name.to_uppercase();
+            if n == "MAIN" || n == "LOOP" {
                 continue;
             }
             s.push_str(&emit_function(&func.name, &func.params, &func.body, &var_addrs)?);
@@ -151,6 +153,21 @@ fn collect_locals(
             Stmt::While { body, .. } => {
                 collect_locals(body, alloc, addrs, decls);
             }
+            Stmt::ForIn { var, body, source_line, .. } => {
+                ensure_var(var, alloc, addrs, decls, "forin elem");
+                ensure_var(&format!("_fi_{source_line}"), alloc, addrs, decls, "forin counter");
+                ensure_var(&format!("_fi_{source_line}_base"), alloc, addrs, decls, "forin base ptr");
+                ensure_var(&format!("_fi_{source_line}_len"), alloc, addrs, decls, "forin len");
+                collect_locals(body, alloc, addrs, decls);
+            }
+            Stmt::Switch { cases, default, .. } => {
+                for (_, case_body) in cases {
+                    collect_locals(case_body, alloc, addrs, decls);
+                }
+                if let Some(def) = default {
+                    collect_locals(def, alloc, addrs, decls);
+                }
+            }
             _ => {}
         }
     }
@@ -207,12 +224,17 @@ fn emit_function(
 fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<String, String> {
     let mut s = String::new();
 
+    // After unification all function names are uppercase.
     let main_fn = module.items.iter().find_map(|i| {
-        if let Item::Function(f) = i { if f.name == "main" { return Some(f); } }
+        if let Item::Function(f) = i {
+            if f.name.to_uppercase() == "MAIN" { return Some(f); }
+        }
         None
     });
     let loop_fn = module.items.iter().find_map(|i| {
-        if let Item::Function(f) = i { if f.name == "loop" { return Some(f); } }
+        if let Item::Function(f) = i {
+            if f.name.to_uppercase() == "LOOP" { return Some(f); }
+        }
         None
     });
 
@@ -295,6 +317,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     // Game loop
     s.push_str("game_main_loop:\n");
     s.push_str("    bl      vpy_wait_recal\n");
+    s.push_str("    bl      vpy_update_buttons\n");
     s.push_str("    bl      vpy_beep_update\n");
     s.push_str("    bl      vpy_music_update\n");
     s.push_str("    bl      vpy_audio_update\n");
@@ -540,6 +563,119 @@ fn emit_stmt(
 
         Stmt::Pass { .. } => Ok(String::new()),
 
-        other => Err(format!("Unsupported statement in ARM backend: {:?}", other)),
+        Stmt::ForIn { var, iterable, body, source_line, .. } => {
+            let id = next_id();
+            let varname    = var.to_uppercase();
+            let ctr_name   = format!("_fi_{source_line}").to_uppercase();
+            let base_name  = format!("_fi_{source_line}_base").to_uppercase();
+            let len_name   = format!("_fi_{source_line}_len").to_uppercase();
+
+            let var_addr  = var_addrs.get(&varname).copied()
+                .ok_or_else(|| format!("ForIn var {var} not allocated"))?;
+            let ctr_addr  = var_addrs.get(&ctr_name).copied()
+                .ok_or_else(|| format!("ForIn counter {ctr_name} not allocated"))?;
+            let base_addr = var_addrs.get(&base_name).copied()
+                .ok_or_else(|| format!("ForIn base {base_name} not allocated"))?;
+            let len_addr  = var_addrs.get(&len_name).copied()
+                .ok_or_else(|| format!("ForIn len {len_name} not allocated"))?;
+
+            let break_lbl    = format!("forin_end_{id}");
+            let continue_lbl = format!("forin_inc_{id}");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((break_lbl.clone(), continue_lbl.clone()));
+
+            let mut s = String::new();
+
+            // Evaluate array base pointer, save to RAM
+            s.push_str(&emit_expr(iterable, var_addrs)?);
+            s.push_str(&format!("    ldr     r1, =0x{base_addr:08X}\n    str     r0, [r1]    @ forin base ptr\n"));
+
+            // Array length — compile-time constant via ARRAY_NAME_LEN equate
+            let len_asm = if let Expr::Ident(id_info) = iterable {
+                format!("    ldr     r0, =ARRAY_{}_LEN\n", id_info.name.to_uppercase())
+            } else {
+                "    mov     r0, #0             @ unknown array len\n".to_string()
+            };
+            s.push_str(&len_asm);
+            s.push_str(&format!("    ldr     r1, =0x{len_addr:08X}\n    str     r0, [r1]    @ forin len\n"));
+
+            // Init counter = 0
+            s.push_str("    mov     r0, #0\n");
+            s.push_str(&format!("    ldr     r1, =0x{ctr_addr:08X}\n    str     r0, [r1]\n"));
+
+            s.push_str(&format!("forin_top_{id}:\n"));
+            // Condition: ctr < len
+            s.push_str(&format!("    ldr     r1, =0x{ctr_addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str(&format!("    ldr     r1, =0x{len_addr:08X}\n    ldr     r1, [r1]\n"));
+            s.push_str("    cmp     r0, r1\n");
+            s.push_str(&format!("    bge     forin_end_{id}\n"));
+
+            // Load element: var = base_ptr[ctr * 2]  (i16 elements)
+            s.push_str(&format!("    ldr     r1, =0x{base_addr:08X}\n    ldr     r1, [r1]\n"));
+            s.push_str(&format!("    ldr     r2, =0x{ctr_addr:08X}\n    ldr     r2, [r2]\n"));
+            s.push_str("    lsl     r2, r2, #1     @ ctr * 2\n");
+            s.push_str("    add     r1, r1, r2\n");
+            s.push_str("    ldrsh   r0, [r1]       @ load i16 element\n");
+            s.push_str(&format!("    ldr     r1, =0x{var_addr:08X}\n    str     r0, [r1]    @ var = arr[ctr]\n"));
+
+            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels)?); }
+
+            // Continue target: increment counter
+            s.push_str(&format!("forin_inc_{id}:\n"));
+            s.push_str(&format!("    ldr     r1, =0x{ctr_addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str("    add     r0, r0, #1\n");
+            s.push_str("    str     r0, [r1]\n");
+            s.push_str(&format!("    b       forin_top_{id}\n"));
+            s.push_str(&format!("forin_end_{id}:\n"));
+            Ok(s)
+        }
+
+        Stmt::Switch { expr, cases, default, .. } => {
+            let id = next_id();
+            let end_lbl = format!("switch_end_{id}");
+            let mut s = String::new();
+
+            // Evaluate switch expression once, save to RAM scratch via r4 (callee-saved)
+            // We can't use stack due to break/continue stack-discipline issues.
+            // Use a push-pop bracket since callee-saved r4 is already in use.
+            // Instead, emit expr into r4 temporarily (save/restore around body is handled
+            // by the function prologue/epilogue).  Use a stack push for simplicity — switch
+            // does not contain loops so break/continue don't need to pop the stack here.
+            // Actually: switch bodies CAN contain break (which jumps to switch_end).
+            // So we can't rely on stack at switch_end unless we emit a cleanup there.
+            // Solution: push {r0, r1} (8 bytes, aligned) at entry; emit cleanup at each
+            // break target and at the end label.  Instead, simplest: save to r4 (available
+            // since emit_function saves r4-r7 at entry and we're inside a function).
+            //
+            // r4 is callee-saved but may be in use by the outer function body. Use the
+            // stack approach with an explicit cleanup label that break jumps to.
+            // --- Use stack approach, add cleanup label before end_lbl ---
+            let cleanup_lbl = format!("switch_cleanup_{id}");
+
+            s.push_str(&emit_expr(expr, var_addrs)?);
+            s.push_str("    push    {r0, r1}       @ switch value (r1=pad, 8-byte align)\n");
+
+            for (ci, (case_val, case_body)) in cases.iter().enumerate() {
+                let no_match_lbl = format!("switch_next_{ci}_{id}");
+                s.push_str(&emit_expr(case_val, var_addrs)?);
+                s.push_str("    mov     r1, r0\n");
+                s.push_str("    ldr     r0, [sp, #0]   @ reload switch value\n");
+                s.push_str("    cmp     r0, r1\n");
+                s.push_str(&format!("    bne     {no_match_lbl}\n"));
+                for st in case_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+                s.push_str(&format!("    b       {cleanup_lbl}\n"));
+                s.push_str(&format!("{no_match_lbl}:\n"));
+            }
+
+            if let Some(default_body) = default {
+                for st in default_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+            }
+
+            s.push_str(&format!("{cleanup_lbl}:\n"));
+            s.push_str("    add     sp, sp, #8     @ pop switch value\n");
+            s.push_str(&format!("{end_lbl}:\n"));
+            Ok(s)
+        }
+
     }
 }

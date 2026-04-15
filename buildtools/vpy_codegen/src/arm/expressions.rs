@@ -4,6 +4,26 @@
 //! Result always ends up in r0.
 
 use vpy_parser::{Expr, BinOp, CmpOp, LogicOp, CallInfo};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static COND_LABEL_CTR: AtomicUsize = AtomicUsize::new(0);
+
+/// Emit code that sets r0=1 if condition is true, r0=0 otherwise.
+/// `branch_if_false` is the branch mnemonic taken when the condition is FALSE
+/// (the complement), e.g. for LT use "bge".  Uses forward branches instead of
+/// IT blocks so that 16-bit `movs` never runs inside an IT slot and cannot
+/// corrupt the flags used by the ELSE evaluation.
+fn bool_from_flags(branch_if_false: &str) -> String {
+    let id = COND_LABEL_CTR.fetch_add(1, Ordering::Relaxed);
+    format!(
+        "    {branch_if_false}    .Lcf{id}\n\
+         \x20   movs    r0, #1\n\
+         \x20   b       .Lcf{id}e\n\
+         .Lcf{id}:\n\
+         \x20   movs    r0, #0\n\
+         .Lcf{id}e:\n"
+    )
+}
 
 /// Emit Thumb2 code to evaluate `expr`, leaving result in r0.
 pub fn emit_expr(
@@ -67,13 +87,15 @@ pub fn emit_expr(
             s.push_str("    mov     r1, r0\n");
             s.push_str("    pop     {r0}\n");
             s.push_str("    cmp     r0, r1\n");
+            // Use conditional branch pattern — IT blocks are avoided because
+            // 16-bit `movs` inside them sets N/Z, corrupting ELSE slot evaluation.
             match op {
-                CmpOp::Eq => { s.push_str("    ite     eq\n    moveq   r0, #1\n    movne   r0, #0\n"); }
-                CmpOp::Ne => { s.push_str("    ite     ne\n    movne   r0, #1\n    moveq   r0, #0\n"); }
-                CmpOp::Lt => { s.push_str("    ite     lt\n    movlt   r0, #1\n    movge   r0, #0\n"); }
-                CmpOp::Le => { s.push_str("    ite     le\n    movle   r0, #1\n    movgt   r0, #0\n"); }
-                CmpOp::Gt => { s.push_str("    ite     gt\n    movgt   r0, #1\n    movle   r0, #0\n"); }
-                CmpOp::Ge => { s.push_str("    ite     ge\n    movge   r0, #1\n    movlt   r0, #0\n"); }
+                CmpOp::Eq => s.push_str(&bool_from_flags("bne")),
+                CmpOp::Ne => s.push_str(&bool_from_flags("beq")),
+                CmpOp::Lt => s.push_str(&bool_from_flags("bge")),
+                CmpOp::Le => s.push_str(&bool_from_flags("bgt")),
+                CmpOp::Gt => s.push_str(&bool_from_flags("ble")),
+                CmpOp::Ge => s.push_str(&bool_from_flags("blt")),
             }
             Ok(s)
         }
@@ -88,7 +110,7 @@ pub fn emit_expr(
                     s.push_str("    beq     1f\n");
                     s.push_str(&emit_expr(right, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
-                    s.push_str("    ite     ne\n    movne   r0, #1\n    moveq   r0, #0\n");
+                    s.push_str(&bool_from_flags("beq"));
                     s.push_str("    b       2f\n");
                     s.push_str("1:  mov     r0, #0\n");
                     s.push_str("2:\n");
@@ -109,7 +131,7 @@ pub fn emit_expr(
         Expr::Not(operand) => {
             let mut s = emit_expr(operand, var_addrs)?;
             s.push_str("    cmp     r0, #0\n");
-            s.push_str("    ite     eq\n    moveq   r0, #1\n    movne   r0, #0\n");
+            s.push_str(&bool_from_flags("bne"));
             Ok(s)
         }
 
@@ -137,6 +159,52 @@ pub fn emit_expr(
         Expr::StringLit(s) => {
             // String literals used as asset names — not a runtime value
             Err(format!("String literal '{}' not supported as expression in ARM backend", s))
+        }
+
+        Expr::MethodCall(info) => {
+            match info.method_name.as_str() {
+                "abs" => {
+                    let mut s = emit_expr(&info.target, var_addrs)?;
+                    s.push_str("    cmp     r0, #0\n");
+                    s.push_str("    it      mi\n    negmi   r0, r0    @ abs\n");
+                    Ok(s)
+                }
+                "clamp" => {
+                    let lo = info.args.get(0).ok_or_else(|| "clamp: missing lo".to_string())?;
+                    let hi = info.args.get(1).ok_or_else(|| "clamp: missing hi".to_string())?;
+                    let mut s = emit_expr(&info.target, var_addrs)?;
+                    // clamp lo: val = max(val, lo)
+                    s.push_str("    push    {r0}           @ val\n");
+                    s.push_str(&emit_expr(lo, var_addrs)?);
+                    s.push_str("    mov     r1, r0\n    pop     {r0}\n");
+                    s.push_str("    cmp     r0, r1\n    it      lt\n    movlt   r0, r1    @ max(val, lo)\n");
+                    // clamp hi: val = min(val, hi)
+                    s.push_str("    push    {r0}           @ val (after lo clamp)\n");
+                    s.push_str(&emit_expr(hi, var_addrs)?);
+                    s.push_str("    mov     r1, r0\n    pop     {r0}\n");
+                    s.push_str("    cmp     r0, r1\n    it      gt\n    movgt   r0, r1    @ min(val, hi)\n");
+                    Ok(s)
+                }
+                "min" => {
+                    let arg = info.args.get(0).ok_or_else(|| "min: missing arg".to_string())?;
+                    let mut s = emit_expr(&info.target, var_addrs)?;
+                    s.push_str("    push    {r0}\n");
+                    s.push_str(&emit_expr(arg, var_addrs)?);
+                    s.push_str("    mov     r1, r0\n    pop     {r0}\n");
+                    s.push_str("    cmp     r0, r1\n    it      gt\n    movgt   r0, r1    @ min(a, b)\n");
+                    Ok(s)
+                }
+                "max" => {
+                    let arg = info.args.get(0).ok_or_else(|| "max: missing arg".to_string())?;
+                    let mut s = emit_expr(&info.target, var_addrs)?;
+                    s.push_str("    push    {r0}\n");
+                    s.push_str(&emit_expr(arg, var_addrs)?);
+                    s.push_str("    mov     r1, r0\n    pop     {r0}\n");
+                    s.push_str("    cmp     r0, r1\n    it      lt\n    movlt   r0, r1    @ max(a, b)\n");
+                    Ok(s)
+                }
+                other => Err(format!("Unsupported method call: .{other}()")),
+            }
         }
 
         other => Err(format!("Unsupported expression in ARM backend: {:?}", other)),
@@ -173,6 +241,12 @@ pub fn emit_call(
         "WAIT_RECAL"      => "vpy_wait_recal",
         "SET_INTENSITY"   => "vpy_set_intensity",
         "DRAW_LINE"       => "vpy_draw_line",
+        "DRAW_CIRCLE"     => "vpy_draw_circle",
+        "DRAW_RECT"       => "vpy_draw_rect",
+        "DRAW_FILLED_RECT" => "vpy_draw_filled_rect",
+        "DRAW_POLYGON"    => "vpy_draw_polygon",
+        "DRAW_ARC"        => "vpy_draw_circle",    // approximate arc as circle
+        "DRAW_ELLIPSE"    => "vpy_draw_circle",    // approximate ellipse as circle
         "MOVE"            => "vpy_move",
         "DRAW_VECTOR"     => "vpy_draw_vector",
         "DRAW_VECTOR_EX"  => "vpy_draw_vector_ex",
@@ -180,6 +254,7 @@ pub fn emit_call(
         "PRINT_TEXT"      => "vpy_print_text",
         "PRINT_NUMBER"    => "vpy_print_number",
         "PLAY_MUSIC"      => "vpy_play_music",
+        "STOP_MUSIC"      => "vpy_stop_music",
         "PLAY_SFX"        => "vpy_play_sfx",
         "LOAD_LEVEL"      => "vpy_load_level",
         "SHOW_LEVEL"      => "vpy_show_level",
@@ -305,6 +380,37 @@ pub fn emit_call(
             s.push_str(&format!("    add     sp, sp, #{}\n", nextra * 4));
         }
         return Ok(s);
+    }
+
+    // Special case: DRAW_VECTOR("name", ox, oy) — always emit r0=asset, r1=ox, r2=oy.
+    // ox/oy default to 0 when not supplied so the vector draws at screen centre.
+    if info.name == "DRAW_VECTOR" {
+        if let Some(Expr::StringLit(asset_name)) = args.first() {
+            let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol   = format!("_{sym_base}_VECTORS");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            // r0 = asset ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = ox
+            if let Some(ox) = runtime.first() {
+                s.push_str(&emit_arg(ox, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = oy
+            if let Some(oy) = runtime.get(1) {
+                s.push_str(&emit_arg(oy, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r2, r1, r0
+            s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_vector\n");
+            return Ok(s);
+        }
     }
 
     // For asset builtins, the first arg is a string literal → ROM symbol address.

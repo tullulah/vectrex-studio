@@ -251,8 +251,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     asm.push_str("; === RAM VARIABLE DEFINITIONS ===\n");
     asm.push_str(";***************************************************************************\n");
     asm.push_str(&ram.emit_equ_definitions());
-    asm.push_str("\n");
-    
+    asm.push_str(&crate::m6809::variables::emit_array_len_equates(module));
+
     // CRITICAL FIX (2026-01-18): Emit array data BEFORE code
     // Arrays must be defined before first use to avoid forward references in single-pass assembler
     asm.push_str(&crate::m6809::variables::emit_array_data(module));

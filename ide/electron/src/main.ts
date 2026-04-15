@@ -929,11 +929,11 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core' }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   
@@ -1063,16 +1063,20 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       argsv = ['build', fsPath, '--target', 'vectrex', '--title', basename(fsPath).replace(/\.[^.]+$/, '').toUpperCase(), '--bin', '--include-dir', workspaceRoot];
     } else {
       // NEW BUILDTOOLS COMPILER (vpy_cli) ARGUMENTS
+      const buildTarget = target ?? 'm6809';
       argsv = ['build', fsPath, '--output', finalBinPath];
-      
+
       // Add ROM size configuration if in project mode (read from .vpyproj if needed)
       // Default: 32KB single-bank
       argsv.push('--rom-size', '32768');
       argsv.push('--bank-size', '32768');
-      
+
+      // Target platform
+      argsv.push('--target', buildTarget);
+
       // Always generate debug symbols
       argsv.push('--debug');
-      
+
       // If verbose mode, add --verbose flag
       if (verbose) {
         argsv.push('--verbose');
@@ -1250,8 +1254,22 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           mainWindow?.webContents.send('run://stderr', `⚠ Warning: Failed to load .pdb: ${e.message}`);
         }
         
+        // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
+        let elfBase64: string | null = null;
+        if (target === 'rp2350') {
+          const elfPath = binPath.replace(/\.bin$/, '.elf');
+          try {
+            const elfBuf = await fs.readFile(elfPath);
+            elfBase64 = Buffer.from(elfBuf).toString('base64');
+          } catch (_e) { /* elf not available */ }
+        }
+
         // Notify renderer to load binary
-        mainWindow?.webContents.send('emu://compiledBin', { base64, size: buf.length, binPath, pdbData });
+        mainWindow?.webContents.send('emu://compiledBin', {
+          base64, size: buf.length, binPath, pdbData,
+          target: target || 'm6809',
+          elfBase64,
+        });
         resolvePromise({ 
           ok: true, 
           binPath, 

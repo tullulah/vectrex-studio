@@ -5,7 +5,7 @@ import './SettingsPanel.css';
 
 export const SettingsPanel: React.FC = () => {
   const { t } = useTranslation(['common']);
-  const { compiler, setCompiler } = useSettings();
+  const { compiler, setCompiler, buildTarget, setBuildTarget } = useSettings();
 
   return (
     <div className="settings-panel">
@@ -52,6 +52,47 @@ export const SettingsPanel: React.FC = () => {
         </div>
       </div>
       
+      <div className="settings-section">
+        <h3>{t('section.target', 'Build Target')}</h3>
+        <p className="settings-description">
+          {t('settings.target.description', 'Select the hardware target for compilation. M6809 targets the original Vectrex hardware. RP2350 targets the debug cartridge.')}
+        </p>
+
+        <div className="settings-option">
+          <label className="settings-radio">
+            <input
+              type="radio"
+              name="buildTarget"
+              value="m6809"
+              checked={buildTarget === 'm6809'}
+              onChange={() => setBuildTarget('m6809')}
+            />
+            <div className="radio-content">
+              <span className="radio-title">{t('settings.target.m6809.title', 'M6809 (Vectrex)')}</span>
+              <span className="radio-description">
+                {t('settings.target.m6809.desc', 'Original Vectrex hardware. Produces a .bin ROM cartridge image.')}
+              </span>
+            </div>
+          </label>
+
+          <label className="settings-radio">
+            <input
+              type="radio"
+              name="buildTarget"
+              value="rp2350"
+              checked={buildTarget === 'rp2350'}
+              onChange={() => setBuildTarget('rp2350')}
+            />
+            <div className="radio-content">
+              <span className="radio-title">{t('settings.target.rp2350.title', 'RP2350 (Debug Cartridge)')}</span>
+              <span className="radio-description">
+                {t('settings.target.rp2350.desc', 'ARM Thumb2 target for the RP2350 debug cartridge. Requires arm-none-eabi toolchain on PATH.')}
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <div className="settings-info">
         <p>
           {t('settings.note', 'Note: Changes take effect on the next build. The compiler setting is saved in your browser\'s local storage.')}

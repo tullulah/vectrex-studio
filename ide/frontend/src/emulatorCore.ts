@@ -41,6 +41,9 @@ export interface IEmulatorCore {
   getDebugMessages?(): string[];
   clearDebugMessages?(): void;
   getLastDebugOutput?(): string;
+
+  /** Load an ARM binary (rp2350 target). Switches the active backend to Rp2350System. */
+  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void;
 }
 
 // Tipo del identificador de backend.

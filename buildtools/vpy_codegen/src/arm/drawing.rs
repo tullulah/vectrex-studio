@@ -154,22 +154,30 @@ fn emit_dv_draw_delta() -> String {
 // ---------------------------------------------------------------------------
 fn emit_draw_vector() -> String {
     let mut s = String::new();
-    s.push_str("@ vpy_draw_vector(r0=asset_ptr)\n");
+    s.push_str("@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)\n");
+    s.push_str("@ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.\n");
     s.push_str(".global vpy_draw_vector\n.type vpy_draw_vector, %function\n.thumb_func\nvpy_draw_vector:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
-    s.push_str("    mov     r4, r0\n");
-    s.push_str("    bl      dv_reset\n");
+    // Save r9=ox, r10=oy alongside the previous callee-saves.
+    // dv_reset / vpy_set_intensity / dv_move_to / dv_draw_delta are traps and
+    // do NOT modify any CPU registers, so we don't need to push/pop around them.
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    mov     r4, r0              @ asset_ptr\n");
+    s.push_str("    mov     r9, r1              @ ox\n");
+    s.push_str("    mov     r10, r2             @ oy\n");
     s.push_str("    ldr     r5, [r4]            @ path_count\n");
     s.push_str("    mov     r6, #0              @ path index\n");
 
     s.push_str("dvv_pl:\n");
     s.push_str("    cmp     r6, r5\n    bge     dvv_done\n");
-    s.push_str("    lsl     r7, r6, #2\n    add r7, r7, #4\n    ldr r7, [r4, r7]\n"); // path ptr
-    s.push_str("    ldrb    r0, [r7]\n    bl      vpy_set_intensity\n");             // intensity
-    s.push_str("    ldrsb   r0, [r7, #2]\n"); // x_start
-    s.push_str("    ldrsb   r1, [r7, #1]\n"); // y_start
+    s.push_str("    lsl     r7, r6, #2\n    add     r7, r7, #4\n    ldr     r7, [r4, r7]\n"); // path ptr
+    // Reset beam before each path so every path starts from a known centre reference.
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    ldrb    r0, [r7]\n    bl      vpy_set_intensity\n");          // intensity
+    // Move to (x_start + ox, y_start + oy) — places path relative to object origin.
+    s.push_str("    ldrsb   r0, [r7, #2]\n    add     r0, r0, r9\n");  // x = x_start + ox
+    s.push_str("    ldrsb   r1, [r7, #1]\n    add     r1, r1, r10\n"); // y = y_start + oy
     s.push_str("    bl      dv_move_to\n");
-    s.push_str("    add     r8, r7, #5\n"); // command ptr
+    s.push_str("    add     r8, r7, #5\n");                            // command ptr
 
     s.push_str("dvv_cl:\n");
     s.push_str("    ldrb    r0, [r8]\n");
@@ -178,11 +186,11 @@ fn emit_draw_vector() -> String {
     s.push_str("    ldrsb   r0, [r8, #2]\n"); // dx
     s.push_str("    ldrsb   r1, [r8, #1]\n"); // dy
     s.push_str("    bl      dv_draw_delta\n");
-    s.push_str("    add     r8, r8, #3\n    b dvv_cl\n");
-    s.push_str("dvv_cskip: add r8,r8,#1\n    b dvv_cl\n");
-    s.push_str("dvv_cend: add r6,r6,#1\n    b dvv_pl\n");
+    s.push_str("    add     r8, r8, #3\n    b       dvv_cl\n");
+    s.push_str("dvv_cskip:\n    add     r8, r8, #1\n    b       dvv_cl\n");
+    s.push_str("dvv_cend:\n    add     r6, r6, #1\n    b       dvv_pl\n");
 
-    s.push_str("dvv_done:\n    pop {r4,r5,r6,r7,r8,pc}\n");
+    s.push_str("dvv_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }

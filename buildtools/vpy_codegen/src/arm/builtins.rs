@@ -80,6 +80,7 @@ pub fn emit_builtins(msg_entries: &[MsgEntry]) -> String {
     s.push_str(&emit_move());
     s.push_str(&emit_draw_line());
     s.push_str(&emit_draw_vector_ex());
+    s.push_str(&emit_draw_shapes());
     s.push_str(&emit_print_text());
     s.push_str(&emit_print_number());
     s.push_str(&emit_joystick());
@@ -146,15 +147,48 @@ fn emit_move() -> String {
 fn emit_draw_line() -> String {
     let mut s = String::new();
     s.push_str("@ vpy_draw_line(r0=x0, r1=y0, r2=x1, r3=y1, [sp+0]=intensity)\n");
+    s.push_str("@ Splits segments longer than 127 units using SDIV for proportional steps\n");
     s.push_str(".global vpy_draw_line\n.type vpy_draw_line, %function\n.thumb_func\nvpy_draw_line:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n"); // 6 regs = 24 bytes
+    // r4=x0, r5=y0, r6=x1, r7=y1
     s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
     s.push_str("    ldr     r8, [sp, #24]           @ intensity (5th arg, past 6 saved regs)\n");
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
     s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
-    s.push_str("    sub     r4, r6, r4\n    sub     r5, r7, r5\n"); // dx, dy
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_draw_delta\n");
+    // Compute dx = x1-x0 → r4 (remaining), dy = y1-y0 → r5 (remaining)
+    s.push_str("    sub     r4, r6, r4\n    sub     r5, r7, r5\n"); // r4=dx, r5=dy
+    // abs(dx) → r6
+    s.push_str("    movs    r6, r4\n");
+    s.push_str("    bpl     vdl_dx_pos\n");
+    s.push_str("    neg     r6, r4\n");       // r6 = |dx|
+    s.push_str("vdl_dx_pos:\n");
+    // abs(dy) → r7
+    s.push_str("    movs    r7, r5\n");
+    s.push_str("    bpl     vdl_dy_pos\n");
+    s.push_str("    neg     r7, r5\n");       // r7 = |dy|
+    s.push_str("vdl_dy_pos:\n");
+    // max_dim = max(|dx|, |dy|) → r7
+    s.push_str("    cmp     r6, r7\n");
+    s.push_str("    it      ge\n");
+    s.push_str("    movge   r7, r6\n");       // if |dx| >= |dy|: r7 = |dx|
+    // if max_dim == 0, nothing to draw
+    s.push_str("    cmp     r7, #0\n    beq     vdl_done\n");
+    // n = ceil(max_dim / 127) = (max_dim + 126) / 127
+    s.push_str("    add     r7, r7, #126\n");
+    s.push_str("    mov     r6, #127\n");
+    s.push_str("    sdiv    r8, r7, r6\n");   // r8 = steps (n)
+    // r4=remaining_dx, r5=remaining_dy, r8=steps_left
+    s.push_str("vdl_loop:\n");
+    s.push_str("    cmp     r8, #0\n    beq     vdl_done\n");
+    s.push_str("    sdiv    r0, r4, r8\n");   // sub_dx = remaining_dx / steps_left
+    s.push_str("    sdiv    r1, r5, r8\n");   // sub_dy = remaining_dy / steps_left
+    s.push_str("    sub     r4, r4, r0\n");   // remaining_dx -= sub_dx
+    s.push_str("    sub     r5, r5, r1\n");   // remaining_dy -= sub_dy
+    s.push_str("    sub     r8, r8, #1\n");   // steps_left--
+    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    b       vdl_loop\n");
+    s.push_str("vdl_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
     s
 }
@@ -208,6 +242,91 @@ fn emit_draw_vector_ex() -> String {
     s.push_str("dvex_cskip:\n    add     r8, r8, #1\n    b       dvex_cl\n");
     s.push_str("dvex_cend:\n    add     r5, r5, #1\n    b       dvex_pl\n");
     s.push_str("dvex_done:\n    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
+    s
+}
+
+// ─── DRAW_CIRCLE / DRAW_RECT / DRAW_FILLED_RECT / DRAW_POLYGON ────────────
+
+fn emit_draw_shapes() -> String {
+    let mut s = String::new();
+
+    // ── vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity) ──────────────
+    // 16-segment polygon approximation using the sin/cos LUT.
+    // Stack layout inside function:
+    //   push {r4..r11,lr} = 36 bytes, sub sp,#8 = 8 bytes → sp+0=first_x, sp+4=first_y
+    s.push_str("@ vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity)\n");
+    s.push_str("@ 16-segment circle via sin/cos LUT\n");
+    s.push_str(".global vpy_draw_circle\n.type vpy_draw_circle, %function\n.thumb_func\nvpy_draw_circle:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    sub     sp, sp, #8              @ [sp+0]=first_x [sp+4]=first_y\n");
+    s.push_str("    mov     r4, r0                  @ cx\n");
+    s.push_str("    mov     r5, r1                  @ cy\n");
+    s.push_str("    asr     r6, r2, #1              @ r6 = diam/2 = radius (matches M6809 convention)\n");
+    s.push_str("    mov     r7, r3                  @ intensity\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, r7\n    bl      vpy_set_intensity\n");
+    // first point at angle=0: cos(0)=127, sin(0)=0
+    s.push_str("    mov     r0, #0\n    bl      vpy_cos\n");
+    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r9, r4, r0              @ prev_x = cx + cos(0)*r/127\n");
+    s.push_str("    mov     r0, #0\n    bl      vpy_sin\n");
+    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r10, r5, r0             @ prev_y = cy + sin(0)*r/127\n");
+    s.push_str("    str     r9, [sp]\n    str     r10, [sp, #4] @ save first point\n");
+    s.push_str("    mov     r0, r9\n    mov     r1, r10\n    bl      dv_move_to\n");
+    s.push_str("    mov     r8, #1\n");
+    s.push_str("vpy_dc_loop:\n");
+    s.push_str("    cmp     r8, #16\n    bge     vpy_dc_close\n");
+    s.push_str("    lsl     r0, r8, #3\n    bl      vpy_cos\n");
+    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r11, r4, r0             @ new_x\n");
+    s.push_str("    lsl     r0, r8, #3\n    bl      vpy_sin\n");
+    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r0, r5, r0              @ new_y in r0\n");
+    s.push_str("    sub     r2, r11, r9             @ dx = new_x - prev_x\n");
+    s.push_str("    sub     r3, r0, r10             @ dy = new_y - prev_y\n");
+    s.push_str("    mov     r9, r11                 @ prev_x = new_x\n");
+    s.push_str("    mov     r10, r0                 @ prev_y = new_y\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    add     r8, r8, #1\n    b       vpy_dc_loop\n");
+    s.push_str("vpy_dc_close:\n");
+    s.push_str("    ldr     r0, [sp]                @ first_x\n");
+    s.push_str("    ldr     r1, [sp, #4]            @ first_y\n");
+    s.push_str("    sub     r0, r0, r9              @ dx = first_x - prev_x\n");
+    s.push_str("    sub     r1, r1, r10             @ dy = first_y - prev_y\n");
+    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    add     sp, sp, #8\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    // ── vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity) ─────────────
+    // Stack: push {r4..r8,lr} = 24 bytes → intensity at sp+24
+    s.push_str("@ vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)\n");
+    s.push_str(".global vpy_draw_rect\n.type vpy_draw_rect, %function\n.thumb_func\nvpy_draw_rect:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, lr}    @ 24 bytes\n");
+    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
+    s.push_str("    ldr     r8, [sp, #24]               @ intensity\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r6\n    mov     r1, #0\n    bl      dv_draw_delta\n"); // right
+    s.push_str("    mov     r0, #0\n    mov     r1, r7\n    bl      dv_draw_delta\n"); // up
+    s.push_str("    neg     r0, r6\n    mov     r1, #0\n    bl      dv_draw_delta\n"); // left
+    s.push_str("    mov     r0, #0\n    neg     r1, r7\n    bl      dv_draw_delta\n"); // down
+    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
+
+    // ── vpy_draw_filled_rect — same as draw_rect (vector display can't fill) ─
+    s.push_str("@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)\n");
+    s.push_str(".global vpy_draw_filled_rect\n.type vpy_draw_filled_rect, %function\n.thumb_func\nvpy_draw_filled_rect:\n");
+    s.push_str("    push    {lr}\n");
+    s.push_str("    bl      vpy_draw_rect\n");
+    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+
+    // ── vpy_draw_polygon — stub (N, intensity, x0,y0, ...) ──────────────────
+    // Complex variadic; for now returns without drawing so it at least links.
+    s.push_str("@ vpy_draw_polygon — stub\n");
+    s.push_str(".global vpy_draw_polygon\n.type vpy_draw_polygon, %function\n.thumb_func\nvpy_draw_polygon:\n");
+    s.push_str("    bx      lr\n\n");
+
     s
 }
 
@@ -485,7 +604,9 @@ fn emit_print_text_clean() -> String {
     s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n");
 
     s.push_str("    ldr     r7, =TEXT_SIZE\n    ldr     r7, [r7]\n");
-    s.push_str("    cmp     r7, #0\n    bne     vpt_sc\n    mov     r7, #1\nvpt_sc:\n");
+    // Scale is stored as 2× the effective multiplier so non-integer sizes are possible.
+    // TEXT_SIZE=2 → effective ×1.0,  TEXT_SIZE=3 → effective ×1.5,  TEXT_SIZE=4 → effective ×2.0
+    s.push_str("    cmp     r7, #0\n    bne     vpt_sc\n    mov     r7, #3\nvpt_sc:\n");
     s.push_str("    ldr     r8, =TEXT_COLOR\n    ldr     r8, [r8]\n");
     s.push_str("    cmp     r8, #0\n    bne     vpt_cc\n    mov     r8, #100\nvpt_cc:\n");
 
@@ -518,7 +639,7 @@ fn emit_print_text_clean() -> String {
     s.push_str("    bl      vpt_draw_glyph\n");
     s.push_str("    add     sp, sp, #8\n"); // clean up the 2 extra stack args
     s.push_str("vpt_adv:\n");
-    s.push_str("    mov     r0, #5\n    mul     r0, r0, r7\n    add     r9, r9, r0\n");
+    s.push_str("    mov     r0, #7\n    mul     r0, r0, r7\n    asr     r0, r0, #1\n    add     r9, r9, r0\n");
     s.push_str("    b       vpt_loop\n");
     s.push_str("vpt_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
@@ -545,10 +666,10 @@ fn emit_print_text_clean() -> String {
     s.push_str("    ldrb    r2, [r4, #2]        @ gy\n");
     s.push_str("    add     r4, r4, #3\n");
     s.push_str("    push    {r0}               @ save cmd\n");
-    // target_x = char_x + gx * scale
-    s.push_str("    mul     r1, r1, r7\n    add     r1, r1, r5\n"); // r1 = target_x
-    // target_y = char_y + gy * scale
-    s.push_str("    mul     r2, r2, r7\n    add     r2, r2, r6\n"); // r2 = target_y
+    // target_x = char_x + (gx * scale) >> 1  (scale is 2× effective multiplier)
+    s.push_str("    mul     r1, r1, r7\n    asr     r1, r1, #1\n    add     r1, r1, r5\n"); // r1 = target_x
+    // target_y = char_y + (gy * scale) >> 1
+    s.push_str("    mul     r2, r2, r7\n    asr     r2, r2, #1\n    add     r2, r2, r6\n"); // r2 = target_y
     // dx = target_x - beam_x; dy = target_y - beam_y
     s.push_str("    sub     r0, r1, r10         @ dx\n");
     s.push_str("    sub     r3, r2, r11         @ dy\n");
@@ -593,37 +714,39 @@ fn emit_print_number() -> String {
     s.push_str("    ldr     r1, =1000\n    sdiv    r0, r6, r1\n");
     s.push_str("    add     r0, r0, #0x30\n    strb    r0, [r7]\n");
     s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n"); // hmm, r0 has char not digit
-    // Actually let me redo the division properly
-    // digit = val / divisor; remainder = val % divisor
-    // store ASCII digit; advance
-    // Let me use sdiv + mls pattern (mls: multiply and subtract = r0 = r2 - r0*r1)
-    // Redo:
     s.clear();
-    s.push_str("@ vpy_print_number(r0=x, r1=y, r2=value)\n");
+    s.push_str("@ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999\n");
     s.push_str(".global vpy_print_number\n.type vpy_print_number, %function\n.thumb_func\nvpy_print_number:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
     s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n");
+    // 8-byte stack buffer: enough for '-' + 4 digits + null + 1 spare
     s.push_str("    sub     sp, sp, #8\n    mov     r7, sp\n");
-    // Clamp
-    s.push_str("    cmp     r6, #0\n    bge     vpn_pos\n    mov     r6, #0\nvpn_pos:\n");
+    // r8 = write pointer: starts at r7, advances past '-' for negative values
+    s.push_str("    mov     r8, r7\n");
+    // Negative: write '-', negate, advance write ptr
+    s.push_str("    cmp     r6, #0\n    bge     vpn_pos\n");
+    s.push_str("    mov     r0, #45\n    strb    r0, [r8]\n");   // '-' = ASCII 45
+    s.push_str("    add     r8, r8, #1\n    neg     r6, r6\n");
+    s.push_str("vpn_pos:\n");
+    // Clamp absolute value to 9999
     s.push_str("    ldr     r0, =9999\n    cmp     r6, r0\n    ble     vpn_clamp\n    mov     r6, r0\nvpn_clamp:\n");
-    // Thousands
-    s.push_str("    ldr     r8, =1000\n    sdiv    r0, r6, r8\n");
-    s.push_str("    mul     r1, r0, r8\n    sub     r6, r6, r1\n"); // remainder
-    s.push_str("    add     r0, r0, #48\n    strb    r0, [r7]\n");   // '0'+digit
+    // Thousands: r0=divisor, r1=digit, r6=remainder; digits write at [r8+N]
+    s.push_str("    ldr     r0, =1000\n    sdiv    r1, r6, r0\n");
+    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
+    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8]\n");
     // Hundreds
-    s.push_str("    mov     r8, #100\n    sdiv    r0, r6, r8\n");
-    s.push_str("    mul     r1, r0, r8\n    sub     r6, r6, r1\n");
-    s.push_str("    add     r0, r0, #48\n    strb    r0, [r7, #1]\n");
+    s.push_str("    mov     r0, #100\n    sdiv    r1, r6, r0\n");
+    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
+    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8, #1]\n");
     // Tens
-    s.push_str("    mov     r8, #10\n    sdiv    r0, r6, r8\n");
-    s.push_str("    mul     r1, r0, r8\n    sub     r6, r6, r1\n");
-    s.push_str("    add     r0, r0, #48\n    strb    r0, [r7, #2]\n");
+    s.push_str("    mov     r0, #10\n    sdiv    r1, r6, r0\n");
+    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
+    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8, #2]\n");
     // Units
-    s.push_str("    add     r0, r6, #48\n    strb    r0, [r7, #3]\n");
+    s.push_str("    add     r1, r6, #48\n    strb    r1, [r8, #3]\n");
     // Null terminator
-    s.push_str("    mov     r0, #0\n    strb    r0, [r7, #4]\n");
-    // Call vpy_print_text(x, y, buf)
+    s.push_str("    mov     r0, #0\n    strb    r0, [r8, #4]\n");
+    // vpy_print_text(x, y, buf) — r2=r7 always (points to '-' or first digit)
     s.push_str("    mov     r0, r4\n    mov     r1, r5\n    mov     r2, r7\n");
     s.push_str("    bl      vpy_print_text\n");
     s.push_str("    add     sp, sp, #8\n");
@@ -836,7 +959,7 @@ fn emit_math_builtins() -> String {
     s.push_str("    ldr     r5, =1013904223\n    add     r0, r0, r5\n");
     s.push_str("    str     r0, [r4]            @ save seed\n");
     s.push_str("    lsr     r0, r0, #16\n");
-    s.push_str("    and     r0, r0, #0x7FFF\n");
+    s.push_str("    bic     r0, r0, #0x8000      @ clear bit15 (0x8000 is valid Thumb2 immediate)\n");
     s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
 
     // vpy_rand_range(r0=lo, r1=hi) → lo + rand()%(hi-lo+1)

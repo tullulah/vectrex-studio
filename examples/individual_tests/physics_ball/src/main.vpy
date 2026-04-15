@@ -13,7 +13,7 @@ vy = 0
 jx = 0
 
 def main():
-    PLAY_MUSIC("music1")
+    # PLAY_MUSIC("music1")
     bx = 0
     by = 60
     vx = 1

@@ -302,9 +302,10 @@ fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo
     if !func.params.is_empty() {
         context::set_current_params(&func.params);
     }
+    let loop_labels: Vec<(String, String)> = Vec::new();
     // Generate code for each statement
     for stmt in &func.body {
-        generate_statement(stmt, asm, assets)?;
+        generate_statement(stmt, asm, assets, &loop_labels)?;
     }
     // Clear parameter mapping after function body
     if !func.params.is_empty() {
@@ -313,7 +314,7 @@ fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo
     Ok(())
 }
 
-fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
+fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_labels: &[(String, String)]) -> Result<(), String> {
     match stmt {
         Stmt::Assign { target, value, .. } => {
             match target {
@@ -469,7 +470,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             expressions::emit_simple_expr(cond, asm, assets);
             // D already holds the condition result from emit_simple_expr; branch directly.
             asm.push_str(&format!("    LBEQ {}\n", next));
-            for s in body { generate_statement(s, asm, assets)?; }
+            for s in body { generate_statement(s, asm, assets, loop_labels)?; }
             asm.push_str(&format!("    LBRA {}\n", end));
             for (i, (c, b)) in elifs.iter().enumerate() {
                 asm.push_str(&format!("{}:\n", next));
@@ -477,13 +478,13 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                 expressions::emit_simple_expr(c, asm, assets);
                 // D already holds the condition result from emit_simple_expr; branch directly.
                 asm.push_str(&format!("    LBEQ {}\n", new_next));
-                for s in b { generate_statement(s, asm, assets)?; }
+                for s in b { generate_statement(s, asm, assets, loop_labels)?; }
                 asm.push_str(&format!("    LBRA {}\n", end));
                 next = new_next;
             }
             if let Some(eb) = else_body {
                 asm.push_str(&format!("{}:\n", next));
-                for s in eb { generate_statement(s, asm, assets)?; }
+                for s in eb { generate_statement(s, asm, assets, loop_labels)?; }
             } else if !elifs.is_empty() || simple_if {
                 if next != end {
                     asm.push_str(&format!("{}:\n", next));
@@ -491,31 +492,127 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             }
             asm.push_str(&format!("{}:\n", end));
         }
-        
+
         Stmt::While { cond, body, .. } => {
-            // Copied from core/src/backend/m6809/statements.rs
             let ls = fresh_label("WH");
             let le = fresh_label("WH_END");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((le.clone(), ls.clone())); // break→end, continue→top
             asm.push_str(&format!("{}: ; while start\n", ls));
             expressions::emit_simple_expr(cond, asm, assets);
-            // D already holds the condition result from emit_simple_expr; branch directly.
             asm.push_str(&format!("    LBEQ {}\n", le));
-            for s in body { generate_statement(s, asm, assets)?; }
+            for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
             asm.push_str(&format!("    LBRA {}\n{}: ; while end\n", ls, le));
         }
-        
+
+        Stmt::Break { .. } => {
+            if let Some((break_lbl, _)) = loop_labels.last() {
+                asm.push_str(&format!("    LBRA {}  ; break\n", break_lbl));
+            } else {
+                return Err("break outside of loop".to_string());
+            }
+        }
+
+        Stmt::Continue { .. } => {
+            if let Some((_, continue_lbl)) = loop_labels.last() {
+                asm.push_str(&format!("    LBRA {}  ; continue\n", continue_lbl));
+            } else {
+                return Err("continue outside of loop".to_string());
+            }
+        }
+
+        Stmt::ForIn { var, iterable, body, source_line, .. } => {
+            let ls = fresh_label("FI");
+            let li = fresh_label("FI_INC");  // continue target
+            let le = fresh_label("FI_END");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((le.clone(), li.clone()));
+
+            let var_label  = format!("VAR_{}", var.to_uppercase());
+            let ctr_label  = format!("VAR__FI_{}", source_line);
+            let base_label = format!("VAR__FI_{}_BASE", source_line);
+            let len_label  = format!("VAR__FI_{}_LEN", source_line);
+
+            // Evaluate array base pointer (D = pointer)
+            expressions::emit_simple_expr(iterable, asm, assets);
+            asm.push_str(&format!("    STD >{}\n", base_label));
+
+            // Array length — compile-time constant via ARRAY_NAME_LEN equate if Ident
+            if let Expr::Ident(id_info) = iterable {
+                asm.push_str(&format!("    LDD #ARRAY_{}_LEN\n", id_info.name.to_uppercase()));
+            } else {
+                asm.push_str("    LDD #0              ; unknown array length\n");
+            }
+            asm.push_str(&format!("    STD >{}\n", len_label));
+
+            // Init counter = 0
+            asm.push_str("    LDD #0\n");
+            asm.push_str(&format!("    STD >{}\n", ctr_label));
+
+            asm.push_str(&format!("{}: ; forin start\n", ls));
+            // Condition: ctr < len
+            asm.push_str(&format!("    LDD >{}\n", ctr_label));
+            asm.push_str(&format!("    CMPD >{}\n", len_label));
+            asm.push_str(&format!("    LBGE {}\n", le));
+
+            // Load element: var = base_ptr[ctr * 2]
+            asm.push_str(&format!("    LDD >{}\n", ctr_label));
+            asm.push_str("    ASLB\n");
+            asm.push_str("    ROLA                ; D = ctr * 2\n");
+            asm.push_str(&format!("    ADDD >{}\n", base_label));
+            asm.push_str("    TFR D,X\n");
+            asm.push_str("    LDD ,X              ; D = arr[ctr]\n");
+            asm.push_str(&format!("    STD >{}\n", var_label));
+
+            for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
+
+            // Continue target: increment counter
+            asm.push_str(&format!("{}: ; forin inc\n", li));
+            asm.push_str(&format!("    LDD >{}\n", ctr_label));
+            asm.push_str("    ADDD #1\n");
+            asm.push_str(&format!("    STD >{}\n", ctr_label));
+            asm.push_str(&format!("    LBRA {}\n", ls));
+            asm.push_str(&format!("{}: ; forin end\n", le));
+        }
+
+        Stmt::Switch { expr, cases, default, .. } => {
+            let le = fresh_label("SW_END");
+
+            // Evaluate switch expression once, store to TMPVAL
+            expressions::emit_simple_expr(expr, asm, assets);
+            asm.push_str("    STD >TMPVAL         ; switch value\n");
+
+            for (ci, (case_val, case_body)) in cases.iter().enumerate() {
+                let no_match = fresh_label("SW_NXT");
+                expressions::emit_simple_expr(case_val, asm, assets);
+                asm.push_str("    STD >TMPPTR         ; case value\n");
+                asm.push_str("    LDD >TMPVAL\n");
+                asm.push_str("    CMPD >TMPPTR\n");
+                asm.push_str(&format!("    LBNE {}\n", no_match));
+                for s in case_body { generate_statement(s, asm, assets, loop_labels)?; }
+                asm.push_str(&format!("    LBRA {}\n", le));
+                asm.push_str(&format!("{}: ; case {}\n", no_match, ci));
+            }
+
+            if let Some(default_body) = default {
+                for s in default_body { generate_statement(s, asm, assets, loop_labels)?; }
+            }
+
+            asm.push_str(&format!("{}: ; switch end\n", le));
+        }
+
         Stmt::Return(expr, ..) => {
             if let Some(e) = expr {
                 expressions::emit_simple_expr(e, asm, assets);
             }
             asm.push_str("    RTS\n");
         }
-        
+
         _ => {
             asm.push_str(&format!("    ; TODO: Statement {:?}\n", stmt));
         }
     }
-    
+
     Ok(())
 }
 

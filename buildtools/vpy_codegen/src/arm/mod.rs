@@ -87,7 +87,37 @@ pub fn generate_arm_asm(
     // Asset data (vector draw lists, etc.)
     asm.push_str(&assets::emit_arm_assets(assets));
 
-    Ok(asm)
+    // Post-process: expand `cbz rN, label` to `cmp rN, #0; beq.w label`
+    // cbz only works with low registers (r0-r7) and has ±252 byte range.
+    // The wide beq.w form handles high registers and long-range branches.
+    Ok(expand_cbz(&asm))
+}
+
+/// Expand all `cbz rN, label` instructions to `cmp rN, #0` + `beq.w label`.
+/// This handles:
+/// - High registers (r8+): cbz only accepts r0-r7
+/// - Long-range branches: cbz has max +252 byte forward range; beq.w has ±16MB
+fn expand_cbz(asm: &str) -> String {
+    let mut result = String::with_capacity(asm.len() + asm.len() / 8);
+    for line in asm.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("cbz") {
+            let rest = trimmed["cbz".len()..].trim_start();
+            if let Some(comma_pos) = rest.find(',') {
+                let reg = rest[..comma_pos].trim();
+                let label = rest[comma_pos + 1..].trim();
+                let indent = &line[..line.len() - trimmed.len()];
+                result.push_str(&format!(
+                    "{}cmp     {}, #0\n{}beq.w   {}\n",
+                    indent, reg, indent, label
+                ));
+                continue;
+            }
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+    result
 }
 
 /// VIA 6522 register addresses as seen on the Vectrex bus.
