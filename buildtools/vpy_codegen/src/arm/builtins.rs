@@ -314,11 +314,14 @@ fn emit_draw_shapes() -> String {
     s.push_str("    mov     r0, #0\n    neg     r1, r7\n    bl      dv_draw_delta\n"); // down
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
 
-    // ── vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity) ──────
+    // ── vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity) ──────
     // Draws horizontal scan lines to simulate fill (step 3 units).
+    // dv_move_to takes DELTA coordinates (not absolute). Strategy:
+    //   - dv_move_to(x, y) once to reach the first scan line from center (0,0)
+    //   - loop: dv_draw_delta(w, 0)  then  dv_move_to(-w, 3)  to go back+advance
     // push {r4..r9,lr} = 7 regs × 4 = 28 bytes → intensity at [sp+28].
-    s.push_str("@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)\n");
-    s.push_str("@ Horizontal scan lines, step=3\n");
+    s.push_str("@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity)\n");
+    s.push_str("@ Horizontal scan lines, step=3, using delta moves\n");
     s.push_str(".global vpy_draw_filled_rect\n.type vpy_draw_filled_rect, %function\n.thumb_func\nvpy_draw_filled_rect:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes\n");
     s.push_str("    mov     r4, r0              @ x\n");
@@ -326,15 +329,20 @@ fn emit_draw_shapes() -> String {
     s.push_str("    mov     r6, r2              @ w\n");
     s.push_str("    mov     r7, r3              @ h\n");
     s.push_str("    ldr     r8, [sp, #28]       @ intensity\n");
-    s.push_str("    mov     r9, #0              @ scan offset\n");
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
+    // Move ONCE to (x, y) from center (delta = absolute for first call after reset)
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
+    s.push_str("    mov     r9, #0              @ scan offset\n");
     s.push_str("vdfr_loop:\n");
     s.push_str("    cmp     r9, r7\n    bge     vdfr_done\n");
-    s.push_str("    add     r1, r5, r9\n");
-    s.push_str("    mov     r0, r4\n    bl      dv_move_to\n");
+    // Draw horizontal scan line (beam starts at x, y+offset)
     s.push_str("    mov     r0, r6\n    mov     r1, #0\n    bl      dv_draw_delta\n");
-    s.push_str("    add     r9, r9, #3\n    b       vdfr_loop\n");
+    s.push_str("    add     r9, r9, #3\n");
+    // If more lines: return left by w, advance y by 3 (delta move)
+    s.push_str("    cmp     r9, r7\n    bge     vdfr_done\n");
+    s.push_str("    neg     r0, r6\n    mov     r1, #3\n    bl      dv_move_to\n");
+    s.push_str("    b       vdfr_loop\n");
     s.push_str("vdfr_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
 
