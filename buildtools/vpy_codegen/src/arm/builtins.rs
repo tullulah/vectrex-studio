@@ -314,18 +314,176 @@ fn emit_draw_shapes() -> String {
     s.push_str("    mov     r0, #0\n    neg     r1, r7\n    bl      dv_draw_delta\n"); // down
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
 
-    // ── vpy_draw_filled_rect — same as draw_rect (vector display can't fill) ─
+    // ── vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity) ──────
+    // Draws horizontal scan lines to simulate fill (step 3 units).
+    // push {r4..r9,lr} = 7 regs × 4 = 28 bytes → intensity at [sp+28].
     s.push_str("@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)\n");
+    s.push_str("@ Horizontal scan lines, step=3\n");
     s.push_str(".global vpy_draw_filled_rect\n.type vpy_draw_filled_rect, %function\n.thumb_func\nvpy_draw_filled_rect:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    bl      vpy_draw_rect\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes\n");
+    s.push_str("    mov     r4, r0              @ x\n");
+    s.push_str("    mov     r5, r1              @ y\n");
+    s.push_str("    mov     r6, r2              @ w\n");
+    s.push_str("    mov     r7, r3              @ h\n");
+    s.push_str("    ldr     r8, [sp, #28]       @ intensity\n");
+    s.push_str("    mov     r9, #0              @ scan offset\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
+    s.push_str("vdfr_loop:\n");
+    s.push_str("    cmp     r9, r7\n    bge     vdfr_done\n");
+    s.push_str("    add     r1, r5, r9\n");
+    s.push_str("    mov     r0, r4\n    bl      dv_move_to\n");
+    s.push_str("    mov     r0, r6\n    mov     r1, #0\n    bl      dv_draw_delta\n");
+    s.push_str("    add     r9, r9, #3\n    b       vdfr_loop\n");
+    s.push_str("vdfr_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
 
-    // ── vpy_draw_polygon — stub (N, intensity, x0,y0, ...) ──────────────────
-    // Complex variadic; for now returns without drawing so it at least links.
-    s.push_str("@ vpy_draw_polygon — stub\n");
+    // ── vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...) ─
+    // Closed polygon with n vertices. push {r4..r11,lr} = 36 bytes.
+    // Extra vertex pairs at [sp+36], [sp+40], [sp+44], ...
+    s.push_str("@ vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...)\n");
     s.push_str(".global vpy_draw_polygon\n.type vpy_draw_polygon, %function\n.thumb_func\nvpy_draw_polygon:\n");
-    s.push_str("    bx      lr\n\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
+    s.push_str("    mov     r4, r0              @ n (total vertices)\n");
+    s.push_str("    mov     r5, r1              @ intensity\n");
+    s.push_str("    mov     r6, r2              @ first_x\n");
+    s.push_str("    mov     r7, r3              @ first_y\n");
+    s.push_str("    add     r8, sp, #36         @ ptr to x1 (first extra stack arg)\n");
+    s.push_str("    mov     r9, r6              @ prev_x = first_x\n");
+    s.push_str("    mov     r10, r7             @ prev_y = first_y\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, r5\n    bl      vpy_set_intensity\n");
+    s.push_str("    mov     r0, r6\n    mov     r1, r7\n    bl      dv_move_to\n");
+    s.push_str("    mov     r11, #1             @ vertex idx = 1\n");
+    s.push_str("vdpoly_loop:\n");
+    s.push_str("    cmp     r11, r4\n    bge     vdpoly_close\n");
+    s.push_str("    ldr     r0, [r8]            @ xi\n");
+    s.push_str("    ldr     r1, [r8, #4]        @ yi\n");
+    s.push_str("    add     r8, r8, #8\n");
+    s.push_str("    sub     r2, r0, r9          @ dx = xi - prev_x\n");
+    s.push_str("    sub     r3, r1, r10         @ dy = yi - prev_y\n");
+    s.push_str("    mov     r9, r0\n    mov     r10, r1\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    add     r11, r11, #1\n    b       vdpoly_loop\n");
+    s.push_str("vdpoly_close:\n");
+    s.push_str("    sub     r0, r6, r9          @ dx = first_x - prev_x\n");
+    s.push_str("    sub     r1, r7, r10         @ dy = first_y - prev_y\n");
+    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    // ── vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity) ──────
+    // 16-segment parametric ellipse: x = cx + rx*cos(i*8)/127, y = cy + ry*sin(i*8)/127
+    // push {r4..r11,lr} = 36 bytes + sub sp,#8 (locals) = 44 total → intensity at [sp+44].
+    // [sp+0]=first_x, [sp+4]=first_y (for closure).
+    // Registers: r4=cx, r5=cy, r6=rx, r7=ry, r8=prev_x, r9=prev_y, r10=i, r11=new_x.
+    s.push_str("@ vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity)\n");
+    s.push_str("@ 16-segment parametric ellipse via sin/cos LUT\n");
+    s.push_str(".global vpy_draw_ellipse\n.type vpy_draw_ellipse, %function\n.thumb_func\nvpy_draw_ellipse:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
+    s.push_str("    sub     sp, sp, #8          @ [sp+0]=first_x [sp+4]=first_y\n");
+    s.push_str("    mov     r4, r0              @ cx\n");
+    s.push_str("    mov     r5, r1              @ cy\n");
+    s.push_str("    mov     r6, r2              @ rx\n");
+    s.push_str("    mov     r7, r3              @ ry\n");
+    s.push_str("    ldr     r8, [sp, #44]       @ intensity (8+36=44)\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
+    // First point i=0: cos(0)=127 → prev_x = cx + rx; sin(0)=0 → prev_y = cy
+    s.push_str("    mov     r0, #0\n    bl      vpy_cos\n");
+    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r8, r4, r0          @ prev_x = cx + rx*cos(0)/127\n");
+    s.push_str("    str     r8, [sp, #0]        @ first_x\n");
+    s.push_str("    mov     r0, #0\n    bl      vpy_sin\n");
+    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r9, r5, r0          @ prev_y = cy + ry*sin(0)/127\n");
+    s.push_str("    str     r9, [sp, #4]        @ first_y\n");
+    s.push_str("    mov     r0, r8\n    mov     r1, r9\n    bl      dv_move_to\n");
+    s.push_str("    mov     r10, #1             @ i = 1\n");
+    s.push_str("vde_loop:\n");
+    s.push_str("    cmp     r10, #16\n    bge     vde_close\n");
+    s.push_str("    lsl     r0, r10, #3         @ angle = i*8\n");
+    s.push_str("    bl      vpy_cos\n");
+    s.push_str("    mul     r0, r0, r6\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r11, r4, r0         @ new_x = cx + rx*cos/127\n");
+    s.push_str("    lsl     r0, r10, #3\n");
+    s.push_str("    bl      vpy_sin\n");
+    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r0, r5, r0          @ new_y\n");
+    // Compute deltas while new values are still in r11/r0, before overwriting prev
+    s.push_str("    sub     r2, r11, r8         @ dx = new_x - prev_x\n");
+    s.push_str("    sub     r3, r0, r9          @ dy = new_y - prev_y\n");
+    s.push_str("    mov     r8, r11             @ prev_x = new_x\n");
+    s.push_str("    mov     r9, r0              @ prev_y = new_y\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    add     r10, r10, #1\n    b       vde_loop\n");
+    s.push_str("vde_close:\n");
+    s.push_str("    ldr     r0, [sp, #0]        @ first_x\n");
+    s.push_str("    ldr     r1, [sp, #4]        @ first_y\n");
+    s.push_str("    sub     r0, r0, r8          @ dx = first_x - prev_x\n");
+    s.push_str("    sub     r1, r1, r9          @ dy = first_y - prev_y\n");
+    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    add     sp, sp, #8\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    // ── vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity) ──
+    // Open arc from start_deg, sweeping sweep_deg degrees (CCW), in segs segments.
+    // Angles converted to LUT indices: lut = deg * 128 / 360.
+    // push {r4..r11,lr} = 36 bytes → [sp+36]=start, [sp+40]=sweep, [sp+44]=intensity.
+    // Registers: r4=segs(counter), r5=cx, r6=cy, r7=radius, r8=current_angle, r9=step_size,
+    //            r10=prev_x, r11=prev_y.
+    s.push_str("@ vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity)\n");
+    s.push_str(".global vpy_draw_arc\n.type vpy_draw_arc, %function\n.thumb_func\nvpy_draw_arc:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
+    s.push_str("    mov     r4, r0              @ segs (loop counter)\n");
+    s.push_str("    mov     r5, r1              @ cx\n");
+    s.push_str("    mov     r6, r2              @ cy\n");
+    s.push_str("    mov     r7, r3              @ radius\n");
+    // Convert start_deg → LUT step (0-127 = 0-360°)
+    s.push_str("    ldr     r0, [sp, #36]       @ start_deg\n");
+    s.push_str("    lsl     r0, r0, #7          @ * 128\n");
+    s.push_str("    mov     r1, #360\n");
+    s.push_str("    sdiv    r8, r0, r1          @ r8 = start_step\n");
+    // Convert sweep_deg → step_size per segment
+    s.push_str("    ldr     r0, [sp, #40]       @ sweep_deg\n");
+    s.push_str("    lsl     r0, r0, #7\n");
+    s.push_str("    sdiv    r0, r0, r1          @ sweep_steps (r1 still 360)\n");
+    s.push_str("    cmp     r4, #0\n    beq     vpy_arc_done\n");
+    s.push_str("    sdiv    r9, r0, r4          @ r9 = step_size = sweep_steps / segs\n");
+    // Intensity
+    s.push_str("    ldr     r0, [sp, #44]       @ intensity\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    bl      vpy_set_intensity\n");
+    // First point at start_angle
+    s.push_str("    and     r0, r8, #127\n");
+    s.push_str("    bl      vpy_cos\n");
+    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r10, r5, r0         @ prev_x = cx + r*cos(start)/127\n");
+    s.push_str("    and     r0, r8, #127\n");
+    s.push_str("    bl      vpy_sin\n");
+    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r11, r6, r0         @ prev_y = cy + r*sin(start)/127\n");
+    s.push_str("    mov     r0, r10\n    mov     r1, r11\n    bl      dv_move_to\n");
+    s.push_str("vpy_arc_loop:\n");
+    s.push_str("    cmp     r4, #0\n    beq     vpy_arc_done\n");
+    s.push_str("    add     r8, r8, r9          @ current_angle += step_size\n");
+    s.push_str("    and     r0, r8, #127\n");
+    s.push_str("    bl      vpy_cos\n");
+    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r0, r5, r0          @ new_x\n");
+    s.push_str("    push    {r0}                @ save new_x (r0 clobbered by next bl)\n");
+    s.push_str("    and     r0, r8, #127\n");
+    s.push_str("    bl      vpy_sin\n");
+    s.push_str("    mul     r0, r0, r7\n    mov     r1, #127\n    sdiv    r0, r0, r1\n");
+    s.push_str("    add     r1, r6, r0          @ new_y\n");
+    s.push_str("    pop     {r0}                @ restore new_x\n");
+    s.push_str("    sub     r2, r0, r10         @ dx = new_x - prev_x\n");
+    s.push_str("    sub     r3, r1, r11         @ dy = new_y - prev_y\n");
+    s.push_str("    mov     r10, r0             @ prev_x = new_x\n");
+    s.push_str("    mov     r11, r1             @ prev_y = new_y\n");
+    s.push_str("    mov     r0, r2\n    mov     r1, r3\n    bl      dv_draw_delta\n");
+    s.push_str("    sub     r4, r4, #1\n    b       vpy_arc_loop\n");
+    s.push_str("vpy_arc_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
     s
 }

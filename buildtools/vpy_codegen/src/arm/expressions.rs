@@ -245,8 +245,8 @@ pub fn emit_call(
         "DRAW_RECT"       => "vpy_draw_rect",
         "DRAW_FILLED_RECT" => "vpy_draw_filled_rect",
         "DRAW_POLYGON"    => "vpy_draw_polygon",
-        "DRAW_ARC"        => "vpy_draw_circle",    // approximate arc as circle
-        "DRAW_ELLIPSE"    => "vpy_draw_circle",    // approximate ellipse as circle
+        "DRAW_ARC"        => "vpy_draw_arc",
+        "DRAW_ELLIPSE"    => "vpy_draw_ellipse",
         "MOVE"            => "vpy_move",
         "DRAW_VECTOR"     => "vpy_draw_vector",
         "DRAW_VECTOR_EX"  => "vpy_draw_vector_ex",
