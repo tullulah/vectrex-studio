@@ -194,6 +194,12 @@ export class Rp2350System implements ISystem, IBus {
   private joyJ1X: number = 0;
   private joyJ1Y: number = 0;
 
+  // ---- Audio ----
+  private audioCtx:  AudioContext | null           = null;
+  private audioNode: ScriptProcessorNode | null    = null;
+  static readonly AUDIO_SAMPLE_RATE = 44100;
+  static readonly AUDIO_BUFFER_SIZE = 512;
+
   constructor() {
     this.beam   = new Beam();
     this.psg    = new Psg();
@@ -530,11 +536,48 @@ export class Rp2350System implements ISystem, IBus {
 
     // Joystick axis traps: vpy_j1_x / vpy_j1_y read Port A after a PSG write
     // which leaves stale PSG data in via_ora.  Trap them to return clean state.
+    // The real vpy_j1_x/y functions end with "sxtb r0, r0" to sign-extend the
+    // unsigned byte to a signed 32-bit integer.  We must replicate that here so
+    // that callers (e.g. vpy_print_number) receive the correct signed value.
+    // sxtb equivalent in JS: (b << 24) >> 24  (arithmetic right shift)
     if (j1xAddr !== undefined) {
-      this.traps.set(j1xAddr & ~1, (cpu: Thumb2) => { cpu.setReg(0, this.joyJ1X & 0xFF); return 10; });
+      this.traps.set(j1xAddr & ~1, (cpu: Thumb2) => {
+        cpu.setReg(0, (this.joyJ1X << 24) >> 24);  // sxtb: sign extend i8→i32
+        return 10;
+      });
     }
     if (j1yAddr !== undefined) {
-      this.traps.set(j1yAddr & ~1, (cpu: Thumb2) => { cpu.setReg(0, this.joyJ1Y & 0xFF); return 10; });
+      this.traps.set(j1yAddr & ~1, (cpu: Thumb2) => {
+        cpu.setReg(0, (this.joyJ1Y << 24) >> 24);  // sxtb: sign extend i8→i32
+        return 10;
+      });
+    }
+
+    // vpy_update_buttons: bypass Via6522 Port B read entirely.
+    // Reading Port B goes through alg_compare (bit 5) and via_t1pb7 (bit 7),
+    // both of which can mask button 2 and button 4 inputs.  Write joyButtons
+    // (bits 4-7, active-low) directly to BTN_STATE_J1 and BTN_STATE_J2 in SRAM.
+    const updateButtonsAddr = symbols.get('vpy_update_buttons');
+    const btnJ1Addr = symbols.get('BTN_STATE_J1');
+    const btnJ2Addr = symbols.get('BTN_STATE_J2');
+    // Fallback SRAM offsets (used in reset() as well; must match linker script).
+    const BTN_J1_OFF = 0x7F144;
+    const BTN_J2_OFF = 0x7F148;
+    if (updateButtonsAddr !== undefined) {
+      this.traps.set(updateButtonsAddr & ~1, (_cpu: Thumb2): number => {
+        const j1Off = btnJ1Addr !== undefined
+          ? btnJ1Addr - 0x20000000
+          : BTN_J1_OFF;
+        const j2Off = btnJ2Addr !== undefined
+          ? btnJ2Addr - 0x20000000
+          : BTN_J2_OFF;
+        // joyButtons: bits 4-7 active-low.  Lower bits don't matter for button reads.
+        this.sram[j1Off] = this.via.joyButtons & 0xF0;
+        // PSG register 14 (J2 buttons) — not yet wired to host input; 0xFF = all released.
+        this.sram[j2Off] = 0xFF;
+        return 10;
+      });
+      console.log(`[Rp2350System] vpy_update_buttons trap @ 0x${(updateButtonsAddr & ~1).toString(16)}`);
     }
   }
 
@@ -834,6 +877,47 @@ export class Rp2350System implements ISystem, IBus {
   setJoyAxis(x: number, y: number): void {
     this.joyJ1X = (x | 0) & 0xFF;
     this.joyJ1Y = (y | 0) & 0xFF;
+  }
+
+  // -------------------------------------------------------------------------
+  // Audio
+  // -------------------------------------------------------------------------
+
+  /**
+   * Start PSG audio synthesis via a ScriptProcessor node.
+   * Must be called after a user gesture so the AudioContext can start.
+   * Idempotent — safe to call multiple times.
+   */
+  startAudio(): void {
+    if (this.audioCtx) return;
+    try {
+      const ctx = new AudioContext({ sampleRate: Rp2350System.AUDIO_SAMPLE_RATE });
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const node = ctx.createScriptProcessor(Rp2350System.AUDIO_BUFFER_SIZE, 0, 1);
+      node.onaudioprocess = (ev) => {
+        this.psg.fillBuffer(
+          ev.outputBuffer.getChannelData(0),
+          Rp2350System.AUDIO_BUFFER_SIZE,
+        );
+      };
+      node.connect(ctx.destination);
+      this.audioCtx  = ctx;
+      this.audioNode = node;
+      // Resume if browser suspended it
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    } catch (e) {
+      console.warn('[Rp2350System] Audio init failed:', e);
+    }
+  }
+
+  /** Stop and destroy the audio context. */
+  stopAudio(): void {
+    try {
+      this.audioNode?.disconnect();
+      this.audioCtx?.close().catch(() => {});
+    } catch {}
+    this.audioNode = null;
+    this.audioCtx  = null;
   }
 
   /**
