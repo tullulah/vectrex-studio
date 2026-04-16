@@ -1359,7 +1359,20 @@ fn emit_state_builtins() -> String {
     simple_set!("vpy_set_camera_y", "CAMERA_Y");
     simple_get!("vpy_get_camera_x", "CAMERA_X");
     simple_get!("vpy_get_camera_y", "CAMERA_Y");
-    simple_set!("vpy_set_text_size", "TEXT_SIZE");
+    // vpy_set_text_size: converts M6809 convention (n=1..8, n=8=normal) to ARM scale.
+    // ARM TEXT_SIZE=3 ≈ normal Vectrex text (glyph 4×6 box, scale=3 → height=9 units).
+    // Mapping: TEXT_SIZE = max(1, (n*3 + 4) >> 3)
+    //   n=8 → 3, n=7 → 3, n=6 → 2, n=5 → 2, n=4 → 2, n=3 → 1, n=2 → 1, n=1 → 1
+    s.push_str(".global vpy_set_text_size\n.type vpy_set_text_size, %function\n.thumb_func\nvpy_set_text_size:\n");
+    s.push_str("    lsl     r1, r0, #1\n");   // r1 = n*2
+    s.push_str("    add     r1, r1, r0\n");   // r1 = n*3
+    s.push_str("    add     r1, r1, #4\n");   // r1 = n*3+4
+    s.push_str("    lsr     r1, r1, #3\n");   // r1 = (n*3+4)>>3
+    s.push_str("    cmp     r1, #1\n");
+    s.push_str("    bhs     vsts_ok\n");
+    s.push_str("    mov     r1, #1\n");
+    s.push_str("vsts_ok:\n");
+    s.push_str("    ldr     r0, =TEXT_SIZE\n    str     r1, [r0]\n    bx      lr\n\n");
     simple_set!("vpy_set_text_color", "TEXT_COLOR");
 
     // debug_print: write value to DBGVAL (readable via debugger / bus_read)
