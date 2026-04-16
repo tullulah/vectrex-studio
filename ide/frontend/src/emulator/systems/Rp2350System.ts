@@ -784,15 +784,19 @@ export class Rp2350System implements ISystem, IBus {
   }
 
   /**
-   * dv_move_to(r0=dx_i8, r1=dy_i8) — reposition beam without drawing.
+   * dv_move_to(r0=x, r1=y) — reposition beam without drawing.
    *
-   * r0/r1 hold sign-extended i8 deltas.  We interpret the low 8 bits as a
-   * signed byte and scale to ALG units.
+   * r0/r1 hold 32-bit signed screen coordinates (not i8 deltas).
+   * The ARM codegen computes  x_start + ox  and  y_start + oy  in full
+   * 32-bit arithmetic before calling this function, so values can exceed
+   * the ±127 range of an i8 (e.g. screen_x=158 + x_start=-22 = 136).
+   * Treating them as signed 32-bit (|0) is correct; values beyond the
+   * visible range will be clamped by clampAlg to the screen edge.
    */
   private makeDvMoveTrap(): TrapFn {
     return (cpu: Thumb2): number => {
-      const dx = armI8(cpu.getReg(0));
-      const dy = armI8(cpu.getReg(1));
+      const dx = cpu.getReg(0) | 0;  // signed 32-bit (NOT i8 — can exceed ±127)
+      const dy = cpu.getReg(1) | 0;
       this.armBeamX = clampAlg(this.armBeamX + dx * ARM_ALG_SCALE, ALG_MAX_X);
       this.armBeamY = clampAlg(this.armBeamY - dy * ARM_ALG_SCALE, ALG_MAX_Y); // Y inverted
       return 200;
