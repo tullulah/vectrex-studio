@@ -1,7 +1,8 @@
-# Debug Cart — Component Reference
+# Debug Cart — Component Reference (RP2350 / PCB v2)
 
-Schematic entry guide. All symbols and footprints are from standard KiCad 9 libraries unless noted.
-Re-enter each component manually in KiCad using the tables below.
+Schematic entry guide for KiCad 9.
+Target MCU: **RP2350A** (QFN-60, 7×7mm, 0.4mm pitch).
+PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold fingers biselados 45°.
 
 ---
 
@@ -9,110 +10,104 @@ Re-enter each component manually in KiCad using the tables below.
 
 | Net name | Description |
 |---|---|
-| +5V | Vectrex 5 V rail (from edge connector) |
-| +3V3 | 3.3 V regulated rail |
+| +5V | Vectrex 5 V rail (from card edge) |
+| +3V3 | 3.3 V regulated rail (AMS1117-3.3) |
 | GND | Ground |
-| GP0–GP29 | RP2040 GPIO |
-| CART_A0–A14 | Vectrex address bus |
-| CART_D0–D7 | Vectrex data bus |
-| CART_RW | Vectrex R/W line |
-| CART_nOE | Vectrex /OE (output enable) |
-| CART_nCE | Vectrex /CE (chip enable) |
-| nNMI / nHALT | Open-drain NMI / HALT lines to Vectrex |
-| QSPI_SD0–SD3 | RP2040 QSPI data lines |
-| QSPI_SCK | RP2040 QSPI clock |
-| QSPI_CSn | RP2040 QSPI chip select → W25Q16JV boot flash |
-| PSRAM_CS | RP2040 GP29 → APS6404L PSRAM chip select |
-| DIR_CTRL | Data bus buffer direction control (RP2040 GP29/RUN pin area) |
+| GP0–GP29 | RP2350 GPIO — todos accesibles en QFN-60 |
+| CART_A0–A14 | Vectrex address bus (5V, read-only en v1) |
+| CART_D0–D7 | Vectrex data bus (5V, bidireccional) |
+| CART_RW | Vectrex R/W line (5V → 3.3V divisor) |
+| CART_nOE | Vectrex /OE (5V → 3.3V divisor) |
+| CART_nCE | Vectrex /CE (5V, U3 B8 → GP23) |
+| nNMI | Open-drain NMI line (BSS138 + 10k pullup a +5V) |
+| nHALT | Open-drain HALT line (BSS138 + 10k pullup a +5V) |
+| nRST | Open-drain RST line (BSS138 + 10k pullup a +5V) |
+| DIR_CTRL | Data bus buffer direction (GP29 → U4 DIR) |
+| QSPI_SD0–SD3 | RP2350 QSPI data lines |
+| QSPI_SCK | RP2350 QSPI clock |
+| QSPI_CSn | RP2350 QSPI CS0 → W25Q32JV boot flash |
+| QSPI_SS1n | RP2350 QSPI CS1 (hardware QMI) → APS6404L PSRAM |
 | SWD_IO / SWD_CLK | SWDIO / SWDCLK debug lines |
 | XTAL_IN / XTAL_OUT | 12 MHz crystal |
 | USB_DP / USB_DM | USB D+ / D− |
-| TP_RESET | Reset test point |
-| GP24_RW / GP25_nOE / GP26_nNMI / GP27_nHALT / GP28_nRST | RP2040 control GPIO |
 
 ---
 
-## U1 — RP2040
+## U1 — RP2350A
 
 | Field | Value |
 |---|---|
-| Symbol | `MCU_RaspberryPi:RP2040` |
-| Footprint | `Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm` |
-| Value | `RP2040` |
+| Symbol | `MCU_RaspberryPi:RP2350A` (KiCad 9) o crear manualmente |
+| Footprint | `Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.2x3.2mm` |
+| Value | `RP2350A` |
+| Datasheet | https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf |
 
-### Pin connections (symbol signal name → net)
+### GPIO pin connections
 
-| Symbol pin name | Net |
-|---|---|
-| GPIO0 | GP0 |
-| GPIO1 | GP1 |
-| GPIO2 | GP2 |
-| GPIO3 | GP3 |
-| GPIO4 | GP4 |
-| GPIO5 | GP5 |
-| GPIO6 | GP6 |
-| GPIO7 | GP7 |
-| GPIO8 | GP8 |
-| GPIO9 | GP9 |
-| GPIO10 | GP10 |
-| GPIO11 | GP11 |
-| GPIO12 | GP12 |
-| GPIO13 | GP13 |
-| GPIO14 | GP14 |
-| GPIO15 | GP15 |
-| GPIO16 | GP16 |
-| GPIO17 | GP17 |
-| GPIO18 | GP18 |
-| GPIO19 | GP19 |
-| GPIO20 | GP20 |
-| GPIO21 | GP21 |
-| GPIO22 | GP22 |
-| GPIO23 | GP23 |
-| GPIO24 | GP24_RW |
-| GPIO25 | GP25_nOE |
-| GPIO26/ADC0 | GP26_nNMI |
-| GPIO27/ADC1 | GP27_nHALT |
-| GPIO28/ADC2 | GP28_nRST |
-| GPIO29/ADC3 | PSRAM_CS |
-| RUN | DIR_CTRL |
-| IOVDD (all) | +3V3 |
-| DVDD (all) | +3V3 |
-| VREG_VIN | +3V3 |
-| VREG_VOUT | VREG_VOUT (local net — connect C_VREG 1 µF to GND) |
-| ADC_AVDD | +3V3 |
-| USB_VDD | +3V3 |
-| XIN | XTAL_IN |
-| XOUT | XTAL_OUT |
-| USB_DP | USB_DP |
-| USB_DM | USB_DM |
-| SWDIO | SWD_IO |
-| SWCLK | SWD_CLK |
-| QSPI_SD0 | QSPI_SD0 |
-| QSPI_SD1 | QSPI_SD1 |
-| QSPI_SD2 | QSPI_SD2 |
-| QSPI_SD3 | QSPI_SD3 |
-| QSPI_SCLK | QSPI_SCK |
-| ~{QSPI_SS} | QSPI_CSn |
-| GND (all) | GND |
-| TESTEN | GND |
+| Symbol pin | Net | Función |
+|---|---|---|
+| GPIO0 | GP0 | A0 (vía U2) |
+| GPIO1 | GP1 | A1 |
+| GPIO2 | GP2 | A2 |
+| GPIO3 | GP3 | A3 |
+| GPIO4 | GP4 | A4 |
+| GPIO5 | GP5 | A5 |
+| GPIO6 | GP6 | A6 |
+| GPIO7 | GP7 | A7 |
+| GPIO8 | GP8 | A8 (vía U3) |
+| GPIO9 | GP9 | A9 |
+| GPIO10 | GP10 | A10 |
+| GPIO11 | GP11 | A11 |
+| GPIO12 | GP12 | A12 |
+| GPIO13 | GP13 | A13 |
+| GPIO14 | GP14 | A14 |
+| GPIO15 | GP15 | D0 (vía U4) |
+| GPIO16 | GP16 | D1 |
+| GPIO17 | GP17 | D2 |
+| GPIO18 | GP18 | D3 |
+| GPIO19 | GP19 | D4 |
+| GPIO20 | GP20 | D5 |
+| GPIO21 | GP21 | D6 |
+| GPIO22 | GP22 | D7 |
+| GPIO23 | GP23 | /CE (CART_nCE, vía U3 B8) |
+| GPIO24 | GP24 | R/W (CART_RW, divisor 10k+18k) |
+| GPIO25 | GP25 | /OE (CART_nOE, divisor 10k+18k) |
+| GPIO26/ADC0 | GP26 | /NMI (open-drain vía Q1) |
+| GPIO27/ADC1 | GP27 | /HALT (open-drain vía Q2) |
+| GPIO28/ADC2 | GP28 | /RST (open-drain vía Q3) |
+| GPIO29/ADC3 | GP29 | DIR_CTRL (U4 pin 1) |
 
-> **EP (exposed pad):** No existe en el símbolo. Conectar a GND **solo en el PCB** mediante copper fill / via a plano GND.
+### QSPI / power / debug pins
 
-### C_VREG — condensador de VREG_VOUT
-
-Añadir un condensador adicional (no está en la lista de C1–C10):
-
-| Field | Value |
-|---|---|
-| Symbol | `Device:C` |
-| Footprint | `Capacitor_SMD:C_0402_1005Metric` |
-| Value | `1µF` |
-| Pad 1 | VREG_VOUT |
-| Pad 2 | GND |
+| Symbol pin | Net | Notas |
+|---|---|---|
+| QSPI_SD0 | QSPI_SD0 | Compartido flash + PSRAM |
+| QSPI_SD1 | QSPI_SD1 | |
+| QSPI_SD2 | QSPI_SD2 | |
+| QSPI_SD3 | QSPI_SD3 | |
+| QSPI_SCLK | QSPI_SCK | |
+| ~{QSPI_SS} | QSPI_CSn | CS0 → W25Q32JV |
+| ~{QSPI_SS1} | QSPI_SS1n | CS1 → APS6404L (QMI hardware) |
+| RUN | RUN | Pulled up a +3V3 (100kΩ); TP de reset |
+| IOVDD (×6) | +3V3 | |
+| DVDD (×2) | +3V3 | |
+| USB_VDD | +3V3 | |
+| ADC_AVDD | +3V3 | |
+| VREG_VIN | +3V3 | |
+| VREG_VOUT | VREG_VOUT | → C_VREG 1µF → GND (core supply ~1.1V) |
+| XIN | XTAL_IN | |
+| XOUT | XTAL_OUT | |
+| USB_DP | USB_DP | |
+| USB_DM | USB_DM | |
+| SWDIO | SWD_IO | |
+| SWCLK | SWD_CLK | |
+| TESTEN | GND | Siempre a GND |
+| GND (×7) | GND | |
+| EP (pad central) | GND | Conectar a plano GND en PCB |
 
 ---
 
-## U2 — 74LVC245A (Address bus lower byte, A0–A7)
+## U2 — 74LVC245A (Address bus A0–A7)
 
 | Field | Value |
 |---|---|
@@ -120,9 +115,10 @@ Añadir un condensador adicional (no está en la lista de C1–C10):
 | Footprint | `Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm` |
 | Value | `74LVC245A` |
 
-Direction fixed: DIR tied to GND (always A→B), /OE tied to GND (always enabled).
+Dirección fija: DIR=GND (A→B siempre), /OE=GND (siempre activo).
+Nivel: A side = 5V Vectrex, B side = 3.3V RP2350.
 
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
 | 1 | DIR | GND |
 | 2 | A1 | CART_A0 |
@@ -145,9 +141,12 @@ Direction fixed: DIR tied to GND (always A→B), /OE tied to GND (always enabled
 | 19 | /OE | GND |
 | 20 | VCC | +3V3 |
 
+> VCC_A (side A, pines 2-9) debe conectarse a +5V. VCC_B (side B, pines 11-18) a +3V3.
+> Verificar que el símbolo KiCad tiene pines de alimentación separados por side.
+
 ---
 
-## U3 — 74LVC245A (Address bus upper byte + control signals, A8–A14 + /CE)
+## U3 — 74LVC245A (Address bus A8–A14 + /CE)
 
 | Field | Value |
 |---|---|
@@ -155,9 +154,9 @@ Direction fixed: DIR tied to GND (always A→B), /OE tied to GND (always enabled
 | Footprint | `Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm` |
 | Value | `74LVC245A` |
 
-Direction fixed: DIR tied to GND, /OE tied to GND.
+Dirección fija: DIR=GND (A→B siempre), /OE=GND.
 
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
 | 1 | DIR | GND |
 | 2 | A1 | CART_A8 |
@@ -182,7 +181,7 @@ Direction fixed: DIR tied to GND, /OE tied to GND.
 
 ---
 
-## U4 — 74LVC245A (Data bus, D0–D7, bidirectional)
+## U4 — 74LVC245A (Data bus D0–D7, bidireccional)
 
 | Field | Value |
 |---|---|
@@ -190,11 +189,13 @@ Direction fixed: DIR tied to GND, /OE tied to GND.
 | Footprint | `Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm` |
 | Value | `74LVC245A` |
 
-Direction controlled by RP2040 (DIR_CTRL), /OE tied to GND (always enabled).
+Dirección controlada por GP29 (DIR_CTRL). /OE=GND (siempre activo).
+- DIR_CTRL LOW → A→B (Vectrex→RP2350, modo ROM/lectura)
+- DIR_CTRL HIGH → B→A (RP2350→Vectrex, modo bus master/escritura)
 
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
-| 1 | DIR | DIR_CTRL |
+| 1 | DIR | GP29 (DIR_CTRL) |
 | 2 | A1 | CART_D0 |
 | 3 | A2 | CART_D1 |
 | 4 | A3 | CART_D2 |
@@ -217,7 +218,7 @@ Direction controlled by RP2040 (DIR_CTRL), /OE tied to GND (always enabled).
 
 ---
 
-## U5 — AMS1117-3.3 (3.3 V LDO regulator)
+## U5 — AMS1117-3.3 (LDO 3.3V)
 
 | Field | Value |
 |---|---|
@@ -225,110 +226,97 @@ Direction controlled by RP2040 (DIR_CTRL), /OE tied to GND (always enabled).
 | Footprint | `Package_TO_SOT_SMD:SOT-223-3_TabPin2` |
 | Value | `AMS1117-3.3` |
 
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
-| 1 | ADJ/GND | GND |
+| 1 | GND/ADJ | GND |
 | 2 | OUTPUT (tab) | +3V3 |
 | 3 | INPUT | +5V |
 
+Añadir C_LDO_IN (10µF, 0805) entre +5V y GND, y C_LDO_OUT (10µF, 0805) entre +3V3 y GND.
+
 ---
 
-## U6 — APS6404L-3SQR (8 MB QSPI PSRAM)
+## U6 — APS6404L-3SQR (8MB QSPI PSRAM)
 
 | Field | Value |
 |---|---|
-| Symbol | Custom — use `Memory_RAM:Generic_QSPI_RAM_SOIC8` or create manually |
+| Symbol | Crear manualmente o usar `Memory_RAM:Generic_QSPI_RAM_SOIC8` |
 | Footprint | `Package_SO:SOIC-8_3.9x4.9mm_P1.27mm` |
 | Value | `APS6404L-3SQR` |
 
-Datasheet pin names (AP Memory APS6404L):
+CS# controlado por **QSPI_SS1_N** (QMI hardware CS1 del RP2350 — no requiere GPIO software).
 
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
-| 1 | CE# (chip enable, active low) | PSRAM_CS |
-| 2 | SIO1 (MISO / QSPI D1) | QSPI_SD1 |
-| 3 | SIO2 (QSPI D2) | QSPI_SD2 |
+| 1 | CE# | QSPI_SS1n |
+| 2 | SIO1 | QSPI_SD1 |
+| 3 | SIO2 | QSPI_SD2 |
 | 4 | VSS | GND |
-| 5 | SIO0 (MOSI / QSPI D0) | QSPI_SD0 |
+| 5 | SIO0 | QSPI_SD0 |
 | 6 | SCLK | QSPI_SCK |
-| 7 | SIO3 (QSPI D3) | QSPI_SD3 |
+| 7 | SIO3 | QSPI_SD3 |
 | 8 | VCC | +3V3 |
-
-> **Note:** PSRAM_CS is driven by RP2040 GP29.
-> The QSPI bus (SD0–SD3, SCK) is shared with U7 (boot flash).
 
 ---
 
-## U7 — W25Q16JV (2 MB SPI NOR flash, RP2040 boot)
+## U7 — W25Q32JV (4MB SPI NOR flash, boot RP2350)
 
 | Field | Value |
 |---|---|
-| Symbol | `Memory_Flash:W25Q16JV` or `Memory_Flash:W25Q16xx` |
+| Symbol | `Memory_Flash:W25Q32JV` |
 | Footprint | `Package_SO:SOIC-8_3.9x4.9mm_P1.27mm` |
-| Value | `W25Q16JV` |
+| Value | `W25Q32JV` |
 
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
 | 1 | /CS | QSPI_CSn |
-| 2 | DO (MISO / IO1) | QSPI_SD1 |
-| 3 | /WP (IO2) | QSPI_SD2 |
+| 2 | DO / IO1 | QSPI_SD1 |
+| 3 | /WP / IO2 | QSPI_SD2 |
 | 4 | GND | GND |
-| 5 | DI (MOSI / IO0) | QSPI_SD0 |
+| 5 | DI / IO0 | QSPI_SD0 |
 | 6 | CLK | QSPI_SCK |
-| 7 | /HOLD (IO3) | QSPI_SD3 |
+| 7 | /HOLD / IO3 | QSPI_SD3 |
 | 8 | VCC | +3V3 |
 
 ---
 
-## Q1 — BSS138 (NMI open-drain driver)
+## Q1 — BSS138 (NMI open-drain)
 
-| Field | Value |
-|---|---|
-| Symbol | `Transistor_FET:BSS138` |
-| Footprint | `Package_TO_SOT_SMD:SOT-23` |
-| Value | `BSS138` |
-
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
-| 1 | Gate | GP26_nNMI |
+| 1 | Gate | GP26 |
 | 2 | Source | GND |
 | 3 | Drain | nNMI |
 
+R4 (10kΩ): +5V → nNMI (pullup).
+
 ---
 
-## Q2 — BSS138 (HALT open-drain driver)
+## Q2 — BSS138 (HALT open-drain)
 
-| Field | Value |
-|---|---|
-| Symbol | `Transistor_FET:BSS138` |
-| Footprint | `Package_TO_SOT_SMD:SOT-23` |
-| Value | `BSS138` |
-
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
-| 1 | Gate | GP27_nHALT |
+| 1 | Gate | GP27 |
 | 2 | Source | GND |
 | 3 | Drain | nHALT |
 
+R5 (10kΩ): +5V → nHALT (pullup).
+
 ---
 
-## Q3 — BSS138 (Reset open-drain driver)
+## Q3 — BSS138 (RST open-drain)
 
-| Field | Value |
-|---|---|
-| Symbol | `Transistor_FET:BSS138` |
-| Footprint | `Package_TO_SOT_SMD:SOT-23` |
-| Value | `BSS138` |
-
-| Pad | Pin name | Net |
+| Pad | Pin | Net |
 |---|---|---|
-| 1 | Gate | GP28_nRST |
+| 1 | Gate | GP28 |
 | 2 | Source | GND |
-| 3 | Drain | TP_RESET |
+| 3 | Drain | nRST |
+
+R6 (10kΩ): +5V → nRST (pullup).
 
 ---
 
-## Y1 — 12 MHz Crystal
+## Y1 — Crystal 12MHz
 
 | Field | Value |
 |---|---|
@@ -336,26 +324,22 @@ Datasheet pin names (AP Memory APS6404L):
 | Footprint | `Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm` |
 | Value | `12MHz` |
 
-| Pad | Pin name | Net |
-|---|---|---|
-| 1 | XIN | XTAL_IN |
-| 2 | GND | GND |
-| 3 | XOUT | XTAL_OUT |
-| 4 | GND | GND |
+| Pad | Net |
+|---|---|
+| 1 | XTAL_IN |
+| 2 | GND |
+| 3 | XTAL_OUT |
+| 4 | GND |
 
 ---
 
-## J1 — Vectrex 36-pin card edge connector
+## J1 — Card edge 36 pines (cartucho Vectrex)
 
-| Field | Value |
-|---|---|
-| Symbol | Custom — use `Connector_PinHeader_2.54mm:Conn_02x18` (copy footprint from another project) |
-| Footprint | Custom `VPyDebugCart:CardEdge_36` (36 pads, 1.52×8.8 mm oval, 2.54 mm pitch) |
-| Value | `VECTREX_CART_36` |
+Sin conector físico — los pads del PCB son el cartucho.
+Footprint custom: 36 pads dorados (gold fingers), paso 2.54mm, bisel 45°, grosor PCB 1.6mm.
+Pads impares (1,3,5…35) = cara inferior; pares (2,4,6…36) = cara superior.
 
-Odd pads (1,3,5…35) = B.Cu side; even pads (2,4,6…36) = F.Cu side.
-
-| Pin | Signal name | Net |
+| Pin | Señal | Net |
 |---|---|---|
 | 1 | /HALT | nHALT |
 | 2 | +5V | +5V |
@@ -392,17 +376,32 @@ Odd pads (1,3,5…35) = B.Cu side; even pads (2,4,6…36) = F.Cu side.
 | 33 | A14 | CART_A14 |
 | 34 | /NMI | nNMI |
 | 35 | NC | — |
-| 36 | /IRQ | (unconnected — Vectrex does not use /IRQ for cartridges) |
+| 36 | /IRQ | NC |
 
 ---
 
-## J_SWD1 — SWD Debug Header
+## TP_BOOTSEL — Pad de test BOOTSEL
 
-| Field | Value |
+Pad de test (no botón) accesible con pinzas o puente.
+Conectado a `QSPI_CSn` (mismo net que U7 pin 1).
+
+Para entrar en modo bootloader USB (unbrick):
+1. Puentea TP_BOOTSEL a GND con unas pinzas
+2. Conecta o reconecta el USB
+3. Suelta el puente
+4. Aparece disco USB `RP2350` — arrastra el `.uf2`
+
+| Campo | Valor |
 |---|---|
-| Symbol | `Connector_PinHeader_2.54mm:Conn_01x04` |
-| Footprint | `Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical` |
-| Value | `Conn_01x04` |
+| Symbol | `TestPoint:TestPoint_Pad_D1.5mm` |
+| Net | QSPI_CSn |
+
+> El bootloader está en ROM del RP2350 — no puede corromperse con firmware.
+> Es el método de recuperación (unbrick) ante un firmware inválido.
+
+---
+
+## J_SWD1 — Header SWD (1×4, 2.54mm)
 
 | Pad | Net |
 |---|---|
@@ -413,85 +412,85 @@ Odd pads (1,3,5…35) = B.Cu side; even pads (2,4,6…36) = F.Cu side.
 
 ---
 
-## J_USB1 — USB-C Receptacle
-
-| Field | Value |
-|---|---|
-| Symbol | `Connector_USB:USB_C_Receptacle_USB2.0` |
-| Footprint | `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12` |
-| Value | `USB_C_Receptacle` |
+## J_USB1 — USB-C Receptáculo (USB 2.0)
 
 | Symbol pin | Net |
 |---|---|
-| VBUS (A4) | +5V |
-| CC1 (A5) | CC1 |
-| CC2 (B5) | CC2 |
-| D- (A7) | USB_DM |
-| D- (B7) | USB_DM |
-| D+ (A6) | USB_DP |
-| D+ (B6) | USB_DP |
-| SBU1 (A8) | No connect |
-| SBU2 (B8) | No connect |
-| GND (A1) | GND |
-| SHIELD (S1) | GND |
-
-> CC1 → R11 (5.1 kΩ) → GND; CC2 → R12 (5.1 kΩ) → GND.
-> Conectar A7 y B7 juntos al mismo net USB_DM; A6 y B6 juntos a USB_DP.
+| VBUS | +5V |
+| CC1 | CC1 → R11 (5.1kΩ) → GND |
+| CC2 | CC2 → R12 (5.1kΩ) → GND |
+| D− (A7+B7) | USB_DM |
+| D+ (A6+B6) | USB_DP |
+| GND / SHIELD | GND |
 
 ---
 
-## Resistors
+## Resistencias
 
-| Ref | Value | Symbol | Footprint | Pad 1 → Net | Pad 2 → Net |
-|---|---|---|---|---|---|
-| R4 | 10 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | +5V | nNMI |
-| R5 | 10 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | +5V | nHALT |
-| R6 | 10 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | +5V | TP_RESET |
-| R7 | 10 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | CART_RW | GP24_RW |
-| R8 | 18 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | GP24_RW | GND |
-| R9 | 10 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | CART_nOE | GP25_nOE |
-| R10 | 18 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | GP25_nOE | GND |
-| R11 | 5.1 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | GND | CC1 |
-| R12 | 5.1 kΩ | `Device:R` | `Resistor_SMD:R_0402_1005Metric` | GND | CC2 |
+| Ref | Valor | Pad 1 | Pad 2 | Función |
+|---|---|---|---|---|
+| R4 | 10kΩ | +5V | nNMI | Pullup /NMI |
+| R5 | 10kΩ | +5V | nHALT | Pullup /HALT |
+| R6 | 10kΩ | +5V | nRST | Pullup /RST |
+| R7 | 10kΩ | CART_RW | GP24 | Divisor R/W (top) |
+| R8 | 18kΩ | GP24 | GND | Divisor R/W (bottom) — 5V→3.21V |
+| R9 | 10kΩ | CART_nOE | GP25 | Divisor /OE (top) |
+| R10 | 18kΩ | GP25 | GND | Divisor /OE (bottom) |
+| R11 | 5.1kΩ | GND | CC1 | USB-C CC pull-down |
+| R12 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
 
-> R7/R8 form a voltage divider for CART_RW (5 V → 3.3 V level shift, approx 3.21 V at GP24).
-> R9/R10 form a similar divider for CART_nOE → GP25_nOE.
-> R11/R12 are USB-C CC pull-down resistors (device/UFP mode, 5 V / 500 mA).
+Todas en footprint `Resistor_SMD:R_0402_1005Metric`.
 
 ---
 
-## Decoupling Capacitors
+## Condensadores
 
-All 100 nF, 0402.
+| Ref | Valor | Pad 1 | Pad 2 | Notas |
+|---|---|---|---|---|
+| C1–C8 | 100nF | +3V3 | GND | Decoupling RP2350 (uno por par IOVDD) |
+| C9 | 100nF | +3V3 | GND | Decoupling U6 (PSRAM) |
+| C10 | 100nF | +3V3 | GND | Decoupling U7 (flash) |
+| C_VREG | 1µF | VREG_VOUT | GND | Core supply RP2350 |
+| C_LDO_IN | 10µF | +5V | GND | LDO input (0805) |
+| C_LDO_OUT | 10µF | +3V3 | GND | LDO output (0805) |
 
-| Ref | Symbol | Footprint | Pad 1 → Net | Pad 2 → Net | Notes |
-|---|---|---|---|---|---|
-| C1 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND* | RP2040 decoupling |
-| C2 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND* | RP2040 decoupling |
-| C3 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND* | RP2040 decoupling |
-| C4 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND* | RP2040 decoupling |
-| C5 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +5V | GND | +5V decoupling |
-| C6 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +5V | GND | +5V decoupling |
-| C7 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND | General +3V3 decoupling |
-| C8 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND | General +3V3 decoupling |
-| C9 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND | U6 (PSRAM) decoupling |
-| C10 | `Device:C` | `Capacitor_SMD:C_0402_1005Metric` | +3V3 | GND | U7 (flash) decoupling |
-
-> \* C1–C4 pad 2 is labeled `Net-(C1-Pad2)` in the current PCB file — these should all connect to GND.
-> Connect pad 2 of C1–C4 to GND when re-entering the schematic.
+C1–C10 y C_VREG en `Capacitor_SMD:C_0402_1005Metric`.
 
 ---
 
-## RP2040 QSPI Bus Summary
+## QSPI Bus Summary
 
-Both U6 (PSRAM) and U7 (boot flash) share the 4-wire QSPI bus. Chip select is separate:
+U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 
-| Signal | RP2040 pad | U6 (PSRAM) pin | U7 (Flash) pin |
+| Señal | RP2350 pin | U6 PSRAM | U7 Flash |
 |---|---|---|---|
-| QSPI_SD0 | 45 | 5 (SIO0) | 5 (DI) |
-| QSPI_SD1 | 46 | 2 (SIO1) | 2 (DO) |
-| QSPI_SD2 | 47 | 3 (SIO2) | 3 (/WP) |
-| QSPI_SD3 | 48 | 7 (SIO3) | 7 (/HOLD) |
-| QSPI_SCK | 49 | 6 (SCLK) | 6 (CLK) |
-| QSPI_CSn | 50 | — | 1 (/CS) |
-| PSRAM_CS (GP29) | 30 | 1 (CE#) | — |
+| QSPI_SD0 | QSPI_SD0 | 5 (SIO0) | 5 (DI) |
+| QSPI_SD1 | QSPI_SD1 | 2 (SIO1) | 2 (DO) |
+| QSPI_SD2 | QSPI_SD2 | 3 (SIO2) | 3 (/WP) |
+| QSPI_SD3 | QSPI_SD3 | 7 (SIO3) | 7 (/HOLD) |
+| QSPI_SCK | QSPI_SCLK | 6 (SCLK) | 6 (CLK) |
+| QSPI_CSn | ~{QSPI_SS} | — | 1 (/CS) |
+| QSPI_SS1n | ~{QSPI_SS1} | 1 (CE#) | — |
+
+> QSPI_SS1n es el CS1 hardware del QMI del RP2350. El firmware lo controla
+> directamente desde `pac::QMI` sin necesidad de un GPIO de software.
+
+---
+
+## BOM resumen (1 unidad)
+
+| Componente | Qty | Precio aprox |
+|---|---|---|
+| RP2350A QFN-60 | 1 | ~1.20€ |
+| W25Q32JV SOIC-8 (4MB flash) | 1 | ~0.50€ |
+| APS6404L SOIC-8 (8MB PSRAM) | 1 | ~1.50€ |
+| 74LVC245A TSSOP-20 | 3 | ~0.90€ |
+| AMS1117-3.3 SOT-223 | 1 | ~0.15€ |
+| BSS138 SOT-23 | 3 | ~0.15€ |
+| Crystal 12MHz 3225 | 1 | ~0.30€ |
+| USB-C receptáculo | 1 | ~0.40€ |
+| Resistencias 0402 | 9 | ~0.10€ |
+| Condensadores 0402/0805 | 13 | ~0.15€ |
+| **Componentes total** | | **~5.35€** |
+| PCB JLCPCB 5 uds (gold fingers) | | ~15€ (~3€/ud) |
+| **TOTAL por unidad** | | **~8-9€** |

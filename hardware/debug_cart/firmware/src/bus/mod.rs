@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Bus master API — used by Phase 3+ (PCB v2)
+
 /// Bus master primitives — Phase 3
 ///
 /// These functions assume:
@@ -9,7 +11,7 @@
 /// Calling bus_write/bus_read on v1 hardware will silently do nothing
 /// (guarded by BUS_MASTER_AVAILABLE).
 
-use rp2040_hal::pac;
+use rp235x_hal::pac;
 use cortex_m::delay::Delay;
 use crate::pins::*;
 

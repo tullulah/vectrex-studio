@@ -15,11 +15,10 @@
 
 use panic_halt as _;
 
-use rp2040_hal as hal;
+use rp235x_hal as hal;
 use hal::{
     clocks::Clock,
     pac,
-    gpio::{FunctionSio, SioOutput, SioInput, PullDown, PullUp},
 };
 use cortex_m_rt::entry;
 use embedded_hal::digital::OutputPin;
@@ -31,11 +30,13 @@ mod pins;
 mod vectrex_hal;
 mod bus;
 mod psram;
+mod flash;
 
-// Second-stage bootloader: configure XIP flash for 133 MHz operation
-#[link_section = ".boot2"]
+// RP2350 boot block — replaces RP2040's boot2.
+// Tells the bootrom this is a valid secure executable image.
+#[link_section = ".start_block"]
 #[used]
-pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 
 const XTAL_FREQ_HZ: u32 = 12_000_000;
 
@@ -52,6 +53,7 @@ fn usb_print(serial: &mut SerialPort<hal::usb::UsbBus>, s: &[u8]) {
 }
 
 /// Format u32 as decimal into a fixed buffer. Returns slice of used bytes.
+#[allow(dead_code)] // used by Phase 2+ command responses
 fn fmt_u32(val: u32, buf: &mut [u8; 10]) -> &[u8] {
     let mut n = val;
     let mut i = buf.len();
@@ -72,8 +74,8 @@ fn main() -> ! {
     //
     // 1. Peripheral init
     //
-    let mut pac = pac::Peripherals::take().unwrap();
-    let core   = pac::CorePeripherals::take().unwrap();
+    let mut pac  = pac::Peripherals::take().unwrap();
+    let core = cortex_m::peripheral::Peripherals::take().unwrap();
 
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
 
@@ -114,10 +116,10 @@ fn main() -> ! {
     let mut nrst = gpio.gpio28.into_push_pull_output();
     nrst.set_low().unwrap();
 
-    // DIR_CTRL for data bus buffer U4: LOW = Vectrex→RP2040 (input)
-    // RP2040 RUN pin is wired to DIR_CTRL in v1 — this cannot be toggled at
-    // runtime. In ROM emulation mode (Phase 2) we drive data, toggling via PIO.
-    // For now: data bus is input (RP2040 observes bus).
+    // DIR_CTRL for data bus buffer U4: GP29, LOW = Vectrex→RP2350 (read/ROM mode)
+    // Start LOW — RP2350 observes bus. Phase 3 (bus master) will drive HIGH to write.
+    let mut dir_ctrl = gpio.gpio29.into_push_pull_output();
+    dir_ctrl.set_low().unwrap();
 
     delay.delay_ms(1); // 6809 halts within ~7 µs — 1 ms is generous
 
@@ -125,8 +127,8 @@ fn main() -> ! {
     // 3. USB CDC
     //
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
-        pac.USBCTRL_REGS,
-        pac.USBCTRL_DPRAM,
+        pac.USB,
+        pac.USB_DPRAM,
         clocks.usb_clock,
         true,
         &mut pac.RESETS,
@@ -161,7 +163,7 @@ fn main() -> ! {
     //
     usb_print(&mut serial, b"\r\n");
     usb_print(&mut serial, b"=== Vectrex Debug Cart v1 ===\r\n");
-    usb_print(&mut serial, b"RP2040 @ 133 MHz  |  2 MB flash  |  8 MB PSRAM\r\n");
+    usb_print(&mut serial, b"RP2350 @ 150 MHz  |  4 MB flash  |  8 MB PSRAM  |  FPU\r\n");
     usb_print(&mut serial, b"/HALT asserted: 6809 stopped.\r\n");
     usb_print(&mut serial, b"\r\n");
 
@@ -186,13 +188,12 @@ fn main() -> ! {
         usb_print(&mut serial, b"ROM emulation mode only.\r\n");
     }
 
-    usb_print(&mut serial, b"\r\nReady. Commands: [r]om-mode  [h]alt  [u]nhalt  [?]help\r\n> ");
+    usb_print(&mut serial, b"\r\nReady. Commands: [r]om-mode  [H]alt  [U]nhalt  [F]lash  [?]help\r\n> ");
 
     //
     // 7. Command loop
     //
     let mut rx_buf = [0u8; 64];
-    let mut num_buf = [0u8; 10];
 
     loop {
         if usb_dev.poll(&mut [&mut serial]) {
@@ -206,6 +207,7 @@ fn main() -> ! {
                             usb_print(&mut serial, b"  U - release /HALT\r\n");
                             usb_print(&mut serial, b"  N - pulse /NMI\r\n");
                             usb_print(&mut serial, b"  R - pulse /RST\r\n");
+                            usb_print(&mut serial, b"  F - flash game ROM (32KB max, resets after)\r\n");
                             usb_print(&mut serial, b"> ");
                         }
                         b'H' => {
@@ -232,6 +234,23 @@ fn main() -> ! {
                         }
                         b'r' => {
                             usb_print(&mut serial, b"ROM mode not yet implemented (Phase 2)\r\n> ");
+                        }
+                        b'F' => {
+                            // Flash game ROM over USB CDC
+                            // rx closure: poll USB and fill buffer, return bytes read
+                            let rx = |buf: &mut [u8]| -> usize {
+                                if usb_dev.poll(&mut [&mut serial]) {
+                                    serial.read(buf).unwrap_or(0)
+                                } else {
+                                    0
+                                }
+                            };
+                            let tx = |data: &[u8]| {
+                                usb_print(&mut serial, data);
+                            };
+                            flash::receive_and_flash(rx, tx);
+                            // receive_and_flash resets on success; if we reach here it errored
+                            usb_print(&mut serial, b"> ");
                         }
                         b'\r' | b'\n' => {
                             usb_print(&mut serial, b"\r\n> ");

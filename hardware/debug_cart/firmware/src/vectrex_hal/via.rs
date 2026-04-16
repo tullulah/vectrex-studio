@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Hardware constants — used by Phase 3+ (bus master)
+
 /// VIA 6522 register map as seen on the Vectrex bus.
 /// Base address: $D000. All accesses go through bus::write() / bus::read().
 

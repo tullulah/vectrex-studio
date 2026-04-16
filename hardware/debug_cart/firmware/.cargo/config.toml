@@ -1,13 +1,14 @@
-[target.thumbv6m-none-eabi]
+[target.thumbv8m.main-none-eabihf]
+# Cortex-M33 with FPU (RP2350 / Pico 2)
 # Flash and run via probe-rs (SWD debug probe):
-runner = "probe-rs run --chip RP2040"
+runner = "probe-rs run --chip RP2350"
 rustflags = [
     "-C", "link-arg=--nmagic",
     "-C", "link-arg=-Tlink.x",
 ]
 
 [build]
-target = "thumbv6m-none-eabi"
+target = "thumbv8m.main-none-eabihf"
 
-# To flash via UF2 (no debugger needed — hold BOOTSEL, connect USB):
+# To flash via UF2 (no debugger — hold BOOTSEL, connect USB, copy .uf2):
 # runner = "elf2uf2-rs --deploy --serial"

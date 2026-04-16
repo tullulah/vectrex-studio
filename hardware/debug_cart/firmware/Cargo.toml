@@ -11,10 +11,9 @@ test = false
 bench = false
 
 [dependencies]
-# RP2040 HAL + runtime
-rp2040-hal    = { version = "0.10", features = ["rt", "critical-section-impl"] }
-rp2040-boot2  = "0.3"
-cortex-m      = { version = "0.7" }  # no critical-section-single-core — rp2040-hal provides it
+# RP2350 HAL + runtime (Pico 2)
+rp235x-hal    = { version = "0.2", features = ["rt", "critical-section-impl"] }
+cortex-m      = { version = "0.7" }
 cortex-m-rt   = "0.7"
 embedded-hal  = "1.0"
 
@@ -27,8 +26,15 @@ heapless      = "0.8"       # fixed-size collections (no alloc needed)
 fugit         = "0.3"       # type-safe frequency/duration arithmetic
 panic-halt    = "0.2"       # on panic: halt — swap for panic-probe when using SWD
 
+[lints.rust]
+warnings         = "deny"
+unused_imports   = "deny"
+unused_variables = "deny"
+dead_code        = "deny"
+unused_mut       = "deny"
+
 [profile.release]
-opt-level     = "s"         # optimize for size
+opt-level     = "s"
 lto           = true
 codegen-units = 1
 debug         = true        # keep debug symbols for probe-rs
