@@ -479,7 +479,17 @@ fn emit_stmt(
             Ok(s)
         }
 
-        Stmt::Expr(expr, _) => emit_expr(expr, var_addrs),
+        Stmt::Expr(expr, _) => {
+            // MSG_DEF(id, x, y, "text") is a compile-time declaration — its data
+            // is baked into PRINT_MSG_TABLE by collect_msg_entries / emit_msg_builtins.
+            // At runtime it is a complete no-op: suppress ALL code generation for it.
+            if let Expr::Call(info) = expr {
+                if info.name.to_uppercase() == "MSG_DEF" {
+                    return Ok(String::new());
+                }
+            }
+            emit_expr(expr, var_addrs)
+        }
 
         Stmt::If { cond, body, elifs, else_body, .. } => {
             let id = next_id();

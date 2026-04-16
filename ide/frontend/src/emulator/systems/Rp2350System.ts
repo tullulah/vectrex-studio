@@ -562,6 +562,13 @@ export class Rp2350System implements ISystem, IBus {
       });
     }
 
+    // vpy_msg_def: compile-time declaration, pure no-op at runtime.
+    // Trap it to avoid going through cpu.step() + via.tick() + beam.tick().
+    const msgDefAddr = symbols.get('vpy_msg_def');
+    if (msgDefAddr !== undefined) {
+      this.traps.set(msgDefAddr & ~1, (_cpu: Thumb2): number => 0);
+    }
+
     // vpy_update_buttons: bypass Via6522 Port B read entirely.
     // Reading Port B goes through alg_compare (bit 5) and via_t1pb7 (bit 7),
     // both of which can mask button 2 and button 4 inputs.  Write joyButtons
