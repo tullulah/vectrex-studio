@@ -105,6 +105,19 @@ export class Psg {
     // Controller buttons default to all-released (active-low, so 0xFF)
     this.Regs[14] = 0xff;
     this.writeRegister(14, 0xff);
+    // Initialise all periods to STEP3 (=1) so fillBuffer() never divides by
+    // zero or spins in an infinite while-loop before any PSG writes arrive.
+    this.PeriodA = STEP3;
+    this.PeriodB = STEP3;
+    this.PeriodC = STEP3;
+    this.PeriodN = STEP3;
+    this.PeriodE = STEP3;
+    this.CountA  = STEP3;
+    this.CountB  = STEP3;
+    this.CountC  = STEP3;
+    this.CountN  = STEP3;
+    this.CountE  = STEP3;
+    this.ready   = 1;  // safe to call fillBuffer() from now on
   }
 
   // ------------------------------------------------------------------ //
@@ -262,14 +275,181 @@ export class Psg {
   get selectedRegister(): number { return this.index; }
 
   // ------------------------------------------------------------------ //
-  // tick — Phase 1 stub; Phase 2 will produce audio samples
+  // tick — no-op (audio synthesis happens in fillBuffer)
+  // ------------------------------------------------------------------ //
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tick(_cycles: number): void {}
+
+  // ------------------------------------------------------------------ //
+  // fillBuffer — AY-3-8910 PCM synthesis (port of e8910_callback from vecx_full.js)
   // ------------------------------------------------------------------ //
   /**
-   * Advance PSG emulation by `cycles` clock cycles.
-   * In Phase 1 this is a no-op.  Phase 2 will generate audio samples here.
+   * Fill `stream` with `length` mono Float32 audio samples [-1, 1].
+   * Called directly by the ScriptProcessor's onaudioprocess handler.
+   *
+   * Algorithm mirrors e8910_callback in vecx_full.js (lines 3444–3608).
+   * STEP3=1, STEP=2: each outer loop processes 2 sub-steps and produces
+   * one sample every 2 outer iterations (checked via `--len & 1`).
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tick(_cycles: number): void {
-    // TODO Phase 2: generate audio samples via ScriptProcessor / AudioWorklet
+  fillBuffer(stream: Float32Array, length: number): void {
+    const STEP  = 2;
+    const STEP2 = STEP;
+
+    let idx = 0;
+
+    // Warm-up: ensure channel counters are large enough to avoid wrap at start
+    if (this.Regs[AY_ENABLE] & 0x01) {
+      if (this.CountA <= STEP2) this.CountA += STEP2;
+      this.OutputA = 1;
+    } else if (this.Regs[AY_AVOL] === 0) {
+      if (this.CountA <= STEP2) this.CountA += STEP2;
+    }
+    if (this.Regs[AY_ENABLE] & 0x02) {
+      if (this.CountB <= STEP2) this.CountB += STEP2;
+      this.OutputB = 1;
+    } else if (this.Regs[AY_BVOL] === 0) {
+      if (this.CountB <= STEP2) this.CountB += STEP2;
+    }
+    if (this.Regs[AY_ENABLE] & 0x04) {
+      if (this.CountC <= STEP2) this.CountC += STEP2;
+      this.OutputC = 1;
+    } else if (this.Regs[AY_CVOL] === 0) {
+      if (this.CountC <= STEP2) this.CountC += STEP2;
+    }
+    if ((this.Regs[AY_ENABLE] & 0x38) === 0x38) {
+      if (this.CountN <= STEP2) this.CountN += STEP2;
+    }
+
+    let outn = (this.OutputN | this.Regs[AY_ENABLE]);
+
+    // Double the loop count: every other iteration emits a sample
+    let len = length << 1;
+
+    while (len > 0) {
+      let vola = 0, volb = 0, volc = 0;
+      let left = STEP;
+
+      do {
+        const nextevent = this.CountN < left ? this.CountN : left;
+
+        // Channel A
+        if (outn & 0x08) {
+          if (this.OutputA) vola += this.CountA;
+          this.CountA -= nextevent;
+          while (this.CountA <= 0) {
+            this.CountA += this.PeriodA;
+            if (this.CountA > 0) {
+              this.OutputA ^= 1;
+              if (this.OutputA) vola += this.PeriodA;
+              break;
+            }
+            this.CountA += this.PeriodA;
+            vola += this.PeriodA;
+          }
+          if (this.OutputA) vola -= this.CountA;
+        } else {
+          this.CountA -= nextevent;
+          while (this.CountA <= 0) {
+            this.CountA += this.PeriodA;
+            if (this.CountA > 0) { this.OutputA ^= 1; break; }
+            this.CountA += this.PeriodA;
+          }
+        }
+
+        // Channel B
+        if (outn & 0x10) {
+          if (this.OutputB) volb += this.CountB;
+          this.CountB -= nextevent;
+          while (this.CountB <= 0) {
+            this.CountB += this.PeriodB;
+            if (this.CountB > 0) {
+              this.OutputB ^= 1;
+              if (this.OutputB) volb += this.PeriodB;
+              break;
+            }
+            this.CountB += this.PeriodB;
+            volb += this.PeriodB;
+          }
+          if (this.OutputB) volb -= this.CountB;
+        } else {
+          this.CountB -= nextevent;
+          while (this.CountB <= 0) {
+            this.CountB += this.PeriodB;
+            if (this.CountB > 0) { this.OutputB ^= 1; break; }
+            this.CountB += this.PeriodB;
+          }
+        }
+
+        // Channel C
+        if (outn & 0x20) {
+          if (this.OutputC) volc += this.CountC;
+          this.CountC -= nextevent;
+          while (this.CountC <= 0) {
+            this.CountC += this.PeriodC;
+            if (this.CountC > 0) {
+              this.OutputC ^= 1;
+              if (this.OutputC) volc += this.PeriodC;
+              break;
+            }
+            this.CountC += this.PeriodC;
+            volc += this.PeriodC;
+          }
+          if (this.OutputC) volc -= this.CountC;
+        } else {
+          this.CountC -= nextevent;
+          while (this.CountC <= 0) {
+            this.CountC += this.PeriodC;
+            if (this.CountC > 0) { this.OutputC ^= 1; break; }
+            this.CountC += this.PeriodC;
+          }
+        }
+
+        // Noise
+        this.CountN -= nextevent;
+        if (this.CountN <= 0) {
+          if ((this.RNG + 1) & 2) {
+            this.OutputN = (~this.OutputN & 0xff);
+            outn = (this.OutputN | this.Regs[AY_ENABLE]);
+          }
+          if (this.RNG & 1) this.RNG ^= 0x24000;
+          this.RNG >>= 1;
+          this.CountN += this.PeriodN;
+        }
+
+        left -= nextevent;
+      } while (left > 0);
+
+      // Envelope
+      if (this.Holding === 0) {
+        this.CountE -= STEP3;
+        if (this.CountE <= 0) {
+          do {
+            this.CountEnv--;
+            this.CountE += this.PeriodE;
+          } while (this.CountE <= 0);
+
+          if (this.CountEnv < 0) {
+            if (this.Hold) {
+              if (this.Alternate) this.Attack ^= 0x1f;
+              this.Holding = 1;
+              this.CountEnv = 0;
+            } else {
+              if (this.Alternate && (this.CountEnv & 0x20)) this.Attack ^= 0x1f;
+              this.CountEnv &= 0x1f;
+            }
+          }
+
+          this.VolE = this.VolTable[this.CountEnv ^ this.Attack];
+          if (this.EnvelopeA) this.VolA = this.VolE;
+          if (this.EnvelopeB) this.VolB = this.VolE;
+          if (this.EnvelopeC) this.VolC = this.VolE;
+        }
+      }
+
+      const vol = (vola * this.VolA + volb * this.VolB + volc * this.VolC) / (3 * STEP);
+      if (--len & 1) {
+        stream[idx++] = vol / MAX_OUTPUT;
+      }
+    }
   }
 }

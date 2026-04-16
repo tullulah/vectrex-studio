@@ -512,6 +512,22 @@ function App() {
         logger.debug('Build', 'Document is dirty - will save before compiling');
       }
 
+      // Save ALL other dirty asset documents (.vmus, .vec, .vsfx) before compiling
+      // so that the compiler reads the latest BPM/vectors/SFX from disk.
+      const allDirty = editorState.documents.filter(
+        d => d.dirty && d.diskPath && d.uri !== (activeDoc.uri)
+          && /\.(vmus|vec|vsfx|vplay|vpy)$/.test(d.diskPath)
+      );
+      for (const dirtyDoc of allDirty) {
+        try {
+          await electronAPI.saveFile({ path: dirtyDoc.diskPath!, content: dirtyDoc.content });
+          useEditorStore.getState().markSaved(dirtyDoc.uri);
+          logger.debug('Build', 'Auto-saved dirty asset before build:', dirtyDoc.diskPath);
+        } catch (saveErr) {
+          logger.warn('Build', 'Failed to auto-save dirty asset:', dirtyDoc.diskPath, saveErr);
+        }
+      }
+
       // Construct expected binary path and delete it before compiling
       if (activeDoc.diskPath) {
         const expectedBinPath = activeDoc.diskPath.replace(/\.(vpy|vpyproj)$/, '.bin');

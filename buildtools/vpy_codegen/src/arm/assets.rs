@@ -108,9 +108,10 @@ struct VsfxNoise {
     enabled: bool,
     #[serde(default)]
     period: u8,
-    #[allow(dead_code)]
     #[serde(default)]
     volume: u8,
+    #[serde(default)]
+    decay_ms: f64,
 }
 
 // ============================================================
@@ -238,9 +239,11 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
 fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
 
-    // Timing conversion: ticks → frames @ 50 fps
+    // Timing conversion: ticks → frames @ 60 fps
+    // The RP2350 emulator runs its RAF loop at 60 fps (TARGET_MS = 1000/60).
+    // Compiling at 50 fps would cause music to play 20% too fast in the emulator.
     let ticks_per_sec = vmus.tempo / 60.0 * vmus.ticks_per_beat;
-    let tick_to_frame = |t: f64| -> u32 { (t * 50.0 / ticks_per_sec).round() as u32 };
+    let tick_to_frame = |t: f64| -> u32 { (t * 60.0 / ticks_per_sec).round() as u32 };
 
     let loop_start_frame = tick_to_frame(vmus.loop_start);
     let loop_end_frame = tick_to_frame(vmus.loop_end.unwrap_or(vmus.total_ticks));
@@ -421,6 +424,14 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
     // Effective start_mult / end_mult (default 1.0 if pitch disabled or zero)
     let s_mult = if vsfx.pitch.enabled && vsfx.pitch.start_mult > 0.0 { vsfx.pitch.start_mult } else { 1.0 };
     let e_mult = if vsfx.pitch.enabled && vsfx.pitch.end_mult > 0.0   { vsfx.pitch.end_mult   } else { 1.0 };
+    let base_freq = if vsfx.oscillator.frequency > 0.0 { vsfx.oscillator.frequency } else { 440.0 };
+
+    // Noise decay: noise.volume decays to 0 over noise.decay_ms
+    let noise_total_frames = if vsfx.noise.enabled && vsfx.noise.decay_ms > 0.0 {
+        (vsfx.noise.decay_ms as f64 / 20.0).round().max(1.0)
+    } else {
+        total_frames as f64
+    };
 
     // Build per-frame events (only emit when values actually change)
     let mut frame_events: Vec<(u32, Vec<(u8, u8)>)> = Vec::new();
@@ -432,7 +443,7 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
         let mut writes: Vec<(u8, u8)> = Vec::new();
 
         // ADSR volume
-        let vol: u8 = if attack_f > 0 && frame < attack_f {
+        let tone_vol: u8 = if attack_f > 0 && frame < attack_f {
             ((peak as u32 * frame / attack_f) as u8).min(15)
         } else {
             let f = frame - attack_f.min(frame);
@@ -451,18 +462,32 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
             }
         };
 
-        // Pitch sweep
+        // Noise volume: decays over noise.decay_ms, independent of tone envelope
+        let noise_vol: u8 = if vsfx.noise.enabled {
+            let progress = (frame as f64 / noise_total_frames).min(1.0);
+            ((1.0 - progress) * vsfx.noise.volume as f64).round() as u8
+        } else {
+            0
+        };
+
+        // Channel volume = louder of tone ADSR or noise decay
+        let vol = tone_vol.max(noise_vol).min(15);
+
+        // Pitch sweep — same convention as SFX editor:
+        //   start_mult = freq multiplier at frame 0,  end_mult = freq multiplier at last frame.
+        //   period = 88200 / (base_freq × mult),  interpolating mult linearly.
         let t = if total_frames > 1 { frame as f64 / (total_frames - 1) as f64 } else { 0.0 };
         let mult = s_mult + (e_mult - s_mult) * t;
-        let base_freq = if vsfx.oscillator.frequency > 0.0 { vsfx.oscillator.frequency } else { 440.0 };
         let freq = base_freq * mult;
-        let period = if freq > 0.0 { (93750.0 / freq).round() as u16 } else { 0xFFF };
-        let period = period.min(0xFFF);
+        let period = if freq > 0.0 { (88200.0 / freq).round() as u16 } else { 0xFFF };
+        let period = period.max(1).min(0xFFF);
+
+        let noise_active = vsfx.noise.enabled && noise_vol > 0;
 
         // Mixer
         let mut mixer = 0x3Fu8;
         if vol > 0 { mixer &= !(1u8 << ch); }
-        if vsfx.noise.enabled { mixer &= !(1u8 << (3 + ch)); }
+        if noise_active { mixer &= !(1u8 << (3 + ch)); }
 
         // Only emit noise period write on frame 0
         if frame == 0 && vsfx.noise.enabled {

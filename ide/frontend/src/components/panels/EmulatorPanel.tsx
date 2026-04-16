@@ -611,6 +611,8 @@ export const EmulatorPanel: React.FC = () => {
           vecx.upHeld    = kbY > 0.3;
           vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
           vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
+          // rp2350 target: forward keyboard axis (no button support from keyboard)
+          emuCore.setJoyAxis?.(kb.x, kb.y);
         } catch {}
         return;
       }
@@ -697,6 +699,21 @@ export const EmulatorPanel: React.FC = () => {
           });
         }
 
+        // rp2350 target: forward analog axis and button state.
+        // buttonState bits 0-3 = buttons 1-4 (1=pressed).
+        // VIA Port B bits 4-7 = buttons 1-4, active-low (0=pressed).
+        {
+          const rp2350X = Math.round(x * 127);
+          const rp2350Y = Math.round(y * 127);
+          // D-pad: combine with analog for digital axis
+          const dp2350X = dpadLeft ? -127 : dpadRight ? 127 : rp2350X;
+          const dp2350Y = dpadDown ? -127 : dpadUp   ? 127 : rp2350Y;
+          emuCore.setJoyAxis?.(dp2350X, dp2350Y);
+          // Convert buttonState (bits 0-3 active-high) → VIA Port B (bits 4-7 active-low)
+          const portBMask = 0xF0 & ~((buttonState & 0x0F) << 4);
+          emuCore.setJoyButtons?.(portBMask);
+        }
+
         // WORKAROUND for JSVecx PSG read issue (2026-01-03):
         // Root Cause: Read_Btns auto-injects at loop start and reads PSG register 14
         // The PSG read happens AFTER our $C80F write, so Read_Btns overwrites our value
@@ -706,10 +723,10 @@ export const EmulatorPanel: React.FC = () => {
         //
         // PSG Register 14 format (inverted: 0=pressed, 1=released)
         const psgReg14 = ~buttonState & 0xFF;
-        
+
         // Inject into window for JSVecx to read (patched in vecx.js VIA read case 0xf)
         (window as any).injectedButtonStatePSG = psgReg14;
-        
+
         // Also write to PSG.Regs[14] for hardware compatibility (vecx emulator)
         if (vecx.e8910 && vecx.e8910.e8910_write) {
           vecx.e8910.e8910_write(14, psgReg14);

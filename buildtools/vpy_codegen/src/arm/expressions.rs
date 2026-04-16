@@ -413,6 +413,54 @@ pub fn emit_call(
         }
     }
 
+    // Special case: DRAW_VECTOR_EX(asset, ox, oy, mirror, intensity)
+    // ABI: r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity
+    // intensity MUST be on the stack BEFORE the call (and cleaned up after).
+    if info.name == "DRAW_VECTOR_EX" {
+        if let Some(Expr::StringLit(asset_name)) = args.first() {
+            let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VECTORS");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            // Push intensity first so it sits at [sp] when the function reads [sp+32]
+            // (after the function pushes 8 regs = 32 bytes).
+            if let Some(intensity) = runtime.get(3) {
+                s.push_str(&emit_arg(intensity, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #127\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r0 = asset_ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = ox
+            if let Some(ox) = runtime.first() {
+                s.push_str(&emit_arg(ox, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = oy
+            if let Some(oy) = runtime.get(1) {
+                s.push_str(&emit_arg(oy, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r3 = mirror
+            if let Some(mirror) = runtime.get(2) {
+                s.push_str(&emit_arg(mirror, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r3=mirror, r2=oy, r1=ox, r0=asset_ptr; intensity stays at [sp]
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_vector_ex\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard intensity from stack
+            return Ok(s);
+        }
+    }
+
     // For asset builtins, the first arg is a string literal → ROM symbol address.
     // Only treat as asset builtin if first arg is actually a string literal.
     let is_asset_builtin = ASSET_BUILTINS.contains(&info.name.as_str())

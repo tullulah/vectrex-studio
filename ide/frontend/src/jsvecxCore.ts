@@ -480,6 +480,30 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     this._activeTarget = 'm6809';
   }
 
+  /**
+   * Forward joystick axis input to the active emulation target.
+   * x, y are signed values in [-127, 127] (0 = centred).
+   * Only has effect when the active target is rp2350.
+   */
+  setJoyAxis(x: number, y: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyAxis(x, y);
+    }
+  }
+
+  /**
+   * Forward joystick button state to the active emulation target.
+   * portBMask: VIA Port B bits 4-7, active-low (0 = pressed, 1 = released).
+   *   bit 4 = Button 1, bit 5 = Button 2, bit 6 = Button 3, bit 7 = Button 4.
+   * Default (no buttons pressed): 0xF0.
+   * Only has effect when the active target is rp2350.
+   */
+  setJoyButtons(portBMask: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyButtons(portBMask);
+    }
+  }
+
   /** Load an ARM binary (rp2350 target). Switches the active emulation system to Rp2350System. */
   loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void {
     console.log(`[loadArm] START bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
@@ -489,6 +513,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     this._rp2350System.init(bin, elf);
     if (canvas) this._rp2350System.setCanvas(canvas);
     this._activeTarget = 'rp2350';
+    // Start PSG audio synthesis (requires user gesture — loadArm is always
+    // triggered by a user action, so the AudioContext can start here).
+    this._rp2350System.startAudio();
     console.log(`[loadArm] DONE — activeTarget=${this._activeTarget} traps registered`);
   }
 
