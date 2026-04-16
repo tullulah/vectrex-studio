@@ -110,9 +110,36 @@ function armI8(r: number): number {
 
 /**
  * Clamp a beam coordinate to the half-open interval [0, maxCoord).
+ * Used only for dv_reset; beam tracking itself is unbounded.
  */
 function clampAlg(v: number, maxCoord: number): number {
   return v < 0 ? 0 : v >= maxCoord ? maxCoord - 1 : v;
+}
+
+/**
+ * Cohen-Sutherland line clipping against [0, ALG_MAX_X) × [0, ALG_MAX_Y).
+ * Returns clipped [x0,y0,x1,y1] or null if the segment is entirely off-screen.
+ * The beam position is tracked unbounded; only the drawable portion is returned.
+ */
+function clipSegment(
+  x0: number, y0: number, x1: number, y1: number,
+): [number, number, number, number] | null {
+  const XMAX = ALG_MAX_X - 1, YMAX = ALG_MAX_Y - 1;
+  const code = (x: number, y: number): number =>
+    (x < 0 ? 1 : x > XMAX ? 2 : 0) | (y < 0 ? 4 : y > YMAX ? 8 : 0);
+  let c0 = code(x0, y0), c1 = code(x1, y1);
+  for (;;) {
+    if (!(c0 | c1)) return [x0 | 0, y0 | 0, x1 | 0, y1 | 0]; // both inside
+    if (c0 & c1)    return null;                                // trivially outside
+    const cout = c0 !== 0 ? c0 : c1;
+    let x = 0, y = 0;
+    if (cout & 8)      { x = x0 + (x1 - x0) * (YMAX - y0) / (y1 - y0); y = YMAX; }
+    else if (cout & 4) { x = x0 + (x1 - x0) * (0    - y0) / (y1 - y0); y = 0;    }
+    else if (cout & 2) { y = y0 + (y1 - y0) * (XMAX - x0) / (x1 - x0); x = XMAX; }
+    else               { y = y0 + (y1 - y0) * (0    - x0) / (x1 - x0); x = 0;    }
+    if (cout === c0) { x0 = x; y0 = y; c0 = code(x0, y0); }
+    else             { x1 = x; y1 = y; c1 = code(x1, y1); }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -786,19 +813,17 @@ export class Rp2350System implements ISystem, IBus {
   /**
    * dv_move_to(r0=x, r1=y) — reposition beam without drawing.
    *
-   * r0/r1 hold 32-bit signed screen coordinates (not i8 deltas).
-   * The ARM codegen computes  x_start + ox  and  y_start + oy  in full
-   * 32-bit arithmetic before calling this function, so values can exceed
-   * the ±127 range of an i8 (e.g. screen_x=158 + x_start=-22 = 136).
-   * Treating them as signed 32-bit (|0) is correct; values beyond the
-   * visible range will be clamped by clampAlg to the screen edge.
+   * The beam is tracked in UNBOUNDED virtual ALG coordinates so that objects
+   * partially off-screen don't have their paths clamped to the screen edge.
+   * dv_draw_delta uses Cohen-Sutherland clipping to only render the visible
+   * portion of each segment.
    */
   private makeDvMoveTrap(): TrapFn {
     return (cpu: Thumb2): number => {
-      const dx = cpu.getReg(0) | 0;  // signed 32-bit (NOT i8 — can exceed ±127)
+      const dx = cpu.getReg(0) | 0;  // signed 32-bit screen coord
       const dy = cpu.getReg(1) | 0;
-      this.armBeamX = clampAlg(this.armBeamX + dx * ARM_ALG_SCALE, ALG_MAX_X);
-      this.armBeamY = clampAlg(this.armBeamY - dy * ARM_ALG_SCALE, ALG_MAX_Y); // Y inverted
+      this.armBeamX += dx * ARM_ALG_SCALE;   // unbounded — no clamp
+      this.armBeamY -= dy * ARM_ALG_SCALE;   // Y inverted, still unbounded
       return 200;
     };
   }
@@ -806,20 +831,20 @@ export class Rp2350System implements ISystem, IBus {
   /**
    * dv_draw_delta(r0=dx_i8, r1=dy_i8) — draw one vector segment.
    *
-   * Computes the endpoint from the current tracked beam position and injects
-   * the segment directly into the Beam draw list at the current intensity.
+   * Tracks the beam in unbounded virtual space; clips the segment with
+   * Cohen-Sutherland before injecting into the Beam draw list so that
+   * objects scrolling off-screen don't pile up on the screen edge.
    */
   private makeDvDrawDeltaTrap(): TrapFn {
     return (cpu: Thumb2): number => {
       const dx   = armI8(cpu.getReg(0));
       const dy   = armI8(cpu.getReg(1));
-      const newX = clampAlg(this.armBeamX + dx * ARM_ALG_SCALE, ALG_MAX_X);
-      const newY = clampAlg(this.armBeamY - dy * ARM_ALG_SCALE, ALG_MAX_Y);
-      this.beam.addSegmentDirect(
-        this.armBeamX, this.armBeamY,
-        newX,          newY,
-        this.armIntensity,
-      );
+      const newX = this.armBeamX + dx * ARM_ALG_SCALE;   // unbounded
+      const newY = this.armBeamY - dy * ARM_ALG_SCALE;   // unbounded, Y inverted
+      const clipped = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
+      if (clipped !== null) {
+        this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], this.armIntensity);
+      }
       this.armBeamX = newX;
       this.armBeamY = newY;
       return 200;
