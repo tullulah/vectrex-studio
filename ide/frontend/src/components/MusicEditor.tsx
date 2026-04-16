@@ -886,6 +886,48 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
     }
   }, [isPlaying, playheadPosition, resource, viewChannel, playbackSpeed, autoScroll, zoom, scrollX, visibleWidth]);
 
+  // Restart the playback interval when BPM or playback speed changes mid-play.
+  // The setInterval closure captures msPerTick at start time; it won't update
+  // when resource.tempo or playbackSpeed changes unless we restart explicitly.
+  useEffect(() => {
+    if (!isPlaying) return;
+    // Trigger a restart: stop current interval and let the next render restart it.
+    if (playIntervalRef.current) {
+      clearInterval(playIntervalRef.current);
+      playIntervalRef.current = null;
+    }
+    // Restart with updated tempo
+    const speedFactor = 100 / playbackSpeed;
+    const msPerTick = ((60000 / resource.tempo) / TICKS_PER_BEAT) * speedFactor;
+    let pos = playheadPosition;
+    const notesToPlay = viewChannel === 'all'
+      ? resource.notes
+      : viewChannel === 'noise'
+        ? []
+        : resource.notes.filter((n: NoteEvent) => n.channel === viewChannel);
+    const shouldPlayNoise = viewChannel === 'all' || viewChannel === 'noise';
+    const activeNotePerChannel: (NoteEvent | null)[] = [null, null, null];
+    let activeNoiseEvent: any = null;
+    playIntervalRef.current = window.setInterval(() => {
+      for (const note of notesToPlay) {
+        if (note.start === pos) { psgRef.current?.playNote(note.channel, note.note, note.velocity); activeNotePerChannel[note.channel] = note; }
+      }
+      if (shouldPlayNoise && resource.noise && Array.isArray(resource.noise)) {
+        for (const noise of resource.noise) { if (noise.start === pos) { psgRef.current?.playNoise(noise.period, 15); activeNoiseEvent = noise; } }
+        if (activeNoiseEvent && pos >= activeNoiseEvent.start + activeNoiseEvent.duration) { if (!resource.noise.find((n: any) => n.start === pos)) { psgRef.current?.stopNoise(); activeNoiseEvent = null; } }
+      }
+      for (let ch = 0; ch < 3; ch++) {
+        const activeNote = activeNotePerChannel[ch];
+        if (activeNote && pos >= activeNote.start + activeNote.duration) { if (!notesToPlay.find((n: NoteEvent) => n.channel === ch && n.start === pos)) { psgRef.current?.stopChannel(ch); activeNotePerChannel[ch] = null; } }
+      }
+      pos++;
+      if (pos >= resource.loopEnd) pos = resource.loopStart;
+      setPlayheadPosition(pos);
+    }, msPerTick);
+    return () => { if (playIntervalRef.current) { clearInterval(playIntervalRef.current); playIntervalRef.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resource.tempo, playbackSpeed]);
+
   useEffect(() => () => { if (playIntervalRef.current) clearInterval(playIntervalRef.current); }, []);
 
   const deleteSelected = useCallback(() => {
