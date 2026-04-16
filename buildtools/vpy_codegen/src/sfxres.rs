@@ -551,17 +551,23 @@ impl SfxResource {
                 current_period = (1_411_200.0 / (16.0 * frequency)).round() as u16;
                 current_period = current_period.max(1).min(4095);
             } else if self.pitch.enabled && total_frames > 1 {
-                // PITCH SWEEP: smooth frequency change
+                // PITCH SWEEP — same convention as SFX editor:
+                //   start_mult = frequency multiplier at frame 0
+                //   end_mult   = frequency multiplier at last frame
+                //   period = 88200 / (base_freq × mult), mult interpolated linearly.
                 let t = frame as f32 / (total_frames - 1) as f32;
-                // Apply reverse only if start_mult > end_mult (descending sweep)
-                let t_adjusted = if self.pitch.start_mult > self.pitch.end_mult {
-                    1.0 - t  // Reverse for descending sweeps
+                let mult = self.pitch.start_mult + (self.pitch.end_mult - self.pitch.start_mult) * t;
+                let base_freq_f = if self.oscillator.frequency > 0 {
+                    self.oscillator.frequency as f32
                 } else {
-                    t  // Normal for ascending sweeps
+                    440.0
                 };
-                let mult = self.pitch.start_mult + (self.pitch.end_mult - self.pitch.start_mult) * t_adjusted;
-
-                current_period = ((base_period as f32) * mult) as u16;
+                let freq_f = base_freq_f * mult;
+                current_period = if freq_f > 0.0 {
+                    (88200.0 / freq_f).round() as u16
+                } else {
+                    4095
+                };
                 current_period = current_period.max(1).min(4095);
             }
             
