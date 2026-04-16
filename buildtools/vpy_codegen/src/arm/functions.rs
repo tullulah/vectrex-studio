@@ -19,6 +19,25 @@ pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, 
     s.push_str(&var_decls);
     s.push('\n');
 
+    // Emit const array ROM data tables (before user functions so they land in bank 0).
+    // These are labelled .hword tables pointed to by VAR_{name} at startup.
+    s.push_str("@ --- Const array ROM data ---\n");
+    for item in &module.items {
+        if let Item::Const { name, value, .. } = item {
+            if let Expr::List(elems) = value {
+                let varname = name.to_uppercase();
+                s.push_str(".align 2\n");
+                s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
+                for elem in elems {
+                    if let Expr::Number(n) = elem {
+                        s.push_str(&format!("    .hword {n}\n"));
+                    }
+                }
+            }
+        }
+    }
+    s.push('\n');
+
     // Emit user-defined functions (skip main/loop — inlined by emit_game_main).
     // After unification all names are uppercase, so compare against "MAIN"/"LOOP".
     for item in &module.items {
@@ -32,6 +51,7 @@ pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, 
     }
 
     s.push_str(&emit_game_main(module, &var_addrs)?);
+
     Ok(s)
 }
 
@@ -297,7 +317,11 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n{mov}    str     r0, [r1]\n"));
                         }
                         Expr::List(_) => {
-                            // const arrays: pointer is set by assets code (ROM data)
+                            // const arrays: set VAR_{varname} → ARRAY_{varname}_DATA in ROM
+                            let data_label = format!("ARRAY_{varname}_DATA");
+                            s.push_str(&format!("    ldr     r0, ={data_label}\n"));
+                            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n"));
+                            s.push_str(&format!("    str     r0, [r1]  @ const array {name} -> ROM\n"));
                         }
                         _ => {}
                     }

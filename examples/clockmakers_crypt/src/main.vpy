@@ -1114,6 +1114,61 @@ def draw_bottom_hud():
     draw_verb_indicator()
     if msg_timer > 0:
         draw_message()
+    elif near_hs >= 0:
+        draw_hotspot_name()
+
+def draw_hotspot_name():
+    SET_TEXT_SIZE(7)
+    SET_INTENSITY(100)
+    if current_room == ROOM_ENTRANCE:
+        if near_hs == 0:
+            PRINT_TEXT(-35, 114, "PAINTING")
+        elif near_hs == 1:
+            PRINT_TEXT(-56, 114, "WORKSHOP DOOR")
+        elif near_hs == 2:
+            PRINT_TEXT(-42, 114, "CARETAKER")
+        elif near_hs == 3:
+            PRINT_TEXT(-56, 114, "CONSERV. DOOR")
+    elif current_room == ROOM_WORKSHOP:
+        if near_hs == 0:
+            PRINT_TEXT(-49, 114, "SARCOPHAGUS")
+        elif near_hs == 1:
+            PRINT_TEXT(-21, 114, "CLOCK")
+        elif near_hs == 2:
+            PRINT_TEXT(-42, 114, "GEAR PANEL")
+        elif near_hs == 3:
+            PRINT_TEXT(-21, 114, "HANS")
+        elif near_hs == 4:
+            PRINT_TEXT(-35, 114, "OIL CAN")
+        elif near_hs == 5:
+            PRINT_TEXT(-49, 114, "OPTICS DOOR")
+    elif current_room == ROOM_ANTEROOM:
+        if near_hs == 0:
+            PRINT_TEXT(-21, 114, "DIARY")
+        elif near_hs == 1:
+            PRINT_TEXT(-42, 114, "EXIT DOOR")
+        elif near_hs == 2:
+            PRINT_TEXT(-49, 114, "MUSIC SHELF")
+        elif near_hs == 3:
+            PRINT_TEXT(-35, 114, "CABINET")
+    elif current_room == ROOM_WEIGHTS:
+        if near_hs == 0:
+            PRINT_TEXT(-35, 114, "PEDESTAL")
+        elif near_hs == 1:
+            PRINT_TEXT(-42, 114, "EXIT DOOR")
+    elif current_room == ROOM_OPTICS:
+        if near_hs == 0:
+            PRINT_TEXT(-49, 114, "PRISM MOUNT")
+        elif near_hs == 1:
+            PRINT_TEXT(-49, 114, "COMPARTMENT")
+    elif current_room == ROOM_CONSERVATORY:
+        if near_hs == 0:
+            PRINT_TEXT(-21, 114, "ELISA")
+    elif current_room == ROOM_VAULT_CORRIDOR:
+        if near_hs == 0:
+            PRINT_TEXT(-42, 114, "APPRENTICE")
+        elif near_hs == 1:
+            PRINT_TEXT(-42, 114, "VAULT DOOR")
 
 def draw_verb_indicator():
     if current_verb == VERB_EXAMINE:
