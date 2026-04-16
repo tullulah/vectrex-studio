@@ -197,51 +197,63 @@ fn emit_draw_line() -> String {
 
 fn emit_draw_vector_ex() -> String {
     let mut s = String::new();
+    // Register layout (constant across the path loop):
+    //   r4 = asset_ptr
+    //   r5 = path_count
+    //   r6 = path_idx
+    //   r7 = mirror
+    //   r8 = intensity arg
+    //   r9 = ox
+    //   r10 = oy
+    // Push r10 so it is callee-saved.  8 regs × 4 = 32 bytes → sp+32 = intensity arg.
     s.push_str("@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)\n");
     s.push_str("@ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY\n");
+    s.push_str("@ dv_reset called before EVERY path so each path starts from screen centre.\n");
     s.push_str(".global vpy_draw_vector_ex\n.type vpy_draw_vector_ex, %function\n.thumb_func\nvpy_draw_vector_ex:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n"); // 7 regs = 28 bytes
-    s.push_str("    mov     r4, r0              @ asset ptr\n");
-    s.push_str("    mov     r5, r1              @ ox\n");
-    s.push_str("    mov     r6, r2              @ oy\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n"); // 8 regs = 32 bytes
+    s.push_str("    mov     r4, r0              @ asset_ptr\n");
+    s.push_str("    mov     r9, r1              @ ox  (kept for whole function)\n");
+    s.push_str("    mov     r10, r2             @ oy  (kept for whole function)\n");
     s.push_str("    mov     r7, r3              @ mirror\n");
-    s.push_str("    ldr     r8, [sp, #28]       @ intensity (7 saved + 0 padding = 28)\n");
+    s.push_str("    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)\n");
+    s.push_str("    ldr     r5, [r4]            @ path_count\n");
+    s.push_str("    mov     r6, #0              @ path_idx\n");
+    s.push_str("dvex_pl:\n");
+    s.push_str("    cmp     r6, r5\n    bge     dvex_done\n");
+    // r3 = path_ptr
+    s.push_str("    lsl     r3, r6, #2\n    add     r3, r3, #4\n    ldr     r3, [r4, r3]\n");
+    // Reset beam to screen centre before each path — prevents accumulation of
+    // beam drift from the previous path's final position.
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
-    s.push_str("    mov     r0, r5\n    mov     r1, r6\n    bl      dv_move_to\n");
-    // r9 = path_count; r5 = path_idx
-    s.push_str("    ldr     r9, [r4]            @ path_count\n");
-    s.push_str("    mov     r5, #0              @ path_idx\n");
-    s.push_str("dvex_pl:\n");
-    s.push_str("    cmp     r5, r9\n    bge     dvex_done\n");
-    // r6 = path_ptr
-    s.push_str("    lsl     r6, r5, #2\n    add     r6, r6, #4\n    ldr     r6, [r4, r6]\n");
-    // load x_start (byte 2), y_start (byte 1)
-    s.push_str("    ldrsb   r0, [r6, #2]        @ x_start\n");
-    s.push_str("    ldrsb   r1, [r6, #1]        @ y_start\n");
+    // compute absolute move: x_start + ox, y_start + oy
+    s.push_str("    ldrsb   r0, [r3, #2]        @ x_start\n");
+    s.push_str("    ldrsb   r1, [r3, #1]        @ y_start\n");
     // apply mirror
     s.push_str("    tst     r7, #1\n    beq     dvex_nfx\n    neg     r0, r0\n");
     s.push_str("dvex_nfx:\n");
     s.push_str("    tst     r7, #2\n    beq     dvex_nfy\n    neg     r1, r1\n");
     s.push_str("dvex_nfy:\n");
+    s.push_str("    add     r0, r0, r9          @ x_start + ox\n");
+    s.push_str("    add     r1, r1, r10         @ y_start + oy\n");
     s.push_str("    bl      dv_move_to\n");
-    // r8 = cmd_ptr (reuse r8; intensity already set)
-    s.push_str("    add     r8, r6, #5          @ command ptr\n");
+    // r2 = cmd_ptr (r3 still holds path_ptr; r2 is caller-free across dv_* traps)
+    s.push_str("    add     r2, r3, #5          @ command ptr\n");
     s.push_str("dvex_cl:\n");
-    s.push_str("    ldrb    r0, [r8]\n");
+    s.push_str("    ldrb    r0, [r2]\n");
     s.push_str("    cmp     r0, #0x02\n    beq     dvex_cend\n");
     s.push_str("    cmp     r0, #0xFF\n    bne     dvex_cskip\n");
-    s.push_str("    ldrsb   r0, [r8, #2]        @ dx\n");
-    s.push_str("    ldrsb   r1, [r8, #1]        @ dy\n");
+    s.push_str("    ldrsb   r0, [r2, #2]        @ dx\n");
+    s.push_str("    ldrsb   r1, [r2, #1]        @ dy\n");
     s.push_str("    tst     r7, #1\n    beq     dvex_nfx2\n    neg     r0, r0\n");
     s.push_str("dvex_nfx2:\n");
     s.push_str("    tst     r7, #2\n    beq     dvex_nfy2\n    neg     r1, r1\n");
     s.push_str("dvex_nfy2:\n");
     s.push_str("    bl      dv_draw_delta\n");
-    s.push_str("    add     r8, r8, #3\n    b       dvex_cl\n");
-    s.push_str("dvex_cskip:\n    add     r8, r8, #1\n    b       dvex_cl\n");
-    s.push_str("dvex_cend:\n    add     r5, r5, #1\n    b       dvex_pl\n");
-    s.push_str("dvex_done:\n    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
+    s.push_str("    add     r2, r2, #3\n    b       dvex_cl\n");
+    s.push_str("dvex_cskip:\n    add     r2, r2, #1\n    b       dvex_cl\n");
+    s.push_str("dvex_cend:\n    add     r6, r6, #1\n    b       dvex_pl\n");
+    s.push_str("dvex_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
     s
 }
 
