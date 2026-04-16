@@ -323,24 +323,6 @@ export class Rp2350System implements ISystem, IBus {
       console.log(`[Rp2350System.runFrame] ENTER frame=${fc} pc=0x${this.cpu.pc.toString(16)} sp=0x${this.cpu.getReg(13).toString(16)} traps=${this.traps.size}`);
     }
 
-    // ── Ball-variable trace (debug bounce bug) ────────────────────────────
-    // Log every frame for the first 200 frames, then every 10.
-    if (fc < 200 || fc % 10 === 0) {
-      const rd32s = (off: number) => {
-        const v = this.sram[off] | (this.sram[off+1] << 8)
-                | (this.sram[off+2] << 16) | (this.sram[off+3] << 24);
-        return v | 0;  // signed
-      };
-      const bx  = rd32s(0x7F28C);
-      const by  = rd32s(0x7F290);
-      const bvx = rd32s(0x7F294);
-      const bvy = rd32s(0x7F298);
-      if (bx !== 0 || by !== 0 || bvx !== 0 || bvy !== 0) {
-        console.log(`[bounce-trace] frame=${fc} ball: x=${bx} y=${by} vx=${bvx} vy=${bvy}`);
-      }
-    }
-    // ─────────────────────────────────────────────────────────────────────
-
     this.cpu.hitWfi = false;
 
     let spent   = 0;

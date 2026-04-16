@@ -199,6 +199,7 @@ fn emit_function(
     // Call sites emit `bl name` and the definition emits `name:` — they must match.
     let mut s = String::new();
     s.push_str(&format!("@ --- function {name} ---\n"));
+    s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
     s.push_str(&format!(".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n"));
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
 
@@ -240,6 +241,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     });
 
     s.push_str("@ --- game_main (firmware entry point) ---\n");
+    s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
     s.push_str(".global game_main\n.type game_main, %function\n.thumb_func\ngame_main:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
 

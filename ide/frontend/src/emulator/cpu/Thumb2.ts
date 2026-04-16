@@ -556,14 +556,14 @@ export class Thumb2 implements ICpu {
     const rd    = hw & 0x7;
     const rn    = (hw >>> 3) & 0x7;
 
-    if (b12_9 === 0x6) {
+    if (b12_9 === 0xc) {
       // ADD Rd, Rn, Rm
       const rm = (hw >>> 6) & 0x7;
       const a  = this.regs[rn];
       const b  = this.regs[rm];
       this.setNZCV_add(a, b);
       this.regs[rd] = u32(a + b);
-    } else if (b12_9 === 0x7) {
+    } else if (b12_9 === 0xd) {
       // SUB Rd, Rn, Rm
       const rm = (hw >>> 6) & 0x7;
       const a  = this.regs[rn];

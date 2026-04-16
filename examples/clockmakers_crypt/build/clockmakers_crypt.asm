@@ -3466,6 +3466,7 @@ _pmsg_str_43:
 .equ VAR_ITEM_ID, 0x2007F4EC  @ param
 
 @ --- function DRAW_TITLE ---
+.align 2
 .global DRAW_TITLE
 .type DRAW_TITLE, %function
 .thumb_func
@@ -3605,6 +3606,7 @@ if_end_3:
     .ltorg
 
 @ --- function DRAW_INTRO ---
+.align 2
 .global DRAW_INTRO
 .type DRAW_INTRO, %function
 .thumb_func
@@ -3881,6 +3883,7 @@ if_end_6:
     .ltorg
 
 @ --- function ENTER_ROOM ---
+.align 2
 .global ENTER_ROOM
 .type ENTER_ROOM, %function
 .thumb_func
@@ -4346,6 +4349,7 @@ if_end_8:
     .ltorg
 
 @ --- function UPDATE_ROOM ---
+.align 2
 .global UPDATE_ROOM
 .type UPDATE_ROOM, %function
 .thumb_func
@@ -5732,6 +5736,7 @@ if_end_48:
     .ltorg
 
 @ --- function CHECK_ENTRANCE_HOTSPOTS ---
+.align 2
 .global CHECK_ENTRANCE_HOTSPOTS
 .type CHECK_ENTRANCE_HOTSPOTS, %function
 .thumb_func
@@ -6173,6 +6178,7 @@ if_end_66:
     .ltorg
 
 @ --- function CHECK_WORKSHOP_HOTSPOTS ---
+.align 2
 .global CHECK_WORKSHOP_HOTSPOTS
 .type CHECK_WORKSHOP_HOTSPOTS, %function
 .thumb_func
@@ -7004,6 +7010,7 @@ if_end_77:
     .ltorg
 
 @ --- function CHECK_ANTEROOM_HOTSPOTS ---
+.align 2
 .global CHECK_ANTEROOM_HOTSPOTS
 .type CHECK_ANTEROOM_HOTSPOTS, %function
 .thumb_func
@@ -7421,6 +7428,7 @@ if_end_81:
     .ltorg
 
 @ --- function CHECK_WEIGHTS_HOTSPOTS ---
+.align 2
 .global CHECK_WEIGHTS_HOTSPOTS
 .type CHECK_WEIGHTS_HOTSPOTS, %function
 .thumb_func
@@ -7634,6 +7642,7 @@ if_end_83:
     .ltorg
 
 @ --- function CHECK_OPTICS_HOTSPOTS ---
+.align 2
 .global CHECK_OPTICS_HOTSPOTS
 .type CHECK_OPTICS_HOTSPOTS, %function
 .thumb_func
@@ -7871,6 +7880,7 @@ if_end_85:
     .ltorg
 
 @ --- function CHECK_CONSERVATORY_HOTSPOTS ---
+.align 2
 .global CHECK_CONSERVATORY_HOTSPOTS
 .type CHECK_CONSERVATORY_HOTSPOTS, %function
 .thumb_func
@@ -7982,6 +7992,7 @@ if_end_87:
     .ltorg
 
 @ --- function CHECK_VAULT_HOTSPOTS ---
+.align 2
 .global CHECK_VAULT_HOTSPOTS
 .type CHECK_VAULT_HOTSPOTS, %function
 .thumb_func
@@ -8195,6 +8206,7 @@ if_end_89:
     .ltorg
 
 @ --- function INTERACT_ENTRANCE ---
+.align 2
 .global INTERACT_ENTRANCE
 .type INTERACT_ENTRANCE, %function
 .thumb_func
@@ -8862,6 +8874,7 @@ if_end_90:
     .ltorg
 
 @ --- function INTERACT_WORKSHOP ---
+.align 2
 .global INTERACT_WORKSHOP
 .type INTERACT_WORKSHOP, %function
 .thumb_func
@@ -9718,6 +9731,7 @@ if_end_113:
     .ltorg
 
 @ --- function INTERACT_ANTEROOM ---
+.align 2
 .global INTERACT_ANTEROOM
 .type INTERACT_ANTEROOM, %function
 .thumb_func
@@ -10273,6 +10287,7 @@ if_end_142:
     .ltorg
 
 @ --- function INTERACT_WEIGHTS ---
+.align 2
 .global INTERACT_WEIGHTS
 .type INTERACT_WEIGHTS, %function
 .thumb_func
@@ -10536,6 +10551,7 @@ if_end_162:
     .ltorg
 
 @ --- function INTERACT_OPTICS ---
+.align 2
 .global INTERACT_OPTICS
 .type INTERACT_OPTICS, %function
 .thumb_func
@@ -10848,6 +10864,7 @@ if_end_172:
     .ltorg
 
 @ --- function INTERACT_CONSERVATORY ---
+.align 2
 .global INTERACT_CONSERVATORY
 .type INTERACT_CONSERVATORY, %function
 .thumb_func
@@ -11077,6 +11094,7 @@ if_end_183:
     .ltorg
 
 @ --- function INTERACT_VAULT ---
+.align 2
 .global INTERACT_VAULT
 .type INTERACT_VAULT, %function
 .thumb_func
@@ -11397,6 +11415,7 @@ if_end_190:
     .ltorg
 
 @ --- function DRAW_ROOM ---
+.align 2
 .global DRAW_ROOM
 .type DRAW_ROOM, %function
 .thumb_func
@@ -12053,6 +12072,7 @@ if_end_216:
     .ltorg
 
 @ --- function DRAW_BOTTOM_HUD ---
+.align 2
 .global DRAW_BOTTOM_HUD
 .type DRAW_BOTTOM_HUD, %function
 .thumb_func
@@ -12090,6 +12110,7 @@ if_end_217:
     .ltorg
 
 @ --- function DRAW_VERB_INDICATOR ---
+.align 2
 .global DRAW_VERB_INDICATOR
 .type DRAW_VERB_INDICATOR, %function
 .thumb_func
@@ -12514,6 +12535,7 @@ if_end_218:
     .ltorg
 
 @ --- function DRAW_MESSAGE ---
+.align 2
 .global DRAW_MESSAGE
 .type DRAW_MESSAGE, %function
 .thumb_func
@@ -13372,6 +13394,7 @@ ldr     r0, =_arg_str_43
     .ltorg
 
 @ --- function PICKUP_ITEM ---
+.align 2
 .global PICKUP_ITEM
 .type PICKUP_ITEM, %function
 .thumb_func
@@ -13452,6 +13475,7 @@ if_end_231:
     .ltorg
 
 @ --- function DROP_ITEM ---
+.align 2
 .global DROP_ITEM
 .type DROP_ITEM, %function
 .thumb_func
@@ -13528,6 +13552,7 @@ if_end_232:
     .ltorg
 
 @ --- function DRAW_INVENTORY ---
+.align 2
 .global DRAW_INVENTORY
 .type DRAW_INVENTORY, %function
 .thumb_func
@@ -14211,6 +14236,7 @@ _str_34_after:
     .ltorg
 
 @ --- function DRAW_TESTAMENT ---
+.align 2
 .global DRAW_TESTAMENT
 .type DRAW_TESTAMENT, %function
 .thumb_func
@@ -14420,6 +14446,7 @@ if_end_252:
     .ltorg
 
 @ --- function DRAW_ENDING ---
+.align 2
 .global DRAW_ENDING
 .type DRAW_ENDING, %function
 .thumb_func
@@ -15143,6 +15170,7 @@ if_end_257:
     .ltorg
 
 @ --- function ACCELERATE_HEARTBEAT ---
+.align 2
 .global ACCELERATE_HEARTBEAT
 .type ACCELERATE_HEARTBEAT, %function
 .thumb_func
@@ -15182,6 +15210,7 @@ if_end_259:
     .ltorg
 
 @ --- game_main (firmware entry point) ---
+.align 2
 .global game_main
 .type game_main, %function
 .thumb_func
