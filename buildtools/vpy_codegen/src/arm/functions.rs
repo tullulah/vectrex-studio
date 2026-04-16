@@ -214,7 +214,8 @@ fn emit_function(
 
     let loop_labels: Vec<(String, String)> = Vec::new();
     for stmt in body {
-        s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels)?);
+        // return_label=None: `return` in a helper function emits the real function epilogue
+        s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, None)?);
     }
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
     s.push_str("    .ltorg\n\n");
@@ -310,7 +311,8 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     if let Some(f) = main_fn {
         s.push_str("    @ main() body\n");
         for stmt in &f.body {
-            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels)?);
+            // return_label="game_main_loop": `return` in main() skips to game loop
+            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("game_main_loop"))?);
         }
     }
 
@@ -323,7 +325,8 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      vpy_audio_update\n");
     if let Some(f) = loop_fn {
         for stmt in &f.body {
-            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels)?);
+            // return_label="game_main_loop": `return` in loop() jumps to next frame
+            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("game_main_loop"))?);
         }
     }
     s.push_str("    b       game_main_loop\n");
@@ -371,6 +374,7 @@ fn emit_stmt(
     stmt: &Stmt,
     var_addrs: &HashMap<String, u32>,
     loop_labels: &[(String, String)],  // stack of (break_label, continue_label)
+    return_label: Option<&str>,        // when Some(lbl), `return` branches to lbl instead of popping
 ) -> Result<String, String> {
     match stmt {
         Stmt::Assign { target, value, .. } => {
@@ -457,7 +461,7 @@ fn emit_stmt(
             s.push_str(&emit_expr(cond, var_addrs)?);
             s.push_str("    cmp     r0, #0\n");
             s.push_str(&format!("    beq     if_else_{id}\n"));
-            for st in body { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+            for st in body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
             s.push_str(&format!("    b       if_end_{id}\n"));
             s.push_str(&format!("if_else_{id}:\n"));
 
@@ -466,13 +470,13 @@ fn emit_stmt(
                 s.push_str(&emit_expr(elif_cond, var_addrs)?);
                 s.push_str("    cmp     r0, #0\n");
                 s.push_str(&format!("    beq     elif_end_{eid}\n"));
-                for st in elif_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+                for st in elif_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
                 s.push_str(&format!("    b       if_end_{id}\n"));
                 s.push_str(&format!("elif_end_{eid}:\n"));
             }
 
             if let Some(else_stmts) = else_body {
-                for st in else_stmts { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+                for st in else_stmts { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
             }
             s.push_str(&format!("if_end_{id}:\n"));
             Ok(s)
@@ -490,7 +494,7 @@ fn emit_stmt(
             s.push_str(&emit_expr(cond, var_addrs)?);
             s.push_str("    cmp     r0, #0\n");
             s.push_str(&format!("    beq     while_end_{id}\n"));
-            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels)?); }
+            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
             s.push_str(&format!("    b       while_top_{id}\n"));
             s.push_str(&format!("while_end_{id}:\n"));
             Ok(s)
@@ -520,7 +524,7 @@ fn emit_stmt(
             s.push_str("    cmp     r0, r1\n");
             s.push_str(&format!("    bge     for_end_{id}\n"));
 
-            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels)?); }
+            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
 
             // increment — continue target
             s.push_str(&format!("for_inc_{id}:\n"));
@@ -537,12 +541,20 @@ fn emit_stmt(
 
         Stmt::Return(Some(expr), _) => {
             let mut s = emit_expr(expr, var_addrs)?;
-            s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+            if let Some(lbl) = return_label {
+                s.push_str(&format!("    b       {lbl}\n"));
+            } else {
+                s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+            }
             Ok(s)
         }
 
         Stmt::Return(None, _) => {
-            Ok("    pop     {r4, r5, r6, r7, pc}\n".to_string())
+            if let Some(lbl) = return_label {
+                Ok(format!("    b       {lbl}\n"))
+            } else {
+                Ok("    pop     {r4, r5, r6, r7, pc}\n".to_string())
+            }
         }
 
         Stmt::Break { .. } => {
@@ -618,7 +630,7 @@ fn emit_stmt(
             s.push_str("    ldrsh   r0, [r1]       @ load i16 element\n");
             s.push_str(&format!("    ldr     r1, =0x{var_addr:08X}\n    str     r0, [r1]    @ var = arr[ctr]\n"));
 
-            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels)?); }
+            for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
 
             // Continue target: increment counter
             s.push_str(&format!("forin_inc_{id}:\n"));
@@ -662,13 +674,13 @@ fn emit_stmt(
                 s.push_str("    ldr     r0, [sp, #0]   @ reload switch value\n");
                 s.push_str("    cmp     r0, r1\n");
                 s.push_str(&format!("    bne     {no_match_lbl}\n"));
-                for st in case_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+                for st in case_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
                 s.push_str(&format!("    b       {cleanup_lbl}\n"));
                 s.push_str(&format!("{no_match_lbl}:\n"));
             }
 
             if let Some(default_body) = default {
-                for st in default_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels)?); }
+                for st in default_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
             }
 
             s.push_str(&format!("{cleanup_lbl}:\n"));
