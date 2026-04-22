@@ -402,36 +402,36 @@ export const EmulatorPanel: React.FC = () => {
         console.log('[EmulatorPanel] 🛑 Skipping re-initialization - JSVecx already initialized');
         return;
       }
-      
-      // CRITICAL: Don't re-initialize if emulator is already running/debugging
-      if (vecx.running) {
-        console.log('[EmulatorPanel] 🛑 Skipping re-initialization - emulator already running');
-        jsVecxInitialized.current = true; // Mark as initialized
-        return;
-      }
-      
-      console.log(`[EmulatorPanel] Initializing JSVecX with canvas size: ${canvasSize.width}x${canvasSize.height} (visible: ${rect.width}x${rect.height})`);
+
+      const wasRunning = !!vecx.running;
+
+      console.log(`[EmulatorPanel] Initializing JSVecX with canvas size: ${canvasSize.width}x${canvasSize.height} (visible: ${rect.width}x${rect.height}) wasRunning=${wasRunning}`);
       
       try {
-      // CRITICAL: Ensure osint display + CPU are initialized with the canvas element.
-      // index.html only creates the vecx instance — it does NOT call vecx.main() because
-      // the canvas doesn't exist yet at DOMContentLoaded time (React renders it later).
-      // We perform the equivalent of vecx.main() here, minus auto-start.
-      if (!vecx.osint?.ctx) {
-        console.log('[EmulatorPanel] Initializing osint display with canvas...');
-        vecx.osint.init(vecx);
-        console.log('[EmulatorPanel] ✓ osint.init() successful');
-      }
+      // Always re-bind osint to the current canvas element.
+      // On tab switch React unmounts the panel (destroys canvas) and remounts it.
+      // vecx.osint.ctx still points to the old detached canvas — re-init is required.
+      // osint.init() is safe to call while running: it only refreshes canvas/ctx refs.
+      console.log('[EmulatorPanel] Binding osint display to current canvas...');
+      vecx.osint.init(vecx);
+      console.log('[EmulatorPanel] ✓ osint.init() successful');
+
       if (!vecx.e6809?.vecx) {
         console.log('[EmulatorPanel] Initializing e6809 CPU...');
         vecx.e6809.init(vecx);
         console.log('[EmulatorPanel] ✓ e6809.init() successful');
       }
 
-      console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: JSVecX initialization');
-      vecx.vecx_reset();
-      vecx.osint.osint_clearscreen();
-      console.log('[EmulatorPanel] ✓ vecx reset successful');
+      if (!wasRunning) {
+        // Fresh start: reset CPU+display state
+        console.log('🔄 [EmulatorPanel] CALLING vecx_reset() - fresh initialization');
+        vecx.vecx_reset();
+        vecx.osint.osint_clearscreen();
+        console.log('[EmulatorPanel] ✓ vecx reset successful');
+      } else {
+        // Was already running: canvas is now re-bound, emulator continues painting
+        console.log('[EmulatorPanel] ✓ canvas re-bound, emulator continues running');
+      }
         
       console.log('[EmulatorPanel] ✓ JSVecx initialized (stopped, ready for manual start)');
         
