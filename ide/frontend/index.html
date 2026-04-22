@@ -29,45 +29,11 @@
         var vecx = new VecX();
         console.log('[JSVecX] Global vecx instance created:', vecx);
         
-        function initializeJSVecX() {
-            console.log('[JSVecX] Initializing JSVecX functionality...');
-            
-            // Test basic functionality
-            if (typeof vecx !== 'undefined' && vecx.constructor === VecX) {
-                console.log('[JSVecX] ✓ vecx instance is valid');
-                
-                // Test reset functionality
-                try {
-                    vecx.reset();
-                    console.log('[JSVecX] ✓ vecx.reset() successful');
-                } catch (e) {
-                    console.error('[JSVecX] ✗ vecx.reset() failed:', e);
-                }
-                
-                // Test BIOS loading
-                if (vecx.rom && vecx.rom.length > 0) {
-                    console.log('[JSVecX] ✓ ROM loaded, length:', vecx.rom.length);
-                } else {
-                    console.log('[JSVecX] ⚠ ROM not loaded');
-                }
-                
-                // Test main initialization
-                try {
-                    vecx.main();
-                    console.log('[JSVecX] ✓ vecx.main() called successfully');
-                } catch (e) {
-                    console.error('[JSVecX] ✗ vecx.main() failed:', e);
-                }
-                
-            } else {
-                console.error('[JSVecX] ✗ vecx instance is invalid');
-            }
-        }
-        
-        // Initialize JSVecX when DOM is ready
+        // NOTE: vecx.main() is NOT called here — EmulatorPanel owns display
+        // initialization after the canvas element exists in the DOM.
+        // Calling main() here would race with React rendering <canvas id="screen">.
         $(document).ready(function() {
-            console.log('[JSVecX] Document ready, initializing vecx...');
-            initializeJSVecX();
+            console.log('[JSVecX] Document ready — vecx instance created, waiting for EmulatorPanel to initialize display');
         });
         
         // ========== DEBUG SYSTEM SETUP ==========
