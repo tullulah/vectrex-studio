@@ -929,7 +929,7 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2' }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
@@ -1041,7 +1041,8 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     // NEW: ['build', fsPath, '--output', binPath, '--rom-size', '32768', '--bank-size', '32768', '--debug']
     
     // If outputPath is provided (from project), use it
-    let finalBinPath = outAsm.replace(/\.asm$/, '.bin');
+    const binExt = (target === 'pitrex') ? '.img' : (target === 'uvm2') ? '.um2' : '.bin';
+    let finalBinPath = outAsm.replace(/\.asm$/, binExt);
     if (finalOutputPath) {
       // outputPath is the .bin path, derive .asm from it
       const outAsmFromProject = finalOutputPath.replace(/\.bin$/, '.asm');

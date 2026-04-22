@@ -4,9 +4,12 @@
 //! Targets:
 //!   - M6809 (Vectrex BIOS, cartridge ROM)
 //!   - ARM Thumb2 / RP2350 (bare metal, bus master)
+//!   - ARM32 / PiTrex (Pi Zero bare metal, libvectrexInterface SDK)
 
 pub mod m6809;
 pub mod arm;
+pub mod pitrex;
+pub mod uvm2;
 pub mod vecres;
 pub mod musres;
 pub mod levelres;
@@ -20,6 +23,10 @@ pub enum Target {
     M6809,
     /// RP2350 debug cartridge — ARM Thumb2 + bus master VIA access
     Rp2350,
+    /// PiTrex (Pi Zero inside Vectrex) — ARM32 + libvectrexInterface SDK
+    PiTrex,
+    /// UVM2 (Ultimate Vectrex Multicart 2) — ARM Thumb2 / Cortex-M33, Ralf & Jason's PCB
+    Uvm2,
 }
 
 use std::collections::HashMap;
@@ -175,6 +182,26 @@ pub fn generate_from_module_with_target(
     match target {
         Target::Rp2350 => {
             let asm_source = arm::generate_arm_asm(module, title, assets)
+                .map_err(CodegenError::Error)?;
+            return Ok(GeneratedASM {
+                asm_source,
+                bank_config: bank_config.clone(),
+                symbols: HashMap::new(),
+                external_refs: Vec::new(),
+            });
+        }
+        Target::PiTrex => {
+            let asm_source = pitrex::generate_pitrex_asm(module, title, assets)
+                .map_err(CodegenError::Error)?;
+            return Ok(GeneratedASM {
+                asm_source,
+                bank_config: bank_config.clone(),
+                symbols: HashMap::new(),
+                external_refs: Vec::new(),
+            });
+        }
+        Target::Uvm2 => {
+            let asm_source = uvm2::generate_uvm2_asm(module, title, assets)
                 .map_err(CodegenError::Error)?;
             return Ok(GeneratedASM {
                 asm_source,

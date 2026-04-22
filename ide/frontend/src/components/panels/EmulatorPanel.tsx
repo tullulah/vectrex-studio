@@ -301,6 +301,8 @@ export const EmulatorPanel: React.FC = () => {
   const [availableROMs, setAvailableROMs] = useState<string[]>([]);
   const [selectedROM, setSelectedROM] = useState<string>(lastRomName || '');
   const [currentOverlay, setCurrentOverlay] = useState<string | null>(null);
+  const [showPitrexOverlay, setShowPitrexOverlay] = useState<boolean>(false);
+  const [pitrexImgPath, setPitrexImgPath] = useState<string>('');
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 300, height: 400 });
@@ -2191,8 +2193,8 @@ export const EmulatorPanel: React.FC = () => {
       END DISABLED AUTO-LOAD */
       
       // Skip loading compiled ROM - go straight to default Minestorm
-      // But only for the M6809 path — rp2350 has no use for a 6809 ROM.
-      if (useSettings.getState().buildTarget === 'rp2350') {
+      // But only for the M6809 path — rp2350/pitrex have no use for a 6809 ROM.
+      if (useSettings.getState().buildTarget === 'rp2350' || useSettings.getState().buildTarget === 'pitrex' || useSettings.getState().buildTarget === 'uvm2') {
         defaultOverlayLoaded.current = true;
         return;
       }
@@ -2275,7 +2277,7 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350'; elfBase64?: string | null }) => {
+    const handleCompiledBin = (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null }) => {
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
       
       // Guardar última ROM compilada con su proyecto
@@ -2314,8 +2316,17 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
+      // ── pitrex / uvm2 path: hardware-only targets, no in-browser emulation ──
+      if (payload.target === 'pitrex' || payload.target === 'uvm2') {
+        console.log(`[EmulatorPanel] ${payload.target} target — hardware only, no browser emulation`);
+        setPitrexImgPath(payload.binPath);
+        setShowPitrexOverlay(true);
+        return;
+      }
+
       // ── rp2350 path: route through Rp2350System instead of M6809/JSVecX ──
       if (payload.target === 'rp2350') {
+        setShowPitrexOverlay(false);
         try {
           const bin = Uint8Array.from(atob(payload.base64), c => c.charCodeAt(0));
           const elf = payload.elfBase64
@@ -2494,6 +2505,7 @@ export const EmulatorPanel: React.FC = () => {
         }
         
         // Actualizar ROM cargada y buscar overlay
+        setShowPitrexOverlay(false);
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         setLoadedROM(`Compiled - ${romName}`);
         
@@ -2619,6 +2631,33 @@ export const EmulatorPanel: React.FC = () => {
         }}
       >
         <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* PiTrex hardware-only overlay */}
+          {showPitrexOverlay && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: canvasSize.width,
+              height: canvasSize.height,
+              background: '#0a0a0a',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              zIndex: 10,
+              pointerEvents: 'none',
+              border: '1px solid #333',
+            }}>
+              <span style={{ fontSize: '28px' }}>🥝</span>
+              <span style={{ color: '#ccc', fontFamily: 'monospace', fontSize: '13px', fontWeight: 'bold' }}>PiTrex (Pi Zero / ARMv6)</span>
+              <span style={{ color: '#777', fontFamily: 'monospace', fontSize: '11px' }}>.img compilado — copiar a SD</span>
+              {pitrexImgPath && (
+                <span style={{ color: '#555', fontFamily: 'monospace', fontSize: '10px', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pitrexImgPath}</span>
+              )}
+              <span style={{ color: '#444', fontFamily: 'monospace', fontSize: '10px', marginTop: '4px' }}>Sin emulación en navegador para Pi Zero</span>
+            </div>
+          )}
           <canvas 
             ref={canvasRef} 
             id="screen" 

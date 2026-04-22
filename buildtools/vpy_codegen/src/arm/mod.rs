@@ -93,6 +93,9 @@ pub fn generate_arm_asm(
     Ok(expand_cbz(&asm))
 }
 
+/// Public re-export so the uvm2 backend can reuse the same post-processing.
+pub fn expand_cbz_pub(asm: &str) -> String { expand_cbz(asm) }
+
 /// Expand all `cbz rN, label` instructions to `cmp rN, #0` + `beq.w label`.
 /// This handles:
 /// - High registers (r8+): cbz only accepts r0-r7

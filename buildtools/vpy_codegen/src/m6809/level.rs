@@ -615,8 +615,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X           ; Save object pointer\n");
         out.push_str("    TFR U,X          ; X = vector data pointer (header)\n");
         out.push_str("    \n");
-        out.push_str("    ; Read path_count from vector header byte 0\n");
-        out.push_str("    LDB ,X+          ; B = path_count, X now at pointer table\n");
+        out.push_str("    ; Read path_count from vector header (FDB = 2 bytes big-endian, high byte is always $00)\n");
+        out.push_str("    LDA ,X+          ; skip high byte of FDB path_count (always $00 for ≤255 paths)\n");
+        out.push_str("    LDB ,X+          ; B = path_count (low byte), X now at pointer table\n");
         out.push_str("    \n");
         out.push_str("    ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)\n");
         out.push_str("SLR_PATH_LOOP:\n");

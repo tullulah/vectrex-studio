@@ -55,7 +55,7 @@ export const SettingsPanel: React.FC = () => {
       <div className="settings-section">
         <h3>{t('section.target', 'Build Target')}</h3>
         <p className="settings-description">
-          {t('settings.target.description', 'Select the hardware target for compilation. M6809 targets the original Vectrex hardware. RP2350 targets the debug cartridge.')}
+          {t('settings.target.description', 'Select the hardware target for compilation. M6809 targets the original Vectrex hardware. RP2350 targets the debug cartridge. PiTrex targets the Pi Zero inside a PiTrex cartridge.')}
         </p>
 
         <div className="settings-option">
@@ -87,6 +87,38 @@ export const SettingsPanel: React.FC = () => {
               <span className="radio-title">{t('settings.target.rp2350.title', 'RP2350 (Debug Cartridge)')}</span>
               <span className="radio-description">
                 {t('settings.target.rp2350.desc', 'ARM Thumb2 target for the RP2350 debug cartridge. Requires arm-none-eabi toolchain on PATH.')}
+              </span>
+            </div>
+          </label>
+
+          <label className="settings-radio">
+            <input
+              type="radio"
+              name="buildTarget"
+              value="pitrex"
+              checked={buildTarget === 'pitrex'}
+              onChange={() => setBuildTarget('pitrex')}
+            />
+            <div className="radio-content">
+              <span className="radio-title">{t('settings.target.pitrex.title', 'PiTrex (Pi Zero / ARMv6)')}</span>
+              <span className="radio-description">
+                {t('settings.target.pitrex.desc', 'ARM32 native target for the PiTrex cartridge (Pi Zero). Produces a .img file. Requires arm-none-eabi toolchain and PITREX_SDK.')}
+              </span>
+            </div>
+          </label>
+
+          <label className="settings-radio">
+            <input
+              type="radio"
+              name="buildTarget"
+              value="uvm2"
+              checked={buildTarget === 'uvm2'}
+              onChange={() => setBuildTarget('uvm2')}
+            />
+            <div className="radio-content">
+              <span className="radio-title">{t('settings.target.uvm2.title', 'UVM2 (Ultimate Vectrex Multicart)')}</span>
+              <span className="radio-description">
+                {t('settings.target.uvm2.desc', 'ARM Thumb2 target for the Ultimate Vectrex Multicart 2 (RP2350/Cortex-M33). Produces a .um2 raw binary for SD card.')}
               </span>
             </div>
           </label>

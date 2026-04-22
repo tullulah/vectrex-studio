@@ -646,15 +646,86 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // 3D import dialog state (shared by DXF and OBJ)
   interface RawPath { pts: Point[]; closed: boolean }
+  interface ObjEdge {
+    a: number; b: number; dot: number; border: boolean;
+    n1?: Vec3; n2?: Vec3; // face normals (only for shared edges, used for silhouette mode)
+  }
   interface ImportDialogState {
     source: 'DXF' | 'OBJ';
     rawPaths: RawPath[];
     bbox: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
     referencePlane: 'xy' | 'xz' | 'yz' | 'manual';
     manualScale: number;
+    // OBJ-only: raw edge data for re-filtering when angle threshold changes
+    objVerts?: [number, number, number][];
+    objEdges?: ObjEdge[];
+    angleThreshold?: number; // degrees, default 25
+    edgeMode?: 'hard' | 'silhouette'; // default 'hard'
   }
   const [dxfImport, setDxfImport] = useState<ImportDialogState | null>(null);
-  
+
+  // Re-chain OBJ hard edges into RawPaths given a set of (a,b) pairs and vertex array
+  const chainObjEdges = (hardEdges: [number, number][], verts: [number, number, number][]): RawPath[] => {
+    const adj = new Map<number, number[]>();
+    const edgeDegree = new Map<number, number>();
+    for (const [a, b] of hardEdges) {
+      edgeDegree.set(a, (edgeDegree.get(a) ?? 0) + 1);
+      edgeDegree.set(b, (edgeDegree.get(b) ?? 0) + 1);
+    }
+    for (const [a, b] of hardEdges) {
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a)!.push(b);
+      adj.get(b)!.push(a);
+    }
+    const usedEdges = new Set<string>();
+    const edgeKey = (a: number, b: number) => `${Math.min(a,b)},${Math.max(a,b)}`;
+    const result: RawPath[] = [];
+    const walkChain = (start: number, firstNext: number) => {
+      const chain: number[] = [start, firstNext];
+      usedEdges.add(edgeKey(start, firstNext));
+      let cur = firstNext, prev = start;
+      while (true) {
+        const neighbors = adj.get(cur) ?? [];
+        const nextCandidates = neighbors.filter(n => n !== prev && !usedEdges.has(edgeKey(cur, n)));
+        if (nextCandidates.length === 1 && (edgeDegree.get(cur) ?? 0) === 2) {
+          const next = nextCandidates[0];
+          usedEdges.add(edgeKey(cur, next));
+          chain.push(next); prev = cur; cur = next;
+        } else break;
+      }
+      const closed = chain[0] === chain[chain.length - 1];
+      result.push({ pts: chain.map(v => ({ x: verts[v][0], y: verts[v][1], z: verts[v][2] })), closed });
+    };
+    const startVerts = [...edgeDegree.entries()].filter(([, d]) => d !== 2).map(([v]) => v);
+    for (const sv of startVerts)
+      for (const nb of (adj.get(sv) ?? []))
+        if (!usedEdges.has(edgeKey(sv, nb))) walkChain(sv, nb);
+    for (const v of [...edgeDegree.keys()])
+      for (const nb of (adj.get(v) ?? []))
+        if (!usedEdges.has(edgeKey(v, nb))) walkChain(v, nb);
+    return result;
+  };
+
+  // Compute silhouette edges for a given view direction.
+  // A silhouette edge = border (only 1 face) OR the two face normals straddle the view plane
+  // i.e. (n1·viewDir) * (n2·viewDir) <= 0
+  type Vec3 = [number, number, number];
+  const viewDirForPlane = (plane: 'xy' | 'xz' | 'yz' | 'manual'): Vec3 =>
+    plane === 'yz' ? [1, 0, 0] : plane === 'xz' ? [0, 1, 0] : [0, 0, 1];
+
+  const silhouetteEdges = (edges: ObjEdge[], plane: 'xy' | 'xz' | 'yz' | 'manual'): [number, number][] => {
+    const [vx, vy, vz] = viewDirForPlane(plane);
+    return edges
+      .filter(e => {
+        if (e.border || !e.n2) return true; // border always visible
+        const d1 = e.n1![0] * vx + e.n1![1] * vy + e.n1![2] * vz;
+        const d2 = e.n2[0] * vx + e.n2[1] * vy + e.n2[2] * vz;
+        return d1 * d2 <= 0; // sign change → silhouette
+      })
+      .map(e => [e.a, e.b]);
+  };
+
   // Track if we're the source of changes to avoid loops
   const isInternalChange = useRef(false);
   
@@ -1641,101 +1712,33 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }
 
         // Keep edge if: border (only 1 face) OR dihedral angle > threshold
-        const ANGLE_THRESHOLD_DEG = 25;
-        const cosThreshold = Math.cos((ANGLE_THRESHOLD_DEG * Math.PI) / 180);
-        const hardEdges: [number, number][] = [];
-
+        // Build objEdges list (stores dot product per edge for re-filtering in the dialog)
+        const objEdgeList: ObjEdge[] = [];
         for (const [key, normals] of edgeFaces) {
           const [a, b] = key.split(',').map(Number);
           if (normals.length === 1) {
-            // Border edge — always keep
-            hardEdges.push([a, b]);
+            objEdgeList.push({ a, b, dot: -2, border: true, n1: normals[0] });
           } else {
-            // Check dihedral angle between the two adjacent faces
             const [n1, n2] = normals;
             const dot = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2];
-            if (dot < cosThreshold) hardEdges.push([a, b]);
+            objEdgeList.push({ a, b, dot, border: false, n1, n2 });
           }
         }
-
-        // Also add any explicit 'l' lines from the OBJ
+        // Add explicit 'l' lines
         for (const [a, b] of linesExplicit) {
-          if (a >= 0 && b >= 0 && a < verts.length && b < verts.length) hardEdges.push([a, b]);
+          if (a >= 0 && b >= 0 && a < verts.length && b < verts.length)
+            objEdgeList.push({ a, b, dot: -2, border: true });
         }
+
+        const ANGLE_THRESHOLD_DEG = 25;
+        const cosThreshold = Math.cos((ANGLE_THRESHOLD_DEG * Math.PI) / 180);
+        const hardEdges: [number, number][] = objEdgeList
+          .filter(e => e.border || e.dot < cosThreshold)
+          .map(e => [e.a, e.b]);
 
         if (hardEdges.length === 0) { alert('No hard edges found. Try lowering the angle threshold or check the OBJ file.'); return; }
 
-        // Chain edges into polylines to minimize path count.
-        // Build adjacency: vertex → list of connected vertices (only for vertices with degree ≤ 2,
-        // which form simple chains; vertices with degree > 2 are junctions and break chains there).
-        const adj = new Map<number, number[]>();
-        const edgeDegree = new Map<number, number>();
-        for (const [a, b] of hardEdges) {
-          edgeDegree.set(a, (edgeDegree.get(a) ?? 0) + 1);
-          edgeDegree.set(b, (edgeDegree.get(b) ?? 0) + 1);
-        }
-        for (const [a, b] of hardEdges) {
-          // Only chain through vertices with exactly degree 2 (pure chain vertices)
-          if (!adj.has(a)) adj.set(a, []);
-          if (!adj.has(b)) adj.set(b, []);
-          adj.get(a)!.push(b);
-          adj.get(b)!.push(a);
-        }
-
-        const usedEdges = new Set<string>();
-        const edgeKey = (a: number, b: number) => `${Math.min(a,b)},${Math.max(a,b)}`;
-        const rawPaths: RawPath[] = [];
-
-        // Walk chains starting from endpoints (degree 1) or junction vertices (degree > 2)
-        const startVerts = [...edgeDegree.entries()]
-          .filter(([, d]) => d !== 2)
-          .map(([v]) => v);
-        // Also include any isolated cycle verts not reachable from startVerts
-        const allVerts = [...edgeDegree.keys()];
-
-        const walkChain = (start: number, firstNext: number) => {
-          const chain: number[] = [start, firstNext];
-          usedEdges.add(edgeKey(start, firstNext));
-          let cur = firstNext;
-          let prev = start;
-          while (true) {
-            const neighbors = adj.get(cur) ?? [];
-            const nextCandidates = neighbors.filter(n => n !== prev && !usedEdges.has(edgeKey(cur, n)));
-            // Only continue if exactly 1 unused neighbor and cur is a chain vertex (degree 2)
-            if (nextCandidates.length === 1 && (edgeDegree.get(cur) ?? 0) === 2) {
-              const next = nextCandidates[0];
-              usedEdges.add(edgeKey(cur, next));
-              chain.push(next);
-              prev = cur;
-              cur = next;
-            } else {
-              break;
-            }
-          }
-          const closed = chain[0] === chain[chain.length - 1];
-          rawPaths.push({
-            pts: chain.map(v => ({ x: verts[v][0], y: verts[v][1], z: verts[v][2] })),
-            closed,
-          });
-        };
-
-        // Process chains from endpoints/junctions first
-        for (const sv of startVerts) {
-          for (const nb of (adj.get(sv) ?? [])) {
-            if (!usedEdges.has(edgeKey(sv, nb))) {
-              walkChain(sv, nb);
-            }
-          }
-        }
-
-        // Process any remaining edges (closed loops with all degree-2 verts)
-        for (const v of allVerts) {
-          for (const nb of (adj.get(v) ?? [])) {
-            if (!usedEdges.has(edgeKey(v, nb))) {
-              walkChain(v, nb);
-            }
-          }
-        }
+        const rawPaths = chainObjEdges(hardEdges, verts);
 
         // Compute 3D bounding box
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -1746,7 +1749,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }
 
         const defaultScale = 254 / Math.max(maxX - minX || 1, maxY - minY || 1, maxZ - minZ || 1);
-        setDxfImport({ source: 'OBJ', rawPaths, bbox: { minX, maxX, minY, maxY, minZ, maxZ }, referencePlane: 'xy', manualScale: parseFloat(defaultScale.toFixed(4)) });
+        setDxfImport({ source: 'OBJ', rawPaths, bbox: { minX, maxX, minY, maxY, minZ, maxZ }, referencePlane: 'xy', manualScale: parseFloat(defaultScale.toFixed(4)), objVerts: verts, objEdges: objEdgeList, angleThreshold: ANGLE_THRESHOLD_DEG, edgeMode: 'hard' });
       } catch (err) {
         alert('Error reading OBJ: ' + (err as Error).message);
       }
@@ -3765,6 +3768,48 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
         const fmt = (v: number) => (v * scale).toFixed(1);
 
+        // Build SVG preview path string (single <path> for performance)
+        const buildPreviewPath = (): string => {
+          if (rawPaths.length === 0) return '';
+          const project = (pt: { x: number; y: number; z?: number }): [number, number] => {
+            const z = (pt as { z?: number }).z ?? 0;
+            if (referencePlane === 'xz') return [pt.x * scale, z * scale];
+            if (referencePlane === 'yz') return [pt.y * scale, z * scale];
+            return [pt.x * scale, pt.y * scale];
+          };
+          // Compute projected bounds for auto-fit
+          let pMinX = Infinity, pMaxX = -Infinity, pMinY = Infinity, pMaxY = -Infinity;
+          const MAX_PATHS = 3000;
+          const slicedPaths = rawPaths.length > MAX_PATHS ? rawPaths.slice(0, MAX_PATHS) : rawPaths;
+          for (const rp of slicedPaths)
+            for (const pt of rp.pts) {
+              const [px, py] = project(pt);
+              if (px < pMinX) pMinX = px; if (px > pMaxX) pMaxX = px;
+              if (py < pMinY) pMinY = py; if (py > pMaxY) pMaxY = py;
+            }
+          const pRangeX = pMaxX - pMinX || 1, pRangeY = pMaxY - pMinY || 1;
+          const pCX = (pMinX + pMaxX) / 2, pCY = (pMinY + pMaxY) / 2;
+          const PREV = 220, PAD = 12;
+          const fit = (PREV / 2 - PAD) / Math.max(pRangeX, pRangeY) * 2;
+          const tx = (px: number) => ((px - pCX) * fit + PREV / 2);
+          const ty = (py: number) => (-(py - pCY) * fit + PREV / 2);
+          let d = '';
+          for (const rp of slicedPaths) {
+            if (rp.pts.length < 2) continue;
+            const [px0, py0] = project(rp.pts[0]);
+            d += `M${tx(px0).toFixed(1)},${ty(py0).toFixed(1)}`;
+            for (let i = 1; i < rp.pts.length; i++) {
+              const [pxi, pyi] = project(rp.pts[i]);
+              d += `L${tx(pxi).toFixed(1)},${ty(pyi).toFixed(1)}`;
+            }
+            if (rp.closed) d += 'Z';
+          }
+          return d;
+        };
+        const previewD = buildPreviewPath();
+        const PREV = 220;
+        const planeLabel = referencePlane === 'xz' ? 'XZ' : referencePlane === 'yz' ? 'YZ' : 'XY';
+
         return (
           <div style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2000,
@@ -3772,7 +3817,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           }}>
             <div style={{
               background: '#1e1e3a', border: '2px solid #4a4a8e', borderRadius: '8px',
-              padding: '24px', minWidth: '380px', maxWidth: '480px', color: 'white', fontFamily: 'monospace',
+              padding: '24px', minWidth: '380px', maxWidth: '520px', color: 'white', fontFamily: 'monospace',
               boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
             }}>
               <h3 style={{ margin: '0 0 16px', color: '#aaaaff' }}>{dxfImport.source === 'OBJ' ? '📦' : '📐'} Import {dxfImport.source}</h3>
@@ -3786,12 +3831,108 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <div style={{ marginTop: '6px', color: '#888' }}>{rawPaths.length} {dxfImport.source === 'OBJ' ? 'edge(s)' : 'path(s)'} found</div>
               </div>
 
+              {/* OBJ-only: edge mode toggle + angle threshold */}
+              {dxfImport.source === 'OBJ' && dxfImport.objEdges && dxfImport.objVerts && (() => {
+                const mode = dxfImport.edgeMode ?? 'hard';
+                const vectrexBudget = rawPaths.length;
+                const budgetColor = vectrexBudget <= 80 ? '#4f4' : vectrexBudget <= 200 ? '#fa4' : '#f44';
+
+                const applyMode = (newMode: 'hard' | 'silhouette', deg?: number, plane?: typeof dxfImport.referencePlane) => {
+                  const useDeg = deg ?? (dxfImport.angleThreshold ?? 25);
+                  const usePlane = plane ?? dxfImport.referencePlane;
+                  let edgeList: [number, number][];
+                  if (newMode === 'silhouette') {
+                    edgeList = silhouetteEdges(dxfImport.objEdges!, usePlane);
+                  } else {
+                    const cos = Math.cos((useDeg * Math.PI) / 180);
+                    edgeList = (dxfImport.objEdges ?? []).filter(e => e.border || e.dot < cos).map(e => [e.a, e.b]);
+                  }
+                  const rp = edgeList.length > 0 ? chainObjEdges(edgeList, dxfImport.objVerts!) : [];
+                  setDxfImport({ ...dxfImport, edgeMode: newMode, angleThreshold: useDeg, referencePlane: usePlane, rawPaths: rp });
+                };
+
+                return (
+                  <div style={{ marginBottom: '16px' }}>
+                    {/* Mode toggle */}
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                      {(['hard', 'silhouette'] as const).map(m => (
+                        <button key={m} onClick={() => applyMode(m)}
+                          style={{ flex: 1, padding: '6px', borderRadius: '4px', border: '1px solid #4a4a8e', cursor: 'pointer', fontSize: '12px',
+                            background: mode === m ? '#4a4a8e' : '#2a2a4e', color: 'white', fontWeight: mode === m ? 'bold' : 'normal' }}>
+                          {m === 'hard' ? '📐 Hard Edges' : '🔆 Silhouette'}
+                        </button>
+                      ))}
+                    </div>
+                    {mode === 'silhouette' && (
+                      <div style={{ fontSize: '11px', color: '#8af', marginBottom: '8px', background: '#1a1a30', borderRadius: '4px', padding: '6px 8px' }}>
+                        Muestra solo los edges donde las normales de las caras adyacentes cruzan el plano de visión — perfecto para cilindros y esferas.
+                      </div>
+                    )}
+                    {/* Angle slider — only for hard mode */}
+                    {mode === 'hard' && (
+                      <>
+                        <div style={{ marginBottom: '6px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Hard edge angle: <b>{dxfImport.angleThreshold ?? 25}°</b></span>
+                        </div>
+                        <input type="range" min="1" max="90" step="1"
+                          value={dxfImport.angleThreshold ?? 25}
+                          style={{ width: '100%', accentColor: '#4a4a8e' }}
+                          onChange={(ev) => applyMode('hard', parseInt(ev.target.value))}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', marginTop: '2px' }}>
+                          <span>1° (all)</span><span>90° (only sharp)</span>
+                        </div>
+                      </>
+                    )}
+                    {/* Path count + Vectrex budget */}
+                    <div style={{ marginTop: '8px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#888' }}>{rawPaths.length} paths</span>
+                      <span style={{ color: budgetColor, fontWeight: 'bold' }}>
+                        {vectrexBudget <= 80 ? '✓ Vectrex OK' : vectrexBudget <= 200 ? '⚠ Many paths' : '✗ Too many for Vectrex'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* OBJ-only: live SVG preview */}
+              {dxfImport.source === 'OBJ' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Preview — {planeLabel} plane</span>
+                    {rawPaths.length > 3000 && <span style={{ color: '#fa8' }}>⚠ showing first 3000 of {rawPaths.length} paths</span>}
+                  </div>
+                  <svg width={PREV} height={PREV}
+                    style={{ background: '#080818', borderRadius: '4px', border: '1px solid #333', display: 'block', margin: '0 auto' }}>
+                    {/* crosshair */}
+                    <line x1={PREV/2} y1={0} x2={PREV/2} y2={PREV} stroke="#1a1a3a" strokeWidth="1" />
+                    <line x1={0} y1={PREV/2} x2={PREV} y2={PREV/2} stroke="#1a1a3a" strokeWidth="1" />
+                    {/* Vectrex ±127 border */}
+                    <rect x={10} y={10} width={PREV-20} height={PREV-20} fill="none" stroke="#2a2a5a" strokeWidth="1" strokeDasharray="4,4" />
+                    {previewD
+                      ? <path d={previewD} fill="none" stroke="#5af" strokeWidth="0.8" />
+                      : <text x={PREV/2} y={PREV/2} textAnchor="middle" fill="#555" fontSize="12">No edges</text>
+                    }
+                  </svg>
+                </div>
+              )}
+
               {/* Reference plane selector */}
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ marginBottom: '8px', fontSize: '13px' }}>Fit to plane (scaled to ±127):</div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {(['xy', 'xz', 'yz', 'manual'] as const).map((p) => (
-                    <button key={p} onClick={() => setDxfImport({ ...dxfImport, referencePlane: p })}
+                    <button key={p}
+                      onClick={() => {
+                        // In silhouette mode: recompute paths for new view direction
+                        if (dxfImport.source === 'OBJ' && (dxfImport.edgeMode ?? 'hard') === 'silhouette' && dxfImport.objEdges && dxfImport.objVerts) {
+                          const edgeList = silhouetteEdges(dxfImport.objEdges, p);
+                          const rp = edgeList.length > 0 ? chainObjEdges(edgeList, dxfImport.objVerts) : [];
+                          setDxfImport({ ...dxfImport, referencePlane: p, rawPaths: rp });
+                        } else {
+                          setDxfImport({ ...dxfImport, referencePlane: p });
+                        }
+                      }}
                       style={{
                         padding: '6px 12px', borderRadius: '4px', border: '1px solid #4a4a8e', cursor: 'pointer',
                         background: referencePlane === p ? '#4a4a8e' : '#2a2a4e', color: 'white', fontSize: '12px',

@@ -657,7 +657,9 @@ fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<Pa
     println!("\n{}", "Generating unified ASM...".bright_white());
 
     let build_target = match target.as_str() {
-        "rp2350" => vpy_codegen::Target::Rp2350,
+        "rp2350"  => vpy_codegen::Target::Rp2350,
+        "pitrex"  => vpy_codegen::Target::PiTrex,
+        "uvm2"    => vpy_codegen::Target::Uvm2,
         _ => vpy_codegen::Target::M6809,
     };
     println!("  Target: {}", target.bright_yellow());
@@ -716,6 +718,439 @@ fn cmd_assemble(_input: &PathBuf, _output: Option<PathBuf>) -> Result<()> {
 
 fn cmd_link(_input: &PathBuf, _output: Option<PathBuf>) -> Result<()> {
     println!("{}", "TODO: Implement linker integration".yellow());
+    Ok(())
+}
+
+/// Locate the best arm-none-eabi-gcc available.
+/// Prefers arm-gcc-bin@10 (Homebrew osx-cross, has newlib) over the system one.
+fn find_arm_gcc() -> String {
+    // macOS Homebrew osx-cross/arm-gcc-bin@10 — has newlib, supports armv6
+    let candidates = [
+        "/opt/homebrew/Cellar/arm-gcc-bin@10/10.3-2021.10_1/bin/arm-none-eabi-gcc",
+        "/usr/local/Cellar/arm-gcc-bin@10/10.3-2021.10_1/bin/arm-none-eabi-gcc",
+        "arm-none-eabi-gcc",
+    ];
+    for c in &candidates {
+        if std::path::Path::new(c).exists() || !c.starts_with('/') {
+            return c.to_string();
+        }
+    }
+    "arm-none-eabi-gcc".to_string()
+}
+
+fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    let arm_gcc = find_arm_gcc();
+    println!("{}", "Target: PiTrex (ARM32 / ARMv6 / Pi Zero)".bright_yellow().bold());
+
+    // Phase 1: Load project or single file
+    let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+        let project_info = vpy_loader::load_project(input)
+            .context("Failed to load project")?;
+        let dir = input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        (project_info.entry_point, dir)
+    } else {
+        let dir = {
+            let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+            if parent.file_name().and_then(|n| n.to_str()) == Some("src") {
+                parent.parent().unwrap_or(parent).to_path_buf()
+            } else {
+                find_project_root_from(parent)
+            }
+        };
+        (input.clone(), dir)
+    };
+
+    // Phase 2: Parse
+    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
+    let source = std::fs::read_to_string(&source_path)
+        .context("Failed to read source file")?;
+    let tokens = vpy_parser::lex(&source)
+        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
+    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
+        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+    println!("  {} Parsed {} items", "✓".green(), module.items.len());
+
+    // Phase 3: Unify
+    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
+    let mut modules_map = std::collections::HashMap::new();
+    let module_name = source_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("main")
+        .to_string();
+    modules_map.insert(module_name.clone(), module);
+    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
+        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+
+    // Phase 4: PiTrex ARM32 codegen
+    println!("\n{}", "Phase 3: PiTrex ARM32 Codegen".bright_cyan().bold());
+    let title = unified.meta.title_override.as_deref().unwrap_or("VPY GAME");
+    let bank_config = vpy_codegen::BankConfig::single_bank();
+    let assets = discover_assets(&source_path);
+
+    let generated = vpy_codegen::generate_from_module_with_target(
+        &unified, &bank_config, title, &assets, &vpy_codegen::Target::PiTrex,
+    ).context("PiTrex codegen failed")?;
+    println!("  {} Generated {} bytes of ARM32 assembly", "✓".green(), generated.asm_source.len());
+
+    // Determine output paths
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(input))
+        .unwrap_or_else(|| {
+            project_dir.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("output")
+                .to_string()
+        });
+
+    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let asm_path = build_dir.join(format!("{}.asm", project_name));
+    let o_path   = build_dir.join(format!("{}.o",   project_name));
+    let elf_path = build_dir.join(format!("{}.elf", project_name));
+    let img_path = output.unwrap_or_else(|| build_dir.join(format!("{}.img", project_name)));
+
+    std::fs::write(&s_path, &generated.asm_source)
+        .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    std::fs::copy(&s_path, &asm_path)
+        .with_context(|| format!("Failed to write {}", asm_path.display()))?;
+    println!("  {} ARM32 ASM written: {}", "✓".green(), s_path.display());
+
+    // Find PiTrex SDK — search order:
+    //   1. PITREX_SDK env var
+    //   2. Bundled alongside this binary: <exe_dir>/pitrex-sdk  (IDE packaging)
+    //   3. ~/pitrex-baremetal
+    //   4. /opt/pitrex-baremetal
+    let exe_dir = std::env::current_exe().ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let sdk_path = std::env::var("PITREX_SDK").ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let p = exe_dir.as_ref()?.join("pitrex-sdk");
+            if p.join("lib").exists() { Some(p) } else { None }
+        })
+        .or_else(|| {
+            let home = std::env::var("HOME").ok()?;
+            let p = std::path::PathBuf::from(&home).join("pitrex-baremetal");
+            if p.exists() { Some(p) } else { None }
+        })
+        .or_else(|| {
+            let p = std::path::Path::new("/opt/pitrex-baremetal");
+            if p.exists() { Some(p.to_path_buf()) } else { None }
+        })
+        .ok_or_else(|| anyhow::anyhow!(
+            "PiTrex SDK not found.\n\
+             Options:\n\
+             - Bundle it: copy SDK libs to ide/electron/resources/pitrex-sdk/lib/\n\
+             - Set env var: export PITREX_SDK=/path/to/pitrex-baremetal\n\
+             - Install to: ~/pitrex-baremetal or /opt/pitrex-baremetal"
+        ))?;
+    if verbose {
+        println!("  PiTrex SDK: {}", sdk_path.display());
+    }
+
+    // Phase 5: Assemble with arm-none-eabi-as (ARMv6zk, hard-float — matches gtoal/pitrex flags)
+    println!("\n{}", "Phase 4: ARM32 Assemble".bright_cyan().bold());
+    let as_result = Command::new("arm-none-eabi-as")
+        .args([
+            "-march=armv6",
+            "-mfpu=vfp",
+            "-mfloat-abi=hard",
+            s_path.to_str().unwrap(),
+            "-o",
+            o_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match as_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-as not found on PATH.\n\
+                 Install the ARM GNU Toolchain (gnu-rm 10.3-2021.10):\n\
+                 https://developer.arm.com/downloads/-/gnu-rm\n\
+                 Note: GCC 12+ may not boot on Pi Zero — use 10.3.1 exactly."
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-as: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}", stderr));
+            }
+            println!("  {} Assembled: {}", "✓".green(), o_path.display());
+        }
+    }
+
+    // Phase 5: SDK object files (precompiled if available, else compile from source)
+    println!("\n{}", "Phase 5: SDK objects".bright_cyan().bold());
+
+    // Detect build mode: standalone (kernel.img at 0x8000) or loader (piZero1 at 0x4000000)
+    let (loader_start, linker_script_name, mode_name) = (
+        "0x8000",
+        "pitrex_standalone.ld",
+        "standalone",
+    );
+    let ld_script_path = sdk_path.join("linker").join(linker_script_name);
+    if !ld_script_path.exists() {
+        return Err(anyhow::anyhow!(
+            "Linker script not found: {}\n\
+             Run hardware/pitrex-sdk/download-sdk.sh to populate the SDK.",
+            ld_script_path.display()
+        ));
+    }
+    if verbose {
+        println!("  Mode: {} (LOADER_START={})", mode_name, loader_start);
+        println!("  Linker script: {}", ld_script_path.display());
+    }
+
+    let loader_start_flag = format!("-DLOADER_START={}", loader_start);
+
+    // SDK object file list (13 files in order)
+    let sdk_obj_names: &[&str] = &[
+        "baremetalEntry.o",
+        "bareMetalMain.o",
+        "cstubs.o",
+        "rpi-armtimer.o",
+        "rpi-aux.o",
+        "rpi-gpio.o",
+        "rpi-interrupts.o",
+        "rpi-systimer.o",
+        "bcm2835.o",
+        "pitrexio-gpio.o",
+        "vectrexInterface.o",
+        "osWrapper.o",
+        "baremetalUtil.o",
+    ];
+
+    // Try to find SDK object files: prefer precompiled (sdk/obj/standalone/) over compiling from source
+    let sdk_precompiled_dir = sdk_path.join("obj").join("standalone");
+    let sdk_src_dir         = sdk_path.join("src");
+    let sdk_lib_dir         = sdk_path.join("lib");
+    let sdk_inc_dir         = sdk_path.join("include");
+
+    let use_precompiled = sdk_precompiled_dir.exists()
+        && sdk_obj_names.iter().all(|n| sdk_precompiled_dir.join(n).exists());
+
+    let compiled_sdk_objs: Vec<std::path::PathBuf> = if use_precompiled {
+        // ── Fast path: use precompiled .o files from Docker build ─────────
+        println!("\n{}", "Phase 5: Using precompiled SDK objects".bright_cyan().bold());
+        let objs: Vec<_> = sdk_obj_names.iter()
+            .map(|n| sdk_precompiled_dir.join(n))
+            .collect();
+        println!("  {} {} precompiled SDK objects", "✓".green(), objs.len());
+        objs
+    } else {
+        // ── Slow path: compile SDK sources on-the-fly ─────────────────────
+        // Requires arm-none-eabi-gcc WITH newlib headers (e.g., official ARM GNU Embedded
+        // Toolchain from developer.arm.com, or Linux package libnewlib-arm-none-eabi).
+        // On macOS Homebrew, arm-none-eabi-gcc is built --without-headers.
+        // To get precompiled .o files, run:
+        //   docker build -t pitrex-sdk hardware/pitrex-sdk/
+        //   docker run --rm -v $(pwd)/ide/electron/resources/pitrex-sdk:/output pitrex-sdk
+        println!("\n{}", "Phase 5: Compile SDK sources".bright_cyan().bold());
+
+        // Common CFLAGS (matches gtoal/pitrex Makefile.baremetal)
+        let sdk_cflags: Vec<&str> = vec![
+            "-O2",
+            "-mfloat-abi=hard",
+            "-nostartfiles",
+            "-mfpu=vfp",
+            "-march=armv6zk",
+            "-mtune=arm1176jzf-s",
+            "-DRPI0",
+            "-DFREESTANDING",
+            "-DPITREX_DEBUG",
+            "-DMHZ1000",
+            "-DMAP_FAILED=((void*)-1)",
+            r#"-DSETTINGS_DIR="""#,
+        ];
+
+        let sdk_sources: &[(&str, &str)] = &[
+            ("baremetalEntry.S", ""),
+            ("bareMetalMain.c",  ""),
+            ("cstubs.c",         ""),
+            ("rpi-armtimer.c",   ""),
+            ("rpi-aux.c",        ""),
+            ("rpi-gpio.c",       ""),
+            ("rpi-interrupts.c", ""),
+            ("rpi-systimer.c",   ""),
+            ("bcm2835.c",        ""),
+            ("pitrexio-gpio.c",  ""),
+            ("vectrexInterface.c",""),
+            ("osWrapper.c",      ""),
+            ("baremetalUtil.c",  ""),
+        ];
+
+        let sdk_obj_dir = build_dir.join("sdk_obj");
+        std::fs::create_dir_all(&sdk_obj_dir)?;
+
+        let mut objs: Vec<std::path::PathBuf> = Vec::new();
+
+        for (src_name, _) in sdk_sources {
+            let src_path = sdk_src_dir.join(src_name);
+            if !src_path.exists() {
+                return Err(anyhow::anyhow!(
+                    "SDK source file not found: {}\n\
+                     On macOS: run the Docker build to get precompiled .o files:\n\
+                       docker build -t pitrex-sdk hardware/pitrex-sdk/\n\
+                       docker run --rm -v $(pwd)/ide/electron/resources/pitrex-sdk:/output pitrex-sdk\n\
+                     On Linux: ensure libnewlib-arm-none-eabi is installed.\n\
+                     Or set PITREX_SDK to a folder with obj/standalone/*.o",
+                    src_path.display()
+                ));
+            }
+            let obj_name = src_name.replace(".S", ".o").replace(".c", ".o");
+            let obj_path = sdk_obj_dir.join(&obj_name);
+
+            let mut compile_args: Vec<String> = sdk_cflags.iter().map(|s| s.to_string()).collect();
+            compile_args.push(loader_start_flag.clone());
+            compile_args.push(format!("-I{}", sdk_inc_dir.join("pitrex").display()));
+            compile_args.push(format!("-I{}", sdk_inc_dir.join("vectrex").display()));
+            compile_args.push(format!("-I{}", sdk_inc_dir.display()));
+            compile_args.push(format!("-I{}", sdk_inc_dir.join("lib2835").display()));
+            compile_args.push(format!("-I{}", sdk_src_dir.display()));
+            compile_args.push("-c".into());
+            compile_args.push(src_path.to_str().unwrap().into());
+            compile_args.push("-o".into());
+            compile_args.push(obj_path.to_str().unwrap().into());
+
+            let compile_result = Command::new(&arm_gcc)
+                .args(&compile_args)
+                .output();
+
+            match compile_result {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(anyhow::anyhow!(
+                        "arm-none-eabi-gcc not found.\n\
+                         Install the official ARM GNU Embedded Toolchain (includes newlib):\n\
+                         https://developer.arm.com/downloads/-/gnu-rm"
+                    ));
+                }
+                Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-gcc: {}", e)),
+                Ok(out) => {
+                    if !out.status.success() {
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        // Helpful hint for macOS Homebrew users
+                        let hint = if stderr.contains("No such file or directory") && stderr.contains(".h") {
+                            "\nHint: Your arm-none-eabi-gcc doesn't have newlib headers.\n\
+                             On macOS, use Docker to build precompiled SDK objects:\n\
+                             docker build -t pitrex-sdk hardware/pitrex-sdk/\n\
+                             docker run --rm -v $(pwd)/ide/electron/resources/pitrex-sdk:/output pitrex-sdk"
+                        } else { "" };
+                        return Err(anyhow::anyhow!(
+                            "Compiling {} failed:\n{}{}", src_name, stderr, hint
+                        ));
+                    }
+                }
+            }
+            objs.push(obj_path);
+            if verbose { println!("  {} sdk_obj/{}", "✓".green(), obj_name); }
+        }
+        println!("  {} {} SDK object files compiled", "✓".green(), objs.len());
+        objs
+    };
+
+    // Phase 6: Link — SDK objs + game obj + .a archives + linker script
+    //   Matches gtoal/pitrex Makefile.baremetal link pattern exactly:
+    //     arm-none-eabi-gcc $(CFLAGS) -o game.elf.img \
+    //       sdk_obj/*.o game.o \
+    //       -lm -lff12c -ldebug -lhal -lutils -lconsole -lbob -li2c -lbcm2835 -larm \
+    //       linkerScript.ld
+    println!("\n{}", "Phase 6: ARM32 Link".bright_cyan().bold());
+
+    let mut link_args: Vec<String> = vec![
+        "-O2".into(),
+        "-mfloat-abi=hard".into(),
+        "-nostartfiles".into(),
+        "-mfpu=vfp".into(),
+        "-march=armv6zk".into(),
+        "-mtune=arm1176jzf-s".into(),
+        "-DRPI0".into(),
+        "-DFREESTANDING".into(),
+        "-DPITREX_DEBUG".into(),
+        "-DMHZ1000".into(),
+        loader_start_flag.clone(),
+        format!("-L{}", sdk_lib_dir.display()),
+        "-Wl,--allow-multiple-definition".into(),
+        "-o".into(),
+        elf_path.to_str().unwrap().into(),
+    ];
+    // SDK objects first (provides _start, bareMetalMain, vectrexInterface, etc.)
+    for obj in &compiled_sdk_objs {
+        link_args.push(obj.to_str().unwrap().into());
+    }
+    // Game object
+    link_args.push(o_path.to_str().unwrap().into());
+    // Standard libraries + prebuilt .a archives (order matters for ld)
+    link_args.extend(["-lm", "-lff12c", "-ldebug", "-lhal", "-lutils",
+                       "-lconsole", "-lbob", "-li2c", "-lbcm2835", "-larm"]
+        .iter().map(|s| s.to_string()));
+    // Linker script (must use -T flag so ld processes it as a script, not an object)
+    link_args.push("-T".into());
+    link_args.push(ld_script_path.to_str().unwrap().into());
+
+    let ld_result = Command::new(&arm_gcc)
+        .args(&link_args)
+        .output();
+
+    match ld_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-gcc not found on PATH.\n\
+                 Install the ARM GNU Toolchain: https://developer.arm.com/downloads/-/gnu-rm"
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-gcc: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-gcc link failed:\n{}", stderr));
+            }
+            println!("  {} Linked: {}", "✓".green(), elf_path.display());
+        }
+    }
+
+    // Phase 7: Extract binary with arm-none-eabi-objcopy
+    println!("\n{}", "Phase 6: Extract .img".bright_cyan().bold());
+    let objcopy_result = Command::new("arm-none-eabi-objcopy")
+        .args([
+            "-O",
+            "binary",
+            elf_path.to_str().unwrap(),
+            img_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match objcopy_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-objcopy not found on PATH.\n\
+                 Install the ARM GNU Toolchain (gnu-rm 10.3-2021.10)."
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-objcopy: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}", stderr));
+            }
+        }
+    }
+
+    let img_size = std::fs::metadata(&img_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Image written: {} ({} bytes)", "✓".green(), img_path.display(), img_size);
+    println!("\n{}", format!(
+        "✓ BUILD SUCCESS (pitrex): {} bytes written to {}\n  Copy to SD card as kernel.img (standalone) or piZero1/{}.img (loader)",
+        img_size, img_path.display(), project_name
+    ).bright_green().bold());
+
     Ok(())
 }
 
@@ -913,6 +1348,215 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
     Ok(())
 }
 
+/// Build for the UVM2 (Ultimate Vectrex Multicart 2) — Cortex-M33 / Pico SDK toolchain.
+fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    println!("{}", "Target: UVM2 (Ultimate Vectrex Multicart 2 / Cortex-M33)".bright_yellow().bold());
+
+    let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+        let project_info = vpy_loader::load_project(input).context("Failed to load project")?;
+        let dir = input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        (project_info.entry_point, dir)
+    } else {
+        let dir = {
+            let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+            if parent.file_name().and_then(|n| n.to_str()) == Some("src") {
+                parent.parent().unwrap_or(parent).to_path_buf()
+            } else {
+                find_project_root_from(parent)
+            }
+        };
+        (input.clone(), dir)
+    };
+
+    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
+    let source = std::fs::read_to_string(&source_path).context("Failed to read source file")?;
+    let tokens = vpy_parser::lex(&source).map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
+    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
+        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+    println!("  {} Parsed {} items", "✓".green(), module.items.len());
+
+    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
+    let mut modules_map = std::collections::HashMap::new();
+    let module_name = source_path.file_stem().and_then(|s| s.to_str()).unwrap_or("main").to_string();
+    modules_map.insert(module_name.clone(), module);
+    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
+        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+
+    println!("\n{}", "Phase 3: UVM2 ARM Thumb2 Codegen".bright_cyan().bold());
+    let title = project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("UVM2 Game");
+    let bank_config = vpy_codegen::BankConfig::single_bank();
+    let assets = discover_assets(&source_path);
+    let generated = vpy_codegen::generate_from_module_with_target(
+        &unified, &bank_config, title, &assets, &vpy_codegen::Target::Uvm2,
+    ).context("UVM2 codegen failed")?;
+    println!("  {} Generated {} bytes of ARM assembly", "✓".green(), generated.asm_source.len());
+
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem()).and_then(|s| s.to_str()).map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(input))
+        .unwrap_or_else(|| project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("output").to_string());
+
+    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let asm_path = build_dir.join(format!("{}.asm", project_name));
+    let o_path   = build_dir.join(format!("{}.o",   project_name));
+    let elf_path = build_dir.join(format!("{}.elf", project_name));
+    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
+
+    std::fs::write(&s_path, &generated.asm_source)
+        .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    std::fs::copy(&s_path, &asm_path)
+        .with_context(|| format!("Failed to write {}", asm_path.display()))?;
+    println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
+
+    // Linker script — prefer a uvm2-specific one, fall back to rp2350_game.ld
+    let ld_path = find_uvm2_ld(&project_dir)
+        .or_else(|| find_rp2350_ld(&project_dir))
+        .ok_or_else(|| anyhow::anyhow!(
+            "Could not find linker script for UVM2.\n\
+             Expected: hardware/debug_cart/firmware/rp2350_game.ld"))?;
+    if verbose { println!("  Linker script: {}", ld_path.display()); }
+
+    println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
+    let as_out = Command::new("arm-none-eabi-as")
+        .args(["-mthumb", "-mcpu=cortex-m33", "-mfpu=fpv5-sp-d16",
+               s_path.to_str().unwrap(), "-o", o_path.to_str().unwrap()])
+        .output();
+    match as_out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+            return Err(anyhow::anyhow!("arm-none-eabi-as not found. Install gcc-arm-embedded.")),
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-as: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}",
+                    String::from_utf8_lossy(&out.stderr)));
+            }
+            println!("  {} Assembled: {}", "✓".green(), o_path.display());
+        }
+    }
+
+    println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
+    let ld_out = Command::new("arm-none-eabi-ld")
+        .args(["-T", ld_path.to_str().unwrap(),
+               o_path.to_str().unwrap(), "-o", elf_path.to_str().unwrap()])
+        .output();
+    match ld_out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+            return Err(anyhow::anyhow!("arm-none-eabi-ld not found.")),
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-ld: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                return Err(anyhow::anyhow!("arm-none-eabi-ld failed:\n{}",
+                    String::from_utf8_lossy(&out.stderr)));
+            }
+            println!("  {} Linked: {}", "✓".green(), elf_path.display());
+        }
+    }
+
+    println!("\n{}", "Phase 6: Extract Binary".bright_cyan().bold());
+    let oc_out = Command::new("arm-none-eabi-objcopy")
+        .args(["-O", "binary", elf_path.to_str().unwrap(), bin_path.to_str().unwrap()])
+        .output();
+    match oc_out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+            return Err(anyhow::anyhow!("arm-none-eabi-objcopy not found.")),
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-objcopy: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}",
+                    String::from_utf8_lossy(&out.stderr)));
+            }
+        }
+    }
+
+    let bin_size = std::fs::metadata(&bin_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Binary: {} ({} bytes)", "✓".green(), bin_path.display(), bin_size);
+
+    // Phase 7: Wrap with UM2 header for SD card (UVM2 game format)
+    println!("\n{}", "Phase 7: UM2 Package".bright_cyan().bold());
+    let um2_path = build_dir.join(format!("{}.um2", project_name));
+    let bin_data = std::fs::read(&bin_path)
+        .with_context(|| format!("Failed to read binary for UM2 packaging: {}", bin_path.display()))?;
+    let um2_data = build_um2(&bin_data, 0x20000000u32);
+    std::fs::write(&um2_path, &um2_data)
+        .with_context(|| format!("Failed to write UM2: {}", um2_path.display()))?;
+    println!("  {} UM2: {} ({} bytes) — header(20) + ARM binary",
+        "✓".green(), um2_path.display(), um2_data.len());
+
+    println!("\n{}", format!("✓ BUILD SUCCESS (uvm2): {} bytes  →  {}",
+        um2_data.len(), um2_path.display()).bright_green().bold());
+
+    Ok(())
+}
+
+/// Build a .um2 file for the Ultimate Vectrex Multicart 2.
+///
+/// Header format (20 bytes, all fields little-endian):
+///   [0..4]   Magic:       "2CMU"  (0x554D4332)
+///   [4..8]   Version:     1
+///   [8..12]  GameCount:   1
+///   [12..16] LoadAddr:    load address in SRAM (e.g. 0x20000000)
+///   [16..20] BinarySize:  length of the ARM binary in bytes
+///   [20..]   Binary data  (ARM Thumb2, Cortex-M33)
+fn build_um2(bin: &[u8], load_addr: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity(20 + bin.len());
+    // Magic "2CMU"
+    out.extend_from_slice(b"2CMU");
+    // Version = 1
+    out.extend_from_slice(&1u32.to_le_bytes());
+    // GameCount = 1
+    out.extend_from_slice(&1u32.to_le_bytes());
+    // LoadAddr
+    out.extend_from_slice(&load_addr.to_le_bytes());
+    // BinarySize
+    out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+    // ARM binary payload
+    out.extend_from_slice(bin);
+    out
+}
+
+/// Build a UF2 binary from raw `data` loaded at `base_addr`.
+/// UF2 spec: https://github.com/microsoft/uf2
+/// Each 512-byte block carries 256 bytes of payload.
+/// Family ID 0xE48BFF59 = rp2350-arm-s (RP2350 Cortex-M33)
+fn build_uf2(data: &[u8], base_addr: u32) -> Vec<u8> {
+    const MAGIC0:      u32 = 0x0A324655; // "UF2\n"
+    const MAGIC1:      u32 = 0x9E5D5157;
+    const MAGIC_END:   u32 = 0x0AB16F30;
+    const FLAG_FAMILY: u32 = 0x00002000;
+    const FAMILY_ID:   u32 = 0xE48BFF59; // rp2350-arm-s
+    const PAYLOAD:     usize = 256;
+    const BLOCK_SIZE:  usize = 512;
+
+    let total_blocks = (data.len() + PAYLOAD - 1) / PAYLOAD;
+    let mut out = Vec::with_capacity(total_blocks * BLOCK_SIZE);
+
+    for (i, chunk) in data.chunks(PAYLOAD).enumerate() {
+        let addr = base_addr + (i * PAYLOAD) as u32;
+        let mut block = [0u8; BLOCK_SIZE];
+        let w = |buf: &mut [u8], off: usize, v: u32| {
+            buf[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        };
+        w(&mut block,   0, MAGIC0);
+        w(&mut block,   4, MAGIC1);
+        w(&mut block,   8, FLAG_FAMILY);
+        w(&mut block,  12, addr);
+        w(&mut block,  16, PAYLOAD as u32);
+        w(&mut block,  20, i as u32);
+        w(&mut block,  24, total_blocks as u32);
+        w(&mut block,  28, FAMILY_ID);
+        block[32..32 + chunk.len()].copy_from_slice(chunk);
+        w(&mut block, 508, MAGIC_END);
+        out.extend_from_slice(&block);
+    }
+    out
+}
+
 fn find_project_root_from(start: &Path) -> PathBuf {
     let mut current = start;
     loop {
@@ -920,9 +1564,7 @@ fn find_project_root_from(start: &Path) -> PathBuf {
             let has_vpyproj = entries
                 .flatten()
                 .any(|e| e.path().extension().and_then(|s| s.to_str()) == Some("vpyproj"));
-            if has_vpyproj {
-                return current.to_path_buf();
-            }
+            if has_vpyproj { return current.to_path_buf(); }
         }
         match current.parent() {
             Some(p) => current = p,
@@ -973,6 +1615,25 @@ fn find_rp2350_ld(project_dir: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Find the UVM2 linker script — looks for hardware/uvm2/uvm2_game.ld first,
+/// then falls back to the rp2350_game.ld (same Pico SDK memory map).
+fn find_uvm2_ld(project_dir: &Path) -> Option<PathBuf> {
+    fn walk_up(start: &Path) -> Option<PathBuf> {
+        let mut current = start;
+        loop {
+            let candidate = current.join("hardware/uvm2/uvm2_game.ld");
+            if candidate.exists() { return Some(candidate); }
+            match current.parent() {
+                Some(p) => current = p,
+                None => return None,
+            }
+        }
+    }
+    walk_up(project_dir)
+        .or_else(|| { std::env::current_exe().ok().and_then(|e| e.parent().and_then(|d| walk_up(d))) })
+        .or_else(|| { std::env::current_dir().ok().and_then(|d| walk_up(&d)) })
+}
+
 /// Extract project name from a .vpyproj file without pulling in the full toml crate.
 /// Tries [build] output stem first, then [project] name, returns None on any failure.
 fn vpyproj_project_name(vpyproj: &Path) -> Option<String> {
@@ -1005,9 +1666,17 @@ fn vpyproj_project_name(vpyproj: &Path) -> Option<String> {
 }
 
 fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String) -> Result<()> {
+    // PiTrex target: separate path — no banks, ARM32 toolchain invocation
+    if target == "pitrex" {
+        return cmd_build_pitrex(input, output, verbose);
+    }
     // RP2350 target: separate path — no banks, ARM toolchain invocation
     if target == "rp2350" {
         return cmd_build_rp2350(input, output, verbose);
+    }
+    // UVM2 target: Ultimate Vectrex Multicart 2 — same Pico SDK toolchain as rp2350
+    if target == "uvm2" {
+        return cmd_build_uvm2(input, output, verbose);
     }
 
     // Check if this is a multi-module project

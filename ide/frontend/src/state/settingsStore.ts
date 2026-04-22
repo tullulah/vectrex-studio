@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type CompilerBackend = 'buildtools' | 'core';
-export type BuildTarget = 'm6809' | 'rp2350';
+export type BuildTarget = 'm6809' | 'rp2350' | 'pitrex' | 'uvm2';
 
 interface SettingsState {
   compiler: CompilerBackend;

@@ -480,15 +480,20 @@ impl SfxResource {
         // Duration in frames (50 FPS for Vectrex)
         let total_frames = (self.duration_ms as u32 * 50 / 1000).max(1) as usize;
         
-        // Envelope timing (0ms = instant, no forced minimum)
+        // Envelope timing: allocate frames proportionally to ms durations.
+        // Clamp each phase to remaining frames so phases never exceed total_frames.
+        let dur = self.duration_ms as f32;
         let attack_frames = if self.envelope.attack == 0 { 0 } else {
-            ((self.envelope.attack as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+            ((self.envelope.attack as f32 / dur * total_frames as f32).round() as usize)
+                .min(total_frames)
         };
         let decay_frames = if self.envelope.decay == 0 { 0 } else {
-            ((self.envelope.decay as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+            ((self.envelope.decay as f32 / dur * total_frames as f32).round() as usize)
+                .min(total_frames.saturating_sub(attack_frames))
         };
         let release_frames = if self.envelope.release == 0 { 0 } else {
-            ((self.envelope.release as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+            ((self.envelope.release as f32 / dur * total_frames as f32).round() as usize)
+                .min(total_frames.saturating_sub(attack_frames + decay_frames))
         };
         let sustain_frames = total_frames.saturating_sub(attack_frames + decay_frames + release_frames);
         
