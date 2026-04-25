@@ -285,6 +285,9 @@ pub fn emit_call(
         "clamp" | "CLAMP" => "pitrex_clamp",
         "sin" | "SIN"     => "pitrex_sin",
         "cos" | "COS"     => "pitrex_cos",
+        "tan" | "TAN"     => "pitrex_tan_impl",
+        "atan2" | "ATAN2" => "pitrex_atan2",
+        "pow" | "POW"     => "pitrex_pow",
         "sqrt" | "SQRT"   => "pitrex_sqrt",
         "rand" | "RAND"   => "pitrex_rand",
         "rand_range" | "RAND_RANGE" => "pitrex_rand_range",
@@ -360,7 +363,7 @@ pub fn emit_call(
                     s.push_str(&format!("@ string data for label {label} emitted in rodata\n"));
                     // Store for later emission — for now inline with b/label trick
                     s = format!(
-                        "{s_prev}    b       {label}_after\n{label}:\n    .asciz  \"{text}\\x80\"\n    .align  2\n{label}_after:\n    ldr     r0, ={label}\n    push    {{r0}}\n",
+                        "{s_prev}    b       {label}_after\n{label}:\n    .asciz  \"{text}\"\n    .align  2\n{label}_after:\n    ldr     r0, ={label}\n    push    {{r0}}\n",
                         s_prev = {
                             // Remove the last two lines we just added
                             let mut tmp = s.clone();
@@ -387,6 +390,53 @@ pub fn emit_call(
             s.push_str(&format!("    add     sp, sp, #{}\n", nextra * 4));
         }
         return Ok(s);
+    }
+
+    // Special case: DRAW_POLYGON — supports both
+    //   Form A: (n, x0, y0, x1, y1, ...)            — no intensity
+    //   Form B: (n, intensity, x0, y0, x1, y1, ...) — intensity as 2nd arg
+    // pitrex_draw_polygon expects Form B; normalise Form A by inserting a
+    // default intensity (0x5F) at position 1 before pushing.
+    if info.name == "DRAW_POLYGON" {
+        if let Some(Expr::Number(nv)) = args.first() {
+            let n = *nv as usize;
+            let form_a_len = 1 + 2 * n;
+            let form_b_len = 2 + 2 * n;
+            let normalized: Vec<Expr> = if args.len() == form_a_len {
+                let mut v: Vec<Expr> = Vec::with_capacity(form_b_len);
+                v.push(args[0].clone());
+                v.push(Expr::Number(0x5F));
+                v.extend(args[1..].iter().cloned());
+                v
+            } else if args.len() == form_b_len {
+                args.to_vec()
+            } else {
+                args.to_vec()
+            };
+
+            // Inline the generic emit path but with the normalised arg list.
+            let total_reg_args = normalized.len();
+            let n_extra = total_reg_args.saturating_sub(4);
+            let n_skip = 4usize.min(total_reg_args);
+
+            for arg in normalized.iter().skip(n_skip).rev() {
+                s.push_str(&emit_arg(arg, var_addrs)?);
+                s.push_str("    push    {r0}\n");
+            }
+            for arg in normalized.iter().take(n_skip) {
+                s.push_str(&emit_arg(arg, var_addrs)?);
+                s.push_str("    push    {r0}\n");
+            }
+            let nreg = total_reg_args.min(4);
+            for i in (0..nreg).rev() {
+                s.push_str(&format!("    pop     {{r{i}}}\n"));
+            }
+            s.push_str("    bl      pitrex_draw_polygon\n");
+            if n_extra > 0 {
+                s.push_str(&format!("    add     sp, sp, #{}\n", n_extra * 4));
+            }
+            return Ok(s);
+        }
     }
 
     // Special case: DRAW_VECTOR("name", ox, oy) — always emit r0=asset, r1=ox, r2=oy.

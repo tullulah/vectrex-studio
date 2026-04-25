@@ -429,8 +429,10 @@ fn emit_pitrex_print_text() -> String {
     s.push_str(".global pitrex_print_text\n.type pitrex_print_text, %function\npitrex_print_text:\n");
     s.push_str("    push    {lr}\n");
     // r0=x, r1=y, r2=str — passed directly (int8_t, no scaling)
-    // r3=size=5 (matches helloworld size for legibility)
-    s.push_str("    mov     r3, #5              @ size\n");
+    // r3=xSize from PITREX_TEXT_SIZE, default=3 (PiTrex calibration: ~10 VPy units/char)
+    s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
+    s.push_str("    ldr     r3, [r3]\n");
+    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #3\n");
     // push remaining args: angle=-7, terminator=0
     s.push_str("    mov     r12, #0             @ terminator\n");
     s.push_str("    push    {r12}\n");
@@ -454,26 +456,25 @@ fn emit_pitrex_print_number() -> String {
 
 fn emit_pitrex_draw_rect() -> String {
     // pitrex_draw_rect(r0=x, r1=y, r2=w, r3=h)  — 5th arg (brightness) on stack
-    // Draws a rectangle as 4 lines using v_directDraw32.
-    // Coordinate scaling: VPy units → pitrex units (*192)
+    // Convention (matches M6809/rp2350): (x, y) is the BOTTOM-LEFT corner;
+    // the rect extends UP by `h` and RIGHT by `w` so it spans
+    // x..x+w on the X axis and y..y+h on the Y axis (Vectrex y = up).
     let mut s = String::new();
     s.push_str("@ pitrex_draw_rect(r0=x, r1=y, r2=w, r3=h) 5th=[sp]=brightness\n");
     s.push_str(".global pitrex_draw_rect\n.type pitrex_draw_rect, %function\npitrex_draw_rect:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
     // Save x,y,w,h and load brightness from stack above saved regs (5*4=20 bytes pushed)
-    s.push_str("    mov     r4, r0          @ x\n");
-    s.push_str("    mov     r5, r1          @ y\n");
+    s.push_str("    mov     r4, r0          @ x (left)\n");
+    s.push_str("    mov     r5, r1          @ y (bottom)\n");
     s.push_str("    mov     r6, r2          @ w\n");
     s.push_str("    mov     r7, r3          @ h\n");
-    s.push_str("    ldr     r3, [sp, #20]   @ brightness\n");
-    // Scale all by 192
+    // Scale by 100 (VPy → pitrex)
     s.push_str("    mov     r0, #100\n");
-    s.push_str("    mul     r4, r4, r0      @ x *= 192\n");
-    s.push_str("    mul     r5, r5, r0      @ y *= 192\n");
-    s.push_str("    mul     r6, r6, r0      @ w *= 192\n");
-    s.push_str("    mul     r7, r7, r0      @ h *= 192\n");
-    // Compute corners: top-left(r4,r5), top-right(r4+r6,r5), bot-right(r4+r6,r5-r7), bot-left(r4,r5-r7)
-    // Top edge: (x,y) -> (x+w,y)
+    s.push_str("    mul     r4, r4, r0\n");
+    s.push_str("    mul     r5, r5, r0\n");
+    s.push_str("    mul     r6, r6, r0\n");
+    s.push_str("    mul     r7, r7, r0\n");
+    // Bottom edge: (x, y) -> (x+w, y)
     s.push_str("    mov     r0, r4\n");
     s.push_str("    mov     r1, r5\n");
     s.push_str("    add     r2, r4, r6\n");
@@ -482,27 +483,27 @@ fn emit_pitrex_draw_rect() -> String {
     s.push_str("    push    {r12}\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
-    // Right edge: (x+w,y) -> (x+w,y-h)
+    // Right edge: (x+w, y) -> (x+w, y+h)
     s.push_str("    add     r0, r4, r6\n");
     s.push_str("    mov     r1, r5\n");
     s.push_str("    add     r2, r4, r6\n");
-    s.push_str("    sub     r3, r5, r7\n");
+    s.push_str("    add     r3, r5, r7\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
     s.push_str("    push    {r12}\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
-    // Bottom edge: (x+w,y-h) -> (x,y-h)
+    // Top edge: (x+w, y+h) -> (x, y+h)
     s.push_str("    add     r0, r4, r6\n");
-    s.push_str("    sub     r1, r5, r7\n");
+    s.push_str("    add     r1, r5, r7\n");
     s.push_str("    mov     r2, r4\n");
-    s.push_str("    sub     r3, r5, r7\n");
+    s.push_str("    add     r3, r5, r7\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
     s.push_str("    push    {r12}\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
-    // Left edge: (x,y-h) -> (x,y)
+    // Left edge: (x, y+h) -> (x, y)
     s.push_str("    mov     r0, r4\n");
-    s.push_str("    sub     r1, r5, r7\n");
+    s.push_str("    add     r1, r5, r7\n");
     s.push_str("    mov     r2, r4\n");
     s.push_str("    mov     r3, r5\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
@@ -574,15 +575,16 @@ fn emit_pitrex_draw_circle() -> String {
 
 fn emit_pitrex_draw_filled_rect() -> String {
     // pitrex_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=brightness)
-    // Draws outline + horizontal scan lines every 3 VPy units.
-    // Reuses pitrex_draw_rect for the outline, then fills.
+    // (x, y) is the BOTTOM-LEFT corner — rect spans y..y+h going UP, matching
+    // the M6809/rp2350 convention.  Outline is delegated to pitrex_draw_rect;
+    // fill is a stack of horizontal scan lines walking UP from y+step to y+h-step.
     let mut s = String::new();
     s.push_str("@ pitrex_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=brightness)\n");
     s.push_str(".global pitrex_draw_filled_rect\n.type pitrex_draw_filled_rect, %function\npitrex_draw_filled_rect:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
     // save args
-    s.push_str("    mov     r4, r0          @ x\n");
-    s.push_str("    mov     r5, r1          @ y\n");
+    s.push_str("    mov     r4, r0          @ x (left)\n");
+    s.push_str("    mov     r5, r1          @ y (bottom)\n");
     s.push_str("    mov     r6, r2          @ w\n");
     s.push_str("    mov     r7, r3          @ h\n");
     s.push_str("    ldr     r8, [sp, #28]   @ brightness ([sp+7regs*4])\n");
@@ -590,30 +592,34 @@ fn emit_pitrex_draw_filled_rect() -> String {
     s.push_str("    push    {r8}            @ brightness as 5th arg\n");
     s.push_str("    bl      pitrex_draw_rect\n");
     s.push_str("    add     sp, sp, #4\n");
-    // scale coords by 192
+    // scale coords by 100
     s.push_str("    mov     r9, #100\n");
     s.push_str("    mul     r4, r4, r9      @ x_s\n");
-    s.push_str("    mul     r5, r5, r9      @ y_s\n");
+    s.push_str("    mul     r5, r5, r9      @ y_s (bottom)\n");
     s.push_str("    mul     r6, r6, r9      @ w_s\n");
     s.push_str("    mul     r7, r7, r9      @ h_s\n");
-    // scan line step = 3*192 = 576
+    // scan step = 3 VPy units (× 100)
     s.push_str("    mov     r9, #300        @ scan step (3 * 100)\n");
-    // r0 = scan_y starts at y_s - step, going down to y_s - h_s
-    s.push_str("    sub     r0, r5, r9      @ scan_y = y - step\n");
+    // r0 = scan_y starts at y_s + step, going UP to y_s + h_s - step
+    s.push_str("    add     r0, r5, r9      @ scan_y = y + step\n");
     s.push_str(".Lfill_loop:\n");
-    s.push_str("    sub     r1, r5, r7      @ bottom = y_s - h_s\n");
+    s.push_str("    add     r1, r5, r7      @ top = y_s + h_s\n");
     s.push_str("    cmp     r0, r1\n");
-    s.push_str("    ble     .Lfill_done\n");
-    // draw horizontal line at scan_y: from (x_s, scan_y) to (x_s+w_s, scan_y)
+    s.push_str("    bge     .Lfill_done     @ exit when scan_y >= top\n");
+    // draw horizontal line at scan_y: from (x_s, scan_y) to (x_s+w_s, scan_y).
+    // ARM PUSH stores lowest-numbered register at lowest stack address, so we
+    // must push scan_y FIRST and brightness SECOND to get [sp+0]=brightness
+    // for v_directDraw32 (its 5th arg).
     s.push_str("    mov     r1, r0          @ y0 = scan_y\n");
     s.push_str("    add     r2, r4, r6      @ x1 = x_s + w_s\n");
     s.push_str("    mov     r3, r0          @ y1 = scan_y\n");
-    s.push_str("    push    {r0, r8}        @ save scan_y; brightness as 5th arg\n");
+    s.push_str("    push    {r0}            @ save scan_y for after the call\n");
     s.push_str("    mov     r0, r4          @ x0 = x_s\n");
+    s.push_str("    push    {r8}            @ brightness as 5th arg ([sp+0])\n");
     s.push_str("    bl      v_directDraw32\n");
-    s.push_str("    pop     {r0, r8}\n");
-    s.push_str("    add     sp, sp, #0      @ no extra pop (brightness was in push pair)\n");
-    s.push_str("    sub     r0, r0, r9      @ scan_y -= step\n");
+    s.push_str("    add     sp, sp, #4      @ pop brightness\n");
+    s.push_str("    pop     {r0}            @ restore scan_y\n");
+    s.push_str("    add     r0, r0, r9      @ scan_y += step\n");
     s.push_str("    b       .Lfill_loop\n");
     s.push_str(".Lfill_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
@@ -624,10 +630,14 @@ fn emit_pitrex_draw_filled_rect() -> String {
 // ── Polygon ───────────────────────────────────────────────────────────────
 
 fn emit_pitrex_draw_polygon() -> String {
-    // pitrex_draw_polygon(r0=n, r1=x0, r2=y0, r3=x1, [sp+0]=y1, [sp+4]=x2, ..., [sp+(2n-3)*4]=brightness)
+    // pitrex_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0,
+    //                    [sp+0]=x1, [sp+4]=y1, [sp+8]=x2, [sp+12]=y2, ...)
     // Connects n vertices in order and closes back to v0.
+    // Form B (intensity-as-2nd-arg) — matches the user-facing signature
+    // DRAW_POLYGON(n, intensity, x0, y0, x1, y1, ...). The codegen normalises
+    // Form A (no intensity) into Form B before the call.
     let mut s = String::new();
-    s.push_str("@ pitrex_draw_polygon(r0=n, r1=x0, r2=y0, r3=x1, stack=y1,x2,y2,...,brightness)\n");
+    s.push_str("@ pitrex_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, stack=x1,y1,x2,y2,...)\n");
     s.push_str(".global pitrex_draw_polygon\n.type pitrex_draw_polygon, %function\npitrex_draw_polygon:\n");
     // save original sp before push (for reading stack args)
     s.push_str("    mov     r12, sp\n");
@@ -635,47 +645,45 @@ fn emit_pitrex_draw_polygon() -> String {
     // r4=n, r5=scale, r6=brightness, r7=x0_s, r8=y0_s, r9=cur_x_s, r10=cur_y_s, r11=loop counter
     s.push_str("    mov     r4, r0          @ n\n");
     s.push_str("    mov     r5, #100        @ scale\n");
-    // brightness = [r12 + (2n-3)*4]
-    s.push_str("    mov     r6, r4, lsl #1  @ 2n\n");
-    s.push_str("    sub     r6, r6, #3      @ 2n-3\n");
-    s.push_str("    lsl     r6, r6, #2      @ (2n-3)*4\n");
-    s.push_str("    ldr     r6, [r12, r6]   @ brightness\n");
-    // scale v0
-    s.push_str("    mul     r7, r1, r5      @ x0_s\n");
-    s.push_str("    mul     r8, r2, r5      @ y0_s\n");
-    // scale v1 (x1=r3, y1=[r12+0])
-    s.push_str("    mul     r9, r3, r5      @ x1_s\n");
-    s.push_str("    ldr     r0, [r12, #0]   @ y1 raw\n");
+    s.push_str("    mov     r6, r1          @ brightness\n");
+    // scale v0 (x0=r2, y0=r3)
+    s.push_str("    mul     r7, r2, r5      @ x0_s\n");
+    s.push_str("    mul     r8, r3, r5      @ y0_s\n");
+    // scale v1 — x1 at [r12+0], y1 at [r12+4]
+    s.push_str("    ldr     r0, [r12, #0]   @ x1 raw\n");
+    s.push_str("    mul     r9, r0, r5      @ x1_s\n");
+    s.push_str("    ldr     r0, [r12, #4]   @ y1 raw\n");
     s.push_str("    mul     r10, r0, r5     @ y1_s\n");
     // draw edge 0→1: v_directDraw32(x0_s, y0_s, x1_s, y1_s, brightness)
-    s.push_str("    push    {r9, r10}       @ save x1_s, y1_s (xk_next, yk_next)\n");
-    s.push_str("    mov     r2, r9\n    mov     r3, r10\n");
+    s.push_str("    push    {r9, r10}       @ save v1 endpoint (cur_x, cur_y)\n");
     s.push_str("    mov     r0, r7\n    mov     r1, r8\n");
-    s.push_str("    push    {r6}\n");
+    s.push_str("    mov     r2, r9\n    mov     r3, r10\n");
+    s.push_str("    push    {r6}            @ brightness ([sp+0])\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r9, r10}       @ r9=cur_x=x1_s, r10=cur_y=y1_s\n");
-    // loop k=2..n-1
+    // loop k=2..n-1: vk on stack at [r12+(2k-2)*4]=xk, [r12+(2k-1)*4]=yk
     s.push_str("    mov     r11, #2\n");
     s.push_str(".Lpoly_loop:\n");
     s.push_str("    cmp     r11, r4\n");
     s.push_str("    bge     .Lpoly_close\n");
-    // xk = [r12 + (2k-3)*4], yk = [r12 + (2k-2)*4]
+    // xk = [r12 + (2k-2)*4]
     s.push_str("    mov     r0, r11, lsl #1 @ 2k\n");
-    s.push_str("    sub     r0, r0, #3      @ 2k-3\n");
+    s.push_str("    sub     r0, r0, #2      @ 2k-2\n");
     s.push_str("    lsl     r0, r0, #2\n");
     s.push_str("    ldr     r0, [r12, r0]   @ xk raw\n");
     s.push_str("    mul     r0, r0, r5      @ xk_s\n");
+    // yk = [r12 + (2k-1)*4]
     s.push_str("    mov     r1, r11, lsl #1 @ 2k\n");
-    s.push_str("    sub     r1, r1, #2      @ 2k-2\n");
+    s.push_str("    sub     r1, r1, #1      @ 2k-1\n");
     s.push_str("    lsl     r1, r1, #2\n");
     s.push_str("    ldr     r1, [r12, r1]   @ yk raw\n");
     s.push_str("    mul     r1, r1, r5      @ yk_s\n");
-    // save xk_s, yk_s; set up draw args
+    // save new endpoint, then draw cur→new
     s.push_str("    push    {r0, r1}        @ save new xk_s, yk_s\n");
     s.push_str("    mov     r2, r0\n    mov     r3, r1\n");
     s.push_str("    mov     r0, r9\n    mov     r1, r10\n");
-    s.push_str("    push    {r6}\n");
+    s.push_str("    push    {r6}            @ brightness\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r9, r10}       @ r9=xk_s, r10=yk_s\n");
@@ -685,7 +693,7 @@ fn emit_pitrex_draw_polygon() -> String {
     s.push_str(".Lpoly_close:\n");
     s.push_str("    mov     r0, r9\n    mov     r1, r10\n");
     s.push_str("    mov     r2, r7\n    mov     r3, r8\n");
-    s.push_str("    push    {r6}\n");
+    s.push_str("    push    {r6}            @ brightness\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
@@ -697,7 +705,7 @@ fn emit_pitrex_draw_polygon() -> String {
 
 fn emit_pitrex_draw_ellipse() -> String {
     // pitrex_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=brightness)
-    // 8-segment approximation, same angles as draw_circle but separate x/y radii.
+    // 16-segment approximation (matches M6809/rp2350 ellipse resolution).
     let mut s = String::new();
     s.push_str("@ pitrex_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=brightness)\n");
     s.push_str(".global pitrex_draw_ellipse\n.type pitrex_draw_ellipse, %function\npitrex_draw_ellipse:\n");
@@ -707,27 +715,43 @@ fn emit_pitrex_draw_ellipse() -> String {
     s.push_str("    mov     r6, r2          @ rx\n");
     s.push_str("    mov     r7, r3          @ ry\n");
     s.push_str("    ldr     r8, [sp, #28]   @ brightness\n");
-    // scale cx,cy,rx,ry by 192
     s.push_str("    mov     r9, #100\n");
     s.push_str("    mul     r4, r4, r9\n");
     s.push_str("    mul     r5, r5, r9\n");
     s.push_str("    mul     r6, r6, r9\n");
     s.push_str("    mul     r7, r7, r9\n");
-    // 8 segments with unit circle values *1024
-    let segs: [(i32,i32,i32,i32); 8] = [
-        (1024,0,    724,724),
-        (724,724,   0,1024),
-        (0,1024,    -724,724),
-        (-724,724,  -1024,0),
-        (-1024,0,   -724,-724),
-        (-724,-724, 0,-1024),
-        (0,-1024,   724,-724),
-        (724,-724,  1024,0),
+    // 16-segment unit-circle table * 1024 — vertex k = (cos(k*22.5°), sin(k*22.5°)).
+    // Each tuple is (x_start, y_start, x_end, y_end) for one chord.
+    let pts: [(i32,i32); 17] = [
+        (1024, 0),
+        (946, 392),
+        (724, 724),
+        (392, 946),
+        (0, 1024),
+        (-392, 946),
+        (-724, 724),
+        (-946, 392),
+        (-1024, 0),
+        (-946, -392),
+        (-724, -724),
+        (-392, -946),
+        (0, -1024),
+        (392, -946),
+        (724, -724),
+        (946, -392),
+        (1024, 0),
     ];
-    for (xs0,ys0,xs1,ys1) in segs {
-        // x coords use rx (r6), y coords use ry (r7)
+    for i in 0..16 {
+        let (xs0, ys0) = pts[i];
+        let (xs1, ys1) = pts[i + 1];
+        // x coords use rx (r6), y coords use ry (r7); use ldr for values > 255.
         let emit_coord = |s: &mut String, reg: &str, scale_reg: &str, val: i32, base: &str| {
-            s.push_str(&format!("    mov     {reg}, #{}\n", val.unsigned_abs()));
+            let abs = val.unsigned_abs();
+            if abs <= 255 {
+                s.push_str(&format!("    mov     {reg}, #{abs}\n"));
+            } else {
+                s.push_str(&format!("    ldr     {reg}, ={abs}\n"));
+            }
             if val < 0 { s.push_str(&format!("    neg     {reg}, {reg}\n")); }
             s.push_str(&format!("    mul     {reg}, {reg}, {scale_reg}\n"));
             s.push_str(&format!("    asr     {reg}, {reg}, #10\n"));
@@ -769,18 +793,26 @@ fn emit_pitrex_draw_arc() -> String {
     s.push_str("    mul     r6, r6, r0\n");
     // brightness
     s.push_str("    ldr     r3, [sp, #32]   @ brightness\n");
-    // For each of the 8 segments (45° each), check if its start angle is within [start, start+sweep].
-    // Segment i covers angle i*45..(i+1)*45. We check if i*45 >= start and i*45 < start+sweep.
-    // Emit 8 conditional-draw blocks unrolled.
-    let segs: [(i32,i32,i32,i32,i32); 8] = [
-        (1024,0,    724,724,  0),    // 0°
-        (724,724,   0,1024,   45),   // 45°
-        (0,1024,    -724,724, 90),   // 90°
-        (-724,724,  -1024,0,  135),  // 135°
-        (-1024,0,   -724,-724,180),  // 180°
-        (-724,-724, 0,-1024,  225),  // 225°
-        (0,-1024,   724,-724, 270),  // 270°
-        (724,-724,  1024,0,   315),  // 315°
+    // For each of the 16 segments (22.5° each), check if its start angle is within [start, start+sweep].
+    // Segment i covers angle i*22.5..(i+1)*22.5. We check if floor(i*22.5) >= start and floor(i*22.5) < start+sweep.
+    // Use integer angles so the cmp uses integer math: 0,22,45,67,90,112,135,157,180,202,225,247,270,292,315,337.
+    let segs: [(i32,i32,i32,i32,i32); 16] = [
+        (1024, 0,     946, 392,    0),    // 0°
+        (946, 392,    724, 724,   22),    // 22.5°
+        (724, 724,    392, 946,   45),    // 45°
+        (392, 946,    0, 1024,    67),    // 67.5°
+        (0, 1024,     -392, 946,  90),    // 90°
+        (-392, 946,   -724, 724, 112),    // 112.5°
+        (-724, 724,   -946, 392, 135),    // 135°
+        (-946, 392,   -1024, 0,  157),    // 157.5°
+        (-1024, 0,    -946, -392, 180),   // 180°
+        (-946, -392,  -724, -724, 202),   // 202.5°
+        (-724, -724,  -392, -946, 225),   // 225°
+        (-392, -946,  0, -1024,  247),    // 247.5°
+        (0, -1024,    392, -946, 270),    // 270°
+        (392, -946,   724, -724, 292),    // 292.5°
+        (724, -724,   946, -392, 315),    // 315°
+        (946, -392,   1024, 0,   337),    // 337.5°
     ];
     for (i, (xs0,ys0,xs1,ys1,start_angle)) in segs.iter().enumerate() {
         let label = format!(".Larc_skip{i}");
@@ -1822,7 +1854,7 @@ fn emit_pitrex_print_number_impl() -> String {
     s.push_str("    mov     r2, sp          @ buf ptr\n");
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
-    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n    @ default size\n");
+    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #3\n    @ default size (PiTrex calibration: ~10 VPy units/char)\n");
     s.push_str("    mov     r12, #0\n    push    {r12}\n    @ terminator\n");
     s.push_str("    mvn     r12, #6\n    push    {r12}\n    @ angle=-7\n");
     s.push_str("    bl      v_printStringRaster\n");

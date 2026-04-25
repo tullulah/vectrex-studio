@@ -333,7 +333,7 @@ fn emit_draw_shapes() -> String {
     //   - loop: dv_draw_delta(w, 0)  then  dv_move_to(-w, 3)  to go back+advance
     // push {r4..r9,lr} = 7 regs × 4 = 28 bytes → intensity at [sp+28].
     s.push_str("@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity)\n");
-    s.push_str("@ Horizontal scan lines, step=3, using delta moves\n");
+    s.push_str("@ Outer outline (vpy_draw_rect) + horizontal scan lines (step=3)\n");
     s.push_str(".global vpy_draw_filled_rect\n.type vpy_draw_filled_rect, %function\n.thumb_func\nvpy_draw_filled_rect:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes\n");
     s.push_str("    mov     r4, r0              @ x\n");
@@ -341,6 +341,13 @@ fn emit_draw_shapes() -> String {
     s.push_str("    mov     r6, r2              @ w\n");
     s.push_str("    mov     r7, r3              @ h\n");
     s.push_str("    ldr     r8, [sp, #28]       @ intensity\n");
+    // Draw the outer outline first via vpy_draw_rect (reuses dv_reset/intensity).
+    s.push_str("    push    {r8}                @ intensity as 5th arg\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    mov     r2, r6\n    mov     r3, r7\n");
+    s.push_str("    bl      vpy_draw_rect\n");
+    s.push_str("    add     sp, sp, #4\n");
+    // Reset for fill scan lines (vpy_draw_rect ended at the start corner, but
+    // dv_reset gives us a clean origin and avoids relying on prior beam state).
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
     // Move ONCE to (x, y) from center (delta = absolute for first call after reset)

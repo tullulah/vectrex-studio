@@ -312,21 +312,26 @@ export function parseAsm(src: string): ParsedAsm {
             .replace(/\\0/g, '\0')
             .replace(/\\\\/g, '\\');
           strings.set(lastTextLabel, decoded);
-          // Assign fake string address if not already in symbols
+          // Assign fake string address if not already in symbols.
+          // Advance stringNext by actual string length + null terminator,
+          // aligned to 4 bytes — otherwise consecutive strings overlap and
+          // reads past the null run into the next string ("POLY" + "FILL" + …
+          // would render as one concatenated blob).
           if (!symbols.has(lastTextLabel)) {
             symbols.set(lastTextLabel, { kind: 'string', value: stringNext });
-            stringNext += 4;
+            stringNext += decoded.length + 1;
+            stringNext = (stringNext + 3) & ~3;
           }
         }
         continue;
       }
 
-      // Skip directives in text section
-      if (line.startsWith('.')) continue;
-
       // ── Label detection ──────────────────────────────────────────────
       // Lines can be "LABEL:" or "LABEL: instruction..."
       // Local numeric labels: "1:" or "2:"
+      // Local ARM labels start with ".L" (".Larc_skip0:") — must check
+      // BEFORE the dot-prefix directive skip below, otherwise these
+      // branch targets disappear and conditional skips fall through.
       const labelMatch = line.match(/^([\w.]+)\s*:(.*)/);
       if (labelMatch) {
         const labelName = labelMatch[1];
@@ -351,6 +356,10 @@ export function parseAsm(src: string): ParsedAsm {
           continue;
         }
       }
+
+      // Skip remaining directives in text section (after label handling,
+      // so that `.Lfoo:` style local labels above are still registered).
+      if (line.startsWith('.')) continue;
 
       // ── Instruction parsing ──────────────────────────────────────────
       // Split mnemonic from operands
