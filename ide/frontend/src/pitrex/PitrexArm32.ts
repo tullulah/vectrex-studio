@@ -426,7 +426,7 @@ const SDK_STUBS: Record<string, SdkStub> = {
     let text = '';
     for (let i = 0; i < 64; i++) {
       const ch = memRead8(s, strPtr + i);
-      if (ch === 0) break;
+      if (ch === 0 || ch >= 0x80) break;  // null or Vectrex high-bit terminator
       text += String.fromCharCode(ch);
     }
     if (text.length > 0) {
@@ -913,6 +913,18 @@ export function createState(parsed: ParsedAsm): PitrexArm32State {
   // Copy rodata init memory into state memory
   for (const [addr, word] of parsed.initMemory) {
     s.mem.set(addr, word);
+  }
+
+  // Copy inline string literals into memory at their fake addresses
+  // (parser assigns them 0xF0000xxx addresses but doesn't write bytes to initMemory)
+  for (const [name, content] of parsed.strings.entries()) {
+    const sym = parsed.symbols.get(name);
+    if (!sym) continue;
+    const base = sym.value;
+    for (let i = 0; i < content.length; i++) {
+      memWrite8(s, base + i, content.charCodeAt(i) & 0xFF);
+    }
+    memWrite8(s, base + content.length, 0); // null terminator
   }
 
   // Initialize extern symbol addresses in memory to 0 (neutral joystick etc.)
