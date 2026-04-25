@@ -317,6 +317,10 @@ export const EmulatorPanel: React.FC = () => {
 
   // rp2350 requestAnimationFrame loop handle
   const rp2350LoopRef = useRef<number | null>(null);
+
+  // PiTrex ARM32 interpreter loop handle and core instance
+  const pitrexLoopRef = useRef<number | null>(null);
+  const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
   
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
@@ -2277,7 +2281,7 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null }) => {
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
       
       // Guardar última ROM compilada con su proyecto
@@ -2316,11 +2320,142 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
-      // ── pitrex / uvm2 path: hardware-only targets, no in-browser emulation ──
-      if (payload.target === 'pitrex' || payload.target === 'uvm2') {
-        console.log(`[EmulatorPanel] ${payload.target} target — hardware only, no browser emulation`);
+      // ── uvm2 path: hardware-only target, no in-browser emulation ──
+      if (payload.target === 'uvm2') {
+        console.log('[EmulatorPanel] uvm2 target — hardware only, no browser emulation');
         setPitrexImgPath(payload.binPath);
         setShowPitrexOverlay(true);
+        return;
+      }
+
+      // ── pitrex path: ARM32 interpreter + vector renderer ──
+      if (payload.target === 'pitrex') {
+        setShowPitrexOverlay(false);
+        if (!payload.sFileText) {
+          console.warn('[EmulatorPanel] pitrex: no .s file text in payload — cannot start emulator');
+          setPitrexImgPath(payload.binPath);
+          setShowPitrexOverlay(true);
+          return;
+        }
+        try {
+          // Stop JSVecX
+          const vecx = (window as any).vecx;
+          if (vecx) vecx.stop();
+
+          // Cancel any existing pitrex loop
+          if (pitrexLoopRef.current !== null) {
+            cancelAnimationFrame(pitrexLoopRef.current);
+            pitrexLoopRef.current = null;
+          }
+
+          // Dynamically import PitrexCore to avoid bundling it unless needed
+          const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
+          const core = new PitrexCore();
+          core.loadAssembly(payload.sFileText);
+          pitrexCoreRef.current = core;
+
+          if (!core.isReady()) {
+            console.error('[EmulatorPanel] PitrexCore failed to load assembly');
+            return;
+          }
+
+          // Clear canvas
+          if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+          }
+
+          // PiTrex coordinate → canvas pixel conversion constants
+          // PiTrex range: ±9600 x, ±12800 y (VPy ±96/128 × 100)
+          // Canvas: 330×410 pixels, center at (165, 205)
+          const PITREX_MAX_X = 9600;
+          const PITREX_MAX_Y = 12800;
+
+          const TARGET_MS = 1000 / 50;  // 50 Hz (PiTrex default)
+          let lastFrameTs = 0;
+          let pitrexFrameCount = 0;
+
+          const loop = (ts: number) => {
+            pitrexLoopRef.current = requestAnimationFrame(loop);
+            const elapsed = ts - lastFrameTs;
+            if (elapsed < TARGET_MS) return;
+            lastFrameTs = ts - (elapsed % TARGET_MS);
+
+            if (useDebugStore.getState().state !== 'running') return;
+
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            const W = canvas.width;
+            const H = canvas.height;
+            const scaleX = (W / 2) / PITREX_MAX_X;
+            const scaleY = (H / 2) / PITREX_MAX_Y;
+            const cx = W / 2;
+            const cy = H / 2;
+
+            // Feed input to the interpreter before running the frame
+            const kb = inputManager.update();
+            pitrexCoreRef.current?.setInput(kb.x, kb.y, kb.buttons & 0xF);
+
+            // Clear frame
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, W, H);
+
+            // Run one game frame
+            const result = pitrexCoreRef.current?.runFrame() ?? { segments: [], texts: [], timeout: false };
+            const { segments, texts, timeout } = result;
+
+            // Render vector segments
+            for (const seg of segments) {
+              if (seg.intensity <= 0) continue;
+              const x0p = cx + seg.x0 * scaleX;
+              const y0p = cy - seg.y0 * scaleY;  // y inverted (Vectrex y = up)
+              const x1p = cx + seg.x1 * scaleX;
+              const y1p = cy - seg.y1 * scaleY;
+              const bright = Math.min(seg.intensity, 127);
+              const lum = Math.round(bright * 255 / 127);
+              ctx.strokeStyle = `rgb(${lum},${lum},${lum})`;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(x0p, y0p);
+              ctx.lineTo(x1p, y1p);
+              ctx.stroke();
+            }
+
+            // Render text segments (from v_printStringRaster)
+            for (const t of texts) {
+              const px = cx + t.x * scaleX;
+              const py = cy - t.y * scaleY;
+              const fontSize = Math.max(10, Math.round(t.size * 3));
+              ctx.fillStyle = '#ffffff';
+              ctx.font = `${fontSize}px monospace`;
+              ctx.fillText(t.text, px, py);
+            }
+
+            // Timeout warning (infinite loop or missing v_WaitRecal)
+            if (timeout) {
+              ctx.fillStyle = 'rgba(255, 80, 80, 0.85)';
+              ctx.font = '11px monospace';
+              ctx.fillText('TIMEOUT — infinite loop?', 8, 16);
+            }
+
+            pitrexFrameCount++;
+            if (pitrexFrameCount <= 5 || pitrexFrameCount % 120 === 0) {
+              console.log(`[EmulatorPanel] pitrex frame ${pitrexFrameCount}: ${segments.length} segs, ${texts.length} texts${timeout ? ' TIMEOUT' : ''}`);
+            }
+          };
+
+          useDebugStore.getState().setState('running');
+          pitrexLoopRef.current = requestAnimationFrame(loop);
+          console.log('[EmulatorPanel] pitrex RAF loop started');
+        } catch (e) {
+          console.error('[EmulatorPanel] Failed to start pitrex emulator:', e);
+        }
         return;
       }
 
@@ -2341,6 +2476,13 @@ export const EmulatorPanel: React.FC = () => {
             // Stop JSVecX internal loop (it drives the M6809 path)
             const vecx = (window as any).vecx;
             if (vecx) vecx.stop();
+
+            // Cancel any existing pitrex loop
+            if (pitrexLoopRef.current !== null) {
+              cancelAnimationFrame(pitrexLoopRef.current);
+              pitrexLoopRef.current = null;
+              pitrexCoreRef.current = null;
+            }
 
             // Cancel any previous rp2350 RAF loop
             if (rp2350LoopRef.current !== null) {
@@ -2403,12 +2545,18 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
 
-        // Detener emulador antes de cargar (y cancelar loop rp2350 si estaba activo)
+        // Detener emulador antes de cargar (y cancelar loop rp2350/pitrex si estaba activo)
         console.log('[EmulatorPanel] Stopping emulator before load...');
         if (rp2350LoopRef.current !== null) {
           cancelAnimationFrame(rp2350LoopRef.current);
           rp2350LoopRef.current = null;
           console.log('[EmulatorPanel] rp2350 rAF loop cancelled');
+        }
+        if (pitrexLoopRef.current !== null) {
+          cancelAnimationFrame(pitrexLoopRef.current);
+          pitrexLoopRef.current = null;
+          pitrexCoreRef.current = null;
+          console.log('[EmulatorPanel] pitrex rAF loop cancelled');
         }
         vecx.stop();
         console.log('[EmulatorPanel] Emulator stopped');
