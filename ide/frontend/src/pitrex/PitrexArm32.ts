@@ -421,7 +421,10 @@ const SDK_STUBS: Record<string, SdkStub> = {
     if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY2 * 32767 / 127));
   },
   'v_printStringRaster':     (s) => {
-    // r0=x, r1=y, r2=str_ptr, r3=size
+    // Called via pitrex_print_text / pitrex_print_number wrappers:
+    //   r0 = VPy_y, r1 = VPy_x, r2 = str_ptr, r3 = size
+    // (wrappers push args in [y,x,str] order and pop to r0=y, r1=x)
+    // Convert VPy units → PiTrex units (×100) to match v_directDraw32 scale.
     const strPtr = s.regs[2];
     let text = '';
     for (let i = 0; i < 64; i++) {
@@ -430,7 +433,7 @@ const SDK_STUBS: Record<string, SdkStub> = {
       text += String.fromCharCode(ch);
     }
     if (text.length > 0) {
-      s.texts.push({ x: s.regs[0], y: s.regs[1], text, size: s.regs[3] });
+      s.texts.push({ x: s.regs[1] * 100, y: s.regs[0] * 100, text, size: s.regs[3] });
     }
   },
   'RPI_AuxUartInit':         () => {},
