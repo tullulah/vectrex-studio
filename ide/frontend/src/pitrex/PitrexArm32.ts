@@ -855,8 +855,7 @@ function executeOne(s: PitrexArm32State): boolean {
         s.regs[LR] = returnPc;
         s.pc = targetIdx;
       } else {
-        // Unknown function — just continue (treat as no-op)
-        // console.warn(`[PitrexArm32] unknown bl target: ${target}`);
+        // Unknown external function — treat as no-op (SDK or user-defined not in asm)
         s.regs[LR] = returnPc;
       }
       break;
@@ -895,9 +894,11 @@ export function createState(parsed: ParsedAsm): PitrexArm32State {
   // SP starts at 0x00300000 (grows downward)
   regs[SP] = 0x00300000;
 
+  const entryPc = parsed.labels.get('main') ?? parsed.labels.get('game_main') ?? 0;
+
   const s: PitrexArm32State = {
     regs,
-    pc: parsed.labels.get('main') ?? 0,
+    pc: entryPc,
     N: 0, Z: 0, C: 0, V: 0,
     mem: new Map(),
     parsed,

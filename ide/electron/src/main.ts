@@ -1265,11 +1265,26 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           } catch (_e) { /* elf not available */ }
         }
 
+        // For pitrex builds, also read the .s assembly file for the in-browser ARM32 interpreter
+        let sFileText: string | null = null;
+        if (target === 'pitrex') {
+          // Derive .s path from binary path — handle .img, .bin, .elf, or any extension
+          const sPath = binPath.replace(/\.[^.]+$/, '.s');
+          try {
+            sFileText = await fs.readFile(sPath, 'utf8');
+            mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
+          } catch (_e) {
+            // .s file not found at derived path — try sibling with project name
+            console.warn('[main] pitrex: could not load .s from', sPath);
+          }
+        }
+
         // Notify renderer to load binary
         mainWindow?.webContents.send('emu://compiledBin', {
           base64, size: buf.length, binPath, pdbData,
           target: target || 'm6809',
           elfBase64,
+          sFileText,
         });
         resolvePromise({ 
           ok: true, 
