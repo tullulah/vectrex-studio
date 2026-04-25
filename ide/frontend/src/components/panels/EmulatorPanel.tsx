@@ -2427,15 +2427,8 @@ export const EmulatorPanel: React.FC = () => {
               ctx.stroke();
             }
 
-            // Render text segments (from v_printStringRaster)
-            for (const t of texts) {
-              const px = cx + t.x * scaleX;
-              const py = cy - t.y * scaleY;
-              const fontSize = Math.max(10, Math.round(t.size * 3));
-              ctx.fillStyle = '#ffffff';
-              ctx.font = `${fontSize}px monospace`;
-              ctx.fillText(t.text, px, py);
-            }
+            // Render text segments (now rendered as vector segments via drawTextAsSegments)
+            // texts[] is kept for interface compatibility but should be empty
 
             // Timeout warning (infinite loop or missing v_WaitRecal)
             if (timeout) {

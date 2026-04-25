@@ -26,7 +26,7 @@ export interface PitrexSegment {
 }
 
 export interface PitrexTextSegment {
-  x: number; y: number;   // PiTrex coords (×100 scaled)
+  x: number; y: number;   // VPy coords
   text: string;
   size: number;           // from r3 (text scale factor)
 }
@@ -383,6 +383,102 @@ function resolveLdrLiteral(s: PitrexArm32State, operand: string): number {
 
 type SdkStub = (s: PitrexArm32State) => void;
 
+// ---------------------------------------------------------------------------
+// Vectrex vector font — stroke data (matches RP2350 vpy_print_text font)
+// Keys: ASCII code.  Values: flat [cmd, gx, gy, ...] where
+//   cmd=1 → move to (gx,gy),  cmd=2 → draw to (gx,gy)
+//   grid: gx∈[0..4], gy∈[0..6]  (gy=0=bottom, gy=6=top)
+// ---------------------------------------------------------------------------
+const VECTREX_FONT: Record<number, number[]> = {
+  33:  [1,2,6, 2,2,2, 1,2,0, 2,2,1],       // !
+  34:  [1,1,5, 2,1,6, 1,3,5, 2,3,6],        // "
+  43:  [1,2,1, 2,2,5, 1,0,3, 2,4,3],        // +
+  44:  [1,2,1, 2,1,0],                       // ,
+  45:  [1,0,3, 2,4,3],                       // -
+  46:  [1,1,0, 2,2,0],                       // .
+  47:  [1,0,0, 2,4,6],                       // /
+  48:  [1,0,0, 2,4,0, 2,4,6, 2,0,6, 2,0,0], // 0
+  49:  [1,2,0, 2,2,6],                       // 1
+  50:  [1,0,6, 2,4,6, 2,4,3, 2,0,3, 2,0,0, 2,4,0], // 2
+  51:  [1,0,6, 2,4,6, 2,4,0, 2,0,0, 1,4,3, 2,1,3], // 3
+  52:  [1,0,6, 2,0,3, 2,4,3, 1,4,6, 2,4,0], // 4
+  53:  [1,4,6, 2,0,6, 2,0,3, 2,4,3, 2,4,0, 2,0,0], // 5
+  54:  [1,4,6, 2,0,6, 2,0,0, 2,4,0, 2,4,3, 2,0,3], // 6
+  55:  [1,0,6, 2,4,6, 2,2,0],               // 7
+  56:  [1,0,0, 2,4,0, 2,4,6, 2,0,6, 2,0,0, 1,0,3, 2,4,3], // 8
+  57:  [1,4,0, 2,4,6, 2,0,6, 2,0,3, 2,4,3], // 9
+  58:  [1,2,1, 2,2,2, 1,2,4, 2,2,5],        // :
+  59:  [1,2,4, 2,2,5, 1,2,1, 2,1,0],        // ;
+  60:  [1,3,6, 2,0,3, 2,3,0],               // <
+  61:  [1,0,4, 2,4,4, 1,0,2, 2,4,2],        // =
+  62:  [1,1,6, 2,4,3, 2,1,0],               // >
+  63:  [1,0,6, 2,4,6, 2,4,4, 2,2,3, 1,2,1, 2,2,2], // ?
+  65:  [1,0,0, 2,2,6, 2,4,0, 1,0,3, 2,4,3], // A
+  66:  [1,0,0, 2,0,6, 2,3,6, 2,3,3, 2,0,3, 2,3,3, 2,3,0, 2,0,0], // B
+  67:  [1,4,6, 2,0,6, 2,0,0, 2,4,0],        // C
+  68:  [1,0,0, 2,0,6, 2,3,6, 2,4,5, 2,4,1, 2,3,0, 2,0,0], // D
+  69:  [1,4,0, 2,0,0, 2,0,6, 2,4,6, 1,0,3, 2,3,3], // E
+  70:  [1,0,0, 2,0,6, 2,4,6, 1,0,3, 2,3,3], // F
+  71:  [1,4,6, 2,0,6, 2,0,0, 2,4,0, 2,4,3, 2,2,3], // G
+  72:  [1,0,0, 2,0,6, 1,4,0, 2,4,6, 1,0,3, 2,4,3], // H
+  73:  [1,1,0, 2,3,0, 1,2,0, 2,2,6, 1,1,6, 2,3,6], // I
+  74:  [1,0,1, 2,1,0, 2,4,0, 2,4,6, 1,1,6, 2,3,6], // J
+  75:  [1,0,0, 2,0,6, 1,0,3, 2,4,6, 1,0,3, 2,4,0], // K
+  76:  [1,0,6, 2,0,0, 2,4,0],               // L
+  77:  [1,0,0, 2,0,6, 2,2,3, 2,4,6, 2,4,0], // M
+  78:  [1,0,0, 2,0,6, 2,4,0, 2,4,6],        // N
+  79:  [1,0,0, 2,4,0, 2,4,6, 2,0,6, 2,0,0], // O
+  80:  [1,0,0, 2,0,6, 2,3,6, 2,4,5, 2,4,4, 2,3,3, 2,0,3], // P
+  81:  [1,0,0, 2,4,0, 2,4,6, 2,0,6, 2,0,0, 1,3,1, 2,4,0], // Q
+  82:  [1,0,0, 2,0,6, 2,3,6, 2,4,5, 2,4,4, 2,3,3, 2,0,3, 2,4,0], // R
+  83:  [1,4,6, 2,0,6, 2,0,3, 2,4,3, 2,4,0, 2,0,0], // S
+  84:  [1,0,6, 2,4,6, 1,2,6, 2,2,0],        // T
+  85:  [1,0,6, 2,0,0, 2,4,0, 2,4,6],        // U
+  86:  [1,0,6, 2,2,0, 2,4,6],               // V
+  87:  [1,0,6, 2,1,0, 2,2,3, 2,3,0, 2,4,6], // W
+  88:  [1,0,0, 2,4,6, 1,0,6, 2,4,0],        // X
+  89:  [1,0,6, 2,2,3, 2,4,6, 1,2,3, 2,2,0], // Y
+  90:  [1,0,6, 2,4,6, 2,0,0, 2,4,0],        // Z
+};
+// Lowercase a-z map to uppercase A-Z glyphs
+for (let c = 97; c <= 122; c++) VECTREX_FONT[c] = VECTREX_FONT[c - 32];
+
+/**
+ * Render a text string as vector segments at VPy coordinates (x, y).
+ * scale: same as TEXT_SIZE (default 5 for pitrex_print_text).
+ * glyph grid: gx∈[0..4], gy∈[0..6], scale gives size in VPy units.
+ * Coordinates multiplied by PITREX_COORD_SCALE to match v_directDraw32.
+ */
+const PITREX_COORD_SCALE = 100;  // must match pitrex_draw_line ×100 multiplier
+
+function drawTextAsSegments(
+  s: PitrexArm32State, x: number, y: number, text: string, scale: number,
+): void {
+  if (scale <= 0) scale = 5;
+  const intensity = 100;
+  let curX = x * PITREX_COORD_SCALE;
+  const baseY = y * PITREX_COORD_SCALE;
+  const charAdv = ((7 * scale) >> 1) * PITREX_COORD_SCALE;
+  for (const rawCh of text) {
+    const cc = rawCh.charCodeAt(0);
+    if (cc === 0 || cc >= 0x80) break;
+    const glyph = VECTREX_FONT[cc];
+    if (glyph) {
+      let penX = 0, penY = 0;
+      for (let i = 0; i < glyph.length; i += 3) {
+        const cmd = glyph[i];
+        const ax  = curX + ((glyph[i + 1] * scale) >> 1) * PITREX_COORD_SCALE;
+        const ay  = baseY + ((glyph[i + 2] * scale) >> 1) * PITREX_COORD_SCALE;
+        if (cmd === 2) {
+          s.segments.push({ x0: penX, y0: penY, x1: ax, y1: ay, intensity });
+        }
+        penX = ax; penY = ay;
+      }
+    }
+    curX += charAdv;
+  }
+}
+
 const SDK_STUBS: Record<string, SdkStub> = {
   'v_WaitRecal': (s) => {
     s.waitRecalCalled = true;
@@ -421,19 +517,17 @@ const SDK_STUBS: Record<string, SdkStub> = {
     if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY2 * 32767 / 127));
   },
   'v_printStringRaster':     (s) => {
-    // Called via pitrex_print_text / pitrex_print_number wrappers:
-    //   r0 = VPy_y, r1 = VPy_x, r2 = str_ptr, r3 = size
-    // (wrappers push args in [y,x,str] order and pop to r0=y, r1=x)
-    // Convert VPy units → PiTrex units (×100) to match v_directDraw32 scale.
+    // pitrex_print_text / pitrex_print_number call with:
+    //   r0=x (VPy units), r1=y (VPy units), r2=str_ptr, r3=size
     const strPtr = s.regs[2];
     let text = '';
     for (let i = 0; i < 64; i++) {
       const ch = memRead8(s, strPtr + i);
-      if (ch === 0 || ch >= 0x80) break;  // null or Vectrex high-bit terminator
+      if (ch === 0 || ch >= 0x80) break;
       text += String.fromCharCode(ch);
     }
     if (text.length > 0) {
-      s.texts.push({ x: s.regs[1] * 100, y: s.regs[0] * 100, text, size: s.regs[3] });
+      drawTextAsSegments(s, s.regs[0], s.regs[1], text, s.regs[3]);
     }
   },
   'RPI_AuxUartInit':         () => {},
