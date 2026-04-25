@@ -203,57 +203,64 @@ fn emit_pitrex_draw_line_rel() -> String {
 
 fn emit_pitrex_draw_vector() -> String {
     // pitrex_draw_vector(r0 = asset_ptr)
-    // asset_ptr → .vec binary: [path_count u16, per_path: [seg_count u16, segs...]]
-    // Each segment: [dx i8, dy i8]  — but .vec uses int16 pairs in a flat hword table
-    // Actually in ARM backend .vec is stored as: u16 num_paths, then per path:
-    //   u16 num_segs, then num_segs pairs of i16 (dx, dy)
-    // We iterate paths and segments, calling pitrex_draw_line for each segment.
-    // Between paths we move without drawing (brightness=0).
+    //
+    // Asset layout emitted by vpy_codegen::pitrex::assets::emit_vec_resource:
+    //   _NAME_VECTORS:
+    //       .word  path_count
+    //       .word  path0_addr, path1_addr, ...
+    //   _NAME_PATHk:
+    //       .byte  intensity
+    //       .byte  y_start, x_start, 0x00, 0x00     @ move-to header
+    //       .byte  0xFF, dy, dx                     @ N draw segments
+    //       .byte  0x02                             @ end-of-path marker
+    //
+    // We walk the pointer table, then for each path: reset the beam to the
+    // asset centre, perform a non-emitting move to (x_start, y_start), and
+    // then emit each `0xFF, dy, dx` triplet as a draw segment. `0x02` ends
+    // the path.
     //
     // Register usage (callee-save):
-    //   r4 = asset_ptr (cursor advancing through data)
-    //   r5 = path index
-    //   r6 = path count
-    //   r7 = seg count
-    // Plus nested calls use r0-r3.
+    //   r4 = asset cursor (header / pointer table)
+    //   r5 = path_count
+    //   r6 = path index
+    //   r7 = path data cursor (per-path)
     let mut s = String::new();
     s.push_str("@ pitrex_draw_vector(r0=asset_ptr)\n");
     s.push_str(".global pitrex_draw_vector\n.type pitrex_draw_vector, %function\npitrex_draw_vector:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
-    s.push_str("    mov     r4, r0              @ r4 = asset ptr\n");
-    // read num_paths = *r4++ (u16)
-    s.push_str("    ldrh    r6, [r4], #2        @ r6 = num_paths\n");
-    s.push_str("    mov     r5, #0              @ path index = 0\n");
+    s.push_str("    mov     r4, r0              @ r4 = asset header ptr\n");
+    s.push_str("    ldr     r5, [r4], #4        @ r5 = path_count, r4 -> ptr table\n");
+    s.push_str("    mov     r6, #0\n");
     s.push_str("dv_path_loop:\n");
-    s.push_str("    cmp     r5, r6\n");
+    s.push_str("    cmp     r6, r5\n");
     s.push_str("    bge     dv_done\n");
-    // read num_segs = *r4++ (u16)
-    s.push_str("    ldrh    r7, [r4], #2        @ r7 = num_segs\n");
-    // first "segment" is actually the move-to (start position of path)
-    // Actually in VPy .vec format the first entry is the absolute start point.
-    // We treat it as a MOVE (brightness=0).
-    s.push_str("    ldrsh   r0, [r4], #2        @ dx (first entry = start_x relative)\n");
-    s.push_str("    ldrsh   r1, [r4], #2        @ dy (first entry = start_y relative)\n");
-    s.push_str("    mov     r2, #0              @ brightness=0 for move\n");
-    // Scale and move
+    s.push_str("    ldr     r7, [r4], #4        @ r7 = path data ptr\n");
+    // Reset beam to (0,0) for each path — the move-to coords are relative to
+    // the asset centre.
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    ldr     r1, =PITREX_CUR_X\n    str     r0, [r1]\n");
+    s.push_str("    ldr     r1, =PITREX_CUR_Y\n    str     r0, [r1]\n");
+    s.push_str("    add     r7, r7, #1          @ skip intensity byte\n");
+    s.push_str("    ldrsb   r1, [r7], #1        @ dy = y_start\n");
+    s.push_str("    ldrsb   r0, [r7], #1        @ dx = x_start\n");
+    s.push_str("    add     r7, r7, #2          @ skip 2 hdr padding bytes\n");
+    s.push_str("    mov     r2, #0              @ brightness 0 = move only\n");
     s.push_str("    push    {r4, r5, r6, r7}\n");
-    s.push_str("    bl      pitrex_draw_line_rel @ move to start of path\n");
-    s.push_str("    pop     {r4, r5, r6, r7}\n");
-    // remaining segments are draw operations
-    s.push_str("    mov     r12, #1\n         @ seg index = 1\n");
-    s.push_str("dv_seg_loop:\n");
-    s.push_str("    cmp     r12, r7\n");
-    s.push_str("    bge     dv_seg_done\n");
-    s.push_str("    ldrsh   r0, [r4], #2        @ dx\n");
-    s.push_str("    ldrsh   r1, [r4], #2        @ dy\n");
-    s.push_str("    mov     r2, #127            @ full brightness\n");
-    s.push_str("    push    {r4, r5, r6, r7, r12}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r12}\n");
-    s.push_str("    add     r12, r12, #1\n");
+    s.push_str("    pop     {r4, r5, r6, r7}\n");
+    s.push_str("dv_seg_loop:\n");
+    s.push_str("    ldrb    r0, [r7], #1        @ marker (0xFF=draw, 0x02=end)\n");
+    s.push_str("    cmp     r0, #2\n");
+    s.push_str("    beq     dv_seg_done\n");
+    s.push_str("    ldrsb   r1, [r7], #1        @ dy\n");
+    s.push_str("    ldrsb   r0, [r7], #1        @ dx\n");
+    s.push_str("    mov     r2, #127            @ full brightness\n");
+    s.push_str("    push    {r4, r5, r6, r7}\n");
+    s.push_str("    bl      pitrex_draw_line_rel\n");
+    s.push_str("    pop     {r4, r5, r6, r7}\n");
     s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_seg_done:\n");
-    s.push_str("    add     r5, r5, #1\n");
+    s.push_str("    add     r6, r6, #1\n");
     s.push_str("    b       dv_path_loop\n");
     s.push_str("dv_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
@@ -265,87 +272,81 @@ fn emit_pitrex_draw_vector() -> String {
 
 fn emit_pitrex_draw_vector_ex() -> String {
     // pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity)
-    // Like pitrex_draw_vector but with offset (ox,oy) added and optional X mirror.
-    // Intensity from stack replaces the hardcoded 127 in draw segments.
     //
-    // On function entry (ARM AAPCS):
-    //   [sp+0] = intensity  (pushed by caller, before our PUSH {r4..lr} which adds 24 bytes)
-    //   So after "push {r4,r5,r6,r7,r8,lr}" (6 regs × 4 = 24 bytes):
-    //   [sp+24] = intensity
+    // Same asset layout as pitrex_draw_vector (path-pointer table → byte
+    // stream paths terminated with 0x02). Differences from the simple
+    // version:
+    //   * The beam is reset to (ox*100, oy*100) at the start of each path
+    //     so the relative move-to + segments end up centred on (ox, oy).
+    //   * If `mirror` (r7) == 1, all dx values are negated.
+    //   * Intensity comes from the stack instead of being hard-coded to 127.
+    //
+    // After `push {r4..r9, lr}` (28 bytes), the caller's [sp+0]=intensity
+    // is at [sp+28]. We then push 8 more bytes (path_count, path_idx) so
+    // throughout the loop intensity stays in r8 (preserved).
+    //
+    // Register usage (callee-save):
+    //   r4 = asset header cursor, then per-path data cursor
+    //   r5 = ox
+    //   r6 = oy
+    //   r7 = mirror flag
+    //   r8 = intensity
+    //   r9 = scratch
     let mut s = String::new();
     s.push_str("@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity)\n");
     s.push_str(".global pitrex_draw_vector_ex\n.type pitrex_draw_vector_ex, %function\npitrex_draw_vector_ex:\n");
-    // Save r4-r8, lr (6 regs = 24 bytes pushed)
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
-    s.push_str("    mov     r4, r0              @ r4 = asset ptr\n");
-    s.push_str("    mov     r5, r1              @ r5 = ox\n");
-    s.push_str("    mov     r6, r2              @ r6 = oy\n");
-    s.push_str("    mov     r7, r3              @ r7 = mirror flag\n");
-    s.push_str("    ldr     r8, [sp, #24]       @ r8 = intensity (5th arg)\n");
-    // read num_paths
-    s.push_str("    ldrh    r3, [r4], #2        @ r3 = num_paths\n");
-    s.push_str("    push    {r3}               @ save num_paths\n");
-    s.push_str("    mov     r3, #0              @ path index\n");
-    s.push_str("    push    {r3}               @ save path index\n");
-    // path loop: [sp+0]=path_idx, [sp+4]=num_paths
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes\n");
+    s.push_str("    mov     r4, r0              @ asset header ptr\n");
+    s.push_str("    mov     r5, r1              @ ox\n");
+    s.push_str("    mov     r6, r2              @ oy\n");
+    s.push_str("    mov     r7, r3              @ mirror flag\n");
+    s.push_str("    ldr     r8, [sp, #28]       @ intensity (5th arg)\n");
+    s.push_str("    ldr     r9, [r4], #4        @ path_count\n");
+    s.push_str("    push    {r9}                @ [sp+0] = path_count\n");
+    s.push_str("    mov     r9, #0\n");
+    s.push_str("    push    {r9}                @ [sp+0] = path_idx, [sp+4] = path_count\n");
     s.push_str("dvex_path_loop:\n");
     s.push_str("    ldr     r0, [sp]            @ path_idx\n");
-    s.push_str("    ldr     r1, [sp, #4]        @ num_paths\n");
+    s.push_str("    ldr     r1, [sp, #4]        @ path_count\n");
     s.push_str("    cmp     r0, r1\n");
     s.push_str("    bge     dvex_done\n");
-    // read num_segs
-    s.push_str("    ldrh    r3, [r4], #2        @ r3 = num_segs\n");
-    s.push_str("    push    {r3}               @ save num_segs\n");
-    // first seg = move-to (brightness 0)
-    s.push_str("    ldrsh   r0, [r4], #2        @ raw dx\n");
-    s.push_str("    ldrsh   r1, [r4], #2        @ raw dy\n");
-    // apply mirror: if mirror==1, negate dx
-    s.push_str("    cmp     r7, #1\n");
-    s.push_str("    it      eq\n");
-    s.push_str("    rsbeq   r0, r0, #0          @ dx = -dx if mirror\n");
-    // add offset
-    s.push_str("    add     r0, r0, r5          @ dx += ox\n");
-    s.push_str("    add     r1, r1, r6          @ dy += oy\n");
-    // call pitrex_draw_line_rel with brightness=0 (move)
-    s.push_str("    mov     r2, #0\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8}\n");
+    s.push_str("    ldr     r9, [r4], #4        @ r9 = path data ptr\n");
+    // Seed beam at (ox*100, oy*100) so the path-relative move-to and
+    // segments compose to absolute screen coordinates centred on (ox, oy).
+    s.push_str("    mov     r0, #100\n");
+    s.push_str("    mul     r1, r5, r0          @ ox*100\n");
+    s.push_str("    ldr     r2, =PITREX_CUR_X\n    str     r1, [r2]\n");
+    s.push_str("    mul     r1, r6, r0          @ oy*100\n");
+    s.push_str("    ldr     r2, =PITREX_CUR_Y\n    str     r1, [r2]\n");
+    s.push_str("    add     r9, r9, #1          @ skip intensity byte\n");
+    s.push_str("    ldrsb   r1, [r9], #1        @ dy = y_start\n");
+    s.push_str("    ldrsb   r0, [r9], #1        @ dx = x_start\n");
+    s.push_str("    add     r9, r9, #2          @ skip 2 hdr padding bytes\n");
+    s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0          @ mirror dx\n");
+    s.push_str("    mov     r2, #0              @ move only\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8}\n");
-    // segment draw loop: seg_idx starts at 1
-    s.push_str("    mov     r3, #1\n");
-    s.push_str("    push    {r3}               @ seg_idx\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("dvex_seg_loop:\n");
-    // [sp+0]=seg_idx [sp+4]=num_segs [sp+8]=path_idx [sp+12]=num_paths
-    s.push_str("    ldr     r0, [sp]            @ seg_idx\n");
-    s.push_str("    ldr     r1, [sp, #4]        @ num_segs\n");
-    s.push_str("    cmp     r0, r1\n");
-    s.push_str("    bge     dvex_seg_done\n");
-    s.push_str("    ldrsh   r0, [r4], #2        @ raw dx\n");
-    s.push_str("    ldrsh   r1, [r4], #2        @ raw dy\n");
-    s.push_str("    cmp     r7, #1\n");
-    s.push_str("    it      eq\n");
-    s.push_str("    rsbeq   r0, r0, #0\n");
-    s.push_str("    add     r0, r0, r5\n");
-    s.push_str("    add     r1, r1, r6\n");
-    s.push_str("    mov     r2, r8              @ use stored intensity\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8}\n");
+    s.push_str("    ldrb    r0, [r9], #1\n");
+    s.push_str("    cmp     r0, #2\n");
+    s.push_str("    beq     dvex_seg_done\n");
+    s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
+    s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
+    s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0\n");
+    s.push_str("    mov     r2, r8              @ intensity\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8}\n");
-    s.push_str("    ldr     r0, [sp]\n");
-    s.push_str("    add     r0, r0, #1\n");
-    s.push_str("    str     r0, [sp]            @ seg_idx++\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_seg_done:\n");
-    s.push_str("    add     sp, sp, #4          @ pop seg_idx\n");
-    s.push_str("    add     sp, sp, #4          @ pop num_segs\n");
-    // increment path_idx
     s.push_str("    ldr     r0, [sp]\n");
     s.push_str("    add     r0, r0, #1\n");
     s.push_str("    str     r0, [sp]            @ path_idx++\n");
     s.push_str("    b       dvex_path_loop\n");
     s.push_str("dvex_done:\n");
-    s.push_str("    add     sp, sp, #8          @ pop path_idx + num_paths\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+    s.push_str("    add     sp, sp, #8          @ pop path_idx + path_count\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }

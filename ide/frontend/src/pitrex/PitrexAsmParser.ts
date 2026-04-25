@@ -155,6 +155,7 @@ const EXTERN_BASE  = 0x00210000;  // Extern symbols (currentJoy1X etc.)
 const STRING_BASE  = 0xF0000000;  // Inline string labels
 const BSS_BASE     = 0x00200000;  // BSS labels (PITREX_CUR_X etc.)
 const RODATA_BASE  = 0x00208000;  // Read-only data arrays
+const TEXT_DATA_BASE = 0x00400000; // Text-section data labels (assets emitted as .byte/.word)
 
 export function parseAsm(src: string): ParsedAsm {
   const lines = src.split('\n');
@@ -186,6 +187,39 @@ export function parseAsm(src: string): ParsedAsm {
   let lastRodataLabel: string | null = null;
   let lastRodataAddr = 0;
 
+  // Text-section data (.byte/.word/.short/.hword under labels — used for the
+  // vector asset tables emitted by pitrex/assets.rs).
+  let textDataNext = TEXT_DATA_BASE;
+  let textDataActive = false;
+  // Forward references inside `.word SYMBOL` data — patched after the main
+  // pass once every label has been seen.
+  const pendingTextRefs: Array<{ addr: number; symbol: string }> = [];
+
+  const writeMemByte = (addr: number, val: number): void => {
+    const aligned = addr & ~3;
+    const shift   = (addr & 3) * 8;
+    const prev    = initMemory.get(aligned) ?? 0;
+    initMemory.set(aligned, ((prev & ~(0xFF << shift)) | (((val & 0xFF) << shift) >>> 0)) | 0);
+  };
+  const writeMemHalf = (addr: number, val: number): void => {
+    if ((addr & 1) !== 0) {
+      writeMemByte(addr,     val & 0xFF);
+      writeMemByte(addr + 1, (val >>> 8) & 0xFF);
+      return;
+    }
+    const aligned = addr & ~3;
+    const shift   = (addr & 2) * 8;
+    const prev    = initMemory.get(aligned) ?? 0;
+    initMemory.set(aligned, ((prev & ~(0xFFFF << shift)) | (((val & 0xFFFF) << shift) >>> 0)) | 0);
+  };
+  const writeMemWord = (addr: number, val: number): void => {
+    if ((addr & 3) === 0) {
+      initMemory.set(addr, val | 0);
+      return;
+    }
+    for (let i = 0; i < 4; i++) writeMemByte(addr + i, (val >>> (i * 8)) & 0xFF);
+  };
+
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     let line = lines[lineIdx];
 
@@ -200,6 +234,7 @@ export function parseAsm(src: string): ParsedAsm {
 
     // ── Section switches ────────────────────────────────────────────────
     if (line.startsWith('.section')) {
+      textDataActive = false;
       if (line.includes('.bss'))    { section = 'bss';    continue; }
       if (line.includes('.rodata')) { section = 'rodata'; continue; }
       if (line.includes('.text'))   { section = 'text';   continue; }
@@ -353,8 +388,46 @@ export function parseAsm(src: string): ParsedAsm {
           line = rest;
           // Fall through to instruction parsing below
         } else {
+          // Reset text-data tracking — if data directives follow this label,
+          // they belong to a fresh data block addressed by `lastTextLabel`.
+          textDataActive = false;
           continue;
         }
+      }
+
+      // ── Text-section data directives (.byte / .word / .short / .hword) ──
+      // Asset tables emitted by pitrex/assets.rs live in the text section
+      // and use these directives. Bind them to the most recent label and
+      // store the bytes in initMemory so the runtime ldr/ldrb can read them.
+      const dataMatch = line.match(/^\.(byte|word|short|hword)\s*(.*)$/);
+      if (dataMatch) {
+        const kind = dataMatch[1];
+        const rest = dataMatch[2].trim();
+
+        if (!textDataActive && lastTextLabel) {
+          textDataNext = (textDataNext + 3) & ~3;
+          // Override any prior code-label entry: this label addresses data,
+          // not an instruction index. Branches to it shouldn't happen anyway.
+          symbols.set(lastTextLabel, { kind: 'rodata', value: textDataNext });
+          textDataActive = true;
+        }
+
+        const tokens = rest.split(',').map(t => t.trim()).filter(Boolean);
+        for (const tok of tokens) {
+          const num = parseNumber(tok);
+          if (kind === 'word') {
+            if (num !== null) writeMemWord(textDataNext, num);
+            else              pendingTextRefs.push({ addr: textDataNext, symbol: tok });
+            textDataNext += 4;
+          } else if (kind === 'short' || kind === 'hword') {
+            writeMemHalf(textDataNext, (num ?? 0) & 0xFFFF);
+            textDataNext += 2;
+          } else {
+            writeMemByte(textDataNext, (num ?? 0) & 0xFF);
+            textDataNext += 1;
+          }
+        }
+        continue;
       }
 
       // Skip remaining directives in text section (after label handling,
@@ -387,14 +460,19 @@ export function parseAsm(src: string): ParsedAsm {
       };
 
       instructions.push(instr);
+      textDataActive = false;
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Post-process: resolve =SYMBOL in operands to numeric values, record which
-  // are ldr-literal operands so the executor doesn't need to re-scan symbols.
-  // We do this as a lightweight pass — the executor handles it at runtime.
+  // Post-process: resolve forward `.word SYMBOL` references inside text-data
+  // blocks (e.g. the asset pointer tables). Symbols defined later in the file
+  // are guaranteed to be known by now.
   // ---------------------------------------------------------------------------
+  for (const ref of pendingTextRefs) {
+    const sym = symbols.get(ref.symbol);
+    if (sym) writeMemWord(ref.addr, sym.value);
+  }
 
   return { equs, symbols, labels, numericLabels, strings, instructions, initMemory };
 }

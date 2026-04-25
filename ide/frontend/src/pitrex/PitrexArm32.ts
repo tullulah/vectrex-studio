@@ -251,15 +251,24 @@ function resolveOp(s: PitrexArm32State, tok: string): number {
 
 /**
  * Parse a memory operand like "[r1]", "[sp, #8]", "[r4], #2".
- * Returns { base, offset, postInc } and modifies the base register if postInc.
+ *
+ * splitOperands cuts on top-level commas, so post-increment forms come in as
+ * TWO tokens: ["[r4]", "#2"]. Pass the remaining tail as `extra` so we can
+ * detect the post-inc immediate.
  */
-function parseMemOp(s: PitrexArm32State, tok: string): { addr: number; postIncReg: number; postIncVal: number } {
+function parseMemOp(
+  s: PitrexArm32State,
+  tok: string,
+  extra?: string,
+): { addr: number; postIncReg: number; postIncVal: number } {
   tok = tok.trim();
-  // Post-increment: "[r4], #2"
-  const postMatch = tok.match(/^\[(\w+)\]\s*,\s*#(-?\d+)/);
+
+  // Inline post-increment in a single token: "[r4], #2"
+  const postMatch = tok.match(/^\[(\w+)\]\s*,\s*#(-?(?:0x[\da-fA-F]+|\d+))/);
   if (postMatch) {
     const rn  = regIdx(postMatch[1]);
-    const inc = parseInt(postMatch[2], 10);
+    const incStr = postMatch[2];
+    const inc = incStr.startsWith('0x') ? parseInt(incStr.slice(2), 16) : parseInt(incStr, 10);
     return { addr: getReg(s, rn), postIncReg: rn, postIncVal: inc };
   }
   // Offset: "[r1, #8]"
@@ -276,10 +285,19 @@ function parseMemOp(s: PitrexArm32State, tok: string): { addr: number; postIncRe
     const rm = regIdx(regOffMatch[2]);
     return { addr: (getReg(s, rn) + getReg(s, rm)) | 0, postIncReg: -1, postIncVal: 0 };
   }
-  // Simple: "[r1]"
-  const simpleMatch = tok.match(/^\[(\w+)\]/);
+  // Simple: "[r1]" — possibly followed by a post-inc immediate split into the
+  // next operand token (e.g. ldrb r0, [r4], #1 → ["[r4]", "#1"]).
+  const simpleMatch = tok.match(/^\[(\w+)\]\s*$/);
   if (simpleMatch) {
     const rn = regIdx(simpleMatch[1]);
+    if (extra) {
+      const incTok = extra.trim();
+      const m = incTok.match(/^#(-?(?:0x[\da-fA-F]+|\d+))$/);
+      if (m) {
+        const inc = m[1].startsWith('0x') ? parseInt(m[1].slice(2), 16) : parseInt(m[1], 10);
+        return { addr: getReg(s, rn), postIncReg: rn, postIncVal: inc };
+      }
+    }
     return { addr: getReg(s, rn), postIncReg: -1, postIncVal: 0 };
   }
   return { addr: 0, postIncReg: -1, postIncVal: 0 };
@@ -623,7 +641,7 @@ function executeOne(s: PitrexArm32State): boolean {
         // Literal pool load
         setReg(s, rd, resolveLdrLiteral(s, src));
       } else if (src.startsWith('[')) {
-        const { addr, postIncReg, postIncVal } = parseMemOp(s, src);
+        const { addr, postIncReg, postIncVal } = parseMemOp(s, src, operands[2]);
         setReg(s, rd, memRead32(s, addr));
         if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
       }
@@ -633,7 +651,7 @@ function executeOne(s: PitrexArm32State): boolean {
     case 'ldrh': {
       const rd = regIdx(operands[0] ?? '');
       if (rd < 0) break;
-      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '');
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '', operands[2]);
       setReg(s, rd, memRead16(s, addr));  // zero-extended
       if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
       break;
@@ -642,7 +660,7 @@ function executeOne(s: PitrexArm32State): boolean {
     case 'ldrsh': {
       const rd = regIdx(operands[0] ?? '');
       if (rd < 0) break;
-      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '');
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '', operands[2]);
       const raw = memRead16(s, addr);
       setReg(s, rd, ((raw << 16) >> 16));  // sign-extend 16→32
       if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
@@ -652,7 +670,7 @@ function executeOne(s: PitrexArm32State): boolean {
     case 'ldrb': case 'ldrsb': {
       const rd = regIdx(operands[0] ?? '');
       if (rd < 0) break;
-      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '');
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '', operands[2]);
       let raw = memRead8(s, addr);
       if (op === 'ldrsb') raw = ((raw << 24) >> 24);  // sign-extend
       setReg(s, rd, raw);
@@ -664,7 +682,7 @@ function executeOne(s: PitrexArm32State): boolean {
     case 'str': case 'strs': {
       const rs  = regIdx(operands[0] ?? '');
       if (rs < 0) break;
-      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '');
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '', operands[2]);
       memWrite32(s, addr, getReg(s, rs));
       if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
       break;
@@ -673,7 +691,7 @@ function executeOne(s: PitrexArm32State): boolean {
     case 'strh': {
       const rs = regIdx(operands[0] ?? '');
       if (rs < 0) break;
-      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '');
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '', operands[2]);
       memWrite16(s, addr, getReg(s, rs) & 0xFFFF);
       if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
       break;
@@ -682,7 +700,7 @@ function executeOne(s: PitrexArm32State): boolean {
     case 'strb': {
       const rs = regIdx(operands[0] ?? '');
       if (rs < 0) break;
-      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '');
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, operands[1] ?? '', operands[2]);
       memWrite8(s, addr, getReg(s, rs) & 0xFF);
       if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
       break;
