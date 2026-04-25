@@ -1269,6 +1269,12 @@ fn emit_pitrex_random() -> String {
 fn emit_pitrex_j2() -> String {
     let mut s = String::new();
 
+    // Weak fallback for v_readJoystick2Analog — SDK version used if available, otherwise no-op
+    s.push_str(".weak v_readJoystick2Analog\n");
+    s.push_str(".type v_readJoystick2Analog, %function\n");
+    s.push_str("v_readJoystick2Analog:\n");
+    s.push_str("    bx      lr\n\n");
+
     // J2 X — from currentJoy2X (filled by v_readJoystick2Analog)
     s.push_str("@ pitrex_j2_x() → r0 = -1, 0, or +1\n");
     s.push_str(".global pitrex_j2_x\n.type pitrex_j2_x, %function\npitrex_j2_x:\n");

@@ -75,7 +75,9 @@ pub fn generate_pitrex_asm(
         "v_directDraw32", "v_setBrightness",
         "v_printStringRaster",
         "currentJoy1X", "currentJoy1Y", "currentButtonState",
-        "__aeabi_idiv",
+        "currentJoy2X", "currentJoy2Y",
+        "__aeabi_idiv", "__aeabi_idivmod",
+        "RPI_AuxUartInit", "RPI_AuxUartWrite",
     ] {
         asm.push_str(&format!(".extern {sym}\n"));
     }
@@ -87,6 +89,8 @@ pub fn generate_pitrex_asm(
     let (var_addrs, bss_decls) = functions::allocate_globals_bss(module);
     asm.push_str(&bss_decls);
     // PiTrex beam tracker (current draw position in PiTrex coords)
+    // NOTE: all other runtime vars (RAND_SEED, PSG_*, CAMERA_*, TEXT_SIZE etc.)
+    // are allocated as .equ constants by allocate_globals_bss() above.
     asm.push_str("PITREX_CUR_X: .space 4\n");
     asm.push_str("PITREX_CUR_Y: .space 4\n");
     asm.push('\n');
