@@ -55,6 +55,7 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let cam_x     = alloc.alloc(4); decls.push_str(&format!(".equ CAMERA_X, 0x{cam_x:08X}\n"));
     let cam_y     = alloc.alloc(4); decls.push_str(&format!(".equ CAMERA_Y, 0x{cam_y:08X}\n"));
     let txt_sz    = alloc.alloc(4); decls.push_str(&format!(".equ TEXT_SIZE, 0x{txt_sz:08X}\n"));
+    decls.push_str(&format!(".equ PITREX_TEXT_SIZE, 0x{txt_sz:08X}\n")); // alias
     // PSG music sequencer
     let psg_ptr   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_MUSIC_PTR, 0x{psg_ptr:08X}\n"));
     let psg_start = alloc.alloc(4); decls.push_str(&format!(".equ PSG_MUSIC_START, 0x{psg_start:08X}\n"));
@@ -64,6 +65,11 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let sfx_ptr   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_PTR, 0x{sfx_ptr:08X}\n"));
     let sfx_act   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_ACTIVE, 0x{sfx_act:08X}\n"));
     let sfx_dly   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_DELAY, 0x{sfx_dly:08X}\n"));
+    // Level system
+    let lvl_ptr   = alloc.alloc(4); decls.push_str(&format!(".equ LEVEL_DATA_PTR, 0x{lvl_ptr:08X}\n"));
+    let lvl_gpc   = alloc.alloc(4); decls.push_str(&format!(".equ LEVEL_GP_COUNT, 0x{lvl_gpc:08X}\n"));
+    // LEVEL_GP_BUF: 32 GP objects × 8 bytes each (x i16, y i16, vx i16, vy i16)
+    let lvl_buf   = alloc.alloc(256); decls.push_str(&format!(".equ LEVEL_GP_BUF, 0x{lvl_buf:08X}\n"));
     decls.push('\n');
 
     // User globals & locals
@@ -231,7 +237,8 @@ fn emit_function(
     s.push_str(".align 2\n");
     // ARM32: no .thumb_func directive
     s.push_str(&format!(".global {name}\n.type {name}, %function\n{name}:\n"));
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    // Push 6 registers (24 bytes) to maintain 8-byte stack alignment
+    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
 
     for (i, param) in params.iter().enumerate().take(4) {
         let varname = param.to_uppercase();
@@ -246,7 +253,7 @@ fn emit_function(
     for stmt in body {
         s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, None)?);
     }
-    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
     s.push_str("    .ltorg\n\n");
     Ok(s)
 }
@@ -267,11 +274,22 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("@ --- main (PiTrex SDK entry point) ---\n");
     s.push_str(".align 2\n");
     s.push_str(".global main\n.type main, %function\nmain:\n");
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    // Push 8 registers (32 bytes) to maintain 16-byte stack alignment required by NEON
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+
+    // UART debug init (PL011, 921600 baud, 250 MHz clock) — Malban SDK
+    s.push_str("    @ UART debug init\n");
+    s.push_str("    ldr     r0, =921600\n");
+    s.push_str("    mov     r1, #8\n");
+    s.push_str("    ldr     r2, =250000000\n");
+    s.push_str("    bl      RPI_AuxUartInit\n");
+    s.push_str("    ldr     r0, =.Lstr_start\n");
+    s.push_str("    bl      vpy_uart_puts\n");
 
     // PiTrex SDK initialisation
     s.push_str("    @ PiTrex SDK init\n");
     s.push_str("    mov     r0, #1\n    bl      vectrexinit\n");
+    s.push_str("    ldr     r0, =.Lstr_vinit\n    bl      vpy_uart_puts\n");
     s.push_str("    bl      v_init\n");
     s.push_str("    mov     r0, #50\n    bl      v_setRefresh\n\n");
 
@@ -351,14 +369,34 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      v_WaitRecal\n");
     s.push_str("    bl      v_readButtons\n");
     s.push_str("    bl      v_readJoystick1Analog\n");
+    s.push_str("    bl      v_readJoystick2Analog\n");
     s.push_str("    bl      pitrex_music_update\n");
+    s.push_str("    bl      pitrex_sfx_update\n");
 
     if let Some(f) = loop_fn {
         for stmt in &f.body {
             s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("pitrex_game_loop"))?);
         }
     }
-    s.push_str("    b       pitrex_game_loop\n");
+    s.push_str("    b       pitrex_game_loop\n\n");
+
+    // UART helper: vpy_uart_puts(r0=str_ptr) — loops calling RPI_AuxUartWrite
+    s.push_str("@ vpy_uart_puts(r0=str_ptr) — write null-terminated string via UART\n");
+    s.push_str(".type vpy_uart_puts, %function\nvpy_uart_puts:\n");
+    s.push_str("    push    {r4, lr}\n");
+    s.push_str("    mov     r4, r0\n");
+    s.push_str(".Lputs_loop:\n");
+    s.push_str("    ldrb    r0, [r4], #1\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lputs_done\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
+    s.push_str("    b       .Lputs_loop\n");
+    s.push_str(".Lputs_done:\n");
+    s.push_str("    pop     {r4, pc}\n\n");
+
+    // Debug strings
+    s.push_str(".Lstr_start:  .asciz \"VPy PiTrex starting\\r\\n\"\n");
+    s.push_str(".Lstr_vinit:  .asciz \"vectrexinit OK\\r\\n\"\n");
     s.push_str("    .ltorg\n\n");
 
     Ok(s)
@@ -573,7 +611,7 @@ fn emit_stmt(
             if let Some(lbl) = return_label {
                 s.push_str(&format!("    b       {lbl}\n"));
             } else {
-                s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+                s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
             }
             Ok(s)
         }
@@ -582,7 +620,7 @@ fn emit_stmt(
             if let Some(lbl) = return_label {
                 Ok(format!("    b       {lbl}\n"))
             } else {
-                Ok("    pop     {r4, r5, r6, r7, pc}\n".to_string())
+                Ok("    pop     {r4, r5, r6, r7, r8, pc}\n".to_string())
             }
         }
 
@@ -601,6 +639,8 @@ fn emit_stmt(
                 Err("continue outside loop".into())
             }
         }
+
+        Stmt::Pass { .. } => Ok(String::new()),
 
         other => Err(format!("Unsupported statement in PiTrex backend: {:?}", other)),
     }
