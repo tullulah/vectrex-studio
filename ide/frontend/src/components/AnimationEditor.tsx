@@ -42,6 +42,7 @@ interface VanimResource {
   version: string;
   name: string;
   loop: boolean;
+  base_refs: string[];  // static cel layer — drawn before every frame
   frames: VanimFrame[];
 }
 
@@ -66,6 +67,7 @@ const defaultResource: VanimResource = {
   version: '1.0',
   name: 'untitled',
   loop: true,
+  base_refs: [],
   frames: [{ index: 0, duration_ticks: 4, vec_refs: [], paths: [] }],
 };
 
@@ -123,10 +125,38 @@ async function findVecFile(name: string, rootPath: string): Promise<string | nul
 // Canvas drawing
 // ============================================
 
+function drawVecPaths(
+  ctx: CanvasRenderingContext2D,
+  vec: VecResource,
+  toCanvas: (p: VanimPoint) => [number, number],
+  dimmed: boolean
+): void {
+  for (const layer of vec.layers) {
+    if (!layer.visible) continue;
+    for (const path of layer.paths) {
+      if (path.points.length === 0) continue;
+      const brightness = (path.intensity / 127) * (dimmed ? 0.45 : 1.0);
+      const v = Math.round(255 * brightness);
+      ctx.strokeStyle = dimmed ? `rgb(${Math.round(v*0.6)},${v},${Math.round(v*0.6)})` : `rgb(${v},${v},${v})`;
+      ctx.lineWidth = dimmed ? 1 : 1.5;
+      ctx.beginPath();
+      const [x0, y0] = toCanvas(path.points[0]);
+      ctx.moveTo(x0, y0);
+      for (let i = 1; i < path.points.length; i++) {
+        const [xi, yi] = toCanvas(path.points[i]);
+        ctx.lineTo(xi, yi);
+      }
+      if (path.closed && path.points.length > 2) ctx.closePath();
+      ctx.stroke();
+    }
+  }
+}
+
 function drawFrame(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
+  baseRefs: string[],
   frame: VanimFrame,
   selectedPathIdx: number | null,
   hoverPoint: { pathIdx: number; ptIdx: number } | null,
@@ -182,32 +212,34 @@ function drawFrame(
   ctx.lineTo(w, originY);
   ctx.stroke();
 
+  // Draw base_refs (static cel layer) — dimmed green tint to distinguish from frame content
+  ctx.save();
+  baseRefs.forEach((ref) => {
+    const vec = resolvedVecs.get(ref);
+    if (vec) {
+      drawVecPaths(ctx, vec, toCanvas, true);
+    } else {
+      const boxHalf = 40 * scale * zoom;
+      ctx.strokeStyle = '#336633';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(originX - boxHalf, originY - boxHalf, boxHalf * 2, boxHalf * 2);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#336633';
+      ctx.font = `${Math.max(9, 11 * scale)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`[base: ${ref}]`, originX, originY - 8);
+    }
+  });
+  ctx.restore();
+
   // Draw vec_refs — resolved if available, grey placeholder otherwise
   frame.vec_refs.forEach((ref) => {
     const vec = resolvedVecs.get(ref);
     if (vec) {
       ctx.save();
-      for (const layer of vec.layers) {
-        if (!layer.visible) continue;
-        for (const path of layer.paths) {
-          if (path.points.length === 0) continue;
-          const brightness = path.intensity / 127;
-          const v = Math.round(255 * brightness);
-          ctx.strokeStyle = `rgb(${v},${v},${v})`;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          const [x0, y0] = toCanvas(path.points[0]);
-          ctx.moveTo(x0, y0);
-          for (let i = 1; i < path.points.length; i++) {
-            const [xi, yi] = toCanvas(path.points[i]);
-            ctx.lineTo(xi, yi);
-          }
-          if (path.closed && path.points.length > 2) {
-            ctx.closePath();
-          }
-          ctx.stroke();
-        }
-      }
+      drawVecPaths(ctx, vec, toCanvas, false);
       ctx.restore();
     } else {
       // Placeholder for unresolved vec
@@ -402,6 +434,8 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
   } | null>(null);
   const [addingVecRef, setAddingVecRef] = useState(false);
   const [newVecRefText, setNewVecRefText] = useState('');
+  const [addingBaseRef, setAddingBaseRef] = useState(false);
+  const [newBaseRefText, setNewBaseRefText] = useState('');
 
   // Zoom + Pan state
   const [zoom, setZoom] = useState(1.0);
@@ -434,11 +468,12 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
   // Collect all unique vec ref names across all frames
   const allVecRefs = useMemo(() => {
     const names = new Set<string>();
+    for (const name of (res.base_refs ?? [])) names.add(name);
     for (const frame of res.frames) {
       for (const name of frame.vec_refs) names.add(name);
     }
     return Array.from(names);
-  }, [res.frames]);
+  }, [res.base_refs, res.frames]);
 
   useEffect(() => {
     if (allVecRefs.length === 0) return;
@@ -493,6 +528,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
       ctx,
       w,
       h,
+      res.base_refs ?? [],
       currentFrame,
       selectedPathIdx,
       hoverPoint
@@ -502,7 +538,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
       pan,
       resolvedVecs
     );
-  }, [currentFrame, selectedPathIdx, hoverPoint, safeFrameIdx, zoom, pan, resolvedVecs]);
+  }, [currentFrame, selectedPathIdx, hoverPoint, safeFrameIdx, zoom, pan, resolvedVecs, res.base_refs]);
 
   // ---- Playback ----
 
@@ -614,6 +650,23 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
     },
     [updateFrame, safeFrameIdx]
   );
+
+  // Base refs (animation-level static cel layer)
+  const handleAddBaseRef = useCallback(() => {
+    const trimmed = newBaseRefText.trim();
+    if (!trimmed) return;
+    const next = cloneResource(res);
+    next.base_refs = [...(next.base_refs ?? []), trimmed];
+    emit(next);
+    setNewBaseRefText('');
+    setAddingBaseRef(false);
+  }, [newBaseRefText, res, emit]);
+
+  const handleRemoveBaseRef = useCallback((idx: number) => {
+    const next = cloneResource(res);
+    next.base_refs = (next.base_refs ?? []).filter((_, i) => i !== idx);
+    emit(next);
+  }, [res, emit]);
 
   const handleAddPath = useCallback(() => {
     updateFrame(safeFrameIdx, (f) => ({
@@ -948,6 +1001,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         ctx,
         w,
         h,
+        res.base_refs ?? [],
         currentFrame,
         selectedPathIdx,
         hoverPoint
@@ -1296,6 +1350,45 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
 
         {/* Right: Frame props */}
         <div style={propsStyle}>
+          {/* Base layer — animation-level static cel */}
+          <div style={{ marginBottom: 14, borderBottom: '1px solid #2a2a4a', paddingBottom: 12 }}>
+            <div style={{ ...propsSectionTitle, color: '#66cc88' }}>Base Layer (cel)</div>
+            <div style={{ fontSize: 10, color: '#557755', marginBottom: 6 }}>
+              Drawn on every frame — like animation cel backgrounds
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+              {(res.base_refs ?? []).map((ref, ri) => (
+                <span key={ri} style={{ ...tagStyle, background: '#1a3a1a', borderColor: '#336633', color: '#88cc88' }}>
+                  {ref}
+                  <button
+                    onClick={() => handleRemoveBaseRef(ri)}
+                    style={{ background: 'transparent', border: 'none', color: '#557755', cursor: 'pointer', padding: '0 0 0 4px', fontSize: 11 }}
+                  >
+                    x
+                  </button>
+                </span>
+              ))}
+            </div>
+            {addingBaseRef ? (
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input
+                  autoFocus
+                  value={newBaseRefText}
+                  onChange={(e) => setNewBaseRefText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddBaseRef(); if (e.key === 'Escape') setAddingBaseRef(false); }}
+                  placeholder="vec name…"
+                  style={{ ...numInputStyle, flex: 1, fontSize: 11 }}
+                />
+                <button onClick={handleAddBaseRef} style={smallAddBtnStyle}>+</button>
+                <button onClick={() => setAddingBaseRef(false)} style={{ ...smallAddBtnStyle, background: '#3a1a1a' }}>✕</button>
+              </div>
+            ) : (
+              <button onClick={() => setAddingBaseRef(true)} style={{ ...smallAddBtnStyle, color: '#66cc88', borderColor: '#336633' }}>
+                + Add base ref
+              </button>
+            )}
+          </div>
+
           <div style={propsSectionTitle}>Frame Properties</div>
 
           {/* Duration */}

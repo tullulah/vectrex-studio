@@ -23,6 +23,10 @@ pub struct VanimResource {
     /// Whether the animation loops (true) or plays once and freezes (false)
     #[serde(default = "default_loop")]
     pub r#loop: bool,
+    /// Static cel layer: .vec names drawn on every frame before per-frame content.
+    /// Like animation cel backgrounds — defined once, reused at 2 bytes/frame cost.
+    #[serde(default)]
+    pub base_refs: Vec<String>,
     /// Ordered list of frames
     pub frames: Vec<VanimFrame>,
 }
@@ -84,8 +88,9 @@ impl VanimResource {
 
     /// Estimate ROM bytes for size calculations (rough)
     pub fn estimate_binary_size(&self) -> usize {
-        // Header: 2 bytes (frame_count + loop) + 2*frame_count FDB pointers
-        let mut size = 2 + self.frames.len() * 2;
+        // Header: 4 bytes (frame_count + loop + base_ref_count + frame_table_offset)
+        //       + 2*base_refs + 2*frame_count FDB pointers
+        let mut size = 4 + self.base_refs.len() * 2 + self.frames.len() * 2;
         for frame in &self.frames {
             // Frame header: duration_ticks(1) + vec_ref_count(1) + 2*vec_refs + inline_path_count(1)
             size += 3 + frame.vec_refs.len() * 2;
@@ -174,15 +179,33 @@ pub fn compile_vanim_to_asm(resource: &VanimResource, asset_name: &str) -> Strin
     let sym = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
     let frame_count = resource.frames.len();
 
-    asm.push_str(&format!("; .vanim animation data: {} ({} frames, loop={})\n",
-        asset_name, frame_count, resource.r#loop));
+    let base_ref_count = resource.base_refs.len();
+    // frame_table_offset = 4 (fixed header bytes) + base_ref_count * 2 (FDB entries)
+    let frame_table_offset = 4 + base_ref_count * 2;
+
+    asm.push_str(&format!("; .vanim animation data: {} ({} frames, loop={}, base_refs={})\n",
+        asset_name, frame_count, resource.r#loop, base_ref_count));
     asm.push_str("\n");
 
     // --- Header ---
+    // byte 0: frame_count
+    // byte 1: loop flag
+    // byte 2: base_ref_count
+    // byte 3: frame_table_offset (= 4 + base_ref_count*2)
+    // bytes 4..: FDB ptrs to base_ref _VECNAME_VECTORS (static cel layer)
+    // at frame_table_offset: FDB ptrs to per-frame data
     asm.push_str(&format!("_ANIM_{}:\n", sym));
     asm.push_str(&format!("    FCB {}               ; frame_count\n", frame_count));
     asm.push_str(&format!("    FCB {}               ; loop flag (1=loop, 0=freeze)\n",
         if resource.r#loop { 1 } else { 0 }));
+    asm.push_str(&format!("    FCB {}               ; base_ref_count\n", base_ref_count));
+    asm.push_str(&format!("    FCB {}               ; frame_table_offset\n", frame_table_offset));
+
+    // Base ref FDB pointers (static cel layer — drawn before every frame)
+    for base_name in &resource.base_refs {
+        let vec_sym = base_name.to_uppercase().replace('-', "_").replace(' ', "_");
+        asm.push_str(&format!("    FDB _{}_VECTORS      ; base_ref: {}\n", vec_sym, base_name));
+    }
 
     // FDB pointer table for each frame
     for i in 0..frame_count {

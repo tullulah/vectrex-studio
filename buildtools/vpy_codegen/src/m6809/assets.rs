@@ -53,9 +53,14 @@ fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>
     }
 }
 
-/// Scan a .vanim JSON file and add all vec_refs to used_names.
+/// Scan a .vanim JSON file and add all vec_refs (base_refs + per-frame) to used_names.
 fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
     let Ok(resource) = crate::animres::VanimResource::load(Path::new(vanim_path)) else { return };
+    // Static cel layer — referenced on every frame
+    for vec_name in &resource.base_refs {
+        used_names.insert(vec_name.clone());
+    }
+    // Per-frame additional refs
     for frame in &resource.frames {
         for vec_name in &frame.vec_refs {
             used_names.insert(vec_name.clone());

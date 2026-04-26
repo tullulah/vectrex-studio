@@ -1845,126 +1845,140 @@ fn emit_draw_anim_runtime(asm: &mut String) {
 ; DRAW_ANIM_RUNTIME\n\
 ; Input: X = animation ROM header (_ANIM_XXX)\n\
 ;        U = 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)\n\
-; Draws the current frame and advances the animation counter.\n\
-; Preserves all registers via PSHS/PULS.\n\
+;\n\
+; Header layout:\n\
+;   byte 0: frame_count\n\
+;   byte 1: loop_flag (1=loop, 0=freeze)\n\
+;   byte 2: base_ref_count  (static cel layer — drawn before every frame)\n\
+;   byte 3: frame_table_offset (= 4 + base_ref_count*2)\n\
+;   bytes 4..: FDB ptrs to base_ref _VECNAME_VECTORS\n\
+;   at frame_table_offset: FDB ptrs to per-frame data\n\
 ; ============================================================================\n\
 DRAW_ANIM_RUNTIME:\n\
     PSHS D,X,Y,U\n\
+    ; --- Draw base_refs (static cel layer, drawn before every frame) ---\n\
+    LDB 2,X             ; base_ref_count\n\
+    BEQ DAR_TICK        ; none: skip to tick management\n\
+    LEAY 4,X            ; Y = first base_ref FDB entry\n\
+DAR_BASE_LOOP:\n\
+    PSHS B,X,Y\n\
+    LDX ,Y              ; X = _VECNAME_VECTORS header\n\
+    CLR >MIRROR_X\n\
+    CLR >MIRROR_Y\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    LDD ,X              ; D = path_count\n\
+    BEQ DAR_BASE_SKIP\n\
+    LEAY 2,X            ; Y = first path FDB in vec table\n\
+DAR_BASE_PATH_LOOP:\n\
+    PSHS D,Y\n\
+    LDX ,Y\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    LEAY 2,Y\n\
+    PULS D,Y\n\
+    SUBD #1\n\
+    BNE DAR_BASE_PATH_LOOP\n\
+DAR_BASE_SKIP:\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    PULS B,X,Y\n\
+    LEAY 2,Y            ; next base_ref FDB\n\
+    DECB\n\
+    LBNE DAR_BASE_LOOP\n\
     ; --- Tick counter management ---\n\
+DAR_TICK:\n\
     LDA 1,U             ; ticks_left\n\
     DECA\n\
     BNE DAR_DRAW        ; still on this frame: skip frame advance\n\
     ; ticks exhausted: advance frame index\n\
     LDB ,U              ; current frame_idx\n\
     INCB\n\
-    CMPB ,X             ; compare with frame_count (byte 0 of header)\n\
+    CMPB ,X             ; frame_count (byte 0)\n\
     BLT DAR_NO_WRAP\n\
-    LDA 1,X             ; loop flag (byte 1 of header)\n\
+    LDA 1,X             ; loop flag (byte 1)\n\
     BEQ DAR_FREEZE      ; loop=0: freeze on last frame\n\
     CLRB                ; loop=1: back to frame 0\n\
 DAR_NO_WRAP:\n\
     STB ,U              ; save new frame_idx\n\
-    ; load duration_ticks from new frame's header (byte 0)\n\
-    ; frame_ptr = header+2 + frame_idx*2\n\
-    LDB ,U              ; frame_idx\n\
-    CLRA                ; D = frame_idx\n\
-    LSLB                ; D = frame_idx * 2\n\
-    ROLA\n\
-    ADDD #2             ; D = offset past frame_count + loop_flag\n\
+    ; frame_ptr = X + frame_table_offset + frame_idx*2\n\
+    LDB ,U              ; new frame_idx\n\
+    CLRA\n\
+    LSLB\n\
+    ROLA                ; D = frame_idx*2\n\
+    ADDB 3,X            ; D += frame_table_offset (byte 3)\n\
+    ADCA #0\n\
     LEAY D,X            ; Y = &frame_table[frame_idx]\n\
     LDY ,Y              ; Y = frame data ptr\n\
-    LDA ,Y              ; duration_ticks (byte 0 of frame)\n\
+    LDA ,Y              ; duration_ticks\n\
     STA 1,U             ; reset ticks_remaining\n\
-    BRA DAR_DO_DRAW\n\
+    BRA DAR_EMIT\n\
 DAR_FREEZE:\n\
-    ; Stay on last frame — reset ticks to 1 so we stay here forever\n\
     LDA #1\n\
     STA 1,U\n\
-    ; fall through to draw last frame: compute its ptr\n\
-    LDB ,U              ; frame_idx (still last frame)\n\
+    LDB ,U              ; last frame_idx\n\
     CLRA\n\
     LSLB\n\
     ROLA\n\
-    ADDD #2\n\
+    ADDB 3,X\n\
+    ADCA #0\n\
     LEAY D,X\n\
-    LDY ,Y              ; Y = last frame data ptr\n\
+    LDY ,Y\n\
     BRA DAR_EMIT\n\
 DAR_DRAW:\n\
     STA 1,U             ; save decremented ticks\n\
-DAR_DO_DRAW:\n\
-    ; Compute frame data ptr from current frame_idx\n\
     LDB ,U              ; frame_idx\n\
     CLRA\n\
     LSLB\n\
     ROLA\n\
-    ADDD #2             ; skip frame_count + loop_flag\n\
+    ADDB 3,X\n\
+    ADCA #0\n\
     LEAY D,X\n\
     LDY ,Y              ; Y = frame data ptr\n\
 DAR_EMIT:\n\
-    ; Y now points to frame data\n\
-    ; byte 0: duration_ticks (already processed for ticking)\n\
-    ; byte 1: vec_ref_count\n\
-    LEAY 1,Y            ; skip duration_ticks\n\
-    LDB ,Y+             ; B = vec_ref_count, Y advances to first vec ptr\n\
-    BEQ DAR_INLINE      ; no vec_refs\n\
-    ; --- Draw vec_refs ---\n\
-    ; Each entry is an FDB pointer to a _VECNAME_VECTORS symbol\n\
-    ; (header: FDB path_count, then FDB path0_ptr, FDB path1_ptr, ...)\n\
+    ; frame data: byte 0=duration_ticks (skip), byte 1=vec_ref_count\n\
+    LEAY 1,Y\n\
+    LDB ,Y+             ; B = vec_ref_count, Y at first vec ptr\n\
+    BEQ DAR_INLINE\n\
 DAR_VEC_LOOP:\n\
     PSHS B,Y\n\
-    LDX ,Y              ; X = _VECNAME_VECTORS header address\n\
-    ; Set up draw position from DRAW_VEC_X/Y (same as DRAW_VECTOR)\n\
+    LDX ,Y\n\
     CLR >MIRROR_X\n\
     CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
-    ; Iterate over all paths in this vec\n\
-    LDD ,X              ; D = path_count (16-bit FDB)\n\
-    CMPD #0\n\
+    LDD ,X              ; D = path_count\n\
     BEQ DAR_VEC_DONE\n\
-    LEAY 2,X            ; Y = first FDB path pointer in table\n\
+    LEAY 2,X\n\
 DAR_VEC_PATH_LOOP:\n\
     PSHS D,Y\n\
-    LDX ,Y              ; X = path data ptr\n\
+    LDX ,Y\n\
     JSR Draw_Sync_List_At_With_Mirrors\n\
-    LEAY 2,Y            ; advance to next FDB entry\n\
+    LEAY 2,Y\n\
     PULS D,Y\n\
     SUBD #1\n\
     BNE DAR_VEC_PATH_LOOP\n\
 DAR_VEC_DONE:\n\
     JSR $F1AF           ; DP_to_C8\n\
     PULS B,Y\n\
-    LEAY 2,Y            ; advance past this FDB entry\n\
+    LEAY 2,Y\n\
     DECB\n\
     BNE DAR_VEC_LOOP\n\
-    ; --- Draw inline paths ---\n\
 DAR_INLINE:\n\
-    LDB ,Y+             ; B = inline_path_count, Y now at first inline path\n\
+    LDB ,Y+             ; B = inline_path_count\n\
     BEQ DAR_DONE\n\
 DAR_PATH_LOOP:\n\
     PSHS B\n\
-    ; Inline path format: intensity(1), y_start(1), x_start(1), pad(2), segments, FCB 2\n\
-    ; Draw using Draw_Sync_List_At_With_Mirrors (X = path ptr)\n\
-    TFR Y,X             ; X = current inline path ptr\n\
+    TFR Y,X\n\
     JSR $F1AA           ; DP_to_D0\n\
     CLR >MIRROR_X\n\
     CLR >MIRROR_Y\n\
     JSR Draw_Sync_List_At_With_Mirrors\n\
     JSR $F1AF           ; DP_to_C8\n\
-    ; Advance Y past this path: scan forward to the FCB 2 end marker\n\
-    ; Format: intensity(1) + header4(4) + N*(3 bytes FCB $FF,dy,dx) + FCB 2\n\
-    ; We skip by scanning byte-by-byte for $02 end marker.\n\
-    ; Y is still at path start — advance 5 bytes (header), then scan segments\n\
     LEAY 5,Y            ; skip intensity + 4-byte header\n\
 DAR_SCAN:\n\
-    LDA ,Y+             ; load byte, advance\n\
+    LDA ,Y+\n\
     CMPA #2\n\
-    BNE DAR_SKIP_SEG\n\
-    ; Found end marker (FCB 2): Y is already past it\n\
-    BRA DAR_PATH_DONE\n\
-DAR_SKIP_SEG:\n\
+    BEQ DAR_PATH_DONE\n\
     CMPA #$FF\n\
-    BNE DAR_SCAN        ; unknown byte, keep scanning\n\
-    LEAY 2,Y            ; skip dy + dx of this segment\n\
+    BNE DAR_SCAN\n\
+    LEAY 2,Y\n\
     BRA DAR_SCAN\n\
 DAR_PATH_DONE:\n\
     PULS B\n\
