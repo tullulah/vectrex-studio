@@ -2342,11 +2342,12 @@ export const EmulatorPanel: React.FC = () => {
           const vecx = (window as any).vecx;
           if (vecx) vecx.stop();
 
-          // Cancel any existing pitrex loop
+          // Cancel any existing pitrex loop and stop its audio
           if (pitrexLoopRef.current !== null) {
             cancelAnimationFrame(pitrexLoopRef.current);
             pitrexLoopRef.current = null;
           }
+          pitrexCoreRef.current?.stopAudio?.();
 
           // Dynamically import PitrexCore to avoid bundling it unless needed
           const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
@@ -2369,10 +2370,13 @@ export const EmulatorPanel: React.FC = () => {
           }
 
           // PiTrex coordinate → canvas pixel conversion constants
-          // PiTrex range: ±9600 x, ±12800 y (VPy ±96/128 × 100)
-          // Canvas: 330×410 pixels, center at (165, 205)
-          const PITREX_MAX_X = 9600;
-          const PITREX_MAX_Y = 12800;
+          // Pitrex coords = VPy × PITREX_COORD_SCALE(100).
+          // To get equal px/VPy in both axes (matching JSVecX equal-scale rendering):
+          //   PITREX_MAX = canvas_half × PITREX_COORD_SCALE² / T1(128) = canvas_half × 78.125
+          // PITREX_MAX_X = 165 × 78.125 = 12891, PITREX_MAX_Y = 205 × 78.125 = 16016
+          // Both give 1.280 px/VPy, matching JSVecX which renders Vectrex with equal X/Y scale.
+          const PITREX_MAX_X = 12891;
+          const PITREX_MAX_Y = 16016;
 
           const TARGET_MS = 1000 / 50;  // 50 Hz (PiTrex default)
           let lastFrameTs = 0;
@@ -2444,6 +2448,7 @@ export const EmulatorPanel: React.FC = () => {
           };
 
           useDebugStore.getState().setState('running');
+          core.startAudio();
           pitrexLoopRef.current = requestAnimationFrame(loop);
           console.log('[EmulatorPanel] pitrex RAF loop started');
         } catch (e) {

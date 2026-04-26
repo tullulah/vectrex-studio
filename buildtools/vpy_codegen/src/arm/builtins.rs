@@ -1341,6 +1341,18 @@ fn emit_audio_builtins() -> String {
     s.push_str("    add     r7, r5, #2\n");
     s.push_str("vau_wl:\n    cmp     r6, #0\n    beq     vau_aw\n");
     s.push_str("    ldrb    r0, [r7]\n    ldrb    r1, [r7, #1]\n");
+    // Mixer reg 7: read-modify-write to preserve music channels A/B.
+    // CHANNEL_C_MASK = 0x24 (bit2=toneC, bit5=noiseC). Only bits 2/5 come from SFX;
+    // bits 0/1/3/4 (channels A/B tone/noise) are taken from the current PSG state.
+    s.push_str("    cmp     r0, #7\n    bne     vau_do_write\n");
+    s.push_str("    push    {r1, r6, r7}    @ save sfx_mixer, loop vars\n");
+    s.push_str("    bl      psg_read         @ r0=7 already → returns Regs[7]\n");
+    s.push_str("    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer\n");
+    s.push_str("    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)\n");
+    s.push_str("    and     r1, r1, #0x24   @ keep only C bits from SFX\n");
+    s.push_str("    orr     r1, r0, r1      @ r1 = merged mixer\n");
+    s.push_str("    mov     r0, #7          @ reg = 7\n");
+    s.push_str("vau_do_write:\n");
     s.push_str("    push    {r6, r7}\n    bl      psg_write\n    pop     {r6, r7}\n");
     s.push_str("    add     r7, r7, #2\n    sub     r6, r6, #1\n    b       vau_wl\n");
     s.push_str("vau_aw:\n    ldr     r0, =PSG_SFX_PTR\n    str     r7, [r0]\n");

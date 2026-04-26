@@ -64,6 +64,8 @@ export interface PitrexArm32State {
   joyX2: number; joyY2: number; joyButtons2: number;
   /** Step counter (safety guard against infinite loops). */
   steps: number;
+  /** PSG register write callback — set by PitrexCore to drive audio synthesis. */
+  psgWrite: (reg: number, val: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -551,6 +553,13 @@ const SDK_STUBS: Record<string, SdkStub> = {
   'RPI_AuxUartInit':         () => {},
   'RPI_AuxUartWrite':        () => {},
 
+  'v_writePSG': (s) => {
+    const reg = s.regs[0] & 0xFF;
+    const val = s.regs[1] & 0xFF;
+    s.psgWrite(reg, val);
+  },
+  'v_doSound': () => {},
+
   '__aeabi_idiv': (s) => {
     const dividend = s.regs[0];
     const divisor  = s.regs[1];
@@ -1023,6 +1032,7 @@ export function createState(parsed: ParsedAsm): PitrexArm32State {
     joyX: 0, joyY: 0, joyButtons: 0,
     joyX2: 0, joyY2: 0, joyButtons2: 0,
     steps: 0,
+    psgWrite: () => {},
   };
 
   // Copy rodata init memory into state memory

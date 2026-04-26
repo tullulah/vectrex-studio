@@ -1,2586 +1,3974 @@
-; --- Motorola 6809 backend (Vectrex) title='MOVINGVEC' origin=$0000 ---
-        ORG $0000
-;***************************************************************************
-; DEFINE SECTION
-;***************************************************************************
-    INCLUDE "VECTREX.I"
-
-;***************************************************************************
-; HEADER SECTION
-;***************************************************************************
-    FCC "g GCE 1982"
-    FCB $80
-    FDB music1
-    FCB $F8
-    FCB $50
-    FCB $20
-    FCB $BB
-    FCC "MOVINGVEC"
-    FCB $80
-    FCB 0
-
-;***************************************************************************
-; CODE SECTION
-;***************************************************************************
-
-; === RAM VARIABLE DEFINITIONS (EQU) ===
-; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 93 bytes
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
-TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
-TMPRIGHT             EQU $C880+$06   ; Right operand temp (2 bytes)
-TMPRIGHT2            EQU $C880+$08   ; Right operand temp 2 (for nested operations) (2 bytes)
-TMPPTR               EQU $C880+$0A   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$0C   ; Pointer temp 2 (for nested array operations) (2 bytes)
-TEMP_YX              EQU $C880+$0E   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$10   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$11   ; Temporary y storage (1 bytes)
-VPY_MOVE_X           EQU $C880+$12   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$13   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$14   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity as i16x5) (10 bytes)
-PSG_MUSIC_PTR        EQU $C880+$1E   ; Current music position pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$20   ; Music start pointer (for loops) (2 bytes)
-PSG_IS_PLAYING       EQU $C880+$22   ; Playing flag ($00=stopped, $01=playing) (1 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$23   ; Set during UPDATE_MUSIC_PSG (1 bytes)
-PSG_FRAME_COUNT      EQU $C880+$24   ; Frame register write count (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$25   ; Frames to wait before next read (1 bytes)
-SFX_PTR              EQU $C880+$26   ; Current SFX data pointer (2 bytes)
-SFX_TICK             EQU $C880+$28   ; Current frame counter (2 bytes)
-SFX_ACTIVE           EQU $C880+$2A   ; Playback state ($00=stopped, $01=playing) (1 bytes)
-SFX_PHASE            EQU $C880+$2B   ; Envelope phase (0=A,1=D,2=S,3=R) (1 bytes)
-SFX_VOL              EQU $C880+$2C   ; Current volume level (0-15) (1 bytes)
-NUM_STR              EQU $C880+$2D   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-DRAW_VEC_X           EQU $C880+$33   ; X position offset for vector drawing (1 bytes)
-DRAW_VEC_Y           EQU $C880+$34   ; Y position offset for vector drawing (1 bytes)
-MIRROR_X             EQU $C880+$35   ; X-axis mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$36   ; Y-axis mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$37   ; Intensity override (0=use vector's, >0=override) (1 bytes)
-VLINE_DX_16          EQU $C880+$38   ; x1-x0 (16-bit) for line drawing (2 bytes)
-VLINE_DY_16          EQU $C880+$3A   ; y1-y0 (16-bit) for line drawing (2 bytes)
-VLINE_DX             EQU $C880+$3C   ; Clamped dx (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$3D   ; Clamped dy (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$3E   ; Remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$40   ; Remaining dx for segment 2 (16-bit) (2 bytes)
-VLINE_STEPS          EQU $C880+$42   ; Line drawing step counter (1 bytes)
-VLINE_LIST           EQU $C880+$43   ; 2-byte vector list (Y|endbit, X) (2 bytes)
-VAR_BALL_X           EQU $C880+$45   ; User variable (2 bytes)
-VAR_BALL_Y           EQU $C880+$47   ; User variable (2 bytes)
-VAR_BALL_VX          EQU $C880+$49   ; User variable (2 bytes)
-VAR_BALL_VY          EQU $C880+$4B   ; User variable (2 bytes)
-VAR_BUB_X            EQU $C880+$4D   ; User variable (2 bytes)
-VAR_BUB_Y            EQU $C880+$4F   ; User variable (2 bytes)
-VAR_BUB_VX           EQU $C880+$51   ; User variable (2 bytes)
-VAR_BUB_VY           EQU $C880+$53   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$55   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$57   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$59   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$5B   ; Function argument 3 (2 bytes)
-PSG_MUSIC_PTR_DP   EQU $1E  ; DP-relative
-PSG_MUSIC_START_DP EQU $20  ; DP-relative
-PSG_IS_PLAYING_DP  EQU $22  ; DP-relative
-PSG_MUSIC_ACTIVE_DP EQU $23  ; DP-relative
-PSG_FRAME_COUNT_DP EQU $24  ; DP-relative
-PSG_DELAY_FRAMES_DP EQU $25  ; DP-relative
-SFX_PTR_DP         EQU $26  ; DP-relative
-SFX_TICK_DP        EQU $28  ; DP-relative
-SFX_ACTIVE_DP      EQU $2A  ; DP-relative
-SFX_PHASE_DP       EQU $2B  ; DP-relative
-SFX_VOL_DP         EQU $2C  ; DP-relative
-
-    JMP START
-
-;**** CONST DECLARATIONS (NUMBER-ONLY) ****
-
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
-J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
-J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; === BUTTON SYSTEM - BIOS TRANSITIONS ===
-; J1_BUTTON_1-4() - Read transition bits from $C811
-; Read_Btns (auto-injected) calculates: ~(new) OR Vec_Prev_Btns
-; Result: bit=1 ONLY on rising edge (0→1 transition)
-; Returns: D = 1 (just pressed), 0 (not pressed or still held)
-
-J1B1_BUILTIN:
-    LDA $C811      ; Read transition bits (Vec_Button_1_1)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    BEQ .J1B1_OFF
-    LDD #1         ; Return pressed (rising edge)
-    RTS
-.J1B1_OFF:
-    LDD #0         ; Return not pressed
-    RTS
-
-J1B2_BUILTIN:
-    LDA $C811
-    ANDA #$02      ; Test bit 1 (Button 2)
-    BEQ .J1B2_OFF
-    LDD #1
-    RTS
-.J1B2_OFF:
-    LDD #0
-    RTS
-
-J1B3_BUILTIN:
-    LDA $C811
-    ANDA #$04      ; Test bit 2 (Button 3)
-    BEQ .J1B3_OFF
-    LDD #1
-    RTS
-.J1B3_OFF:
-    LDD #0
-    RTS
-
-J1B4_BUILTIN:
-    LDA $C811
-    ANDA #$08      ; Test bit 3 (Button 4)
-    BEQ .J1B4_OFF
-    LDD #1
-    RTS
-.J1B4_OFF:
-    LDD #0
-    RTS
-
-VECTREX_PRINT_TEXT:
-    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)
-    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref  ; Reset beam to center for absolute text positioning
-    LDU VAR_ARG2   ; string pointer (ARG2 = third param)
-    LDA VAR_ARG1+1 ; Y (ARG1 = second param)
-    LDB VAR_ARG0+1 ; X (ARG0 = first param)
-    JSR Print_Str_d
-    LDA #$80
-    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)
-    JSR $F1AF      ; DP_to_C8 (restore before return)
-    RTS
-; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
-; Args in DRAW_LINE_ARGS[0..9]: x0,y0,x1,y1,intensity (5x i16, low byte used for coords)
-; Resets beam to center, moves to (x0,y0), draws to (x1,y1)
-DRAW_LINE_WRAPPER:
-    ; Set DP to hardware registers
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning
-    LDA #$80
-    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)
-    ; Set intensity
-    LDA >DRAW_LINE_ARGS+9  ; intensity (low byte)
-    JSR Intensity_a
-    ; Move to start position (y in A, x in B)
-    LDA >DRAW_LINE_ARGS+3  ; Y start (low byte)
-    ADDA >VPY_MOVE_Y       ; Add MOVE Y offset
-    LDB >DRAW_LINE_ARGS+1  ; X start (low byte)
-    ADDB >VPY_MOVE_X       ; Add MOVE X offset
-    JSR Moveto_d
-    ; Compute deltas using 16-bit arithmetic
-    ; dx = x1 - x0 (treating as signed 16-bit)
-    LDD >DRAW_LINE_ARGS+4  ; x1 (16-bit)
-    SUBD >DRAW_LINE_ARGS+0 ; subtract x0 (16-bit)
-    STD VLINE_DX_16        ; Store full 16-bit dx
-    ; dy = y1 - y0 (treating as signed 16-bit)
-    LDD >DRAW_LINE_ARGS+6  ; y1 (16-bit)
-    SUBD >DRAW_LINE_ARGS+2 ; subtract y0 (16-bit)
-    STD VLINE_DY_16        ; Store full 16-bit dy
-    ; SEGMENT 1: Clamp dy to ±127 and draw
-    LDD VLINE_DY_16 ; Load full dy
-    CMPD #127
-    BLE DLW_SEG1_DY_LO
-    LDA #127        ; dy > 127: use 127
-    BRA DLW_SEG1_DY_READY
-DLW_SEG1_DY_LO:
-    CMPD #-128
-    BGE DLW_SEG1_DY_NO_CLAMP  ; -128 <= dy <= 127: use original (sign-extended)
-    LDA #$80        ; dy < -128: use -128
-    BRA DLW_SEG1_DY_READY
-DLW_SEG1_DY_NO_CLAMP:
-    LDA VLINE_DY_16+1  ; Use original low byte (already in valid range)
-DLW_SEG1_DY_READY:
-    STA VLINE_DY    ; Save clamped dy for segment 1
-    ; Clamp dx to ±127
-    LDD VLINE_DX_16
-    CMPD #127
-    BLE DLW_SEG1_DX_LO
-    LDB #127        ; dx > 127: use 127
-    BRA DLW_SEG1_DX_READY
-DLW_SEG1_DX_LO:
-    CMPD #-128
-    BGE DLW_SEG1_DX_NO_CLAMP  ; -128 <= dx <= 127: use original (sign-extended)
-    LDB #$80        ; dx < -128: use -128
-    BRA DLW_SEG1_DX_READY
-DLW_SEG1_DX_NO_CLAMP:
-    LDB VLINE_DX_16+1  ; Use original low byte (already in valid range)
-DLW_SEG1_DX_READY:
-    STB VLINE_DX    ; Save clamped dx for segment 1
-    ; Draw segment 1
-    CLR Vec_Misc_Count
-    LDA VLINE_DY
-    LDB VLINE_DX
-    JSR Draw_Line_d ; Beam moves automatically
-    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)
-    LDD VLINE_DY_16 ; Reload original dy
-    CMPD #127
-    BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
-    CMPD #-128
-    BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
-    LDD VLINE_DX_16 ; Also check dx
-    CMPD #127
-    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2
-    CMPD #-128
-    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2
-    BRA DLW_DONE       ; both dy and dx in range: no segment 2
-DLW_NEED_SEG2:
-    ; SEGMENT 2: Draw remaining dy and dx
-    ; Calculate remaining dy
-    LDD VLINE_DY_16 ; Load original full dy
-    CMPD #127
-    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127
-    CMPD #-128
-    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy
-    ; dy < -128, so we drew -128 in segment 1
-    ; remaining = dy - (-128) = dy + 128
-    ADDD #128       ; Add back the -128 we already drew
-    BRA DLW_SEG2_DY_DONE
-DLW_SEG2_DY_NO_REMAIN:
-    LDD #0          ; dy in range: no remaining
-    BRA DLW_SEG2_DY_DONE
-DLW_SEG2_DY_POS:
-    ; dy > 127, so we drew 127 in segment 1
-    ; remaining = dy - 127
-    SUBD #127       ; Subtract 127 we already drew
-DLW_SEG2_DY_DONE:
-    STD VLINE_DY_REMAINING  ; Store remaining dy (16-bit)
-    ; Calculate remaining dx
-    LDD VLINE_DX_16 ; Load original full dx
-    CMPD #127
-    BLE DLW_SEG2_DX_CHECK_NEG
-    ; dx > 127, so we drew 127 in segment 1
-    ; remaining = dx - 127
-    SUBD #127
-    BRA DLW_SEG2_DX_DONE
-DLW_SEG2_DX_CHECK_NEG:
-    CMPD #-128
-    BGE DLW_SEG2_DX_NO_REMAIN  ; -128 <= dx <= 127: no remaining dx
-    ; dx < -128, so we drew -128 in segment 1
-    ; remaining = dx - (-128) = dx + 128
-    ADDD #128
-    BRA DLW_SEG2_DX_DONE
-DLW_SEG2_DX_NO_REMAIN:
-    LDD #0          ; No remaining dx
-DLW_SEG2_DX_DONE:
-    STD VLINE_DX_REMAINING  ; Store remaining dx (16-bit) in VLINE_DX_REMAINING
-    ; Setup for Draw_Line_d: A=dy, B=dx (CRITICAL: order matters!)
-    ; Load remaining dy from VLINE_DY_REMAINING (already saved)
-    LDA VLINE_DY_REMAINING+1  ; Low byte of remaining dy
-    LDB VLINE_DX_REMAINING+1  ; Low byte of remaining dx
-    CLR Vec_Misc_Count
-    JSR Draw_Line_d ; Beam continues from segment 1 endpoint
-DLW_DONE:
-    LDA #$C8       ; CRITICAL: Restore DP to $C8 for our code
-    TFR A,DP
-    RTS
-; ============================================================================
-; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
-; ============================================================================
-; Writes directly to PSG chip using WRITE_PSG sequence
-;
-; Music data format (frame-based):
-;   FCB count           ; Number of register writes this frame
-;   FCB reg, val        ; PSG register/value pairs
-;   ...                 ; Repeat for each register
-;   FCB $FF             ; End marker
-;
-; PSG Registers:
-;   0-1: Channel A frequency (12-bit)
-;   2-3: Channel B frequency
-;   4-5: Channel C frequency
-;   6:   Noise period
-;   7:   Mixer control (enable/disable channels)
-;   8-10: Channel A/B/C volume
-;   11-12: Envelope period
-;   13:  Envelope shape
-; ============================================================================
-
-; RAM variables (defined via ram.allocate in mod.rs):
-; PSG_MUSIC_PTR, PSG_MUSIC_START, PSG_IS_PLAYING,
-; PSG_MUSIC_ACTIVE, PSG_DELAY_FRAMES
-
-; PLAY_MUSIC_RUNTIME - Start PSG music playback
-; Input: X = pointer to PSG music data
-PLAY_MUSIC_RUNTIME:
-STX >PSG_MUSIC_PTR     ; Store current music pointer (force extended)
-STX >PSG_MUSIC_START   ; Store start pointer for loops (force extended)
-CLR >PSG_DELAY_FRAMES  ; Clear delay counter
-LDA #$01
-STA >PSG_IS_PLAYING ; Mark as playing (extended - var at 0xC8A0)
-RTS
-
-; ============================================================================
-; UPDATE_MUSIC_PSG - Update PSG (call every frame)
-; ============================================================================
-UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
-LDA #$01
-STA >PSG_MUSIC_ACTIVE  ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done    ; Not playing, exit
-
-LDX >PSG_MUSIC_PTR     ; Load pointer (force extended - LDX has no DP mode)
-BEQ PSG_update_done    ; No music loaded
-
-; Read frame count byte (number of register writes)
-LDB ,X+
-BEQ PSG_music_ended    ; Count=0 means end (no loop)
-CMPB #$FF              ; Check for loop command
-BEQ PSG_music_loop     ; $FF means loop (never valid as count)
-
-; Process frame - push counter to stack
-PSHS B                 ; Save count on stack
-
-; Write register/value pairs to PSG
-PSG_write_loop:
-LDA ,X+                ; Load register number
-LDB ,X+                ; Load register value
-PSHS X                 ; Save pointer (after reads)
-
-; WRITE_PSG sequence
-STA VIA_port_a         ; Store register number
-LDA #$19               ; BDIR=1, BC1=1 (LATCH)
-STA VIA_port_b
-LDA #$01               ; BDIR=0, BC1=0 (INACTIVE)
-STA VIA_port_b
-LDA VIA_port_a         ; Read status
-STB VIA_port_a         ; Store data
-LDB #$11               ; BDIR=1, BC1=0 (WRITE)
-STB VIA_port_b
-LDB #$01               ; BDIR=0, BC1=0 (INACTIVE)
-STB VIA_port_b
-
-PULS X                 ; Restore pointer
-PULS B                 ; Get counter
-DECB                   ; Decrement
-BEQ PSG_frame_done     ; Done with this frame
-PSHS B                 ; Save counter back
-BRA PSG_write_loop
-
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR     ; Update pointer (force extended)
-BRA PSG_update_done
-
-PSG_music_ended:
-CLR >PSG_IS_PLAYING ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
-
-PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                 ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR     ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
-
-PSG_update_done:
-CLR >PSG_MUSIC_ACTIVE  ; Clear flag (music system done)
-RTS
-
-; ============================================================================
-; STOP_MUSIC_RUNTIME - Stop music playback
-; ============================================================================
-STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING     ; Clear playing flag
-CLR >PSG_MUSIC_PTR      ; Clear pointer high byte
-CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte
-; Mute all PSG channels so the last note doesn't keep sounding
-PSHS DP
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 for Sound_Byte
-LDA #8                  ; PSG reg 8 = Volume Channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume Channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume Channel C
-LDB #0
-JSR Sound_Byte
-PULS DP
-RTS
-
-; ============================================================================
-; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)
-; ============================================================================
-; Processes both music (channel B) and SFX (channel C) in one pass
-; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems
-; Sets DP=$D0 once at entry, restores at exit
-; RAM variables: SFX_PTR, SFX_ACTIVE (defined via ram.allocate in mod.rs)
-
-AUDIO_UPDATE:
-PSHS DP                 ; Save current DP
-LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)
-TFR A,DP
-
-; UPDATE MUSIC (channel B: registers 9, 11-14)
-LDA >PSG_IS_PLAYING     ; Check if music is playing
-BEQ AU_SKIP_MUSIC       ; Skip if not
-
-; Check delay counter first
-LDA >PSG_DELAY_FRAMES   ; Load delay counter
-BEQ AU_MUSIC_READ       ; If zero, read next frame data
-DECA                    ; Decrement delay
-STA >PSG_DELAY_FRAMES   ; Store back
-CMPA #0                 ; Check if it just reached zero
-BNE AU_UPDATE_SFX       ; If not zero yet, skip this frame
-
-; Delay just reached zero, X points to count byte already
-LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)
-BEQ AU_SKIP_MUSIC       ; Skip if null
-BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count
-
-AU_MUSIC_READ:
-LDX >PSG_MUSIC_PTR      ; Load music pointer
-BEQ AU_SKIP_MUSIC       ; Skip if null
-
-; Check if we need to read delay or we're ready for count
-; PSG_DELAY_FRAMES just reached 0, so we read delay byte first
-LDB ,X+                 ; Read delay counter (X now points to count byte)
-CMPB #$FF               ; Check for loop marker
-BEQ AU_MUSIC_LOOP       ; Handle loop
-CMPB #0                 ; Check if delay is 0
-BNE AU_MUSIC_HAS_DELAY  ; If not 0, process delay
-
-; Delay is 0, read count immediately
-AU_MUSIC_NO_DELAY:
-AU_MUSIC_READ_COUNT:
-LDB ,X+                 ; Read count (number of register writes)
-BEQ AU_MUSIC_ENDED      ; If 0, end of music
-CMPB #$FF               ; Check for loop marker (can appear after delay)
-BEQ AU_MUSIC_LOOP       ; Handle loop
-BRA AU_MUSIC_PROCESS_WRITES
-
-AU_MUSIC_HAS_DELAY:
-; B has delay > 0, store it and skip to next frame
-DECB                    ; Delay-1 (we consume this frame)
-STB >PSG_DELAY_FRAMES   ; Save delay counter
-STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
-BRA AU_UPDATE_SFX       ; Skip reading data this frame
-
-AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
-; Mark that next time we should read delay, not count
-; (This is implicit - after processing, X points to next delay byte)
-
-AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
-
-AU_MUSIC_DONE:
-STX >PSG_MUSIC_PTR      ; Update music pointer
-BRA AU_UPDATE_SFX       ; Now update SFX
-
-AU_MUSIC_ENDED:
-CLR >PSG_IS_PLAYING     ; Stop music
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_MUSIC_LOOP:
-LDD ,X                  ; Load loop target
-STD >PSG_MUSIC_PTR      ; Set music pointer to loop
-CLR >PSG_DELAY_FRAMES   ; Clear delay on loop
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_SKIP_MUSIC:
-BRA AU_UPDATE_SFX       ; Skip music, go to SFX
-
-; UPDATE SFX (channel C: registers 4/5=tone, 6=noise, 10=volume, 7=mixer)
-AU_UPDATE_SFX:
-LDA >SFX_ACTIVE         ; Check if SFX is active
-BEQ AU_DONE             ; Skip if not active
-
-JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
-
-AU_DONE:
-PULS DP                 ; Restore original DP
-RTS
-
-; ============================================================================
-; AYFX SOUND EFFECTS PLAYER (Richard Chadd original system)
-; ============================================================================
-; Uses channel C (registers 4/5=tone, 6=noise, 10=volume, 7=mixer bit2/bit5)
-; RAM variables: SFX_PTR (16-bit), SFX_ACTIVE (8-bit)
-; AYFX format: flag byte + optional data per frame, end marker $D0 $20
-; Flag bits: 0-3=volume, 4=disable tone, 5=tone data present,
-;            6=noise data present, 7=disable noise
-; ============================================================================
-; (RAM variables defined in AUDIO_UPDATE section above)
-
-; PLAY_SFX_RUNTIME - Start SFX playback
-; Input: X = pointer to AYFX data
-PLAY_SFX_RUNTIME:
-STX >SFX_PTR           ; Store pointer (force extended)
-LDA #$01
-STA >SFX_ACTIVE        ; Mark as active
-RTS
-
-; SFX_UPDATE - Process one AYFX frame (call once per frame in loop)
-SFX_UPDATE:
-LDA >SFX_ACTIVE        ; Check if active
-BEQ noay               ; Not active, skip
-JSR sfx_doframe        ; Process one frame
-noay:
-RTS
-
-; sfx_doframe - AYFX frame parser
-; Runs with DP=$D0 (inside AUDIO_UPDATE)
-sfx_doframe:
-LDU SFX_PTR            ; Get current frame pointer (LDU has no direct mode)
-LDB ,U                 ; Read flag byte (NO auto-increment)
-CMPB #$D0              ; Check end marker (first byte)
-BNE sfx_checktonefreq  ; Not end, continue
-LDB 1,U                ; Check second byte at offset 1
-CMPB #$20              ; End marker $D0 $20?
-BEQ sfx_endofeffect    ; Yes, stop
-
-sfx_checktonefreq:
-LEAY 1,U               ; Y = pointer to tone/noise data
-LDB ,U                 ; Reload flag byte
-BITB #$20              ; Bit 5: tone data present?
-BEQ sfx_checknoisefreq ; No, skip tone
-; Set tone frequency (channel C = reg 4/5)
-LDB 2,U                ; Get LOW byte (fine tune)
-LDA #$04               ; Register 4
-JSR Sound_Byte         ; Write to PSG
-LDB 1,U                ; Get HIGH byte (coarse tune)
-LDA #$05               ; Register 5
-JSR Sound_Byte         ; Write to PSG
-LEAY 2,Y               ; Skip 2 tone bytes
-
-sfx_checknoisefreq:
-LDB ,U                 ; Reload flag byte
-BITB #$40              ; Bit 6: noise data present?
-BEQ sfx_checkvolume    ; No, skip noise
-LDB ,Y                 ; Get noise period
-LDA #$06               ; Register 6
-JSR Sound_Byte         ; Write to PSG
-LEAY 1,Y               ; Skip 1 noise byte
-
-sfx_checkvolume:
-LDB ,U                 ; Reload flag byte
-ANDB #$0F              ; Get volume from bits 0-3
-LDA #$0A               ; Register 10 (volume C)
-JSR Sound_Byte         ; Write to PSG
-
-; Combined mixer update: read shadow once, apply tone+noise, write once
-sfx_updatemixer:
-LDB $C807              ; Read mixer shadow ONCE
-LDA ,U                 ; Load flag byte into A
-; Handle tone (flag bit 4 -> mixer bit 2)
-BITA #$10              ; Bit 4: disable tone?
-BNE sfx_m_tonedis
-ANDB #$FB              ; Clear bit 2 (enable tone C)
-BRA sfx_m_noise
-sfx_m_tonedis:
-ORB #$04               ; Set bit 2 (disable tone C)
-sfx_m_noise:
-; Handle noise (flag bit 7 -> mixer bit 5)
-BITA #$80              ; Bit 7: disable noise?
-BNE sfx_m_noisedis
-ANDB #$DF              ; Clear bit 5 (enable noise C)
-BRA sfx_m_write
-sfx_m_noisedis:
-ORB #$20               ; Set bit 5 (disable noise C)
-sfx_m_write:
-STB $C807              ; Update mixer shadow
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Single write to PSG
-
-sfx_nextframe:
-STY SFX_PTR            ; Update pointer (STY has no direct mode)
-RTS
-
-sfx_endofeffect:
-; Stop SFX - silence channel C and restore mixer
-CLR >SFX_ACTIVE        ; Mark as inactive (force extended)
-LDA #$0A               ; Register 10 (volume C)
-LDB #$00               ; Volume = 0
-JSR Sound_Byte
-; Restore mixer: disable tone+noise on channel C
-LDB $C807              ; Read mixer shadow
-ORB #$24               ; Set bits 2+5 (disable tone C + noise C)
-STB $C807              ; Update shadow
-LDA #$07               ; Register 7
-JSR Sound_Byte         ; Write mixer
-LDD #$0000
-STD >SFX_PTR           ; Clear pointer (force extended)
-RTS
-
-; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
-__Intensity_a:
-TFR B,A         ; Move B to A (BIOS expects intensity in A)
-JMP Intensity_a ; JMP (not JSR) - BIOS returns to original caller
-__Reset0Ref:
-JMP Reset0Ref   ; JMP (not JSR) - BIOS returns to original caller
-__Moveto_d:
-LDA 2,S         ; Get Y from stack (after return address)
-JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
-__Draw_Line_d:
-LDA 2,S         ; Get dy from stack (after return address)
-JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
-; ============================================================================
-; Draw_Sync_List - EXACT port of Malban's draw_synced_list_c
-; Data: FCB intensity, y_start, x_start, next_y, next_x, [flag, dy, dx]*, 2
-; ============================================================================
-Draw_Sync_List:
-; ITERACIÓN 11: Loop completo dentro (bug assembler arreglado, datos embebidos OK)
-LDA ,X+                 ; intensity
-JSR $F2AB               ; BIOS Intensity_a (expects value in A)
-LDB ,X+                 ; y_start
-LDA ,X+                 ; x_start
-STD TEMP_YX             ; Guardar en variable temporal (evita stack)
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
-LDD TEMP_YX             ; Recuperar y,x
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore x
-STA VIA_port_a          ; x to DAC
-; Timing setup
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
-DSL_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSL_W1
-; Loop de dibujo
-DSL_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSL_DONE           ; Exit if end (long branch)
-CMPA #1                 ; Check next path marker
-LBEQ DSL_NEXT_PATH      ; Process next path (long branch)
-; Draw line
-CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)
-LDB ,X+                 ; dy
-LDA ,X+                 ; dx
-PSHS A                  ; Save dx
-STB VIA_port_a          ; dy to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore dx
-STA VIA_port_a          ; dx to DAC
-CLR VIA_t1_cnt_hi
-LDA #$FF
-STA VIA_shift_reg
-; Wait for line draw
-DSL_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSL_W2
-CLR VIA_shift_reg
-LBRA DSL_LOOP            ; Long branch back to loop start
-; Next path: read new intensity and header, then continue drawing
-DSL_NEXT_PATH:
-; Save current X position before reading anything
-TFR X,D                 ; D = X (current position)
-PSHS D                  ; Save X address
-LDA ,X+                 ; Read intensity (X now points to y_start)
-PSHS A                  ; Save intensity
-LDB ,X+                 ; y_start
-LDA ,X+                 ; x_start (X now points to next_y)
-STD TEMP_YX             ; Save y,x
-PULS A                  ; Get intensity back
-PSHS A                  ; Save intensity again
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 (BIOS requirement)
-PULS A                  ; Restore intensity
-JSR $F2AB               ; BIOS Intensity_a (may corrupt X!)
-; Restore X to point to next_y,next_x (after the 3 bytes we read)
-PULS D                  ; Get original X
-ADDD #3                 ; Skip intensity, y_start, x_start
-TFR D,X                 ; X now points to next_y
-; Reset to zero (same as Draw_Sync_List start)
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
-LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A
-STA VIA_port_a          ; x to DAC
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move
-DSL_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSL_W3
-CLR VIA_shift_reg       ; Clear before continuing
-LBRA DSL_LOOP            ; Continue drawing - LONG BRANCH
-DSL_DONE:
-RTS
-Draw_Sync_List_At_With_Mirrors:
-; Unified mirror support using flags: MIRROR_X and MIRROR_Y
-; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_SET_INTENSITY:
-JSR $F2AB               ; BIOS Intensity_a
-LDB ,X+                 ; y_start from .vec (already relative to center)
-; Check if Y mirroring is enabled
-TST MIRROR_Y
-BEQ DSWM_NO_NEGATE_Y
-NEGB                    ; ← Negate Y if flag set
-DSWM_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
-LDA ,X+                 ; x_start from .vec (already relative to center)
-; Check if X mirroring is enabled
-TST MIRROR_X
-BEQ DSWM_NO_NEGATE_X
-NEGA                    ; ← Negate X if flag set
-DSWM_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX             ; Save adjusted position
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
-LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore x
-STA VIA_port_a          ; x to DAC
-; Timing setup
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
-DSWM_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W1
-; Loop de dibujo (conditional mirrors)
-DSWM_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSWM_DONE
-CMPA #1                 ; Check next path marker
-LBEQ DSWM_NEXT_PATH
-; Draw line with conditional negations
-LDB ,X+                 ; dy
-; Check if Y mirroring is enabled
-TST MIRROR_Y
-BEQ DSWM_NO_NEGATE_DY
-NEGB                    ; ← Negate dy if flag set
-DSWM_NO_NEGATE_DY:
-LDA ,X+                 ; dx
-; Check if X mirroring is enabled
-TST MIRROR_X
-BEQ DSWM_NO_NEGATE_DX
-NEGA                    ; ← Negate dx if flag set
-DSWM_NO_NEGATE_DX:
-PSHS A                  ; Save final dx
-STB VIA_port_a          ; dy (possibly negated) to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore final dx
-STA VIA_port_a          ; dx (possibly negated) to DAC
-CLR VIA_t1_cnt_hi
-LDA #$FF
-STA VIA_shift_reg
-; Wait for line draw
-DSWM_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W2
-CLR VIA_shift_reg
-LBRA DSWM_LOOP          ; Long branch
-; Next path: repeat mirror logic for new path header
-DSWM_NEXT_PATH:
-TFR X,D
-PSHS D
-; Check intensity override (same logic as start)
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_NEXT_SET_INTENSITY:
-PSHS A
-LDB ,X+                 ; y_start
-TST MIRROR_Y
-BEQ DSWM_NEXT_NO_NEGATE_Y
-NEGB
-DSWM_NEXT_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
-LDA ,X+                 ; x_start
-TST MIRROR_X
-BEQ DSWM_NEXT_NO_NEGATE_X
-NEGA
-DSWM_NEXT_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX
-PULS A                  ; Get intensity back
-JSR $F2AB
-PULS D
-ADDD #3
-TFR D,X
-; Reset to zero
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
-LDD TEMP_YX
-STB VIA_port_a
-PSHS A
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A
-STA VIA_port_a
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X
-; Wait for move
-DSWM_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W3
-CLR VIA_shift_reg
-LBRA DSWM_LOOP          ; Long branch
-DSWM_DONE:
-RTS
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
-    CLR $C80E        ; Initialize Vec_Prev_Btns to 0 for Read_Btns debounce
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk
-    TFR X,S
-    JSR $F533       ; Init_Music_Buf - Initialize BIOS music system to silence
-    ; Initialize SFX variables to prevent random noise on startup
-    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)
-    LDD #$0000
-    STD >SFX_PTR            ; Clear SFX pointer
-
-    ; *** DEBUG *** main() function code inline (initialization)
-    ; VPy_LINE:20
-    ; VPy_LINE:9
-    LDD #0
-    STD VAR_BALL_X
-    ; VPy_LINE:10
-    LDD #20
-    STD VAR_BALL_Y
-    ; VPy_LINE:11
-    LDD #3
-    STD VAR_BALL_VX
-    ; VPy_LINE:12
-    LDD #2
-    STD VAR_BALL_VY
-    ; VPy_LINE:15
-    LDD #-30
-    STD VAR_BUB_X
-    ; VPy_LINE:16
-    LDD #-20
-    STD VAR_BUB_Y
-    ; VPy_LINE:17
-    LDD #-2
-    STD VAR_BUB_VX
-    ; VPy_LINE:18
-    LDD #3
-    STD VAR_BUB_VY
-    ; VPy_LINE:21
-; PLAY_MUSIC("music1") - play music asset
-    LDX #_MUSIC1_MUSIC
-    JSR PLAY_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
-    ; VPy_LINE:22
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_X
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:23
-    LDD #20
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_Y
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:24
-    LDD #3
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:25
-    LDD #2
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:26
-    LDD #-30
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_X
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:27
-    LDD #-20
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_Y
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:28
-    LDD #-2
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:29
-    LDD #3
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_VY
-    STU TMPPTR
-    STX ,U
-
-MAIN:
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    ; === Initialize Joystick (one-time setup) ===
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
-    ; *** Call loop() as subroutine (executed every frame)
-    JSR LOOP_BODY
-    BRA MAIN
-
-    ; VPy_LINE:31
-LOOP_BODY:
-    JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:32
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-60
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #110
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_0
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 32
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(0)
-    ; VPy_LINE:35
-    LDD VAR_BALL_X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BALL_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_X
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 2 - Discriminant(0)
-    ; VPy_LINE:36
-    LDD VAR_BALL_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BALL_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_Y
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 3 - Discriminant(9)
-    ; VPy_LINE:39
-    LDD VAR_BALL_X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #97
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_2
-    LDD #0
-    STD RESULT
-    BRA CE_3
-CT_2:
-    LDD #1
-    STD RESULT
-CE_3:
-    LDD RESULT
-    LBEQ IF_NEXT_1
-    ; VPy_LINE:40
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BALL_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:41
-    LDD #97
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_X
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:42
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-    ; DEBUG: Statement 4 - Discriminant(9)
-    ; VPy_LINE:44
-    LDD VAR_BALL_X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-97
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_6
-    LDD #0
-    STD RESULT
-    BRA CE_7
-CT_6:
-    LDD #1
-    STD RESULT
-CE_7:
-    LDD RESULT
-    LBEQ IF_NEXT_5
-    ; VPy_LINE:45
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BALL_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:46
-    LDD #-97
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_X
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:47
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
-    ; DEBUG: Statement 5 - Discriminant(9)
-    ; VPy_LINE:49
-    LDD VAR_BALL_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #77
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_10
-    LDD #0
-    STD RESULT
-    BRA CE_11
-CT_10:
-    LDD #1
-    STD RESULT
-CE_11:
-    LDD RESULT
-    LBEQ IF_NEXT_9
-    ; VPy_LINE:50
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BALL_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:51
-    LDD #77
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_Y
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:52
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_8
-IF_NEXT_9:
-IF_END_8:
-    ; DEBUG: Statement 6 - Discriminant(9)
-    ; VPy_LINE:54
-    LDD VAR_BALL_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-77
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_14
-    LDD #0
-    STD RESULT
-    BRA CE_15
-CT_14:
-    LDD #1
-    STD RESULT
-CE_15:
-    LDD RESULT
-    LBEQ IF_NEXT_13
-    ; VPy_LINE:55
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BALL_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:56
-    LDD #-77
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BALL_Y
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:57
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_12
-IF_NEXT_13:
-IF_END_12:
-    ; DEBUG: Statement 7 - Discriminant(0)
-    ; VPy_LINE:60
-    LDD VAR_BUB_X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BUB_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_X
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 8 - Discriminant(0)
-    ; VPy_LINE:61
-    LDD VAR_BUB_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BUB_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_Y
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 9 - Discriminant(9)
-    ; VPy_LINE:64
-    LDD VAR_BUB_X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #90
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_18
-    LDD #0
-    STD RESULT
-    BRA CE_19
-CT_18:
-    LDD #1
-    STD RESULT
-CE_19:
-    LDD RESULT
-    LBEQ IF_NEXT_17
-    ; VPy_LINE:65
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BUB_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:66
-    LDD #90
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_X
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:67
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_16
-IF_NEXT_17:
-IF_END_16:
-    ; DEBUG: Statement 10 - Discriminant(9)
-    ; VPy_LINE:69
-    LDD VAR_BUB_X
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-90
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_22
-    LDD #0
-    STD RESULT
-    BRA CE_23
-CT_22:
-    LDD #1
-    STD RESULT
-CE_23:
-    LDD RESULT
-    LBEQ IF_NEXT_21
-    ; VPy_LINE:70
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BUB_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:71
-    LDD #-90
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_X
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:72
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_20
-IF_NEXT_21:
-IF_END_20:
-    ; DEBUG: Statement 11 - Discriminant(9)
-    ; VPy_LINE:74
-    LDD VAR_BUB_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #70
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_26
-    LDD #0
-    STD RESULT
-    BRA CE_27
-CT_26:
-    LDD #1
-    STD RESULT
-CE_27:
-    LDD RESULT
-    LBEQ IF_NEXT_25
-    ; VPy_LINE:75
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BUB_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:76
-    LDD #70
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_Y
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:77
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_24
-IF_NEXT_25:
-IF_END_24:
-    ; DEBUG: Statement 12 - Discriminant(9)
-    ; VPy_LINE:79
-    LDD VAR_BUB_Y
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-70
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_30
-    LDD #0
-    STD RESULT
-    BRA CE_31
-CT_30:
-    LDD #1
-    STD RESULT
-CE_31:
-    LDD RESULT
-    LBEQ IF_NEXT_29
-    ; VPy_LINE:80
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_BUB_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:81
-    LDD #-70
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BUB_Y
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:82
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_28
-IF_NEXT_29:
-IF_END_28:
-    ; DEBUG: Statement 13 - Discriminant(8)
-    ; VPy_LINE:85
-; DRAW_VECTOR("ball", x, y) - 1 path(s) at position
-    LDD VAR_BALL_X
-    STD RESULT
-    LDA RESULT+1  ; X position (low byte)
-    STA TMPPTR    ; Save X to temporary storage
-    LDD VAR_BALL_Y
-    STD RESULT
-    LDA RESULT+1  ; Y position (low byte)
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_BALL_PATH0  ; Path 0
-    JSR Draw_Sync_List_At_With_Mirrors  ; Uses unified mirror function
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 14 - Discriminant(8)
-    ; VPy_LINE:86
-; DRAW_VECTOR("bubble_small", x, y) - 1 path(s) at position
-    LDD VAR_BUB_X
-    STD RESULT
-    LDA RESULT+1  ; X position (low byte)
-    STA TMPPTR    ; Save X to temporary storage
-    LDD VAR_BUB_Y
-    STD RESULT
-    LDA RESULT+1  ; Y position (low byte)
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_BUBBLE_SMALL_PATH0  ; Path 0
-    JSR Draw_Sync_List_At_With_Mirrors  ; Uses unified mirror function
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 15 - Discriminant(8)
-    ; VPy_LINE:89
-    LDD #65436
-    STD >DRAW_LINE_ARGS+0
-    LDD #80
-    STD >DRAW_LINE_ARGS+2
-    LDD #100
-    STD >DRAW_LINE_ARGS+4
-    LDD #80
-    STD >DRAW_LINE_ARGS+6
-    LDD #60
-    STD >DRAW_LINE_ARGS+8
-    JSR DRAW_LINE_WRAPPER
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 16 - Discriminant(8)
-    ; VPy_LINE:90
-    LDD #100
-    STD >DRAW_LINE_ARGS+0
-    LDD #80
-    STD >DRAW_LINE_ARGS+2
-    LDD #100
-    STD >DRAW_LINE_ARGS+4
-    LDD #65456
-    STD >DRAW_LINE_ARGS+6
-    LDD #60
-    STD >DRAW_LINE_ARGS+8
-    JSR DRAW_LINE_WRAPPER
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 17 - Discriminant(8)
-    ; VPy_LINE:91
-    LDD #100
-    STD >DRAW_LINE_ARGS+0
-    LDD #65456
-    STD >DRAW_LINE_ARGS+2
-    LDD #65436
-    STD >DRAW_LINE_ARGS+4
-    LDD #65456
-    STD >DRAW_LINE_ARGS+6
-    LDD #60
-    STD >DRAW_LINE_ARGS+8
-    JSR DRAW_LINE_WRAPPER
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 18 - Discriminant(8)
-    ; VPy_LINE:92
-    LDD #65436
-    STD >DRAW_LINE_ARGS+0
-    LDD #65456
-    STD >DRAW_LINE_ARGS+2
-    LDD #65436
-    STD >DRAW_LINE_ARGS+4
-    LDD #80
-    STD >DRAW_LINE_ARGS+6
-    LDD #60
-    STD >DRAW_LINE_ARGS+8
-    JSR DRAW_LINE_WRAPPER
-    LDD #0
-    STD RESULT
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
-    RTS
-
-;***************************************************************************
-; DATA SECTION
-;***************************************************************************
-
-; ========================================
-; ASSET DATA SECTION
-; Embedded 4 of 4 assets (unused assets excluded)
-; ========================================
-
-; Vector asset: bubble_small
-; Generated from bubble_small.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 24
-; X bounds: min=-10, max=10, width=20
-; Center: (0, 0)
-
-_BUBBLE_SMALL_WIDTH EQU 20
-_BUBBLE_SMALL_CENTER_X EQU 0
-_BUBBLE_SMALL_CENTER_Y EQU 0
-
-_BUBBLE_SMALL_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
-    FDB _BUBBLE_SMALL_PATH0        ; pointer to path 0
-
-_BUBBLE_SMALL_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $00,$0A,0,0        ; path0: header (y=0, x=10, relative to center)
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
-    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB 2                ; End marker (path complete)
-
-; Vector asset: ball
-; Generated from ball.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 8
-; X bounds: min=-3, max=3, width=6
-; Center: (0, 0)
-
-_BALL_WIDTH EQU 6
-_BALL_CENTER_X EQU 0
-_BALL_CENTER_Y EQU 0
-
-_BALL_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
-    FDB _BALL_PATH0        ; pointer to path 0
-
-_BALL_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $03,$00,0,0        ; path0: header (y=3, x=0, relative to center)
-    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
-    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
-    FCB 2                ; End marker (path complete)
-
-; Generated from music1.vmus (internal name: Space Groove)
-; Tempo: 140 BPM, Total events: 36 (PSG Direct format)
-; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
-
-_MUSIC1_MUSIC:
-    ; Frame-based PSG register writes
-    FCB     0              ; Delay 0 frames (maintain previous state)
-    FCB     11              ; Frame 0 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     10              ; Frame 5 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     11              ; Frame 10 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     10              ; Frame 13 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 21 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     8              ; Frame 24 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 32 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 34 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $51             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     11              ; Frame 42 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     6              ; Delay 6 frames (maintain previous state)
-    FCB     10              ; Frame 48 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     11              ; Frame 53 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     10              ; Frame 56 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 64 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 66 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     9              ; Delay 9 frames (maintain previous state)
-    FCB     9              ; Frame 75 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0B             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 77 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $E1             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0B             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     11              ; Frame 85 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     6              ; Delay 6 frames (maintain previous state)
-    FCB     10              ; Frame 91 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     11              ; Frame 96 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     10              ; Frame 99 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 107 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 109 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 117 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     8              ; Frame 120 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $E1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     11              ; Frame 128 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $14             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     10              ; Frame 133 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     6              ; Delay 6 frames (maintain previous state)
-    FCB     11              ; Frame 139 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     10              ; Frame 141 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C2             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0B             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     9              ; Delay 9 frames (maintain previous state)
-    FCB     9              ; Frame 150 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     2              ; Delay 2 frames (maintain previous state)
-    FCB     8              ; Frame 152 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames (maintain previous state)
-    FCB     9              ; Frame 160 - 9 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $03             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F2             ; Reg 7 value
-    FCB     3              ; Delay 3 frames (maintain previous state)
-    FCB     8              ; Frame 163 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     9               ; Reg 9 number
-    FCB     $00             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $0B             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $01             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $09             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $FA             ; Reg 7 value
-    FCB     8              ; Delay 8 frames before loop
-    FCB     $FF             ; Loop command ($FF never valid as count)
-    FDB     _MUSIC1_MUSIC       ; Jump to start (absolute address)
-
-
-; ========================================
-; SFX Asset: hit (from /Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/moving_vectors/assets/sfx/hit.vsfx)
-; ========================================
+@ VPy — ARM Thumb2 target (RP2350 / Cortex-M33)
+@ Game: MOVINGVEC
+@ Generated by vpy_codegen arm backend
+@ Assemble with: arm-none-eabi-as -mthumb -mcpu=cortex-m33 game.s -o game.o
+
+.syntax unified
+.cpu cortex-m33
+.fpu fpv5-sp-d16
+.thumb
+
+@ --- VPy runtime RAM (RP2350 SRAM) ---
+.equ TMPVAL,              0x2007F000  @ 32-bit arithmetic temporary
+.equ TMPPTR,              0x2007F004  @ pointer temporary
+.equ TMPPTR2,             0x2007F008  @ second pointer temporary
+.equ VAR_ARG0,            0x2007F00C  @ function argument 0
+.equ VAR_ARG1,            0x2007F010  @ function argument 1
+.equ VAR_ARG2,            0x2007F014  @ function argument 2
+.equ VAR_ARG3,            0x2007F018  @ function argument 3
+.equ VAR_ARG4,            0x2007F01C  @ function argument 4
+.equ RESULT,              0x2007F020  @ function return value
+.equ BEEP_FRAMES_LEFT,    0x2007F024  @ non-blocking beep counter
+.equ VIA_WRITE_ADDR,      0x2007F028  @ scratch for bus_write address
+.equ VIA_WRITE_DATA,      0x2007F02C  @ scratch for bus_write data
+.equ _dv3d_cos,           0x2007F030  @ 3D cos offsets: cos_ax, cos_ay, cos_az (3 bytes)
+.equ _dv3d_tmp,           0x2007F034  @ 3D vertex raw coords: rx, ry, rz (3 bytes)
+.equ _dv3d_sm,            0x2007F038  @ 3D rotation intermediates: t0, y1, z1, x2 (4 bytes)
+.equ _dv3d_cur,           0x2007F03C  @ 3D current beam pos: cur_x, cur_y (2 bytes)
+.equ _dv3d_fst,           0x2007F03E  @ 3D first vertex of path: first_x, first_y (2 bytes)
+.equ _dv3d_vbuf,          0x2007F040  @ 3D rotated vertex cache: sx,sy pairs (254 bytes max)
+.equ RAND_SEED,           0x2007F140  @ LCG random number seed
+.equ BTN_STATE_J1,        0x2007F144  @ cached VIA Port B (J1 buttons, bits 4-7 active-low)
+.equ BTN_STATE_J2,        0x2007F148  @ cached PSG reg 14 (J2 buttons, bits 0-3 active-low)
+.equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
+.equ CAMERA_Y,            0x2007F150  @ camera Y offset
+.equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
+.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
+.equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
+.equ DBGVAL,              0x2007F160  @ debug_print last written value
+.equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
+.equ PRINT_BEAM_Y,        0x2007F168  @ beam Y shadow during print_text
+.equ PSG_MUSIC_PTR,       0x2007F16C  @ pointer to current music event in ROM
+.equ PSG_MUSIC_START,     0x2007F170  @ pointer to loop-start event
+.equ PSG_IS_PLAYING,      0x2007F174  @ 1 = music playing
+.equ PSG_DELAY_FRAMES,    0x2007F178  @ frames remaining before next music event
+.equ PSG_SFX_PTR,         0x2007F17C  @ pointer to current SFX event in ROM
+.equ PSG_SFX_ACTIVE,      0x2007F180  @ 1 = SFX playing
+.equ PSG_SFX_DELAY,       0x2007F184  @ frames remaining before next SFX event
+.equ LEVEL_GP_COUNT,      0x2007F188  @ number of active GP objects
+.equ LEVEL_GP_BUF,        0x2007F18C  @ level GP mutable buffer (32 obj × 8 bytes = 256 bytes)
+.equ USER_RAM_START,      0x2007F28C  @ user variables begin here
+
+@ --- VIA 6522 registers (Vectrex bus addresses) ---
+.equ VIA_BASE,       0xD000
+.equ VIA_PORT_B,     0xD000   @ Port B data (MUX, beam, z-pulse)
+.equ VIA_PORT_A,     0xD001   @ Port A data (DAC / joystick)
+.equ VIA_DDR_B,      0xD002   @ Port B direction
+.equ VIA_DDR_A,      0xD003   @ Port A direction
+.equ VIA_T1C_L,      0xD004   @ Timer 1 counter low
+.equ VIA_T1C_H,      0xD005   @ Timer 1 counter high
+.equ VIA_T1L_L,      0xD006   @ Timer 1 latch low
+.equ VIA_T1L_H,      0xD007   @ Timer 1 latch high
+.equ VIA_SR,         0xD00A   @ Shift register (beam on/off via CB2)
+.equ VIA_ACR,        0xD00B   @ Auxiliary control register
+.equ VIA_PCR,        0xD00C   @ Peripheral control register
+.equ VIA_IFR,        0xD00D   @ Interrupt flag register
+.equ VIA_IER,        0xD00E   @ Interrupt enable register
+
+@ VIA Port B bits
+.equ PB_MUX,         0x01     @ PSG BDIR (bit 0)
+.equ PB_BEAM,        0x08     @ Beam on/off
+.equ PB_ZPULSE,      0x10     @ Z-axis pulse
+
+@ VIA ACR / PCR values
+.equ ACR_SR_SHIFT,   0x18     @ SR = shift out under PHI2
+.equ PCR_BEAM_OFF,   0xCE
+.equ PCR_BEAM_ON,    0xDE
+.equ T1_STANDARD,    0x7F     @ Timer 1 value for standard vector scale
+
+@ --- RP2350 SIO (GPIO bit-bang) ---
+.equ SIO_BASE,       0xD0000000
+.equ SIO_GPIO_OUT,   0xD0000010  @ GPIO output value
+.equ SIO_GPIO_SET,   0xD0000014  @ GPIO output set (atomic)
+.equ SIO_GPIO_CLR,   0xD0000018  @ GPIO output clear (atomic)
+.equ SIO_GPIO_OE_SET,0xD0000024  @ GPIO OE set
+.equ SIO_GPIO_OE_CLR,0xD0000028  @ GPIO OE clear
+.equ SIO_GPIO_IN,    0xD0000004  @ GPIO input value
+
+@ GPIO pin masks (from pins.rs)
+.equ ADDR_MASK,      0x00007FFF  @ GP0-GP14 (A0-A14)
+.equ DATA_MASK,      0x007F8000  @ GP15-GP22 (D0-D7)
+.equ PIN_NCE,        23
+.equ PIN_RW,         24
+.equ PIN_NOE,        25
+.equ PIN_NHALT,      27
+.equ PIN_DIR_CTRL,   29
+
+.section .game_rom, "ax"
+.align 2
+
+@ --- Game ROM image header (offset 0 of game ROM slot) ---
+@ Firmware checks GAME_MAGIC before calling game_main.
+
+.global game_header
+.type game_header, %object
+game_header:
+    .word 0x32795056      @ GAME_MAGIC 'VPy2'
+    .word game_main         @ entry point (thumb bit set by linker)
+    .word 0x00000000        @ reserved
+    .word 0x00000000        @ reserved
+
+@ ============================================================
+@ bus_write: write one byte to Vectrex bus address
+@   r0 = address (16-bit Vectrex bus address, e.g. 0xD000)
+@   r1 = data byte
+@ Clobbers: r2, r3
+@ ============================================================
+.global bus_write
+.type bus_write, %function
+.thumb_func
+bus_write:
+    push    {r4, r5, lr}
+    ldr     r4, =0xD0000000         @ SIO_BASE
+    movw    r2, #0x7FFF
+    and     r2, r0, r2               @ address → GP0-GP14
+    and     r3, r1, #0xFF
+    lsl     r3, r3, #15              @ data → GP15-GP22
+    orr     r2, r2, r3               @ combined GPIO value
+    ldr     r3, =0x007F7FFF          @ ADDR_MASK | DATA_MASK
+    str     r3, [r4, #0x24]          @ SIO_GPIO_OE_SET
+    str     r2, [r4, #0x14]          @ SIO_GPIO_OUT_SET (set bits)
+    mvn     r3, r2
+    ldr     r5, =0x007F7FFF
+    and     r3, r3, r5
+    str     r3, [r4, #0x18]          @ SIO_GPIO_OUT_CLR (clear bits)
+    mov     r3, #1
+    lsl     r3, r3, #24              @ 1 << PIN_RW (24)
+    str     r3, [r4, #0x18]          @ GPIO_CLR: R/W low
+    mov     r3, #300
+1:  subs    r3, r3, #1
+    bne     1b
+    mov     r3, #1
+    lsl     r3, r3, #24
+    str     r3, [r4, #0x14]          @ GPIO_SET: R/W high
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ ============================================================
+@ bus_read: read one byte from Vectrex bus address
+@   r0 = address
+@ Returns: r0 = data byte
+@ Clobbers: r2, r3
+@ ============================================================
+.global bus_read
+.type bus_read, %function
+.thumb_func
+bus_read:
+    push    {r4, lr}
+    ldr     r4, =0xD0000000
+    ldr     r2, =0x00007FFF          @ ADDR_MASK
+    str     r2, [r4, #0x24]          @ OE_SET address lines
+    ldr     r2, =0x007F8000          @ DATA_MASK
+    str     r2, [r4, #0x28]          @ OE_CLR data lines
+    movw    r2, #0x7FFF
+    and     r2, r0, r2
+    str     r2, [r4, #0x14]          @ set addr bits
+    mvn     r3, r2
+    movw    r2, #0x7FFF
+    and     r3, r3, r2
+    str     r3, [r4, #0x18]          @ clear addr bits
+    mov     r2, #1
+    lsl     r2, r2, #24
+    str     r2, [r4, #0x14]
+    mov     r3, #300
+1:  subs    r3, r3, #1
+    bne     1b
+    ldr     r0, [r4, #0x04]          @ SIO_GPIO_IN
+    lsr     r0, r0, #15              @ shift data to bits 0-7
+    and     r0, r0, #0xFF
+    pop     {r4, pc}
+    .ltorg
+
+@ ============================================================
+@ Drawing engine — ARM Thumb2 / RP2350 bus master
+@ ============================================================
+
+@ SIN_TABLE[128]: sin(i*2π/128)*127 as i8
+.global _SIN_TABLE
+_SIN_TABLE:
+    .byte   0x00, 0x06, 0x0C, 0x13, 0x19, 0x1F, 0x25, 0x2B, 0x31, 0x36, 0x3C, 0x41, 0x47, 0x4C, 0x51, 0x55
+    .byte   0x5A, 0x5E, 0x62, 0x66, 0x6A, 0x6D, 0x70, 0x73, 0x75, 0x78, 0x7A, 0x7B, 0x7D, 0x7E, 0x7E, 0x7F
+    .byte   0x7F, 0x7F, 0x7E, 0x7E, 0x7D, 0x7B, 0x7A, 0x78, 0x75, 0x73, 0x70, 0x6D, 0x6A, 0x66, 0x62, 0x5E
+    .byte   0x5A, 0x55, 0x51, 0x4C, 0x47, 0x41, 0x3C, 0x36, 0x31, 0x2B, 0x25, 0x1F, 0x19, 0x13, 0x0C, 0x06
+    .byte   0x00, 0xFA, 0xF4, 0xED, 0xE7, 0xE1, 0xDB, 0xD5, 0xCF, 0xCA, 0xC4, 0xBF, 0xB9, 0xB4, 0xAF, 0xAB
+    .byte   0xA6, 0xA2, 0x9E, 0x9A, 0x96, 0x93, 0x90, 0x8D, 0x8B, 0x88, 0x86, 0x85, 0x83, 0x82, 0x82, 0x81
+    .byte   0x81, 0x81, 0x82, 0x82, 0x83, 0x85, 0x86, 0x88, 0x8B, 0x8D, 0x90, 0x93, 0x96, 0x9A, 0x9E, 0xA2
+    .byte   0xA6, 0xAB, 0xAF, 0xB4, 0xB9, 0xBF, 0xC4, 0xCA, 0xCF, 0xD5, 0xDB, 0xE1, 0xE7, 0xED, 0xF4, 0xFA
+
+@ smul_lut(r0=val i8, r1=angle 0-127) → r0=(val*sin)>>7
+.global smul_lut
+.type smul_lut, %function
+.thumb_func
+smul_lut:
+    ldr     r2, =_SIN_TABLE
+    and     r1, r1, #0x7F
+    ldrb    r2, [r2, r1]
+    sxtb    r2, r2
+    sxtb    r0, r0
+    mul     r0, r0, r2
+    asr     r0, r0, #7
+    bx      lr
+
+@ dv_reset() — reset Vectrex integrators, set ACR=$18
+.global dv_reset
+.type dv_reset, %function
+.thumb_func
+dv_reset:
+    push    {lr}
+    mov     r0, #0xD00A
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD00B
+    mov     r1, #0x18
+    bl      bus_write
+    mov     r0, #0xD00C
+    mov     r1, #0xCC
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x03
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    pop     {pc}
+    .ltorg
+
+@ dv_move_to(r0=dx, r1=dy) — position beam, no draw
+.global dv_move_to
+.type dv_move_to, %function
+.thumb_func
+dv_move_to:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #60
+dv_mt_s: subs r0,r0,#1
+    bne dv_mt_s
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD00A
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD006
+    mov     r1, #0x7F
+    bl      bus_write
+    mov     r0, #0xD005
+    mov     r1, #0x00
+    bl      bus_write
+dv_mt_p: mov r0,#0xD00D
+    bl bus_read
+    tst r0,#0x40
+    beq dv_mt_p
+    mov     r0, #0xD004
+    bl      bus_read
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ dv_draw_delta(r0=dx, r1=dy) — draw one vector segment
+.global dv_draw_delta
+.type dv_draw_delta, %function
+.thumb_func
+dv_draw_delta:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #60
+dv_dd_s: subs r0,r0,#1
+    bne dv_dd_s
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD00A
+    mov     r1, #0xFF
+    bl      bus_write
+    mov     r0, #0xD006
+    mov     r1, #0x7F
+    bl      bus_write
+    mov     r0, #0xD005
+    mov     r1, #0x00
+    bl      bus_write
+dv_dd_p: mov r0,#0xD00D
+    bl bus_read
+    tst r0,#0x40
+    beq dv_dd_p
+    mov     r0, #0xD00A
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD004
+    bl      bus_read
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
+@ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.
+.global vpy_draw_vector
+.type vpy_draw_vector, %function
+.thumb_func
+vpy_draw_vector:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox
+    mov     r10, r2             @ oy
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path index
+dvv_pl:
+    cmp     r6, r5
+    bge     dvv_done
+    lsl     r7, r6, #2
+    add     r7, r7, #4
+    ldr     r7, [r4, r7]
+    bl      dv_reset
+    ldrb    r0, [r7]
+    bl      vpy_set_intensity
+    ldrsb   r0, [r7, #2]
+    add     r0, r0, r9
+    ldrsb   r1, [r7, #1]
+    add     r1, r1, r10
+    bl      dv_move_to
+    add     r8, r7, #5
+dvv_cl:
+    ldrb    r0, [r8]
+    cmp     r0, #0x02
+    beq     dvv_cend
+    cmp     r0, #0xFF
+    bne     dvv_cskip
+    ldrsb   r0, [r8, #2]
+    ldrsb   r1, [r8, #1]
+    bl      dv_draw_delta
+    add     r8, r8, #3
+    b       dvv_cl
+dvv_cskip:
+    add     r8, r8, #1
+    b       dvv_cl
+dvv_cend:
+    add     r6, r6, #1
+    b       dvv_pl
+dvv_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_draw_vector_3d(r0,r1=ax,r2=ay,r3=az,[sp+36]=ox,[sp+40]=oy)
+.global vpy_draw_vector_3d
+.type vpy_draw_vector_3d, %function
+.thumb_func
+vpy_draw_vector_3d:
+    push    {r4,r5,r6,r7,r8,r9,r10,r11,lr}
+    mov     r4, r0
+    mov     r5, r1               @ ax
+    mov     r6, r2               @ ay
+    mov     r7, r3               @ az
+    ldrsb   r8, [sp, #36]        @ ox (sign-extend)
+    ldrsb   r9, [sp, #40]        @ oy
+    ldr     r0, =_dv3d_cos
+    add     r1, r5, #32
+    and r1,r1,#0x7F
+    strb r1,[r0]
+    add     r1, r6, #32
+    and r1,r1,#0x7F
+    strb r1,[r0,#1]
+    add     r1, r7, #32
+    and r1,r1,#0x7F
+    strb r1,[r0,#2]
+    ldr     r10, [r4]
+    add r4,r4,#4
+    ldr     r11, =_dv3d_vbuf
+dv3_vl:
+    cmp r10,#0
+    beq dv3_vd
+    sub r10,r10,#1
+    ldr     r0, =_dv3d_tmp
+    ldrsb   r1, [r4]
+    strb r1,[r0]
+    ldrsb   r1, [r4,#1]
+  strb r1,[r0,#1]
+    ldrsb   r1, [r4,#2]
+  strb r1,[r0,#2]
+    add     r4, r4, #3
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#0]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#2]
+    mov     r1,r5
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    sub r0,r3,r0
+    strb r0,[r2,#1]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#1]
+    mov     r1,r5
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#2]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#0]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    strb r0,[r2,#2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#0]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#1]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#2]
+    mov     r1,r6
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    strb r0,[r2,#3]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#3]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    sub r0,r3,r0
+    add r0,r0,r8
+    strb    r0,[r11]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#3]
+    mov     r1,r7
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    add r0,r0,r9
+    strb    r0,[r11,#1]
+    add     r11,r11,#2
+    b dv3_vl
+dv3_vd:
+    bl      dv_reset
+    ldr     r10,[r4]
+    add r4,r4,#4
+    ldr     r11,=_dv3d_vbuf
+    ldr     r0,=_dv3d_cur
+    mov r1,#0
+    strh r1,[r0]
+dv3_pl:
+    cmp r10,#0
+    beq dv3_pd
+    sub r10,r10,#1
+    ldrb    r5,[r4]              @ pt_count
+    ldrb    r6,[r4,#1]           @ closed
+    add     r4,r4,#2
+    cmp     r5,#0
+    beq dv3_pnext_emp
+    mov     r7, r4
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r0,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r1,[r11,r2]
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r0,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r1,r3
+    push    {r0,r1}
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r8,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r9,[r11,r2]
+    ldr     r2,=_dv3d_cur
+    strb r8,[r2]
+    strb r9,[r2,#1]
+    pop     {r0,r1}
+    bl      dv_move_to
+    sub     r5,r5,#1
+    add r7,r7,#1
+dv3_vxtx:
+    cmp     r5,#0
+    beq dv3_close
+    sub r5,r5,#1
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r0,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r1,[r11,r2]
+    push    {r0,r1}
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r0,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r1,r3
+    bl      dv_draw_delta
+    pop     {r0,r1}
+    ldr     r2,=_dv3d_cur
+    strb r0,[r2]
+    strb r1,[r2,#1]
+    add     r7,r7,#1
+    b dv3_vxtx
+dv3_close:
+    cmp     r6,#0
+    beq dv3_pnext
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r8,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r9,r3
+    bl      dv_draw_delta
+    ldr     r2,=_dv3d_cur
+    strb r8,[r2]
+    strb r9,[r2,#1]
+dv3_pnext:
+    mov     r4,r7
+    b dv3_pl
+dv3_pnext_emp:
+    b       dv3_pl
+dv3_pd:
+    pop     {r4,r5,r6,r7,r8,r9,r10,r11,pc}
+    .ltorg
+
+@ ============================================================
+@ VPy Builtins — ARM Thumb2 / RP2350
+@ ============================================================
+
+@ ============================================================
+@ Vector font — ASCII 32-126 stroke data
+@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
+@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
+@ ============================================================
+
+.global _FONT_PTRS
+_FONT_PTRS:
+    .word   0    @ ' ' no strokes
+    .word   _glyph_033   @ '!'
+    .word   _glyph_034   @ '"'
+    .word   0    @ '#' no strokes
+    .word   0    @ '$' no strokes
+    .word   0    @ '%' no strokes
+    .word   0    @ '&' no strokes
+    .word   0    @ ''' no strokes
+    .word   0    @ '(' no strokes
+    .word   0    @ ')' no strokes
+    .word   0    @ '*' no strokes
+    .word   _glyph_043   @ '+'
+    .word   _glyph_044   @ ','
+    .word   _glyph_045   @ '-'
+    .word   _glyph_046   @ '.'
+    .word   _glyph_047   @ '/'
+    .word   _glyph_048   @ '0'
+    .word   _glyph_049   @ '1'
+    .word   _glyph_050   @ '2'
+    .word   _glyph_051   @ '3'
+    .word   _glyph_052   @ '4'
+    .word   _glyph_053   @ '5'
+    .word   _glyph_054   @ '6'
+    .word   _glyph_055   @ '7'
+    .word   _glyph_056   @ '8'
+    .word   _glyph_057   @ '9'
+    .word   _glyph_058   @ ':'
+    .word   _glyph_059   @ ';'
+    .word   _glyph_060   @ '<'
+    .word   _glyph_061   @ '='
+    .word   _glyph_062   @ '>'
+    .word   _glyph_063   @ '?'
+    .word   0    @ '@' no strokes
+    .word   _glyph_065   @ 'A'
+    .word   _glyph_066   @ 'B'
+    .word   _glyph_067   @ 'C'
+    .word   _glyph_068   @ 'D'
+    .word   _glyph_069   @ 'E'
+    .word   _glyph_070   @ 'F'
+    .word   _glyph_071   @ 'G'
+    .word   _glyph_072   @ 'H'
+    .word   _glyph_073   @ 'I'
+    .word   _glyph_074   @ 'J'
+    .word   _glyph_075   @ 'K'
+    .word   _glyph_076   @ 'L'
+    .word   _glyph_077   @ 'M'
+    .word   _glyph_078   @ 'N'
+    .word   _glyph_079   @ 'O'
+    .word   _glyph_080   @ 'P'
+    .word   _glyph_081   @ 'Q'
+    .word   _glyph_082   @ 'R'
+    .word   _glyph_083   @ 'S'
+    .word   _glyph_084   @ 'T'
+    .word   _glyph_085   @ 'U'
+    .word   _glyph_086   @ 'V'
+    .word   _glyph_087   @ 'W'
+    .word   _glyph_088   @ 'X'
+    .word   _glyph_089   @ 'Y'
+    .word   _glyph_090   @ 'Z'
+    .word   0    @ '[' no strokes
+    .word   0    @ '\' no strokes
+    .word   0    @ ']' no strokes
+    .word   0    @ '^' no strokes
+    .word   0    @ '_' no strokes
+    .word   0    @ '`' no strokes
+    .word   _glyph_097   @ 'a'
+    .word   _glyph_098   @ 'b'
+    .word   _glyph_099   @ 'c'
+    .word   _glyph_100   @ 'd'
+    .word   _glyph_101   @ 'e'
+    .word   _glyph_102   @ 'f'
+    .word   _glyph_103   @ 'g'
+    .word   _glyph_104   @ 'h'
+    .word   _glyph_105   @ 'i'
+    .word   _glyph_106   @ 'j'
+    .word   _glyph_107   @ 'k'
+    .word   _glyph_108   @ 'l'
+    .word   _glyph_109   @ 'm'
+    .word   _glyph_110   @ 'n'
+    .word   _glyph_111   @ 'o'
+    .word   _glyph_112   @ 'p'
+    .word   _glyph_113   @ 'q'
+    .word   _glyph_114   @ 'r'
+    .word   _glyph_115   @ 's'
+    .word   _glyph_116   @ 't'
+    .word   _glyph_117   @ 'u'
+    .word   _glyph_118   @ 'v'
+    .word   _glyph_119   @ 'w'
+    .word   _glyph_120   @ 'x'
+    .word   _glyph_121   @ 'y'
+    .word   _glyph_122   @ 'z'
+    .word   0    @ '{' no strokes
+    .word   0    @ '|' no strokes
+    .word   0    @ '}' no strokes
+    .word   0    @ '~' no strokes
+
+.global _FONT_DATA
+_FONT_DATA:
+_glyph_033:  @ '!'
+    .byte   1, 2, 6
+    .byte   2, 2, 2
+    .byte   1, 2, 0
+    .byte   2, 2, 1
+    .byte   0
+_glyph_034:  @ '"'
+    .byte   1, 1, 5
+    .byte   2, 1, 6
+    .byte   1, 3, 5
+    .byte   2, 3, 6
+    .byte   0
+_glyph_043:  @ '+'
+    .byte   1, 2, 1
+    .byte   2, 2, 5
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_044:  @ ','
+    .byte   1, 2, 1
+    .byte   2, 1, 0
+    .byte   0
+_glyph_045:  @ '-'
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_046:  @ '.'
+    .byte   1, 1, 0
+    .byte   2, 2, 0
+    .byte   0
+_glyph_047:  @ '/'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_048:  @ '0'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_049:  @ '1'
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   0
+_glyph_050:  @ '2'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 3
+    .byte   2, 0, 3
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_051:  @ '3'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   1, 4, 3
+    .byte   2, 1, 3
+    .byte   0
+_glyph_052:  @ '4'
+    .byte   1, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   1, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_053:  @ '5'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_054:  @ '6'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_055:  @ '7'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_056:  @ '8'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_057:  @ '9'
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_058:  @ ':'
+    .byte   1, 2, 1
+    .byte   2, 2, 2
+    .byte   1, 2, 4
+    .byte   2, 2, 5
+    .byte   0
+_glyph_059:  @ ';'
+    .byte   1, 2, 4
+    .byte   2, 2, 5
+    .byte   1, 2, 1
+    .byte   2, 1, 0
+    .byte   0
+_glyph_060:  @ '<'
+    .byte   1, 3, 6
+    .byte   2, 0, 3
+    .byte   2, 3, 0
+    .byte   0
+_glyph_061:  @ '='
+    .byte   1, 0, 4
+    .byte   2, 4, 4
+    .byte   1, 0, 2
+    .byte   2, 4, 2
+    .byte   0
+_glyph_062:  @ '>'
+    .byte   1, 1, 6
+    .byte   2, 4, 3
+    .byte   2, 1, 0
+    .byte   0
+_glyph_063:  @ '?'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 4
+    .byte   2, 2, 3
+    .byte   1, 2, 1
+    .byte   2, 2, 2
+    .byte   0
+_glyph_065:  @ 'A'
+    .byte   1, 0, 0
+    .byte   2, 2, 6
+    .byte   2, 4, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_066:  @ 'B'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 3, 3
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_067:  @ 'C'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_068:  @ 'D'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 1
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_069:  @ 'E'
+    .byte   1, 4, 0
+    .byte   2, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_070:  @ 'F'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_071:  @ 'G'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 2, 3
+    .byte   0
+_glyph_072:  @ 'H'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_073:  @ 'I'
+    .byte   1, 1, 0
+    .byte   2, 3, 0
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_074:  @ 'J'
+    .byte   1, 0, 1
+    .byte   2, 1, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_075:  @ 'K'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_076:  @ 'L'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_077:  @ 'M'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_078:  @ 'N'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_079:  @ 'O'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_080:  @ 'P'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_081:  @ 'Q'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 3, 1
+    .byte   2, 4, 0
+    .byte   0
+_glyph_082:  @ 'R'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_083:  @ 'S'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_084:  @ 'T'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 2, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_085:  @ 'U'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_086:  @ 'V'
+    .byte   1, 0, 6
+    .byte   2, 2, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_087:  @ 'W'
+    .byte   1, 0, 6
+    .byte   2, 1, 0
+    .byte   2, 2, 3
+    .byte   2, 3, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_088:  @ 'X'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_089:  @ 'Y'
+    .byte   1, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   1, 2, 3
+    .byte   2, 2, 0
+    .byte   0
+_glyph_090:  @ 'Z'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_097:  @ 'a'
+    .byte   1, 0, 0
+    .byte   2, 2, 6
+    .byte   2, 4, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_098:  @ 'b'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 3, 3
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_099:  @ 'c'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_100:  @ 'd'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 1
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_101:  @ 'e'
+    .byte   1, 4, 0
+    .byte   2, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_102:  @ 'f'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_103:  @ 'g'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 2, 3
+    .byte   0
+_glyph_104:  @ 'h'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_105:  @ 'i'
+    .byte   1, 1, 0
+    .byte   2, 3, 0
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_106:  @ 'j'
+    .byte   1, 0, 1
+    .byte   2, 1, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_107:  @ 'k'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_108:  @ 'l'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_109:  @ 'm'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_110:  @ 'n'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_111:  @ 'o'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_112:  @ 'p'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_113:  @ 'q'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 3, 1
+    .byte   2, 4, 0
+    .byte   0
+_glyph_114:  @ 'r'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_115:  @ 's'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_116:  @ 't'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 2, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_117:  @ 'u'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_118:  @ 'v'
+    .byte   1, 0, 6
+    .byte   2, 2, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_119:  @ 'w'
+    .byte   1, 0, 6
+    .byte   2, 1, 0
+    .byte   2, 2, 3
+    .byte   2, 3, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_120:  @ 'x'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_121:  @ 'y'
+    .byte   1, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   1, 2, 3
+    .byte   2, 2, 0
+    .byte   0
+_glyph_122:  @ 'z'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+
+@ vpy_wait_recal() — wait for VIA Timer 1 (frame sync)
+.global vpy_wait_recal
+.type vpy_wait_recal, %function
+.thumb_func
+vpy_wait_recal:
+    push    {lr}
+    mov     r0, #0xD006
+    mov     r1, #0x7F
+    bl      bus_write
+    mov     r0, #0xD007
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD005
+    mov     r1, #0x00
+    bl      bus_write
+vpy_wr_poll:
+    mov     r0, #0xD00D
+    bl      bus_read
+    tst     r0, #0x40
+    beq     vpy_wr_poll
+    mov     r0, #0xD004
+    bl      bus_read
+    pop     {pc}
+    .ltorg
+
+@ vpy_set_intensity(r0=intensity 0-127)
+.global vpy_set_intensity
+.type vpy_set_intensity, %function
+.thumb_func
+vpy_set_intensity:
+    push    {lr}
+    and     r1, r0, #0x7F
+    mov     r0, #0xD001
+    bl      bus_write
+    pop     {pc}
+    .ltorg
+
+@ vpy_move(r0=x, r1=y) — position beam (absolute from current)
+.global vpy_move
+.type vpy_move, %function
+.thumb_func
+vpy_move:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_draw_line(r0=x0, r1=y0, r2=x1, r3=y1, [sp+0]=intensity)
+@ Splits segments longer than 127 units using SDIV for proportional steps
+.global vpy_draw_line
+.type vpy_draw_line, %function
+.thumb_func
+vpy_draw_line:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r8, [sp, #24]           @ intensity (5th arg, past 6 saved regs)
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    sub     r4, r6, r4
+    sub     r5, r7, r5
+    movs    r6, r4
+    bpl     vdl_dx_pos
+    neg     r6, r4
+vdl_dx_pos:
+    movs    r7, r5
+    bpl     vdl_dy_pos
+    neg     r7, r5
+vdl_dy_pos:
+    cmp     r6, r7
+    it      ge
+    movge   r7, r6
+    cmp     r7, #0
+    beq     vdl_done
+    add     r7, r7, #126
+    mov     r6, #127
+    sdiv    r8, r7, r6
+vdl_loop:
+    cmp     r8, #0
+    beq     vdl_done
+    sdiv    r0, r4, r8
+    sdiv    r1, r5, r8
+    sub     r4, r4, r0
+    sub     r5, r5, r1
+    sub     r8, r8, #1
+    bl      dv_draw_delta
+    b       vdl_loop
+vdl_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)
+@ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY
+@ dv_reset called before EVERY path so each path starts from screen centre.
+.global vpy_draw_vector_ex
+.type vpy_draw_vector_ex, %function
+.thumb_func
+vpy_draw_vector_ex:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox  (kept for whole function)
+    mov     r10, r2             @ oy  (kept for whole function)
+    mov     r7, r3              @ mirror
+    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path_idx
+dvex_pl:
+    cmp     r6, r5
+    bge     dvex_done
+    lsl     r3, r6, #2
+    add     r3, r3, #4
+    ldr     r3, [r4, r3]
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    ldrsb   r0, [r3, #2]        @ x_start
+    ldrsb   r1, [r3, #1]        @ y_start
+    tst     r7, #1
+    beq     dvex_nfx
+    neg     r0, r0
+dvex_nfx:
+    tst     r7, #2
+    beq     dvex_nfy
+    neg     r1, r1
+dvex_nfy:
+    add     r0, r0, r9          @ x_start + ox
+    add     r1, r1, r10         @ y_start + oy
+    bl      dv_move_to
+    add     r2, r3, #5          @ command ptr
+dvex_cl:
+    ldrb    r0, [r2]
+    cmp     r0, #0x02
+    beq     dvex_cend
+    cmp     r0, #0xFF
+    bne     dvex_cskip
+    ldrsb   r0, [r2, #2]        @ dx
+    ldrsb   r1, [r2, #1]        @ dy
+    tst     r7, #1
+    beq     dvex_nfx2
+    neg     r0, r0
+dvex_nfx2:
+    tst     r7, #2
+    beq     dvex_nfy2
+    neg     r1, r1
+dvex_nfy2:
+    bl      dv_draw_delta
+    add     r2, r2, #3
+    b       dvex_cl
+dvex_cskip:
+    add     r2, r2, #1
+    b       dvex_cl
+dvex_cend:
+    add     r6, r6, #1
+    b       dvex_pl
+dvex_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity)
+@ 16-segment circle via sin/cos LUT
+.global vpy_draw_circle
+.type vpy_draw_circle, %function
+.thumb_func
+vpy_draw_circle:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    sub     sp, sp, #8              @ [sp+0]=first_x [sp+4]=first_y
+    mov     r4, r0                  @ cx
+    mov     r5, r1                  @ cy
+    asr     r6, r2, #1              @ r6 = diam/2 = radius (matches M6809 convention)
+    mov     r7, r3                  @ intensity
+    bl      dv_reset
+    mov     r0, r7
+    bl      vpy_set_intensity
+    mov     r0, #0
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r9, r4, r0              @ prev_x = cx + cos(0)*r/127
+    mov     r0, #0
+    bl      vpy_sin
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r10, r5, r0             @ prev_y = cy + sin(0)*r/127
+    str     r9, [sp]
+    str     r10, [sp, #4] @ save first point
+    mov     r0, r9
+    mov     r1, r10
+    bl      dv_move_to
+    mov     r8, #1
+vpy_dc_loop:
+    cmp     r8, #16
+    bge     vpy_dc_close
+    lsl     r0, r8, #3
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r11, r4, r0             @ new_x
+    lsl     r0, r8, #3
+    bl      vpy_sin
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r0, r5, r0              @ new_y in r0
+    sub     r2, r11, r9             @ dx = new_x - prev_x
+    sub     r3, r0, r10             @ dy = new_y - prev_y
+    mov     r9, r11                 @ prev_x = new_x
+    mov     r10, r0                 @ prev_y = new_y
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    add     r8, r8, #1
+    b       vpy_dc_loop
+vpy_dc_close:
+    ldr     r0, [sp]                @ first_x
+    ldr     r1, [sp, #4]            @ first_y
+    sub     r0, r0, r9              @ dx = first_x - prev_x
+    sub     r1, r1, r10             @ dy = first_y - prev_y
+    bl      dv_draw_delta
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)
+.global vpy_draw_rect
+.type vpy_draw_rect, %function
+.thumb_func
+vpy_draw_rect:
+    push    {r4, r5, r6, r7, r8, lr}    @ 24 bytes
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r8, [sp, #24]               @ intensity
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    mov     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    mov     r0, #0
+    mov     r1, r7
+    bl      dv_draw_delta
+    neg     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    mov     r0, #0
+    neg     r1, r7
+    bl      dv_draw_delta
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity)
+@ Outer outline (vpy_draw_rect) + horizontal scan lines (step=3)
+.global vpy_draw_filled_rect
+.type vpy_draw_filled_rect, %function
+.thumb_func
+vpy_draw_filled_rect:
+    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes
+    mov     r4, r0              @ x
+    mov     r5, r1              @ y
+    mov     r6, r2              @ w
+    mov     r7, r3              @ h
+    ldr     r8, [sp, #28]       @ intensity
+    push    {r8}                @ intensity as 5th arg
+    mov     r0, r4
+    mov     r1, r5
+    mov     r2, r6
+    mov     r3, r7
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    mov     r9, #0              @ scan offset
+vdfr_loop:
+    cmp     r9, r7
+    bge     vdfr_done
+    mov     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    add     r9, r9, #3
+    cmp     r9, r7
+    bge     vdfr_done
+    neg     r0, r6
+    mov     r1, #3
+    bl      dv_move_to
+    b       vdfr_loop
+vdfr_done:
+    pop     {r4, r5, r6, r7, r8, r9, pc}
+    .ltorg
+
+@ vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...)
+.global vpy_draw_polygon
+.type vpy_draw_polygon, %function
+.thumb_func
+vpy_draw_polygon:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    mov     r4, r0              @ n (total vertices)
+    mov     r5, r1              @ intensity
+    mov     r6, r2              @ first_x
+    mov     r7, r3              @ first_y
+    add     r8, sp, #36         @ ptr to x1 (first extra stack arg)
+    mov     r9, r6              @ prev_x = first_x
+    mov     r10, r7             @ prev_y = first_y
+    bl      dv_reset
+    mov     r0, r5
+    bl      vpy_set_intensity
+    mov     r0, r6
+    mov     r1, r7
+    bl      dv_move_to
+    mov     r11, #1             @ vertex idx = 1
+vdpoly_loop:
+    cmp     r11, r4
+    bge     vdpoly_close
+    ldr     r0, [r8]            @ xi
+    ldr     r1, [r8, #4]        @ yi
+    add     r8, r8, #8
+    sub     r2, r0, r9          @ dx = xi - prev_x
+    sub     r3, r1, r10         @ dy = yi - prev_y
+    mov     r9, r0
+    mov     r10, r1
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    add     r11, r11, #1
+    b       vdpoly_loop
+vdpoly_close:
+    sub     r0, r6, r9          @ dx = first_x - prev_x
+    sub     r1, r7, r10         @ dy = first_y - prev_y
+    bl      dv_draw_delta
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity)
+@ 16-segment parametric ellipse via sin/cos LUT
+.global vpy_draw_ellipse
+.type vpy_draw_ellipse, %function
+.thumb_func
+vpy_draw_ellipse:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    sub     sp, sp, #8          @ [sp+0]=first_x [sp+4]=first_y
+    mov     r4, r0              @ cx
+    mov     r5, r1              @ cy
+    mov     r6, r2              @ rx
+    mov     r7, r3              @ ry
+    ldr     r8, [sp, #44]       @ intensity (8+36=44)
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, #0
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r8, r4, r0          @ prev_x = cx + rx*cos(0)/127
+    str     r8, [sp, #0]        @ first_x
+    mov     r0, #0
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r9, r5, r0          @ prev_y = cy + ry*sin(0)/127
+    str     r9, [sp, #4]        @ first_y
+    mov     r0, r8
+    mov     r1, r9
+    bl      dv_move_to
+    mov     r10, #1             @ i = 1
+vde_loop:
+    cmp     r10, #16
+    bge     vde_close
+    lsl     r0, r10, #3         @ angle = i*8
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r11, r4, r0         @ new_x = cx + rx*cos/127
+    lsl     r0, r10, #3
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r0, r5, r0          @ new_y
+    sub     r2, r11, r8         @ dx = new_x - prev_x
+    sub     r3, r0, r9          @ dy = new_y - prev_y
+    mov     r8, r11             @ prev_x = new_x
+    mov     r9, r0              @ prev_y = new_y
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    add     r10, r10, #1
+    b       vde_loop
+vde_close:
+    ldr     r0, [sp, #0]        @ first_x
+    ldr     r1, [sp, #4]        @ first_y
+    sub     r0, r0, r8          @ dx = first_x - prev_x
+    sub     r1, r1, r9          @ dy = first_y - prev_y
+    bl      dv_draw_delta
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity)
+.global vpy_draw_arc
+.type vpy_draw_arc, %function
+.thumb_func
+vpy_draw_arc:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    mov     r4, r0              @ segs (loop counter)
+    mov     r5, r1              @ cx
+    mov     r6, r2              @ cy
+    mov     r7, r3              @ radius
+    ldr     r0, [sp, #36]       @ start_deg
+    lsl     r0, r0, #7          @ * 128
+    mov     r1, #360
+    sdiv    r8, r0, r1          @ r8 = start_step
+    ldr     r0, [sp, #40]       @ sweep_deg
+    lsl     r0, r0, #7
+    sdiv    r0, r0, r1          @ sweep_steps (r1 still 360)
+    cmp     r4, #0
+    beq     vpy_arc_done
+    sdiv    r9, r0, r4          @ r9 = step_size = sweep_steps / segs
+    ldr     r0, [sp, #44]       @ intensity
+    bl      dv_reset
+    bl      vpy_set_intensity
+    and     r0, r8, #127
+    bl      vpy_cos
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r10, r5, r0         @ prev_x = cx + r*cos(start)/127
+    and     r0, r8, #127
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r11, r6, r0         @ prev_y = cy + r*sin(start)/127
+    mov     r0, r10
+    mov     r1, r11
+    bl      dv_move_to
+vpy_arc_loop:
+    cmp     r4, #0
+    beq     vpy_arc_done
+    add     r8, r8, r9          @ current_angle += step_size
+    and     r0, r8, #127
+    bl      vpy_cos
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r0, r5, r0          @ new_x
+    push    {r0}                @ save new_x (r0 clobbered by next bl)
+    and     r0, r8, #127
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r1, r6, r0          @ new_y
+    pop     {r0}                @ restore new_x
+    sub     r2, r0, r10         @ dx = new_x - prev_x
+    sub     r3, r1, r11         @ dy = new_y - prev_y
+    mov     r10, r0             @ prev_x = new_x
+    mov     r11, r1             @ prev_y = new_y
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    sub     r4, r4, #1
+    b       vpy_arc_loop
+vpy_arc_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
+.global vpy_print_text
+.type vpy_print_text, %function
+.thumb_func
+vpy_print_text:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    ldr     r7, =TEXT_SIZE
+    ldr     r7, [r7]
+    cmp     r7, #0
+    bne     vpt_sc
+    mov     r7, #3
+vpt_sc:
+    ldr     r8, =TEXT_COLOR
+    ldr     r8, [r8]
+    cmp     r8, #0
+    bne     vpt_cc
+    mov     r8, #100
+vpt_cc:
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    ldr     r10, =PRINT_BEAM_X
+    str     r4, [r10]
+    ldr     r11, =PRINT_BEAM_Y
+    str     r5, [r11]
+    mov     r9, r4              @ cur_x = x
+vpt_loop:
+    ldrb    r0, [r6]
+    add     r6, r6, #1
+    cmp     r0, #0
+    beq     vpt_done
+    cmp     r0, #0x80
+    beq     vpt_done
+    cmp     r0, #0x61
+    blt     vpt_nl
+    cmp     r0, #0x7A
+    bgt     vpt_nl
+    sub     r0, r0, #0x20
+vpt_nl:
+    cmp     r0, #32
+    blt     vpt_adv
+    cmp     r0, #126
+    bgt     vpt_adv
+    sub     r0, r0, #32
+    ldr     r1, =_FONT_PTRS
+    lsl     r0, r0, #2
+    ldr     r0, [r1, r0]
+    cmp     r0, #0
+    beq     vpt_adv
+    mov     r1, r9
+    mov     r2, r5
+    mov     r3, r7
+    push    {r10, r11}
+    bl      vpt_draw_glyph
+    add     sp, sp, #8
+vpt_adv:
+    mov     r0, #7
+    mul     r0, r0, r7
+    asr     r0, r0, #1
+    add     r9, r9, r0
+    b       vpt_loop
+vpt_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
+.type vpt_draw_glyph, %function
+.thumb_func
+vpt_draw_glyph:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0              @ glyph_ptr
+    mov     r5, r1              @ char_x
+    mov     r6, r2              @ char_y
+    mov     r7, r3              @ scale
+    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
+    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
+    ldr     r10, [r8]           @ beam_x
+    ldr     r11, [r9]           @ beam_y
+vdg_loop:
+    ldrb    r0, [r4]
+    cmp     r0, #0
+    beq     vdg_done
+    ldrb    r1, [r4, #1]        @ gx
+    ldrb    r2, [r4, #2]        @ gy
+    add     r4, r4, #3
+    push    {r0}               @ save cmd
+    mul     r1, r1, r7
+    asr     r1, r1, #1
+    add     r1, r1, r5
+    mul     r2, r2, r7
+    asr     r2, r2, #1
+    add     r2, r2, r6
+    sub     r0, r1, r10         @ dx
+    sub     r3, r2, r11         @ dy
+    mov     r10, r1
+    mov     r11, r2
+    pop     {r1}               @ restore cmd
+    push    {r0, r3}           @ save dx, dy
+    cmp     r1, #1
+    bne     vdg_draw
+    pop     {r0, r1}
+    bl      dv_move_to
+    b       vdg_loop
+vdg_draw:
+    pop     {r0, r1}
+    bl      dv_draw_delta
+    b       vdg_loop
+vdg_done:
+    str     r10, [r8]           @ update PRINT_BEAM_X
+    str     r11, [r9]           @ update PRINT_BEAM_Y
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999
+.global vpy_print_number
+.type vpy_print_number, %function
+.thumb_func
+vpy_print_number:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    sub     sp, sp, #8
+    mov     r7, sp
+    mov     r8, r7
+    cmp     r6, #0
+    bge     vpn_pos
+    mov     r0, #45
+    strb    r0, [r8]
+    add     r8, r8, #1
+    neg     r6, r6
+vpn_pos:
+    ldr     r0, =9999
+    cmp     r6, r0
+    ble     vpn_clamp
+    mov     r6, r0
+vpn_clamp:
+    ldr     r0, =1000
+    sdiv    r1, r6, r0
+    mul     r0, r0, r1
+    sub     r6, r6, r0
+    add     r1, r1, #48
+    strb    r1, [r8]
+    mov     r0, #100
+    sdiv    r1, r6, r0
+    mul     r0, r0, r1
+    sub     r6, r6, r0
+    add     r1, r1, #48
+    strb    r1, [r8, #1]
+    mov     r0, #10
+    sdiv    r1, r6, r0
+    mul     r0, r0, r1
+    sub     r6, r6, r0
+    add     r1, r1, #48
+    strb    r1, [r8, #2]
+    add     r1, r6, #48
+    strb    r1, [r8, #3]
+    mov     r0, #0
+    strb    r0, [r8, #4]
+    mov     r0, r4
+    mov     r1, r5
+    mov     r2, r7
+    bl      vpy_print_text
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_j1_x() → r0 = X axis (-127..127)
+.global vpy_j1_x
+.type vpy_j1_x, %function
+.thumb_func
+vpy_j1_x:
+    push    {lr}
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r0, r0
+    pop     {pc}
+    .ltorg
+
+@ vpy_j1_y() → r0 = Y axis (-127..127)
+.global vpy_j1_y
+.type vpy_j1_y, %function
+.thumb_func
+vpy_j1_y:
+    push    {lr}
+    mov     r0, #0xD000
+    mov     r1, #0x03
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r0, r0
+    pop     {pc}
+    .ltorg
+
+.global vpy_j1_btn1
+.type vpy_j1_btn1, %function
+.thumb_func
+vpy_j1_btn1:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #4, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn2
+.type vpy_j1_btn2, %function
+.thumb_func
+vpy_j1_btn2:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #5, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn3
+.type vpy_j1_btn3, %function
+.thumb_func
+vpy_j1_btn3:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #6, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn4
+.type vpy_j1_btn4, %function
+.thumb_func
+vpy_j1_btn4:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #7, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_j2_x() → r0 = J2 X axis (-127..127)
+.global vpy_j2_x
+.type vpy_j2_x, %function
+.thumb_func
+vpy_j2_x:
+    push    {lr}
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r0, r0
+    pop     {pc}
+    .ltorg
+
+@ vpy_j2_y() → r0 = J2 Y axis (-127..127)
+.global vpy_j2_y
+.type vpy_j2_y, %function
+.thumb_func
+vpy_j2_y:
+    push    {lr}
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r0, r0
+    pop     {pc}
+    .ltorg
+
+.global vpy_j2_btn1
+.type vpy_j2_btn1, %function
+.thumb_func
+vpy_j2_btn1:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #0, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn2
+.type vpy_j2_btn2, %function
+.thumb_func
+vpy_j2_btn2:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #1, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn3
+.type vpy_j2_btn3, %function
+.thumb_func
+vpy_j2_btn3:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #2, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn4
+.type vpy_j2_btn4, %function
+.thumb_func
+vpy_j2_btn4:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #3, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register
+.global psg_write
+.type psg_write, %function
+.thumb_func
+psg_write:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ reg
+    mov     r5, r1              @ data
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x19
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x11
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ psg_read(r0=reg) → r0 = PSG register value
+.global psg_read
+.type psg_read, %function
+.thumb_func
+psg_read:
+    push    {r4, lr}
+    mov     r4, r0              @ reg
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x19
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD003
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x09
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    push    {r0}               @ save result
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD003
+    mov     r1, #0xFF
+    bl      bus_write
+    pop     {r0}               @ return value
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_update_buttons() — cache VIA Port B (J1) and PSG reg14 (J2)
+.global vpy_update_buttons
+.type vpy_update_buttons, %function
+.thumb_func
+vpy_update_buttons:
+    push    {lr}
+    mov     r0, #0xD000
+    bl      bus_read
+    ldr     r1, =BTN_STATE_J1
+    str     r0, [r1]
+    mov     r0, #14
+    bl      psg_read
+    ldr     r1, =BTN_STATE_J2
+    str     r0, [r1]
+    pop     {pc}
+    .ltorg
+
+.global vpy_abs
+.type vpy_abs, %function
+.thumb_func
+vpy_abs:
+    cmp     r0, #0
+    it      lt
+    neglt   r0, r0
+    bx      lr
+
+.global vpy_min
+.type vpy_min, %function
+.thumb_func
+vpy_min:
+    cmp     r0, r1
+    it      gt
+    movgt   r0, r1
+    bx      lr
+
+.global vpy_max
+.type vpy_max, %function
+.thumb_func
+vpy_max:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    bx      lr
+
+.global vpy_clamp
+.type vpy_clamp, %function
+.thumb_func
+vpy_clamp:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    cmp     r0, r2
+    it      gt
+    movgt   r0, r2
+    bx      lr
+
+@ vpy_sin(r0=angle) → r0 = sin(angle*2π/128)*127 as signed i8
+.global vpy_sin
+.type vpy_sin, %function
+.thumb_func
+vpy_sin:
+    and     r0, r0, #0x7F
+    ldr     r1, =_SIN_TABLE
+    ldrb    r0, [r1, r0]
+    sxtb    r0, r0
+    bx      lr
+    .ltorg
+
+@ vpy_cos(r0=angle) → r0 = cos(angle*2π/128)*127 as signed i8
+.global vpy_cos
+.type vpy_cos, %function
+.thumb_func
+vpy_cos:
+    add     r0, r0, #32
+    and     r0, r0, #0x7F
+    ldr     r1, =_SIN_TABLE
+    ldrb    r0, [r1, r0]
+    sxtb    r0, r0
+    bx      lr
+    .ltorg
+
+@ vpy_sqrt(r0=n) → r0 = floor(sqrt(n))
+.global vpy_sqrt
+.type vpy_sqrt, %function
+.thumb_func
+vpy_sqrt:
+    cmp     r0, #0
+    beq     vsqrt_zero
+    push    {r4, r5, r6}
+    mov     r4, r0              @ n
+    mov     r5, #0              @ lo
+    ldr     r6, =46340         @ hi (floor(sqrt(2^31-1)))
+    cmp     r4, r6
+    blt     vsqrt_loop
+    mov     r0, r6
+    pop     {r4, r5, r6}
+    bx      lr
+vsqrt_loop:
+    add     r0, r5, r6
+    lsr     r0, r0, #1  @ mid = (lo+hi)/2
+    mul     r2, r0, r0           @ mid*mid
+    cmp     r2, r4
+    beq     vsqrt_exact
+    bgt     vsqrt_high
+    mov     r5, r0
+    add     r5, r5, #1
+    cmp     r5, r6
+    blt     vsqrt_loop
+    b       vsqrt_done
+vsqrt_high:
+    mov     r6, r0
+    cmp     r5, r6
+    blt     vsqrt_loop
+vsqrt_done:
+    mov     r0, r5
+    sub     r0, r0, #1
+    pop     {r4, r5, r6}
+    bx      lr
+vsqrt_exact:
+    pop     {r4, r5, r6}
+    bx      lr
+vsqrt_zero:
+    bx      lr
+    .ltorg
+
+@ vpy_rand() → r0 = pseudo-random 0-32767 (LCG)
+.global vpy_rand
+.type vpy_rand, %function
+.thumb_func
+vpy_rand:
+    push    {r4, r5, lr}
+    ldr     r4, =RAND_SEED
+    ldr     r0, [r4]
+    ldr     r5, =1664525
+    mul     r0, r0, r5
+    ldr     r5, =1013904223
+    add     r0, r0, r5
+    str     r0, [r4]            @ save seed
+    lsr     r0, r0, #16
+    bic     r0, r0, #0x8000      @ clear bit15 (0x8000 is valid Thumb2 immediate)
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_rand_range(r0=lo, r1=hi) → r0 = random in [lo, hi]
+.global vpy_rand_range
+.type vpy_rand_range, %function
+.thumb_func
+vpy_rand_range:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ lo
+    sub     r5, r1, r0
+    add     r5, r5, #1
+    bl      vpy_rand
+    sdiv    r1, r0, r5
+    mul     r1, r1, r5
+    sub     r0, r0, r1
+    add     r0, r0, r4          @ + lo
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_peek(r0=vectrex_addr) → r0 = byte at that address
+.global vpy_peek
+.type vpy_peek, %function
+.thumb_func
+vpy_peek:
+    push    {lr}
+    bl      bus_read
+    pop     {pc}
+    .ltorg
+
+@ vpy_poke(r0=vectrex_addr, r1=val)
+.global vpy_poke
+.type vpy_poke, %function
+.thumb_func
+vpy_poke:
+    push    {lr}
+    bl      bus_write
+    pop     {pc}
+    .ltorg
+
+@ vpy_wait(r0=frames) — busy-wait N frames via wait_recal
+.global vpy_wait
+.type vpy_wait, %function
+.thumb_func
+vpy_wait:
+    push    {r4, lr}
+    mov     r4, r0
+vwt_loop:
+    cmp     r4, #0
+    beq     vwt_done
+    bl      vpy_wait_recal
+    sub     r4, r4, #1
+    b       vwt_loop
+vwt_done:
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG tone on channel A
+.global vpy_beep
+.type vpy_beep, %function
+.thumb_func
+vpy_beep:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ freq period (reg 0)
+    mov     r5, r1              @ duration
+    mov     r0, #0
+    mov     r1, r4
+    bl      psg_write
+    mov     r0, #1
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #7
+    mov     r1, #0x3E
+    bl      psg_write
+    mov     r0, #8
+    mov     r1, #15
+    bl      psg_write
+    ldr     r0, =BEEP_FRAMES_LEFT
+    str     r5, [r0]
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_beep_update() — decrement beep timer; mute channel A when done
+.global vpy_beep_update
+.type vpy_beep_update, %function
+.thumb_func
+vpy_beep_update:
+    push    {r4, lr}
+    ldr     r4, =BEEP_FRAMES_LEFT
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vbu_done
+    sub     r0, r0, #1
+    str     r0, [r4]
+    bne     vbu_done
+    mov     r0, #8
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #7
+    mov     r1, #0x3F
+    bl      psg_write
+vbu_done:
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_len — fallback, returns 0 (len(arr) on static arrays resolved at compile time)
+.global vpy_len
+.type vpy_len, %function
+.thumb_func
+vpy_len:
+    mov     r0, #0
+    bx      lr
+
+@ vpy_play_music(r0=music_data_ptr)
+.global vpy_play_music
+.type vpy_play_music, %function
+.thumb_func
+vpy_play_music:
+    push    {r4, lr}
+    mov     r4, r0
+    ldr     r1, =PSG_MUSIC_START
+    ldr     r1, [r1]
+    cmp     r4, r1
+    beq     vpm_already
+    bl      vpy_stop_music
+    ldr     r1, =PSG_MUSIC_START
+    str     r4, [r1]
+    add     r0, r4, #8
+    ldr     r1, =PSG_MUSIC_PTR
+    str     r0, [r1]
+    ldr     r1, =PSG_IS_PLAYING
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =PSG_DELAY_FRAMES
+    mov     r0, #0
+    str     r0, [r1]
+vpm_already:
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_stop_music() — stop playback and silence all PSG channels
+.global vpy_stop_music
+.type vpy_stop_music, %function
+.thumb_func
+vpy_stop_music:
+    push    {lr}
+    ldr     r0, =PSG_IS_PLAYING
+    mov     r1, #0
+    str     r1, [r0]
+    mov     r0, #8
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #9
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #10
+   mov     r1, #0
+    bl      psg_write
+    mov     r0, #7
+    mov     r1, #0x3F
+ bl      psg_write
+    pop     {pc}
+    .ltorg
+
+@ vpy_music_update() — advance PSG music sequencer by one frame
+.global vpy_music_update
+.type vpy_music_update, %function
+.thumb_func
+vpy_music_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_IS_PLAYING
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vmu_done
+    ldr     r4, =PSG_DELAY_FRAMES
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vmu_process
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       vmu_done
+vmu_process:
+    ldr     r5, =PSG_MUSIC_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]         @ num_writes
+    cmp     r6, #0
+    beq     vmu_end
+    cmp     r6, #0xFF
+    beq     vmu_loop
+    add     r7, r5, #2
+vmu_write_loop:
+    cmp     r6, #0
+    beq     vmu_after_writes
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    push    {r6, r7}
+    bl      psg_write
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       vmu_write_loop
+vmu_after_writes:
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]
+    str     r0, [r4]
+    b       vmu_done
+vmu_end:
+    bl      vpy_stop_music
+    b       vmu_done
+vmu_loop:
+    ldr     r0, =PSG_MUSIC_START
+    ldr     r0, [r0]
+    ldr     r1, [r0, #4]         @ loop_event_offset
+    add     r1, r0, r1
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r1, [r0]
+    ldrb    r0, [r1]
+    str     r0, [r4]
+vmu_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ vpy_play_sfx(r0=sfx_data_ptr)
+.global vpy_play_sfx
+.type vpy_play_sfx, %function
+.thumb_func
+vpy_play_sfx:
+    push    {lr}
+    ldr     r1, =PSG_SFX_PTR
+    add     r2, r0, #4
+    str     r2, [r1]
+    ldr     r1, =PSG_SFX_ACTIVE
+    mov     r2, #1
+    str     r2, [r1]
+    ldr     r1, =PSG_SFX_DELAY
+    mov     r2, #0
+    str     r2, [r1]
+    pop     {pc}
+    .ltorg
+
+@ vpy_audio_update() — advance SFX sequencer by one frame
+.global vpy_audio_update
+.type vpy_audio_update, %function
+.thumb_func
+vpy_audio_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_SFX_ACTIVE
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vau_done
+    ldr     r4, =PSG_SFX_DELAY
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vau_proc
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       vau_done
+vau_proc:
+    ldr     r5, =PSG_SFX_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]         @ num_writes
+    cmp     r6, #0
+    beq     vau_end
+    add     r7, r5, #2
+vau_wl:
+    cmp     r6, #0
+    beq     vau_aw
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    cmp     r0, #7
+    bne     vau_do_write
+    push    {r1, r6, r7}    @ save sfx_mixer, loop vars
+    bl      psg_read         @ r0=7 already → returns Regs[7]
+    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer
+    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)
+    and     r1, r1, #0x24   @ keep only C bits from SFX
+    orr     r1, r0, r1      @ r1 = merged mixer
+    mov     r0, #7          @ reg = 7
+vau_do_write:
+    push    {r6, r7}
+    bl      psg_write
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       vau_wl
+vau_aw:
+    ldr     r0, =PSG_SFX_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]
+    str     r0, [r4]
+    b       vau_done
+vau_end:
+    ldr     r0, =PSG_SFX_ACTIVE
+    mov     r1, #0
+    str     r1, [r0]
+vau_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+.global vpy_set_camera_x
+.type vpy_set_camera_x, %function
+.thumb_func
+vpy_set_camera_x:
+    ldr     r1, =CAMERA_X
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_set_camera_y
+.type vpy_set_camera_y, %function
+.thumb_func
+vpy_set_camera_y:
+    ldr     r1, =CAMERA_Y
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_get_camera_x
+.type vpy_get_camera_x, %function
+.thumb_func
+vpy_get_camera_x:
+    ldr     r0, =CAMERA_X
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_camera_y
+.type vpy_get_camera_y, %function
+.thumb_func
+vpy_get_camera_y:
+    ldr     r0, =CAMERA_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_set_text_size
+.type vpy_set_text_size, %function
+.thumb_func
+vpy_set_text_size:
+    lsl     r1, r0, #1
+    add     r1, r1, r0
+    add     r1, r1, #4
+    lsr     r1, r1, #3
+    cmp     r1, #1
+    bhs     vsts_ok
+    mov     r1, #1
+vsts_ok:
+    ldr     r0, =TEXT_SIZE
+    str     r1, [r0]
+    bx      lr
+
+.global vpy_set_text_color
+.type vpy_set_text_color, %function
+.thumb_func
+vpy_set_text_color:
+    ldr     r1, =TEXT_COLOR
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print
+.type vpy_debug_print, %function
+.thumb_func
+vpy_debug_print:
+    ldr     r1, =DBGVAL
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print_labeled
+.type vpy_debug_print_labeled, %function
+.thumb_func
+vpy_debug_print_labeled:
+    ldr     r1, =DBGVAL
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print_str
+.type vpy_debug_print_str, %function
+.thumb_func
+vpy_debug_print_str:
+    bx      lr
+
+@ vpy_load_level(r0=level_data_ptr)
+.global vpy_load_level
+.type vpy_load_level, %function
+.thumb_func
+vpy_load_level:
+    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
+    mov     r4, r0
+    ldr     r1, =LEVEL_DATA_PTR
+    str     r0, [r1]
+    ldr     r1, =CAMERA_X
+    mov     r2, #0
+    str     r2, [r1]
+    ldr     r1, =CAMERA_Y
+    str     r2, [r1]
+    ldrb    r5, [r4, #9]              @ gpCount
+    ldr     r1, =LEVEL_GP_COUNT
+    str     r5, [r1]
+    cmp     r5, #0
+    beq.w   vll_done
+    ldr     r6, [r4, #16]             @ gpObjectsPtr
+    ldr     r7, =LEVEL_GP_BUF
+vll_gp_loop:
+    ldrsh   r0, [r6, #0]              @ world_x
+    ldrsh   r1, [r6, #2]              @ world_y
+    strh    r0, [r7, #0]
+    strh    r1, [r7, #2]
+    ldrsb   r0, [r6, #14]             @ vel_x_init
+    ldrsb   r1, [r6, #15]             @ vel_y_init
+    strb    r0, [r7, #4]
+    strb    r1, [r7, #5]
+    mov     r0, #1
+    strb    r0, [r7, #6]  @ alive=1
+    mov     r0, #0
+    strb    r0, [r7, #7]  @ pad=0
+    add     r6, r6, #16
+    add     r7, r7, #8
+    subs    r5, r5, #1
+    bne     vll_gp_loop
+vll_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_show_level()
+.global vpy_show_level
+.type vpy_show_level, %function
+.thumb_func
+vpy_show_level:
+    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
+    ldr     r4, =LEVEL_DATA_PTR
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vsl_done
+    ldrb    r5, [r4, #8]              @ bgCount
+    cmp     r5, #0
+    beq.w   vsl_skip_bg
+    ldr     r6, [r4, #12]             @ bgObjectsPtr
+    bl      vsl_draw_static
+vsl_skip_bg:
+    ldr     r5, =LEVEL_GP_COUNT
+    ldr     r5, [r5]
+    cmp     r5, #0
+    beq.w   vsl_skip_gp
+    ldr     r6, [r4, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    ldr     r8, =CAMERA_X
+vsl_gp_loop:
+    ldrb    r0, [r7, #6]              @ alive
+    cmp     r0, #0
+    beq.w   vsl_gp_next
+    ldrsh   r0, [r7, #0]              @ world_x
+    ldrsh   r1, [r7, #2]              @ world_y
+    ldr     r2, [r8]
+    sub     r0, r0, r2  @ screen_x
+    ldr     r2, [r8, #4]
+    sub     r1, r1, r2  @ screen_y (CAMERA_Y=CAMERA_X+4)
+    movs    r2, r0
+    bpl     vsl_gp_cx_ok
+    neg     r2, r0
+vsl_gp_cx_ok:
+    cmp     r2, #160
+    bgt     vsl_gp_next
+    movs    r2, r1
+    bpl     vsl_gp_cy_ok
+    neg     r2, r1
+vsl_gp_cy_ok:
+    cmp     r2, #160
+    bgt     vsl_gp_next
+    ldrb    r2, [r6, #5]              @ intensity
+    cmp     r2, #0
+    bne     vsl_gp_havei
+    mov     r2, #127
+vsl_gp_havei:
+    mov     r3, #0
+    push    {r2, r3}            @ [sp]=intensity, align+8
+    mov     r2, r1
+    mov     r1, r0
+    ldr     r0, [r6, #8]  @ vector_ptr
+    mov     r3, #0
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+vsl_gp_next:
+    add     r6, r6, #16
+    add     r7, r7, #8
+    subs    r5, r5, #1
+    bne     vsl_gp_loop
+vsl_skip_gp:
+    ldrb    r5, [r4, #10]             @ fgCount
+    cmp     r5, #0
+    beq.w   vsl_done
+    ldr     r6, [r4, #20]             @ fgObjectsPtr
+    bl      vsl_draw_static
+vsl_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vsl_draw_static — internal
+vsl_draw_static:
+    push    {r4, r5, r6, r7, r8, lr}  @ 24 bytes
+    mov     r4, r5                    @ count
+    mov     r5, r6                    @ ROM ptr
+    ldr     r6, =CAMERA_X
+    ldr     r6, [r6]
+    ldr     r7, =CAMERA_Y
+    ldr     r7, [r7]
+vsd_loop:
+    cmp     r4, #0
+    beq.w   vsd_done
+    ldrsh   r0, [r5, #0]
+    ldrsh   r1, [r5, #2]
+    sub     r0, r0, r6
+    sub     r1, r1, r7
+    movs    r8, r0
+    bpl     vsd_cx_ok
+    neg     r8, r0
+vsd_cx_ok:
+    cmp     r8, #160
+    bgt     vsd_next
+    movs    r8, r1
+    bpl     vsd_cy_ok
+    neg     r8, r1
+vsd_cy_ok:
+    cmp     r8, #160
+    bgt     vsd_next
+    ldrb    r2, [r5, #5]
+    cmp     r2, #0
+    bne     vsd_havei
+    mov     r2, #127
+vsd_havei:
+    mov     r3, #0
+    push    {r2, r3}
+    mov     r2, r1
+    mov     r1, r0
+    ldr     r0, [r5, #8]
+    mov     r3, #0
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+vsd_next:
+    add     r5, r5, #16
+    subs    r4, r4, #1
+    b       vsd_loop
+vsd_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_update_level()
+.global vpy_update_level
+.type vpy_update_level, %function
+.thumb_func
+vpy_update_level:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned
+    ldr     r4, =LEVEL_DATA_PTR
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vul_done
+    ldrsh   r6, [r4, #0]              @ xMin
+    ldrsh   r7, [r4, #2]              @ xMax
+    ldrsh   r8, [r4, #4]              @ yMin
+    ldrsh   r9, [r4, #6]              @ yMax
+    ldr     r5, =LEVEL_GP_COUNT
+    ldr     r5, [r5]
+    cmp     r5, #0
+    beq.w   vul_done
+    ldr     r10, [r4, #16]            @ gpObjectsPtr (ROM, for flags)
+    ldr     r4, =LEVEL_GP_BUF
+vul_loop:
+    ldrb    r0, [r4, #6]              @ alive
+    cmp     r0, #0
+    beq.w   vul_next
+    ldrb    r0, [r10, #6]             @ ROM flags
+    tst     r0, #0x02
+    beq     vul_nograv
+    ldrsb   r1, [r4, #5]              @ vel_y
+    sub     r1, r1, #1
+    cmp     r1, #-127
+    bge     vul_vy_ok
+    mov     r1, #-127
+vul_vy_ok:
+    strb    r1, [r4, #5]
+vul_nograv:
+    ldrsh   r1, [r4, #0]              @ world_x
+    ldrsb   r2, [r4, #4]              @ vel_x
+    add     r1, r1, r2
+    cmp     r1, r6
+    bge     vul_x_min_ok
+    mov     r1, r6
+    mov     r2, #0
+    strb    r2, [r4, #4]
+vul_x_min_ok:
+    cmp     r1, r7
+    ble     vul_x_max_ok
+    mov     r1, r7
+    mov     r2, #0
+    strb    r2, [r4, #4]
+vul_x_max_ok:
+    strh    r1, [r4, #0]
+    ldrsh   r1, [r4, #2]              @ world_y
+    ldrsb   r2, [r4, #5]              @ vel_y
+    add     r1, r1, r2
+    cmp     r1, r8
+    bge     vul_y_min_ok
+    mov     r1, r8
+    mov     r2, #0
+    strb    r2, [r4, #5]
+vul_y_min_ok:
+    cmp     r1, r9
+    ble     vul_y_max_ok
+    mov     r1, r9
+    mov     r2, #0
+    strb    r2, [r4, #5]
+vul_y_max_ok:
+    strh    r1, [r4, #2]
+vul_next:
+    add     r4, r4, #8
+    add     r10, r10, #16
+    subs    r5, r5, #1
+    bne     vul_loop
+vul_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_get_level_width() -> r0
+.global vpy_get_level_width
+.type vpy_get_level_width, %function
+.thumb_func
+vpy_get_level_width:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq.w   vglw_null
+    ldrsh   r1, [r0, #2]              @ xMax
+    ldrsh   r0, [r0, #0]              @ xMin
+    sub     r0, r1, r0
+    bx      lr
+vglw_null:
+    mov     r0, #0
+    bx      lr
+    .ltorg
+
+@ vpy_get_level_height() -> r0
+.global vpy_get_level_height
+.type vpy_get_level_height, %function
+.thumb_func
+vpy_get_level_height:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq.w   vglh_null
+    ldrsh   r1, [r0, #6]              @ yMax
+    ldrsh   r0, [r0, #4]              @ yMin
+    sub     r0, r1, r0
+    bx      lr
+vglh_null:
+    mov     r0, #0
+    bx      lr
+    .ltorg
+
+@ vpy_get_level_tile(r0=x, r1=y) -> index or -1
+.global vpy_get_level_tile
+.type vpy_get_level_tile, %function
+.thumb_func
+vpy_get_level_tile:
+    push    {r4, r5, r6, lr}           @ 4 regs = 16 bytes, 8-aligned
+    mov     r4, r0                    @ query_x
+    mov     r5, r1                    @ query_y
+    ldr     r6, =LEVEL_GP_COUNT
+    ldr     r6, [r6]
+    ldr     r0, =LEVEL_GP_BUF
+    mov     r1, #0                    @ index
+vglt_loop:
+    cmp     r1, r6
+    bge     vglt_notfound
+    ldrb    r2, [r0, #6]
+    cmp     r2, #0
+    beq.w   vglt_next
+    ldrsh   r2, [r0, #0]              @ world_x
+    sub     r2, r2, r4
+    movs    r3, r2
+    bpl     vglt_dx_ok
+    neg     r2, r2
+vglt_dx_ok:
+    cmp     r2, #16
+    bgt     vglt_next
+    ldrsh   r2, [r0, #2]              @ world_y
+    sub     r2, r2, r5
+    movs    r3, r2
+    bpl     vglt_dy_ok
+    neg     r2, r2
+vglt_dy_ok:
+    cmp     r2, #16
+    bgt     vglt_next
+    mov     r0, r1                    @ return index
+    pop     {r4, r5, r6, pc}
+vglt_next:
+    add     r0, r0, #8
+    add     r1, r1, #1
+    b       vglt_loop
+vglt_notfound:
+    mvn     r0, #0            @ return -1
+    pop     {r4, r5, r6, pc}
+    .ltorg
+
+@ vpy_level_collision_x(r0=px, r1=py, r2=hw) -> push-out dx
+.global vpy_level_collision_x
+.type vpy_level_collision_x, %function
+.thumb_func
+vpy_level_collision_x:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned
+    mov     r4, r0                    @ px
+    mov     r5, r1                    @ py
+    mov     r6, r2                    @ half_w (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    cmp     r7, #0
+    beq.w   vlcx_done_zero
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq.w   vlcx_done_zero
+    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    mov     r10, #0                   @ best_dx
+vlcx_loop:
+    cmp     r8, #0
+    beq.w   vlcx_done
+    ldrb    r0, [r7, #6]
+    cmp     r0, #0
+    beq.w   vlcx_next
+    ldrb    r0, [r9, #6]
+    tst     r0, #0x10
+    beq     vlcx_next
+    ldrb    r0, [r9, #12]             @ obj half_w
+    ldrsh   r1, [r7, #0]              @ obj world_x
+    ldrsh   r2, [r7, #2]              @ obj world_y
+    ldrb    r3, [r9, #13]             @ obj half_h
+    sub     r2, r5, r2                @ dy = py - obj_y
+    movs    r2, r2
+    bpl     vlcx_dychk
+    neg     r2, r2
+vlcx_dychk:
+    add     r3, r3, #16
+    cmp     r2, r3
+    bge     vlcx_next
+    sub     r1, r4, r1                @ dx_raw = px - obj_x
+    add     r3, r6, r0                @ total_hw = player_hw + obj_hw
+    movs    r2, r1
+    bpl     vlcx_dxpos
+    neg     r2, r1
+vlcx_dxpos:
+    cmp     r2, r3
+    bge     vlcx_next
+    sub     r3, r3, r2                @ overlap = total_hw - |dx|
+    cmp     r1, #0
+    bge     vlcx_pos
+    neg     r3, r3
+vlcx_pos:
+    mov     r10, r3
+vlcx_next:
+    add     r7, r7, #8
+    add     r9, r9, #16
+    subs    r8, r8, #1
+    b       vlcx_loop
+vlcx_done:
+    mov     r0, r10
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+vlcx_done_zero:
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y
+.global vpy_level_collision_y
+.type vpy_level_collision_y, %function
+.thumb_func
+vpy_level_collision_y:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned
+    mov     r4, r0                    @ px
+    mov     r5, r1                    @ py
+    mov     r6, r2                    @ half_h (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    mvn     r10, #0                   @ best_floor_top = INT_MIN
+    cmp     r7, #0
+    beq.w   vlcy_finish
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq.w   vlcy_finish
+    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    sub     r0, r5, r6                @ player_feet
+vlcy_loop:
+    cmp     r8, #0
+    beq.w   vlcy_finish
+    ldrb    r1, [r7, #6]
+    cmp     r1, #0
+    beq.w   vlcy_next
+    ldrb    r1, [r9, #6]
+    tst     r1, #0x10
+    beq     vlcy_next
+    ldrb    r1, [r9, #12]             @ obj half_w
+    ldrsh   r2, [r7, #0]              @ obj world_x
+    sub     r2, r4, r2                @ dx = px - obj_x
+    movs    r3, r2
+    bpl     vlcy_dxok
+    neg     r3, r2
+vlcy_dxok:
+    add     r1, r1, #8     @ total_hw = obj_hw + 8
+    cmp     r3, r1
+    bge     vlcy_next
+    ldrsh   r2, [r7, #2]              @ obj world_y
+    ldrb    r3, [r9, #13]             @ obj half_h
+    add     r2, r2, r3                @ obj_top = world_y + half_h
+    cmp     r2, r0                    @ obj_top <= player_feet?
+    bgt     vlcy_next
+    cmp     r10, #0xFFFF8000
+    cmp     r10, r2
+    bge     vlcy_next
+    mov     r10, r2
+vlcy_next:
+    add     r7, r7, #8
+    add     r9, r9, #16
+    subs    r8, r8, #1
+    b       vlcy_loop
+vlcy_finish:
+    mvn     r1, #0
+    cmp     r10, r1
+    beq     vlcy_no_floor
+    add     r0, r10, r6               @ floor_y + half_h (player center)
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+vlcy_no_floor:
+    mov     r0, #-128
+    add     r0, r0, r6  @ -128 + half_h
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ ─── MSG_DEF / PRINT_MSG ─────────────────────────────────────
+
+.global vpy_msg_def
+.type vpy_msg_def, %function
+.thumb_func
+vpy_msg_def:
+    bx      lr
+
+@ vpy_print_msg(r0=id): renders message at pre-defined (x,y)
+.global vpy_print_msg
+.type vpy_print_msg, %function
+.thumb_func
+vpy_print_msg:
+    bx      lr
+
+@ --- User variables (RAM) ---
+.equ VAR_BALL_X, 0x2007F28C
+.equ VAR_BALL_Y, 0x2007F290
+.equ VAR_BALL_VX, 0x2007F294
+.equ VAR_BALL_VY, 0x2007F298
+.equ VAR_BUB_X, 0x2007F29C
+.equ VAR_BUB_Y, 0x2007F2A0
+.equ VAR_BUB_VX, 0x2007F2A4
+.equ VAR_BUB_VY, 0x2007F2A8
+
+@ --- Const array ROM data ---
+
+@ --- game_main (firmware entry point) ---
+.align 2
+.global game_main
+.type game_main, %function
+.thumb_func
+game_main:
+    push    {r4, r5, r6, r7, lr}
+    @ initialize globals
+    ldr     r1, =0x2007F28C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F290
+    mov     r0, #20
+    str     r0, [r1]
+    ldr     r1, =0x2007F294
+    mov     r0, #3
+    str     r0, [r1]
+    ldr     r1, =0x2007F298
+    mov     r0, #2
+    str     r0, [r1]
+    ldr     r1, =0x2007F29C
+    ldr     r0, =-30
+    str     r0, [r1]
+    ldr     r1, =0x2007F2A0
+    ldr     r0, =-20
+    str     r0, [r1]
+    ldr     r1, =0x2007F2A4
+    ldr     r0, =-2
+    str     r0, [r1]
+    ldr     r1, =0x2007F2A8
+    mov     r0, #3
+    str     r0, [r1]
+    @ main() body
+    ldr     r0, =_MUSIC1_MUSIC    @ asset 'music1'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_music
+    mov     r0, #0
+    ldr     r1, =0x2007F28C    @ BALL_X
+    str     r0, [r1]
+    mov     r0, #20
+    ldr     r1, =0x2007F290    @ BALL_Y
+    str     r0, [r1]
+    mov     r0, #3
+    ldr     r1, =0x2007F294    @ BALL_VX
+    str     r0, [r1]
+    mov     r0, #2
+    ldr     r1, =0x2007F298    @ BALL_VY
+    str     r0, [r1]
+    ldr     r0, =-30
+    ldr     r1, =0x2007F29C    @ BUB_X
+    str     r0, [r1]
+    ldr     r0, =-20
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    str     r0, [r1]
+    ldr     r0, =-2
+    ldr     r1, =0x2007F2A4    @ BUB_VX
+    str     r0, [r1]
+    mov     r0, #3
+    ldr     r1, =0x2007F2A8    @ BUB_VY
+    str     r0, [r1]
+game_main_loop:
+    bl      vpy_wait_recal
+    bl      vpy_update_buttons
+    bl      vpy_beep_update
+    bl      vpy_music_update
+    bl      vpy_audio_update
+    ldr     r0, =-60
+    push    {r0}
+    mov     r0, #110
+    push    {r0}
+    b       _str_0_after
+_str_0:
+    .asciz  "MOVING VEC\x80"
+    .align  2
+_str_0_after:
+    ldr     r0, =_str_0
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    ldr     r0, =-60
+    push    {r0}
+    mov     r0, #90
+    push    {r0}
+    ldr     r1, =0x2007F28C    @ BALL_X
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_number
+    ldr     r0, =-60
+    push    {r0}
+    mov     r0, #70
+    push    {r0}
+    ldr     r1, =0x2007F294    @ BALL_VX
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_number
+    ldr     r1, =0x2007F28C    @ BALL_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F294    @ BALL_VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F28C    @ BALL_X
+    str     r0, [r1]
+    ldr     r1, =0x2007F290    @ BALL_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F298    @ BALL_VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F290    @ BALL_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F28C    @ BALL_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #97
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf0
+    movs    r0, #1
+    b       .Lcf0e
+.Lcf0:
+    movs    r0, #0
+.Lcf0e:
+    cmp     r0, #0
+    beq     if_else_0
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F294    @ BALL_VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F294    @ BALL_VX
+    str     r0, [r1]
+    mov     r0, #97
+    ldr     r1, =0x2007F28C    @ BALL_X
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_0
+if_else_0:
+if_end_0:
+    ldr     r1, =0x2007F28C    @ BALL_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-97
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf1
+    movs    r0, #1
+    b       .Lcf1e
+.Lcf1:
+    movs    r0, #0
+.Lcf1e:
+    cmp     r0, #0
+    beq     if_else_1
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F294    @ BALL_VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F294    @ BALL_VX
+    str     r0, [r1]
+    ldr     r0, =-97
+    ldr     r1, =0x2007F28C    @ BALL_X
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_1
+if_else_1:
+if_end_1:
+    ldr     r1, =0x2007F290    @ BALL_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #77
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf2
+    movs    r0, #1
+    b       .Lcf2e
+.Lcf2:
+    movs    r0, #0
+.Lcf2e:
+    cmp     r0, #0
+    beq     if_else_2
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F298    @ BALL_VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F298    @ BALL_VY
+    str     r0, [r1]
+    mov     r0, #77
+    ldr     r1, =0x2007F290    @ BALL_Y
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_2
+if_else_2:
+if_end_2:
+    ldr     r1, =0x2007F290    @ BALL_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-77
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf3
+    movs    r0, #1
+    b       .Lcf3e
+.Lcf3:
+    movs    r0, #0
+.Lcf3e:
+    cmp     r0, #0
+    beq     if_else_3
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F298    @ BALL_VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F298    @ BALL_VY
+    str     r0, [r1]
+    ldr     r0, =-77
+    ldr     r1, =0x2007F290    @ BALL_Y
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_3
+if_else_3:
+if_end_3:
+    ldr     r1, =0x2007F29C    @ BUB_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F2A4    @ BUB_VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F29C    @ BUB_X
+    str     r0, [r1]
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F2A8    @ BUB_VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F29C    @ BUB_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #90
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf4
+    movs    r0, #1
+    b       .Lcf4e
+.Lcf4:
+    movs    r0, #0
+.Lcf4e:
+    cmp     r0, #0
+    beq     if_else_4
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F2A4    @ BUB_VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F2A4    @ BUB_VX
+    str     r0, [r1]
+    mov     r0, #90
+    ldr     r1, =0x2007F29C    @ BUB_X
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_4
+if_else_4:
+if_end_4:
+    ldr     r1, =0x2007F29C    @ BUB_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-90
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf5
+    movs    r0, #1
+    b       .Lcf5e
+.Lcf5:
+    movs    r0, #0
+.Lcf5e:
+    cmp     r0, #0
+    beq     if_else_5
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F2A4    @ BUB_VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F2A4    @ BUB_VX
+    str     r0, [r1]
+    ldr     r0, =-90
+    ldr     r1, =0x2007F29C    @ BUB_X
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_5
+if_else_5:
+if_end_5:
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #70
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf6
+    movs    r0, #1
+    b       .Lcf6e
+.Lcf6:
+    movs    r0, #0
+.Lcf6e:
+    cmp     r0, #0
+    beq     if_else_6
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F2A8    @ BUB_VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F2A8    @ BUB_VY
+    str     r0, [r1]
+    mov     r0, #70
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_6
+if_else_6:
+if_end_6:
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-70
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf7
+    movs    r0, #1
+    b       .Lcf7e
+.Lcf7:
+    movs    r0, #0
+.Lcf7e:
+    cmp     r0, #0
+    beq     if_else_7
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F2A8    @ BUB_VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F2A8    @ BUB_VY
+    str     r0, [r1]
+    ldr     r0, =-70
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_7
+if_else_7:
+if_end_7:
+    ldr     r0, =_BALL_VECTORS    @ asset 'ball'
+    push    {r0}
+    ldr     r1, =0x2007F28C    @ BALL_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F290    @ BALL_Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    ldr     r0, =_BUBBLE_SMALL_VECTORS    @ asset 'bubble_small'
+    push    {r0}
+    ldr     r1, =0x2007F29C    @ BUB_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F2A0    @ BUB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    mov     r0, #60
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    mov     r0, #80
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    mov     r0, #80
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_line
+    add     sp, sp, #4
+    mov     r0, #60
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    mov     r0, #80
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    ldr     r0, =-80
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_line
+    add     sp, sp, #4
+    mov     r0, #60
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    ldr     r0, =-80
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    ldr     r0, =-80
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_line
+    add     sp, sp, #4
+    mov     r0, #60
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    ldr     r0, =-80
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    mov     r0, #80
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_line
+    add     sp, sp, #4
+    b       game_main_loop
+    .ltorg
+
+@ ============================================================
+@ Asset data
+@ ============================================================
+
+@ --- ball (1 path(s)) ---
+.global _BALL_VECTORS
+_BALL_VECTORS:
+    .word   1               @ path_count
+    .word   _BALL_PATH0      @ ptr path 0
+
+_BALL_PATH0:
+    .byte   127               @ intensity
+    .byte   0x03, 0x00, 0x00, 0x00  @ y=3, x=0, hdr
+    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
+    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
+    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
+    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
+    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
+    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
+    .byte   0x02            @ end marker
+
+@ --- BALL_3D_DATA (1 path(s)) ---
+.global _BALL_3D_DATA
+_BALL_3D_DATA:
+    .word   8               @ vertex_count
+    .byte   0x00, 0x03, 0x00  @ vert 0: x=0,y=3,z=0
+    .byte   0x02, 0x02, 0x00  @ vert 1: x=2,y=2,z=0
+    .byte   0x03, 0x00, 0x00  @ vert 2: x=3,y=0,z=0
+    .byte   0x02, 0xFE, 0x00  @ vert 3: x=2,y=-2,z=0
+    .byte   0x00, 0xFD, 0x00  @ vert 4: x=0,y=-3,z=0
+    .byte   0xFE, 0xFE, 0x00  @ vert 5: x=-2,y=-2,z=0
+    .byte   0xFD, 0x00, 0x00  @ vert 6: x=-3,y=0,z=0
+    .byte   0xFE, 0x02, 0x00  @ vert 7: x=-2,y=2,z=0
+    .word   1               @ path_count
+    .byte   8               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+
+@ --- bubble_small (1 path(s)) ---
+.global _BUBBLE_SMALL_VECTORS
+_BUBBLE_SMALL_VECTORS:
+    .word   1               @ path_count
+    .word   _BUBBLE_SMALL_PATH0      @ ptr path 0
+
+_BUBBLE_SMALL_PATH0:
+    .byte   127               @ intensity
+    .byte   0x00, 0x0A, 0x00, 0x00  @ y=0, x=10, hdr
+    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
+    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
+    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
+    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0x01, 0xFD  @ line dy=1, dx=-3
+    .byte   0xFF, 0xFF, 0xFD  @ line dy=-1, dx=-3
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
+    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
+    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
+    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
+    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
+    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
+    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
+    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0xFF, 0x03  @ line dy=-1, dx=3
+    .byte   0xFF, 0x01, 0x03  @ line dy=1, dx=3
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
+    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
+    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
+    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
+    .byte   0x02            @ end marker
+
+@ --- BUBBLE_SMALL_3D_DATA (1 path(s)) ---
+.global _BUBBLE_SMALL_3D_DATA
+_BUBBLE_SMALL_3D_DATA:
+    .word   24               @ vertex_count
+    .byte   0x0A, 0x00, 0x00  @ vert 0: x=10,y=0,z=0
+    .byte   0x09, 0x03, 0x00  @ vert 1: x=9,y=3,z=0
+    .byte   0x09, 0x05, 0x00  @ vert 2: x=9,y=5,z=0
+    .byte   0x07, 0x07, 0x00  @ vert 3: x=7,y=7,z=0
+    .byte   0x05, 0x09, 0x00  @ vert 4: x=5,y=9,z=0
+    .byte   0x03, 0x09, 0x00  @ vert 5: x=3,y=9,z=0
+    .byte   0x00, 0x0A, 0x00  @ vert 6: x=0,y=10,z=0
+    .byte   0xFD, 0x09, 0x00  @ vert 7: x=-3,y=9,z=0
+    .byte   0xFB, 0x09, 0x00  @ vert 8: x=-5,y=9,z=0
+    .byte   0xF9, 0x07, 0x00  @ vert 9: x=-7,y=7,z=0
+    .byte   0xF7, 0x05, 0x00  @ vert 10: x=-9,y=5,z=0
+    .byte   0xF7, 0x03, 0x00  @ vert 11: x=-9,y=3,z=0
+    .byte   0xF6, 0x00, 0x00  @ vert 12: x=-10,y=0,z=0
+    .byte   0xF7, 0xFD, 0x00  @ vert 13: x=-9,y=-3,z=0
+    .byte   0xF7, 0xFB, 0x00  @ vert 14: x=-9,y=-5,z=0
+    .byte   0xF9, 0xF9, 0x00  @ vert 15: x=-7,y=-7,z=0
+    .byte   0xFB, 0xF7, 0x00  @ vert 16: x=-5,y=-9,z=0
+    .byte   0xFD, 0xF7, 0x00  @ vert 17: x=-3,y=-9,z=0
+    .byte   0x00, 0xF6, 0x00  @ vert 18: x=0,y=-10,z=0
+    .byte   0x03, 0xF7, 0x00  @ vert 19: x=3,y=-9,z=0
+    .byte   0x05, 0xF7, 0x00  @ vert 20: x=5,y=-9,z=0
+    .byte   0x07, 0xF9, 0x00  @ vert 21: x=7,y=-7,z=0
+    .byte   0x09, 0xFB, 0x00  @ vert 22: x=9,y=-5,z=0
+    .byte   0x09, 0xFD, 0x00  @ vert 23: x=9,y=-3,z=0
+    .word   1               @ path_count
+    .byte   24               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+
+@ --- hit SFX (15 frames, 16 events) ---
+.global _HIT_SFX
 _HIT_SFX:
-    ; SFX: hit (hit)
-    ; Duration: 300ms (15fr), Freq: 200Hz, Channel: 0
-    FCB $6C         ; Frame 0 - flags (vol=12, noisevol=12, tone=Y, noise=Y)
-    FCB $00, $84  ; Tone period = 132 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6F         ; Frame 1 - flags (vol=15, noisevol=11, tone=Y, noise=Y)
-    FCB $00, $A0  ; Tone period = 160 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6F         ; Frame 2 - flags (vol=15, noisevol=10, tone=Y, noise=Y)
-    FCB $00, $BD  ; Tone period = 189 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6E         ; Frame 3 - flags (vol=14, noisevol=8, tone=Y, noise=Y)
-    FCB $00, $D9  ; Tone period = 217 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6D         ; Frame 4 - flags (vol=13, noisevol=7, tone=Y, noise=Y)
-    FCB $00, $F5  ; Tone period = 245 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 5 - flags (vol=12, noisevol=6, tone=Y, noise=Y)
-    FCB $01, $12  ; Tone period = 274 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 6 - flags (vol=12, noisevol=5, tone=Y, noise=Y)
-    FCB $01, $2E  ; Tone period = 302 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 7 - flags (vol=12, noisevol=4, tone=Y, noise=Y)
-    FCB $01, $4A  ; Tone period = 330 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 8 - flags (vol=12, noisevol=2, tone=Y, noise=Y)
-    FCB $01, $67  ; Tone period = 359 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 9 - flags (vol=12, noisevol=1, tone=Y, noise=Y)
-    FCB $01, $83  ; Tone period = 387 (big-endian)
-    FCB $08         ; Noise period
-    FCB $AC         ; Frame 10 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $9F  ; Tone period = 415 (big-endian)
-    FCB $AC         ; Frame 11 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $BC  ; Tone period = 444 (big-endian)
-    FCB $A9         ; Frame 12 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $01, $D8  ; Tone period = 472 (big-endian)
-    FCB $A6         ; Frame 13 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $01, $F4  ; Tone period = 500 (big-endian)
-    FCB $A3         ; Frame 14 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $02, $11  ; Tone period = 529 (big-endian)
-    FCB $D0, $20    ; End of effect marker
+    .word   16  @ num_events
+    .byte   0, 5  @ frame=0
+    .byte   6, 8  @ PSG r6
+    .byte   4, 112  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 12  @ PSG r10
+    .byte   7, 27  @ PSG r7
+    .byte   0, 3  @ frame=1
+    .byte   4, 132  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 11  @ PSG r10
+    .byte   0, 3  @ frame=2
+    .byte   4, 156  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 15  @ PSG r10
+    .byte   0, 2  @ frame=3
+    .byte   4, 182  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   0, 3  @ frame=4
+    .byte   4, 212  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   0, 3  @ frame=5
+    .byte   4, 246  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   0, 3  @ frame=6
+    .byte   4, 30  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 12  @ PSG r10
+    .byte   0, 3  @ frame=7
+    .byte   4, 76  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   0, 3  @ frame=8
+    .byte   4, 131  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 7  @ PSG r10
+    .byte   0, 3  @ frame=9
+    .byte   4, 198  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 4  @ PSG r10
+    .byte   0, 4  @ frame=10
+    .byte   4, 24  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 2  @ PSG r10
+    .byte   7, 59  @ PSG r7
+    .byte   0, 4  @ frame=11
+    .byte   4, 127  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 2  @ frame=12
+    .byte   4, 5  @ PSG r4
+    .byte   5, 4  @ PSG r5
+    .byte   0, 2  @ frame=13
+    .byte   4, 187  @ PSG r4
+    .byte   5, 4  @ PSG r5
+    .byte   0, 2  @ frame=14
+    .byte   4, 190  @ PSG r4
+    .byte   5, 5  @ PSG r5
+    .byte   0, 2  @ frame=15
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0  @ end
 
+@ --- music1 MUSIC (33 events, loop@0) ---
+.global _MUSIC1_MUSIC
+_MUSIC1_MUSIC:
+    .word   33           @ num_events
+    .word   8           @ loop_event_byte_offset from base
+    .byte   0, 11  @ frame=0 delay=0 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 205  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 11  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=6 delay=5 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   6, 5  @ frame=13 delay=6 writes=5
+    .byte   6, 3  @ PSG r6
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=16 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   9, 6  @ frame=26 delay=9 writes=6
+    .byte   6, 3  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=29 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   9, 5  @ frame=39 delay=9 writes=5
+    .byte   6, 3  @ PSG r6
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=42 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   8, 11  @ frame=51 delay=8 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 205  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 11  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   6, 2  @ frame=58 delay=6 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   5, 3  @ frame=64 delay=5 writes=3
+    .byte   6, 3  @ PSG r6
+    .byte   8, 15  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=68 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   8, 6  @ frame=77 delay=8 writes=6
+    .byte   6, 3  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=80 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   9, 5  @ frame=90 delay=9 writes=5
+    .byte   6, 3  @ PSG r6
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 11  @ PSG r8
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=93 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   9, 11  @ frame=103 delay=9 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 222  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 11  @ PSG r9
+    .byte   4, 239  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=109 delay=5 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   6, 5  @ frame=116 delay=6 writes=5
+    .byte   6, 3  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=119 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   9, 6  @ frame=129 delay=9 writes=6
+    .byte   6, 3  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 15  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=132 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   8, 3  @ frame=141 delay=8 writes=3
+    .byte   6, 3  @ PSG r6
+    .byte   8, 15  @ PSG r8
+    .byte   7, 50  @ PSG r7
+    .byte   3, 2  @ frame=145 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   8, 11  @ frame=154 delay=8 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 222  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 11  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   6, 2  @ frame=161 delay=6 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   5, 3  @ frame=167 delay=5 writes=3
+    .byte   6, 3  @ PSG r6
+    .byte   8, 15  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=170 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   9, 6  @ frame=180 delay=9 writes=6
+    .byte   6, 3  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=183 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   9, 3  @ frame=193 delay=9 writes=3
+    .byte   6, 3  @ PSG r6
+    .byte   8, 15  @ PSG r8
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=196 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 58  @ PSG r7
+    .byte   9, 3  @ frame=206 delay=9 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0xFF   @ loop back (fires frame ~206)
 
-; String literals (classic FCC + $80 terminator)
-STR_0:
-    FCC "MOVING VEC"
-    FCB $80
