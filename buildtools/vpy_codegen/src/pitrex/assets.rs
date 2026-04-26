@@ -410,7 +410,10 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
 fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
 
-    let ch = vsfx.oscillator.channel.min(2) as usize;
+    // Force SFX onto channel C (regs 4/5 period, 10 volume) so it cannot
+    // overwrite music playing on channels A/B. Matches M6809 sfx_doframe.
+    let _ = vsfx.oscillator.channel;
+    let ch = 2usize;
     let reg_lo  = (ch * 2) as u8;
     let reg_hi  = (ch * 2 + 1) as u8;
     let reg_vol = (8 + ch) as u8;

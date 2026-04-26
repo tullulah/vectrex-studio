@@ -293,9 +293,23 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      v_init\n");
     s.push_str("    mov     r0, #50\n    bl      v_setRefresh\n\n");
 
+    // Flush literal pool after SDK init so subsequent ldr= pool entries fit within 4KB
+    let mut pool_idx = 0usize;
+    let flush_pool = |s: &mut String, idx: &mut usize| {
+        let lbl = format!(".Lgp_{}", *idx);
+        s.push_str(&format!("    b       {lbl}\n    .ltorg\n{lbl}:\n"));
+        *idx += 1;
+    };
+    flush_pool(&mut s, &mut pool_idx);
+
     // Initialise global variables (same pattern as ARM backend)
     s.push_str("    @ initialise globals\n");
+    let mut init_count = 0usize;
     for item in &module.items {
+        // Flush literal pool every 60 variables to stay within ARM ldr= range
+        if init_count > 0 && init_count % 60 == 0 {
+            flush_pool(&mut s, &mut pool_idx);
+        }
         match item {
             Item::GlobalLet { name, value, .. } => {
                 let varname = name.to_uppercase();
@@ -308,6 +322,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                                 format!("    ldr     r0, ={n}\n")
                             };
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n{mov}    str     r0, [r1]\n"));
+                            init_count += 1;
                         }
                         Expr::List(elems) => {
                             let data_varname = format!("ARRAY_{varname}_DATA");
@@ -324,6 +339,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                                 }
                             }
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r2, [r1]\n"));
+                            init_count += 1;
                         }
                         _ => {}
                     }
@@ -340,12 +356,14 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                                 format!("    ldr     r0, ={n}\n")
                             };
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n{mov}    str     r0, [r1]\n"));
+                            init_count += 1;
                         }
                         Expr::List(_) => {
                             let data_label = format!("ARRAY_{varname}_DATA");
                             s.push_str(&format!(
                                 "    ldr     r0, ={data_label}\n    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]  @ const array {name} → rodata\n"
                             ));
+                            init_count += 1;
                         }
                         _ => {}
                     }
@@ -354,6 +372,8 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
             _ => {}
         }
     }
+    // Flush after globals init
+    flush_pool(&mut s, &mut pool_idx);
 
     // VPy main() body
     let loop_labels: Vec<(String, String)> = Vec::new();
@@ -362,6 +382,8 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
         for stmt in &f.body {
             s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("pitrex_game_loop"))?);
         }
+        // Flush after main() body before entering game loop
+        flush_pool(&mut s, &mut pool_idx);
     }
 
     // Game loop — PiTrex frame sync + input
@@ -372,10 +394,19 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      v_readJoystick2Analog\n");
     s.push_str("    bl      pitrex_music_update\n");
     s.push_str("    bl      pitrex_sfx_update\n");
+    s.push_str("    bl      v_doSound          @ flush PSG buffer to hardware\n");
 
     if let Some(f) = loop_fn {
+        // Emit loop body with periodic pool flushes every ~3 KB of generated text
+        // ARM ldr= pool must be within 4KB; ~3000 chars ≈ 600 instructions ≈ 2.4 KB — safe margin
+        let mut last_flush_len = s.len();
         for stmt in &f.body {
-            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("pitrex_game_loop"))?);
+            let stmt_code = emit_stmt(stmt, var_addrs, &loop_labels, Some("pitrex_game_loop"))?;
+            s.push_str(&stmt_code);
+            if s.len() - last_flush_len > 3000 {
+                flush_pool(&mut s, &mut pool_idx);
+                last_flush_len = s.len();
+            }
         }
     }
     s.push_str("    b       pitrex_game_loop\n\n");
@@ -538,6 +569,7 @@ fn emit_stmt(
             for st in body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
             s.push_str(&format!("    b       if_end_{id}\n"));
             s.push_str(&format!("if_else_{id}:\n"));
+            let mut last_pool_flush_pos = s.len();
             for (elif_cond, elif_body) in elifs {
                 let eid = next_id();
                 s.push_str(&emit_expr(elif_cond, var_addrs)?);
@@ -546,6 +578,13 @@ fn emit_stmt(
                 for st in elif_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
                 s.push_str(&format!("    b       if_end_{id}\n"));
                 s.push_str(&format!("elif_end_{eid}:\n"));
+                // Flush literal pool after each large elif block to stay within ARM 4KB pool range
+                // (~2000 chars ≈ 300-400 ARM instructions ≈ 1200-1600 bytes)
+                if s.len() - last_pool_flush_pos > 2000 {
+                    let pid = next_id();
+                    s.push_str(&format!("    b       .Lgp_{pid}_skip\n    .ltorg\n.Lgp_{pid}_skip:\n"));
+                    last_pool_flush_pos = s.len();
+                }
             }
             if let Some(else_stmts) = else_body {
                 for st in else_stmts { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }

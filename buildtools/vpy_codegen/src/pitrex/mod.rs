@@ -74,6 +74,7 @@ pub fn generate_pitrex_asm(
         "v_WaitRecal", "v_readButtons", "v_readJoystick1Analog",
         "v_directDraw32", "v_setBrightness",
         "v_printStringRaster",
+        "v_writePSG", "v_doSound",
         "currentJoy1X", "currentJoy1Y", "currentButtonState",
         "currentJoy2X", "currentJoy2Y",
         "__aeabi_idiv", "__aeabi_idivmod",

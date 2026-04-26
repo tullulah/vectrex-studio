@@ -202,7 +202,7 @@ fn emit_pitrex_draw_line_rel() -> String {
 // ── Draw vector (simple, single asset, no offset/mirror) ─────────────────
 
 fn emit_pitrex_draw_vector() -> String {
-    // pitrex_draw_vector(r0 = asset_ptr)
+    // pitrex_draw_vector(r0 = asset_ptr, r1 = ox, r2 = oy)
     //
     // Asset layout emitted by vpy_codegen::pitrex::assets::emit_vec_resource:
     //   _NAME_VECTORS:
@@ -214,56 +214,58 @@ fn emit_pitrex_draw_vector() -> String {
     //       .byte  0xFF, dy, dx                     @ N draw segments
     //       .byte  0x02                             @ end-of-path marker
     //
-    // We walk the pointer table, then for each path: reset the beam to the
-    // asset centre, perform a non-emitting move to (x_start, y_start), and
-    // then emit each `0xFF, dy, dx` triplet as a draw segment. `0x02` ends
-    // the path.
+    // We walk the pointer table; for each path the beam is seeded at
+    // (ox*100, oy*100) so the relative move-to + segments compose to absolute
+    // screen coords centred on (ox, oy). Default brightness 127.
     //
     // Register usage (callee-save):
     //   r4 = asset cursor (header / pointer table)
     //   r5 = path_count
-    //   r6 = path index
-    //   r7 = path data cursor (per-path)
+    //   r6 = ox*100  (precomputed)
+    //   r7 = oy*100  (precomputed)
+    //   r8 = path index
+    //   r9 = path data cursor (per-path)
     let mut s = String::new();
-    s.push_str("@ pitrex_draw_vector(r0=asset_ptr)\n");
+    s.push_str("@ pitrex_draw_vector(r0=asset_ptr, r1=ox, r2=oy)\n");
     s.push_str(".global pitrex_draw_vector\n.type pitrex_draw_vector, %function\npitrex_draw_vector:\n");
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
-    s.push_str("    mov     r4, r0              @ r4 = asset header ptr\n");
-    s.push_str("    ldr     r5, [r4], #4        @ r5 = path_count, r4 -> ptr table\n");
-    s.push_str("    mov     r6, #0\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
+    s.push_str("    mov     r4, r0              @ asset header ptr\n");
+    s.push_str("    mov     r3, #100\n");
+    s.push_str("    mul     r6, r1, r3          @ ox*100\n");
+    s.push_str("    mul     r7, r2, r3          @ oy*100\n");
+    s.push_str("    ldr     r5, [r4], #4        @ path_count\n");
+    s.push_str("    mov     r8, #0\n");
     s.push_str("dv_path_loop:\n");
-    s.push_str("    cmp     r6, r5\n");
+    s.push_str("    cmp     r8, r5\n");
     s.push_str("    bge     dv_done\n");
-    s.push_str("    ldr     r7, [r4], #4        @ r7 = path data ptr\n");
-    // Reset beam to (0,0) for each path — the move-to coords are relative to
-    // the asset centre.
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    ldr     r1, =PITREX_CUR_X\n    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =PITREX_CUR_Y\n    str     r0, [r1]\n");
-    s.push_str("    add     r7, r7, #1          @ skip intensity byte\n");
-    s.push_str("    ldrsb   r1, [r7], #1        @ dy = y_start\n");
-    s.push_str("    ldrsb   r0, [r7], #1        @ dx = x_start\n");
-    s.push_str("    add     r7, r7, #2          @ skip 2 hdr padding bytes\n");
+    s.push_str("    ldr     r9, [r4], #4        @ r9 = path data ptr\n");
+    // Seed beam at offset for each path.
+    s.push_str("    ldr     r0, =PITREX_CUR_X\n    str     r6, [r0]\n");
+    s.push_str("    ldr     r0, =PITREX_CUR_Y\n    str     r7, [r0]\n");
+    s.push_str("    add     r9, r9, #1          @ skip intensity byte\n");
+    s.push_str("    ldrsb   r1, [r9], #1        @ dy = y_start\n");
+    s.push_str("    ldrsb   r0, [r9], #1        @ dx = x_start\n");
+    s.push_str("    add     r9, r9, #2          @ skip 2 hdr padding bytes\n");
     s.push_str("    mov     r2, #0              @ brightness 0 = move only\n");
-    s.push_str("    push    {r4, r5, r6, r7}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("dv_seg_loop:\n");
-    s.push_str("    ldrb    r0, [r7], #1        @ marker (0xFF=draw, 0x02=end)\n");
+    s.push_str("    ldrb    r0, [r9], #1        @ marker (0xFF=draw, 0x02=end)\n");
     s.push_str("    cmp     r0, #2\n");
     s.push_str("    beq     dv_seg_done\n");
-    s.push_str("    ldrsb   r1, [r7], #1        @ dy\n");
-    s.push_str("    ldrsb   r0, [r7], #1        @ dx\n");
+    s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
+    s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
     s.push_str("    mov     r2, #127            @ full brightness\n");
-    s.push_str("    push    {r4, r5, r6, r7}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
     s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_seg_done:\n");
-    s.push_str("    add     r6, r6, #1\n");
+    s.push_str("    add     r8, r8, #1\n");
     s.push_str("    b       dv_path_loop\n");
     s.push_str("dv_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -957,95 +959,86 @@ fn emit_pitrex_newlib_stubs() -> String {
 fn emit_pitrex_music_helpers() -> String {
     let mut s = String::new();
 
-    // pitrex_play_music(r0=music_ptr)
-    s.push_str("@ pitrex_play_music(r0=music_ptr) — start music playback\n");
+    // ── pitrex_play_music(r0=music_base) ──────────────────────────────────
+    // Music asset header (assets.rs::compile_vmus):
+    //   [base+0] .word num_events
+    //   [base+4] .word loop_event_byte_offset (from base, NOT from base+8)
+    //   [base+8] first event = (delay, num_writes, [reg,val]*N)
+    // PSG_MUSIC_START stores the base; PSG_MUSIC_PTR is the cursor
+    // pointing to the *current* event (initially base+8).
+    s.push_str("@ pitrex_play_music(r0=music_base)\n");
     s.push_str(".global pitrex_play_music\n.type pitrex_play_music, %function\npitrex_play_music:\n");
-    s.push_str("    ldr     r1, =PSG_MUSIC_PTR\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =PSG_MUSIC_START\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =PSG_IS_PLAYING\n");
-    s.push_str("    mov     r0, #1\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =PSG_DELAY_FRAMES\n");
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    bx      lr\n\n");
+    s.push_str("    ldr     r1, =PSG_MUSIC_START\n    str     r0, [r1]\n");
+    s.push_str("    add     r2, r0, #8          @ first event = base + 8\n");
+    s.push_str("    ldr     r1, =PSG_MUSIC_PTR\n    str     r2, [r1]\n");
+    s.push_str("    ldr     r1, =PSG_IS_PLAYING\n    mov     r0, #1\n    str     r0, [r1]\n");
+    s.push_str("    ldr     r1, =PSG_DELAY_FRAMES\n    mov     r0, #0\n    str     r0, [r1]\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
 
-    // pitrex_stop_music()
+    // ── pitrex_stop_music() ────────────────────────────────────────────────
+    // Mute all 3 channels and disable mixer, then mark not-playing.
     s.push_str("@ pitrex_stop_music()\n");
     s.push_str(".global pitrex_stop_music\n.type pitrex_stop_music, %function\npitrex_stop_music:\n");
-    s.push_str("    ldr     r1, =PSG_IS_PLAYING\n");
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    bx      lr\n\n");
+    s.push_str("    push    {lr}\n");
+    s.push_str("    ldr     r1, =PSG_IS_PLAYING\n    mov     r0, #0\n    str     r0, [r1]\n");
+    s.push_str("    mov     r0, #8\n    mov     r1, #0\n    bl      v_writePSG\n");
+    s.push_str("    mov     r0, #9\n    mov     r1, #0\n    bl      v_writePSG\n");
+    s.push_str("    mov     r0, #10\n   mov     r1, #0\n    bl      v_writePSG\n");
+    s.push_str("    mov     r0, #7\n    mov     r1, #0x3F\n bl      v_writePSG\n");
+    s.push_str("    pop     {pc}\n    .ltorg\n\n");
 
-    // pitrex_music_update() — called every frame from game loop
-    // Same event-table format as ARM backend but at 50fps.
-    // TODO: wire up PSG events to PiTrex audio (v_setSoundFrequency etc.)
-    // For now this is a stub that advances the event pointer when delay expires.
-    s.push_str("@ pitrex_music_update() — advance music sequencer (50fps)\n");
+    // ── pitrex_music_update() ──────────────────────────────────────────────
+    // Advance music sequencer one frame:
+    //   - decrement PSG_DELAY_FRAMES if > 0
+    //   - else fire current event (apply N reg/val pairs via v_writePSG),
+    //     then advance PSG_MUSIC_PTR past it, and load NEXT event's delay.
+    //   - num_writes==0   → end of music: stop.
+    //   - num_writes==0xFF → loop marker: jump to base + loop_event_byte_offset.
+    s.push_str("@ pitrex_music_update() — advance music sequencer one frame\n");
     s.push_str(".global pitrex_music_update\n.type pitrex_music_update, %function\npitrex_music_update:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    // if !PSG_IS_PLAYING, return
-    s.push_str("    ldr     r0, =PSG_IS_PLAYING\n");
-    s.push_str("    ldr     r0, [r0]\n");
-    s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     pmu_done\n");
-    // if PSG_DELAY_FRAMES > 0, decrement and return
-    s.push_str("    ldr     r4, =PSG_DELAY_FRAMES\n");
-    s.push_str("    ldr     r0, [r4]\n");
-    s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     pmu_process\n");
-    s.push_str("    sub     r0, r0, #1\n");
+    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str("    ldr     r0, =PSG_IS_PLAYING\n    ldr     r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n    beq     pmu_done\n");
+    // If PSG_DELAY_FRAMES > 0 → decrement, return
+    s.push_str("    ldr     r4, =PSG_DELAY_FRAMES\n    ldr     r0, [r4]\n");
+    s.push_str("    cmp     r0, #0\n    beq     pmu_process\n");
+    s.push_str("    sub     r0, r0, #1\n    str     r0, [r4]\n    b       pmu_done\n");
+    s.push_str("pmu_process:\n");
+    s.push_str("    ldr     r5, =PSG_MUSIC_PTR\n    ldr     r5, [r5]    @ event ptr\n");
+    s.push_str("    ldrb    r6, [r5, #1]                @ num_writes\n");
+    s.push_str("    cmp     r6, #0\n    beq     pmu_end\n");
+    s.push_str("    cmp     r6, #0xFF\n beq     pmu_loop\n");
+    // Apply num_writes (reg, val) pairs starting at event+2
+    s.push_str("    add     r7, r5, #2\n");
+    s.push_str("pmu_wl:\n");
+    s.push_str("    cmp     r6, #0\n    beq     pmu_after\n");
+    s.push_str("    ldrb    r0, [r7]\n    ldrb    r1, [r7, #1]\n");
+    s.push_str("    push    {r6, r7}\n    bl      v_writePSG\n    pop     {r6, r7}\n");
+    s.push_str("    add     r7, r7, #2\n    sub     r6, r6, #1\n    b       pmu_wl\n");
+    s.push_str("pmu_after:\n");
+    // r7 now = next event ptr; store and load its delay
+    s.push_str("    ldr     r0, =PSG_MUSIC_PTR\n    str     r7, [r0]\n");
+    s.push_str("    ldrb    r0, [r7]                    @ next event delay\n");
     s.push_str("    str     r0, [r4]\n");
     s.push_str("    b       pmu_done\n");
-    s.push_str("pmu_process:\n");
-    // Read event from PSG_MUSIC_PTR
-    s.push_str("    ldr     r5, =PSG_MUSIC_PTR\n");
-    s.push_str("    ldr     r4, [r5]            @ r4 = event ptr\n");
-    // Event format (same as ARM): 1 byte type, followed by args
-    // type=0xFF: loop (jump back to PSG_MUSIC_START)
-    // type=0xFE: stop
-    // type=delay_count (1 byte) + channel data (3 bytes): just advance delay
-    s.push_str("    ldrb    r0, [r4], #1        @ read event type\n");
-    s.push_str("    cmp     r0, #0xFF\n");
-    s.push_str("    beq     pmu_loop\n");
-    s.push_str("    cmp     r0, #0xFE\n");
-    s.push_str("    beq     pmu_stop\n");
-    // Normal event: low byte = delay_frames; skip 3 bytes of channel data (stub)
-    s.push_str("    mov     r1, r0              @ delay\n");
-    s.push_str("    add     r4, r4, #3          @ skip channel data\n");
-    s.push_str("    str     r4, [r5]            @ update PSG_MUSIC_PTR\n");
-    s.push_str("    ldr     r4, =PSG_DELAY_FRAMES\n");
-    s.push_str("    str     r1, [r4]\n");
-    s.push_str("    b       pmu_done\n");
+    s.push_str("pmu_end:\n    bl      pitrex_stop_music\n    b       pmu_done\n");
     s.push_str("pmu_loop:\n");
-    s.push_str("    ldr     r0, =PSG_MUSIC_START\n");
-    s.push_str("    ldr     r0, [r0]\n");
-    s.push_str("    ldr     r1, =PSG_MUSIC_PTR\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    b       pmu_done\n");
-    s.push_str("pmu_stop:\n");
-    s.push_str("    ldr     r0, =PSG_IS_PLAYING\n");
-    s.push_str("    mov     r1, #0\n");
-    s.push_str("    str     r1, [r0]\n");
-    s.push_str("pmu_done:\n");
-    s.push_str("    pop     {r4, r5, pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    ldr     r0, =PSG_MUSIC_START\n    ldr     r0, [r0]\n");
+    s.push_str("    ldr     r1, [r0, #4]                @ loop_event_byte_offset\n");
+    s.push_str("    add     r1, r0, r1\n");
+    s.push_str("    ldr     r0, =PSG_MUSIC_PTR\n    str     r1, [r0]\n");
+    s.push_str("    ldrb    r0, [r1]\n    str     r0, [r4]\n");
+    s.push_str("pmu_done:\n    pop     {r4, r5, r6, r7, pc}\n    .ltorg\n\n");
 
-    // pitrex_play_sfx(r0=sfx_ptr) — start SFX sequencer
-    s.push_str("@ pitrex_play_sfx(r0=sfx_ptr) — start SFX playback\n");
+    // ── pitrex_play_sfx(r0=sfx_base) ───────────────────────────────────────
+    // SFX header is just a single .word num_events; first event at base+4.
+    s.push_str("@ pitrex_play_sfx(r0=sfx_base)\n");
     s.push_str(".global pitrex_play_sfx\n.type pitrex_play_sfx, %function\npitrex_play_sfx:\n");
-    s.push_str("    add     r0, r0, #4          @ skip .word num_events header\n");
-    s.push_str("    ldr     r1, =PSG_SFX_PTR\n");
-    s.push_str("    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =PSG_SFX_ACTIVE\n");
-    s.push_str("    mov     r0, #1\n    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =PSG_SFX_DELAY\n");
-    s.push_str("    mov     r0, #0\n    str     r0, [r1]\n");
-    s.push_str("    bx      lr\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    add     r0, r0, #4\n");
+    s.push_str("    ldr     r1, =PSG_SFX_PTR\n    str     r0, [r1]\n");
+    s.push_str("    ldr     r1, =PSG_SFX_ACTIVE\n    mov     r0, #1\n    str     r0, [r1]\n");
+    s.push_str("    ldr     r1, =PSG_SFX_DELAY\n    mov     r0, #0\n    str     r0, [r1]\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
 
     // pitrex_load_level(r0=level_ptr) — store header ptr, read counts, copy GP to mutable buf
     // Level header layout (24 bytes):
@@ -1199,50 +1192,43 @@ fn emit_pitrex_music_helpers() -> String {
 
 fn emit_pitrex_sfx_update() -> String {
     // pitrex_sfx_update() — advance SFX sequencer by one frame.
-    // Event format: [delay_byte, num_writes, (reg u8, val u8)×N]
+    //
+    // Event format (matches assets.rs::compile_vsfx):
+    //   [delay_byte, num_writes, (reg, val)*N]
     //   num_writes==0 → end of SFX.
-    // PSG_SFX_DELAY counts down each frame; when it hits 0 consume the next event.
-    // PSG register writes are stubbed (no direct PSG access on PiTrex SDK yet).
+    //
+    // SFX is forced onto channel C (regs 4/5 period, 10 volume) by the
+    // compiler, so it cannot overwrite music playing on channels A/B.
     let mut s = String::new();
-    s.push_str("@ pitrex_sfx_update() — advance SFX sequencer\n");
+    s.push_str("@ pitrex_sfx_update() — advance SFX sequencer one frame\n");
     s.push_str(".global pitrex_sfx_update\n.type pitrex_sfx_update, %function\npitrex_sfx_update:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    // If not active, return immediately
-    s.push_str("    ldr     r4, =PSG_SFX_ACTIVE\n");
-    s.push_str("    ldr     r0, [r4]\n");
+    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str("    ldr     r0, =PSG_SFX_ACTIVE\n    ldr     r0, [r0]\n");
     s.push_str("    cmp     r0, #0\n    beq     .Lsfxu_done\n");
-    // Decrement delay counter
-    s.push_str("    ldr     r5, =PSG_SFX_DELAY\n");
-    s.push_str("    ldr     r0, [r5]\n");
-    s.push_str("    cmp     r0, #0\n    bne     .Lsfxu_decdelay\n");
-    // Delay expired — process next event
-    s.push_str("    ldr     r4, =PSG_SFX_PTR\n");
-    s.push_str("    ldr     r4, [r4]            @ r4 = current event ptr\n");
-    s.push_str("    ldrb    r0, [r4]            @ byte0 = delay\n");
-    s.push_str("    ldrb    r1, [r4, #1]        @ byte1 = num_writes\n");
-    // num_writes==0 → SFX finished
-    s.push_str("    cmp     r1, #0\n    beq     .Lsfxu_stop\n");
-    // Skip over event bytes: 2 (delay+num_writes) + 2*num_writes (reg,val pairs)
-    s.push_str("    lsl     r2, r1, #1          @ r2 = num_writes * 2\n");
-    s.push_str("    add     r2, r2, #2          @ + 2 header bytes\n");
-    s.push_str("    add     r4, r4, r2          @ advance ptr past this event\n");
-    // Update PSG_SFX_PTR
-    s.push_str("    ldr     r1, =PSG_SFX_PTR\n");
-    s.push_str("    str     r4, [r1]\n");
-    // Load delay for next event (peek at next event's byte0)
-    s.push_str("    ldrb    r0, [r4]            @ next event delay\n");
-    s.push_str("    str     r0, [r5]            @ PSG_SFX_DELAY = next delay\n");
-    s.push_str("    b       .Lsfxu_done\n");
-    s.push_str(".Lsfxu_decdelay:\n");
-    s.push_str("    sub     r0, r0, #1\n");
-    s.push_str("    str     r0, [r5]            @ PSG_SFX_DELAY--\n");
+    s.push_str("    ldr     r4, =PSG_SFX_DELAY\n    ldr     r0, [r4]\n");
+    s.push_str("    cmp     r0, #0\n    beq     .Lsfxu_proc\n");
+    s.push_str("    sub     r0, r0, #1\n    str     r0, [r4]\n    b       .Lsfxu_done\n");
+    s.push_str(".Lsfxu_proc:\n");
+    s.push_str("    ldr     r5, =PSG_SFX_PTR\n    ldr     r5, [r5]\n");
+    s.push_str("    ldrb    r6, [r5, #1]                @ num_writes\n");
+    s.push_str("    cmp     r6, #0\n    beq     .Lsfxu_stop\n");
+    s.push_str("    add     r7, r5, #2\n");
+    s.push_str(".Lsfxu_wl:\n");
+    s.push_str("    cmp     r6, #0\n    beq     .Lsfxu_after\n");
+    s.push_str("    ldrb    r0, [r7]\n    ldrb    r1, [r7, #1]\n");
+    s.push_str("    push    {r6, r7}\n    bl      v_writePSG\n    pop     {r6, r7}\n");
+    s.push_str("    add     r7, r7, #2\n    sub     r6, r6, #1\n    b       .Lsfxu_wl\n");
+    s.push_str(".Lsfxu_after:\n");
+    s.push_str("    ldr     r0, =PSG_SFX_PTR\n    str     r7, [r0]\n");
+    s.push_str("    ldrb    r0, [r7]                    @ next event delay\n");
+    s.push_str("    str     r0, [r4]\n");
     s.push_str("    b       .Lsfxu_done\n");
     s.push_str(".Lsfxu_stop:\n");
-    s.push_str("    ldr     r0, =PSG_SFX_ACTIVE\n");
-    s.push_str("    mov     r1, #0\n    str     r1, [r0]    @ deactivate\n");
+    // Mute channel C (the SFX channel) so it doesn't keep ringing.
+    s.push_str("    mov     r0, #10\n    mov     r1, #0\n    bl      v_writePSG\n");
+    s.push_str("    ldr     r0, =PSG_SFX_ACTIVE\n    mov     r1, #0\n    str     r1, [r0]\n");
     s.push_str(".Lsfxu_done:\n");
-    s.push_str("    pop     {r4, r5, pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    pop     {r4, r5, r6, r7, pc}\n    .ltorg\n\n");
     s
 }
 
