@@ -48,6 +48,8 @@ interface AnimationEditorProps {
   onChange?: (resource: VanimResource) => void;
 }
 
+type Tool = 'select' | 'pen';
+
 // ============================================
 // Defaults
 // ============================================
@@ -67,8 +69,20 @@ function cloneResource(r: VanimResource): VanimResource {
   return JSON.parse(JSON.stringify(r));
 }
 
-function cloneFrame(f: VanimFrame): VanimFrame {
-  return JSON.parse(JSON.stringify(f));
+
+function canvasToWorld(
+  mx: number,
+  my: number,
+  w: number,
+  h: number,
+  zoom: number,
+  pan: { x: number; y: number }
+): VanimPoint {
+  const scale = Math.min(w, h) / 256;
+  return {
+    x: Math.round((mx - w / 2 - pan.x) / (scale * zoom)),
+    y: Math.round(-(my - h / 2 - pan.y) / (scale * zoom)),
+  };
 }
 
 // ============================================
@@ -81,7 +95,9 @@ function drawFrame(
   h: number,
   frame: VanimFrame,
   selectedPathIdx: number | null,
-  hoverPoint: { pathIdx: number; ptIdx: number } | null
+  hoverPoint: { pathIdx: number; ptIdx: number } | null,
+  zoom: number,
+  pan: { x: number; y: number }
 ): void {
   ctx.clearRect(0, 0, w, h);
 
@@ -93,54 +109,58 @@ function drawFrame(
   const cy = h / 2;
   const scale = Math.min(w, h) / 256;
 
-  // Grid
+  const toCanvas = (p: VanimPoint): [number, number] => [
+    cx + p.x * scale * zoom + pan.x,
+    cy - p.y * scale * zoom + pan.y,
+  ];
+
+  // Grid — draw relative to pan so it moves with the world
   ctx.strokeStyle = '#2a2a44';
   ctx.lineWidth = 0.5;
-  const gridStep = 32 * scale;
-  for (let gx = cx % gridStep; gx < w; gx += gridStep) {
+  const gridStep = 32 * scale * zoom;
+  const gridOffsetX = (cx + pan.x) % gridStep;
+  const gridOffsetY = (cy + pan.y) % gridStep;
+  for (let gx = gridOffsetX; gx < w; gx += gridStep) {
     ctx.beginPath();
     ctx.moveTo(gx, 0);
     ctx.lineTo(gx, h);
     ctx.stroke();
   }
-  for (let gy = cy % gridStep; gy < h; gy += gridStep) {
+  for (let gy = gridOffsetY; gy < h; gy += gridStep) {
     ctx.beginPath();
     ctx.moveTo(0, gy);
     ctx.lineTo(w, gy);
     ctx.stroke();
   }
 
-  // Crosshair
+  // Crosshair at world origin
+  const originX = cx + pan.x;
+  const originY = cy + pan.y;
   ctx.strokeStyle = '#444466';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(cx, 0);
-  ctx.lineTo(cx, h);
+  ctx.moveTo(originX, 0);
+  ctx.lineTo(originX, h);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(0, cy);
-  ctx.lineTo(w, cy);
+  ctx.moveTo(0, originY);
+  ctx.lineTo(w, originY);
   ctx.stroke();
-
-  const toCanvas = (p: VanimPoint): [number, number] => [
-    cx + p.x * scale,
-    cy - p.y * scale,
-  ];
 
   // Draw vec_refs as grey dashed placeholder boxes
   frame.vec_refs.forEach((ref) => {
-    const boxHalf = 40 * scale;
+    const boxHalf = 40 * scale * zoom;
     ctx.save();
     ctx.strokeStyle = '#555577';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 3]);
-    ctx.strokeRect(cx - boxHalf, cy - boxHalf, boxHalf * 2, boxHalf * 2);
+    ctx.strokeRect(originX - boxHalf, originY - boxHalf, boxHalf * 2, boxHalf * 2);
     ctx.setLineDash([]);
     ctx.fillStyle = '#555577';
     ctx.font = `${Math.max(10, 12 * scale)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`[${ref}]`, cx, cy);
+    ctx.fillText(`[${ref}]`, originX, originY);
     ctx.restore();
   });
 
@@ -320,6 +340,21 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
   const [addingVecRef, setAddingVecRef] = useState(false);
   const [newVecRefText, setNewVecRefText] = useState('');
 
+  // Zoom + Pan state
+  const [zoom, setZoom] = useState(1.0);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Tool state
+  const [tool, setTool] = useState<Tool>('select');
+
+  // Drag state
+  const [dragging, setDragging] = useState<{ pathIdx: number; ptIdx: number } | null>(null);
+  const [panDragging, setPanDragging] = useState<{
+    startX: number;
+    startY: number;
+    startPan: { x: number; y: number };
+  } | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -350,9 +385,11 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
       selectedPathIdx,
       hoverPoint
         ? { pathIdx: hoverPoint.pathIdx, ptIdx: hoverPoint.ptIdx }
-        : null
+        : null,
+      zoom,
+      pan
     );
-  }, [currentFrame, selectedPathIdx, hoverPoint, safeFrameIdx]);
+  }, [currentFrame, selectedPathIdx, hoverPoint, safeFrameIdx, zoom, pan]);
 
   // ---- Playback ----
 
@@ -554,7 +591,117 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
     [updateFrame, safeFrameIdx]
   );
 
-  // ---- Canvas mouse for hover tooltip ----
+  // ---- Scale path ----
+
+  const handleScalePath = useCallback(
+    (pathIdx: number, factor: number) => {
+      updateFrame(safeFrameIdx, (f) => {
+        const paths = f.paths.map((p, i) => {
+          if (i !== pathIdx) return p;
+          return {
+            ...p,
+            points: p.points.map((pt) => ({
+              x: Math.round(Math.max(-127, Math.min(127, pt.x * factor))),
+              y: Math.round(Math.max(-127, Math.min(127, pt.y * factor))),
+            })),
+          };
+        });
+        return { ...f, paths };
+      });
+    },
+    [updateFrame, safeFrameIdx]
+  );
+
+  // ---- Wheel zoom ----
+
+  const handleCanvasWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    setZoom((z) => Math.min(8, Math.max(0.2, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+  }, []);
+
+  // ---- Canvas mouse handlers ----
+
+  const handleCanvasMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      // Middle mouse: start pan drag
+      if (e.button === 1) {
+        e.preventDefault();
+        setPanDragging({ startX: e.clientX, startY: e.clientY, startPan: pan });
+        return;
+      }
+
+      if (e.button !== 0) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      if (tool === 'select') {
+        // Find nearest point within snap radius (scaled by zoom)
+        const snapRadius = 12 / zoom;
+        let foundPathIdx = -1;
+        let foundPtIdx = -1;
+        let bestDist = Infinity;
+
+        for (let pi = 0; pi < currentFrame.paths.length; pi++) {
+          const path = currentFrame.paths[pi];
+          for (let ptI = 0; ptI < path.points.length; ptI++) {
+            const pt = path.points[ptI];
+            const scale = Math.min(w, h) / 256;
+            const px = w / 2 + pt.x * scale * zoom + pan.x;
+            const py = h / 2 - pt.y * scale * zoom + pan.y;
+            const dist = Math.hypot(px - mx, py - my);
+            if (dist < snapRadius * scale * zoom && dist < bestDist) {
+              bestDist = dist;
+              foundPathIdx = pi;
+              foundPtIdx = ptI;
+            }
+          }
+        }
+
+        if (foundPathIdx >= 0) {
+          setDragging({ pathIdx: foundPathIdx, ptIdx: foundPtIdx });
+          setSelectedPathIdx(foundPathIdx);
+        } else {
+          setSelectedPathIdx(null);
+        }
+      } else if (tool === 'pen') {
+        const worldPos = canvasToWorld(mx, my, w, h, zoom, pan);
+
+        if (selectedPathIdx !== null) {
+          // Add point to selected path
+          updateFrame(safeFrameIdx, (f) => {
+            const paths = f.paths.map((p, i) => {
+              if (i !== selectedPathIdx) return p;
+              return { ...p, points: [...p.points, worldPos] };
+            });
+            return { ...f, paths };
+          });
+        } else {
+          // Create new path with this point
+          const newPathIdx = currentFrame.paths.length;
+          updateFrame(safeFrameIdx, (f) => ({
+            ...f,
+            paths: [
+              ...f.paths,
+              {
+                name: `path${f.paths.length}`,
+                intensity: 127,
+                points: [worldPos],
+              },
+            ],
+          }));
+          setSelectedPathIdx(newPathIdx);
+        }
+      }
+    },
+    [tool, currentFrame.paths, zoom, pan, selectedPathIdx, updateFrame, safeFrameIdx]
+  );
 
   const handleCanvasMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -565,19 +712,50 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
       const my = e.clientY - rect.top;
       const w = canvas.width;
       const h = canvas.height;
-      const cx = w / 2;
-      const cy = h / 2;
       const scale = Math.min(w, h) / 256;
 
-      const RADIUS = 8;
+      // Pan dragging
+      if (panDragging) {
+        setPan({
+          x: panDragging.startPan.x + (e.clientX - panDragging.startX),
+          y: panDragging.startPan.y + (e.clientY - panDragging.startY),
+        });
+      }
+
+      // Point dragging (select tool)
+      if (dragging && tool === 'select') {
+        const worldPos = canvasToWorld(mx, my, w, h, zoom, pan);
+        updateFrame(safeFrameIdx, (f) => {
+          const paths = f.paths.map((p, i) => {
+            if (i !== dragging.pathIdx) return p;
+            const points = p.points.map((pt, j) =>
+              j === dragging.ptIdx ? worldPos : pt
+            );
+            return { ...p, points };
+          });
+          return { ...f, paths };
+        });
+        setHoverPoint({
+          pathIdx: dragging.pathIdx,
+          ptIdx: dragging.ptIdx,
+          x: worldPos.x,
+          y: worldPos.y,
+          wx: e.clientX,
+          wy: e.clientY,
+        });
+        return;
+      }
+
+      // Hover detection
+      const snapRadius = 8;
       let found: typeof hoverPoint = null;
       for (let pi = 0; pi < currentFrame.paths.length; pi++) {
         const path = currentFrame.paths[pi];
         for (let ptI = 0; ptI < path.points.length; ptI++) {
           const pt = path.points[ptI];
-          const px = cx + pt.x * scale;
-          const py = cy - pt.y * scale;
-          if (Math.hypot(px - mx, py - my) < RADIUS) {
+          const px = w / 2 + pt.x * scale * zoom + pan.x;
+          const py = h / 2 - pt.y * scale * zoom + pan.y;
+          if (Math.hypot(px - mx, py - my) < snapRadius) {
             found = {
               pathIdx: pi,
               ptIdx: ptI,
@@ -593,12 +771,28 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
       }
       setHoverPoint(found);
     },
-    [currentFrame.paths]
+    [currentFrame.paths, zoom, pan, dragging, panDragging, tool, updateFrame, safeFrameIdx]
   );
 
+  const handleCanvasMouseUp = useCallback(() => {
+    setDragging(null);
+    setPanDragging(null);
+  }, []);
+
   const handleCanvasMouseLeave = useCallback(() => {
+    setDragging(null);
+    setPanDragging(null);
     setHoverPoint(null);
   }, []);
+
+  // ---- Canvas cursor ----
+
+  const canvasCursor = useMemo((): string => {
+    if (panDragging) return 'grabbing';
+    if (tool === 'pen') return 'crosshair';
+    if (dragging) return 'grabbing';
+    return 'default';
+  }, [tool, dragging, panDragging]);
 
   // ---- Navigation ----
 
@@ -612,6 +806,11 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
 
   const togglePlay = useCallback(() => {
     setPlaying((p) => !p);
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    setZoom(1.0);
+    setPan({ x: 0, y: 0 });
   }, []);
 
   // ---- Computed ----
@@ -640,12 +839,14 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         selectedPathIdx,
         hoverPoint
           ? { pathIdx: hoverPoint.pathIdx, ptIdx: hoverPoint.ptIdx }
-          : null
+          : null,
+        zoom,
+        pan
       );
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [currentFrame, selectedPathIdx, hoverPoint]);
+  }, [currentFrame, selectedPathIdx, hoverPoint, zoom, pan]);
 
   // ---- Inline path list (memoized) ----
 
@@ -721,6 +922,36 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
             <span style={{ color: '#aaa', fontSize: 11, minWidth: 24 }}>
               {path.intensity}
             </span>
+          </div>
+
+          {/* Scale buttons */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              marginBottom: 4,
+            }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleScalePath(pathIdx, 2);
+              }}
+              style={smallAddBtnStyle}
+              title="Scale all points by 2x (clamped to ±127)"
+            >
+              Scale 2x
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleScalePath(pathIdx, 0.5);
+              }}
+              style={smallAddBtnStyle}
+              title="Scale all points by 0.5x"
+            >
+              Scale 1/2
+            </button>
           </div>
 
           {/* Points table */}
@@ -805,6 +1036,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
       handlePathNameChange,
       handleDeletePath,
       handlePathIntensityChange,
+      handleScalePath,
       handlePointChange,
       handleRemovePoint,
       handleAddPoint,
@@ -844,6 +1076,47 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
           Frame {safeFrameIdx + 1} / {totalFrames}
         </span>
 
+        <div style={{ width: 1, background: '#333', alignSelf: 'stretch' }} />
+
+        {/* Tool buttons */}
+        <button
+          onClick={() => setTool('select')}
+          style={{
+            ...toolBtnStyle,
+            border: tool === 'select' ? '1px solid #8888ff' : '1px solid #3a3a6a',
+            color: tool === 'select' ? '#ccccff' : '#ccc',
+          }}
+          title="Select / drag points"
+        >
+          Select
+        </button>
+        <button
+          onClick={() => setTool('pen')}
+          style={{
+            ...toolBtnStyle,
+            border: tool === 'pen' ? '1px solid #8888ff' : '1px solid #3a3a6a',
+            color: tool === 'pen' ? '#ccccff' : '#ccc',
+          }}
+          title="Pen: click canvas to add points"
+        >
+          Pen
+        </button>
+
+        <div style={{ width: 1, background: '#333', alignSelf: 'stretch' }} />
+
+        {/* Reset view */}
+        <button
+          onClick={handleResetView}
+          style={toolBtnStyle}
+          title="Reset zoom and pan to default"
+        >
+          Reset View
+        </button>
+
+        <span style={{ color: '#666', fontSize: 11 }}>
+          {Math.round(zoom * 100)}%
+        </span>
+
         <div style={{ flex: 1 }} />
 
         <button onClick={handleAddFrame} style={addBtnStyle}>
@@ -879,9 +1152,12 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         >
           <canvas
             ref={canvasRef}
-            style={{ display: 'block', width: '100%', height: '100%' }}
+            style={{ display: 'block', width: '100%', height: '100%', cursor: canvasCursor }}
             onMouseMove={handleCanvasMouseMove}
             onMouseLeave={handleCanvasMouseLeave}
+            onMouseDown={handleCanvasMouseDown}
+            onMouseUp={handleCanvasMouseUp}
+            onWheel={handleCanvasWheel}
           />
           {hoverPoint && (
             <div
