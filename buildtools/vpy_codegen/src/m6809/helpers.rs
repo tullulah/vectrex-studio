@@ -235,6 +235,18 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
     }
 
+    // Animation state: 2 bytes per unique animation name used via DRAW_ANIM()
+    // byte 0 = current frame_idx, byte 1 = ticks_remaining
+    for key in needed.iter() {
+        if let Some(anim_sym) = key.strip_prefix("DRAW_ANIM_STATE_") {
+            ram.allocate(
+                &format!("ANIM_{}_STATE", anim_sym),
+                2,
+                &format!("DRAW_ANIM state for {} (frame_idx, ticks_left)", anim_sym),
+            );
+        }
+    }
+
     if module.meta.interleaved_frames.is_some() {
         ram.allocate("FRAME_PARITY", 1, "Interleaved frame group counter");
     }
@@ -397,6 +409,15 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             }
             if name_upper == "BEEP" {
                 needed.insert("BEEP".to_string());
+            }
+
+            if name_upper == "DRAW_ANIM" {
+                needed.insert("DRAW_ANIM_RUNTIME".to_string());
+                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+                // Record which animation names are used (for state RAM allocation)
+                if let Some(Expr::StringLit(anim_name)) = args.first() {
+                    needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
+                }
             }
 
             // Recursively analyze arguments
@@ -658,6 +679,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
     // DRAW_VECTOR_3D_RUNTIME: 3D rotation and drawing
     if needed.contains("DRAW_VECTOR_3D") {
         emit_draw_vector_3d_runtime(&mut asm);
+    }
+
+    // DRAW_ANIM_RUNTIME: animation player
+    if needed.contains("DRAW_ANIM_RUNTIME") {
+        emit_draw_anim_runtime(&mut asm);
     }
 
     Ok(asm)
@@ -1789,5 +1815,163 @@ fn emit_smul_prod_table() -> String {
     }
     asm.push_str("\n");
     asm
+}
+
+/// Emit the DRAW_ANIM_RUNTIME subroutine.
+///
+/// Input:
+///   X = pointer to animation ROM header (_ANIM_XXX)
+///   U = pointer to 2-byte RAM state (ANIM_XXX_STATE): frame_idx(u8) + ticks_left(u8)
+///
+/// Header layout (from animres.rs compile_vanim_to_asm):
+///   +0  FCB frame_count
+///   +1  FCB loop_flag  (1=loop, 0=freeze)
+///   +2  FDB frame0_ptr
+///   +4  FDB frame1_ptr  ... (2 bytes per frame)
+///
+/// Frame layout:
+///   +0  FCB duration_ticks
+///   +1  FCB vec_ref_count
+///   +2  FDB vec_ref_ptr[0]  ...  (2 bytes each)
+///   +2+vec_ref_count*2  FCB inline_path_count
+///   followed by inline path binary blocks
+///
+/// Register conventions:
+///   Y = scratch / frame data pointer
+///   Preserves: everything except RESULT via PSHS/PULS D,X,Y,U
+fn emit_draw_anim_runtime(asm: &mut String) {
+    asm.push_str(
+"; ============================================================================\n\
+; DRAW_ANIM_RUNTIME\n\
+; Input: X = animation ROM header (_ANIM_XXX)\n\
+;        U = 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)\n\
+; Draws the current frame and advances the animation counter.\n\
+; Preserves all registers via PSHS/PULS.\n\
+; ============================================================================\n\
+DRAW_ANIM_RUNTIME:\n\
+    PSHS D,X,Y,U\n\
+    ; --- Tick counter management ---\n\
+    LDA 1,U             ; ticks_left\n\
+    DECA\n\
+    BNE DAR_DRAW        ; still on this frame: skip frame advance\n\
+    ; ticks exhausted: advance frame index\n\
+    LDB ,U              ; current frame_idx\n\
+    INCB\n\
+    CMPB ,X             ; compare with frame_count (byte 0 of header)\n\
+    BLT DAR_NO_WRAP\n\
+    LDA 1,X             ; loop flag (byte 1 of header)\n\
+    BEQ DAR_FREEZE      ; loop=0: freeze on last frame\n\
+    CLRB                ; loop=1: back to frame 0\n\
+DAR_NO_WRAP:\n\
+    STB ,U              ; save new frame_idx\n\
+    ; load duration_ticks from new frame's header (byte 0)\n\
+    ; frame_ptr = header+2 + frame_idx*2\n\
+    LDB ,U              ; frame_idx\n\
+    CLRA                ; D = frame_idx\n\
+    LSLB                ; D = frame_idx * 2\n\
+    ROLA\n\
+    ADDD #2             ; D = offset past frame_count + loop_flag\n\
+    LEAY D,X            ; Y = &frame_table[frame_idx]\n\
+    LDY ,Y              ; Y = frame data ptr\n\
+    LDA ,Y              ; duration_ticks (byte 0 of frame)\n\
+    STA 1,U             ; reset ticks_remaining\n\
+    BRA DAR_DO_DRAW\n\
+DAR_FREEZE:\n\
+    ; Stay on last frame — reset ticks to 1 so we stay here forever\n\
+    LDA #1\n\
+    STA 1,U\n\
+    ; fall through to draw last frame: compute its ptr\n\
+    LDB ,U              ; frame_idx (still last frame)\n\
+    CLRA\n\
+    LSLB\n\
+    ROLA\n\
+    ADDD #2\n\
+    LEAY D,X\n\
+    LDY ,Y              ; Y = last frame data ptr\n\
+    BRA DAR_EMIT\n\
+DAR_DRAW:\n\
+    STA 1,U             ; save decremented ticks\n\
+DAR_DO_DRAW:\n\
+    ; Compute frame data ptr from current frame_idx\n\
+    LDB ,U              ; frame_idx\n\
+    CLRA\n\
+    LSLB\n\
+    ROLA\n\
+    ADDD #2             ; skip frame_count + loop_flag\n\
+    LEAY D,X\n\
+    LDY ,Y              ; Y = frame data ptr\n\
+DAR_EMIT:\n\
+    ; Y now points to frame data\n\
+    ; byte 0: duration_ticks (already processed for ticking)\n\
+    ; byte 1: vec_ref_count\n\
+    LEAY 1,Y            ; skip duration_ticks\n\
+    LDB ,Y+             ; B = vec_ref_count, Y advances to first vec ptr\n\
+    BEQ DAR_INLINE      ; no vec_refs\n\
+    ; --- Draw vec_refs ---\n\
+    ; Each entry is an FDB pointer to a _VECNAME_VECTORS symbol\n\
+    ; (header: FDB path_count, then FDB path0_ptr, FDB path1_ptr, ...)\n\
+DAR_VEC_LOOP:\n\
+    PSHS B,Y\n\
+    LDX ,Y              ; X = _VECNAME_VECTORS header address\n\
+    ; Set up draw position from DRAW_VEC_X/Y (same as DRAW_VECTOR)\n\
+    CLR >MIRROR_X\n\
+    CLR >MIRROR_Y\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    ; Iterate over all paths in this vec\n\
+    LDD ,X              ; D = path_count (16-bit FDB)\n\
+    CMPD #0\n\
+    BEQ DAR_VEC_DONE\n\
+    LEAY 2,X            ; Y = first FDB path pointer in table\n\
+DAR_VEC_PATH_LOOP:\n\
+    PSHS D,Y\n\
+    LDX ,Y              ; X = path data ptr\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    LEAY 2,Y            ; advance to next FDB entry\n\
+    PULS D,Y\n\
+    SUBD #1\n\
+    BNE DAR_VEC_PATH_LOOP\n\
+DAR_VEC_DONE:\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    PULS B,Y\n\
+    LEAY 2,Y            ; advance past this FDB entry\n\
+    DECB\n\
+    BNE DAR_VEC_LOOP\n\
+    ; --- Draw inline paths ---\n\
+DAR_INLINE:\n\
+    LDB ,Y+             ; B = inline_path_count, Y now at first inline path\n\
+    BEQ DAR_DONE\n\
+DAR_PATH_LOOP:\n\
+    PSHS B\n\
+    ; Inline path format: intensity(1), y_start(1), x_start(1), pad(2), segments, FCB 2\n\
+    ; Draw using Draw_Sync_List_At_With_Mirrors (X = path ptr)\n\
+    TFR Y,X             ; X = current inline path ptr\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    CLR >MIRROR_X\n\
+    CLR >MIRROR_Y\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    ; Advance Y past this path: scan forward to the FCB 2 end marker\n\
+    ; Format: intensity(1) + header4(4) + N*(3 bytes FCB $FF,dy,dx) + FCB 2\n\
+    ; We skip by scanning byte-by-byte for $02 end marker.\n\
+    ; Y is still at path start — advance 5 bytes (header), then scan segments\n\
+    LEAY 5,Y            ; skip intensity + 4-byte header\n\
+DAR_SCAN:\n\
+    LDA ,Y+             ; load byte, advance\n\
+    CMPA #2\n\
+    BNE DAR_SKIP_SEG\n\
+    ; Found end marker (FCB 2): Y is already past it\n\
+    BRA DAR_PATH_DONE\n\
+DAR_SKIP_SEG:\n\
+    CMPA #$FF\n\
+    BNE DAR_SCAN        ; unknown byte, keep scanning\n\
+    LEAY 2,Y            ; skip dy + dx of this segment\n\
+    BRA DAR_SCAN\n\
+DAR_PATH_DONE:\n\
+    PULS B\n\
+    DECB\n\
+    BNE DAR_PATH_LOOP\n\
+DAR_DONE:\n\
+    PULS D,X,Y,U\n\
+    RTS\n\n");
 }
 

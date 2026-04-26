@@ -110,6 +110,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Message table dispatch
     ("MSG_DEF", 4),       // id, x, y, text  — data declaration, emits no code
     ("PRINT_MSG", 1),     // id_expr          — runtime dispatch via ROM table
+
+    // Animation
+    ("DRAW_ANIM", 1),     // animation_name → draws current frame, advances counter
 ];
 
 /// Get expected arity for a builtin (None if not a builtin)
@@ -749,6 +752,22 @@ pub fn emit_builtin(
             true
         }
         
+        // ===== Animation =====
+        "DRAW_ANIM" => {
+            if let Some(Expr::StringLit(anim_name)) = args.first() {
+                let name_upper = anim_name.to_uppercase().replace('-', "_").replace(' ', "_");
+                out.push_str(&format!("    ; DRAW_ANIM: draw animation '{}'\n", anim_name));
+                out.push_str(&format!("    LDX #_ANIM_{}\n", name_upper));
+                out.push_str(&format!("    LDU #ANIM_{}_STATE\n", name_upper));
+                out.push_str("    JSR DRAW_ANIM_RUNTIME\n");
+                out.push_str("    LDD #0\n");
+                out.push_str("    STD RESULT\n");
+            } else {
+                out.push_str("    ; ERROR: DRAW_ANIM requires a string literal name\n");
+            }
+            true
+        }
+
         // ===== Default: Not a builtin =====
         _ => false,
     }

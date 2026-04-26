@@ -1,0 +1,103 @@
+{
+  "version": "1.0",
+  "name": "mario_walk",
+  "loop": true,
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 6,
+      "vec_refs": ["mario"],
+      "paths": []
+    },
+    {
+      "index": 1,
+      "duration_ticks": 6,
+      "vec_refs": [],
+      "paths": [
+        {
+          "name": "body",
+          "intensity": 127,
+          "points": [
+            { "x": 0, "y": 0 },
+            { "x": 0, "y": 13 }
+          ]
+        },
+        {
+          "name": "hat",
+          "intensity": 127,
+          "points": [
+            { "x": -5, "y": 13 },
+            { "x": 5, "y": 13 },
+            { "x": 5, "y": 18 },
+            { "x": -5, "y": 18 },
+            { "x": -5, "y": 13 }
+          ]
+        },
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "points": [
+            { "x": -3, "y": 0 },
+            { "x": -6, "y": -8 }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "points": [
+            { "x": 3, "y": 0 },
+            { "x": 3, "y": -8 }
+          ]
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "duration_ticks": 6,
+      "vec_refs": ["mario"],
+      "paths": []
+    },
+    {
+      "index": 3,
+      "duration_ticks": 6,
+      "vec_refs": [],
+      "paths": [
+        {
+          "name": "body",
+          "intensity": 127,
+          "points": [
+            { "x": 0, "y": 0 },
+            { "x": 0, "y": 13 }
+          ]
+        },
+        {
+          "name": "hat",
+          "intensity": 127,
+          "points": [
+            { "x": -5, "y": 13 },
+            { "x": 5, "y": 13 },
+            { "x": 5, "y": 18 },
+            { "x": -5, "y": 18 },
+            { "x": -5, "y": 13 }
+          ]
+        },
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "points": [
+            { "x": -3, "y": 0 },
+            { "x": -3, "y": -8 }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "points": [
+            { "x": 3, "y": 0 },
+            { "x": 6, "y": -8 }
+          ]
+        }
+      ]
+    }
+  ]
+}

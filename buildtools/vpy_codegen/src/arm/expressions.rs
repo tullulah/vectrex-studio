@@ -214,7 +214,7 @@ pub fn emit_expr(
 /// Builtins whose first argument is an asset name (string literal → ROM symbol address).
 const ASSET_BUILTINS: &[&str] = &[
     "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
-    "LOAD_LEVEL", "SHOW_LEVEL",
+    "LOAD_LEVEL", "SHOW_LEVEL", "DRAW_ANIM",
 ];
 
 /// Builtins that contain string literals in any position — handled by stripping them
@@ -305,6 +305,8 @@ pub fn emit_call(
         "peek" | "PEEK"   => "vpy_peek",
         "poke" | "POKE"   => "vpy_poke",
         "len" | "LEN"     => "vpy_len",
+        // Animation
+        "DRAW_ANIM"       => "vpy_draw_anim",
         other             => other,
     };
 

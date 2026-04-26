@@ -24,6 +24,16 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
         }
     }
 
+    // Also scan used .vanim files to include their vec_refs
+    let anim_names: Vec<String> = used_names.iter().cloned().collect();
+    for anim_name in &anim_names {
+        if let Some(anim_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Animation) && &a.name == anim_name
+        }) {
+            collect_vanim_vec_refs(&anim_asset.path, &mut used_names);
+        }
+    }
+
     // Filter assets to only those referenced in code (or used by levels)
     assets.iter()
         .filter(|asset| used_names.contains(&asset.name))
@@ -40,6 +50,16 @@ fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>
         .chain(level.layers.foreground.iter())
     {
         used_names.insert(obj.vector_name.clone());
+    }
+}
+
+/// Scan a .vanim JSON file and add all vec_refs to used_names.
+fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
+    let Ok(resource) = crate::animres::VanimResource::load(Path::new(vanim_path)) else { return };
+    for frame in &resource.frames {
+        for vec_name in &frame.vec_refs {
+            used_names.insert(vec_name.clone());
+        }
     }
 }
 
@@ -114,7 +134,8 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             // Check if it's an asset-loading builtin
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
-               up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" {
+               up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
+               up == "DRAW_ANIM" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -267,7 +288,26 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
             }
         }
     }
-    
+
+    // Search for animation assets (assets/animations/*.vanim)
+    let anim_dir = project_root.join("assets").join("animations");
+    if anim_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&anim_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vanim") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Animation,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     // Sort assets alphabetically by name for consistency
     assets.sort_by(|a, b| a.name.cmp(&b.name));
     assets
@@ -365,9 +405,26 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
         }
     }
 
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Animation)) {
+        match crate::animres::VanimResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                let binary_size = resource.estimate_binary_size();
+                let asm_code = crate::animres::compile_vanim_to_asm(&resource, &asset.name);
+                sized_assets.push(SizedAsset {
+                    info: asset.clone(),
+                    binary_size,
+                    asm_code,
+                });
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load animation asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     // Sort by size descending (best for bin-packing)
     sized_assets.sort_by(|a, b| b.binary_size.cmp(&a.binary_size));
-    
+
     sized_assets
 }
 
@@ -525,7 +582,19 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
             }
         }
     }
-    
+
+    // Generate animation assets
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Animation)) {
+        match crate::animres::VanimResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&crate::animres::compile_vanim_to_asm(&resource, &asset.name));
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load animation asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     Ok(out)
 }
 
@@ -570,6 +639,7 @@ pub fn generate_distributed_assets_asm(
                 AssetType::Music => format!("_{}_MUSIC", symbol_name),
                 AssetType::Sfx => format!("_{}_SFX", symbol_name),
                 AssetType::Level => format!("_{}_LEVEL", symbol_name),
+                AssetType::Animation => format!("_ANIM_{}", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }
@@ -594,23 +664,30 @@ pub fn generate_distributed_assets_asm(
         .filter(|(_, _, _, t)| matches!(t, AssetType::Level))
         .cloned()
         .collect();
+    let anim_entries: Vec<_> = asset_entries.iter()
+        .filter(|(_, _, _, t)| matches!(t, AssetType::Animation))
+        .cloned()
+        .collect();
 
     // Sort each list alphabetically by name for index consistency
     let mut vector_entries = vector_entries;
     let mut music_entries = music_entries;
     let mut sfx_entries = sfx_entries;
     let mut level_entries = level_entries;
+    let mut anim_entries = anim_entries;
     vector_entries.sort_by(|a, b| a.0.cmp(&b.0));
     music_entries.sort_by(|a, b| a.0.cmp(&b.0));
     sfx_entries.sort_by(|a, b| a.0.cmp(&b.0));
     level_entries.sort_by(|a, b| a.0.cmp(&b.0));
-    
+    anim_entries.sort_by(|a, b| a.0.cmp(&b.0));
+
     // Generate lookup tables for helpers bank
     let mut lookup_asm = String::new();
     lookup_asm.push_str(";***************************************************************************\n");
     lookup_asm.push_str("; ASSET LOOKUP TABLES (for banked asset access)\n");
-    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels\n", 
-        vector_entries.len(), music_entries.len(), sfx_entries.len(), level_entries.len()));
+    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels, {} animations\n",
+        vector_entries.len(), music_entries.len(), sfx_entries.len(),
+        level_entries.len(), anim_entries.len()));
     lookup_asm.push_str(";***************************************************************************\n\n");
     
     // ===== VECTOR TABLES =====
@@ -701,6 +778,27 @@ pub fn generate_distributed_assets_asm(
         lookup_asm.push_str("\n");
     }
     
+    // ===== ANIMATION TABLES =====
+    if !anim_entries.is_empty() {
+        lookup_asm.push_str("; Animation Asset Index Mapping:\n");
+        for (idx, (name, bank_id, _label, _)) in anim_entries.iter().enumerate() {
+            lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ANIM_BANK_TABLE:\n");
+        for (_, bank_id, _, _) in &anim_entries {
+            lookup_asm.push_str(&format!("    FCB {}              ; Bank ID\n", bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ANIM_ADDR_TABLE:\n");
+        for (name, _, label, _) in &anim_entries {
+            lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
+        }
+        lookup_asm.push_str("\n");
+    }
+
     // Legacy unified tables (deprecated, keep for compatibility)
     lookup_asm.push_str("; Legacy unified tables (all assets)\n");
     lookup_asm.push_str("ASSET_BANK_TABLE:\n");

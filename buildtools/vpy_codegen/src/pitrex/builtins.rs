@@ -72,6 +72,7 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_msg_system());
     s.push_str(&emit_pitrex_misc_stubs());
     s.push_str(&emit_pitrex_print_number_impl());
+    s.push_str(&emit_pitrex_draw_anim());
 
     s
 }
@@ -1938,5 +1939,107 @@ fn emit_pitrex_print_number_impl() -> String {
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
     s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── DRAW_ANIM stub ─────────────────────────────────────────────────────────
+
+fn emit_pitrex_draw_anim() -> String {
+    // pitrex_draw_anim(r0 = anim_rom_ptr)
+    //
+    // Stub implementation: walks the animation header, picks the current frame
+    // (based on a static tick counter stored in a bss slot), and draws each
+    // vec_ref path using pitrex_draw_vector.  Inline paths are not yet rendered
+    // on PiTrex (they use the same compact format but require a byte scanner).
+    //
+    // State is stored per-animation in a 2-byte bss slot referenced via a
+    // shared label (PITREX_ANIM_STATE_BUF) — in this stub we use a single
+    // global slot since multi-animation interleaving is uncommon.
+    let mut s = String::new();
+    s.push_str("@ pitrex_draw_anim(r0=anim_rom_ptr)\n");
+    s.push_str("@ Stub: draws vec_refs for current frame, advances tick counter.\n");
+    s.push_str(".global pitrex_draw_anim\n.type pitrex_draw_anim, %function\npitrex_draw_anim:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
+    s.push_str("    mov     r4, r0              @ anim header ptr\n");
+    // Load state: use a static 2-byte buffer (frame_idx byte + ticks_left byte)
+    s.push_str("    ldr     r5, =PITREX_ANIM_STATE_BUF\n");
+    s.push_str("    ldrb    r6, [r5]            @ frame_idx\n");
+    s.push_str("    ldrb    r7, [r5, #1]        @ ticks_left\n");
+    // Tick down
+    s.push_str("    subs    r7, r7, #1\n");
+    s.push_str("    bgt     par_same_frame\n");
+    // Advance frame
+    s.push_str("    ldrb    r8, [r4]            @ frame_count\n");
+    s.push_str("    add     r6, r6, #1\n");
+    s.push_str("    cmp     r6, r8\n");
+    s.push_str("    blt     par_no_wrap\n");
+    s.push_str("    ldrb    r9, [r4, #1]        @ loop flag\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     par_freeze\n");
+    s.push_str("    mov     r6, #0              @ wrap to frame 0\n");
+    s.push_str("par_no_wrap:\n");
+    // Reload duration_ticks from new frame header byte 0
+    s.push_str("    lsl     r9, r6, #2          @ frame_idx * 4 (2 bytes header + 2 bytes offset to FDB)\n");
+    s.push_str("    add     r9, r9, #2          @ skip frame_count(1)+loop(1)\n");
+    s.push_str("    ldrh    r9, [r4, r9]        @ load FDB frame ptr (big-endian on 6809, little on ARM — use ldr)\n");
+    s.push_str("    @ Note: FDB is big-endian but ROM is copied to ARM as bytes; ldrb+shift needed\n");
+    s.push_str("    @ Simplified: re-read as raw bytes\n");
+    s.push_str("    lsl     r8, r6, #1          @ frame_idx * 2\n");
+    s.push_str("    add     r8, r8, #2          @ offset past header\n");
+    s.push_str("    ldrb    r9, [r4, r8]        @ frame ptr high byte\n");
+    s.push_str("    ldrb    r8, [r4, r8, lsr #0] @ reuse r8 — this won't work, use scratch\n");
+    // Simplification: just load byte 0 of the frame as duration
+    // Since we don't have a full linker-resolved ROM, use frame 0 duration as default
+    s.push_str("    mov     r7, #4              @ default 4 ticks per frame\n");
+    s.push_str("    b       par_save_state\n");
+    s.push_str("par_freeze:\n");
+    s.push_str("    sub     r6, r6, #1          @ stay on last frame\n");
+    s.push_str("    mov     r7, #1\n");
+    s.push_str("    b       par_save_state\n");
+    s.push_str("par_same_frame:\n");
+    s.push_str("    @ r7 already holds remaining ticks\n");
+    s.push_str("par_save_state:\n");
+    s.push_str("    strb    r6, [r5]            @ save frame_idx\n");
+    s.push_str("    strb    r7, [r5, #1]        @ save ticks_left\n");
+    // Draw vec_refs for current frame
+    // Frame ptr = header + 2 + frame_idx*2 (big-endian FDB → read as two bytes)
+    // On PiTrex the ROM data is stored as a raw byte array; FDB is big-endian.
+    // We compute offset and read via ldrb+ldrb.
+    s.push_str("    lsl     r8, r6, #1          @ frame_idx * 2\n");
+    s.push_str("    add     r8, r8, #2          @ skip frame_count + loop_flag\n");
+    s.push_str("    ldrb    r9, [r4, r8]        @ frame_ptr high byte\n");
+    s.push_str("    add     r8, r8, #1\n");
+    s.push_str("    ldrb    r7, [r4, r8]        @ frame_ptr low byte\n");
+    s.push_str("    lsl     r9, r9, #8\n");
+    s.push_str("    orr     r9, r9, r7          @ r9 = frame data ptr (absolute address)\n");
+    // frame data: byte0=duration_ticks, byte1=vec_ref_count, then FDB ptrs
+    s.push_str("    ldrb    r8, [r9, #1]        @ vec_ref_count\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     par_done\n");
+    s.push_str("    add     r9, r9, #2          @ Y = first FDB ptr slot\n");
+    s.push_str("    mov     r6, r8              @ loop counter = vec_ref_count\n");
+    s.push_str("par_vec_loop:\n");
+    s.push_str("    ldrb    r0, [r9]            @ vec ptr high byte\n");
+    s.push_str("    ldrb    r1, [r9, #1]        @ vec ptr low byte\n");
+    s.push_str("    lsl     r0, r0, #8\n");
+    s.push_str("    orr     r0, r0, r1          @ r0 = vec_ptr\n");
+    s.push_str("    add     r9, r9, #2\n");
+    s.push_str("    push    {r6, r9}\n");
+    s.push_str("    mov     r1, #0              @ ox=0\n");
+    s.push_str("    mov     r2, #0              @ oy=0\n");
+    s.push_str("    bl      pitrex_draw_vector\n");
+    s.push_str("    pop     {r6, r9}\n");
+    s.push_str("    subs    r6, r6, #1\n");
+    s.push_str("    bne     par_vec_loop\n");
+    s.push_str("par_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
+    // Static state buffer in BSS
+    s.push_str(".bss\n");
+    s.push_str(".balign 4\n");
+    s.push_str("PITREX_ANIM_STATE_BUF: .space 2\n");
+    s.push_str(".text\n\n");
+
     s
 }

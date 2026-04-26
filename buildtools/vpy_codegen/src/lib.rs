@@ -14,6 +14,7 @@ pub mod vecres;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;
+pub mod animres;
 pub mod stack_validator;
 
 /// Compilation target selection.
@@ -91,10 +92,11 @@ pub struct AssetInfo {
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AssetType {
-    Vector,  // .vec file
-    Music,   // .vmus file (background music, loops)
-    Sfx,     // .vsfx file (sound effect, parametric SFXR-style)
-    Level,   // .vlevel file (level data for games)
+    Vector,    // .vec file
+    Music,     // .vmus file (background music, loops)
+    Sfx,       // .vsfx file (sound effect, parametric SFXR-style)
+    Level,     // .vlevel file (level data for games)
+    Animation, // .vanim file (frame-by-frame vector animation)
 }
 
 #[derive(Debug, Clone, Error)]

@@ -91,6 +91,7 @@ pub fn emit_builtins(msg_entries: &[MsgEntry]) -> String {
     s.push_str(&emit_state_builtins());
     s.push_str(&emit_level_builtins());
     s.push_str(&emit_msg_builtins(msg_entries));
+    s.push_str(&emit_draw_anim());
     s
 }
 
@@ -1982,6 +1983,103 @@ fn emit_level_builtins() -> String {
     s.push_str("vlcy_no_floor:\n");
     s.push_str("    mov     r0, #-128\n    add     r0, r0, r6  @ -128 + half_h\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+// ─── DRAW_ANIM (stub) ──────────────────────────────────────────────────────
+
+fn emit_draw_anim() -> String {
+    // vpy_draw_anim(r0 = anim_rom_ptr)
+    //
+    // Stub: walks the animation ROM header (same byte layout as m6809),
+    // picks the current frame using a shared BSS state buffer, and draws
+    // each vec_ref path via vpy_draw_vector.  Inline paths are skipped
+    // (same simplification as pitrex stub).
+    //
+    // ROM header is big-endian (as emitted by animres.rs):
+    //   byte 0:  frame_count
+    //   byte 1:  loop_flag
+    //   byte 2+: FDB pointers (big-endian u16 per frame)
+    //
+    // Per-frame data:
+    //   byte 0:  duration_ticks
+    //   byte 1:  vec_ref_count
+    //   byte 2+: FDB vec_ref pointers (big-endian u16 each)
+    //
+    // State (in BSS): 2 bytes — frame_idx(u8), ticks_left(u8)
+    let mut s = String::new();
+    s.push_str("@ vpy_draw_anim(r0=anim_rom_ptr)\n");
+    s.push_str("@ Stub: draws vec_refs for current frame, advances tick counter.\n");
+    s.push_str(".global vpy_draw_anim\n.type vpy_draw_anim, %function\n.thumb_func\nvpy_draw_anim:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    mov     r4, r0              @ anim header ptr\n");
+    // Load state
+    s.push_str("    ldr     r5, =VPY_ANIM_STATE_BUF\n");
+    s.push_str("    ldrb    r6, [r5]            @ frame_idx\n");
+    s.push_str("    ldrb    r7, [r5, #1]        @ ticks_left\n");
+    // Tick down
+    s.push_str("    subs    r7, r7, #1\n");
+    s.push_str("    bgt     dar_same_frame\n");
+    // Advance frame
+    s.push_str("    ldrb    r8, [r4]            @ frame_count\n");
+    s.push_str("    add     r6, r6, #1\n");
+    s.push_str("    cmp     r6, r8\n");
+    s.push_str("    blt     dar_no_wrap\n");
+    s.push_str("    ldrb    r9, [r4, #1]        @ loop flag\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     dar_freeze\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("dar_no_wrap:\n");
+    // Default 4 ticks (simplified — a full impl would read frame header)
+    s.push_str("    mov     r7, #4\n");
+    s.push_str("    b       dar_save_state\n");
+    s.push_str("dar_freeze:\n");
+    s.push_str("    sub     r6, r6, #1\n");
+    s.push_str("    mov     r7, #1\n");
+    s.push_str("    b       dar_save_state\n");
+    s.push_str("dar_same_frame:\n");
+    s.push_str("    @ r7 holds remaining ticks\n");
+    s.push_str("dar_save_state:\n");
+    s.push_str("    strb    r6, [r5]            @ save frame_idx\n");
+    s.push_str("    strb    r7, [r5, #1]        @ save ticks_left\n");
+    // Compute frame data ptr: header + 2 + frame_idx*2 (each FDB = 2 bytes, big-endian)
+    s.push_str("    lsl     r8, r6, #1          @ frame_idx * 2\n");
+    s.push_str("    add     r8, r8, #2          @ skip frame_count + loop_flag\n");
+    s.push_str("    ldrb    r9, [r4, r8]        @ frame_ptr high byte\n");
+    s.push_str("    add     r8, r8, #1\n");
+    s.push_str("    ldrb    r10, [r4, r8]       @ frame_ptr low byte\n");
+    s.push_str("    lsl     r9, r9, #8\n");
+    s.push_str("    orr     r9, r9, r10         @ r9 = frame ptr (absolute)\n");
+    // vec_ref_count at frame+1
+    s.push_str("    ldrb    r8, [r9, #1]        @ vec_ref_count\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     dar_done\n");
+    s.push_str("    add     r9, r9, #2          @ advance past duration+vec_ref_count\n");
+    s.push_str("    mov     r10, r8             @ loop counter\n");
+    s.push_str("dar_vec_loop:\n");
+    // Read big-endian FDB (2 bytes) → absolute address
+    s.push_str("    ldrb    r0, [r9]            @ vec ptr high byte\n");
+    s.push_str("    ldrb    r1, [r9, #1]        @ vec ptr low byte\n");
+    s.push_str("    lsl     r0, r0, #8\n");
+    s.push_str("    orr     r0, r0, r1          @ r0 = vec ptr\n");
+    s.push_str("    add     r9, r9, #2\n");
+    s.push_str("    push    {r9, r10}\n");
+    s.push_str("    mov     r1, #0              @ ox=0\n");
+    s.push_str("    mov     r2, #0              @ oy=0\n");
+    s.push_str("    bl      vpy_draw_vector\n");
+    s.push_str("    pop     {r9, r10}\n");
+    s.push_str("    subs    r10, r10, #1\n");
+    s.push_str("    bne     dar_vec_loop\n");
+    s.push_str("dar_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
+    // Static state buffer in BSS
+    s.push_str(".bss\n");
+    s.push_str(".balign 4\n");
+    s.push_str("VPY_ANIM_STATE_BUF: .space 2\n");
+    s.push_str(".text\n\n");
 
     s
 }
