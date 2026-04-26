@@ -356,46 +356,27 @@ fn emit_pitrex_draw_vector_ex() -> String {
 // ── Joystick / Buttons ────────────────────────────────────────────────────
 
 fn emit_pitrex_j1_x() -> String {
-    // Returns -1, 0, +1 from currentJoy1X (raw ±32767)
-    // Threshold: ±8192 (≈25% deflection)
+    // Returns ±127 from currentJoy1X (raw ±32767 from SDK / emulator stub)
+    // Scale: ASR #8 gives 32767>>8=127, -32767>>8=-128 (close enough)
     let mut s = String::new();
-    s.push_str("@ pitrex_j1_x() → r0 = -1, 0, or +1\n");
+    s.push_str("@ pitrex_j1_x() → r0 = X axis (-127..127)\n");
     s.push_str(".global pitrex_j1_x\n.type pitrex_j1_x, %function\npitrex_j1_x:\n");
     s.push_str("    ldr     r1, =currentJoy1X\n");
     s.push_str("    ldr     r0, [r1]\n");
-    s.push_str("    ldr     r1, =8192\n");
-    s.push_str("    cmp     r0, r1\n");
-    s.push_str("    bgt     1f              @ > threshold → +1\n");
-    s.push_str("    neg     r1, r1\n");
-    s.push_str("    cmp     r0, r1\n");
-    s.push_str("    blt     2f              @ < -threshold → -1\n");
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    bx      lr\n");
-    s.push_str("1:  mov     r0, #1\n");
-    s.push_str("    bx      lr\n");
-    s.push_str("2:  mvn     r0, #0\n         @ r0 = -1\n");
+    s.push_str("    asr     r0, r0, #8\n    @ ±32767 → ±127\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
     s
 }
 
 fn emit_pitrex_j1_y() -> String {
+    // Returns ±127 from currentJoy1Y (raw ±32767 from SDK / emulator stub)
     let mut s = String::new();
-    s.push_str("@ pitrex_j1_y() → r0 = -1, 0, or +1\n");
+    s.push_str("@ pitrex_j1_y() → r0 = Y axis (-127..127)\n");
     s.push_str(".global pitrex_j1_y\n.type pitrex_j1_y, %function\npitrex_j1_y:\n");
     s.push_str("    ldr     r1, =currentJoy1Y\n");
     s.push_str("    ldr     r0, [r1]\n");
-    s.push_str("    ldr     r1, =8192\n");
-    s.push_str("    cmp     r0, r1\n");
-    s.push_str("    bgt     1f\n");
-    s.push_str("    neg     r1, r1\n");
-    s.push_str("    cmp     r0, r1\n");
-    s.push_str("    blt     2f\n");
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    bx      lr\n");
-    s.push_str("1:  mov     r0, #1\n");
-    s.push_str("    bx      lr\n");
-    s.push_str("2:  mvn     r0, #0\n");
+    s.push_str("    asr     r0, r0, #8\n    @ ±32767 → ±127\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -1826,10 +1807,14 @@ fn emit_pitrex_print_number_impl() -> String {
     // allocate 8-byte stack buffer (aligned)
     s.push_str("    sub     sp, sp, #8\n");
     s.push_str("    mov     r7, sp          @ buf ptr\n");
-    // ensure value >= 0 (abs)
+    // prepend '-' if negative, then abs
     s.push_str("    cmp     r6, #0\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    rsblt   r6, r6, #0\n");
+    s.push_str("    bge     pn_positive\n");
+    s.push_str("    mov     r0, #45         @ '-' ASCII\n");
+    s.push_str("    strb    r0, [r7]\n");
+    s.push_str("    add     r7, r7, #1\n");
+    s.push_str("    rsb     r6, r6, #0      @ abs(r6)\n");
+    s.push_str("pn_positive:\n");
     // extract digits: 1000s, 100s, 10s, 1s
     for (i, divisor) in [1000u32, 100, 10, 1].iter().enumerate() {
         if *divisor > 1 {

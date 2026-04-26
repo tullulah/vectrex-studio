@@ -595,8 +595,8 @@ export const EmulatorPanel: React.FC = () => {
 
     const gamepadPollInterval = setInterval(() => {
       const vecx = (window as any).vecx;
-      // Allow gamepad to work even when paused (for testing controls during debugging)
-      if (!vecx) return;
+      // vecx may be null in pitrex mode — do NOT early-return here.
+      // All input processing runs regardless; JSVecX writes are guarded below.
 
       const gamepads = navigator.getGamepads();
       if (!gamepads) return;
@@ -610,16 +610,19 @@ export const EmulatorPanel: React.FC = () => {
         const kb = inputManager.update();
         const kbX = kb.x / 127; // normalize -127..127 → -1..1
         const kbY = kb.y / 127;
-        try {
-          vecx.leftHeld  = kbX < -0.3;
-          vecx.rightHeld = kbX > 0.3;
-          vecx.downHeld  = kbY < -0.3;
-          vecx.upHeld    = kbY > 0.3;
-          vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
-          vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
-          // rp2350 target: forward keyboard axis (no button support from keyboard)
-          emuCore.setJoyAxis?.(kb.x, kb.y);
-        } catch {}
+        // rp2350 / pitrex keyboard axis and buttons
+        emuCore.setJoyAxis?.(kb.x, kb.y);
+        pitrexCoreRef.current?.setInput(kb.x, kb.y, kb.buttons & 0xF);
+        if (vecx) {
+          try {
+            vecx.leftHeld  = kbX < -0.3;
+            vecx.rightHeld = kbX > 0.3;
+            vecx.downHeld  = kbY < -0.3;
+            vecx.upHeld    = kbY > 0.3;
+            vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
+            vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
+          } catch {}
+        }
         return;
       }
 
@@ -644,119 +647,75 @@ export const EmulatorPanel: React.FC = () => {
       const dpadUp = gamepad.buttons[dpadUpButton]?.pressed || false;
       const dpadDown = gamepad.buttons[dpadDownButton]?.pressed || false;
 
-      // Set JSVecX input state (directional booleans)
-      // IMPORTANT: JSVecx internally converts these booleans to alg_jch0/1
-      // The booleans activate from EITHER analog stick OR D-Pad buttons
-      try {
-        // Combine analog stick (with threshold) and D-Pad buttons
-        // Analog: threshold of 0.3 to avoid drift
-        // D-Pad: direct button press state
-        vecx.leftHeld = (x < -0.3) || dpadLeft;
-        vecx.rightHeld = (x > 0.3) || dpadRight;
-        vecx.downHeld = (y < -0.3) || dpadDown;
-        vecx.upHeld = (y > 0.3) || dpadUp;
-
-
-        // Write analog joystick values to JSVecX hardware emulation
-        // JSVecx uses UNSIGNED range: 0=left/down, 128=center, 255=right/up
-        // Input x,y are in range -1.0 to +1.0 (0.0 = center)
-        const analogX = Math.round((x + 1) * 127.5); // 0 to 255 (128=center)
-        const analogY = Math.round((y + 1) * 127.5); // 0 to 255 (128=center)
-        
-        // Update JSVecx analog channels (this is what Joy_Analog BIOS reads via alg_compare)
-        vecx.alg_jch0 = analogX; // Channel 0 = X axis (0=left, 128=center, 255=right)
-        vecx.alg_jch1 = analogY; // Channel 1 = Y axis (0=down, 128=center, 255=up)
-        
-        // Read button states and build button state byte
-        // In Vec_Btn_State ($C80F): 1 = pressed, 0 = released
-        let buttonState = 0x00; // Default: all buttons released (all bits 0)
-        
-        buttonMappings.forEach(mapping => {
-          const button = gamepad.buttons[mapping.gamepadButton];
-          if (button && button.pressed) {
-            // Button pressed: set bit (1 = pressed in Vec_Btn_State)
-            const bitPosition = mapping.vectrexButton - 1;
-            buttonState |= (1 << bitPosition);
-          }
-        });
-        
-        // Read previous state for debug logging only
-        const prevState = lastButtonState; // Use persistent variable, not RAM
-        
-        // Calculate transitions manually (rising edge detection)
-        // Formula: new & ~prev (bit is 1 only when new=1 AND prev=0)
-        const transitions = buttonState & ~prevState & 0xFF;
-        
-        // Update persistent state for next frame
-        lastButtonState = buttonState;
-        
-        // NOTE (2026-01-19): DO NOT write to $C80E (Vec_Prev_Btns) here!
-        // Read_Btns in the BIOS manages Vec_Prev_Btns internally.
-        // If we write buttonState to $C80E, then when Read_Btns calculates
-        // transitions (new XOR prev), it sees new==prev and always returns 0.
-        // Let Read_Btns handle the prev/current state tracking autonomously.
-        
-        // DEBUG: Log button state if any button is pressed
-        if (transitions !== 0) {
-          console.log('[GamepadManager] TRANSITION DETECTED:', {
-            buttonState: buttonState.toString(2).padStart(4, '0'),
-            transitions: transitions.toString(2).padStart(4, '0'),
-            c811_written: transitions
-          });
+      // Build button state from configured button mappings
+      let buttonState = 0x00;
+      buttonMappings.forEach(mapping => {
+        const button = gamepad.buttons[mapping.gamepadButton];
+        if (button && button.pressed) {
+          buttonState |= (1 << (mapping.vectrexButton - 1));
         }
+      });
 
-        // rp2350 target: forward analog axis and button state.
-        // buttonState bits 0-3 = buttons 1-4 (1=pressed).
-        // VIA Port B bits 4-7 = buttons 1-4, active-low (0=pressed).
-        {
-          const rp2350X = Math.round(x * 127);
-          const rp2350Y = Math.round(y * 127);
-          // D-pad: combine with analog for digital axis
-          const dp2350X = dpadLeft ? -127 : dpadRight ? 127 : rp2350X;
-          const dp2350Y = dpadDown ? -127 : dpadUp   ? 127 : rp2350Y;
-          emuCore.setJoyAxis?.(dp2350X, dp2350Y);
-          // Convert buttonState (bits 0-3 active-high) → VIA Port B (bits 4-7 active-low)
-          const portBMask = 0xF0 & ~((buttonState & 0x0F) << 4);
-          emuCore.setJoyButtons?.(portBMask);
-        }
+      // Compute final axis values with D-pad override
+      const rp2350X = Math.round(x * 127);
+      const rp2350Y = Math.round(y * 127);
+      const dp2350X = dpadLeft ? -127 : dpadRight ? 127 : rp2350X;
+      const dp2350Y = dpadDown ? -127 : dpadUp   ? 127 : rp2350Y;
 
-        // WORKAROUND for JSVecx PSG read issue (2026-01-03):
-        // Root Cause: Read_Btns auto-injects at loop start and reads PSG register 14
-        // The PSG read happens AFTER our $C80F write, so Read_Btns overwrites our value
-        //
-        // Solution: Inject button state into window.injectedButtonStatePSG
-        // JSVecx is patched to check this value when reading PSG register 14
-        //
-        // PSG Register 14 format (inverted: 0=pressed, 1=released)
-        const psgReg14 = ~buttonState & 0xFF;
+      // rp2350: forward axis and buttons
+      emuCore.setJoyAxis?.(dp2350X, dp2350Y);
+      emuCore.setJoyButtons?.(0xF0 & ~((buttonState & 0x0F) << 4));
 
-        // Inject into window for JSVecx to read (patched in vecx.js VIA read case 0xf)
-        (window as any).injectedButtonStatePSG = psgReg14;
+      // pitrex: forward axis and buttons (always, even when vecx is null)
+      pitrexCoreRef.current?.setInput(dp2350X, dp2350Y, buttonState & 0xF);
 
-        // Also write to PSG.Regs[14] for hardware compatibility (vecx emulator)
-        if (vecx.e8910 && vecx.e8910.e8910_write) {
-          vecx.e8910.e8910_write(14, psgReg14);
-        }
-        
-        // DEBUG: Monitor button state and RAM values
-        if (transitions !== 0 || buttonState !== 0) {
-          setTimeout(() => {
-            const c811 = vecx.read8(0xC811);
-            const c80f = vecx.read8(0xC80F);
-            const c80e = vecx.read8(0xC80E);
-            
-            console.log('[Button] Frame state:', {
-              'btn': buttonState.toString(2).padStart(4, '0'),
-              'trans': transitions.toString(2).padStart(4, '0'),
-              'C811': c811.toString(2).padStart(4, '0'),
-              'C80F': c80f.toString(2).padStart(4, '0'),
-              'C80E': c80e.toString(2).padStart(4, '0')
+      // JSVecX-specific: directional booleans, analog channels, PSG buttons
+      if (vecx) {
+        try {
+          vecx.leftHeld  = (x < -0.3) || dpadLeft;
+          vecx.rightHeld = (x > 0.3)  || dpadRight;
+          vecx.downHeld  = (y < -0.3) || dpadDown;
+          vecx.upHeld    = (y > 0.3)  || dpadUp;
+
+          vecx.alg_jch0 = Math.round((x + 1) * 127.5);
+          vecx.alg_jch1 = Math.round((y + 1) * 127.5);
+
+          // Track transitions for debug logging
+          const prevState = lastButtonState;
+          const transitions = buttonState & ~prevState & 0xFF;
+          lastButtonState = buttonState;
+
+          if (transitions !== 0) {
+            console.log('[GamepadManager] TRANSITION DETECTED:', {
+              buttonState: buttonState.toString(2).padStart(4, '0'),
+              transitions: transitions.toString(2).padStart(4, '0'),
             });
-          }, 5); // Quick check after emulator processes
+          }
+
+          // PSG reg 14 injection for Read_Btns workaround
+          const psgReg14 = ~buttonState & 0xFF;
+          (window as any).injectedButtonStatePSG = psgReg14;
+          if (vecx.e8910 && vecx.e8910.e8910_write) {
+            vecx.e8910.e8910_write(14, psgReg14);
+          }
+
+          if (transitions !== 0 || buttonState !== 0) {
+            setTimeout(() => {
+              const c811 = vecx.read8(0xC811);
+              const c80f = vecx.read8(0xC80F);
+              const c80e = vecx.read8(0xC80E);
+              console.log('[Button] Frame state:', {
+                'btn': buttonState.toString(2).padStart(4, '0'),
+                'trans': transitions.toString(2).padStart(4, '0'),
+                'C811': c811.toString(2).padStart(4, '0'),
+                'C80F': c80f.toString(2).padStart(4, '0'),
+                'C80E': c80e.toString(2).padStart(4, '0'),
+              });
+            }, 5);
+          }
+        } catch (error) {
+          console.error('[GamepadManager] Error setting JSVecX input state:', error);
         }
-        
-      } catch (error) {
-        console.error('[GamepadManager] Error setting input state:', error);
       }
     }, 16); // ~60Hz polling
 
@@ -2402,9 +2361,9 @@ export const EmulatorPanel: React.FC = () => {
             const cx = W / 2;
             const cy = H / 2;
 
-            // Feed input to the interpreter before running the frame
-            const kb = inputManager.update();
-            pitrexCoreRef.current?.setInput(kb.x, kb.y, kb.buttons & 0xF);
+            // Input is forwarded by the gamepad poll interval (respects axis
+            // inversion, deadzone, and button mappings from useJoystickStore).
+            // No setInput call here — avoid overwriting with raw inputManager values.
 
             // Clear frame
             ctx.fillStyle = '#000000';
