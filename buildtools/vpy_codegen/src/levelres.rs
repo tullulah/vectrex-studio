@@ -303,10 +303,12 @@ impl VPlayLevel {
         let intensity = obj.intensity.unwrap_or(127);
         out.push_str(&format!("    .byte {}   @ intensity\n", intensity));
 
-        // +6: flags — ALL physics flags gated on physics_enabled.
-        // The VPlay editor stores "gravity":1 / physicsType:"gravity" on ALL objects
-        // (as editor defaults), but only objects with physicsEnabled:true should move.
+        // +6: flags
+        // Collidable is independent of physics_enabled — static platforms have collidable=true
+        // but physicsEnabled=false. Physics motion flags are only set when physicsEnabled=true.
         let mut flags: u8 = 0;
+        let collidable = obj.collidable || obj.collision.as_ref().map_or(false, |c| c.enabled);
+        if collidable { flags |= 0x10; }
         if obj.physics_enabled {
             let has_physics = obj.physics.as_ref().map_or(true, |p| p.physics_type == "dynamic");
             if has_physics { flags |= 0x01; }
@@ -314,8 +316,6 @@ impl VPlayLevel {
                 || obj.physics.as_ref().map_or(false, |p| p.gravity != 0.0)
                 || obj.physics_type.as_ref().map_or(false, |t| t == "gravity" || t == "projectile");
             if has_gravity { flags |= 0x02; }
-            let collidable = obj.collidable || obj.collision.as_ref().map_or(false, |c| c.enabled);
-            if collidable { flags |= 0x10; }
             let bounce = obj.bounce_damping != 0.0
                 || obj.physics_type.as_ref().map_or(false, |t| t == "bounce" || t == "gravity")
                 || obj.collision.as_ref().map_or(false, |c| c.bounce_walls);

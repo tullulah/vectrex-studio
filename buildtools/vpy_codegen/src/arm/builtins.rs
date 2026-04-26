@@ -1888,14 +1888,17 @@ fn emit_level_builtins() -> String {
     s.push_str("vglt_notfound:\n    mvn     r0, #0            @ return -1\n");
     s.push_str("    pop     {r4, r5, r6, pc}\n    .ltorg\n\n");
 
-    // ── vpy_level_collision_x(r0=px, r1=py, r2=half_w) → r0 = push-out dx ──
+    // ── vpy_level_collision_x(r0=px, r1=py, r2=half_w, r3=half_h) → r0 = push-out dx ──
     // Scans collidable GP objects. Returns push-out dx to resolve overlap (0 if none).
-    s.push_str("@ vpy_level_collision_x(r0=px, r1=py, r2=hw) -> push-out dx\n");
+    // r3=half_h is the player's actual half-height used for the Y-overlap test — prevents lateral
+    // push when the player hits the bottom of a block from below.
+    s.push_str("@ vpy_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx\n");
     s.push_str(".global vpy_level_collision_x\n.type vpy_level_collision_x, %function\n.thumb_func\nvpy_level_collision_x:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs + pad = 40 bytes, 8-aligned\n");
     s.push_str("    mov     r4, r0                    @ px\n");
     s.push_str("    mov     r5, r1                    @ py\n");
     s.push_str("    mov     r6, r2                    @ half_w (player)\n");
+    s.push_str("    mov     r11, r3                   @ half_h (player) — Y-overlap threshold\n");
     s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n    ldr     r7, [r7]\n");
     s.push_str("    cbz     r7, vlcx_done_zero\n");
     s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
@@ -1907,16 +1910,15 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldrb    r0, [r7, #6]\n    cbz     r0, vlcx_next\n");
     // collidable flag (ROM +6 bit4)
     s.push_str("    ldrb    r0, [r9, #6]\n    tst     r0, #0x10\n    beq     vlcx_next\n");
-    // half_w of this object (ROM +12)
+    // y overlap: |py - obj_y| < player_hh + obj_half_h (uses actual player_hh = r11)
+    s.push_str("    ldrsh   r1, [r7, #2]              @ obj world_y\n");
+    s.push_str("    ldrb    r3, [r9, #13]             @ obj half_h\n");
+    s.push_str("    sub     r2, r5, r1                @ dy = py - obj_y\n");
+    s.push_str("    movs    r2, r2\n    bpl     vlcx_dychk\n    neg     r2, r2\n");
+    s.push_str("vlcx_dychk:\n    add     r3, r3, r11\n    cmp     r2, r3\n    bge     vlcx_next\n");
+    // x overlap: |px - obj_x| < half_w_player + obj_half_w
     s.push_str("    ldrb    r0, [r9, #12]             @ obj half_w\n");
     s.push_str("    ldrsh   r1, [r7, #0]              @ obj world_x\n");
-    s.push_str("    ldrsh   r2, [r7, #2]              @ obj world_y\n");
-    // y overlap: |py - obj_y| < 16 + obj_half_h (simple; use obj half_h from ROM+13)
-    s.push_str("    ldrb    r3, [r9, #13]             @ obj half_h\n");
-    s.push_str("    sub     r2, r5, r2                @ dy = py - obj_y\n");
-    s.push_str("    movs    r2, r2\n    bpl     vlcx_dychk\n    neg     r2, r2\n");
-    s.push_str("vlcx_dychk:\n    add     r3, r3, #16\n    cmp     r2, r3\n    bge     vlcx_next\n");
-    // x overlap: |px - obj_x| < half_w_player + obj_half_w
     s.push_str("    sub     r1, r4, r1                @ dx_raw = px - obj_x\n");
     s.push_str("    add     r3, r6, r0                @ total_hw = player_hw + obj_hw\n");
     s.push_str("    movs    r2, r1\n    bpl     vlcx_dxpos\n    neg     r2, r1\n");
@@ -1928,9 +1930,9 @@ fn emit_level_builtins() -> String {
     s.push_str("vlcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
     s.push_str("    subs    r8, r8, #1\n    b       vlcx_loop\n");
     s.push_str("vlcx_done:\n    mov     r0, r10\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n");
     s.push_str("vlcx_done_zero:\n    mov     r0, #0\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
     // ── vpy_level_collision_y(r0=px, r1=py, r2=half_h) → r0 = floor_y ───────
     // Finds the highest floor (top edge of collidable GP object) that is at or below
@@ -1943,7 +1945,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    mov     r5, r1                    @ py\n");
     s.push_str("    mov     r6, r2                    @ half_h (player)\n");
     s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n    ldr     r7, [r7]\n");
-    s.push_str("    mvn     r10, #0                   @ best_floor_top = INT_MIN\n"); // 0xFFFFFFFF = -1 as sentinel
+    s.push_str("    ldr     r10, =-32767              @ best_floor_top sentinel (below any valid Y)\n");
     s.push_str("    cbz     r7, vlcy_finish\n");
     s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
     s.push_str("    cbz     r8, vlcy_finish\n");
@@ -1968,15 +1970,13 @@ fn emit_level_builtins() -> String {
     s.push_str("    add     r2, r2, r3                @ obj_top = world_y + half_h\n");
     // Only consider if obj_top <= player_feet (surface player could stand on)
     s.push_str("    cmp     r2, r0                    @ obj_top <= player_feet?\n    bgt     vlcy_next\n");
-    // Track highest obj_top (closest floor below)
-    s.push_str("    cmp     r10, #0xFFFF8000\n"); // simple sentinel check
-    // Actually let's compare properly: if r10 == INT_MIN or r2 > r10 → update
+    // Track highest obj_top (closest floor below); sentinel -32767 < any valid top
     s.push_str("    cmp     r10, r2\n    bge     vlcy_next\n    mov     r10, r2\n");
     s.push_str("vlcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
     s.push_str("    subs    r8, r8, #1\n    b       vlcy_loop\n");
     s.push_str("vlcy_finish:\n");
     // If best_floor_top is still -1 (INT_MIN sentinel mvn #0), return -128+half_h
-    s.push_str("    mvn     r1, #0\n    cmp     r10, r1\n    beq     vlcy_no_floor\n");
+    s.push_str("    ldr     r1, =-32767\n    cmp     r10, r1\n    beq     vlcy_no_floor\n");
     s.push_str("    add     r0, r10, r6               @ floor_y + half_h (player center)\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("vlcy_no_floor:\n");

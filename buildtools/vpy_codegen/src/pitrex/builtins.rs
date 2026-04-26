@@ -897,13 +897,103 @@ fn emit_pitrex_debug_print() -> String {
 
 fn emit_pitrex_level_collision() -> String {
     let mut s = String::new();
-    s.push_str("@ pitrex_level_collision_y(r0=x, r1=y, r2=h) -> r0=adjusted_y\n");
+
+    // ── pitrex_level_collision_y(r0=px, r1=py, r2=hh) → r0 = floor_center_y ──
+    // Scans collidable GP objects (ROM flags bit4 = 0x10).
+    // Returns best_obj_top + player_hh (where player center should sit).
+    // Returns -200 if no floor found (caller uses max(result, game_floor)).
+    //
+    // LEVEL_GP_BUF layout (8 bytes/entry): x i16 @0, y i16 @2, vx i16 @4, vy i16 @6
+    // ROM object layout (16 bytes): x @0, y @2, scale @4, intensity @5, flags @6,
+    //   type @7, vector_ptr @8, half_w @12, half_h @13, vel_x @14, vel_y @15
+    s.push_str("@ pitrex_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y\n");
     s.push_str(".global pitrex_level_collision_y\n.type pitrex_level_collision_y, %function\npitrex_level_collision_y:\n");
-    s.push_str("    mov     r0, r1\n");
-    s.push_str("    bx      lr\n\n");
-    s.push_str("@ pitrex_level_collision_x(r0=x, r1=y, r2=w) -> r0=adjusted_x\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    mov     r4, r0              @ px\n");
+    s.push_str("    mov     r5, r1              @ py\n");
+    s.push_str("    mov     r6, r2              @ half_h (player)\n");
+    s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n");
+    s.push_str("    ldr     r7, [r7]            @ r7 = level header ptr\n");
+    s.push_str("    ldr     r10, =-32767        @ best_floor_top sentinel (below any valid Y)\n");
+    s.push_str("    cmp     r7, #0\n    beq     plcy_finish\n");
+    s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
+    s.push_str("    cmp     r8, #0\n    beq     plcy_finish\n");
+    s.push_str("    ldr     r9, [r7, #16]       @ r9 = gpObjectsPtr (ROM)\n");
+    s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
+    s.push_str("    sub     r0, r5, r6          @ player_feet = py - hh\n");
+    s.push_str("plcy_loop:\n    cmp     r8, #0\n    beq     plcy_finish\n");
+    // collidable flag (ROM[6] bit4)
+    s.push_str("    ldrb    r1, [r9, #6]\n    tst     r1, #0x10\n    beq     plcy_next\n");
+    // x-range check: |px - obj_x| < obj_hw + 8 (player hw = 8)
+    s.push_str("    ldrb    r1, [r9, #12]       @ obj half_w\n");
+    s.push_str("    ldrsh   r2, [r7, #0]        @ obj world_x (buf)\n");
+    s.push_str("    sub     r2, r4, r2          @ dx = px - obj_x\n");
+    s.push_str("    movs    r3, r2\n    bpl     plcy_dx_ok\n    neg     r3, r2\n");
+    s.push_str("plcy_dx_ok:\n    add     r1, r1, #8\n    cmp     r3, r1\n    bge     plcy_next\n");
+    // obj_top = world_y + half_h; only consider if obj_top <= player_feet
+    s.push_str("    ldrsh   r2, [r7, #2]        @ obj world_y (buf)\n");
+    s.push_str("    ldrb    r3, [r9, #13]       @ obj half_h\n");
+    s.push_str("    add     r2, r2, r3          @ obj_top = world_y + half_h\n");
+    s.push_str("    cmp     r2, r0\n    bgt     plcy_next   @ surface above player feet\n");
+    // track highest floor_top (closest to player from below); sentinel -32767 < any valid top
+    s.push_str("    cmp     r10, r2\n    bge     plcy_next\n    mov     r10, r2\n");
+    s.push_str("plcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
+    s.push_str("    subs    r8, r8, #1\n    b       plcy_loop\n");
+    s.push_str("plcy_finish:\n");
+    s.push_str("    ldr     r1, =-32767\n    cmp     r10, r1\n    beq     plcy_no_floor\n");
+    s.push_str("    add     r0, r10, r6         @ floor_center = floor_top + player_hh\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("plcy_no_floor:\n");
+    s.push_str("    ldr     r0, =-200\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
+    // ── pitrex_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) → r0 = push-out dx ──
+    // Returns push-out dx to resolve horizontal overlap (0 if none).
+    // r3=hy (player half-height) is used for the Y-overlap test — prevents lateral push
+    // when hitting the bottom of a block from below (threshold = hy + obj_hh excludes that case).
+    s.push_str("@ pitrex_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx\n");
     s.push_str(".global pitrex_level_collision_x\n.type pitrex_level_collision_x, %function\npitrex_level_collision_x:\n");
-    s.push_str("    bx      lr\n\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    mov     r4, r0              @ px\n");
+    s.push_str("    mov     r5, r1              @ py\n");
+    s.push_str("    mov     r6, r2              @ half_w (player)\n");
+    s.push_str("    mov     r11, r3             @ half_h (player) — for Y-overlap threshold\n");
+    s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n    ldr     r7, [r7]\n");
+    s.push_str("    cmp     r7, #0\n    beq     plcx_done_zero\n");
+    s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
+    s.push_str("    cmp     r8, #0\n    beq     plcx_done_zero\n");
+    s.push_str("    ldr     r9, [r7, #16]       @ gpObjectsPtr (ROM)\n");
+    s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
+    s.push_str("    mov     r10, #0             @ best push-out dx\n");
+    s.push_str("plcx_loop:\n    cmp     r8, #0\n    beq     plcx_done\n");
+    // collidable
+    s.push_str("    ldrb    r0, [r9, #6]\n    tst     r0, #0x10\n    beq     plcx_next\n");
+    // y-overlap: |py - obj_y| < player_hh + obj_half_h (uses actual player_hh, not hardcoded 8)
+    s.push_str("    ldrb    r0, [r9, #13]       @ obj half_h\n");
+    s.push_str("    ldrsh   r1, [r7, #2]        @ obj world_y\n");
+    s.push_str("    sub     r1, r5, r1          @ dy = py - obj_y\n");
+    s.push_str("    movs    r2, r1\n    bpl     plcx_dy_ok\n    neg     r2, r1\n");
+    s.push_str("plcx_dy_ok:\n    add     r0, r0, r11\n    cmp     r2, r0\n    bge     plcx_next\n");
+    // x-overlap: |px - obj_x| < player_hw + obj_hw
+    s.push_str("    ldrb    r0, [r9, #12]       @ obj half_w\n");
+    s.push_str("    ldrsh   r1, [r7, #0]        @ obj world_x\n");
+    s.push_str("    sub     r1, r4, r1          @ dx_raw = px - obj_x\n");
+    s.push_str("    add     r3, r6, r0          @ total_hw = player_hw + obj_hw\n");
+    s.push_str("    movs    r2, r1\n    bpl     plcx_dx_abs\n    neg     r2, r1\n");
+    s.push_str("plcx_dx_abs:\n    cmp     r2, r3\n    bge     plcx_next\n");
+    // push-out = sign(dx_raw) * (total_hw - |dx_raw|)
+    s.push_str("    sub     r3, r3, r2          @ overlap = total_hw - |dx|\n");
+    s.push_str("    cmp     r1, #0\n    bge     plcx_push_pos\n    neg     r3, r3\n");
+    s.push_str("plcx_push_pos:\n    mov     r10, r3\n");
+    s.push_str("plcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
+    s.push_str("    subs    r8, r8, #1\n    b       plcx_loop\n");
+    s.push_str("plcx_done:\n    mov     r0, r10\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    s.push_str("plcx_done_zero:\n    mov     r0, #0\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
     s
 }
 

@@ -2,6 +2,7 @@ META TITLE = "SUPER MARIO POC"
 
 # Mario half-height (from mario.vec HALF_HEIGHT = 13)
 const MARIO_HH = 13
+const MARIO_HW = 8
 
 # Player world position (player_y = center of mario sprite)
 player_x: i16 = 0
@@ -34,6 +35,12 @@ def loop():
 
     # Clamp player to level bounds
     player_x = clamp(player_x, -100, 1050)
+
+    # Horizontal collision: only when not moving upward
+    # (prevents spurious lateral push when jumping into a block from below)
+    if vel_y <= 0:
+        dx_push = LEVEL_COLLISION_X(player_x, player_y, MARIO_HW, MARIO_HH)
+        player_x = player_x + dx_push
 
     # Jump
     if btn_jump == 1:

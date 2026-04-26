@@ -11,7 +11,7 @@ pub fn needs_level_runtime(module: &Module) -> bool {
     fn check_expr(expr: &Expr) -> bool {
         if let Expr::Call(c) = expr {
             matches!(c.name.as_str(),
-                "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "LEVEL_COLLISION_Y")
+                "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "LEVEL_COLLISION_Y" | "LEVEL_COLLISION_X")
         } else { false }
     }
     fn check_stmt(stmt: &Stmt) -> bool {
@@ -222,6 +222,35 @@ pub fn emit_level_collision_y(args: &[Expr], out: &mut String, assets: &[crate::
     out.push_str("    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom\n");
     out.push_str("    STB >LCOL_PY         ; store player feet Y for surface filter\n");
     out.push_str("    JSR LEVEL_COLLISION_Y_RUNTIME\n");
+}
+
+/// Emit LEVEL_COLLISION_X(player_x, player_y, player_half_width, player_half_height) → push-out dx
+///
+/// Scans all collidable GP objects and returns a signed 16-bit push-out dx.
+/// Positive = push right, negative = push left, 0 = no horizontal overlap.
+/// player_half_height is used for the Y-overlap test so that hitting the bottom of a block
+/// from below does not trigger a lateral push (threshold = player_hh + obj_hh exactly excludes it).
+pub fn emit_level_collision_x(args: &[Expr], out: &mut String, assets: &[crate::AssetInfo]) {
+    out.push_str("    ; ===== LEVEL_COLLISION_X builtin =====\n");
+    if args.len() < 4 {
+        out.push_str("    ; ERROR: LEVEL_COLLISION_X requires 4 arguments (player_x, player_y, player_half_width, player_half_height)\n");
+        out.push_str("    LDD #0\n");
+        out.push_str("    STD RESULT\n");
+        return;
+    }
+    // arg[0]: player_x → LCOL_PX (16-bit)
+    expressions::emit_simple_expr(&args[0], out, assets);
+    out.push_str("    STD >LCOL_PX         ; store player world_x (16-bit)\n");
+    // arg[2]: player_half_width → LCOL_PHW
+    expressions::emit_simple_expr(&args[2], out, assets);
+    out.push_str("    STB >LCOL_PHW        ; store player half_width\n");
+    // arg[3]: player_half_height → LCOL_PHH (used for Y-overlap; runtime overwrites it with total_hw after Y-check)
+    expressions::emit_simple_expr(&args[3], out, assets);
+    out.push_str("    STB >LCOL_PHH        ; store player half_height for Y-overlap check\n");
+    // arg[1]: player_y lo-byte → LCOL_PY
+    expressions::emit_simple_expr(&args[1], out, assets);
+    out.push_str("    STB >LCOL_PY         ; store player_y lo byte\n");
+    out.push_str("    JSR LEVEL_COLLISION_X_RUNTIME\n");
 }
 
 /// Emit runtime helpers for level system.
@@ -1382,6 +1411,112 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STD RESULT\n");
         out.push_str("    \n");
         out.push_str("    PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)\n");
+        out.push_str("\n");
+    }
+
+    // =========================================================================
+    // LEVEL_COLLISION_X_RUNTIME
+    // =========================================================================
+    if needed.contains("LEVEL_COLLISION_X_RUNTIME") {
+        out.push_str("; === LEVEL_COLLISION_X_RUNTIME ===\n");
+        out.push_str("; Find first collidable GP object overlapping player horizontally.\n");
+        out.push_str("; Input:  LCOL_PX (16-bit) = player world_x\n");
+        out.push_str(";         LCOL_PY (i8) = player world_y lo byte\n");
+        out.push_str(";         LCOL_PHW (u8) = player half_width\n");
+        out.push_str("; Output: RESULT = signed push-out dx (16-bit). Positive=right, negative=left.\n");
+        out.push_str("; Returns 0 if no overlap found.\n");
+        out.push_str("; Scratch: borrows LCOL_PHH (total_hw) during run.\n");
+        out.push_str("; RAM object offsets: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,\n");
+        out.push_str(";   +13=half_width, +14=half_height\n");
+        out.push_str("LEVEL_COLLISION_X_RUNTIME:\n");
+        out.push_str("    PSHS X,Y,U\n");
+        out.push_str("    LDD #0\n");
+        out.push_str("    STD RESULT\n");
+        out.push_str("    TST >LEVEL_LOADED\n");
+        out.push_str("    LBEQ LCOL_X_DONE\n");
+        out.push_str("    LDB >LEVEL_GP_COUNT\n");
+        out.push_str("    LBEQ LCOL_X_DONE\n");
+        out.push_str("    LDX >LEVEL_GP_PTR\n");
+        out.push_str("LCOL_X_LOOP:\n");
+        out.push_str("    TSTB\n");
+        out.push_str("    LBEQ LCOL_X_DONE\n");
+        out.push_str("    PSHS B\n");
+        // Collidable check: collision_flags at +8, bit0 = collidable
+        out.push_str("    LDA 8,X\n");
+        out.push_str("    BITA #$01\n");
+        out.push_str("    LBEQ LCOL_X_NEXT\n");
+        // Y overlap: |player_y - obj_y| < player_hh + obj_half_h
+        // LCOL_PHH = player_half_height (4th arg); prevents lateral push when hitting block from below
+        out.push_str("    LDA >LCOL_PY\n");
+        out.push_str("    SUBA 2,X\n");
+        out.push_str("    BPL LCOL_X_YABS\n");
+        out.push_str("    NEGA\n");
+        out.push_str("LCOL_X_YABS:\n");
+        out.push_str("    LDB 14,X\n");       // B = obj_half_h
+        out.push_str("    ADDB >LCOL_PHH\n"); // B = obj_half_h + player_hh (real threshold)
+        out.push_str("    STB >TMPVAL\n");    // save threshold
+        out.push_str("    CMPA >TMPVAL\n");   // A (|dy|) vs threshold
+        out.push_str("    LBGE LCOL_X_NEXT\n"); // |dy| >= threshold → no Y overlap
+        // total_hw = player_hw + obj_half_w → overwrite LCOL_PHH (player_hh no longer needed)
+        out.push_str("    LDA >LCOL_PHW\n");
+        out.push_str("    ADDA 13,X\n");
+        out.push_str("    STA >LCOL_PHH\n");
+        // left_edge = obj_x - total_hw (16-bit); skip if player_x < left_edge
+        out.push_str("    LDA 0,X\n");
+        out.push_str("    LDB 1,X\n");
+        out.push_str("    SUBB >LCOL_PHH\n");
+        out.push_str("    SBCA #0\n");
+        out.push_str("    STD >TMPVAL\n");
+        out.push_str("    LDD >LCOL_PX\n");
+        out.push_str("    CMPD >TMPVAL\n");
+        out.push_str("    LBLT LCOL_X_NEXT\n");
+        // right_edge = obj_x + total_hw (16-bit); skip if player_x > right_edge
+        out.push_str("    LDA 0,X\n");
+        out.push_str("    LDB 1,X\n");
+        out.push_str("    ADDB >LCOL_PHH\n");
+        out.push_str("    ADCA #0\n");
+        out.push_str("    STD >TMPVAL\n");
+        out.push_str("    LDD >LCOL_PX\n");
+        out.push_str("    CMPD >TMPVAL\n");
+        out.push_str("    LBGT LCOL_X_NEXT\n");
+        // Push-out: dx = player_x_lo - obj_x_lo (8-bit signed approximation)
+        out.push_str("    LDD >LCOL_PX\n");   // D = player_x
+        out.push_str("    SUBB 1,X\n");       // B = player_x_lo - obj_x_lo = dx (signed)
+        out.push_str("    STB >TMPVAL\n");    // save signed dx for direction
+        out.push_str("    TSTB\n");
+        out.push_str("    BPL LCOL_X_DXABS\n");
+        out.push_str("    NEGB\n");           // B = |dx| (when dx was negative)
+        out.push_str("LCOL_X_DXABS:\n");
+        // B = |dx|; compute push_magnitude = total_hw - |dx| via NEGB + ADDB
+        out.push_str("    NEGB\n");           // B = -|dx|
+        out.push_str("    ADDB >LCOL_PHH\n"); // B = total_hw - |dx| = push_magnitude
+        // A = push_magnitude (from TFR B,A above), B = push_magnitude (unchanged)
+        // Load dx sign into B; branch on direction; put push_magnitude back in B for SEX
+        out.push_str("    TFR B,A\n");        // A = push_magnitude (B also = push_magnitude here)
+        out.push_str("    LDB >TMPVAL\n");    // B = original dx (sign reference)
+        out.push_str("    BMI LCOL_X_PUSH_LEFT\n");
+        // Push right (dx >= 0): D = $00:push_magnitude
+        out.push_str("    TFR A,B\n");        // B = push_magnitude (A unchanged)
+        out.push_str("    SEX\n");            // D = sign_extend(B=push_magnitude) = $00:push_magnitude
+        out.push_str("    STD RESULT\n");
+        out.push_str("    PULS B\n");
+        out.push_str("    LBRA LCOL_X_DONE\n");
+        out.push_str("LCOL_X_PUSH_LEFT:\n");
+        // Push left (dx < 0): D = $FF:(-push_magnitude)
+        out.push_str("    NEGA\n");           // A = -push_magnitude
+        out.push_str("    TFR A,B\n");        // B = -push_magnitude
+        out.push_str("    SEX\n");            // D = sign_extend(B=-push_magnitude) = $FF:(-push_magnitude)
+        out.push_str("    STD RESULT\n");
+        out.push_str("    PULS B\n");
+        out.push_str("    LBRA LCOL_X_DONE\n");
+        out.push_str("LCOL_X_NEXT:\n");
+        out.push_str("    LEAX 15,X\n");
+        out.push_str("    PULS B\n");
+        out.push_str("    DECB\n");
+        out.push_str("    LBRA LCOL_X_LOOP\n");
+        out.push_str("LCOL_X_DONE:\n");
+        out.push_str("    LDD RESULT\n");   // reload result into D (PULS B in loop corrupts B)
+        out.push_str("    PULS X,Y,U,PC\n");
         out.push_str("\n");
     }
 }

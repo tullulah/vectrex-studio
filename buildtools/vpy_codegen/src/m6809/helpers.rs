@@ -140,6 +140,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         || needed.contains("LOAD_LEVEL") || needed.contains("LOAD_LEVEL_RUNTIME")
         || needed.contains("UPDATE_LEVEL_RUNTIME")
         || needed.contains("LEVEL_COLLISION_Y_RUNTIME")
+        || needed.contains("LEVEL_COLLISION_X_RUNTIME")
     {
         ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level header");
         ram.allocate("LEVEL_LOADED", 1, "Level loaded flag (0=not loaded, 1=loaded)");
@@ -175,10 +176,11 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         // GP objects RAM buffer (max 32 objects × 15 bytes)
         ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
         // LEVEL_COLLISION_Y input/scratch variables
-        ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION_Y player world_x input (16-bit)");
+        ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION player world_x input (16-bit)");
         ram.allocate("LCOL_BEST_Y", 1, "LEVEL_COLLISION_Y best floor y found (signed byte)");
-        ram.allocate("LCOL_PY", 1, "LEVEL_COLLISION_Y player feet Y (player_y - player_hh)");
-        ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION_Y player half_height");
+        ram.allocate("LCOL_PY", 1, "LEVEL_COLLISION player_y (lo byte)");
+        ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION player half_height");
+        ram.allocate("LCOL_PHW", 1, "LEVEL_COLLISION_X player half_width");
         // Physics / collision temporaries
         ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
         ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
@@ -370,6 +372,9 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             }
             if name_upper == "LEVEL_COLLISION_Y" {
                 needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
+            }
+            if name_upper == "LEVEL_COLLISION_X" {
+                needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
             }
             
 // Math helpers: Need runtime if operands contain variables
