@@ -13,6 +13,8 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
+import { useEditorStore } from '../state/editorStore';
+import { useProjectStore } from '../state/projectStore';
 
 // ============================================
 // Types
@@ -47,6 +49,12 @@ interface AnimationEditorProps {
   resource?: VanimResource;
   onChange?: (resource: VanimResource) => void;
 }
+
+// .vec types (subset needed for rendering)
+interface VecPoint { x: number; y: number; }
+interface VecPath { name: string; intensity: number; closed: boolean; points: VecPoint[]; }
+interface VecLayer { name: string; visible: boolean; paths: VecPath[]; }
+interface VecResource { layers: VecLayer[]; }
 
 type Tool = 'select' | 'pen';
 
@@ -85,6 +93,32 @@ function canvasToWorld(
   };
 }
 
+// Search project directory tree for a .vec file by asset name
+async function findVecFile(name: string, rootPath: string): Promise<string | null> {
+  const target = `${name}.vec`;
+  // Common locations to check first (fast path)
+  const candidates = [
+    `${rootPath}/assets/vectors/${target}`,
+    `${rootPath}/assets/${target}`,
+    `${rootPath}/vectors/${target}`,
+  ];
+  for (const p of candidates) {
+    try {
+      const r = await (window as any).files?.readFile?.(p);
+      if (r) return p;
+    } catch { /* not found */ }
+  }
+  // Fallback: ask the OS to list the assets/vectors dir
+  try {
+    const dir = await (window as any).files?.readDirectory?.(`${rootPath}/assets/vectors`);
+    if (dir?.files) {
+      const found = (dir.files as Array<{path: string}>).find(f => f.path.endsWith(`/${target}`));
+      if (found) return found.path;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 // ============================================
 // Canvas drawing
 // ============================================
@@ -97,7 +131,8 @@ function drawFrame(
   selectedPathIdx: number | null,
   hoverPoint: { pathIdx: number; ptIdx: number } | null,
   zoom: number,
-  pan: { x: number; y: number }
+  pan: { x: number; y: number },
+  resolvedVecs: Map<string, VecResource>
 ): void {
   ctx.clearRect(0, 0, w, h);
 
@@ -147,21 +182,49 @@ function drawFrame(
   ctx.lineTo(w, originY);
   ctx.stroke();
 
-  // Draw vec_refs as grey dashed placeholder boxes
+  // Draw vec_refs — resolved if available, grey placeholder otherwise
   frame.vec_refs.forEach((ref) => {
-    const boxHalf = 40 * scale * zoom;
-    ctx.save();
-    ctx.strokeStyle = '#555577';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    ctx.strokeRect(originX - boxHalf, originY - boxHalf, boxHalf * 2, boxHalf * 2);
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#555577';
-    ctx.font = `${Math.max(10, 12 * scale)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`[${ref}]`, originX, originY);
-    ctx.restore();
+    const vec = resolvedVecs.get(ref);
+    if (vec) {
+      ctx.save();
+      for (const layer of vec.layers) {
+        if (!layer.visible) continue;
+        for (const path of layer.paths) {
+          if (path.points.length === 0) continue;
+          const brightness = path.intensity / 127;
+          const v = Math.round(255 * brightness);
+          ctx.strokeStyle = `rgb(${v},${v},${v})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          const [x0, y0] = toCanvas(path.points[0]);
+          ctx.moveTo(x0, y0);
+          for (let i = 1; i < path.points.length; i++) {
+            const [xi, yi] = toCanvas(path.points[i]);
+            ctx.lineTo(xi, yi);
+          }
+          if (path.closed && path.points.length > 2) {
+            ctx.closePath();
+          }
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    } else {
+      // Placeholder for unresolved vec
+      const boxHalf = 40 * scale * zoom;
+      ctx.save();
+      ctx.strokeStyle = '#555577';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(originX - boxHalf, originY - boxHalf, boxHalf * 2, boxHalf * 2);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#555577';
+      ctx.font = `${Math.max(10, 12 * scale)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`[${ref}]`, originX, originY);
+      ctx.restore();
+    }
   });
 
   // Draw inline paths
@@ -355,12 +418,61 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
     startPan: { x: number; y: number };
   } | null>(null);
 
+  // Resolved .vec assets for vec_refs rendering
+  const [resolvedVecs, setResolvedVecs] = useState<Map<string, VecResource>>(new Map());
+  const documents = useEditorStore(s => s.documents);
+  const projectRoot = useProjectStore(s => s.project?.rootPath);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const safeFrameIdx = Math.min(selectedFrameIdx, res.frames.length - 1);
   const currentFrame = res.frames[safeFrameIdx] ?? res.frames[0];
+
+  // ---- Resolve vec_refs from open documents or disk ----
+  // Collect all unique vec ref names across all frames
+  const allVecRefs = useMemo(() => {
+    const names = new Set<string>();
+    for (const frame of res.frames) {
+      for (const name of frame.vec_refs) names.add(name);
+    }
+    return Array.from(names);
+  }, [res.frames]);
+
+  useEffect(() => {
+    if (allVecRefs.length === 0) return;
+    const next = new Map<string, VecResource>();
+
+    const tryLoad = async () => {
+      for (const name of allVecRefs) {
+        // 1. Check open documents first
+        const doc = documents.find(d => d.uri.endsWith(`/${name}.vec`));
+        if (doc?.content) {
+          try {
+            next.set(name, JSON.parse(doc.content) as VecResource);
+            continue;
+          } catch { /* fall through */ }
+        }
+
+        // 2. Search project file tree for the .vec file and read from disk
+        if (projectRoot) {
+          // Search recursively through project for assets/vectors/<name>.vec
+          const diskPath = await findVecFile(name, projectRoot);
+          if (diskPath) {
+            try {
+              const result = await (window as any).files?.readFile?.(diskPath);
+              const content = typeof result === 'string' ? result : result?.content;
+              if (content) next.set(name, JSON.parse(content) as VecResource);
+            } catch { /* ignore */ }
+          }
+        }
+      }
+      setResolvedVecs(new Map(next));
+    };
+
+    tryLoad();
+  }, [allVecRefs, documents, projectRoot]);
 
   // ---- Canvas drawing ----
 
@@ -387,9 +499,10 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         ? { pathIdx: hoverPoint.pathIdx, ptIdx: hoverPoint.ptIdx }
         : null,
       zoom,
-      pan
+      pan,
+      resolvedVecs
     );
-  }, [currentFrame, selectedPathIdx, hoverPoint, safeFrameIdx, zoom, pan]);
+  }, [currentFrame, selectedPathIdx, hoverPoint, safeFrameIdx, zoom, pan, resolvedVecs]);
 
   // ---- Playback ----
 
@@ -841,12 +954,13 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
           ? { pathIdx: hoverPoint.pathIdx, ptIdx: hoverPoint.ptIdx }
           : null,
         zoom,
-        pan
+        pan,
+        resolvedVecs
       );
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [currentFrame, selectedPathIdx, hoverPoint, zoom, pan]);
+  }, [currentFrame, selectedPathIdx, hoverPoint, zoom, pan, resolvedVecs]);
 
   // ---- Inline path list (memoized) ----
 
