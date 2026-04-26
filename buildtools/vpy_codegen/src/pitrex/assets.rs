@@ -260,6 +260,14 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
     let mut tones: Vec<ToneInterval> = Vec::new();
     let mut noises: Vec<NoiseInterval> = Vec::new();
 
+    // Pre-collect tone intervals so the noise loop can avoid clobbering tone volumes.
+    let tone_intervals_early: Vec<(usize, u32, u32)> = vmus.notes.iter().map(|n| {
+        let ch  = n.channel.min(2) as usize;
+        let on  = tick_to_frame(n.start);
+        let off = tick_to_frame(n.start + n.duration);
+        (ch, on, off)
+    }).collect();
+
     // --- Noise first (lower priority — tone amplitude will overwrite on same frame) ---
     for noise in &vmus.noise {
         let on_f  = tick_to_frame(noise.start);
@@ -269,10 +277,19 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         frame_writes.entry(on_f).or_default().push((6, noise.period));
         for ch in 0..3u8 {
             if noise.channels & (1 << ch) != 0 {
-                // Note: dedup keeps LAST write per reg per frame.
-                // If a tone note also starts on this frame, tone amplitude is pushed later → wins.
-                frame_writes.entry(on_f).or_default().push((8 + ch, amp));
-                frame_writes.entry(off_f).or_default().push((8 + ch, 0));
+                let ch_idx = ch as usize;
+                // Only write noise amplitude when no tone is already playing on this channel.
+                let tone_active_at_on = tone_intervals_early.iter()
+                    .any(|&(tc, ton, toff)| tc == ch_idx && ton < on_f && on_f < toff);
+                if !tone_active_at_on {
+                    frame_writes.entry(on_f).or_default().push((8 + ch, amp));
+                }
+                // Noise-off: only write vol=0 if no tone note is still playing past this frame.
+                let tone_extends_past_off = tone_intervals_early.iter()
+                    .any(|&(tc, ton, toff)| tc == ch_idx && ton <= off_f && toff > off_f);
+                if !tone_extends_past_off {
+                    frame_writes.entry(off_f).or_default().push((8 + ch, 0));
+                }
             }
         }
         noises.push(NoiseInterval { on: on_f, off: off_f, ch_mask: noise.channels, period: noise.period });
