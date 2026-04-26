@@ -126,6 +126,11 @@ function stackPop(s: PitrexArm32State): number {
 // CMP / flag setting
 // ---------------------------------------------------------------------------
 
+function setNZFlags(s: PitrexArm32State, val: number): void {
+  s.N = val < 0 ? 1 : 0;
+  s.Z = val === 0 ? 1 : 0;
+}
+
 function setCmpFlags(s: PitrexArm32State, a: number, b: number): void {
   const a32  = a | 0;
   const b32  = b | 0;
@@ -626,10 +631,13 @@ function executeOne(s: PitrexArm32State): boolean {
           else if (shiftOp.startsWith('lsr')) val = (val >>> shiftAmt) | 0;
           else if (shiftOp.startsWith('asr')) val = (val >> shiftAmt) | 0;
           setReg(s, rd, val);
+          if (op === 'movs') setNZFlags(s, val);
           break;
         }
       }
-      setReg(s, rd, resolveOp(s, operands[1] ?? '#0'));
+      const movVal = resolveOp(s, operands[1] ?? '#0');
+      setReg(s, rd, movVal);
+      if (op === 'movs') setNZFlags(s, movVal | 0);
       break;
     }
 
@@ -732,11 +740,13 @@ function executeOne(s: PitrexArm32State): boolean {
           else if (shiftOp.startsWith('lsr')) rmVal = (rmVal >>> shiftAmt) | 0;
           else if (shiftOp.startsWith('asr')) rmVal = (rmVal >> shiftAmt) | 0;
           setReg(s, rd, (a + rmVal) | 0);
+          if (op === 'adds') setAddFlags(s, a, rmVal);
           break;
         }
       }
       const b = resolveFlexOp(s, operands, 2);
       setReg(s, rd, (a + b) | 0);
+      if (op === 'adds') setAddFlags(s, a, b);
       break;
     }
 
@@ -748,6 +758,7 @@ function executeOne(s: PitrexArm32State): boolean {
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2);
       setReg(s, rd, (a - b) | 0);
+      if (op === 'subs') setCmpFlags(s, a, b);
       break;
     }
 
@@ -759,6 +770,7 @@ function executeOne(s: PitrexArm32State): boolean {
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2);
       setReg(s, rd, (b - a) | 0);  // rd = operand3 - rn
+      if (op === 'rsbs') setCmpFlags(s, b, a);
       break;
     }
 
@@ -779,7 +791,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rm = regIdx(operands[2] ?? '');
       if (rd < 0 || rn < 0 || rm < 0) break;
       // Use Math.imul for correct 32-bit signed multiply
-      setReg(s, rd, Math.imul(getReg(s, rn), getReg(s, rm)));
+      const mulRes = Math.imul(getReg(s, rn), getReg(s, rm));
+      setReg(s, rd, mulRes);
+      if (op === 'muls') setNZFlags(s, mulRes | 0);
       break;
     }
 
@@ -790,7 +804,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2);
-      setReg(s, rd, (a & b) | 0);
+      const andRes = (a & b) | 0;
+      setReg(s, rd, andRes);
+      if (op === 'ands') setNZFlags(s, andRes);
       break;
     }
 
@@ -801,7 +817,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2);
-      setReg(s, rd, (a | b) | 0);
+      const orrRes = (a | b) | 0;
+      setReg(s, rd, orrRes);
+      if (op === 'orrs') setNZFlags(s, orrRes);
       break;
     }
 
@@ -812,7 +830,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2);
-      setReg(s, rd, (a ^ b) | 0);
+      const eorRes = (a ^ b) | 0;
+      setReg(s, rd, eorRes);
+      if (op === 'eors') setNZFlags(s, eorRes);
       break;
     }
 
@@ -823,7 +843,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2);
-      setReg(s, rd, (a & ~b) | 0);
+      const bicRes = (a & ~b) | 0;
+      setReg(s, rd, bicRes);
+      if (op === 'bics') setNZFlags(s, bicRes);
       break;
     }
 
@@ -834,7 +856,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2) & 0x1F;
-      setReg(s, rd, (a << b) | 0);
+      const lslRes = (a << b) | 0;
+      setReg(s, rd, lslRes);
+      if (op === 'lsls') setNZFlags(s, lslRes);
       break;
     }
     case 'lsr': case 'lsrs': {
@@ -843,7 +867,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2) & 0x1F;
-      setReg(s, rd, (a >>> b) | 0);
+      const lsrRes = (a >>> b) | 0;
+      setReg(s, rd, lsrRes);
+      if (op === 'lsrs') setNZFlags(s, lsrRes);
       break;
     }
     case 'asr': case 'asrs': {
@@ -852,7 +878,9 @@ function executeOne(s: PitrexArm32State): boolean {
       const rn = regIdx(operands[1] ?? '');
       const a  = rn >= 0 ? getReg(s, rn) : 0;
       const b  = resolveFlexOp(s, operands, 2) & 0x1F;
-      setReg(s, rd, (a >> b) | 0);
+      const asrRes = (a >> b) | 0;
+      setReg(s, rd, asrRes);
+      if (op === 'asrs') setNZFlags(s, asrRes);
       break;
     }
     case 'ror': case 'rors': {
