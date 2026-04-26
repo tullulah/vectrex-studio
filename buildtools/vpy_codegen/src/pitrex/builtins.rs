@@ -516,16 +516,17 @@ fn emit_pitrex_draw_rect() -> String {
 }
 
 fn emit_pitrex_draw_circle() -> String {
-    // pitrex_draw_circle(r0=x, r1=y, r2=radius, r3=brightness)
-    // 8-segment approximation. Coords scaled ×192. Constants 1024/724 > 255
-    // so use ldr =N (literal pool) instead of mov #N.
+    // pitrex_draw_circle(r0=cx, r1=cy, r2=diameter, r3=brightness)
+    // The 3rd argument is the *diameter* (matches M6809/rp2350); we halve it
+    // before scaling by 100 so the unit-circle constants (×1024) produce the
+    // correct radius after the >>10. 16-segment approximation (22.5° each).
     let mut s = String::new();
-    s.push_str("@ pitrex_draw_circle(r0=x, r1=y, r2=radius, r3=brightness)\n");
+    s.push_str("@ pitrex_draw_circle(r0=cx, r1=cy, r2=diameter, r3=brightness)\n");
     s.push_str(".global pitrex_draw_circle\n.type pitrex_draw_circle, %function\npitrex_draw_circle:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
     s.push_str("    mov     r4, r0          @ cx\n");
     s.push_str("    mov     r5, r1          @ cy\n");
-    s.push_str("    mov     r6, r2          @ radius\n");
+    s.push_str("    asr     r6, r2, #1      @ radius = diameter/2\n");
     s.push_str("    mov     r7, r3          @ brightness\n");
     s.push_str("    mov     r0, #100\n");
     s.push_str("    mul     r4, r4, r0\n");
@@ -548,17 +549,29 @@ fn emit_pitrex_draw_circle() -> String {
         s.push_str(&format!("    add     {reg}, {reg}, {base}\n"));
     }
 
-    let segments: [(i32,i32,i32,i32); 8] = [
-        (1024,0,    724,724),
-        (724,724,   0,1024),
-        (0,1024,    -724,724),
-        (-724,724,  -1024,0),
-        (-1024,0,   -724,-724),
-        (-724,-724, 0,-1024),
-        (0,-1024,   724,-724),
-        (724,-724,  1024,0),
+    // 16-segment unit-circle table × 1024 — vertex k = (cos(k*22.5°), sin(k*22.5°)).
+    let pts: [(i32,i32); 17] = [
+        (1024, 0),
+        (946, 392),
+        (724, 724),
+        (392, 946),
+        (0, 1024),
+        (-392, 946),
+        (-724, 724),
+        (-946, 392),
+        (-1024, 0),
+        (-946, -392),
+        (-724, -724),
+        (-392, -946),
+        (0, -1024),
+        (392, -946),
+        (724, -724),
+        (946, -392),
+        (1024, 0),
     ];
-    for (x0s,y0s,x1s,y1s) in segments {
+    for i in 0..16 {
+        let (x0s, y0s) = pts[i];
+        let (x1s, y1s) = pts[i + 1];
         arm_coord(&mut s, "r0", x0s, "r4");
         arm_coord(&mut s, "r1", y0s, "r5");
         arm_coord(&mut s, "r2", x1s, "r4");
