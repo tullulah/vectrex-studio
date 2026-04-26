@@ -82,6 +82,6 @@ def loop():
     SHOW_LEVEL()
 
     # Draw player at fixed screen position (player_y = sprite center)
-    DRAW_VECTOR("mario", -30, player_y)
+    DRAW_ANIM("mario_walk")
     debug_print(floor_y)
     debug_print(player_y)

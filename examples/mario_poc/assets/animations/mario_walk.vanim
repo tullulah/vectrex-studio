@@ -2,13 +2,28 @@
   "version": "1.0",
   "name": "mario_walk",
   "loop": true,
-  "base_refs": ["mario"],
+  "base_refs": ["mario_body"],
   "frames": [
     {
       "index": 0,
       "duration_ticks": 6,
       "vec_refs": [],
-      "paths": []
+      "paths": [
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "points": [
+            { "x": -7, "y": -5 }, { "x": -7, "y": -11 }, { "x": -2, "y": -11 }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "points": [
+            { "x": 7, "y": -5 }, { "x": 7, "y": -11 }, { "x": 2, "y": -11 }
+          ]
+        }
+      ]
     },
     {
       "index": 1,
@@ -19,16 +34,14 @@
           "name": "left_leg",
           "intensity": 127,
           "points": [
-            { "x": -3, "y": -13 },
-            { "x": -6, "y": -21 }
+            { "x": -7, "y": -5 }, { "x": -10, "y": -11 }, { "x": -5, "y": -11 }
           ]
         },
         {
           "name": "right_leg",
           "intensity": 127,
           "points": [
-            { "x": 3, "y": -13 },
-            { "x": 3, "y": -21 }
+            { "x": 7, "y": -5 }, { "x": 4, "y": -11 }, { "x": 9, "y": -11 }
           ]
         }
       ]
@@ -37,7 +50,22 @@
       "index": 2,
       "duration_ticks": 6,
       "vec_refs": [],
-      "paths": []
+      "paths": [
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "points": [
+            { "x": -7, "y": -5 }, { "x": -7, "y": -11 }, { "x": -2, "y": -11 }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "points": [
+            { "x": 7, "y": -5 }, { "x": 7, "y": -11 }, { "x": 2, "y": -11 }
+          ]
+        }
+      ]
     },
     {
       "index": 3,
@@ -48,16 +76,14 @@
           "name": "left_leg",
           "intensity": 127,
           "points": [
-            { "x": -3, "y": -13 },
-            { "x": -3, "y": -21 }
+            { "x": -7, "y": -5 }, { "x": -4, "y": -11 }, { "x": 1, "y": -11 }
           ]
         },
         {
           "name": "right_leg",
           "intensity": 127,
           "points": [
-            { "x": 3, "y": -13 },
-            { "x": 6, "y": -21 }
+            { "x": 7, "y": -5 }, { "x": 10, "y": -11 }, { "x": 5, "y": -11 }
           ]
         }
       ]
