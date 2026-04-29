@@ -2329,13 +2329,10 @@ export const EmulatorPanel: React.FC = () => {
           }
 
           // PiTrex coordinate → canvas pixel conversion constants
-          // Pitrex coords = VPy × PITREX_COORD_SCALE(100).
-          // To get equal px/VPy in both axes (matching JSVecX equal-scale rendering):
-          //   PITREX_MAX = canvas_half × PITREX_COORD_SCALE² / T1(128) = canvas_half × 78.125
-          // PITREX_MAX_X = 165 × 78.125 = 12891, PITREX_MAX_Y = 205 × 78.125 = 16016
-          // Both give 1.280 px/VPy, matching JSVecX which renders Vectrex with equal X/Y scale.
-          const PITREX_MAX_X = 12891;
-          const PITREX_MAX_Y = 16016;
+          // Pitrex coords = VPy × 100. Hardware physical range: ±18000 X, ±24000 Y.
+          // VPy ±127 × 100 = ±12700 fills ~70% of hardware range, matching actual rendering.
+          const PITREX_MAX_X = 18000;
+          const PITREX_MAX_Y = 24000;
 
           const TARGET_MS = 1000 / 50;  // 50 Hz (PiTrex default)
           let lastFrameTs = 0;

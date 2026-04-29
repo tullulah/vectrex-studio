@@ -221,7 +221,7 @@ pub fn emit_expr(
 /// Builtins whose first argument is an asset name (string literal → ROM symbol address).
 const ASSET_BUILTINS: &[&str] = &[
     "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
-    "LOAD_LEVEL", "SHOW_LEVEL", "DRAW_ANIM",
+    "LOAD_LEVEL", "SHOW_LEVEL",
 ];
 
 /// Builtins that contain string literals in any position — handled by stripping them
@@ -516,6 +516,32 @@ pub fn emit_call(
             s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
             s.push_str("    bl      pitrex_draw_vector_ex\n");
             s.push_str("    add     sp, sp, #4\n"); // discard intensity from stack
+            return Ok(s);
+        }
+    }
+
+    // Special case: DRAW_ANIM("name", ox, oy) — animation asset, symbol is _ANIM_NAME
+    if info.name == "DRAW_ANIM" {
+        if let Some(Expr::StringLit(anim_name)) = args.first() {
+            let sym = anim_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_ANIM_{sym}");
+            // push anim ptr, push ox, push oy; then pop r2=oy, r1=ox, r0=anim ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ animation '{anim_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            if args.len() >= 3 {
+                s.push_str(&emit_arg(&args[1], var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            if args.len() >= 3 {
+                s.push_str(&emit_arg(&args[2], var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      pitrex_draw_anim\n");
             return Ok(s);
         }
     }

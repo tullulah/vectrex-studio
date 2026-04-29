@@ -9,18 +9,26 @@ interface SettingsState {
   setCompiler: (compiler: CompilerBackend) => void;
   buildTarget: BuildTarget;
   setBuildTarget: (target: BuildTarget) => void;
+  pitrexCopyToSD: boolean;
+  setPitrexCopyToSD: (value: boolean) => void;
+  pitrexSdPath: string;
+  setPitrexSdPath: (path: string) => void;
 }
 
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
-      compiler: 'buildtools', // Default to new buildtools compiler
+      compiler: 'buildtools',
       setCompiler: (compiler) => set({ compiler }),
-      buildTarget: 'm6809', // Default target
+      buildTarget: 'm6809',
       setBuildTarget: (buildTarget) => set({ buildTarget }),
+      pitrexCopyToSD: false,
+      setPitrexCopyToSD: (pitrexCopyToSD) => set({ pitrexCopyToSD }),
+      pitrexSdPath: '',
+      setPitrexSdPath: (pitrexSdPath) => set({ pitrexSdPath }),
     }),
     {
-      name: 'vpy-settings', // localStorage key
+      name: 'vpy-settings',
     }
   )
 );

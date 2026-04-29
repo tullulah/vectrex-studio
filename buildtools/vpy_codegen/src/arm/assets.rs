@@ -4,6 +4,7 @@
 
 use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
+use crate::animres::VanimResource;
 use std::collections::BTreeMap;
 use std::fs;
 use serde::Deserialize;
@@ -205,6 +206,25 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 };
                 s.push_str(&level.compile_to_arm_asm());
+            }
+            AssetType::Animation => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _ANIM_{sym}\n_ANIM_{sym}:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let resource: VanimResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _ANIM_{sym}\n_ANIM_{sym}:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vanim_for_arm(&resource, &asset.name));
             }
             #[allow(unreachable_patterns)]
             _ => {
@@ -734,4 +754,55 @@ fn emit_split_segment_arm(s: &mut String, dx: i16, dy: i16) {
             sub_dy as u8, sub_dx as u8, sub_dy, sub_dx
         ));
     }
+}
+
+// ============================================================
+// Animation asset emitter (ARM 32-bit .word pointers)
+// ============================================================
+// Same format as pitrex/assets.rs compile_vanim_for_arm.
+// Header uses .byte for fixed fields and .word for ARM absolute ptrs.
+
+fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
+    let sym = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let mut s = String::new();
+
+    let base_ref_count = resource.base_refs.len();
+    let frame_count = resource.frames.len();
+    let loop_flag: u8 = if resource.r#loop { 1 } else { 0 };
+    let frame_table_offset = 4 + base_ref_count * 4;
+
+    s.push_str(&format!("@ --- Animation: {} ({} frames, {} base_refs) ---\n",
+        asset_name, frame_count, base_ref_count));
+    s.push_str(".balign 4\n");
+    s.push_str(&format!(".global _ANIM_{sym}\n"));
+    s.push_str(&format!("_ANIM_{sym}:\n"));
+    s.push_str(&format!("    .byte {}, {}, {}, {}  @ frame_count, loop, base_ref_count, frame_table_offset\n",
+        frame_count, loop_flag, base_ref_count, frame_table_offset));
+
+    for base_ref in &resource.base_refs {
+        let bsym = base_ref.to_uppercase().replace('-', "_").replace(' ', "_");
+        s.push_str(&format!("    .word _{bsym}_VECTORS  @ base_ref '{base_ref}'\n"));
+    }
+
+    for frame in &resource.frames {
+        s.push_str(&format!("    .word _ANIM_{sym}_F{}  @ frame {}\n", frame.index, frame.index));
+    }
+
+    for frame in &resource.frames {
+        let vec_ref_count = frame.vec_refs.len();
+        s.push_str(".balign 4\n");
+        s.push_str(&format!("_ANIM_{sym}_F{}:\n", frame.index));
+        s.push_str(&format!("    .byte {}, {}  @ duration_ticks, vec_ref_count\n",
+            frame.duration_ticks, vec_ref_count));
+        if vec_ref_count > 0 {
+            s.push_str("    .byte 0, 0  @ alignment padding\n");
+        }
+        for vec_ref in &frame.vec_refs {
+            let vsym = vec_ref.to_uppercase().replace('-', "_").replace(' ', "_");
+            s.push_str(&format!("    .word _{vsym}_VECTORS  @ vec_ref '{vec_ref}'\n"));
+        }
+        s.push_str("    .byte 0  @ inline_path_count (not rendered on ARM)\n");
+    }
+    s.push('\n');
+    s
 }

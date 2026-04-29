@@ -150,6 +150,12 @@ fn validate_builtin_arity(name: &str, arg_count: usize) -> Result<(), String> {
             }
             return Ok(());
         }
+        "DRAW_ANIM" => {
+            if arg_count != 1 && arg_count != 3 && arg_count != 4 {
+                return Err(format!("DRAW_ANIM requires 1, 3, or 4 arguments (name, name+x+y, or name+x+y+mirror), got {}", arg_count));
+            }
+            return Ok(());
+        }
         _ => {}
     }
     
@@ -753,10 +759,33 @@ pub fn emit_builtin(
         }
         
         // ===== Animation =====
+        // DRAW_ANIM("name")              — draw at DRAW_VEC_X/Y (caller must set)
+        // DRAW_ANIM("name", x, y)        — draw at screen position (x, y)
+        // DRAW_ANIM("name", x, y, mir)   — draw with X mirror flag
         "DRAW_ANIM" => {
             if let Some(Expr::StringLit(anim_name)) = args.first() {
                 let name_upper = anim_name.to_uppercase().replace('-', "_").replace(' ', "_");
                 out.push_str(&format!("    ; DRAW_ANIM: draw animation '{}'\n", anim_name));
+                if args.len() >= 3 {
+                    // Set X position
+                    expressions::emit_simple_expr(&args[1], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_VEC_X\n");
+                    // Set Y position
+                    expressions::emit_simple_expr(&args[2], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_VEC_Y\n");
+                } else {
+                    out.push_str("    CLR DRAW_VEC_X\n");
+                    out.push_str("    CLR DRAW_VEC_Y\n");
+                }
+                if args.len() >= 4 {
+                    expressions::emit_simple_expr(&args[3], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_ANIM_MIRROR_X\n");
+                } else {
+                    out.push_str("    CLR DRAW_ANIM_MIRROR_X\n");
+                }
                 out.push_str(&format!("    LDX #_ANIM_{}\n", name_upper));
                 out.push_str(&format!("    LDU #ANIM_{}_STATE\n", name_upper));
                 out.push_str("    JSR DRAW_ANIM_RUNTIME\n");

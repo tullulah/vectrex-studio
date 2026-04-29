@@ -41,22 +41,22 @@ def loop():
     if ball_x > 97:
         ball_vx = 0 - ball_vx
         ball_x = 97
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     if ball_x < -97:
         ball_vx = 0 - ball_vx
         ball_x = -97
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     if ball_y > 77:
         ball_vy = 0 - ball_vy
         ball_y = 77
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     if ball_y < -77:
         ball_vy = 0 - ball_vy
         ball_y = -77
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     # Move bubble
     bub_x = bub_x + bub_vx
@@ -66,22 +66,22 @@ def loop():
     if bub_x > 90:
         bub_vx = 0 - bub_vx
         bub_x = 90
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     if bub_x < -90:
         bub_vx = 0 - bub_vx
         bub_x = -90
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     if bub_y > 70:
         bub_vy = 0 - bub_vy
         bub_y = 70
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     if bub_y < -70:
         bub_vy = 0 - bub_vy
         bub_y = -70
-        PLAY_SFX("hit")
+        #PLAY_SFX("hit")
 
     # Draw sprites at their positions
     DRAW_VECTOR("ball", ball_x, ball_y)

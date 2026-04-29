@@ -48,6 +48,8 @@ function App() {
   // Settings
   const compilerBackend = useSettings(s => s.compiler);
   const buildTarget = useSettings(s => s.buildTarget);
+  const pitrexCopyToSD = useSettings(s => s.pitrexCopyToSD);
+  const pitrexSdPath = useSettings(s => s.pitrexSdPath);
 
   const initializedRef = useRef(false);
 
@@ -490,7 +492,9 @@ function App() {
         path: filePath,
         autoStart: autoRun,
         compilerBackend, // from useSettings
-        target: buildTarget // from useSettings
+        target: buildTarget, // from useSettings
+        pitrexCopyToSD,
+        pitrexSdPath,
       };
 
       // If building from project, include output path
@@ -602,7 +606,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend, buildTarget]);
+  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -803,7 +807,9 @@ def loop():
             path: filePath,
             autoStart: false,  // No auto-run, queremos control manual
             compilerBackend, // from useSettings
-            target: buildTarget // from useSettings
+            target: buildTarget, // from useSettings
+            pitrexCopyToSD,
+            pitrexSdPath,
           };
 
           // Si el documento está sucio, enviarlo para que se guarde antes de compilar

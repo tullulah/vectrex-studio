@@ -81,7 +81,7 @@ def loop():
     SET_CAMERA_X(camera_x)
     SHOW_LEVEL()
 
-    # Draw player at fixed screen position (player_y = sprite center)
-    DRAW_ANIM("mario_walk")
+    # Draw player at fixed screen position (screen_x=-30, player_y = sprite center)
+    DRAW_ANIM("mario_walk", -30, player_y)
     debug_print(floor_y)
     debug_print(player_y)

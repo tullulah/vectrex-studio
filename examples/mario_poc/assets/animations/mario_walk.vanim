@@ -7,86 +7,26 @@
     {
       "index": 0,
       "duration_ticks": 6,
-      "vec_refs": [],
-      "paths": [
-        {
-          "name": "left_leg",
-          "intensity": 127,
-          "points": [
-            { "x": -7, "y": -5 }, { "x": -7, "y": -11 }, { "x": -2, "y": -11 }
-          ]
-        },
-        {
-          "name": "right_leg",
-          "intensity": 127,
-          "points": [
-            { "x": 7, "y": -5 }, { "x": 7, "y": -11 }, { "x": 2, "y": -11 }
-          ]
-        }
-      ]
+      "vec_refs": ["mario_legs_straight"],
+      "paths": []
     },
     {
       "index": 1,
       "duration_ticks": 6,
-      "vec_refs": [],
-      "paths": [
-        {
-          "name": "left_leg",
-          "intensity": 127,
-          "points": [
-            { "x": -7, "y": -5 }, { "x": -10, "y": -11 }, { "x": -5, "y": -11 }
-          ]
-        },
-        {
-          "name": "right_leg",
-          "intensity": 127,
-          "points": [
-            { "x": 7, "y": -5 }, { "x": 4, "y": -11 }, { "x": 9, "y": -11 }
-          ]
-        }
-      ]
+      "vec_refs": ["mario_legs_stride_a"],
+      "paths": []
     },
     {
       "index": 2,
       "duration_ticks": 6,
-      "vec_refs": [],
-      "paths": [
-        {
-          "name": "left_leg",
-          "intensity": 127,
-          "points": [
-            { "x": -7, "y": -5 }, { "x": -7, "y": -11 }, { "x": -2, "y": -11 }
-          ]
-        },
-        {
-          "name": "right_leg",
-          "intensity": 127,
-          "points": [
-            { "x": 7, "y": -5 }, { "x": 7, "y": -11 }, { "x": 2, "y": -11 }
-          ]
-        }
-      ]
+      "vec_refs": ["mario_legs_straight"],
+      "paths": []
     },
     {
       "index": 3,
       "duration_ticks": 6,
-      "vec_refs": [],
-      "paths": [
-        {
-          "name": "left_leg",
-          "intensity": 127,
-          "points": [
-            { "x": -7, "y": -5 }, { "x": -4, "y": -11 }, { "x": 1, "y": -11 }
-          ]
-        },
-        {
-          "name": "right_leg",
-          "intensity": 127,
-          "points": [
-            { "x": 7, "y": -5 }, { "x": 10, "y": -11 }, { "x": 5, "y": -11 }
-          ]
-        }
-      ]
+      "vec_refs": ["mario_legs_stride_b"],
+      "paths": []
     }
   ]
 }

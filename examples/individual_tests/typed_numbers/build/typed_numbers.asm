@@ -2778,15 +2778,17 @@ pitrex_draw_vector_3d:
 .global pitrex_print_number
 .type pitrex_print_number, %function
 pitrex_print_number:
-    push    {r4, r5, r6, r7, r8, lr}
+    push    {r4, r5, r6, r7, r8, r9, lr}
     mov     r4, r0          @ x
     mov     r5, r1          @ y
     mov     r6, r2          @ value
     sub     sp, sp, #8
     mov     r7, sp          @ buf ptr
+    mov     r9, #0          @ is_negative = false
     cmp     r6, #0
     bge     pn_positive
-    mov     r0, #45         @ '-' ASCII
+    mov     r9, #1          @ is_negative = true
+    mov     r0, #45         @ '-' ASCII (font renders as space-advance)
     strb    r0, [r7]
     add     r7, r7, #1
     rsb     r6, r6, #0      @ abs(r6)
@@ -2827,14 +2829,34 @@ pn_positive:
     mov     r0, #0
     mov     r1, #0
     bl      v_directMove32
-    mov     r0, r4          @ x
-    mov     r1, r5          @ y
-    mov     r2, sp          @ buf ptr
     ldr     r3, =PITREX_TEXT_SIZE
     ldr     r3, [r3]
     cmp     r3, #0
     it eq
     moveq   r3, #5
+    cmp     r9, #0
+    beq     pn_print_str
+    ldr     r12, =100
+    mul     r0, r4, r12         @ x0_px = VPy_x * 100 (Rd≠Rm ✓)
+    sub     r2, r5, #8          @ VPy_y - 8 (cap_height offset)
+    mul     r1, r2, r12         @ y_baseline_px (Rd≠Rm ✓)
+    add     r1, r1, r3, lsl #2  @ + 4*textSize
+    add     r1, r1, r3, lsl #1  @ + 2*textSize → y_mid = baseline+6*ts
+    add     r2, r0, r3, lsl #3  @ x1 = x0 + 8*textSize
+    mov     r3, r1              @ y1 = y0 (horizontal line)
+    mov     r12, #0x50
+    push    {r12}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r3, =PITREX_TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it eq
+    moveq   r3, #5
+pn_print_str:
+    mov     r0, r4          @ x
+    mov     r1, r5          @ y
+    mov     r2, sp          @ buf ptr
     sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)
     lsl     r12, r0, #4         @ r12 = x*16
     add     r12, r12, r0, lsl #3 @ r12 = x*24
@@ -2849,7 +2871,7 @@ pn_positive:
     bl      v_printString
     add     sp, sp, #4
     add     sp, sp, #8
-    pop     {r4, r5, r6, r7, r8, pc}
+    pop     {r4, r5, r6, r7, r8, r9, pc}
     .ltorg
 
 @ pitrex_draw_anim(r0 = ARM ptr to _ANIM_NAME data block, r1 = ox, r2 = oy)

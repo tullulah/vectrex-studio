@@ -2,7 +2,7 @@
   "version": "1.0",
   "name": "pang_theme",
   "author": "VPy Arcade",
-  "tempo": 230,
+  "tempo": 150,
   "ticksPerBeat": 24,
   "totalTicks": 384,
   "notes": [

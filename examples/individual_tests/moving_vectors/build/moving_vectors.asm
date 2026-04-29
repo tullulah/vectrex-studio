@@ -3234,10 +3234,6 @@ _str_0_after:
     mov     r0, #97
     ldr     r1, =0x2007F28C    @ BALL_X
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_0
 if_else_0:
 if_end_0:
@@ -3268,10 +3264,6 @@ if_end_0:
     ldr     r0, =-97
     ldr     r1, =0x2007F28C    @ BALL_X
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_1
 if_else_1:
 if_end_1:
@@ -3302,10 +3294,6 @@ if_end_1:
     mov     r0, #77
     ldr     r1, =0x2007F290    @ BALL_Y
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_2
 if_else_2:
 if_end_2:
@@ -3336,10 +3324,6 @@ if_end_2:
     ldr     r0, =-77
     ldr     r1, =0x2007F290    @ BALL_Y
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_3
 if_else_3:
 if_end_3:
@@ -3390,10 +3374,6 @@ if_end_3:
     mov     r0, #90
     ldr     r1, =0x2007F29C    @ BUB_X
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_4
 if_else_4:
 if_end_4:
@@ -3424,10 +3404,6 @@ if_end_4:
     ldr     r0, =-90
     ldr     r1, =0x2007F29C    @ BUB_X
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_5
 if_else_5:
 if_end_5:
@@ -3458,10 +3434,6 @@ if_end_5:
     mov     r0, #70
     ldr     r1, =0x2007F2A0    @ BUB_Y
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_6
 if_else_6:
 if_end_6:
@@ -3492,10 +3464,6 @@ if_end_6:
     ldr     r0, =-70
     ldr     r1, =0x2007F2A0    @ BUB_Y
     str     r0, [r1]
-    ldr     r0, =_HIT_SFX    @ asset 'hit'
-    push    {r0}
-    pop     {r0}
-    bl      vpy_play_sfx
     b       if_end_7
 if_else_7:
 if_end_7:
@@ -3814,8 +3782,7 @@ _MUSIC1_MUSIC:
     .byte   5, 1  @ PSG r5
     .byte   10, 9  @ PSG r10
     .byte   7, 48  @ PSG r7
-    .byte   5, 2  @ frame=6 delay=5 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   5, 1  @ frame=6 delay=5 writes=1
     .byte   7, 56  @ PSG r7
     .byte   6, 5  @ frame=13 delay=6 writes=5
     .byte   6, 3  @ PSG r6
@@ -3823,8 +3790,7 @@ _MUSIC1_MUSIC:
     .byte   1, 0  @ PSG r1
     .byte   8, 13  @ PSG r8
     .byte   7, 48  @ PSG r7
-    .byte   2, 2  @ frame=16 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=16 delay=2 writes=1
     .byte   7, 56  @ PSG r7
     .byte   9, 6  @ frame=26 delay=9 writes=6
     .byte   6, 3  @ PSG r6
@@ -3833,8 +3799,7 @@ _MUSIC1_MUSIC:
     .byte   8, 14  @ PSG r8
     .byte   9, 0  @ PSG r9
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=29 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=29 delay=2 writes=1
     .byte   7, 58  @ PSG r7
     .byte   9, 5  @ frame=39 delay=9 writes=5
     .byte   6, 3  @ PSG r6
@@ -3842,8 +3807,7 @@ _MUSIC1_MUSIC:
     .byte   1, 0  @ PSG r1
     .byte   8, 12  @ PSG r8
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=42 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=42 delay=2 writes=1
     .byte   7, 58  @ PSG r7
     .byte   8, 11  @ frame=51 delay=8 writes=11
     .byte   6, 20  @ PSG r6
@@ -3857,15 +3821,12 @@ _MUSIC1_MUSIC:
     .byte   5, 1  @ PSG r5
     .byte   10, 9  @ PSG r10
     .byte   7, 48  @ PSG r7
-    .byte   6, 2  @ frame=58 delay=6 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   6, 1  @ frame=58 delay=6 writes=1
     .byte   7, 56  @ PSG r7
-    .byte   5, 3  @ frame=64 delay=5 writes=3
+    .byte   5, 2  @ frame=64 delay=5 writes=2
     .byte   6, 3  @ PSG r6
-    .byte   8, 15  @ PSG r8
     .byte   7, 48  @ PSG r7
-    .byte   3, 2  @ frame=68 delay=3 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   3, 1  @ frame=68 delay=3 writes=1
     .byte   7, 56  @ PSG r7
     .byte   8, 6  @ frame=77 delay=8 writes=6
     .byte   6, 3  @ PSG r6
@@ -3874,8 +3835,7 @@ _MUSIC1_MUSIC:
     .byte   8, 12  @ PSG r8
     .byte   9, 0  @ PSG r9
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=80 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=80 delay=2 writes=1
     .byte   7, 58  @ PSG r7
     .byte   9, 5  @ frame=90 delay=9 writes=5
     .byte   6, 3  @ PSG r6
@@ -3883,8 +3843,7 @@ _MUSIC1_MUSIC:
     .byte   1, 0  @ PSG r1
     .byte   8, 11  @ PSG r8
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=93 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=93 delay=2 writes=1
     .byte   7, 58  @ PSG r7
     .byte   9, 11  @ frame=103 delay=9 writes=11
     .byte   6, 20  @ PSG r6
@@ -3898,8 +3857,7 @@ _MUSIC1_MUSIC:
     .byte   5, 0  @ PSG r5
     .byte   10, 9  @ PSG r10
     .byte   7, 48  @ PSG r7
-    .byte   5, 2  @ frame=109 delay=5 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   5, 1  @ frame=109 delay=5 writes=1
     .byte   7, 56  @ PSG r7
     .byte   6, 5  @ frame=116 delay=6 writes=5
     .byte   6, 3  @ PSG r6
@@ -3907,8 +3865,7 @@ _MUSIC1_MUSIC:
     .byte   1, 0  @ PSG r1
     .byte   8, 14  @ PSG r8
     .byte   7, 48  @ PSG r7
-    .byte   2, 2  @ frame=119 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=119 delay=2 writes=1
     .byte   7, 56  @ PSG r7
     .byte   9, 6  @ frame=129 delay=9 writes=6
     .byte   6, 3  @ PSG r6
@@ -3917,15 +3874,12 @@ _MUSIC1_MUSIC:
     .byte   8, 15  @ PSG r8
     .byte   9, 0  @ PSG r9
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=132 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=132 delay=2 writes=1
     .byte   7, 58  @ PSG r7
-    .byte   8, 3  @ frame=141 delay=8 writes=3
+    .byte   8, 2  @ frame=141 delay=8 writes=2
     .byte   6, 3  @ PSG r6
-    .byte   8, 15  @ PSG r8
     .byte   7, 50  @ PSG r7
-    .byte   3, 2  @ frame=145 delay=3 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   3, 1  @ frame=145 delay=3 writes=1
     .byte   7, 58  @ PSG r7
     .byte   8, 11  @ frame=154 delay=8 writes=11
     .byte   6, 20  @ PSG r6
@@ -3939,15 +3893,12 @@ _MUSIC1_MUSIC:
     .byte   5, 1  @ PSG r5
     .byte   10, 9  @ PSG r10
     .byte   7, 48  @ PSG r7
-    .byte   6, 2  @ frame=161 delay=6 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   6, 1  @ frame=161 delay=6 writes=1
     .byte   7, 56  @ PSG r7
-    .byte   5, 3  @ frame=167 delay=5 writes=3
+    .byte   5, 2  @ frame=167 delay=5 writes=2
     .byte   6, 3  @ PSG r6
-    .byte   8, 15  @ PSG r8
     .byte   7, 48  @ PSG r7
-    .byte   2, 2  @ frame=170 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=170 delay=2 writes=1
     .byte   7, 56  @ PSG r7
     .byte   9, 6  @ frame=180 delay=9 writes=6
     .byte   6, 3  @ PSG r6
@@ -3956,15 +3907,12 @@ _MUSIC1_MUSIC:
     .byte   8, 12  @ PSG r8
     .byte   9, 0  @ PSG r9
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=183 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=183 delay=2 writes=1
     .byte   7, 58  @ PSG r7
-    .byte   9, 3  @ frame=193 delay=9 writes=3
+    .byte   9, 2  @ frame=193 delay=9 writes=2
     .byte   6, 3  @ PSG r6
-    .byte   8, 15  @ PSG r8
     .byte   7, 50  @ PSG r7
-    .byte   2, 2  @ frame=196 delay=2 writes=2
-    .byte   8, 0  @ PSG r8
+    .byte   2, 1  @ frame=196 delay=2 writes=1
     .byte   7, 58  @ PSG r7
     .byte   9, 3  @ frame=206 delay=9 writes=3
     .byte   8, 0  @ PSG r8

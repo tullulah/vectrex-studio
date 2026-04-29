@@ -5,7 +5,25 @@ import './SettingsPanel.css';
 
 export const SettingsPanel: React.FC = () => {
   const { t } = useTranslation(['common']);
-  const { compiler, setCompiler, buildTarget, setBuildTarget } = useSettings();
+  const {
+    compiler, setCompiler,
+    buildTarget, setBuildTarget,
+    pitrexCopyToSD, setPitrexCopyToSD,
+    pitrexSdPath, setPitrexSdPath,
+  } = useSettings();
+
+  const handleBrowseSD = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const result = await (window as any).file.openFolder();
+      if (result && result.path) {
+        setPitrexSdPath(result.path);
+      }
+    } catch (err) {
+      console.error('[SettingsPanel] Browse SD failed:', err);
+    }
+  };
 
   return (
     <div className="settings-panel">
@@ -16,7 +34,7 @@ export const SettingsPanel: React.FC = () => {
         <p className="settings-description">
           {t('settings.compiler.description', 'Select which compiler backend to use for building VPy projects.')}
         </p>
-        
+
         <div className="settings-option">
           <label className="settings-radio">
             <input
@@ -51,7 +69,7 @@ export const SettingsPanel: React.FC = () => {
           </label>
         </div>
       </div>
-      
+
       <div className="settings-section">
         <h3>{t('section.target', 'Build Target')}</h3>
         <p className="settings-description">
@@ -91,21 +109,50 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </label>
 
-          <label className="settings-radio">
-            <input
-              type="radio"
-              name="buildTarget"
-              value="pitrex"
-              checked={buildTarget === 'pitrex'}
-              onChange={() => setBuildTarget('pitrex')}
-            />
-            <div className="radio-content">
-              <span className="radio-title">{t('settings.target.pitrex.title', 'PiTrex (Pi Zero / ARMv6)')}</span>
-              <span className="radio-description">
-                {t('settings.target.pitrex.desc', 'ARM32 native target for the PiTrex cartridge (Pi Zero). Produces a .img file. Requires arm-none-eabi toolchain and PITREX_SDK.')}
-              </span>
-            </div>
-          </label>
+          <div className="settings-radio-group">
+            <label className="settings-radio">
+              <input
+                type="radio"
+                name="buildTarget"
+                value="pitrex"
+                checked={buildTarget === 'pitrex'}
+                onChange={() => setBuildTarget('pitrex')}
+              />
+              <div className="radio-content">
+                <span className="radio-title">{t('settings.target.pitrex.title', 'PiTrex (Pi Zero / ARMv6)')}</span>
+                <span className="radio-description">
+                  {t('settings.target.pitrex.desc', 'ARM32 native target for the PiTrex cartridge (Pi Zero). Produces a .img file. Requires arm-none-eabi toolchain and PITREX_SDK.')}
+                </span>
+              </div>
+            </label>
+            {buildTarget === 'pitrex' && (
+              <div className="pitrex-suboption">
+                <label className="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={pitrexCopyToSD}
+                    onChange={e => setPitrexCopyToSD(e.target.checked)}
+                  />
+                  <span>{t('settings.target.pitrex.copyToSD', 'Copy to SD')}</span>
+                </label>
+                {pitrexCopyToSD && (
+                  <div className="pitrex-sd-path">
+                    <input
+                      className="pitrex-sd-input"
+                      type="text"
+                      placeholder="/Volumes/BAREMETAL  (leave empty to auto-detect)"
+                      value={pitrexSdPath}
+                      onChange={e => setPitrexSdPath(e.target.value)}
+                      spellCheck={false}
+                    />
+                    <button type="button" className="pitrex-sd-browse" onClick={handleBrowseSD}>
+                      Browse
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <label className="settings-radio">
             <input

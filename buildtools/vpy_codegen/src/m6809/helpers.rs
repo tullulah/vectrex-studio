@@ -247,6 +247,10 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         }
     }
 
+    if needed.contains("DRAW_ANIM_RUNTIME") {
+        ram.allocate("DRAW_ANIM_MIRROR_X", 1, "DRAW_ANIM mirror X flag (0=normal, 1=flip)");
+    }
+
     if module.meta.interleaved_frames.is_some() {
         ram.allocate("FRAME_PARITY", 1, "Interleaved frame group counter");
     }
@@ -1855,6 +1859,8 @@ fn emit_draw_anim_runtime(asm: &mut String) {
 ;   at frame_table_offset: FDB ptrs to per-frame data\n\
 ; ============================================================================\n\
 DRAW_ANIM_RUNTIME:\n\
+    LDA #$18\n\
+    STA >$D00B          ; ACR=$18: SR shift-out PHI2, enable beam via SR\n\
     PSHS D,X,Y,U\n\
     ; --- Draw base_refs (static cel layer, drawn before every frame) ---\n\
     LDB 2,X             ; base_ref_count\n\
@@ -1863,7 +1869,8 @@ DRAW_ANIM_RUNTIME:\n\
 DAR_BASE_LOOP:\n\
     PSHS B,X,Y\n\
     LDX ,Y              ; X = _VECNAME_VECTORS header\n\
-    CLR >MIRROR_X\n\
+    LDA >DRAW_ANIM_MIRROR_X\n\
+    STA >MIRROR_X\n\
     CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
     LDD ,X              ; D = path_count\n\
@@ -1873,8 +1880,8 @@ DAR_BASE_PATH_LOOP:\n\
     PSHS D,Y\n\
     LDX ,Y\n\
     JSR Draw_Sync_List_At_With_Mirrors\n\
-    LEAY 2,Y\n\
     PULS D,Y\n\
+    LEAY 2,Y\n\
     SUBD #1\n\
     BNE DAR_BASE_PATH_LOOP\n\
 DAR_BASE_SKIP:\n\
@@ -1885,7 +1892,9 @@ DAR_BASE_SKIP:\n\
     LBNE DAR_BASE_LOOP\n\
     ; --- Tick counter management ---\n\
 DAR_TICK:\n\
+    LDU 6,S             ; reload U from stack — BIOS may corrupt live U\n\
     LDA 1,U             ; ticks_left\n\
+    BEQ DAR_INIT        ; 0 = first call: initialize frame 0\n\
     DECA\n\
     BNE DAR_DRAW        ; still on this frame: skip frame advance\n\
     ; ticks exhausted: advance frame index\n\
@@ -1922,6 +1931,18 @@ DAR_FREEZE:\n\
     LEAY D,X\n\
     LDY ,Y\n\
     BRA DAR_EMIT\n\
+DAR_INIT:\n\
+    ; First call: frame_idx=0, load frame 0 duration and draw it\n\
+    CLRB                ; frame_idx = 0\n\
+    STB ,U\n\
+    CLRA                ; D = 0 (frame_idx*2 = 0)\n\
+    ADDB 3,X            ; B = frame_table_offset (frame 0 offset from header)\n\
+    ADCA #0\n\
+    LEAY D,X            ; Y = frame_table[0] entry\n\
+    LDY ,Y              ; Y = frame 0 data ptr\n\
+    LDA ,Y              ; A = duration_ticks\n\
+    STA 1,U             ; ticks_left = duration_ticks\n\
+    BRA DAR_EMIT\n\
 DAR_DRAW:\n\
     STA 1,U             ; save decremented ticks\n\
     LDB ,U              ; frame_idx\n\
@@ -1940,7 +1961,8 @@ DAR_EMIT:\n\
 DAR_VEC_LOOP:\n\
     PSHS B,Y\n\
     LDX ,Y\n\
-    CLR >MIRROR_X\n\
+    LDA >DRAW_ANIM_MIRROR_X\n\
+    STA >MIRROR_X\n\
     CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
     LDD ,X              ; D = path_count\n\
@@ -1950,8 +1972,8 @@ DAR_VEC_PATH_LOOP:\n\
     PSHS D,Y\n\
     LDX ,Y\n\
     JSR Draw_Sync_List_At_With_Mirrors\n\
-    LEAY 2,Y\n\
     PULS D,Y\n\
+    LEAY 2,Y\n\
     SUBD #1\n\
     BNE DAR_VEC_PATH_LOOP\n\
 DAR_VEC_DONE:\n\
@@ -1967,7 +1989,8 @@ DAR_PATH_LOOP:\n\
     PSHS B\n\
     TFR Y,X\n\
     JSR $F1AA           ; DP_to_D0\n\
-    CLR >MIRROR_X\n\
+    LDA >DRAW_ANIM_MIRROR_X\n\
+    STA >MIRROR_X\n\
     CLR >MIRROR_Y\n\
     JSR Draw_Sync_List_At_With_Mirrors\n\
     JSR $F1AF           ; DP_to_C8\n\

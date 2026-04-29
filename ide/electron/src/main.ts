@@ -928,14 +928,77 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
   return diags;
 }
 
+
+async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+  const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
+  const sdBundlePath = join(resourcesDir, 'pitrex-sd');
+
+  // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
+  let sdMount: string = sdPath.trim();
+  if (!sdMount) {
+    try {
+      const volumes = await fs.readdir('/Volumes');
+      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
+      for (const vol of volumes) {
+        if (skip.has(vol)) continue;
+        sdMount = join('/Volumes', vol);
+        break;
+      }
+    } catch {}
+  }
+
+  if (!sdMount) {
+    win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > PiTrex.\n');
+    win?.webContents.send('run://status', 'Copy to SD failed: no SD card found');
+    return;
+  }
+
+  // Verify the path exists
+  try {
+    await fs.access(sdMount);
+  } catch {
+    win?.webContents.send('run://stderr', `[SD] Path not found: ${sdMount}\n`);
+    win?.webContents.send('run://status', `Copy to SD failed: path not found: ${sdMount}`);
+    return;
+  }
+
+  win?.webContents.send('run://stdout', `[SD] Copying to ${sdMount}...\n`);
+
+  const sdFiles = ['bootcode.bin', 'config.txt', 'fixup.dat', 'start.elf', 'vectrexInterface.ini'];
+  for (const file of sdFiles) {
+    const src = join(sdBundlePath, file);
+    const dst = join(sdMount, file);
+    try {
+      await fs.copyFile(src, dst);
+      win?.webContents.send('run://stdout', `[SD]   + ${file}\n`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[SD] Failed to copy ${file}: ${e.message}\n`);
+    }
+  }
+
+  const kernelDst = join(sdMount, 'kernel7l.img');
+  try {
+    await fs.copyFile(imgPath, kernelDst);
+    win?.webContents.send('run://stdout', `[SD]   + kernel7.img\n`);
+    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+    win?.webContents.send('run://stdout', `[SD] Done.\n`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7.img: ${e.message}\n`);
+  }
+}
+
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2' }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
+  // Surface pitrex SD flags to the output panel so they're always visible
+  if (target === 'pitrex') {
+    mainWindow?.webContents.send('run://stdout', `[SD] pitrexCopyToSD=${pitrexCopyToSD} sdPath="${pitrexSdPath}"\n`);
+  }
   
   // Check if we have a project open - if so, compile the project instead of individual file
   const project = getCurrentProject();
@@ -1286,6 +1349,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           elfBase64,
           sFileText,
         });
+
+        // Copy to SD card if requested (pitrex target only)
+        if (target === 'pitrex' && pitrexCopyToSD) {
+          await copyPitrexToSDCard(binPath, pitrexSdPath, mainWindow ?? null);
+        }
+
         resolvePromise({ 
           ok: true, 
           binPath, 
