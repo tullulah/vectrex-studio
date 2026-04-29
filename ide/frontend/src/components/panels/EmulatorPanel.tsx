@@ -2329,10 +2329,12 @@ export const EmulatorPanel: React.FC = () => {
           }
 
           // PiTrex coordinate → canvas pixel conversion constants
-          // Pitrex coords = VPy × 100. Hardware physical range: ±18000 X, ±24000 Y.
-          // VPy ±127 × 100 = ±12700 fills ~70% of hardware range, matching actual rendering.
-          const PITREX_MAX_X = 18000;
-          const PITREX_MAX_Y = 24000;
+          // Codegen: VPy × 127 = PiTrex coord (scale=127, matches rp2350 ARM_ALG_SCALE=127).
+          // rp2350 renderer uses ALG_CENTER_X=16500, ALG_CENTER_Y=20500 as half-range.
+          // Use same values so PiTrex and rp2350 render at identical screen fractions.
+          // VPy ±96 → ±12192 → 12192/16500 = 73.9% half-width (matching rp2350).
+          const PITREX_MAX_X = 16500;
+          const PITREX_MAX_Y = 20500;
 
           const TARGET_MS = 1000 / 50;  // 50 Hz (PiTrex default)
           let lastFrameTs = 0;

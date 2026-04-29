@@ -3195,7 +3195,7 @@ game_main:
     mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F298
-    ldr     r0, =-80
+    ldr     r0, =-62
     str     r0, [r1]
     ldr     r1, =0x2007F29C
     mov     r0, #0
@@ -3204,13 +3204,13 @@ game_main:
     mov     r0, #1
     str     r0, [r1]
     ldr     r1, =0x2007F2A4
-    ldr     r0, =-80
+    ldr     r0, =-62
     str     r0, [r1]
     ldr     r1, =0x2007F2A8
     mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F2AC
-    ldr     r0, =-80
+    ldr     r0, =-62
     str     r0, [r1]
     @ main() body
     ldr     r0, =_WORLD_1_1_LEVEL    @ asset 'world_1_1'
@@ -3286,7 +3286,7 @@ if_end_1:
     ldr     r1, =0x2007F294    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r0, =-80
+    ldr     r0, =-62
     push    {r0}
     mov     r0, #1050
     push    {r0}
@@ -3445,7 +3445,7 @@ if_end_3:
     ldr     r1, =0x2007F2AC    @ FLOOR_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r0, =-80
+    ldr     r0, =-120
     push    {r0}
     pop     {r1}
     pop     {r0}
@@ -3517,7 +3517,7 @@ if_end_5:
     ldr     r1, =0x2007F2AC    @ FLOOR_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r0, =-80
+    ldr     r0, =-120
     push    {r0}
     pop     {r1}
     pop     {r0}
@@ -4300,12 +4300,13 @@ _MOUNTAIN_3D_DATA:
 _OVERWORLD_MUSIC:
     .word 0
 
-@ --- pipe (2 path(s)) ---
+@ --- pipe (3 path(s)) ---
 .global _PIPE_VECTORS
 _PIPE_VECTORS:
-    .word   2               @ path_count
+    .word   3               @ path_count
     .word   _PIPE_PATH0      @ ptr path 0
     .word   _PIPE_PATH1      @ ptr path 1
+    .word   _PIPE_PATH2      @ ptr path 2
 
 _PIPE_PATH0:
     .byte   100               @ intensity
@@ -4325,7 +4326,13 @@ _PIPE_PATH1:
     .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
     .byte   0x02            @ end marker
 
-@ --- PIPE_3D_DATA (2 path(s)) ---
+_PIPE_PATH2:
+    .byte   127               @ intensity
+    .byte   0x19, 0xF6, 0x00, 0x00  @ y=25, x=-10, hdr
+    .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
+    .byte   0x02            @ end marker
+
+@ --- PIPE_3D_DATA (3 path(s)) ---
 .global _PIPE_3D_DATA
 _PIPE_3D_DATA:
     .word   8               @ vertex_count
@@ -4337,7 +4344,7 @@ _PIPE_3D_DATA:
     .byte   0x0C, 0x0F, 0x00  @ vert 5: x=12,y=15,z=0
     .byte   0x0C, 0x19, 0x00  @ vert 6: x=12,y=25,z=0
     .byte   0xF4, 0x19, 0x00  @ vert 7: x=-12,y=25,z=0
-    .word   2               @ path_count
+    .word   3               @ path_count
     .byte   5               @ path 0: pt_count
     .byte   1               @ path 0: closed
     .byte   0
@@ -4352,6 +4359,10 @@ _PIPE_3D_DATA:
     .byte   6
     .byte   7
     .byte   4
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   3
+    .byte   2
 
 @ --- platform (7 path(s)) ---
 .global _PLATFORM_VECTORS
@@ -6798,8 +6809,8 @@ _WORLD_1_1_LEVEL:
     .hword 2207  @ xMax
     .hword -384  @ yMin
     .hword 127  @ yMax
-    .byte 5   @ bgCount
-    .byte 29   @ gpCount
+    .byte 4   @ bgCount
+    .byte 30   @ gpCount
     .byte 0   @ fgCount
     .byte 0    @ pad
     .word _WORLD_1_1_BG_OBJECTS
@@ -6859,19 +6870,6 @@ _WORLD_1_1_BG_OBJECTS:
     .byte 0   @ vel_x_init
     .byte 0   @ vel_y_init
 
-    @ obj_bg_7 (tile)
-    .hword 295  @ x
-    .hword -103  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x10  @ flags
-    .byte 255   @ type
-    .word _GROUND_TILE_VECTORS  @ vector_ptr
-    .byte 16   @ half_w
-    .byte 16   @ half_h
-    .byte 0   @ vel_x_init
-    .byte 0   @ vel_y_init
-
 
 _WORLD_1_1_GP_OBJECTS:
     @ obj_bg_mountain_2 (decoration)
@@ -6888,8 +6886,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_mountain_3 (decoration)
-    .hword 750  @ x
-    .hword -50  @ y
+    .hword 730  @ x
+    .hword 6  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x00  @ flags
@@ -6913,9 +6911,22 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_x_init
     .byte 0   @ vel_y_init
 
+    @ obj_bg_7 (tile)
+    .hword 300  @ x
+    .hword -153  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 16   @ half_w
+    .byte 16   @ half_h
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+
     @ obj_bg_1 (tile)
-    .hword -65  @ x
-    .hword -103  @ y
+    .hword -66  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -6928,7 +6939,7 @@ _WORLD_1_1_GP_OBJECTS:
 
     @ obj_bg_2 (tile)
     .hword -5  @ x
-    .hword -103  @ y
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -6940,8 +6951,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_3 (tile)
-    .hword 55  @ x
-    .hword -103  @ y
+    .hword 56  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -6953,8 +6964,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_4 (tile)
-    .hword 115  @ x
-    .hword -103  @ y
+    .hword 117  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -6966,8 +6977,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_5 (tile)
-    .hword 175  @ x
-    .hword -103  @ y
+    .hword 178  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -6979,8 +6990,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_6 (tile)
-    .hword 235  @ x
-    .hword -103  @ y
+    .hword 239  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -6992,8 +7003,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_8 (tile)
-    .hword 355  @ x
-    .hword -103  @ y
+    .hword 361  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7005,8 +7016,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_9 (tile)
-    .hword 415  @ x
-    .hword -103  @ y
+    .hword 422  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7018,8 +7029,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_10 (tile)
-    .hword 475  @ x
-    .hword -103  @ y
+    .hword 483  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7031,8 +7042,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_11 (tile)
-    .hword 535  @ x
-    .hword -103  @ y
+    .hword 544  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7044,8 +7055,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_12 (tile)
-    .hword 595  @ x
-    .hword -103  @ y
+    .hword 605  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7057,8 +7068,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_13 (tile)
-    .hword 655  @ x
-    .hword -103  @ y
+    .hword 666  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7070,8 +7081,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_14 (tile)
-    .hword 715  @ x
-    .hword -103  @ y
+    .hword 727  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7083,8 +7094,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_15 (tile)
-    .hword 775  @ x
-    .hword -103  @ y
+    .hword 788  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7096,8 +7107,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_16 (tile)
-    .hword 835  @ x
-    .hword -103  @ y
+    .hword 849  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7109,8 +7120,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_17 (tile)
-    .hword 895  @ x
-    .hword -103  @ y
+    .hword 910  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7122,8 +7133,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_18 (tile)
-    .hword 955  @ x
-    .hword -103  @ y
+    .hword 971  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7135,8 +7146,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_bg_19 (tile)
-    .hword 1015  @ x
-    .hword -102  @ y
+    .hword 1032  @ x
+    .hword -153  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7148,8 +7159,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_gp_pipe_1 (obstacle)
-    .hword 220  @ x
-    .hword -69  @ y
+    .hword 218  @ x
+    .hword -119  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7162,7 +7173,7 @@ _WORLD_1_1_GP_OBJECTS:
 
     @ obj_gp_pipe_2 (obstacle)
     .hword 420  @ x
-    .hword -45  @ y
+    .hword -119  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7174,8 +7185,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_gp_pipe_3 (obstacle)
-    .hword 680  @ x
-    .hword -45  @ y
+    .hword 682  @ x
+    .hword -119  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7188,7 +7199,7 @@ _WORLD_1_1_GP_OBJECTS:
 
     @ obj_gp_pipe_4 (obstacle)
     .hword 850  @ x
-    .hword -45  @ y
+    .hword -119  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7201,7 +7212,7 @@ _WORLD_1_1_GP_OBJECTS:
 
     @ obj_gp_qblock_1 (item)
     .hword 84  @ x
-    .hword -35  @ y
+    .hword -88  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7213,8 +7224,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_gp_qblock_2 (item)
-    .hword 149  @ x
-    .hword 33  @ y
+    .hword 145  @ x
+    .hword -49  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7226,8 +7237,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_gp_qblock_3 (item)
-    .hword 500  @ x
-    .hword -10  @ y
+    .hword 492  @ x
+    .hword -88  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags
@@ -7239,8 +7250,8 @@ _WORLD_1_1_GP_OBJECTS:
     .byte 0   @ vel_y_init
 
     @ obj_gp_qblock_4 (item)
-    .hword 760  @ x
-    .hword -10  @ y
+    .hword 808  @ x
+    .hword -88  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
     .byte 0x10  @ flags

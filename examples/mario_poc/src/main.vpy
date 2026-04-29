@@ -6,18 +6,18 @@ const MARIO_HW = 8
 
 # Player world position (player_y = center of mario sprite)
 player_x: i16 = 0
-player_y: i16 = -80   # starts on ground: tile_top(-70) + MARIO_HH(13)
+player_y: i16 = -62   # ground tiles at y=-103, half_height=8 -> floor_y = -95+13 = -82
 
 # Physics
 vel_y: i16 = 0
 on_ground: u8 = 1
-prev_y: i16 = -80
+prev_y: i16 = -62
 
 # Camera
 camera_x: i16 = 0
 
 # Collision result (floor_y = where player center lands = tile_top + MARIO_HH)
-floor_y: i16 = -80
+floor_y: i16 = -62
 
 def main():
     LOAD_LEVEL("world_1_1")
@@ -34,7 +34,7 @@ def loop():
         player_x = player_x - 3
 
     # Clamp player to level bounds
-    player_x = clamp(player_x, -80, 1050)
+    player_x = clamp(player_x, -62, 1050)
 
     # Horizontal collision: only when not moving upward
     # (prevents spurious lateral push when jumping into a block from below)
@@ -58,8 +58,7 @@ def loop():
         # Find highest surface at prev_y using full AABB (3rd arg = mario half_height)
         # Returns tile_top + MARIO_HH → where player center should land
         floor_y = LEVEL_COLLISION_Y(player_x, prev_y, MARIO_HH)
-        # Absolute ground floor: tile_top=-70, so landing y = -70 + 13 = -57
-        floor_y = max(floor_y, -80)
+        floor_y = max(floor_y, -120)
 
         # Land on solid surface
         if player_y <= floor_y:
@@ -70,7 +69,7 @@ def loop():
     # When grounded, check if surface still exists (walk off platform edge)
     if on_ground == 1:
         floor_y = LEVEL_COLLISION_Y(player_x, player_y, MARIO_HH)
-        floor_y = max(floor_y, -80)
+        floor_y = max(floor_y, -120)
         if player_y > floor_y:
             on_ground = 0
 

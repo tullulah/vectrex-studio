@@ -198,7 +198,7 @@ pub fn emit_set_camera_y(args: &[Expr], out: &mut String, assets: &[crate::Asset
 ///
 /// Scans all collidable GP objects (collision_flags bit 0 set) and returns the top Y
 /// Returns tile_top + player_half_height (the Y where player CENTER should be to stand on the surface).
-/// Only considers surfaces whose top <= player_bottom (player_y - player_half_height).
+/// Only considers surfaces whose top <= player_top (player_y + player_half_height).
 /// Returns -128 + player_half_height if no surface found.
 /// Caller usage:
 ///   floor_y = LEVEL_COLLISION_Y(player_x, player_y, player_half_height)
@@ -217,10 +217,12 @@ pub fn emit_level_collision_y(args: &[Expr], out: &mut String, assets: &[crate::
     // arg[2]: player_half_height → LCOL_PHH (evaluate first so B is available for subtraction)
     expressions::emit_simple_expr(&args[2], out, assets);
     out.push_str("    STB >LCOL_PHH        ; store player half_height\n");
-    // arg[1]: player_y lo-byte minus player_hh → LCOL_PY (player's feet)
+    // arg[1]: player_y lo-byte plus player_hh → LCOL_PY (player's top/head)
+    // Filter: skip surfaces whose top > player_top (surface is above the player's head)
+    // Using player_top avoids exact-boundary failures at tile seams and multi-path assets
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    SUBB >LCOL_PHH       ; B = player_y_lo - player_hh = player_bottom\n");
-    out.push_str("    STB >LCOL_PY         ; store player feet Y for surface filter\n");
+    out.push_str("    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh = player_top\n");
+    out.push_str("    STB >LCOL_PY         ; store player top Y for surface filter\n");
     out.push_str("    JSR LEVEL_COLLISION_Y_RUNTIME\n");
 }
 
@@ -1330,7 +1332,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; === LEVEL_COLLISION_Y_RUNTIME ===\n");
         out.push_str("; Find the highest collidable floor Y at player_x in the GP layer.\n");
         out.push_str("; Input:  LCOL_PX (16-bit) = player world_x\n");
-        out.push_str(";         LCOL_PY (i8) = player_y lo-byte; surfaces above this are ignored\n");
+        out.push_str(";         LCOL_PY (i8) = player_y lo-byte + player_hh = player_top; surfaces above player_top are ignored\n");
         out.push_str("; Output: RESULT = highest floor surface_top (i16, sign-extended from i8)\n");
         out.push_str(";         Returns $FF80 (-128) if no collidable surface found at that X.\n");
         out.push_str("; Algorithm: for each collidable GP object, check X AABB overlap,\n");
@@ -1390,9 +1392,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; --- X overlaps — compute surface_top = obj_y + tile_half_height ---\n");
         out.push_str("    LDA 2,X          ; A = obj_y (signed byte)\n");
         out.push_str("    ADDA 14,X        ; A = tile surface_top = obj_y + tile_half_height\n");
-        out.push_str("    ; Filter: skip surfaces above the player's feet (surface_top > player_bottom)\n");
-        out.push_str("    CMPA >LCOL_PY    ; signed compare surface_top to player_bottom\n");
-        out.push_str("    BGT LCOL_Y_NEXT  ; surface_top > player_bottom → above player → skip\n");
+        out.push_str("    ; Filter: skip surfaces above the player's head (surface_top > player_top)\n");
+        out.push_str("    CMPA >LCOL_PY    ; signed compare surface_top to player_top\n");
+        out.push_str("    BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip\n");
         out.push_str("    ; Compute landing Y = surface_top + player_half_height\n");
         out.push_str("    ADDA >LCOL_PHH   ; A = tile_top + player_hh = where player center lands\n");
         out.push_str("    ; Update best_floor if this landing Y > current best\n");
