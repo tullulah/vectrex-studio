@@ -22,8 +22,8 @@
 //!
 //! Coordinate system:
 //!   VPy: ±96 X, ±128 Y (signed bytes in .vec paths)
-//!   PiTrex: ±18000 X, ±24000 Y (int32)
-//!   Scale factor: 180 (VPy 96 → 17280, VPy 128 → 23040, both within PiTrex range)
+//!   PiTrex: ±16129 X, ±16129 Y (int32)
+//!   Scale factor = 127 (matches rp2350 VIA T1=127: VPy×127 = same physical deflection)
 //!
 //! ARM32 vs Thumb2 differences:
 //!   - No .thumb_func / .thumb directives (ARM mode by default)
@@ -41,7 +41,8 @@ use vpy_parser::Module;
 use crate::AssetInfo;
 
 /// Coordinate scale factor: VPy unit → PiTrex unit
-pub const COORD_SCALE: i32 = 180;
+/// Scale factor: 127 (matches rp2350 T1=127 timer: VPy×127 = 127×127 = 16129 integration units)
+pub const COORD_SCALE: i32 = 127;
 
 /// Entry point: generate a complete ARM32 .s file for the PiTrex target.
 pub fn generate_pitrex_asm(
