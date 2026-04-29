@@ -479,11 +479,14 @@ const PITREX_COORD_SCALE = 100;  // must match pitrex_draw_line ×100 multiplier
 function drawTextAsSegments(
   s: PitrexArm32State, x: number, y: number, text: string, scale: number,
 ): void {
-  if (scale <= 0) scale = 5;
+  if (scale <= 0) scale = 3;
   const intensity = 100;
   let curX = x * PITREX_COORD_SCALE;
   const baseY = y * PITREX_COORD_SCALE;
-  const charAdv = ((7 * scale) >> 1) * PITREX_COORD_SCALE;
+  // Use float division so scale=3.0 gives exact 10.5 VPy per char (matching M6809 BIOS advance).
+  const charAdv = (7 * scale / 2) * PITREX_COORD_SCALE;
+  // y is top of character (M6809 BIOS convention). Glyphs have y=6 at top, y=0 at bottom.
+  const topOffset = (6 * scale / 2) * PITREX_COORD_SCALE;
   for (const rawCh of text) {
     const cc = rawCh.charCodeAt(0);
     if (cc === 0 || cc >= 0x80) break;
@@ -492,8 +495,8 @@ function drawTextAsSegments(
       let penX = 0, penY = 0;
       for (let i = 0; i < glyph.length; i += 3) {
         const cmd = glyph[i];
-        const ax  = curX + ((glyph[i + 1] * scale) >> 1) * PITREX_COORD_SCALE;
-        const ay  = baseY + ((glyph[i + 2] * scale) >> 1) * PITREX_COORD_SCALE;
+        const ax  = curX + (glyph[i + 1] * scale / 2) * PITREX_COORD_SCALE;
+        const ay  = baseY - topOffset + (glyph[i + 2] * scale / 2) * PITREX_COORD_SCALE;
         if (cmd === 2) {
           s.segments.push({ x0: penX, y0: penY, x1: ax, y1: ay, intensity });
         }
@@ -520,6 +523,7 @@ const SDK_STUBS: Record<string, SdkStub> = {
   },
 
   'v_setBrightness':         () => {},
+  'v_setScale':              () => {}, // scale is irrelevant in emulator (coord mapping uses PITREX_MAX_X/Y)
   'v_init':                  () => {},
   'v_setRefresh':            () => {},
   'vectrexinit':             () => {},
@@ -541,6 +545,24 @@ const SDK_STUBS: Record<string, SdkStub> = {
     if (xSym) memWrite32(s, xSym.value, Math.round(s.joyX2 * 32767 / 127));
     if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY2 * 32767 / 127));
   },
+  'v_printString': (s) => {
+    // v_printString(x=r0, y=r1, str=r2, textSize=r3, brightness=[sp]) — vector font
+    const strPtr = s.regs[2];
+    let text = '';
+    for (let i = 0; i < 128; i++) {
+      const ch = memRead8(s, strPtr + i);
+      if (ch === 0) break;
+      text += String.fromCharCode(ch);
+    }
+    if (text.length > 0) {
+      // Codegen emits `add r0,r0,#3` and `sub r1,r1,#11` before bl, so at intercept:
+      //   r0 = VPy_x + 3,  r1 = VPy_y - 11
+      // +8 here → drawTextAsSegments(VPy_x+3, VPy_y-3).
+      // The font renders 3 left / 3 above the coords passed, so the visual result is (VPy_x, VPy_y).
+      drawTextAsSegments(s, s.regs[0], s.regs[1] + 8, text, 3.0);
+    }
+  },
+
   'v_printStringRaster':     (s) => {
     // pitrex_print_text / pitrex_print_number call with:
     //   r0=x (VPy units), r1=y (VPy units), r2=str_ptr, r3=size
