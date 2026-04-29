@@ -191,8 +191,110 @@ ARRAY_LOCATION_Y_COORDS_DATA:
     .hword -30
 .align 2
 ARRAY_LOCATION_NAMES_DATA:
+    .word   .LLOCATION_NAMES_STR0
+    .word   .LLOCATION_NAMES_STR1
+    .word   .LLOCATION_NAMES_STR2
+    .word   .LLOCATION_NAMES_STR3
+    .word   .LLOCATION_NAMES_STR4
+    .word   .LLOCATION_NAMES_STR5
+    .word   .LLOCATION_NAMES_STR6
+    .word   .LLOCATION_NAMES_STR7
+    .word   .LLOCATION_NAMES_STR8
+    .word   .LLOCATION_NAMES_STR9
+    .word   .LLOCATION_NAMES_STR10
+    .word   .LLOCATION_NAMES_STR11
+    .word   .LLOCATION_NAMES_STR12
+    .word   .LLOCATION_NAMES_STR13
+    .word   .LLOCATION_NAMES_STR14
+    .word   .LLOCATION_NAMES_STR15
+    .word   .LLOCATION_NAMES_STR16
+.LLOCATION_NAMES_STR0:
+    .asciz  "MOUNT FUJI (JP)"
+.LLOCATION_NAMES_STR1:
+    .asciz  "MOUNT KEIRIN (CN)"
+.LLOCATION_NAMES_STR2:
+    .asciz  "EMERALD BUDDHA TEMPLE (TH)"
+.LLOCATION_NAMES_STR3:
+    .asciz  "ANGKOR WAT (KH)"
+.LLOCATION_NAMES_STR4:
+    .asciz  "AYERS ROCK (AU)"
+.LLOCATION_NAMES_STR5:
+    .asciz  "TAJ MAHAL (IN)"
+.LLOCATION_NAMES_STR6:
+    .asciz  "LENINGRAD (RU)"
+.LLOCATION_NAMES_STR7:
+    .asciz  "PARIS (FR)"
+.LLOCATION_NAMES_STR8:
+    .asciz  "LONDON (UK)"
+.LLOCATION_NAMES_STR9:
+    .asciz  "BARCELONA (ES)"
+.LLOCATION_NAMES_STR10:
+    .asciz  "ATHENS (GR)"
+.LLOCATION_NAMES_STR11:
+    .asciz  "PYRAMIDS (EG)"
+.LLOCATION_NAMES_STR12:
+    .asciz  "MOUNT KILIMANJARO (TZ)"
+.LLOCATION_NAMES_STR13:
+    .asciz  "NEW YORK (US)"
+.LLOCATION_NAMES_STR14:
+    .asciz  "MAYAN RUINS (MX)"
+.LLOCATION_NAMES_STR15:
+    .asciz  "ANTARCTICA (AQ)"
+.LLOCATION_NAMES_STR16:
+    .asciz  "EASTER ISLAND (CL)"
 .align 2
 ARRAY_LEVEL_BACKGROUNDS_DATA:
+    .word   .LLEVEL_BACKGROUNDS_STR0
+    .word   .LLEVEL_BACKGROUNDS_STR1
+    .word   .LLEVEL_BACKGROUNDS_STR2
+    .word   .LLEVEL_BACKGROUNDS_STR3
+    .word   .LLEVEL_BACKGROUNDS_STR4
+    .word   .LLEVEL_BACKGROUNDS_STR5
+    .word   .LLEVEL_BACKGROUNDS_STR6
+    .word   .LLEVEL_BACKGROUNDS_STR7
+    .word   .LLEVEL_BACKGROUNDS_STR8
+    .word   .LLEVEL_BACKGROUNDS_STR9
+    .word   .LLEVEL_BACKGROUNDS_STR10
+    .word   .LLEVEL_BACKGROUNDS_STR11
+    .word   .LLEVEL_BACKGROUNDS_STR12
+    .word   .LLEVEL_BACKGROUNDS_STR13
+    .word   .LLEVEL_BACKGROUNDS_STR14
+    .word   .LLEVEL_BACKGROUNDS_STR15
+    .word   .LLEVEL_BACKGROUNDS_STR16
+.LLEVEL_BACKGROUNDS_STR0:
+    .asciz  "fuji_bg"
+.LLEVEL_BACKGROUNDS_STR1:
+    .asciz  "keirin_bg"
+.LLEVEL_BACKGROUNDS_STR2:
+    .asciz  "buddha_bg"
+.LLEVEL_BACKGROUNDS_STR3:
+    .asciz  "angkor_bg"
+.LLEVEL_BACKGROUNDS_STR4:
+    .asciz  "ayers_bg"
+.LLEVEL_BACKGROUNDS_STR5:
+    .asciz  "taj_bg"
+.LLEVEL_BACKGROUNDS_STR6:
+    .asciz  "leningrad_bg"
+.LLEVEL_BACKGROUNDS_STR7:
+    .asciz  "paris_bg"
+.LLEVEL_BACKGROUNDS_STR8:
+    .asciz  "london_bg"
+.LLEVEL_BACKGROUNDS_STR9:
+    .asciz  "barcelona_bg"
+.LLEVEL_BACKGROUNDS_STR10:
+    .asciz  "athens_bg"
+.LLEVEL_BACKGROUNDS_STR11:
+    .asciz  "pyramids_bg"
+.LLEVEL_BACKGROUNDS_STR12:
+    .asciz  "kilimanjaro_bg"
+.LLEVEL_BACKGROUNDS_STR13:
+    .asciz  "newyork_bg"
+.LLEVEL_BACKGROUNDS_STR14:
+    .asciz  "mayan_bg"
+.LLEVEL_BACKGROUNDS_STR15:
+    .asciz  "antarctica_bg"
+.LLEVEL_BACKGROUNDS_STR16:
+    .asciz  "easter_bg"
 .align 2
 ARRAY_LEVEL_ENEMY_COUNT_DATA:
     .hword 1
@@ -3206,9 +3308,9 @@ if_end_0:
     ldr     r0, [r1]
     mov     r1, r0
     pop     {r0}           @ base ptr
-    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    lsl     r1, r1, #2     @ index * 4 (ptr stride)
     add     r0, r0, r1
-    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r0, [r0]       @ load 32-bit string pointer
     push    {r0}
     pop     {r2}
     pop     {r1}
@@ -6934,9 +7036,9 @@ _str_2_after:
     ldr     r0, [r1]
     mov     r1, r0
     pop     {r0}           @ base ptr
-    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    lsl     r1, r1, #2     @ index * 4 (ptr stride)
     add     r0, r0, r1
-    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r0, [r0]       @ load 32-bit string pointer
     push    {r0}
     pop     {r2}
     pop     {r1}
