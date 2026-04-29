@@ -18,8 +18,13 @@
 .extern v_readButtons
 .extern v_readJoystick1Analog
 .extern v_directDraw32
+.extern v_directMove32
 .extern v_setBrightness
+.extern v_setScale
+.extern v_printString
 .extern v_printStringRaster
+.extern v_writePSG
+.extern v_doSound
 .extern currentJoy1X
 .extern currentJoy1Y
 .extern currentButtonState
@@ -68,12 +73,14 @@ PITREX_CUR_Y: .space 4
 @ PiTrex ARM32 builtins
 @ ================================================================
 
-@ pitrex_wait_recal() — frame sync via v_WaitRecal()
+@ pitrex_wait_recal() — frame sync via v_WaitRecal(), then fix scale=100
 .global pitrex_wait_recal
 .type pitrex_wait_recal, %function
 pitrex_wait_recal:
     push    {lr}
     bl      v_WaitRecal
+    mov     r0, #100
+    bl      v_setScale
     pop     {pc}
     .ltorg
 
@@ -157,148 +164,132 @@ pitrex_draw_line_rel:
     pop     {r4, r5, r6, r7, pc}
     .ltorg
 
-@ pitrex_draw_vector(r0=asset_ptr)
+@ pitrex_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
 .global pitrex_draw_vector
 .type pitrex_draw_vector, %function
 pitrex_draw_vector:
-    push    {r4, r5, r6, r7, lr}
-    mov     r4, r0              @ r4 = asset ptr
-    ldrh    r6, [r4], #2        @ r6 = num_paths
-    mov     r5, #0              @ path index = 0
+    push    {r4, r5, r6, r7, r8, r9, lr}
+    mov     r4, r0              @ asset header ptr
+    mov     r3, #100
+    mul     r6, r1, r3          @ ox*100
+    mul     r7, r2, r3          @ oy*100
+    ldr     r5, [r4], #4        @ path_count
+    mov     r8, #0
 dv_path_loop:
-    cmp     r5, r6
+    cmp     r8, r5
     bge     dv_done
-    ldrh    r7, [r4], #2        @ r7 = num_segs
-    ldrsh   r0, [r4], #2        @ dx (first entry = start_x relative)
-    ldrsh   r1, [r4], #2        @ dy (first entry = start_y relative)
-    mov     r2, #0              @ brightness=0 for move
-    push    {r4, r5, r6, r7}
-    bl      pitrex_draw_line_rel @ move to start of path
-    pop     {r4, r5, r6, r7}
-    mov     r12, #1
-         @ seg index = 1
-dv_seg_loop:
-    cmp     r12, r7
-    bge     dv_seg_done
-    ldrsh   r0, [r4], #2        @ dx
-    ldrsh   r1, [r4], #2        @ dy
-    mov     r2, #127            @ full brightness
-    push    {r4, r5, r6, r7, r12}
+    ldr     r9, [r4], #4        @ r9 = path data ptr
+    ldr     r0, =PITREX_CUR_X
+    str     r6, [r0]
+    ldr     r0, =PITREX_CUR_Y
+    str     r7, [r0]
+    add     r9, r9, #1          @ skip intensity byte
+    ldrsb   r1, [r9], #1        @ dy = y_start
+    ldrsb   r0, [r9], #1        @ dx = x_start
+    add     r9, r9, #2          @ skip 2 hdr padding bytes
+    mov     r2, #0              @ brightness 0 = move only
+    push    {r4, r5, r6, r7, r8, r9}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r12}
-    add     r12, r12, #1
+    pop     {r4, r5, r6, r7, r8, r9}
+dv_seg_loop:
+    ldrb    r0, [r9], #1        @ marker (0xFF=draw, 0x02=end)
+    cmp     r0, #2
+    beq     dv_seg_done
+    ldrsb   r1, [r9], #1        @ dy
+    ldrsb   r0, [r9], #1        @ dx
+    mov     r2, #127            @ full brightness
+    push    {r4, r5, r6, r7, r8, r9}
+    bl      pitrex_draw_line_rel
+    pop     {r4, r5, r6, r7, r8, r9}
     b       dv_seg_loop
 dv_seg_done:
-    add     r5, r5, #1
+    add     r8, r8, #1
     b       dv_path_loop
 dv_done:
-    pop     {r4, r5, r6, r7, pc}
+    pop     {r4, r5, r6, r7, r8, r9, pc}
     .ltorg
 
 @ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity)
 .global pitrex_draw_vector_ex
 .type pitrex_draw_vector_ex, %function
 pitrex_draw_vector_ex:
-    push    {r4, r5, r6, r7, r8, lr}
-    mov     r4, r0              @ r4 = asset ptr
-    mov     r5, r1              @ r5 = ox
-    mov     r6, r2              @ r6 = oy
-    mov     r7, r3              @ r7 = mirror flag
-    ldr     r8, [sp, #24]       @ r8 = intensity (5th arg)
-    ldrh    r3, [r4], #2        @ r3 = num_paths
-    push    {r3}               @ save num_paths
-    mov     r3, #0              @ path index
-    push    {r3}               @ save path index
+    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes
+    mov     r4, r0              @ asset header ptr
+    mov     r5, r1              @ ox
+    mov     r6, r2              @ oy
+    mov     r7, r3              @ mirror flag
+    ldr     r8, [sp, #28]       @ intensity (5th arg)
+    ldr     r9, [r4], #4        @ path_count
+    push    {r9}                @ [sp+0] = path_count
+    mov     r9, #0
+    push    {r9}                @ [sp+0] = path_idx, [sp+4] = path_count
 dvex_path_loop:
     ldr     r0, [sp]            @ path_idx
-    ldr     r1, [sp, #4]        @ num_paths
+    ldr     r1, [sp, #4]        @ path_count
     cmp     r0, r1
     bge     dvex_done
-    ldrh    r3, [r4], #2        @ r3 = num_segs
-    push    {r3}               @ save num_segs
-    ldrsh   r0, [r4], #2        @ raw dx
-    ldrsh   r1, [r4], #2        @ raw dy
+    ldr     r9, [r4], #4        @ r9 = path data ptr
+    mov     r0, #100
+    mul     r1, r5, r0          @ ox*100
+    ldr     r2, =PITREX_CUR_X
+    str     r1, [r2]
+    mul     r1, r6, r0          @ oy*100
+    ldr     r2, =PITREX_CUR_Y
+    str     r1, [r2]
+    add     r9, r9, #1          @ skip intensity byte
+    ldrsb   r1, [r9], #1        @ dy = y_start
+    ldrsb   r0, [r9], #1        @ dx = x_start
+    add     r9, r9, #2          @ skip 2 hdr padding bytes
     cmp     r7, #1
     it      eq
-    rsbeq   r0, r0, #0          @ dx = -dx if mirror
-    add     r0, r0, r5          @ dx += ox
-    add     r1, r1, r6          @ dy += oy
-    mov     r2, #0
-    push    {r4, r5, r6, r7, r8}
+    rsbeq   r0, r0, #0          @ mirror dx
+    mov     r2, #0              @ move only
+    push    {r4, r5, r6, r7, r8, r9}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r8}
-    mov     r3, #1
-    push    {r3}               @ seg_idx
+    pop     {r4, r5, r6, r7, r8, r9}
 dvex_seg_loop:
-    ldr     r0, [sp]            @ seg_idx
-    ldr     r1, [sp, #4]        @ num_segs
-    cmp     r0, r1
-    bge     dvex_seg_done
-    ldrsh   r0, [r4], #2        @ raw dx
-    ldrsh   r1, [r4], #2        @ raw dy
+    ldrb    r0, [r9], #1
+    cmp     r0, #2
+    beq     dvex_seg_done
+    ldrsb   r1, [r9], #1        @ dy
+    ldrsb   r0, [r9], #1        @ dx
     cmp     r7, #1
     it      eq
     rsbeq   r0, r0, #0
-    add     r0, r0, r5
-    add     r1, r1, r6
-    mov     r2, r8              @ use stored intensity
-    push    {r4, r5, r6, r7, r8}
+    mov     r2, r8              @ intensity
+    push    {r4, r5, r6, r7, r8, r9}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r8}
-    ldr     r0, [sp]
-    add     r0, r0, #1
-    str     r0, [sp]            @ seg_idx++
+    pop     {r4, r5, r6, r7, r8, r9}
     b       dvex_seg_loop
 dvex_seg_done:
-    add     sp, sp, #4          @ pop seg_idx
-    add     sp, sp, #4          @ pop num_segs
     ldr     r0, [sp]
     add     r0, r0, #1
     str     r0, [sp]            @ path_idx++
     b       dvex_path_loop
 dvex_done:
-    add     sp, sp, #8          @ pop path_idx + num_paths
-    pop     {r4, r5, r6, r7, r8, pc}
+    add     sp, sp, #8          @ pop path_idx + path_count
+    pop     {r4, r5, r6, r7, r8, r9, pc}
     .ltorg
 
-@ pitrex_j1_x() → r0 = -1, 0, or +1
+@ pitrex_j1_x() → r0 = X axis (-127..127)
 .global pitrex_j1_x
 .type pitrex_j1_x, %function
 pitrex_j1_x:
     ldr     r1, =currentJoy1X
     ldr     r0, [r1]
-    ldr     r1, =8192
-    cmp     r0, r1
-    bgt     1f              @ > threshold → +1
-    neg     r1, r1
-    cmp     r0, r1
-    blt     2f              @ < -threshold → -1
-    mov     r0, #0
-    bx      lr
-1:  mov     r0, #1
-    bx      lr
-2:  mvn     r0, #0
-         @ r0 = -1
+    asr     r0, r0, #8
+    @ ±32767 → ±127
     bx      lr
     .ltorg
 
-@ pitrex_j1_y() → r0 = -1, 0, or +1
+@ pitrex_j1_y() → r0 = Y axis (-127..127)
 .global pitrex_j1_y
 .type pitrex_j1_y, %function
 pitrex_j1_y:
     ldr     r1, =currentJoy1Y
     ldr     r0, [r1]
-    ldr     r1, =8192
-    cmp     r0, r1
-    bgt     1f
-    neg     r1, r1
-    cmp     r0, r1
-    blt     2f
-    mov     r0, #0
-    bx      lr
-1:  mov     r0, #1
-    bx      lr
-2:  mvn     r0, #0
+    asr     r0, r0, #8
+    @ ±32767 → ±127
     bx      lr
     .ltorg
 
@@ -350,19 +341,35 @@ pitrex_j1_btn4:
 .global pitrex_print_text
 .type pitrex_print_text, %function
 pitrex_print_text:
-    push    {lr}
+    push    {r4, r5, r6, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r0, #0
+    mov     r1, #0
+    bl      v_directMove32
+    mov     r0, r4              @ VPy_x
+    mov     r1, r5              @ VPy_y
+    mov     r2, r6              @ str_ptr
     ldr     r3, =PITREX_TEXT_SIZE
     ldr     r3, [r3]
     cmp     r3, #0
     it eq
-    moveq   r3, #3
-    mov     r12, #0             @ terminator
+    moveq   r3, #5
+    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)
+    lsl     r12, r0, #4         @ r12 = x*16
+    add     r12, r12, r0, lsl #3 @ r12 = x*24
+    add     r0, r12, r0          @ r0  = x*25
+    asr     r0, r0, #5           @ r0  = x*25/32 (sign-preserving)
+    lsl     r12, r1, #4         @ r12 = y*16
+    add     r12, r12, r1, lsl #3 @ r12 = y*24
+    add     r1, r12, r1          @ r1  = y*25
+    asr     r1, r1, #5           @ r1  = y*25/32 (sign-preserving)
+    mov     r12, #0x50
     push    {r12}
-    mvn     r12, #6             @ angle = -7 (mvn #6 = ~6 = -7)
-    push    {r12}
-    bl      v_printStringRaster
-    add     sp, sp, #8          @ pop angle + terminator
-    pop     {pc}
+    bl      v_printString
+    add     sp, sp, #4
+    pop     {r4, r5, r6, pc}
     .ltorg
 
 @ pitrex_draw_rect(r0=x, r1=y, r2=w, r3=h) 5th=[sp]=brightness
@@ -482,14 +489,16 @@ pitrex_draw_polygon:
     bge     .Lpoly_close
     mov     r0, r11, lsl #1 @ 2k
     sub     r0, r0, #2      @ 2k-2
-    lsl     r0, r0, #2
-    ldr     r0, [r12, r0]   @ xk raw
-    mul     r0, r0, r5      @ xk_s
+    lsl     r0, r0, #2      @ (2k-2)*4
+    add     r0, r0, #36     @ + callee-save frame (9*4)
+    ldr     r2, [sp, r0]    @ xk raw (sp-relative, avoids clobbered r12)
+    mul     r0, r2, r5      @ xk_s → r0  (Rd=r0 != Rm=r2)
     mov     r1, r11, lsl #1 @ 2k
     sub     r1, r1, #1      @ 2k-1
-    lsl     r1, r1, #2
-    ldr     r1, [r12, r1]   @ yk raw
-    mul     r1, r1, r5      @ yk_s
+    lsl     r1, r1, #2      @ (2k-1)*4
+    add     r1, r1, #36     @ + callee-save frame
+    ldr     r2, [sp, r1]    @ yk raw (sp-relative)
+    mul     r1, r2, r5      @ yk_s → r1  (Rd=r1 != Rm=r2)
     push    {r0, r1}        @ save new xk_s, yk_s
     mov     r2, r0
     mov     r3, r1
@@ -512,14 +521,14 @@ pitrex_draw_polygon:
     pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
-@ pitrex_draw_circle(r0=x, r1=y, r2=radius, r3=brightness)
+@ pitrex_draw_circle(r0=cx, r1=cy, r2=diameter, r3=brightness)
 .global pitrex_draw_circle
 .type pitrex_draw_circle, %function
 pitrex_draw_circle:
     push    {r4, r5, r6, r7, lr}
     mov     r4, r0          @ cx
     mov     r5, r1          @ cy
-    mov     r6, r2          @ radius
+    asr     r6, r2, #1      @ radius = diameter/2
     mov     r7, r3          @ brightness
     mov     r0, #100
     mul     r4, r4, r0
@@ -530,6 +539,25 @@ pitrex_draw_circle:
     asr     r0, r0, #10
     add     r0, r0, r4
     mov     r1, #0
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =392
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =946
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
     mul     r1, r1, r6
     asr     r1, r1, #10
     add     r1, r1, r5
@@ -549,6 +577,25 @@ pitrex_draw_circle:
     asr     r0, r0, #10
     add     r0, r0, r4
     ldr     r1, =724
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =392
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =946
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =392
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
     mul     r1, r1, r6
     asr     r1, r1, #10
     add     r1, r1, r5
@@ -571,6 +618,27 @@ pitrex_draw_circle:
     mul     r1, r1, r6
     asr     r1, r1, #10
     add     r1, r1, r5
+    ldr     r2, =392
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =946
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =392
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
     ldr     r2, =724
     neg     r2, r2
     mul     r2, r2, r6
@@ -589,6 +657,27 @@ pitrex_draw_circle:
     asr     r0, r0, #10
     add     r0, r0, r4
     ldr     r1, =724
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =392
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =946
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
     mul     r1, r1, r6
     asr     r1, r1, #10
     add     r1, r1, r5
@@ -613,6 +702,29 @@ pitrex_draw_circle:
     mul     r1, r1, r6
     asr     r1, r1, #10
     add     r1, r1, r5
+    ldr     r2, =946
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =392
+    neg     r3, r3
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =946
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
     ldr     r2, =724
     neg     r2, r2
     mul     r2, r2, r6
@@ -632,6 +744,29 @@ pitrex_draw_circle:
     asr     r0, r0, #10
     add     r0, r0, r4
     ldr     r1, =724
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =392
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =946
+    neg     r3, r3
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =392
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
     neg     r1, r1
     mul     r1, r1, r6
     asr     r1, r1, #10
@@ -657,6 +792,27 @@ pitrex_draw_circle:
     mul     r1, r1, r6
     asr     r1, r1, #10
     add     r1, r1, r5
+    ldr     r2, =392
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =946
+    neg     r3, r3
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =392
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
     ldr     r2, =724
     mul     r2, r2, r6
     asr     r2, r2, #10
@@ -674,6 +830,27 @@ pitrex_draw_circle:
     asr     r0, r0, #10
     add     r0, r0, r4
     ldr     r1, =724
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r3, =392
+    neg     r3, r3
+    mul     r3, r3, r6
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    push    {r7}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r0, =946
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
     neg     r1, r1
     mul     r1, r1, r6
     asr     r1, r1, #10
@@ -1625,18 +1802,130 @@ pitrex_debug_print_str:
     add     sp, sp, #4
     pop     {pc}
 
-@ pitrex_level_collision_y(r0=x, r1=y, r2=h) -> r0=adjusted_y
+@ pitrex_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y
 .global pitrex_level_collision_y
 .type pitrex_level_collision_y, %function
 pitrex_level_collision_y:
-    mov     r0, r1
-    bx      lr
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ px
+    mov     r5, r1              @ py
+    mov     r6, r2              @ half_h (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]            @ r7 = level header ptr
+    ldr     r10, =-32767        @ best_floor_top sentinel (below any valid Y)
+    cmp     r7, #0
+    beq     plcy_finish
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq     plcy_finish
+    ldr     r9, [r7, #16]       @ r9 = gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    sub     r0, r5, r6          @ player_feet = py - hh
+plcy_loop:
+    cmp     r8, #0
+    beq     plcy_finish
+    ldrb    r1, [r9, #6]
+    tst     r1, #0x10
+    beq     plcy_next
+    ldrb    r1, [r9, #12]       @ obj half_w
+    ldrsh   r2, [r7, #0]        @ obj world_x (buf)
+    sub     r2, r4, r2          @ dx = px - obj_x
+    movs    r3, r2
+    bpl     plcy_dx_ok
+    neg     r3, r2
+plcy_dx_ok:
+    add     r1, r1, #8
+    cmp     r3, r1
+    bge     plcy_next
+    ldrsh   r2, [r7, #2]        @ obj world_y (buf)
+    ldrb    r3, [r9, #13]       @ obj half_h
+    add     r2, r2, r3          @ obj_top = world_y + half_h
+    cmp     r2, r0
+    bgt     plcy_next   @ surface above player feet
+    cmp     r10, r2
+    bge     plcy_next
+    mov     r10, r2
+plcy_next:
+    add     r7, r7, #8
+    add     r9, r9, #16
+    subs    r8, r8, #1
+    b       plcy_loop
+plcy_finish:
+    ldr     r1, =-32767
+    cmp     r10, r1
+    beq     plcy_no_floor
+    add     r0, r10, r6         @ floor_center = floor_top + player_hh
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+plcy_no_floor:
+    ldr     r0, =-200
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
 
-@ pitrex_level_collision_x(r0=x, r1=y, r2=w) -> r0=adjusted_x
+@ pitrex_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx
 .global pitrex_level_collision_x
 .type pitrex_level_collision_x, %function
 pitrex_level_collision_x:
-    bx      lr
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0              @ px
+    mov     r5, r1              @ py
+    mov     r6, r2              @ half_w (player)
+    mov     r11, r3             @ half_h (player) — for Y-overlap threshold
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    cmp     r7, #0
+    beq     plcx_done_zero
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq     plcx_done_zero
+    ldr     r9, [r7, #16]       @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    mov     r10, #0             @ best push-out dx
+plcx_loop:
+    cmp     r8, #0
+    beq     plcx_done
+    ldrb    r0, [r9, #6]
+    tst     r0, #0x10
+    beq     plcx_next
+    ldrb    r0, [r9, #13]       @ obj half_h
+    ldrsh   r1, [r7, #2]        @ obj world_y
+    sub     r1, r5, r1          @ dy = py - obj_y
+    movs    r2, r1
+    bpl     plcx_dy_ok
+    neg     r2, r1
+plcx_dy_ok:
+    add     r0, r0, r11
+    cmp     r2, r0
+    bge     plcx_next
+    ldrb    r0, [r9, #12]       @ obj half_w
+    ldrsh   r1, [r7, #0]        @ obj world_x
+    sub     r1, r4, r1          @ dx_raw = px - obj_x
+    add     r3, r6, r0          @ total_hw = player_hw + obj_hw
+    movs    r2, r1
+    bpl     plcx_dx_abs
+    neg     r2, r1
+plcx_dx_abs:
+    cmp     r2, r3
+    bge     plcx_next
+    sub     r3, r3, r2          @ overlap = total_hw - |dx|
+    cmp     r1, #0
+    bge     plcx_push_pos
+    neg     r3, r3
+plcx_push_pos:
+    mov     r10, r3
+plcx_next:
+    add     r7, r7, #8
+    add     r9, r9, #16
+    subs    r8, r8, #1
+    b       plcx_loop
+plcx_done:
+    mov     r0, r10
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+plcx_done_zero:
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
 
 @ pitrex_set_camera_x(r0=x)
 .global pitrex_set_camera_x
@@ -1666,14 +1955,15 @@ _getpid:
     mov     r0, #1
     bx      lr
 
-@ pitrex_play_music(r0=music_ptr) — start music playback
+@ pitrex_play_music(r0=music_base)
 .global pitrex_play_music
 .type pitrex_play_music, %function
 pitrex_play_music:
-    ldr     r1, =PSG_MUSIC_PTR
-    str     r0, [r1]
     ldr     r1, =PSG_MUSIC_START
     str     r0, [r1]
+    add     r2, r0, #8          @ first event = base + 8
+    ldr     r1, =PSG_MUSIC_PTR
+    str     r2, [r1]
     ldr     r1, =PSG_IS_PLAYING
     mov     r0, #1
     str     r0, [r1]
@@ -1681,21 +1971,36 @@ pitrex_play_music:
     mov     r0, #0
     str     r0, [r1]
     bx      lr
+    .ltorg
 
 @ pitrex_stop_music()
 .global pitrex_stop_music
 .type pitrex_stop_music, %function
 pitrex_stop_music:
+    push    {lr}
     ldr     r1, =PSG_IS_PLAYING
     mov     r0, #0
     str     r0, [r1]
-    bx      lr
+    mov     r0, #8
+    mov     r1, #0
+    bl      v_writePSG
+    mov     r0, #9
+    mov     r1, #0
+    bl      v_writePSG
+    mov     r0, #10
+   mov     r1, #0
+    bl      v_writePSG
+    mov     r0, #7
+    mov     r1, #0x3F
+ bl      v_writePSG
+    pop     {pc}
+    .ltorg
 
-@ pitrex_music_update() — advance music sequencer (50fps)
+@ pitrex_music_update() — advance music sequencer one frame
 .global pitrex_music_update
 .type pitrex_music_update, %function
 pitrex_music_update:
-    push    {r4, r5, lr}
+    push    {r4, r5, r6, r7, lr}
     ldr     r0, =PSG_IS_PLAYING
     ldr     r0, [r0]
     cmp     r0, #0
@@ -1709,37 +2014,51 @@ pitrex_music_update:
     b       pmu_done
 pmu_process:
     ldr     r5, =PSG_MUSIC_PTR
-    ldr     r4, [r5]            @ r4 = event ptr
-    ldrb    r0, [r4], #1        @ read event type
-    cmp     r0, #0xFF
-    beq     pmu_loop
-    cmp     r0, #0xFE
-    beq     pmu_stop
-    mov     r1, r0              @ delay
-    add     r4, r4, #3          @ skip channel data
-    str     r4, [r5]            @ update PSG_MUSIC_PTR
-    ldr     r4, =PSG_DELAY_FRAMES
-    str     r1, [r4]
+    ldr     r5, [r5]    @ event ptr
+    ldrb    r6, [r5, #1]                @ num_writes
+    cmp     r6, #0
+    beq     pmu_end
+    cmp     r6, #0xFF
+ beq     pmu_loop
+    add     r7, r5, #2
+pmu_wl:
+    cmp     r6, #0
+    beq     pmu_after
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    push    {r6, r7}
+    bl      v_writePSG
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       pmu_wl
+pmu_after:
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]                    @ next event delay
+    str     r0, [r4]
+    b       pmu_done
+pmu_end:
+    bl      pitrex_stop_music
     b       pmu_done
 pmu_loop:
     ldr     r0, =PSG_MUSIC_START
     ldr     r0, [r0]
-    ldr     r1, =PSG_MUSIC_PTR
-    str     r0, [r1]
-    b       pmu_done
-pmu_stop:
-    ldr     r0, =PSG_IS_PLAYING
-    mov     r1, #0
+    ldr     r1, [r0, #4]                @ loop_event_byte_offset
+    add     r1, r0, r1
+    ldr     r0, =PSG_MUSIC_PTR
     str     r1, [r0]
+    ldrb    r0, [r1]
+    str     r0, [r4]
 pmu_done:
-    pop     {r4, r5, pc}
+    pop     {r4, r5, r6, r7, pc}
     .ltorg
 
-@ pitrex_play_sfx(r0=sfx_ptr) — start SFX playback
+@ pitrex_play_sfx(r0=sfx_base)
 .global pitrex_play_sfx
 .type pitrex_play_sfx, %function
 pitrex_play_sfx:
-    add     r0, r0, #4          @ skip .word num_events header
+    add     r0, r0, #4
     ldr     r1, =PSG_SFX_PTR
     str     r0, [r1]
     ldr     r1, =PSG_SFX_ACTIVE
@@ -1879,43 +2198,55 @@ pitrex_show_level:
     pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
-@ pitrex_sfx_update() — advance SFX sequencer
+@ pitrex_sfx_update() — advance SFX sequencer one frame
 .global pitrex_sfx_update
 .type pitrex_sfx_update, %function
 pitrex_sfx_update:
-    push    {r4, r5, lr}
-    ldr     r4, =PSG_SFX_ACTIVE
-    ldr     r0, [r4]
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_SFX_ACTIVE
+    ldr     r0, [r0]
     cmp     r0, #0
     beq     .Lsfxu_done
-    ldr     r5, =PSG_SFX_DELAY
-    ldr     r0, [r5]
+    ldr     r4, =PSG_SFX_DELAY
+    ldr     r0, [r4]
     cmp     r0, #0
-    bne     .Lsfxu_decdelay
-    ldr     r4, =PSG_SFX_PTR
-    ldr     r4, [r4]            @ r4 = current event ptr
-    ldrb    r0, [r4]            @ byte0 = delay
-    ldrb    r1, [r4, #1]        @ byte1 = num_writes
-    cmp     r1, #0
-    beq     .Lsfxu_stop
-    lsl     r2, r1, #1          @ r2 = num_writes * 2
-    add     r2, r2, #2          @ + 2 header bytes
-    add     r4, r4, r2          @ advance ptr past this event
-    ldr     r1, =PSG_SFX_PTR
-    str     r4, [r1]
-    ldrb    r0, [r4]            @ next event delay
-    str     r0, [r5]            @ PSG_SFX_DELAY = next delay
-    b       .Lsfxu_done
-.Lsfxu_decdelay:
+    beq     .Lsfxu_proc
     sub     r0, r0, #1
-    str     r0, [r5]            @ PSG_SFX_DELAY--
+    str     r0, [r4]
+    b       .Lsfxu_done
+.Lsfxu_proc:
+    ldr     r5, =PSG_SFX_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]                @ num_writes
+    cmp     r6, #0
+    beq     .Lsfxu_stop
+    add     r7, r5, #2
+.Lsfxu_wl:
+    cmp     r6, #0
+    beq     .Lsfxu_after
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    push    {r6, r7}
+    bl      v_writePSG
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       .Lsfxu_wl
+.Lsfxu_after:
+    ldr     r0, =PSG_SFX_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]                    @ next event delay
+    str     r0, [r4]
     b       .Lsfxu_done
 .Lsfxu_stop:
+    mov     r0, #10
+    mov     r1, #0
+    bl      v_writePSG
     ldr     r0, =PSG_SFX_ACTIVE
     mov     r1, #0
-    str     r1, [r0]    @ deactivate
+    str     r1, [r0]
 .Lsfxu_done:
-    pop     {r4, r5, pc}
+    pop     {r4, r5, r6, r7, pc}
     .ltorg
 
 @ pitrex_abs(r0) → |r0|
@@ -2425,8 +2756,12 @@ pitrex_print_number:
     sub     sp, sp, #8
     mov     r7, sp          @ buf ptr
     cmp     r6, #0
-    it      lt
-    rsblt   r6, r6, #0
+    bge     pn_positive
+    mov     r0, #45         @ '-' ASCII
+    strb    r0, [r7]
+    add     r7, r7, #1
+    rsb     r6, r6, #0      @ abs(r6)
+pn_positive:
     @ digit 0: /1000
     ldr     r8, =1000
     mov     r0, r6
@@ -2460,6 +2795,9 @@ pitrex_print_number:
     add     r7, r7, #1
     mov     r0, #0
     strb    r0, [r7]
+    mov     r0, #0
+    mov     r1, #0
+    bl      v_directMove32
     mov     r0, r4          @ x
     mov     r1, r5          @ y
     mov     r2, sp          @ buf ptr
@@ -2467,19 +2805,111 @@ pitrex_print_number:
     ldr     r3, [r3]
     cmp     r3, #0
     it eq
-    moveq   r3, #3
-    @ default size (PiTrex calibration: ~10 VPy units/char)
-    mov     r12, #0
+    moveq   r3, #5
+    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)
+    lsl     r12, r0, #4         @ r12 = x*16
+    add     r12, r12, r0, lsl #3 @ r12 = x*24
+    add     r0, r12, r0          @ r0  = x*25
+    asr     r0, r0, #5           @ r0  = x*25/32
+    lsl     r12, r1, #4         @ r12 = y*16
+    add     r12, r12, r1, lsl #3 @ r12 = y*24
+    add     r1, r12, r1          @ r1  = y*25
+    asr     r1, r1, #5           @ r1  = y*25/32
+    mov     r12, #0x50
     push    {r12}
-    @ terminator
-    mvn     r12, #6
-    push    {r12}
-    @ angle=-7
-    bl      v_printStringRaster
-    add     sp, sp, #8      @ pop angle+terminator
+    bl      v_printString
+    add     sp, sp, #4
     add     sp, sp, #8
     pop     {r4, r5, r6, r7, r8, pc}
     .ltorg
+
+@ pitrex_draw_anim(r0 = ARM ptr to _ANIM_NAME data block, r1 = ox, r2 = oy)
+.global pitrex_draw_anim
+.type pitrex_draw_anim, %function
+pitrex_draw_anim:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0                      @ anim header ptr
+    mov     r10, r1                     @ save ox
+    mov     r11, r2                     @ save oy
+    ldr     r5, =PITREX_ANIM_STATE_BUF
+    ldrb    r6, [r5]                    @ frame_idx
+    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)
+    ldrb    r8, [r4, #2]                @ base_ref_count
+    cmp     r8, #0
+    beq     par_tick
+    add     r9, r4, #4                  @ first base_ref word-ptr
+par_base_loop:
+    push    {r8, r9}
+    ldr     r0, [r9]                    @ ARM ptr to vec data
+    mov     r1, r10                     @ ox
+    mov     r2, r11                     @ oy
+    bl      pitrex_draw_vector
+    pop     {r8, r9}
+    add     r9, r9, #4                  @ next base_ref ptr
+    subs    r8, r8, #1
+    bne     par_base_loop
+par_tick:
+    cmp     r7, #0
+    beq     par_init_frame              @ first call: init frame 0
+    subs    r7, r7, #1
+    bgt     par_draw                    @ still ticking: draw current frame
+    ldrb    r8, [r4]                    @ frame_count
+    add     r6, r6, #1
+    cmp     r6, r8
+    blt     par_no_wrap
+    ldrb    r9, [r4, #1]                @ loop flag
+    cmp     r9, #0
+    beq     par_freeze
+    mov     r6, #0                      @ loop: wrap to frame 0
+par_no_wrap:
+    strb    r6, [r5]                    @ save new frame_idx
+par_init_frame:
+    ldrb    r8, [r4, #3]                @ frame_table_offset
+    lsl     r9, r6, #2                  @ frame_idx * 4
+    add     r9, r9, r8                  @ offset to frame table entry
+    ldr     r9, [r4, r9]                @ ARM ptr to frame data
+    ldrb    r7, [r9]                    @ duration_ticks
+    cmp     r7, #0
+    movle   r7, #1                      @ clamp to min 1
+    strb    r7, [r5, #1]                @ save ticks_left
+    b       par_draw_vecs
+par_freeze:
+    sub     r6, r6, #1                  @ stay on last frame
+    strb    r6, [r5]
+    mov     r7, #1
+    strb    r7, [r5, #1]
+    b       par_draw_frame
+par_draw:
+    strb    r7, [r5, #1]                @ save decremented ticks
+par_draw_frame:
+    ldrb    r8, [r4, #3]                @ frame_table_offset
+    lsl     r9, r6, #2                  @ frame_idx * 4
+    add     r9, r9, r8
+    ldr     r9, [r4, r9]                @ ARM ptr to frame data
+par_draw_vecs:
+    ldrb    r8, [r9, #1]                @ vec_ref_count
+    cmp     r8, #0
+    beq     par_done
+    add     r9, r9, #4                  @ skip duration+count+2-byte pad
+    mov     r6, r8                      @ loop counter
+par_vec_loop:
+    push    {r6, r9}
+    ldr     r0, [r9]                    @ ARM ptr to vec data
+    mov     r1, r10                     @ ox
+    mov     r2, r11                     @ oy
+    bl      pitrex_draw_vector
+    pop     {r6, r9}
+    add     r9, r9, #4                  @ next vec ptr
+    subs    r6, r6, #1
+    bne     par_vec_loop
+par_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+.bss
+.balign 4
+PITREX_ANIM_STATE_BUF: .space 2
+.text
 
 @ --- main (PiTrex SDK entry point) ---
 .align 2
@@ -2522,6 +2952,7 @@ pitrex_game_loop:
     bl      v_readJoystick2Analog
     bl      pitrex_music_update
     bl      pitrex_sfx_update
+    bl      v_doSound          @ flush PSG buffer to hardware
     mov     r0, #70
     push    {r0}
     ldr     r0, =-40

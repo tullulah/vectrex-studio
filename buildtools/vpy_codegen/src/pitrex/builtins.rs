@@ -691,23 +691,28 @@ fn emit_pitrex_draw_polygon() -> String {
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r9, r10}       @ r9=cur_x=x1_s, r10=cur_y=y1_s\n");
-    // loop k=2..n-1: vk on stack at [r12+(2k-2)*4]=xk, [r12+(2k-1)*4]=yk
+    // loop k=2..n-1: vk on stack at [caller_sp+(2k-2)*4]=xk, [caller_sp+(2k-1)*4]=yk
+    // r12 (IP) is a caller-saved register: v_directDraw32 may clobber it on each call.
+    // Use sp-relative addressing instead: caller_sp = sp + 36 (9 callee-save regs × 4).
+    // At the top of each loop iteration sp = entry_sp - 36 (no extra pushes outstanding).
     s.push_str("    mov     r11, #2\n");
     s.push_str(".Lpoly_loop:\n");
     s.push_str("    cmp     r11, r4\n");
     s.push_str("    bge     .Lpoly_close\n");
-    // xk = [r12 + (2k-2)*4]
+    // xk offset = (2k-2)*4;  full sp offset = 36 + (2k-2)*4
     s.push_str("    mov     r0, r11, lsl #1 @ 2k\n");
     s.push_str("    sub     r0, r0, #2      @ 2k-2\n");
-    s.push_str("    lsl     r0, r0, #2\n");
-    s.push_str("    ldr     r0, [r12, r0]   @ xk raw\n");
-    s.push_str("    mul     r0, r0, r5      @ xk_s\n");
-    // yk = [r12 + (2k-1)*4]
+    s.push_str("    lsl     r0, r0, #2      @ (2k-2)*4\n");
+    s.push_str("    add     r0, r0, #36     @ + callee-save frame (9*4)\n");
+    s.push_str("    ldr     r2, [sp, r0]    @ xk raw (sp-relative, avoids clobbered r12)\n");
+    s.push_str("    mul     r0, r2, r5      @ xk_s → r0  (Rd=r0 != Rm=r2)\n");
+    // yk offset = (2k-1)*4;  full sp offset = 36 + (2k-1)*4
     s.push_str("    mov     r1, r11, lsl #1 @ 2k\n");
     s.push_str("    sub     r1, r1, #1      @ 2k-1\n");
-    s.push_str("    lsl     r1, r1, #2\n");
-    s.push_str("    ldr     r1, [r12, r1]   @ yk raw\n");
-    s.push_str("    mul     r1, r1, r5      @ yk_s\n");
+    s.push_str("    lsl     r1, r1, #2      @ (2k-1)*4\n");
+    s.push_str("    add     r1, r1, #36     @ + callee-save frame\n");
+    s.push_str("    ldr     r2, [sp, r1]    @ yk raw (sp-relative)\n");
+    s.push_str("    mul     r1, r2, r5      @ yk_s → r1  (Rd=r1 != Rm=r2)\n");
     // save new endpoint, then draw cur→new
     s.push_str("    push    {r0, r1}        @ save new xk_s, yk_s\n");
     s.push_str("    mov     r2, r0\n    mov     r3, r1\n");
