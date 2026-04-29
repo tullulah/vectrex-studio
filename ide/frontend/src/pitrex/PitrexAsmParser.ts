@@ -322,6 +322,37 @@ export function parseAsm(src: string): ParsedAsm {
         continue;
       }
 
+      // .word N or .word SYMBOL  (4-byte pointer table entries for string arrays)
+      if (line.startsWith('.word')) {
+        rodataNext = (rodataNext + 3) & ~3; // ensure 4-byte alignment
+        const rest = line.replace(/^\.word\s*/, '');
+        const tokens = rest.split(',').map(t => t.trim()).filter(Boolean);
+        for (const tok of tokens) {
+          const num = parseNumber(tok);
+          if (num !== null) writeMemWord(rodataNext, num);
+          else              pendingTextRefs.push({ addr: rodataNext, symbol: tok });
+          rodataNext += 4;
+        }
+        continue;
+      }
+
+      // .asciz "..." — null-terminated string bytes stored in initMemory
+      const ascizMatch = line.match(/^\.asciz\s+"((?:[^"\\]|\\.)*)"/);
+      if (ascizMatch) {
+        const raw = ascizMatch[1];
+        const decoded = raw
+          .replace(/\\x([0-9a-fA-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
+          .replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+          .replace(/\\0/g, '\0').replace(/\\\\/g, '\\');
+        for (let i = 0; i < decoded.length; i++) {
+          writeMemByte(rodataNext, decoded.charCodeAt(i) & 0xFF);
+          rodataNext++;
+        }
+        writeMemByte(rodataNext, 0); // null terminator
+        rodataNext++;
+        continue;
+      }
+
       // .align or other rodata directives
       if (line.startsWith('.align')) {
         const n = parseInt(line.split(/\s+/)[1] ?? '2', 10);
