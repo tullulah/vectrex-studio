@@ -5,8 +5,25 @@
 
 use vpy_parser::{Expr, BinOp, CmpOp, LogicOp, CallInfo};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::collections::HashSet;
+use std::cell::RefCell;
 
 static COND_LABEL_CTR: AtomicUsize = AtomicUsize::new(0);
+
+// Names of const arrays whose elements are string pointers (stride 4, ldr).
+thread_local! {
+    static STRING_ARRAYS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+/// Register which variable names hold string pointer arrays.
+/// Called from emit_const_array_data before function emission.
+pub fn register_string_arrays(names: HashSet<String>) {
+    STRING_ARRAYS.with(|s| *s.borrow_mut() = names);
+}
+
+fn is_string_array(var_name: &str) -> bool {
+    STRING_ARRAYS.with(|s| s.borrow().contains(&var_name.to_uppercase()))
+}
 
 /// Emit code that sets r0=1 if condition is true, r0=0 otherwise.
 /// `branch_if_false` is the branch mnemonic taken when the condition is FALSE
@@ -151,15 +168,22 @@ pub fn emit_expr(
         Expr::Call(info) => emit_call(info, var_addrs),
 
         Expr::Index { target, index } => {
+            let is_str = matches!(target.as_ref(), Expr::Ident(info) if is_string_array(&info.name));
             let mut s = String::new();
             s.push_str(&emit_expr(target, var_addrs)?);
             s.push_str("    push    {r0}\n");
             s.push_str(&emit_expr(index, var_addrs)?);
             s.push_str("    mov     r1, r0\n");
             s.push_str("    pop     {r0}           @ base ptr\n");
-            s.push_str("    lsl     r1, r1, #1     @ index * 2 (i16 stride)\n");
-            s.push_str("    add     r0, r0, r1\n");
-            s.push_str("    ldrsh   r0, [r0]       @ sign-extend 16-bit load\n");
+            if is_str {
+                s.push_str("    lsl     r1, r1, #2     @ index * 4 (ptr stride)\n");
+                s.push_str("    add     r0, r0, r1\n");
+                s.push_str("    ldr     r0, [r0]       @ load 32-bit string pointer\n");
+            } else {
+                s.push_str("    lsl     r1, r1, #1     @ index * 2 (i16 stride)\n");
+                s.push_str("    add     r0, r0, r1\n");
+                s.push_str("    ldrsh   r0, [r0]       @ sign-extend 16-bit load\n");
+            }
             Ok(s)
         }
 

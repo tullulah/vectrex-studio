@@ -9,10 +9,10 @@
 //!   - No explicit music/audio update call (stubbed for now)
 
 use vpy_parser::{Module, Item, Stmt, Expr, AssignTarget, BinOp};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use crate::AssetInfo;
-use super::expressions::emit_expr;
+use super::expressions::{emit_expr, register_string_arrays};
 
 static LABEL_CTR: AtomicU32 = AtomicU32::new(0);
 fn next_id() -> u32 { LABEL_CTR.fetch_add(1, Ordering::Relaxed) }
@@ -129,22 +129,49 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
 }
 
 /// Emit const array ROM data tables (to be placed in .rodata section).
+/// String arrays emit a .word pointer table followed by .asciz string data.
+/// Numeric arrays emit .hword entries (i16).
+/// Also registers string array names for stride-4/ldr indexing in expressions.
 pub fn emit_const_array_data(module: &Module) -> String {
     let mut s = String::new();
+    let mut str_array_names: HashSet<String> = HashSet::new();
+
     for item in &module.items {
         if let Item::Const { name, value, .. } = item {
             if let Expr::List(elems) = value {
                 let varname = name.to_uppercase();
-                s.push_str(".align 2\n");
-                s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
-                for elem in elems {
-                    if let Expr::Number(n) = elem {
-                        s.push_str(&format!("    .hword {n}\n"));
+                let is_string_array = elems.iter().any(|e| matches!(e, Expr::StringLit(_)));
+
+                if is_string_array {
+                    str_array_names.insert(varname.clone());
+
+                    // Emit pointer table
+                    s.push_str(".align 2\n");
+                    s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
+                    for (i, _elem) in elems.iter().enumerate() {
+                        s.push_str(&format!("    .word   .L{varname}_STR{i}\n"));
+                    }
+                    // Emit string data
+                    for (i, elem) in elems.iter().enumerate() {
+                        if let Expr::StringLit(text) = elem {
+                            s.push_str(&format!(".L{varname}_STR{i}:\n"));
+                            s.push_str(&format!("    .asciz  \"{text}\"\n"));
+                        }
+                    }
+                } else {
+                    s.push_str(".align 2\n");
+                    s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
+                    for elem in elems {
+                        if let Expr::Number(n) = elem {
+                            s.push_str(&format!("    .hword {n}\n"));
+                        }
                     }
                 }
             }
         }
     }
+
+    register_string_arrays(str_array_names);
     s
 }
 

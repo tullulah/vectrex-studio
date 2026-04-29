@@ -442,9 +442,7 @@ dvex_done:
 .type pitrex_j1_x, %function
 pitrex_j1_x:
     ldr     r1, =currentJoy1X
-    ldr     r0, [r1]
-    asr     r0, r0, #8
-    @ ±32767 → ±127
+    ldrsb   r0, [r1]
     bx      lr
     .ltorg
 
@@ -453,9 +451,7 @@ pitrex_j1_x:
 .type pitrex_j1_y, %function
 pitrex_j1_y:
     ldr     r1, =currentJoy1Y
-    ldr     r0, [r1]
-    asr     r0, r0, #8
-    @ ±32767 → ±127
+    ldrsb   r0, [r1]
     bx      lr
     .ltorg
 
@@ -2480,12 +2476,10 @@ v_readJoystick2Analog:
 .type pitrex_j2_x, %function
 pitrex_j2_x:
     ldr     r1, =currentJoy2X
-    ldr     r0, [r1]
-    ldr     r1, =8192
-    cmp     r0, r1
+    ldrsb   r0, [r1]
+    cmp     r0, #32
     bgt     1f
-    neg     r1, r1
-    cmp     r0, r1
+    cmn     r0, #32
     blt     2f
     mov     r0, #0
     bx      lr
@@ -2500,12 +2494,10 @@ pitrex_j2_x:
 .type pitrex_j2_y, %function
 pitrex_j2_y:
     ldr     r1, =currentJoy2Y
-    ldr     r0, [r1]
-    ldr     r1, =8192
-    cmp     r0, r1
+    ldrsb   r0, [r1]
+    cmp     r0, #32
     bgt     1f
-    neg     r1, r1
-    cmp     r0, r1
+    cmn     r0, #32
     blt     2f
     mov     r0, #0
     bx      lr
