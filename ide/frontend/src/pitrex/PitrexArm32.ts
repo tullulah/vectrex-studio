@@ -474,7 +474,7 @@ for (let c = 97; c <= 122; c++) VECTREX_FONT[c] = VECTREX_FONT[c - 32];
  * glyph grid: gx∈[0..4], gy∈[0..6], scale gives size in VPy units.
  * Coordinates multiplied by PITREX_COORD_SCALE to match v_directDraw32.
  */
-const PITREX_COORD_SCALE = 100;  // must match pitrex_draw_line ×100 multiplier
+const PITREX_COORD_SCALE = 128;  // must match pitrex_draw_line ×100 multiplier
 
 function drawTextAsSegments(
   s: PitrexArm32State, x: number, y: number, text: string, scale: number,
@@ -534,17 +534,17 @@ const SDK_STUBS: Record<string, SdkStub> = {
     if (btnSym) memWrite32(s, btnSym.value, s.joyButtons & 0xF);
   },
   'v_readJoystick1Analog':   (s) => {
-    // Write currentJoy1X / currentJoy1Y (±32767 range)
+    // currentJoy1X/Y are int8_t (±127). Write byte-sized values; ldrsb reads them correctly.
     const xSym = s.parsed.symbols.get('currentJoy1X');
     const ySym = s.parsed.symbols.get('currentJoy1Y');
-    if (xSym) memWrite32(s, xSym.value, Math.round(s.joyX * 32767 / 127));
-    if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY * 32767 / 127));
+    if (xSym) memWrite32(s, xSym.value, Math.round(s.joyX));
+    if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY));
   },
   'v_readJoystick2Analog':   (s) => {
     const xSym = s.parsed.symbols.get('currentJoy2X');
     const ySym = s.parsed.symbols.get('currentJoy2Y');
-    if (xSym) memWrite32(s, xSym.value, Math.round(s.joyX2 * 32767 / 127));
-    if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY2 * 32767 / 127));
+    if (xSym) memWrite32(s, xSym.value, Math.round(s.joyX2));
+    if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY2));
   },
   'v_printString': (s) => {
     // v_printString(x=r0, y=r1, str=r2, textSize=r3, brightness=[sp]) — vector font.

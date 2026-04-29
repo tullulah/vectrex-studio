@@ -361,27 +361,24 @@ fn emit_pitrex_draw_vector_ex() -> String {
 // ── Joystick / Buttons ────────────────────────────────────────────────────
 
 fn emit_pitrex_j1_x() -> String {
-    // Returns ±127 from currentJoy1X (raw ±32767 from SDK / emulator stub)
-    // Scale: ASR #8 gives 32767>>8=127, -32767>>8=-128 (close enough)
+    // currentJoy1X is int8_t (1 byte, ±127). Use ldrsb for correct signed byte read.
     let mut s = String::new();
     s.push_str("@ pitrex_j1_x() → r0 = X axis (-127..127)\n");
     s.push_str(".global pitrex_j1_x\n.type pitrex_j1_x, %function\npitrex_j1_x:\n");
     s.push_str("    ldr     r1, =currentJoy1X\n");
-    s.push_str("    ldr     r0, [r1]\n");
-    s.push_str("    asr     r0, r0, #8\n    @ ±32767 → ±127\n");
+    s.push_str("    ldrsb   r0, [r1]\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
     s
 }
 
 fn emit_pitrex_j1_y() -> String {
-    // Returns ±127 from currentJoy1Y (raw ±32767 from SDK / emulator stub)
+    // currentJoy1Y is int8_t (1 byte, ±127). Use ldrsb for correct signed byte read.
     let mut s = String::new();
     s.push_str("@ pitrex_j1_y() → r0 = Y axis (-127..127)\n");
     s.push_str(".global pitrex_j1_y\n.type pitrex_j1_y, %function\npitrex_j1_y:\n");
     s.push_str("    ldr     r1, =currentJoy1Y\n");
-    s.push_str("    ldr     r0, [r1]\n");
-    s.push_str("    asr     r0, r0, #8\n    @ ±32767 → ±127\n");
+    s.push_str("    ldrsb   r0, [r1]\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -1415,32 +1412,28 @@ fn emit_pitrex_j2() -> String {
     s.push_str("v_readJoystick2Analog:\n");
     s.push_str("    bx      lr\n\n");
 
-    // J2 X — from currentJoy2X (filled by v_readJoystick2Analog)
+    // J2 X — currentJoy2X is int8_t (±127). Deadzone = ±32 (~25% of full range).
     s.push_str("@ pitrex_j2_x() → r0 = -1, 0, or +1\n");
     s.push_str(".global pitrex_j2_x\n.type pitrex_j2_x, %function\npitrex_j2_x:\n");
     s.push_str("    ldr     r1, =currentJoy2X\n");
-    s.push_str("    ldr     r0, [r1]\n");
-    s.push_str("    ldr     r1, =8192\n");
-    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    ldrsb   r0, [r1]\n");
+    s.push_str("    cmp     r0, #32\n");
     s.push_str("    bgt     1f\n");
-    s.push_str("    neg     r1, r1\n");
-    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    cmn     r0, #32\n");
     s.push_str("    blt     2f\n");
     s.push_str("    mov     r0, #0\n    bx      lr\n");
     s.push_str("1:  mov     r0, #1\n    bx      lr\n");
     s.push_str("2:  mvn     r0, #0\n    bx      lr\n");
     s.push_str("    .ltorg\n\n");
 
-    // J2 Y — from currentJoy2Y
+    // J2 Y — currentJoy2Y is int8_t (±127). Deadzone = ±32.
     s.push_str("@ pitrex_j2_y() → r0 = -1, 0, or +1\n");
     s.push_str(".global pitrex_j2_y\n.type pitrex_j2_y, %function\npitrex_j2_y:\n");
     s.push_str("    ldr     r1, =currentJoy2Y\n");
-    s.push_str("    ldr     r0, [r1]\n");
-    s.push_str("    ldr     r1, =8192\n");
-    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    ldrsb   r0, [r1]\n");
+    s.push_str("    cmp     r0, #32\n");
     s.push_str("    bgt     1f\n");
-    s.push_str("    neg     r1, r1\n");
-    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    cmn     r0, #32\n");
     s.push_str("    blt     2f\n");
     s.push_str("    mov     r0, #0\n    bx      lr\n");
     s.push_str("1:  mov     r0, #1\n    bx      lr\n");
