@@ -1922,11 +1922,14 @@ fn emit_pitrex_misc_stubs() -> String {
 
 fn emit_pitrex_print_number_impl() -> String {
     // pitrex_print_number(r0=x, r1=y, r2=value) — converts int to decimal string, prints it.
-    // Uses a 6-byte stack buffer. Handles 0-9999 (matches M6809 backend range).
+    // Handles negative values: the '-' glyph is absent from the PiTrex SDK vector font
+    // (it maps to ABC_27 = space), so we draw it manually with v_directDraw32 in PiTrex
+    // coordinate units (same units as DRAW_LINE: VPy * 100).
+    // r9 = is_negative flag (1 if value < 0).
     let mut s = String::new();
     s.push_str("@ pitrex_print_number(r0=x, r1=y, r2=value) — print decimal integer\n");
     s.push_str(".global pitrex_print_number\n.type pitrex_print_number, %function\npitrex_print_number:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
     // save args
     s.push_str("    mov     r4, r0          @ x\n");
     s.push_str("    mov     r5, r1          @ y\n");
@@ -1934,10 +1937,12 @@ fn emit_pitrex_print_number_impl() -> String {
     // allocate 8-byte stack buffer (aligned)
     s.push_str("    sub     sp, sp, #8\n");
     s.push_str("    mov     r7, sp          @ buf ptr\n");
-    // prepend '-' if negative, then abs
+    // check sign — set r9=is_negative, prepend '-' for the space-advance, abs value
+    s.push_str("    mov     r9, #0          @ is_negative = false\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    bge     pn_positive\n");
-    s.push_str("    mov     r0, #45         @ '-' ASCII\n");
+    s.push_str("    mov     r9, #1          @ is_negative = true\n");
+    s.push_str("    mov     r0, #45         @ '-' ASCII (font renders as space-advance)\n");
     s.push_str("    strb    r0, [r7]\n");
     s.push_str("    add     r7, r7, #1\n");
     s.push_str("    rsb     r6, r6, #0      @ abs(r6)\n");
@@ -1960,17 +1965,41 @@ fn emit_pitrex_print_number_impl() -> String {
     }
     // null terminator
     s.push_str("    mov     r0, #0\n    strb    r0, [r7]\n");
-    // Reset beam to (0,0) so v_printString position is absolute, not integrator-relative
+    // Reset beam to (0,0) so v_printString position is absolute
     s.push_str("    mov     r0, #0\n");
     s.push_str("    mov     r1, #0\n");
     s.push_str("    bl      v_directMove32\n");
-    // call v_printString(x, y, buf, size, brightness)
-    s.push_str("    mov     r0, r4          @ x\n");
-    s.push_str("    mov     r1, r5          @ y\n");
-    s.push_str("    mov     r2, sp          @ buf ptr\n");
+    // Load textSize (needed for both minus sign and v_printString)
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
     s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
+    // If negative: draw minus sign as a horizontal line in PiTrex units.
+    // v_printString uses startX = x_passed * 128; we pass VPy*25/32, so
+    // startX = VPy * 100.  The '-' glyph advances 6*SCALEFONT = 9*textSize units.
+    // Minus sign: x0=VPy_x*100, x1=x0+8*textSize, y0=y1=(VPy_y-8)*100+6*textSize.
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     pn_print_str\n");
+    s.push_str("    ldr     r12, =100\n");
+    s.push_str("    mul     r0, r4, r12         @ x0_px = VPy_x * 100 (Rd≠Rm ✓)\n");
+    s.push_str("    sub     r2, r5, #8          @ VPy_y - 8 (cap_height offset)\n");
+    s.push_str("    mul     r1, r2, r12         @ y_baseline_px (Rd≠Rm ✓)\n");
+    s.push_str("    add     r1, r1, r3, lsl #2  @ + 4*textSize\n");
+    s.push_str("    add     r1, r1, r3, lsl #1  @ + 2*textSize → y_mid = baseline+6*ts\n");
+    s.push_str("    add     r2, r0, r3, lsl #3  @ x1 = x0 + 8*textSize\n");
+    s.push_str("    mov     r3, r1              @ y1 = y0 (horizontal line)\n");
+    s.push_str("    mov     r12, #0x50\n");
+    s.push_str("    push    {r12}\n");
+    s.push_str("    bl      v_directDraw32\n");
+    s.push_str("    add     sp, sp, #4\n");
+    // Reload textSize (clobbered by v_directDraw32 as r3 is caller-saved)
+    s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
+    s.push_str("    ldr     r3, [r3]\n");
+    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
+    s.push_str("pn_print_str:\n");
+    // call v_printString(x_scaled, y_scaled, buf, textSize, brightness)
+    s.push_str("    mov     r0, r4          @ x\n");
+    s.push_str("    mov     r1, r5          @ y\n");
+    s.push_str("    mov     r2, sp          @ buf ptr\n");
     // Subtract cap_height first (in VPy space), then rescale 25/32.
     s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)\n");
     // Rescale VPy*25/32 so v_printString's x*128 = VPy*100 (matching draw funcs).
@@ -1988,7 +2017,7 @@ fn emit_pitrex_print_number_impl() -> String {
     s.push_str("    add     sp, sp, #4\n");
     // free buffer
     s.push_str("    add     sp, sp, #8\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }

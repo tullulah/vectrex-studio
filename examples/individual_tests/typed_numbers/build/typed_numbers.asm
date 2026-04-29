@@ -4129,7 +4129,7 @@ _str_8_after:
     push    {r0}
     mov     r0, #10
     push    {r0}
-    mov     r0, #100
+    mov     r0, #60
     push    {r0}
     pop     {r3}
     pop     {r2}
