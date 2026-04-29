@@ -181,6 +181,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LCOL_PY", 1, "LEVEL_COLLISION player_y (lo byte)");
         ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION player half_height");
         ram.allocate("LCOL_PHW", 1, "LEVEL_COLLISION_X player half_width");
+        ram.allocate("LCOL_THW", 1, "LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch)");
         // Physics / collision temporaries
         ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
         ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");

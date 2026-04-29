@@ -1218,6 +1218,13 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 (fully off-screen)\n");
+    s.push_str("    mov     r12, r0\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r12, r12, #0        @ r12 = |ox|\n");
+    s.push_str("    cmp     r12, #180\n");
+    s.push_str("    bgt     .Lshl_bg_skip\n");
     s.push_str("    push    {r4, r5, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
     s.push_str("    mov     r3, #0              @ mirror=0\n");
@@ -1227,6 +1234,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    bl      pitrex_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
     s.push_str("    pop     {r4, r5, r10, r11}\n");
+    s.push_str(".Lshl_bg_skip:\n");
     s.push_str("    add     r5, r5, #16         @ next BG object\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lshl_bg\n");
@@ -1246,6 +1254,13 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr (from ROM obj)\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 (fully off-screen)\n");
+    s.push_str("    mov     r12, r0\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r12, r12, #0        @ r12 = |ox|\n");
+    s.push_str("    cmp     r12, #180\n");
+    s.push_str("    bgt     .Lshl_gp_skip\n");
     s.push_str("    push    {r4, r5, r7, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
     s.push_str("    mov     r3, #0              @ mirror=0\n");
@@ -1255,6 +1270,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    bl      pitrex_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
     s.push_str("    pop     {r4, r5, r7, r10, r11}\n");
+    s.push_str(".Lshl_gp_skip:\n");
     s.push_str("    add     r5, r5, #16         @ next ROM GP object\n");
     s.push_str("    add     r7, r7, #8          @ next buf entry\n");
     s.push_str("    subs    r4, r4, #1\n");
@@ -1273,6 +1289,13 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 (fully off-screen)\n");
+    s.push_str("    mov     r12, r0\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r12, r12, #0        @ r12 = |ox|\n");
+    s.push_str("    cmp     r12, #180\n");
+    s.push_str("    bgt     .Lshl_fg_skip\n");
     s.push_str("    push    {r4, r5, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
     s.push_str("    mov     r3, #0              @ mirror=0\n");
@@ -1282,6 +1305,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    bl      pitrex_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
     s.push_str("    pop     {r4, r5, r10, r11}\n");
+    s.push_str(".Lshl_fg_skip:\n");
     s.push_str("    add     r5, r5, #16         @ next FG object\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lshl_fg_loop\n");

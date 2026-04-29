@@ -244,7 +244,7 @@ pub fn emit_level_collision_x(args: &[Expr], out: &mut String, assets: &[crate::
     // arg[2]: player_half_width → LCOL_PHW
     expressions::emit_simple_expr(&args[2], out, assets);
     out.push_str("    STB >LCOL_PHW        ; store player half_width\n");
-    // arg[3]: player_half_height → LCOL_PHH (used for Y-overlap; runtime overwrites it with total_hw after Y-check)
+    // arg[3]: player_half_height → LCOL_PHH (used for Y-overlap; runtime stores total_hw in LCOL_THW, not here)
     expressions::emit_simple_expr(&args[3], out, assets);
     out.push_str("    STB >LCOL_PHH        ; store player half_height for Y-overlap check\n");
     // arg[1]: player_y lo-byte → LCOL_PY
@@ -425,6 +425,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SHOW_LEVEL_RUNTIME:\n");
         out.push_str("    PSHS D,X,Y,U     ; Preserve registers\n");
         out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
+        out.push_str("    LDA #$18\n");
+        out.push_str("    STA >$D00B       ; ACR=$18: SR shift-out PHI2, enable beam via SR\n");
         if crate::m6809::builtins::use_banked_assets() {
             out.push_str("    ; MULTIBANK: Switch to level bank so ROM pointers are valid\n");
             out.push_str("    LDA >CURRENT_ROM_BANK\n");
@@ -1425,7 +1427,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str(";         LCOL_PHW (u8) = player half_width\n");
         out.push_str("; Output: RESULT = signed push-out dx (16-bit). Positive=right, negative=left.\n");
         out.push_str("; Returns 0 if no overlap found.\n");
-        out.push_str("; Scratch: borrows LCOL_PHH (total_hw) during run.\n");
+        out.push_str("; Scratch: uses LCOL_THW for total_hw (preserves LCOL_PHH=player_hh across iterations).\n");
         out.push_str("; RAM object offsets: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,\n");
         out.push_str(";   +13=half_width, +14=half_height\n");
         out.push_str("LEVEL_COLLISION_X_RUNTIME:\n");
@@ -1457,14 +1459,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STB >TMPVAL\n");    // save threshold
         out.push_str("    CMPA >TMPVAL\n");   // A (|dy|) vs threshold
         out.push_str("    LBGE LCOL_X_NEXT\n"); // |dy| >= threshold → no Y overlap
-        // total_hw = player_hw + obj_half_w → overwrite LCOL_PHH (player_hh no longer needed)
+        // total_hw = player_hw + obj_half_w → store in LCOL_THW (not LCOL_PHH, to preserve player_hh for next iteration)
         out.push_str("    LDA >LCOL_PHW\n");
         out.push_str("    ADDA 13,X\n");
-        out.push_str("    STA >LCOL_PHH\n");
+        out.push_str("    STA >LCOL_THW\n");
         // left_edge = obj_x - total_hw (16-bit); skip if player_x < left_edge
         out.push_str("    LDA 0,X\n");
         out.push_str("    LDB 1,X\n");
-        out.push_str("    SUBB >LCOL_PHH\n");
+        out.push_str("    SUBB >LCOL_THW\n");
         out.push_str("    SBCA #0\n");
         out.push_str("    STD >TMPVAL\n");
         out.push_str("    LDD >LCOL_PX\n");
@@ -1473,7 +1475,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         // right_edge = obj_x + total_hw (16-bit); skip if player_x > right_edge
         out.push_str("    LDA 0,X\n");
         out.push_str("    LDB 1,X\n");
-        out.push_str("    ADDB >LCOL_PHH\n");
+        out.push_str("    ADDB >LCOL_THW\n");
         out.push_str("    ADCA #0\n");
         out.push_str("    STD >TMPVAL\n");
         out.push_str("    LDD >LCOL_PX\n");
@@ -1489,7 +1491,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("LCOL_X_DXABS:\n");
         // B = |dx|; compute push_magnitude = total_hw - |dx| via NEGB + ADDB
         out.push_str("    NEGB\n");           // B = -|dx|
-        out.push_str("    ADDB >LCOL_PHH\n"); // B = total_hw - |dx| = push_magnitude
+        out.push_str("    ADDB >LCOL_THW\n"); // B = total_hw - |dx| = push_magnitude
         // A = push_magnitude (from TFR B,A above), B = push_magnitude (unchanged)
         // Load dx sign into B; branch on direction; put push_magnitude back in B for SEX
         out.push_str("    TFR B,A\n");        // A = push_magnitude (B also = push_magnitude here)
