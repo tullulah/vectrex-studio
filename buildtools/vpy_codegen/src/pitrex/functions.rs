@@ -316,7 +316,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                 if let Some(&addr) = var_addrs.get(&varname) {
                     match value {
                         Expr::Number(n) => {
-                            let mov = if *n >= 0 && *n <= 65535 {
+                            let mov = if *n >= 0 && *n <= 255 {
                                 format!("    mov     r0, #{n}\n")
                             } else {
                                 format!("    ldr     r0, ={n}\n")
@@ -330,7 +330,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
                             for (i, elem) in elems.iter().enumerate() {
                                 if let Expr::Number(n) = elem {
-                                    let mov = if *n >= 0 && *n <= 65535 {
+                                    let mov = if *n >= 0 && *n <= 255 {
                                         format!("    mov     r0, #{n}\n")
                                     } else {
                                         format!("    ldr     r0, ={n}\n")
@@ -350,7 +350,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                 if let Some(&addr) = var_addrs.get(&varname) {
                     match value {
                         Expr::Number(n) => {
-                            let mov = if *n >= 0 && *n <= 65535 {
+                            let mov = if *n >= 0 && *n <= 255 {
                                 format!("    mov     r0, #{n}\n")
                             } else {
                                 format!("    ldr     r0, ={n}\n")
