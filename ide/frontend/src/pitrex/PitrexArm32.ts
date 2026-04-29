@@ -470,7 +470,7 @@ for (let c = 97; c <= 122; c++) VECTREX_FONT[c] = VECTREX_FONT[c - 32];
 
 /**
  * Render a text string as vector segments at VPy coordinates (x, y).
- * scale: same as TEXT_SIZE (default 5 for pitrex_print_text).
+ * scale: emulator glyph scale (textSize * 0.6; default textSize=5 → scale=3.0).
  * glyph grid: gx∈[0..4], gy∈[0..6], scale gives size in VPy units.
  * Coordinates multiplied by PITREX_COORD_SCALE to match v_directDraw32.
  */
@@ -524,6 +524,7 @@ const SDK_STUBS: Record<string, SdkStub> = {
 
   'v_setBrightness':         () => {},
   'v_setScale':              () => {}, // scale is irrelevant in emulator (coord mapping uses PITREX_MAX_X/Y)
+  'v_directMove32':          () => {}, // beam reset — no-op in emulator (drawTextAsSegments is absolute)
   'v_init':                  () => {},
   'v_setRefresh':            () => {},
   'vectrexinit':             () => {},
@@ -546,7 +547,10 @@ const SDK_STUBS: Record<string, SdkStub> = {
     if (ySym) memWrite32(s, ySym.value, Math.round(s.joyY2 * 32767 / 127));
   },
   'v_printString': (s) => {
-    // v_printString(x=r0, y=r1, str=r2, textSize=r3, brightness=[sp]) — vector font
+    // v_printString(x=r0, y=r1, str=r2, textSize=r3, brightness=[sp]) — vector font.
+    // Codegen pre-scales coords: x' = VPy * 25/32, y' = (VPy_y - 8) * 25/32.
+    // Undo: VPy_x = x' * 32/25 = x' * 1.28,  VPy_y = y' * 1.28 + 8.
+    // scale factor: textSize=5 → emulator scale=3.0, so scale = textSize * 0.6.
     const strPtr = s.regs[2];
     let text = '';
     for (let i = 0; i < 128; i++) {
@@ -555,10 +559,10 @@ const SDK_STUBS: Record<string, SdkStub> = {
       text += String.fromCharCode(ch);
     }
     if (text.length > 0) {
-      // Codegen emits `sub r1, r1, #8` before bl v_printString (hardware baseline shift).
-      // The ARM interpreter already executed it, so r1 = VPy_y - 8. Add 8 back to get
-      // the original top-of-character y coordinate.
-      drawTextAsSegments(s, s.regs[0], s.regs[1] + 8, text, 3.0);
+      const scale = Math.max(0.5, s.regs[3] * 0.6);
+      const vpyX = Math.round(s.regs[0] * 1.28);
+      const vpyY = Math.round(s.regs[1] * 1.28) + 8;
+      drawTextAsSegments(s, vpyX, vpyY, text, scale);
     }
   },
 

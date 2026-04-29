@@ -72,8 +72,8 @@ pub fn generate_pitrex_asm(
     for sym in &[
         "vectrexinit", "v_init", "v_setRefresh",
         "v_WaitRecal", "v_readButtons", "v_readJoystick1Analog",
-        "v_directDraw32", "v_setBrightness",
-        "v_printStringRaster",
+        "v_directDraw32", "v_directMove32", "v_setBrightness", "v_setScale",
+        "v_printString", "v_printStringRaster",
         "v_writePSG", "v_doSound",
         "currentJoy1X", "currentJoy1Y", "currentButtonState",
         "currentJoy2X", "currentJoy2Y",

@@ -410,25 +410,53 @@ fn emit_pitrex_j1_btn4() -> String { emit_pitrex_j1_btn("pitrex_j1_btn4", 3) }
 
 fn emit_pitrex_print_text() -> String {
     // pitrex_print_text(r0=x, r1=y, r2=str_ptr)
-    // Calls v_printString(x, y, str, textSize, brightness) — SDK vector font
-    // ARM EABI: r0-r3 first 4 args, brightness (5th) on stack
+    // Calls v_printString(x, y, str, textSize, brightness) — SDK vector font.
+    //
+    // v_printString uses INTEGRATOR-RELATIVE coordinates (like M6809 BIOS Print_Str_d).
+    // Without an explicit reset, text position depends on wherever the beam ended after
+    // the previous draw call → cumulative drift across multiple PRINT_TEXT calls.
+    // We call v_directMove32(0, 0) before v_printString to make positioning absolute.
     let mut s = String::new();
     s.push_str("@ pitrex_print_text(r0=x, r1=y, r2=str_ptr)\n");
     s.push_str(".global pitrex_print_text\n.type pitrex_print_text, %function\npitrex_print_text:\n");
-    s.push_str("    push    {lr}\n");
-    // r3=textSize from PITREX_TEXT_SIZE, default=1
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    // Save VPy_x, VPy_y, str_ptr across the v_directMove32 call
+    s.push_str("    mov     r4, r0\n");
+    s.push_str("    mov     r5, r1\n");
+    s.push_str("    mov     r6, r2\n");
+    // Reset beam to (0,0) so v_printString's int8_t coords are absolute, not relative.
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    bl      v_directMove32\n");
+    // Restore args
+    s.push_str("    mov     r0, r4              @ VPy_x\n");
+    s.push_str("    mov     r1, r5              @ VPy_y\n");
+    s.push_str("    mov     r2, r6              @ str_ptr\n");
+    // textSize from PITREX_TEXT_SIZE, default=5
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
     s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
-    // M6809 convention: y = TOP of text. v_printString: y = baseline (text draws up).
-    // For textSize=5, cap_height ≈ 8. Subtract so text top aligns with VPy y.
-    s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height\n");
-    // push brightness as 5th arg
+    // y convention: VPy y = top of text. v_printString y = baseline. Subtract cap_height
+    // FIRST (in VPy space), then apply the coordinate rescale below.
+    s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)\n");
+    // Coordinate rescale: DRAW_LINE/DRAW_RECT call v_directDraw32 with VPy*100 coordinates.
+    // v_printString internally does startX = x * 128. To align both systems we pre-scale
+    // the VPy coords by 100/128 = 25/32, so: x_passed * 128 = VPy * 25/32 * 128 = VPy * 100.
+    //   x * 25/32  =  (x*16 + x*8 + x) >> 5  =  x*25 >> 5
+    s.push_str("    lsl     r12, r0, #4         @ r12 = x*16\n");
+    s.push_str("    add     r12, r12, r0, lsl #3 @ r12 = x*24\n");
+    s.push_str("    add     r0, r12, r0          @ r0  = x*25\n");
+    s.push_str("    asr     r0, r0, #5           @ r0  = x*25/32 (sign-preserving)\n");
+    s.push_str("    lsl     r12, r1, #4         @ r12 = y*16\n");
+    s.push_str("    add     r12, r12, r1, lsl #3 @ r12 = y*24\n");
+    s.push_str("    add     r1, r12, r1          @ r1  = y*25\n");
+    s.push_str("    asr     r1, r1, #5           @ r1  = y*25/32 (sign-preserving)\n");
+    // brightness as 5th arg on stack
     s.push_str("    mov     r12, #0x50\n");
     s.push_str("    push    {r12}\n");
     s.push_str("    bl      v_printString\n");
     s.push_str("    add     sp, sp, #4\n");
-    s.push_str("    pop     {pc}\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -1927,14 +1955,28 @@ fn emit_pitrex_print_number_impl() -> String {
     }
     // null terminator
     s.push_str("    mov     r0, #0\n    strb    r0, [r7]\n");
-    // call v_printStringRaster(x, y, buf, size, angle, terminator)
+    // Reset beam to (0,0) so v_printString position is absolute, not integrator-relative
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    bl      v_directMove32\n");
+    // call v_printString(x, y, buf, size, brightness)
     s.push_str("    mov     r0, r4          @ x\n");
     s.push_str("    mov     r1, r5          @ y\n");
     s.push_str("    mov     r2, sp          @ buf ptr\n");
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
     s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
-    s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height\n");
+    // Subtract cap_height first (in VPy space), then rescale 25/32.
+    s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)\n");
+    // Rescale VPy*25/32 so v_printString's x*128 = VPy*100 (matching draw funcs).
+    s.push_str("    lsl     r12, r0, #4         @ r12 = x*16\n");
+    s.push_str("    add     r12, r12, r0, lsl #3 @ r12 = x*24\n");
+    s.push_str("    add     r0, r12, r0          @ r0  = x*25\n");
+    s.push_str("    asr     r0, r0, #5           @ r0  = x*25/32\n");
+    s.push_str("    lsl     r12, r1, #4         @ r12 = y*16\n");
+    s.push_str("    add     r12, r12, r1, lsl #3 @ r12 = y*24\n");
+    s.push_str("    add     r1, r12, r1          @ r1  = y*25\n");
+    s.push_str("    asr     r1, r1, #5           @ r1  = y*25/32\n");
     s.push_str("    mov     r12, #0x50\n");
     s.push_str("    push    {r12}\n");
     s.push_str("    bl      v_printString\n");
