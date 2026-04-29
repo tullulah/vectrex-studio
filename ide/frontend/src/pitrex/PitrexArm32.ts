@@ -555,10 +555,9 @@ const SDK_STUBS: Record<string, SdkStub> = {
       text += String.fromCharCode(ch);
     }
     if (text.length > 0) {
-      // Codegen emits `add r0,r0,#3` and `sub r1,r1,#11` before bl, so at intercept:
-      //   r0 = VPy_x + 3,  r1 = VPy_y - 11
-      // +8 here → drawTextAsSegments(VPy_x+3, VPy_y-3).
-      // The font renders 3 left / 3 above the coords passed, so the visual result is (VPy_x, VPy_y).
+      // Codegen emits `sub r1, r1, #8` before bl v_printString (hardware baseline shift).
+      // The ARM interpreter already executed it, so r1 = VPy_y - 8. Add 8 back to get
+      // the original top-of-character y coordinate.
       drawTextAsSegments(s, s.regs[0], s.regs[1] + 8, text, 3.0);
     }
   },

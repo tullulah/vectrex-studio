@@ -420,10 +420,9 @@ fn emit_pitrex_print_text() -> String {
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
     s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
-    // Calibrated offsets: hardware measures show text renders 3 units left and 3 units
-    // above the VPy coordinate. Correct: +3 in x, and baseline = top - cap_height(8) - 3.
-    s.push_str("    add     r0, r0, #3          @ x calibration offset\n");
-    s.push_str("    sub     r1, r1, #11         @ baseline = top - cap_height(8) - y_offset(3)\n");
+    // M6809 convention: y = TOP of text. v_printString: y = baseline (text draws up).
+    // For textSize=5, cap_height ≈ 8. Subtract so text top aligns with VPy y.
+    s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height\n");
     // push brightness as 5th arg
     s.push_str("    mov     r12, #0x50\n");
     s.push_str("    push    {r12}\n");
@@ -1935,8 +1934,7 @@ fn emit_pitrex_print_number_impl() -> String {
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
     s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
-    s.push_str("    add     r0, r0, #3          @ x calibration offset\n");
-    s.push_str("    sub     r1, r1, #11         @ baseline = top - cap_height(8) - y_offset(3)\n");
+    s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height\n");
     s.push_str("    mov     r12, #0x50\n");
     s.push_str("    push    {r12}\n");
     s.push_str("    bl      v_printString\n");
