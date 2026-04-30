@@ -70,6 +70,11 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let lvl_gpc   = alloc.alloc(4); decls.push_str(&format!(".equ LEVEL_GP_COUNT, 0x{lvl_gpc:08X}\n"));
     // LEVEL_GP_BUF: 32 GP objects × 8 bytes each (x i16, y i16, vx i16, vy i16)
     let lvl_buf   = alloc.alloc(256); decls.push_str(&format!(".equ LEVEL_GP_BUF, 0x{lvl_buf:08X}\n"));
+    // Scroll limits loaded from .vplay scrollLimits field
+    let sl_left   = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_LEFT, 0x{sl_left:08X}\n"));
+    let sl_right  = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_RIGHT, 0x{sl_right:08X}\n"));
+    let sl_top    = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_TOP, 0x{sl_top:08X}\n"));
+    let sl_bottom = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_BOTTOM, 0x{sl_bottom:08X}\n"));
     decls.push('\n');
 
     // User globals & locals

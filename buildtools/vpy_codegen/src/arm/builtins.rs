@@ -1391,6 +1391,10 @@ fn emit_state_builtins() -> String {
     simple_set!("vpy_set_camera_y", "CAMERA_Y");
     simple_get!("vpy_get_camera_x", "CAMERA_X");
     simple_get!("vpy_get_camera_y", "CAMERA_Y");
+    simple_get!("vpy_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT");
+    simple_get!("vpy_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT");
+    simple_get!("vpy_get_scroll_limit_top",    "SCROLL_LIMIT_TOP");
+    simple_get!("vpy_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM");
     // vpy_set_text_size: converts M6809 convention (n=1..8, n=8=normal) to ARM scale.
     // ARM TEXT_SIZE=3 ≈ normal Vectrex text (glyph 4×6 box, scale=3 → height=9 units).
     // Mapping: TEXT_SIZE = max(1, (n*3 + 4) >> 3)
@@ -1558,6 +1562,15 @@ fn emit_level_builtins() -> String {
     s.push_str("    add     r7, r7, #8               @ next buf slot\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vll_gp_loop\n");
     s.push_str("vll_done:\n");
+    // Read scroll limits from header (+24..+31): left(i16), right(i16), top(i16), bottom(i16)
+    s.push_str("    ldrsh   r0, [r4, #24]            @ scrollLimit left\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_LEFT\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #26]            @ scrollLimit right\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_RIGHT\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #28]            @ scrollLimit top\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_TOP\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #30]            @ scrollLimit bottom\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_BOTTOM\n    str     r0, [r1]\n");
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n    .ltorg\n\n");
 
     // ── vpy_show_level() ────────────────────────────────────────────────────
@@ -1719,7 +1732,17 @@ fn emit_level_builtins() -> String {
     s.push_str("    mov     r0, #0\n    strb    r0, [r7, #7]  @ pad=0\n");
     s.push_str("    add     r6, r6, #16\n    add     r7, r7, #8\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vll_gp_loop\n");
-    s.push_str("vll_done:\n    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
+    s.push_str("vll_done:\n");
+    // Read scroll limits from header (+24..+31)
+    s.push_str("    ldrsh   r0, [r4, #24]             @ scrollLimit left\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_LEFT\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #26]             @ scrollLimit right\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_RIGHT\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #28]             @ scrollLimit top\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_TOP\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #30]             @ scrollLimit bottom\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_BOTTOM\n    str     r0, [r1]\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
 
     // ── vpy_show_level() ────────────────────────────────────────────────────
     s.push_str("@ vpy_show_level()\n");

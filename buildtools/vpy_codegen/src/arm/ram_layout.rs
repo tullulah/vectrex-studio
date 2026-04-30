@@ -60,13 +60,18 @@ pub fn emit_ram_layout() -> String {
         ("PSG_SFX_PTR",      0x17C, "pointer to current SFX event in ROM"),
         ("PSG_SFX_ACTIVE",   0x180, "1 = SFX playing"),
         ("PSG_SFX_DELAY",    0x184, "frames remaining before next SFX event"),
-        // Level engine (0x188–0x28B)
-        ("LEVEL_GP_COUNT",   0x188, "number of active GP objects"),
+        // Level engine (0x188–0x29B)
+        ("LEVEL_GP_COUNT",      0x188, "number of active GP objects"),
         // LEVEL_GP_BUF: 32 objects × 8 bytes = 256 bytes (0x188+4..0x288)
         // Each slot: +0 world_x(i16), +2 world_y(i16), +4 vel_x(i8), +5 vel_y(i8), +6 alive(u8), +7 pad
-        ("LEVEL_GP_BUF",     0x18C, "level GP mutable buffer (32 obj × 8 bytes = 256 bytes)"),
-        // user RAM starts here (0x28C)
-        ("USER_RAM_START",   0x28C, "user variables begin here"),
+        ("LEVEL_GP_BUF",        0x18C, "level GP mutable buffer (32 obj × 8 bytes = 256 bytes)"),
+        // Scroll limits loaded from .vplay scrollLimits field (0x28C–0x29B)
+        ("SCROLL_LIMIT_LEFT",   0x28C, "camera scroll limit: left world X"),
+        ("SCROLL_LIMIT_RIGHT",  0x290, "camera scroll limit: right world X"),
+        ("SCROLL_LIMIT_TOP",    0x294, "camera scroll limit: top world Y"),
+        ("SCROLL_LIMIT_BOTTOM", 0x298, "camera scroll limit: bottom world Y"),
+        // user RAM starts here (0x29C)
+        ("USER_RAM_START",      0x29C, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {

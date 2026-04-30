@@ -1181,6 +1181,15 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    subs    r5, r5, #1\n");
     s.push_str("    bne     .Lll_copy\n");
     s.push_str(".Lll_done:\n");
+    // Read scroll limits from header (+24..+31)
+    s.push_str("    ldrsh   r0, [r4, #24]       @ scrollLimit left\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_LEFT\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #26]       @ scrollLimit right\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_RIGHT\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #28]       @ scrollLimit top\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_TOP\n    str     r0, [r1]\n");
+    s.push_str("    ldrsh   r0, [r4, #30]       @ scrollLimit bottom\n");
+    s.push_str("    ldr     r1, =SCROLL_LIMIT_BOTTOM\n    str     r0, [r1]\n");
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
     s.push_str("    .ltorg\n\n");
 
@@ -1771,6 +1780,19 @@ fn emit_pitrex_camera_getters() -> String {
     s.push_str("    ldr     r0, [r1]\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
+    for (fname, sym) in &[
+        ("pitrex_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT"),
+        ("pitrex_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT"),
+        ("pitrex_get_scroll_limit_top",    "SCROLL_LIMIT_TOP"),
+        ("pitrex_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM"),
+    ] {
+        s.push_str(&format!("@ {}() → r0\n", fname));
+        s.push_str(&format!(".global {fname}\n.type {fname}, %function\n{fname}:\n"));
+        s.push_str(&format!("    ldr     r1, ={sym}\n"));
+        s.push_str("    ldr     r0, [r1]\n");
+        s.push_str("    bx      lr\n");
+        s.push_str("    .ltorg\n\n");
+    }
     s
 }
 
