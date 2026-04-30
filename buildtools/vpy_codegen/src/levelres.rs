@@ -25,6 +25,9 @@ pub struct VPlayLevel {
     pub world_bounds: VPlayWorldBounds,
     /// Objects organized by layers
     pub layers: VPlayLayers,
+    /// Scroll limits (optional; defaults to worldBounds when absent)
+    #[serde(default, rename = "scrollLimits")]
+    pub scroll_limits: VPlayScrollLimits,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +55,14 @@ pub struct VPlayWorldBounds {
     pub y_min: i16,
     #[serde(rename = "yMax")]
     pub y_max: i16,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct VPlayScrollLimits {
+    pub left: Option<i16>,
+    pub right: Option<i16>,
+    pub top: Option<i16>,
+    pub bottom: Option<i16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +209,16 @@ impl VPlayLevel {
         out.push_str(&format!("    FDB _{}_BG_OBJECTS\n", name));
         out.push_str(&format!("    FDB _{}_GAMEPLAY_OBJECTS\n", name));
         out.push_str(&format!("    FDB _{}_FG_OBJECTS\n", name));
+
+        // Scroll limits (+21..+28): default to worldBounds when not set
+        let sl_left   = self.scroll_limits.left.unwrap_or(self.world_bounds.x_min);
+        let sl_right  = self.scroll_limits.right.unwrap_or(self.world_bounds.x_max);
+        let sl_top    = self.scroll_limits.top.unwrap_or(self.world_bounds.y_max);
+        let sl_bottom = self.scroll_limits.bottom.unwrap_or(self.world_bounds.y_min);
+        out.push_str(&format!("    FDB {}  ; scrollLimit left (camera left cannot go below this)\n", sl_left));
+        out.push_str(&format!("    FDB {}  ; scrollLimit right (camera right cannot exceed this)\n", sl_right));
+        out.push_str(&format!("    FDB {}  ; scrollLimit top\n", sl_top));
+        out.push_str(&format!("    FDB {}  ; scrollLimit bottom\n", sl_bottom));
         out.push_str("\n");
 
         // Emit background objects
@@ -269,6 +290,16 @@ impl VPlayLevel {
         out.push_str(&format!("    .word _{name}_BG_OBJECTS\n"));
         out.push_str(&format!("    .word _{name}_GP_OBJECTS\n"));
         out.push_str(&format!("    .word _{name}_FG_OBJECTS\n"));
+
+        // Scroll limits: default to worldBounds when not set
+        let sl_left   = self.scroll_limits.left.unwrap_or(self.world_bounds.x_min);
+        let sl_right  = self.scroll_limits.right.unwrap_or(self.world_bounds.x_max);
+        let sl_top    = self.scroll_limits.top.unwrap_or(self.world_bounds.y_max);
+        let sl_bottom = self.scroll_limits.bottom.unwrap_or(self.world_bounds.y_min);
+        out.push_str(&format!("    .hword {}  @ scrollLimit left\n", sl_left));
+        out.push_str(&format!("    .hword {}  @ scrollLimit right\n", sl_right));
+        out.push_str(&format!("    .hword {}  @ scrollLimit top\n", sl_top));
+        out.push_str(&format!("    .hword {}  @ scrollLimit bottom\n", sl_bottom));
         out.push_str("\n");
 
         out.push_str(&format!("_{name}_BG_OBJECTS:\n"));
@@ -511,6 +542,7 @@ mod tests {
                 gameplay: vec![],
                 foreground: vec![],
             },
+            scroll_limits: VPlayScrollLimits::default(),
         };
 
         assert_eq!(level.version, "2.0");
@@ -541,6 +573,7 @@ mod tests {
                 gameplay: vec![],
                 foreground: vec![],
             },
+            scroll_limits: VPlayScrollLimits::default(),
         };
 
         let asm = level.compile_to_asm();

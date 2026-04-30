@@ -15,6 +15,10 @@ prev_y: i16 = -62
 
 # Camera
 camera_x: i16 = 0
+scroll_left:  i16 = 0
+scroll_right: i16 = 0
+scroll_right_edge: i16 = 0
+screen_x: i16 = -30
 
 # Movement state
 is_walking: u8 = 0
@@ -24,6 +28,9 @@ floor_y: i16 = -62
 
 def main():
     LOAD_LEVEL("world_1_1")
+    scroll_left  = GET_SCROLL_LIMIT_LEFT()
+    scroll_right = GET_SCROLL_LIMIT_RIGHT()
+    scroll_right_edge = scroll_right - 192
     #PLAY_MUSIC("theme")
 
 def loop():
@@ -79,18 +86,21 @@ def loop():
         if player_y > floor_y:
             on_ground = 0
 
-    # Camera follows player (player appears at screen_x = -30)
+    # Camera: follow player but clamp to scroll limits
     camera_x = player_x + 30
-    camera_x = clamp(camera_x, 0, 970)
+    camera_x = clamp(camera_x, scroll_left, scroll_right_edge)
 
     SET_CAMERA_X(camera_x)
     SHOW_LEVEL()
 
+    # Player screen position depends on camera clamp
+    screen_x = player_x - camera_x
+
     # Draw player: walk animation only while moving, static pose when idle
     if is_walking == 1:
-        DRAW_ANIM("mario_walk", -30, player_y)
+        DRAW_ANIM("mario_walk", screen_x, player_y)
     else:
-        DRAW_VECTOR("mario_body", -30, player_y)
-        DRAW_VECTOR("mario_legs_straight", -30, player_y)
+        DRAW_VECTOR("mario_body", screen_x, player_y)
+        DRAW_VECTOR("mario_legs_straight", screen_x, player_y)
     debug_print(floor_y)
     debug_print(player_y)

@@ -157,6 +157,10 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_FG_COUNT", 1, "FG object count");
         ram.allocate("CAMERA_X", 2, "Camera X scroll offset (16-bit signed world units)");
         ram.allocate("CAMERA_Y", 2, "Camera Y scroll offset (16-bit signed world units)");
+        ram.allocate("SCROLL_LIMIT_LEFT",   2, "Camera scroll limit: left world X");
+        ram.allocate("SCROLL_LIMIT_RIGHT",  2, "Camera scroll limit: right world X");
+        ram.allocate("SCROLL_LIMIT_TOP",    2, "Camera scroll limit: top world Y");
+        ram.allocate("SCROLL_LIMIT_BOTTOM", 2, "Camera scroll limit: bottom world Y");
         ram.allocate("LEVEL_BG_ROM_PTR", 2, "BG layer ROM pointer");
         ram.allocate("LEVEL_GP_ROM_PTR", 2, "GP layer ROM pointer");
         ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");

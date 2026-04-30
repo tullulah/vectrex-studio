@@ -44,6 +44,7 @@ pub fn needs_level_runtime(module: &Module) -> bool {
 ///   +15..+16: FDB bgObjectsPtr
 ///   +17..+18: FDB gpObjectsPtr
 ///   +19..+20: FDB fgObjectsPtr
+///   +21..+28: FDB scrollLeft, scrollRight, scrollTop, scrollBottom
 ///
 /// GP objects (20 bytes each in ROM) are copied to LEVEL_GP_BUFFER (14 bytes each in RAM).
 /// BG/FG objects stay in ROM and are read directly with stride 20.
@@ -194,6 +195,34 @@ pub fn emit_set_camera_y(args: &[Expr], out: &mut String, assets: &[crate::Asset
     out.push_str("    STD RESULT\n");
 }
 
+/// Emit GET_SCROLL_LIMIT_LEFT() → returns SCROLL_LIMIT_LEFT (16-bit signed)
+pub fn emit_get_scroll_limit_left(_args: &[Expr], out: &mut String) {
+    out.push_str("    ; ===== GET_SCROLL_LIMIT_LEFT builtin =====\n");
+    out.push_str("    LDD >SCROLL_LIMIT_LEFT\n");
+    out.push_str("    STD RESULT\n");
+}
+
+/// Emit GET_SCROLL_LIMIT_RIGHT() → returns SCROLL_LIMIT_RIGHT (16-bit signed)
+pub fn emit_get_scroll_limit_right(_args: &[Expr], out: &mut String) {
+    out.push_str("    ; ===== GET_SCROLL_LIMIT_RIGHT builtin =====\n");
+    out.push_str("    LDD >SCROLL_LIMIT_RIGHT\n");
+    out.push_str("    STD RESULT\n");
+}
+
+/// Emit GET_SCROLL_LIMIT_TOP() → returns SCROLL_LIMIT_TOP (16-bit signed)
+pub fn emit_get_scroll_limit_top(_args: &[Expr], out: &mut String) {
+    out.push_str("    ; ===== GET_SCROLL_LIMIT_TOP builtin =====\n");
+    out.push_str("    LDD >SCROLL_LIMIT_TOP\n");
+    out.push_str("    STD RESULT\n");
+}
+
+/// Emit GET_SCROLL_LIMIT_BOTTOM() → returns SCROLL_LIMIT_BOTTOM (16-bit signed)
+pub fn emit_get_scroll_limit_bottom(_args: &[Expr], out: &mut String) {
+    out.push_str("    ; ===== GET_SCROLL_LIMIT_BOTTOM builtin =====\n");
+    out.push_str("    LDD >SCROLL_LIMIT_BOTTOM\n");
+    out.push_str("    STD RESULT\n");
+}
+
 /// Emit LEVEL_COLLISION_Y(player_x, player_y) → highest floor Y at player_x in the GP layer
 ///
 /// Scans all collidable GP objects (collision_flags bit 0 set) and returns the top Y
@@ -301,6 +330,17 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STD >LEVEL_GP_ROM_PTR\n");
         out.push_str("    LDD ,X++         ; D = fgObjectsPtr\n");
         out.push_str("    STD >LEVEL_FG_ROM_PTR\n");
+        out.push_str("    \n");
+        out.push_str("    ; Read scroll limits from ROM header (+21..+28)\n");
+        out.push_str("    ; X is now at +21 (right after the 3 FDB layer pointers)\n");
+        out.push_str("    LDD ,X++         ; D = scrollLimit left\n");
+        out.push_str("    STD >SCROLL_LIMIT_LEFT\n");
+        out.push_str("    LDD ,X++         ; D = scrollLimit right\n");
+        out.push_str("    STD >SCROLL_LIMIT_RIGHT\n");
+        out.push_str("    LDD ,X++         ; D = scrollLimit top\n");
+        out.push_str("    STD >SCROLL_LIMIT_TOP\n");
+        out.push_str("    LDD ,X++         ; D = scrollLimit bottom\n");
+        out.push_str("    STD >SCROLL_LIMIT_BOTTOM\n");
         out.push_str("    \n");
         out.push_str("    ; === Copy GP objects from ROM to RAM buffer ===\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");

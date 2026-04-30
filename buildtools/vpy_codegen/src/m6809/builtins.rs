@@ -104,6 +104,10 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Level camera
     ("SET_CAMERA_X", 1),          // camera_x (16-bit scroll offset)
     ("SET_CAMERA_Y", 1),          // camera_y (16-bit scroll offset)
+    ("GET_SCROLL_LIMIT_LEFT",   0),  // → i16 left scroll boundary
+    ("GET_SCROLL_LIMIT_RIGHT",  0),  // → i16 right scroll boundary
+    ("GET_SCROLL_LIMIT_TOP",    0),  // → i16 top scroll boundary
+    ("GET_SCROLL_LIMIT_BOTTOM", 0),  // → i16 bottom scroll boundary
     ("LEVEL_COLLISION_Y", 3),     // player_x, player_y, player_half_height → returns tile_top + player_hh
     ("LEVEL_COLLISION_X", 4),     // player_x, player_y, player_half_width, player_half_height → returns push-out dx
 
@@ -710,6 +714,22 @@ pub fn emit_builtin(
         }
         "SET_CAMERA_Y" => {
             level::emit_set_camera_y(args, out, assets);
+            true
+        }
+        "GET_SCROLL_LIMIT_LEFT" => {
+            level::emit_get_scroll_limit_left(args, out);
+            true
+        }
+        "GET_SCROLL_LIMIT_RIGHT" => {
+            level::emit_get_scroll_limit_right(args, out);
+            true
+        }
+        "GET_SCROLL_LIMIT_TOP" => {
+            level::emit_get_scroll_limit_top(args, out);
+            true
+        }
+        "GET_SCROLL_LIMIT_BOTTOM" => {
+            level::emit_get_scroll_limit_bottom(args, out);
             true
         }
         "LEVEL_COLLISION_Y" => {
