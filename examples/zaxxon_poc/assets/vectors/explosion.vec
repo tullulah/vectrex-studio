@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "name": "explosion",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "explosion",
+      "visible": true,
+      "paths": [
+        {
+          "name": "h",
+          "intensity": 127,
+          "closed": false,
+          "points": [ { "x": -10, "y": 0 }, { "x": 10, "y": 0 } ]
+        },
+        {
+          "name": "v",
+          "intensity": 127,
+          "closed": false,
+          "points": [ { "x": 0, "y": -10 }, { "x": 0, "y": 10 } ]
+        },
+        {
+          "name": "d1",
+          "intensity": 100,
+          "closed": false,
+          "points": [ { "x": -7, "y": -7 }, { "x": 7, "y": 7 } ]
+        },
+        {
+          "name": "d2",
+          "intensity": 100,
+          "closed": false,
+          "points": [ { "x": 7, "y": -7 }, { "x": -7, "y": 7 } ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}
