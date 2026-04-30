@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-04-16"
+    "description": "Created in Playground - 2026-04-29"
   },
   "worldBounds": {
     "xMin": -96,
@@ -92,25 +92,6 @@
         "gravity": 0,
         "bounceDamping": 0,
         "physicsType": "static"
-      },
-      {
-        "id": "obj_bg_7",
-        "type": "tile",
-        "vectorName": "ground_tile",
-        "layer": "background",
-        "x": 295,
-        "y": -103,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "static"
       }
     ],
     "gameplay": [
@@ -138,8 +119,8 @@
         "type": "decoration",
         "vectorName": "mountain",
         "layer": "gameplay",
-        "x": 750,
-        "y": -50,
+        "x": 730,
+        "y": 6,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -172,12 +153,31 @@
         "physicsType": "gravity"
       },
       {
+        "id": "obj_bg_7",
+        "type": "tile",
+        "vectorName": "ground_tile",
+        "layer": "gameplay",
+        "x": 300,
+        "y": -153,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "static"
+      },
+      {
         "id": "obj_bg_1",
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": -65,
-        "y": -103,
+        "x": -66,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -196,7 +196,7 @@
         "vectorName": "ground_tile",
         "layer": "gameplay",
         "x": -5,
-        "y": -103,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -214,8 +214,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 55,
-        "y": -103,
+        "x": 56,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -233,8 +233,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 115,
-        "y": -103,
+        "x": 117,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -252,8 +252,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 175,
-        "y": -103,
+        "x": 178,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -271,8 +271,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 235,
-        "y": -103,
+        "x": 239,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -290,8 +290,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 355,
-        "y": -103,
+        "x": 361,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -309,8 +309,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 415,
-        "y": -103,
+        "x": 422,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -328,8 +328,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 475,
-        "y": -103,
+        "x": 483,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -347,8 +347,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 535,
-        "y": -103,
+        "x": 544,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -366,8 +366,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 595,
-        "y": -103,
+        "x": 605,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -385,8 +385,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 655,
-        "y": -103,
+        "x": 666,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -404,8 +404,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 715,
-        "y": -103,
+        "x": 727,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -423,8 +423,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 775,
-        "y": -103,
+        "x": 788,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -442,8 +442,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 835,
-        "y": -103,
+        "x": 849,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -461,8 +461,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 895,
-        "y": -103,
+        "x": 910,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -480,8 +480,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 955,
-        "y": -103,
+        "x": 971,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -499,8 +499,8 @@
         "type": "tile",
         "vectorName": "ground_tile",
         "layer": "gameplay",
-        "x": 1015,
-        "y": -102,
+        "x": 1032,
+        "y": -153,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -518,8 +518,8 @@
         "type": "obstacle",
         "vectorName": "pipe",
         "layer": "gameplay",
-        "x": 220,
-        "y": -69,
+        "x": 218,
+        "y": -119,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -538,7 +538,7 @@
         "vectorName": "pipe",
         "layer": "gameplay",
         "x": 420,
-        "y": -45,
+        "y": -119,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -556,8 +556,8 @@
         "type": "obstacle",
         "vectorName": "pipe",
         "layer": "gameplay",
-        "x": 680,
-        "y": -45,
+        "x": 682,
+        "y": -119,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -576,7 +576,7 @@
         "vectorName": "pipe",
         "layer": "gameplay",
         "x": 850,
-        "y": -45,
+        "y": -119,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -595,7 +595,7 @@
         "vectorName": "question_block",
         "layer": "gameplay",
         "x": 84,
-        "y": -35,
+        "y": -88,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -613,8 +613,8 @@
         "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
-        "x": 149,
-        "y": 33,
+        "x": 145,
+        "y": -49,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -632,8 +632,8 @@
         "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
-        "x": 500,
-        "y": -10,
+        "x": 492,
+        "y": -88,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -651,8 +651,8 @@
         "type": "item",
         "vectorName": "question_block",
         "layer": "gameplay",
-        "x": 760,
-        "y": -10,
+        "x": 808,
+        "y": -88,
         "rotation": 0,
         "scale": 1,
         "velocity": {

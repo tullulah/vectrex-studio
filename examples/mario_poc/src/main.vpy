@@ -16,6 +16,9 @@ prev_y: i16 = -62
 # Camera
 camera_x: i16 = 0
 
+# Movement state
+is_walking: u8 = 0
+
 # Collision result (floor_y = where player center lands = tile_top + MARIO_HH)
 floor_y: i16 = -62
 
@@ -28,10 +31,13 @@ def loop():
     btn_jump = J1_BUTTON_1()
 
     # Horizontal movement
+    is_walking = 0
     if joy_x > 20:
         player_x = player_x + 3
+        is_walking = 1
     if joy_x < -20:
         player_x = player_x - 3
+        is_walking = 1
 
     # Clamp player to level bounds
     player_x = clamp(player_x, -62, 1050)
@@ -80,7 +86,11 @@ def loop():
     SET_CAMERA_X(camera_x)
     SHOW_LEVEL()
 
-    # Draw player at fixed screen position (screen_x=-30, player_y = sprite center)
-    DRAW_ANIM("mario_walk", -30, player_y)
+    # Draw player: walk animation only while moving, static pose when idle
+    if is_walking == 1:
+        DRAW_ANIM("mario_walk", -30, player_y)
+    else:
+        DRAW_VECTOR("mario_body", -30, player_y)
+        DRAW_VECTOR("mario_legs_straight", -30, player_y)
     debug_print(floor_y)
     debug_print(player_y)

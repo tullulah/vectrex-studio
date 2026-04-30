@@ -363,13 +363,14 @@ impl VecResource {
             
             let default_intensity = path.intensity;
             let p0 = &path.points[0];
-            // Subtract center to emit RELATIVE coordinates
-            let y0_relative = (p0.y - center_y).clamp(-127, 127) as i8;
-            let x0_relative = (p0.x - center_x).clamp(-127, 127) as i8;
-            
+            // Path coords are relative to sprite origin (0,0), not the bounding-box centroid.
+            // DRAW_VEC_X/Y is the draw position; adding raw path coords gives correct screen pos.
+            let y0_relative = p0.y.clamp(-127, 127) as i8;
+            let x0_relative = p0.x.clamp(-127, 127) as i8;
+
             // Malban format header: intensity, y_start, x_start, next_y, next_x
             asm.push_str(&format!("    FCB {}              ; path{}: intensity\n", default_intensity, path_idx));
-            asm.push_str(&format!("    FCB {},{},0,0        ; path{}: header (y={}, x={}, relative to center)\n", 
+            asm.push_str(&format!("    FCB {},{},0,0        ; path{}: header (y={}, x={})\n",
                 Self::format_byte(y0_relative), Self::format_byte(x0_relative), path_idx, y0_relative, x0_relative));
             
             // Generate lines: flag=$FF (draw), dy, dx

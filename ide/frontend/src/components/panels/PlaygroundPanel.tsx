@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../state/projectStore';
-import { VPlayLevel, VPlayObject, VPlayValidator, VPlayHotspot, HotspotTrigger, DEFAULT_LEVEL, VPLAY_VERSION } from '../../types/vplay-schema';
+import { VPlayLevel, VPlayObject, VPlayValidator, VPlayHotspot, HotspotTrigger, VPlayScrollLimits, DEFAULT_LEVEL, VPLAY_VERSION } from '../../types/vplay-schema';
 
 interface VecPath {
   name: string;
@@ -73,6 +73,9 @@ export function PlaygroundPanel() {
   const [hotspotDragOffset, setHotspotDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [widthScreens, setWidthScreens] = useState(1);
   const [heightScreens, setHeightScreens] = useState(1);
+  const [scrollLimits, setScrollLimits] = useState<VPlayScrollLimits>({});
+  const [draggingLimit, setDraggingLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
+  const [selectedLimit, setSelectedLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -452,6 +455,9 @@ export function PlaygroundPanel() {
           player: { x: 0, y: -100 }
         },
         hotspots: hotspots,
+        ...(Object.keys(scrollLimits).some(k => (scrollLimits as any)[k] !== undefined)
+          ? { scrollLimits }
+          : {}),
       };
 
       // Validate before saving
@@ -533,7 +539,9 @@ export function PlaygroundPanel() {
 
       setObjects(loadedObjects);
       setHotspots(sceneData.hotspots || []);
+      setScrollLimits(sceneData.scrollLimits || {});
       setSelectedHotspotId(null);
+      setSelectedLimit(null);
       setSelectedId(null);
       setSceneName(name); // Remember the scene name for future saves
       console.log('[Playground] Loaded scene:', name, `(${loadedObjects.length} objects)`);
@@ -687,6 +695,22 @@ export function PlaygroundPanel() {
       return;
     }
 
+    if (draggingLimit && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      if (draggingLimit === 'left' || draggingLimit === 'right') {
+        const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+        const clamped = Math.max(worldXMin, Math.min(worldXMax, vecX));
+        setScrollLimits(prev => ({ ...prev, [draggingLimit]: clamped }));
+      } else {
+        const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
+        const clamped = Math.max(worldYMin, Math.min(worldYMax, vecY));
+        setScrollLimits(prev => ({ ...prev, [draggingLimit]: clamped }));
+      }
+      return;
+    }
+
     if (draggingHotspotId && hotspotDragOffset) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -733,6 +757,7 @@ export function PlaygroundPanel() {
     setDraggingVelocity(false);
     setDraggingHotspotId(null);
     setHotspotDragOffset(null);
+    setDraggingLimit(null);
   };
 
   // Convert Vectrex coordinates to SVG viewport coordinates
@@ -777,6 +802,7 @@ export function PlaygroundPanel() {
       if (tag === 'svg' || tag === 'rect') {
         setSelectedId(null);
         setSelectedHotspotId(null);
+        setSelectedLimit(null);
       }
     }
   };
@@ -837,6 +863,90 @@ export function PlaygroundPanel() {
         </text>
       </g>
     );
+  };
+
+  // Render scroll limit guide lines on the SVG canvas
+  const renderScrollLimitLines = () => {
+    const svgW = 192 * widthScreens;
+    const svgH = 256 * heightScreens;
+
+    const limitDefs: Array<{
+      key: 'left' | 'right' | 'top' | 'bottom';
+      label: string;
+      color: string;
+    }> = [
+      { key: 'left',   label: 'L', color: '#00FFFF' },
+      { key: 'right',  label: 'R', color: '#00FFFF' },
+      { key: 'top',    label: 'T', color: '#FF00FF' },
+      { key: 'bottom', label: 'B', color: '#FF00FF' },
+    ];
+
+    return limitDefs.map(({ key, label, color }) => {
+      const val = scrollLimits[key];
+      if (val === undefined) return null;
+
+      const isSelected = selectedLimit === key;
+      const strokeW = isSelected ? 1.5 : 1;
+      const opacity = isSelected ? 1.0 : 0.75;
+
+      const isVertical = key === 'left' || key === 'right';
+      let x1: number, y1: number, x2: number, y2: number;
+      let labelX: number, labelY: number;
+
+      if (isVertical) {
+        const svgX = val - worldXMin;
+        x1 = svgX; y1 = 0; x2 = svgX; y2 = svgH;
+        labelX = svgX + 3;
+        labelY = 14;
+      } else {
+        const svgY = worldYMax - val;
+        x1 = 0; y1 = svgY; x2 = svgW; y2 = svgY;
+        labelX = 4;
+        labelY = svgY - 3;
+      }
+
+      // Hit-target line (wider, invisible) for easier grabbing
+      const hitProps = isVertical
+        ? { x1, y1, x2, y2, strokeWidth: 12, stroke: 'transparent' }
+        : { x1, y1, x2, y2, strokeWidth: 12, stroke: 'transparent' };
+
+      return (
+        <g
+          key={`scroll-limit-${key}`}
+          style={{ cursor: isVertical ? 'ew-resize' : 'ns-resize' }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            setDraggingLimit(key);
+            setSelectedLimit(key);
+            setSelectedId(null);
+            setSelectedHotspotId(null);
+          }}
+        >
+          {/* Wide transparent hit target */}
+          <line {...hitProps} />
+          {/* Visible dashed line */}
+          <line
+            x1={x1} y1={y1} x2={x2} y2={y2}
+            stroke={color}
+            strokeWidth={strokeW}
+            strokeDasharray="6 3"
+            opacity={opacity}
+          />
+          {/* Label */}
+          <text
+            x={labelX}
+            y={labelY}
+            fill={color}
+            fontSize="7"
+            fontFamily="monospace"
+            opacity={opacity}
+            style={{ userSelect: 'none', pointerEvents: 'none' }}
+          >
+            {label}:{val}
+          </text>
+        </g>
+      );
+    });
   };
 
   // Render a vector sprite from loaded .vec data
@@ -1031,6 +1141,75 @@ export function PlaygroundPanel() {
           HOTSPOT
         </button>
         <div style={{ borderLeft: '1px solid #555', height: '24px', margin: '0 4px' }} />
+        {/* Scroll limit toggle buttons */}
+        <span style={{ fontSize: '10px', color: '#888', marginRight: '2px' }}>SCROLL:</span>
+        {(['left', 'right', 'top', 'bottom'] as const).map(side => {
+          const labels: Record<string, string> = { left: 'L', right: 'R', top: 'T', bottom: 'B' };
+          const cyanlimits = side === 'left' || side === 'right';
+          const activeColor = cyanlimits ? '#00FFFF' : '#FF00FF';
+          const activeBg = cyanlimits ? '#003333' : '#330033';
+          const present = scrollLimits[side] !== undefined;
+          return (
+            <button
+              key={side}
+              title={present ? `Remove ${side} scroll limit` : `Add ${side} scroll limit`}
+              onClick={() => {
+                if (present) {
+                  setScrollLimits(prev => {
+                    const next = { ...prev };
+                    delete next[side];
+                    return next;
+                  });
+                  if (selectedLimit === side) setSelectedLimit(null);
+                } else {
+                  // Default position: world centre for each axis
+                  const defaultVal = side === 'left' ? worldXMin
+                    : side === 'right' ? worldXMax
+                    : side === 'top' ? worldYMax
+                    : worldYMin;
+                  setScrollLimits(prev => ({ ...prev, [side]: defaultVal }));
+                  setSelectedLimit(side);
+                }
+              }}
+              style={{
+                padding: '3px 7px',
+                background: present ? activeBg : '#2a2a2a',
+                color: present ? activeColor : '#666',
+                border: `1px solid ${present ? activeColor : '#444'}`,
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                minWidth: '24px',
+              }}
+            >
+              {labels[side]}
+            </button>
+          );
+        })}
+        {/* Inline coordinate input when a limit is selected */}
+        {selectedLimit && scrollLimits[selectedLimit] !== undefined && (
+          <input
+            type="number"
+            value={scrollLimits[selectedLimit] as number}
+            onChange={e => {
+              const v = parseInt(e.target.value) || 0;
+              const clamped = (selectedLimit === 'left' || selectedLimit === 'right')
+                ? Math.max(worldXMin, Math.min(worldXMax, v))
+                : Math.max(worldYMin, Math.min(worldYMax, v));
+              setScrollLimits(prev => ({ ...prev, [selectedLimit]: clamped }));
+            }}
+            style={{
+              width: 52,
+              background: '#1a1a1a',
+              color: (selectedLimit === 'left' || selectedLimit === 'right') ? '#00FFFF' : '#FF00FF',
+              border: `1px solid ${(selectedLimit === 'left' || selectedLimit === 'right') ? '#00FFFF' : '#FF00FF'}`,
+              borderRadius: 3,
+              padding: '2px 4px',
+              fontSize: 11,
+            }}
+          />
+        )}
+        <div style={{ borderLeft: '1px solid #555', height: '24px', margin: '0 4px' }} />
         <button
           onClick={() => setEditingVelocity(!editingVelocity)}
           style={{
@@ -1114,6 +1293,8 @@ export function PlaygroundPanel() {
             setSelectedId(null);
             setHotspots([]);
             setSelectedHotspotId(null);
+            setScrollLimits({});
+            setSelectedLimit(null);
           }}
           style={{
             padding: '4px 12px',
@@ -1236,6 +1417,9 @@ export function PlaygroundPanel() {
             {/* Render hotspots below objects */}
             {hotspots.map(hs => renderHotspot(hs))}
 
+            {/* Scroll limit guide lines */}
+            {renderScrollLimitLines()}
+
             {/* Objects - render actual vectors */}
             {objects.filter(o => o.layer === 'background').map(renderVector)}
             {objects.filter(o => !o.layer || o.layer === 'gameplay').map(renderVector)}
@@ -1244,6 +1428,9 @@ export function PlaygroundPanel() {
             {/* Status display */}
             <text x="5" y="15" fill="#00ff00" fontSize="8" fontFamily="monospace">
               {objects.length} objects | {hotspots.length} hotspots | {loadedVectors.size} vectors
+              {Object.keys(scrollLimits).filter(k => (scrollLimits as any)[k] !== undefined).length > 0
+                ? ` | ${Object.keys(scrollLimits).filter(k => (scrollLimits as any)[k] !== undefined).length} scroll limits`
+                : ''}
             </text>
           </svg>
           </div>

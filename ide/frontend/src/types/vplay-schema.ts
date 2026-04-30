@@ -178,6 +178,13 @@ export interface VPlayHotspot {
   label: string;       // shown in editor and as in-game prompt
 }
 
+export interface VPlayScrollLimits {
+  left?: number;    // world X: camera left edge cannot go below this
+  right?: number;   // world X: camera right edge cannot exceed this
+  top?: number;     // world Y: camera top edge cannot exceed this
+  bottom?: number;  // world Y: camera bottom edge cannot go below this
+}
+
 /**
  * Complete VPlay Level Structure v2.0
  */
@@ -202,6 +209,9 @@ export interface VPlayLevel {
 
   // Hotspots (interactive zones queryable at runtime)
   hotspots?: VPlayHotspot[];
+
+  // Scroll limits (camera clamp boundaries for scrolling levels)
+  scrollLimits?: VPlayScrollLimits;
 }
 
 /**

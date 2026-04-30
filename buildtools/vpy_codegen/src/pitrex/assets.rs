@@ -601,7 +601,7 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
 fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
     let mut s = String::new();
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
-    let (center_x, center_y) = res.calculate_center();
+    let (_center_x, _center_y) = res.calculate_center(); // kept for potential future use
 
     let paths = res.visible_paths();
 
@@ -631,8 +631,9 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
 
         let intensity = path.intensity;
         let p0 = &path.points[0];
-        let y0 = (p0.y - center_y).clamp(-127, 127) as i8;
-        let x0 = (p0.x - center_x).clamp(-127, 127) as i8;
+        // Path coords are relative to sprite origin (0,0), not the bounding-box centroid.
+        let y0 = p0.y.clamp(-127, 127) as i8;
+        let x0 = p0.x.clamp(-127, 127) as i8;
 
         s.push_str(&format!(
             "    .byte   {}               @ intensity\n",
