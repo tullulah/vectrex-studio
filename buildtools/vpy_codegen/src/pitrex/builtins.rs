@@ -111,33 +111,26 @@ fn emit_pitrex_set_intensity() -> String {
 // ── Move beam (no draw) ───────────────────────────────────────────────────
 
 fn emit_pitrex_move() -> String {
-    // pitrex_move(r0=x, r1=y) — move beam to absolute position, no draw
-    // We call v_directDraw32 with brightness=0 from cur→new, update cur
+    // pitrex_move(r0=x, r1=y) — move beam to absolute position, no draw.
+    // v_directMove32 takes unscaled VPy/BIOS coords (same ±127 range as M6809).
+    // PITREX_CUR_X/Y stores x*127 / y*127 so segment accumulation (pitrex_draw_line_rel)
+    // works correctly (it adds dx*127 to PITREX_CUR for each segment).
     let mut s = String::new();
     s.push_str("@ pitrex_move(r0=x, r1=y) — move beam, no draw\n");
     s.push_str(".global pitrex_move\n.type pitrex_move, %function\npitrex_move:\n");
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
-    // r4 = new_x * 127, r5 = new_y * 127
+    s.push_str("    push    {r4, lr}\n");
+    // Update PITREX_CUR_X/Y with scaled values (r0,r1 stay unscaled for v_directMove32)
     s.push_str("    mov     r4, #127\n");
-    s.push_str("    mul     r4, r0, r4          @ r4 = new_x * 127\n");
-    s.push_str("    mov     r5, #127\n");
-    s.push_str("    mul     r5, r1, r5          @ r5 = new_y * 127\n");
-    // load current pos
-    s.push_str("    ldr     r6, =PITREX_CUR_X\n");
-    s.push_str("    ldr     r0, [r6]            @ r0 = cur_x\n");
-    s.push_str("    ldr     r7, =PITREX_CUR_Y\n");
-    s.push_str("    ldr     r1, [r7]            @ r1 = cur_y\n");
-    // call v_directDraw32(cur_x, cur_y, new_x, new_y, brightness=0)
-    s.push_str("    mov     r2, r4              @ x1 = new_x\n");
-    s.push_str("    mov     r3, r5              @ y1 = new_y\n");
-    s.push_str("    mov     r12, #0\n");
-    s.push_str("    push    {r12}               @ brightness=0 (5th arg)\n");
-    s.push_str("    bl      v_directDraw32\n");
-    s.push_str("    add     sp, sp, #4          @ pop 5th arg\n");
-    // update current position
-    s.push_str("    str     r4, [r6]            @ PITREX_CUR_X = new_x\n");
-    s.push_str("    str     r5, [r7]            @ PITREX_CUR_Y = new_y\n");
-    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    s.push_str("    mul     r2, r0, r4          @ r2 = x*127 (Rd≠Rm)\n");
+    s.push_str("    ldr     r4, =PITREX_CUR_X\n");
+    s.push_str("    str     r2, [r4]            @ PITREX_CUR_X = x*127\n");
+    s.push_str("    mov     r4, #127\n");
+    s.push_str("    mul     r2, r1, r4          @ r2 = y*127 (Rd≠Rm)\n");
+    s.push_str("    ldr     r4, =PITREX_CUR_Y\n");
+    s.push_str("    str     r2, [r4]            @ PITREX_CUR_Y = y*127\n");
+    // Call v_directMove32(x, y) — unscaled coords; r0, r1 still intact
+    s.push_str("    bl      v_directMove32\n");
+    s.push_str("    pop     {r4, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -233,44 +226,55 @@ fn emit_pitrex_draw_vector() -> String {
     let mut s = String::new();
     s.push_str("@ pitrex_draw_vector(r0=asset_ptr, r1=ox, r2=oy)\n");
     s.push_str(".global pitrex_draw_vector\n.type pitrex_draw_vector, %function\npitrex_draw_vector:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
     s.push_str("    mov     r4, r0              @ asset header ptr\n");
     s.push_str("    mov     r3, #127\n");
-    s.push_str("    mul     r6, r1, r3          @ ox*127\n");
-    s.push_str("    mul     r7, r2, r3          @ oy*127\n");
+    s.push_str("    mul     r6, r1, r3          @ r6 = ox*127 (Rd=r6 ≠ Rm=r1)\n");
+    s.push_str("    mul     r7, r2, r3          @ r7 = oy*127 (Rd=r7 ≠ Rm=r2)\n");
     s.push_str("    ldr     r5, [r4], #4        @ path_count\n");
     s.push_str("    mov     r8, #0\n");
     s.push_str("dv_path_loop:\n");
     s.push_str("    cmp     r8, r5\n");
     s.push_str("    bge     dv_done\n");
     s.push_str("    ldr     r9, [r4], #4        @ r9 = path data ptr\n");
-    // Seed beam at offset for each path.
-    s.push_str("    ldr     r0, =PITREX_CUR_X\n    str     r6, [r0]\n");
-    s.push_str("    ldr     r0, =PITREX_CUR_Y\n    str     r7, [r0]\n");
-    s.push_str("    add     r9, r9, #1          @ skip intensity byte\n");
-    s.push_str("    ldrsb   r1, [r9], #1        @ dy = y_start\n");
-    s.push_str("    ldrsb   r0, [r9], #1        @ dx = x_start\n");
+    // Move beam to absolute path start using v_directMove32(x, y).
+    // v_directMove32 repositions the beam without drawing (no brightness concern).
+    // PITREX_CUR_X/Y is updated to match so pitrex_draw_line_rel uses correct from-coords.
+    s.push_str("    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)\n");
+    s.push_str("    ldrsb   r1, [r9], #1        @ r1 = y_start (i8)\n");
+    s.push_str("    ldrsb   r0, [r9], #1        @ r0 = x_start (i8)\n");
     s.push_str("    add     r9, r9, #2          @ skip 2 hdr padding bytes\n");
-    s.push_str("    mov     r2, #0              @ brightness 0 = move only\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
-    s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
+    // target = (x_start + ox)*127, (y_start + oy)*127
+    // Use r2 as MUL dest to satisfy ARM32 Rd≠Rm constraint
+    s.push_str("    mov     r3, #127\n");
+    s.push_str("    mul     r2, r0, r3          @ r2 = x_start*127 (Rd=r2 ≠ Rm=r0)\n");
+    s.push_str("    add     r0, r2, r6          @ r0 = (x_start+ox)*127\n");
+    s.push_str("    mul     r2, r1, r3          @ r2 = y_start*127 (Rd=r2 ≠ Rm=r1)\n");
+    s.push_str("    add     r1, r2, r7          @ r1 = (y_start+oy)*127\n");
+    s.push_str("    ldr     r2, =PITREX_CUR_X\n");
+    s.push_str("    str     r0, [r2]            @ PITREX_CUR_X = target_x\n");
+    s.push_str("    ldr     r2, =PITREX_CUR_Y\n");
+    s.push_str("    str     r1, [r2]            @ PITREX_CUR_Y = target_y\n");
+    s.push_str("    bl      v_directMove32\n");
+    s.push_str("    b       dv_after_pool\n");
+    s.push_str("    .ltorg\n");
+    s.push_str("dv_after_pool:\n");
     s.push_str("dv_seg_loop:\n");
     s.push_str("    ldrb    r0, [r9], #1        @ marker (0xFF=draw, 0x02=end)\n");
     s.push_str("    cmp     r0, #2\n");
     s.push_str("    beq     dv_seg_done\n");
     s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
-    s.push_str("    mov     r2, #127            @ full brightness\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
+    s.push_str("    mov     r2, r10             @ intensity from .vec\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10}\n");
     s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_seg_done:\n");
     s.push_str("    add     r8, r8, #1\n");
     s.push_str("    b       dv_path_loop\n");
     s.push_str("dv_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -283,31 +287,27 @@ fn emit_pitrex_draw_vector_ex() -> String {
     // Same asset layout as pitrex_draw_vector (path-pointer table → byte
     // stream paths terminated with 0x02). Differences from the simple
     // version:
-    //   * The beam is reset to (ox*100, oy*100) at the start of each path
-    //     so the relative move-to + segments end up centred on (ox, oy).
+    //   * The beam is reset at the start of each path centred on (ox, oy).
     //   * If `mirror` (r7) == 1, all dx values are negated.
-    //   * Intensity comes from the stack instead of being hard-coded to 127.
-    //
-    // After `push {r4..r9, lr}` (28 bytes), the caller's [sp+0]=intensity
-    // is at [sp+28]. We then push 8 more bytes (path_count, path_idx) so
-    // throughout the loop intensity stays in r8 (preserved).
+    //   * Per-path intensity is read from the .vec asset (same as the
+    //     simple version). The [sp]=intensity caller arg is accepted for
+    //     ABI compatibility but is not used.
     //
     // Register usage (callee-save):
-    //   r4 = asset header cursor, then per-path data cursor
+    //   r4 = asset header cursor
     //   r5 = ox
     //   r6 = oy
     //   r7 = mirror flag
-    //   r8 = intensity
-    //   r9 = scratch
+    //   r9 = path data cursor (per-path)
+    //   r10 = per-path intensity (from .vec)
     let mut s = String::new();
-    s.push_str("@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity)\n");
+    s.push_str("@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity_unused)\n");
     s.push_str(".global pitrex_draw_vector_ex\n.type pitrex_draw_vector_ex, %function\npitrex_draw_vector_ex:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 32 bytes\n");
     s.push_str("    mov     r4, r0              @ asset header ptr\n");
     s.push_str("    mov     r5, r1              @ ox\n");
     s.push_str("    mov     r6, r2              @ oy\n");
     s.push_str("    mov     r7, r3              @ mirror flag\n");
-    s.push_str("    ldr     r8, [sp, #28]       @ intensity (5th arg)\n");
     s.push_str("    ldr     r9, [r4], #4        @ path_count\n");
     s.push_str("    push    {r9}                @ [sp+0] = path_count\n");
     s.push_str("    mov     r9, #0\n");
@@ -318,22 +318,27 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    cmp     r0, r1\n");
     s.push_str("    bge     dvex_done\n");
     s.push_str("    ldr     r9, [r4], #4        @ r9 = path data ptr\n");
-    // Seed beam at (ox*127, oy*127) so the path-relative move-to and
-    // segments compose to absolute screen coordinates centred on (ox, oy).
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    mul     r1, r5, r0          @ ox*127\n");
-    s.push_str("    ldr     r2, =PITREX_CUR_X\n    str     r1, [r2]\n");
-    s.push_str("    mul     r1, r6, r0          @ oy*127\n");
-    s.push_str("    ldr     r2, =PITREX_CUR_Y\n    str     r1, [r2]\n");
-    s.push_str("    add     r9, r9, #1          @ skip intensity byte\n");
-    s.push_str("    ldrsb   r1, [r9], #1        @ dy = y_start\n");
-    s.push_str("    ldrsb   r0, [r9], #1        @ dx = x_start\n");
+    // Move beam to absolute path start using v_directMove32(x, y).
+    // r5=ox, r6=oy, r7=mirror, r10=per-path intensity from .vec
+    s.push_str("    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)\n");
+    s.push_str("    ldrsb   r1, [r9], #1        @ r1 = y_start (i8)\n");
+    s.push_str("    ldrsb   r0, [r9], #1        @ r0 = x_start (i8)\n");
     s.push_str("    add     r9, r9, #2          @ skip 2 hdr padding bytes\n");
-    s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0          @ mirror dx\n");
-    s.push_str("    mov     r2, #0              @ move only\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
-    s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
+    s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0          @ mirror x_start\n");
+    // target = (x_start + ox)*127, (y_start + oy)*127
+    // Use r2/r3 as MUL temps to satisfy ARM32 Rd≠Rm constraint
+    s.push_str("    mov     r12, #127\n");
+    s.push_str("    mul     r2, r0, r12         @ r2 = x_start*127 (Rd=r2 ≠ Rm=r0)\n");
+    s.push_str("    mul     r3, r5, r12         @ r3 = ox*127     (Rd=r3 ≠ Rm=r5)\n");
+    s.push_str("    add     r0, r2, r3          @ r0 = (x_start+ox)*127\n");
+    s.push_str("    mul     r2, r1, r12         @ r2 = y_start*127 (Rd=r2 ≠ Rm=r1)\n");
+    s.push_str("    mul     r3, r6, r12         @ r3 = oy*127     (Rd=r3 ≠ Rm=r6)\n");
+    s.push_str("    add     r1, r2, r3          @ r1 = (y_start+oy)*127\n");
+    s.push_str("    ldr     r2, =PITREX_CUR_X\n");
+    s.push_str("    str     r0, [r2]            @ PITREX_CUR_X = target_x\n");
+    s.push_str("    ldr     r2, =PITREX_CUR_Y\n");
+    s.push_str("    str     r1, [r2]            @ PITREX_CUR_Y = target_y\n");
+    s.push_str("    bl      v_directMove32\n");
     s.push_str("dvex_seg_loop:\n");
     s.push_str("    ldrb    r0, [r9], #1\n");
     s.push_str("    cmp     r0, #2\n");
@@ -341,10 +346,10 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
     s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0\n");
-    s.push_str("    mov     r2, r8              @ intensity\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9}\n");
+    s.push_str("    mov     r2, r10             @ intensity from .vec\n");
+    s.push_str("    push    {r4, r5, r6, r7, r9, r10}\n");
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r9, r10}\n");
     s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_seg_done:\n");
     s.push_str("    ldr     r0, [sp]\n");
@@ -353,7 +358,7 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    b       dvex_path_loop\n");
     s.push_str("dvex_done:\n");
     s.push_str("    add     sp, sp, #8          @ pop path_idx + path_count\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -2076,12 +2081,18 @@ fn emit_pitrex_print_number_impl() -> String {
 
 fn emit_pitrex_draw_anim() -> String {
     let mut s = String::new();
-    s.push_str("@ pitrex_draw_anim(r0 = ARM ptr to _ANIM_NAME data block, r1 = ox, r2 = oy)\n");
+    s.push_str("@ pitrex_draw_anim(r0=anim_ptr, r1=ox, r2=oy, r3=mirror, [sp]=speed_mul)\n");
     s.push_str(".global pitrex_draw_anim\n.type pitrex_draw_anim, %function\npitrex_draw_anim:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}    @ 36 bytes\n");
     s.push_str("    mov     r4, r0                      @ anim header ptr\n");
     s.push_str("    mov     r10, r1                     @ save ox\n");
     s.push_str("    mov     r11, r2                     @ save oy\n");
+    // Save mirror and speed_mul to BSS so they survive across inner calls
+    s.push_str("    ldr     r8, =PITREX_ANIM_MIRROR\n");
+    s.push_str("    strb    r3, [r8]                    @ save mirror flag\n");
+    s.push_str("    ldr     r8, =PITREX_ANIM_SPEED\n");
+    s.push_str("    ldr     r9, [sp, #36]               @ speed_mul (after 9 regs = 36 bytes)\n");
+    s.push_str("    strb    r9, [r8]                    @ save speed_mul\n");
     s.push_str("    ldr     r5, =PITREX_ANIM_STATE_BUF\n");
     s.push_str("    ldrb    r6, [r5]                    @ frame_idx\n");
     s.push_str("    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)\n");
@@ -2096,7 +2107,12 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");
-    s.push_str("    bl      pitrex_draw_vector\n");
+    s.push_str("    ldr     r3, =PITREX_ANIM_MIRROR\n");
+    s.push_str("    ldrb    r3, [r3]                    @ mirror flag\n");
+    s.push_str("    mov     r8, #127\n");
+    s.push_str("    push    {r8}                        @ intensity=127\n");
+    s.push_str("    bl      pitrex_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #4                  @ discard intensity\n");
     s.push_str("    pop     {r8, r9}\n");
     s.push_str("    add     r9, r9, #4                  @ next base_ref ptr\n");
     s.push_str("    subs    r8, r8, #1\n");
@@ -2122,13 +2138,20 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("    strb    r6, [r5]                    @ save new frame_idx\n");
     // Fall through to par_init_frame to load new frame's duration
 
-    // Load current frame data ptr and initialize ticks_left
+    // Load current frame data ptr, apply speed multiplier, and initialize ticks_left
     s.push_str("par_init_frame:\n");
     s.push_str("    ldrb    r8, [r4, #3]                @ frame_table_offset\n");
     s.push_str("    lsl     r9, r6, #2                  @ frame_idx * 4\n");
     s.push_str("    add     r9, r9, r8                  @ offset to frame table entry\n");
     s.push_str("    ldr     r9, [r4, r9]                @ ARM ptr to frame data\n");
     s.push_str("    ldrb    r7, [r9]                    @ duration_ticks\n");
+    // Apply speed multiplier: duration_ticks *= speed_mul (skip if speed_mul <= 1)
+    s.push_str("    ldr     r8, =PITREX_ANIM_SPEED\n");
+    s.push_str("    ldrb    r8, [r8]                    @ speed_mul\n");
+    s.push_str("    cmp     r8, #1\n");
+    s.push_str("    ble     par_speed_done\n");
+    s.push_str("    mul     r7, r8, r7                  @ duration_ticks *= speed_mul\n");
+    s.push_str("par_speed_done:\n");
     s.push_str("    cmp     r7, #0\n");
     s.push_str("    movle   r7, #1                      @ clamp to min 1\n");
     s.push_str("    strb    r7, [r5, #1]                @ save ticks_left\n");
@@ -2164,7 +2187,12 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");
-    s.push_str("    bl      pitrex_draw_vector\n");
+    s.push_str("    ldr     r3, =PITREX_ANIM_MIRROR\n");
+    s.push_str("    ldrb    r3, [r3]                    @ mirror flag\n");
+    s.push_str("    mov     r8, #127\n");
+    s.push_str("    push    {r8}                        @ intensity=127\n");
+    s.push_str("    bl      pitrex_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #4                  @ discard intensity\n");
     s.push_str("    pop     {r6, r9}\n");
     s.push_str("    add     r9, r9, #4                  @ next vec ptr\n");
     s.push_str("    subs    r6, r6, #1\n");
@@ -2173,10 +2201,12 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
-    // Static state buffer in BSS
+    // Static state buffer + mirror/speed bytes in BSS
     s.push_str(".bss\n");
     s.push_str(".balign 4\n");
-    s.push_str("PITREX_ANIM_STATE_BUF: .space 2\n");
+    s.push_str("PITREX_ANIM_STATE_BUF: .space 2    @ [0]=frame_idx [1]=ticks_left\n");
+    s.push_str("PITREX_ANIM_MIRROR: .space 1\n");
+    s.push_str("PITREX_ANIM_SPEED: .space 1\n");
     s.push_str(".text\n\n");
 
     s

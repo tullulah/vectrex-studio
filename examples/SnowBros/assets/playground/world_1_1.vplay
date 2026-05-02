@@ -1,0 +1,164 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "world_1_1",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-05-01"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [
+      {
+        "id": "obj_1777629435866",
+        "type": "enemy",
+        "vectorName": "platform1",
+        "layer": "background",
+        "x": -76,
+        "y": -88,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1777629603657",
+        "type": "enemy",
+        "vectorName": "platform1",
+        "layer": "background",
+        "x": 76,
+        "y": -88,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1777629612161",
+        "type": "enemy",
+        "vectorName": "platform4",
+        "layer": "background",
+        "x": 0,
+        "y": 62,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1777629652016",
+        "type": "enemy",
+        "vectorName": "platform2",
+        "layer": "background",
+        "x": 0,
+        "y": -40,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1777629716564",
+        "type": "enemy",
+        "vectorName": "platform1",
+        "layer": "background",
+        "x": 1,
+        "y": -88,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1777629837468",
+        "type": "enemy",
+        "vectorName": "platform3",
+        "layer": "background",
+        "x": -63,
+        "y": 8,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1777629850372",
+        "type": "enemy",
+        "vectorName": "platform3",
+        "layer": "background",
+        "x": 62,
+        "y": 8,
+        "rotation": 0,
+        "scale": 0.8,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "gameplay": [],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": []
+}

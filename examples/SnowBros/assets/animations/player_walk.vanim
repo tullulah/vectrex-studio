@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "name": "player_walk",
+  "loop": true,
+  "base_refs": [],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 3,
+      "vec_refs": [
+        "player_idle"
+      ],
+      "paths": []
+    },
+    {
+      "index": 1,
+      "duration_ticks": 4,
+      "vec_refs": [
+        "player_walk1"
+      ],
+      "paths": []
+    },
+    {
+      "index": 2,
+      "duration_ticks": 4,
+      "vec_refs": [
+        "player_walk2"
+      ],
+      "paths": []
+    },
+    {
+      "index": 3,
+      "duration_ticks": 4,
+      "vec_refs": [
+        "player_walk3"
+      ],
+      "paths": []
+    },
+    {
+      "index": 4,
+      "duration_ticks": 4,
+      "vec_refs": [
+        "player_walk4"
+      ],
+      "paths": []
+    }
+  ]
+}
