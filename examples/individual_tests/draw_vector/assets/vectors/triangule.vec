@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "name": "vec",
+  "name": "triangule",
   "canvas": {
     "width": 256,
     "height": 256,
@@ -12,42 +12,50 @@
       "visible": true,
       "paths": [
         {
-          "name": "shape",
-          "intensity": 127,
-          "closed": true,
-          "points": [
-            {
-              "x": 0,
-              "y": 28
-            },
-            {
-              "x": -15,
-              "y": -2
-            },
-            {
-              "x": 15,
-              "y": -2
-            }
-          ]
-        },
-        {
-          "name": "path_1777639927436",
+          "name": "path_1777648752263",
           "intensity": 127,
           "closed": false,
           "points": [
             {
-              "x": -15,
-              "y": -2,
+              "x": -23,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": 25,
+              "y": 0,
               "z": 0
             },
             {
               "x": 0,
-              "y": -29,
+              "y": 43,
               "z": 0
             },
             {
-              "x": 15,
-              "y": -2,
+              "x": -23,
+              "y": 0,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1777648772938",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -23,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": -23,
+              "z": 0
+            },
+            {
+              "x": 25,
+              "y": 0,
               "z": 0
             }
           ]
@@ -55,6 +63,6 @@
       ]
     }
   ],
-  "center_x": 0,
-  "center_y": 0
+  "center_x": 1,
+  "center_y": 10
 }

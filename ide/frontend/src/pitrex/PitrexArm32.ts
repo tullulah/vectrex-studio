@@ -522,6 +522,62 @@ const SDK_STUBS: Record<string, SdkStub> = {
     s.segments.push({ x0, y0, x1, y1, intensity: bri & 0x7F });
   },
 
+  'v_drawBezierCubic': (s) => {
+    // r0=x0, r1=y0, r2=cx0, r3=cy0
+    // [sp+0]=cx1, [sp+4]=cy1, [sp+8]=x1, [sp+12]=y1, [sp+16]=steps, [sp+20]=brightness
+    const SCALE = 127;
+    const sp = s.regs[SP];
+    const x0  = (s.regs[0] | 0) * SCALE;
+    const y0  = (s.regs[1] | 0) * SCALE;
+    const cx0 = (s.regs[2] | 0) * SCALE;
+    const cy0 = (s.regs[3] | 0) * SCALE;
+    const cx1 = (memRead32(s, sp +  0) | 0) * SCALE;
+    const cy1 = (memRead32(s, sp +  4) | 0) * SCALE;
+    const x1  = (memRead32(s, sp +  8) | 0) * SCALE;
+    const y1  = (memRead32(s, sp + 12) | 0) * SCALE;
+    const n   = Math.min(Math.max(memRead32(s, sp + 16) | 0, 2), 64);
+    const bri = memRead32(s, sp + 20) & 0x7F;
+    if (bri === 0) return;
+    const lerp = (a: number, b: number, i: number) => Math.trunc(((n - i) * a + i * b) / n);
+    const cubic = (p0: number, p1: number, p2: number, p3: number, i: number) => {
+      const q0 = lerp(p0, p1, i), q1 = lerp(p1, p2, i), q2 = lerp(p2, p3, i);
+      return lerp(lerp(q0, q1, i), lerp(q1, q2, i), i);
+    };
+    let px = x0, py = y0;
+    for (let i = 1; i <= n; i++) {
+      const nx = cubic(x0, cx0, cx1, x1, i);
+      const ny = cubic(y0, cy0, cy1, y1, i);
+      s.segments.push({ x0: px, y0: py, x1: nx, y1: ny, intensity: bri });
+      px = nx; py = ny;
+    }
+  },
+
+  'v_drawBezierQuad': (s) => {
+    // r0=x0, r1=y0, r2=cx, r3=cy
+    // [sp+0]=x1, [sp+4]=y1, [sp+8]=steps, [sp+12]=brightness
+    const SCALE = 127;
+    const sp = s.regs[SP];
+    const x0 = (s.regs[0] | 0) * SCALE;
+    const y0 = (s.regs[1] | 0) * SCALE;
+    const cx = (s.regs[2] | 0) * SCALE;
+    const cy = (s.regs[3] | 0) * SCALE;
+    const x1 = (memRead32(s, sp +  0) | 0) * SCALE;
+    const y1 = (memRead32(s, sp +  4) | 0) * SCALE;
+    const n  = Math.min(Math.max(memRead32(s, sp +  8) | 0, 2), 64);
+    const bri = memRead32(s, sp + 12) & 0x7F;
+    if (bri === 0) return;
+    const lerp = (a: number, b: number, i: number) => Math.trunc(((n - i) * a + i * b) / n);
+    const quad = (p0: number, p1: number, p2: number, i: number) =>
+      lerp(lerp(p0, p1, i), lerp(p1, p2, i), i);
+    let px = x0, py = y0;
+    for (let i = 1; i <= n; i++) {
+      const nx = quad(x0, cx, x1, i);
+      const ny = quad(y0, cy, y1, i);
+      s.segments.push({ x0: px, y0: py, x1: nx, y1: ny, intensity: bri });
+      px = nx; py = ny;
+    }
+  },
+
   'v_setBrightness':         () => {},
   'v_setScale':              () => {}, // scale is irrelevant in emulator (coord mapping uses PITREX_MAX_X/Y)
   'v_directMove32':          () => {}, // beam reset — no-op in emulator (drawTextAsSegments is absolute)

@@ -629,11 +629,57 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
             continue;
         }
 
+        // Bezier paths: store raw control points as 0xFE runtime-bezier segments.
+        // The draw loop calls v_drawBezierCubic per segment (full float precision, no baking).
+        if path.path_type.as_deref() == Some("bezier") {
+            let pts = &path.points;
+            if pts.len() < 4 {
+                s.push_str("    .byte   0x02            @ end marker (degenerate bezier)\n\n");
+                continue;
+            }
+            let intensity = path.intensity;
+            let x0 = pts[0].x.clamp(-127, 127) as i8;
+            let y0 = pts[0].y.clamp(-127, 127) as i8;
+            s.push_str(&format!("    .byte   {}               @ intensity\n", intensity));
+            s.push_str(&format!(
+                "    .byte   0x{:02X}, 0x{:02X}, 0x00, 0x00  @ y={y0}, x={x0}, hdr\n",
+                y0 as u8, x0 as u8
+            ));
+            let mut i = 0;
+            while i + 3 < pts.len() {
+                let ax  = pts[i  ].x.clamp(-127, 127) as i8;
+                let ay  = pts[i  ].y.clamp(-127, 127) as i8;
+                let c0x = pts[i+1].x.clamp(-127, 127) as i8;
+                let c0y = pts[i+1].y.clamp(-127, 127) as i8;
+                let c1x = pts[i+2].x.clamp(-127, 127) as i8;
+                let c1y = pts[i+2].y.clamp(-127, 127) as i8;
+                let bx  = pts[i+3].x.clamp(-127, 127) as i8;
+                let by  = pts[i+3].y.clamp(-127, 127) as i8;
+                s.push_str(&format!(
+                    "    .byte   0xFE, 0x{:02X},0x{:02X}, 0x{:02X},0x{:02X}, 0x{:02X},0x{:02X}, 0x{:02X},0x{:02X}  \
+                     @ bezier a=({ax},{ay}) cp1=({c0x},{c0y}) cp2=({c1x},{c1y}) b=({bx},{by})\n",
+                    ax as u8, ay as u8, c0x as u8, c0y as u8,
+                    c1x as u8, c1y as u8, bx as u8, by as u8
+                ));
+                i += 3;
+            }
+            s.push_str("    .byte   0x02            @ end marker\n\n");
+            continue;
+        }
+
+        // Polyline path: bake points to FCB delta segments.
+        let baked: Vec<(i16, i16)> = path.points.iter().map(|p| (p.x, p.y)).collect();
+
+        if baked.is_empty() {
+            s.push_str("    .byte   0x02            @ end marker (empty path)\n\n");
+            continue;
+        }
+
         let intensity = path.intensity;
-        let p0 = &path.points[0];
+        let (x0, y0) = baked[0];
         // Path coords are relative to sprite origin (0,0), not the bounding-box centroid.
-        let y0 = p0.y.clamp(-127, 127) as i8;
-        let x0 = p0.x.clamp(-127, 127) as i8;
+        let y0 = y0.clamp(-127, 127) as i8;
+        let x0 = x0.clamp(-127, 127) as i8;
 
         s.push_str(&format!(
             "    .byte   {}               @ intensity\n",
@@ -644,19 +690,19 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
             y0 as u8, x0 as u8, y0, x0
         ));
 
-        for j in 0..path.points.len() - 1 {
-            let pf = &path.points[j];
-            let pt = &path.points[j + 1];
-            let dx = pt.x - pf.x;
-            let dy = pt.y - pf.y;
+        for j in 0..baked.len() - 1 {
+            let (fx, fy) = baked[j];
+            let (tx, ty) = baked[j + 1];
+            let dx = tx - fx;
+            let dy = ty - fy;
             emit_split_segment_arm(&mut s, dx, dy);
         }
 
-        if path.closed && path.points.len() > 2 {
-            let pf = &path.points[path.points.len() - 1];
-            let pt = &path.points[0];
-            let dx = pt.x - pf.x;
-            let dy = pt.y - pf.y;
+        if path.closed && baked.len() > 2 {
+            let (fx, fy) = baked[baked.len() - 1];
+            let (tx, ty) = baked[0];
+            let dx = tx - fx;
+            let dy = ty - fy;
             emit_split_segment_arm(&mut s, dx, dy);
         }
 

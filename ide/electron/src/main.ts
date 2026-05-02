@@ -108,7 +108,8 @@ async function createWindow() {
               { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
               { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
               { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-              { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') }
+              { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
+              { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') }
             ]
           },
           {
@@ -556,7 +557,8 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') }
+            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
+            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') }
           ]
         },
         {
@@ -1741,7 +1743,8 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') }
+            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
+            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') }
           ]
         },
         {

@@ -285,16 +285,27 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                             let data_varname = format!("ARRAY_{varname}_DATA");
                             s.push_str(&format!("    @ init array {name}\n"));
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
+                            // ARMv6 STRH immediate offset max = 255 bytes.
+                            // For arrays > 128 halfwords, rechunk into r3 every 256 bytes.
+                            let mut chunk_base: usize = 0;
                             for (i, elem) in elems.iter().enumerate() {
                                 if let Expr::Number(n) = elem {
+                                    let byte_off = i * 2;
+                                    if byte_off > 0 && byte_off >= chunk_base + 256 {
+                                        chunk_base = (byte_off / 256) * 256;
+                                        s.push_str(&format!(
+                                            "    ldr     r3, =({data_varname} + {chunk_base})\n"
+                                        ));
+                                    }
+                                    let local_off = byte_off - chunk_base;
+                                    let base_reg = if chunk_base > 0 { "r3" } else { "r2" };
                                     let mov = if *n >= 0 && *n <= 65535 {
                                         format!("    mov     r0, #{n}\n")
                                     } else {
                                         format!("    ldr     r0, ={n}\n")
                                     };
                                     s.push_str(&format!(
-                                        "{mov}    strh    r0, [r2, #{}]\n",
-                                        i * 2
+                                        "{mov}    strh    r0, [{base_reg}, #{local_off}]\n"
                                     ));
                                 }
                             }

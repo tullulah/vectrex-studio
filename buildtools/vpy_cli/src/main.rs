@@ -931,6 +931,30 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         }
         println!("  {} Assembled: {}", "✓".green(), o_path.display());
 
+        // Compile Bézier supplement (provides v_drawBezierCubic / v_drawBezierQuad)
+        // The C source is embedded so the binary is self-contained.
+        const BEZIER_C_SRC: &str = include_str!("pitrex_bezier.c");
+        let bezier_c_path = build_dir.join(format!("{}_bezier.c", project_name));
+        let bezier_o_path = build_dir.join(format!("{}_bezier.o", project_name));
+        std::fs::write(&bezier_c_path, BEZIER_C_SRC)?;
+
+        let sdk_inc      = sdk_path.join("pitrex");
+        let sdk_inc_uspi = sdk_path.join("pitrex/vectrex/uspi/include");
+        let mut cc_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
+        cc_args.push(format!("-I{}", sdk_inc.display()));
+        cc_args.push(format!("-I{}", sdk_inc_uspi.display()));
+        cc_args.push("-c".into());
+        cc_args.push(bezier_c_path.to_str().unwrap().into());
+        cc_args.push("-o".into());
+        cc_args.push(bezier_o_path.to_str().unwrap().into());
+
+        let cc_out = Command::new(&arm_gcc).args(&cc_args).output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+        if !cc_out.status.success() {
+            return Err(anyhow::anyhow!("Bézier compile failed:\n{}", String::from_utf8_lossy(&cc_out.stderr)));
+        }
+        println!("  {} Compiled Bézier supplement: {}", "✓".green(), bezier_o_path.display());
+
         // Phase 5+6: Link directly against precompiled .a (no need to compile SDK sources)
         println!("\n{}", "Phase 5+6: ARM32 Link".bright_cyan().bold());
         let mut link_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
@@ -939,6 +963,8 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         link_args.push("-o".into());
         link_args.push(elf_path.to_str().unwrap().into());
         link_args.push(o_path.to_str().unwrap().into());
+        // Bézier supplement must precede -lvectrexInterface so its symbols win
+        link_args.push(bezier_o_path.to_str().unwrap().into());
         link_args.extend(["-lvectrexInterface", "-luspi", "-lm", "-lc"].iter().map(|s| s.to_string()));
         link_args.push(heap_ld.to_str().unwrap().into());
         link_args.push("-lbaremetal".into());

@@ -103,11 +103,23 @@ pub struct VecPath {
     /// Whether path is closed (connects back to start)
     #[serde(default)]
     pub closed: bool,
+    /// Path type: "polyline" (default) or "bezier"
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "type")]
+    pub path_type: Option<String>,
     /// Points in the path
     pub points: Vec<Point>,
 }
 
 fn default_intensity() -> u8 { 127 }
+
+/// Bezier point role within a path
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PointType {
+    #[serde(rename = "a")]
+    Anchor,
+    #[serde(rename = "c")]
+    Control,
+}
 
 /// A point in 2D/3D space
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -121,6 +133,9 @@ pub struct Point {
     /// If present, triggers Intensity_a call before drawing to this point
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intensity: Option<u8>,
+    /// Bezier point role: Anchor or Control
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub t: Option<PointType>,
 }
 
 /// Animation definition
@@ -277,6 +292,47 @@ impl VecResource {
     }
     
 
+    // de Casteljau linear interpolation
+    fn dc_lerp(a: i32, b: i32, i: i32, n: i32) -> i32 {
+        ((n - i) * a + i * b) / n
+    }
+
+    // de Casteljau cubic evaluation at step i/n
+    fn dc_cubic(p0: i32, p1: i32, p2: i32, p3: i32, i: i32, n: i32) -> i32 {
+        let q0 = Self::dc_lerp(p0, p1, i, n);
+        let q1 = Self::dc_lerp(p1, p2, i, n);
+        let q2 = Self::dc_lerp(p2, p3, i, n);
+        let r0 = Self::dc_lerp(q0, q1, i, n);
+        let r1 = Self::dc_lerp(q1, q2, i, n);
+        Self::dc_lerp(r0, r1, i, n)
+    }
+
+    /// Bake a bezier path (A, C, C, A, C, C, A, ...) to a polyline.
+    /// Each cubic segment is subdivided into `steps` line segments.
+    /// Positional convention (i%3==0 = anchor) matches VectorEditor.tsx renderBezierPath.
+    pub fn bezier_bake(points: &[Point], steps: usize) -> Vec<(i16, i16)> {
+        if points.len() < 4 {
+            return points.iter().map(|p| (p.x, p.y)).collect();
+        }
+        let n = steps.max(2) as i32;
+        let mut out: Vec<(i16, i16)> = vec![(points[0].x, points[0].y)];
+        let mut i = 0;
+        while i + 3 < points.len() {
+            let (ax, ay)   = (points[i].x as i32,     points[i].y as i32);
+            let (c0x, c0y) = (points[i+1].x as i32,   points[i+1].y as i32);
+            let (c1x, c1y) = (points[i+2].x as i32,   points[i+2].y as i32);
+            let (bx, by)   = (points[i+3].x as i32,   points[i+3].y as i32);
+            for s in 1..=n {
+                out.push((
+                    Self::dc_cubic(ax, c0x, c1x, bx, s, n) as i16,
+                    Self::dc_cubic(ay, c0y, c1y, by, s, n) as i16,
+                ));
+            }
+            i += 3;
+        }
+        out
+    }
+
     // Helper: format i8 value for ASM (compatible with both native and lwasm)
     // lwasm requires hex format $XX for negative values, no spaces after commas
     fn format_byte(value: i8) -> String {
@@ -360,35 +416,49 @@ impl VecResource {
                 }
                 continue;
             }
-            
+
+            // Bezier paths are baked to a polyline at compile time (32 steps per segment)
+            let baked: Vec<(i16, i16)> = if path.path_type.as_deref() == Some("bezier") {
+                Self::bezier_bake(&path.points, 32)
+            } else {
+                path.points.iter().map(|p| (p.x, p.y)).collect()
+            };
+
+            if baked.is_empty() {
+                if is_last_path {
+                    asm.push_str("    FCB 2                ; end marker (no points)\n");
+                }
+                continue;
+            }
+
             let default_intensity = path.intensity;
-            let p0 = &path.points[0];
+            let (x0, y0) = baked[0];
             // Path coords are relative to sprite origin (0,0), not the bounding-box centroid.
             // DRAW_VEC_X/Y is the draw position; adding raw path coords gives correct screen pos.
-            let y0_relative = p0.y.clamp(-127, 127) as i8;
-            let x0_relative = p0.x.clamp(-127, 127) as i8;
+            let y0_relative = y0.clamp(-127, 127) as i8;
+            let x0_relative = x0.clamp(-127, 127) as i8;
 
             // Malban format header: intensity, y_start, x_start, next_y, next_x
             asm.push_str(&format!("    FCB {}              ; path{}: intensity\n", default_intensity, path_idx));
             asm.push_str(&format!("    FCB {},{},0,0        ; path{}: header (y={}, x={})\n",
                 Self::format_byte(y0_relative), Self::format_byte(x0_relative), path_idx, y0_relative, x0_relative));
-            
+
             // Generate lines: flag=$FF (draw), dy, dx
             // Segments longer than 127 units are split into multiple sub-segments
-            for j in 0..path.points.len()-1 {
-                let p_from = &path.points[j];
-                let p_to = &path.points[j + 1];
-                let dx = p_to.x - p_from.x;
-                let dy = p_to.y - p_from.y;
+            for j in 0..baked.len()-1 {
+                let (fx, fy) = baked[j];
+                let (tx, ty) = baked[j + 1];
+                let dx = tx - fx;
+                let dy = ty - fy;
                 Self::emit_split_segment(&mut asm, dx, dy, &format!("line {}", j));
             }
 
             // If closed path, add closing line back to first point
-            if path.closed && path.points.len() > 2 {
-                let p_from = &path.points[path.points.len() - 1];
-                let p_to = &path.points[0];
-                let dx = p_to.x - p_from.x;
-                let dy = p_to.y - p_from.y;
+            if path.closed && baked.len() > 2 {
+                let (fx, fy) = baked[baked.len() - 1];
+                let (tx, ty) = baked[0];
+                let dx = tx - fx;
+                let dy = ty - fy;
                 Self::emit_split_segment(&mut asm, dx, dy, "closing line");
             }
             

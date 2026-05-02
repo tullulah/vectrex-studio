@@ -278,6 +278,8 @@ pub fn emit_call(
         "DRAW_POLYGON"    => "pitrex_draw_polygon",
         "DRAW_ARC"        => "pitrex_draw_arc",
         "DRAW_ELLIPSE"    => "pitrex_draw_ellipse",
+        "DRAW_BEZIER"     => "v_drawBezierCubic",
+        "DRAW_BEZIER_QUAD"=> "v_drawBezierQuad",
         "MOVE"            => "pitrex_move",
         "DRAW_VECTOR"     => "pitrex_draw_vector",
         "DRAW_VECTOR_EX"  => "pitrex_draw_vector_ex",
@@ -469,33 +471,56 @@ pub fn emit_call(
         }
     }
 
-    // Special case: DRAW_VECTOR("name", ox, oy) — always emit r0=asset, r1=ox, r2=oy.
-    // ox/oy default to 0 when not supplied so the vector draws at screen centre.
+    // Special case: DRAW_VECTOR("name", ox, oy[, mirror]) — 3-arg form uses simple draw,
+    // 4-arg form (with mirror) routes to pitrex_draw_vector_ex with intensity=127.
     if info.name == "DRAW_VECTOR" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
             let symbol   = format!("_{sym_base}_VECTORS");
             let runtime: Vec<&Expr> = args.iter().skip(1).collect();
-            // r0 = asset ptr
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
-            s.push_str("    push    {r0}\n");
-            // r1 = ox
-            if let Some(ox) = runtime.first() {
-                s.push_str(&emit_arg(ox, var_addrs)?);
+            if runtime.len() >= 3 {
+                // Has mirror arg → pitrex_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp]=intensity)
+                // Push intensity first so it sits at [sp] when callee reads [sp+28]
+                s.push_str("    mov     r0, #127\n");
+                s.push_str("    push    {r0}\n");
+                s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+                s.push_str("    push    {r0}\n");
+                if let Some(ox) = runtime.first() {
+                    s.push_str(&emit_arg(ox, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                if let Some(oy) = runtime.get(1) {
+                    s.push_str(&emit_arg(oy, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                s.push_str(&emit_arg(runtime.get(2).unwrap(), var_addrs)?);
+                s.push_str("    push    {r0}\n");
+                s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+                s.push_str("    bl      pitrex_draw_vector_ex\n");
+                s.push_str("    add     sp, sp, #4\n"); // discard intensity
             } else {
-                s.push_str("    mov     r0, #0\n");
+                // No mirror → simple pitrex_draw_vector(r0=asset, r1=ox, r2=oy)
+                s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+                s.push_str("    push    {r0}\n");
+                if let Some(ox) = runtime.first() {
+                    s.push_str(&emit_arg(ox, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                if let Some(oy) = runtime.get(1) {
+                    s.push_str(&emit_arg(oy, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+                s.push_str("    bl      pitrex_draw_vector\n");
             }
-            s.push_str("    push    {r0}\n");
-            // r2 = oy
-            if let Some(oy) = runtime.get(1) {
-                s.push_str(&emit_arg(oy, var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
-            s.push_str("    push    {r0}\n");
-            // pop r2, r1, r0
-            s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
-            s.push_str("    bl      pitrex_draw_vector\n");
             return Ok(s);
         }
     }
@@ -548,28 +573,49 @@ pub fn emit_call(
         }
     }
 
-    // Special case: DRAW_ANIM("name", ox, oy) — animation asset, symbol is _ANIM_NAME
+    // Special case: DRAW_ANIM("name", ox, oy[, mirror[, scale[, speed_mul]]])
+    // ABI: r0=anim_ptr, r1=ox, r2=oy, r3=mirror, [sp]=speed_mul
+    // scale is ignored on PiTrex (no T1 timer equivalent).
+    // Callee pushes 9 regs (36 bytes), so speed_mul is at [sp+36] on entry.
     if info.name == "DRAW_ANIM" {
         if let Some(Expr::StringLit(anim_name)) = args.first() {
             let sym = anim_name.to_uppercase().replace('-', "_").replace(' ', "_");
             let symbol = format!("_ANIM_{sym}");
-            // push anim ptr, push ox, push oy; then pop r2=oy, r1=ox, r0=anim ptr
+            // Push speed_mul first — callee reads [sp+36] after pushing 9 regs
+            if args.len() >= 6 {
+                s.push_str(&emit_arg(&args[5], var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #1\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // anim ptr → r0
             s.push_str(&format!("    ldr     r0, ={symbol}    @ animation '{anim_name}'\n"));
             s.push_str("    push    {r0}\n");
-            if args.len() >= 3 {
+            // ox → r1
+            if args.len() >= 2 {
                 s.push_str(&emit_arg(&args[1], var_addrs)?);
             } else {
                 s.push_str("    mov     r0, #0\n");
             }
             s.push_str("    push    {r0}\n");
+            // oy → r2
             if args.len() >= 3 {
                 s.push_str(&emit_arg(&args[2], var_addrs)?);
             } else {
                 s.push_str("    mov     r0, #0\n");
             }
             s.push_str("    push    {r0}\n");
-            s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            // mirror → r3
+            if args.len() >= 4 {
+                s.push_str(&emit_arg(&args[3], var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r3=mirror, r2=oy, r1=ox, r0=anim_ptr; speed_mul stays at [sp]
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
             s.push_str("    bl      pitrex_draw_anim\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard speed_mul
             return Ok(s);
         }
     }

@@ -227,6 +227,9 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("@ pitrex_draw_vector(r0=asset_ptr, r1=ox, r2=oy)\n");
     s.push_str(".global pitrex_draw_vector\n.type pitrex_draw_vector, %function\npitrex_draw_vector:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    // Save raw ox, oy (VPy units) for use in dv_bezier_seg.
+    // v_drawBezierCubic expects VPy-unit coords and scales internally by 127.
+    s.push_str("    push    {r1, r2}            @ [sp+0]=ox [sp+4]=oy (raw VPy units)\n");
     s.push_str("    mov     r4, r0              @ asset header ptr\n");
     s.push_str("    mov     r3, #127\n");
     s.push_str("    mul     r6, r1, r3          @ r6 = ox*127 (Rd=r6 ≠ Rm=r1)\n");
@@ -260,9 +263,11 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("    .ltorg\n");
     s.push_str("dv_after_pool:\n");
     s.push_str("dv_seg_loop:\n");
-    s.push_str("    ldrb    r0, [r9], #1        @ marker (0xFF=draw, 0x02=end)\n");
+    s.push_str("    ldrb    r0, [r9], #1        @ marker (0xFE=bezier, 0xFF=line, 0x02=end)\n");
     s.push_str("    cmp     r0, #2\n");
     s.push_str("    beq     dv_seg_done\n");
+    s.push_str("    cmp     r0, #0xFE\n");
+    s.push_str("    beq     dv_bezier_seg\n");
     s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
     s.push_str("    mov     r2, r10             @ intensity from .vec\n");
@@ -273,7 +278,65 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("dv_seg_done:\n");
     s.push_str("    add     r8, r8, #1\n");
     s.push_str("    b       dv_path_loop\n");
+    // ── 0xFE runtime-bezier handler ──────────────────────────────────────────
+    // Reads 8 signed bytes (x0,y0,cp1x,cp1y,cp2x,cp2y,endx,endy) from [r9]++.
+    // Adds raw VPy offset (ox,oy) so coordinates are sprite-origin-relative.
+    // Passes result directly to v_drawBezierCubic which scales internally by 127.
+    //
+    // Function prologue pushes {r4..r10,lr} then {r1,r2} (raw ox,oy).
+    // Stack layout inside dv_bezier_seg after  push {r4..r10} ; sub sp,#24:
+    //   [sp+ 0..20] = 6 call args (cp2x,cp2y,endx,endy,steps,bri)
+    //   [sp+24]=r4  [sp+28]=r5  [sp+32]=r6(ox*127)  [sp+36]=r7(oy*127)
+    //   [sp+40]=r8  [sp+44]=r9(cursor)  [sp+48]=r10(intensity)
+    //   [sp+52]=r1(raw_ox)  [sp+56]=r2(raw_oy)   ← saved in prologue
+    s.push_str("dv_bezier_seg:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10}\n");
+    s.push_str("    sub     sp, sp, #24\n");
+    s.push_str("    ldr     r4, [sp, #52]        @ r4 = raw ox (VPy units)\n");
+    s.push_str("    ldr     r5, [sp, #56]        @ r5 = raw oy (VPy units)\n");
+    // x0 + ox → r0
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r0, r6, r4\n");
+    // y0 + oy → r1
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r1, r6, r5\n");
+    // cp1x + ox → r2
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r2, r6, r4\n");
+    // cp1y + oy → r3
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r3, r6, r5\n");
+    // cp2x + ox → [sp+0]
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r7, r6, r4\n");
+    s.push_str("    str     r7, [sp, #0]\n");
+    // cp2y + oy → [sp+4]
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r7, r6, r5\n");
+    s.push_str("    str     r7, [sp, #4]\n");
+    // endx + ox → [sp+8]
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r7, r6, r4\n");
+    s.push_str("    str     r7, [sp, #8]\n");
+    // endy + oy → [sp+12]
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r7, r6, r5\n");
+    s.push_str("    str     r7, [sp, #12]\n");
+    // steps=16 → [sp+16]
+    s.push_str("    mov     r6, #16\n");
+    s.push_str("    str     r6, [sp, #16]\n");
+    // brightness → [sp+20]  (saved r10 at sp+48)
+    s.push_str("    ldr     r6, [sp, #48]\n");
+    s.push_str("    uxtb    r6, r6\n");
+    s.push_str("    str     r6, [sp, #20]\n");
+    // Update saved r9 so pop restores the advanced cursor
+    s.push_str("    str     r9, [sp, #44]\n");
+    s.push_str("    bl      v_drawBezierCubic\n");
+    s.push_str("    add     sp, sp, #24\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10}\n");
+    s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_done:\n");
+    s.push_str("    add     sp, sp, #8          @ remove saved raw ox, oy\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -343,6 +406,8 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    ldrb    r0, [r9], #1\n");
     s.push_str("    cmp     r0, #2\n");
     s.push_str("    beq     dvex_seg_done\n");
+    s.push_str("    cmp     r0, #0xFE\n");
+    s.push_str("    beq     dvex_bezier_seg\n");
     s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
     s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0\n");
@@ -356,6 +421,64 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    add     r0, r0, #1\n");
     s.push_str("    str     r0, [sp]            @ path_idx++\n");
     s.push_str("    b       dvex_path_loop\n");
+    // ── 0xFE runtime-bezier handler (ex: supports mirror, r5=ox r6=oy r7=mirror) ──
+    // dvex stores ox/oy as raw VPy units in r5, r6 (no pre-multiply).
+    // Stack layout after  push {r4,r5,r6,r7,r9,r10} ; sub sp,#24:
+    //   [sp+ 0..20] = 6 call args
+    //   [sp+24]=r4  [sp+28]=r5(ox,raw)  [sp+32]=r6(oy,raw)  [sp+36]=r7(mirror)
+    //   [sp+40]=r9(cursor)  [sp+44]=r10(intensity)
+    // r8 (not in push list) and r12 used as scratch.
+    s.push_str("dvex_bezier_seg:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r9, r10}\n");
+    s.push_str("    sub     sp, sp, #24\n");
+    s.push_str("    ldr     r4, [sp, #28]        @ r4 = ox (raw VPy units)\n");
+    s.push_str("    ldr     r5, [sp, #32]        @ r5 = oy (raw VPy units)\n");
+    s.push_str("    ldr     r12, [sp, #36]       @ r12 = mirror flag\n");
+    // x0 + ox → r0  (mirror x if needed)
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r0, r6, r4\n");
+    s.push_str("    cmp     r12, #1\n    it      eq\n    rsbeq   r0, r0, #0\n");
+    // y0 + oy → r1
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r1, r6, r5\n");
+    // cp1x + ox → r2  (mirror)
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r2, r6, r4\n");
+    s.push_str("    cmp     r12, #1\n    it      eq\n    rsbeq   r2, r2, #0\n");
+    // cp1y + oy → r3
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r3, r6, r5\n");
+    // cp2x + ox → [sp+0]  (mirror)
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r6, r6, r4\n");
+    s.push_str("    cmp     r12, #1\n    it      eq\n    rsbeq   r6, r6, #0\n");
+    s.push_str("    str     r6, [sp, #0]\n");
+    // cp2y + oy → [sp+4]
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r6, r6, r5\n");
+    s.push_str("    str     r6, [sp, #4]\n");
+    // endx + ox → [sp+8]  (mirror)
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r6, r6, r4\n");
+    s.push_str("    cmp     r12, #1\n    it      eq\n    rsbeq   r6, r6, #0\n");
+    s.push_str("    str     r6, [sp, #8]\n");
+    // endy + oy → [sp+12]
+    s.push_str("    ldrsb   r6, [r9], #1\n");
+    s.push_str("    add     r6, r6, r5\n");
+    s.push_str("    str     r6, [sp, #12]\n");
+    // steps=16 → [sp+16]
+    s.push_str("    mov     r6, #16\n");
+    s.push_str("    str     r6, [sp, #16]\n");
+    // brightness → [sp+20]  (saved r10 at sp+44)
+    s.push_str("    ldr     r6, [sp, #44]\n");
+    s.push_str("    uxtb    r6, r6\n");
+    s.push_str("    str     r6, [sp, #20]\n");
+    // Update saved r9 with advanced cursor
+    s.push_str("    str     r9, [sp, #40]\n");
+    s.push_str("    bl      v_drawBezierCubic\n");
+    s.push_str("    add     sp, sp, #24\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r9, r10}\n");
+    s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_done:\n");
     s.push_str("    add     sp, sp, #8          @ pop path_idx + path_count\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");

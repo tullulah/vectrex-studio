@@ -62,6 +62,8 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "DRAW_ARC"
             | "DRAW_ELLIPSE"
             | "DRAW_VECTOR_3D"
+            | "DRAW_BEZIER"
+            | "DRAW_BEZIER_QUAD"
     )
 }
 
@@ -92,6 +94,8 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         "SET_INTENSITY" => Some(1),
         "DRAW_VECTOR_EX" => Some(4),
         "DRAW_VECTOR_3D" => Some(6),
+        "DRAW_BEZIER"      => Some(10),
+        "DRAW_BEZIER_QUAD" => Some(8),
 
         _ => None,
     }

@@ -77,6 +77,62 @@ pub fn has_print_calls(module: &Module) -> bool {
     })
 }
 
+/// Check if module uses DRAW_VECTOR, DRAW_ANIM, or SHOW_LEVEL (needs DRAW_SCALE initialization)
+pub fn has_draw_scale_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if matches!(c.name.as_str(), "DRAW_VECTOR" | "DRAW_ANIM" | "SHOW_LEVEL"))
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
+/// Check if module uses DRAW_ANIM (needs DRAW_SCALE / DRAW_ANIM_SCALE initialization)
+pub fn has_draw_anim_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "DRAW_ANIM")
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
@@ -163,6 +219,15 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
         asm.push_str("    LDA #$48\n");
         asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
+    }
+    if has_draw_scale_calls(module) {
+        asm.push_str("    LDA #$7F\n");
+        asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = normal ($7F)\n");
+    }
+    if has_draw_anim_calls(module) {
+        asm.push_str("    LDA #$7F\n");
+        asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = normal ($7F)\n");
+        asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
     }
     let mut array_copy_counter = 0;
     for item in &module.items {
@@ -665,6 +730,15 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
         bank0_asm.push_str("    LDA #$48\n");
         bank0_asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
+    }
+    if has_draw_scale_calls(module) {
+        bank0_asm.push_str("    LDA #$7F\n");
+        bank0_asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = normal ($7F)\n");
+    }
+    if has_draw_anim_calls(module) {
+        bank0_asm.push_str("    LDA #$7F\n");
+        bank0_asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = normal ($7F)\n");
+        bank0_asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
     }
     let mut array_copy_counter = 0;
     for item in &module.items {

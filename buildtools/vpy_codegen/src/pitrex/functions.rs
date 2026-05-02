@@ -360,14 +360,28 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                             let data_varname = format!("ARRAY_{varname}_DATA");
                             s.push_str(&format!("    @ init array {name}\n"));
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
+                            // ARMv6 STRH immediate offset max = 255 bytes.
+                            // For arrays > 128 halfwords, rechunk into r3 every 256 bytes.
+                            let mut chunk_base: usize = 0;
                             for (i, elem) in elems.iter().enumerate() {
                                 if let Expr::Number(n) = elem {
+                                    let byte_off = i * 2;
+                                    if byte_off > 0 && byte_off >= chunk_base + 256 {
+                                        chunk_base = (byte_off / 256) * 256;
+                                        s.push_str(&format!(
+                                            "    ldr     r3, =({data_varname} + {chunk_base})\n"
+                                        ));
+                                    }
+                                    let local_off = byte_off - chunk_base;
+                                    let base_reg = if chunk_base > 0 { "r3" } else { "r2" };
                                     let mov = if *n >= 0 && *n <= 255 {
                                         format!("    mov     r0, #{n}\n")
                                     } else {
                                         format!("    ldr     r0, ={n}\n")
                                     };
-                                    s.push_str(&format!("{mov}    strh    r0, [r2, #{}]\n", i * 2));
+                                    s.push_str(&format!(
+                                        "{mov}    strh    r0, [{base_reg}, #{local_off}]\n"
+                                    ));
                                 }
                             }
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r2, [r1]\n"));
@@ -421,6 +435,12 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     // Game loop — PiTrex frame sync + input
     s.push_str("\npitrex_game_loop:\n");
     s.push_str("    bl      v_WaitRecal\n");
+    // v_WaitRecal resets the SDK's currentCursorX/Y to 0 via v_deflok → ZERO_AND_WAIT.
+    // Mirror that here so PITREX_CUR_X/Y stays in sync for delta moves in draw_vector.
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    ldr     r1, =PITREX_CUR_X\n    str     r0, [r1]\n");
+    s.push_str("    ldr     r1, =PITREX_CUR_Y\n    str     r0, [r1]\n");
+    s.push_str("    ldr     r0, =.Lstr_frame_sep\n    bl      vpy_uart_puts\n");
     s.push_str("    bl      v_readButtons\n");
     s.push_str("    bl      v_readJoystick1Analog\n");
     s.push_str("    bl      v_readJoystick2Analog\n");
@@ -457,9 +477,52 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lputs_done:\n");
     s.push_str("    pop     {r4, pc}\n\n");
 
+    // vpy_uart_print_int(r0=val) — signed 32-bit decimal via UART
+    // Uses __aeabi_idivmod (available from GCC runtime).
+    // Saves r4(value), r5(digit index), r6(buf base ptr).
+    s.push_str("@ vpy_uart_print_int(r0=val)\n");
+    s.push_str(".type vpy_uart_print_int, %function\nvpy_uart_print_int:\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    s.push_str("    mov     r4, r0\n");
+    s.push_str("    cmp     r4, #0\n    bge     .Lpint_pos\n");
+    s.push_str("    mov     r0, #'-'\n    bl      RPI_AuxUartWrite\n");
+    s.push_str("    rsb     r4, r4, #0\n");
+    s.push_str(".Lpint_pos:\n");
+    s.push_str("    cmp     r4, #0\n    bne     .Lpint_nonzero\n");
+    s.push_str("    mov     r0, #'0'\n    bl      RPI_AuxUartWrite\n");
+    s.push_str("    b       .Lpint_done\n");
+    s.push_str(".Lpint_nonzero:\n");
+    s.push_str("    sub     sp, sp, #12\n");   // 10-digit buffer (12 for alignment)
+    s.push_str("    mov     r6, sp\n");         // r6 = stable buffer base
+    s.push_str("    mov     r5, #0\n");         // r5 = digit count
+    s.push_str(".Lpint_extract:\n");
+    s.push_str("    cmp     r4, #0\n    beq     .Lpint_print\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, #10\n");
+    s.push_str("    bl      __aeabi_idivmod\n"); // r0=quot, r1=rem; clobbers r2,r3,r12
+    s.push_str("    add     r1, r1, #'0'\n");
+    s.push_str("    strb    r1, [r6, r5]\n");
+    s.push_str("    add     r5, r5, #1\n");
+    s.push_str("    mov     r4, r0\n    b       .Lpint_extract\n");
+    s.push_str(".Lpint_print:\n");
+    s.push_str("    sub     r5, r5, #1\n");
+    s.push_str(".Lpint_ploop:\n");
+    s.push_str("    cmp     r5, #0\n    blt     .Lpint_cleanup\n");
+    s.push_str("    ldrb    r0, [r6, r5]\n    bl      RPI_AuxUartWrite\n");
+    s.push_str("    sub     r5, r5, #1\n    b       .Lpint_ploop\n");
+    s.push_str(".Lpint_cleanup:\n");
+    s.push_str("    add     sp, sp, #12\n");
+    s.push_str(".Lpint_done:\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n\n");
+
     // Debug strings
     s.push_str(".Lstr_start:  .asciz \"VPy PiTrex starting\\r\\n\"\n");
     s.push_str(".Lstr_vinit:  .asciz \"vectrexinit OK\\r\\n\"\n");
+    s.push_str(".Lstr_frame_sep: .asciz \"---\\r\\n\"\n");
+    s.push_str(".Lstr_dv_p:   .asciz \"DV p=\"\n");
+    s.push_str(".Lstr_prv:    .asciz \" prv=\"\n");
+    s.push_str(".Lstr_tgt:    .asciz \" tgt=\"\n");
+    s.push_str(".Lstr_dlt:    .asciz \" dlt=\"\n");
+    s.push_str(".Lstr_crlf:   .asciz \"\\r\\n\"\n");
     s.push_str("    .ltorg\n\n");
 
     Ok(s)

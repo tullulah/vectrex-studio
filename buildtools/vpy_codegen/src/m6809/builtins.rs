@@ -155,8 +155,14 @@ fn validate_builtin_arity(name: &str, arg_count: usize) -> Result<(), String> {
             return Ok(());
         }
         "DRAW_ANIM" => {
-            if arg_count != 1 && arg_count != 3 && arg_count != 4 {
-                return Err(format!("DRAW_ANIM requires 1, 3, or 4 arguments (name, name+x+y, or name+x+y+mirror), got {}", arg_count));
+            if arg_count != 1 && arg_count != 3 && arg_count != 4 && arg_count != 5 && arg_count != 6 {
+                return Err(format!("DRAW_ANIM requires 1, 3, 4, 5, or 6 arguments (name / name+x+y / +mirror / +scale / +speed), got {}", arg_count));
+            }
+            return Ok(());
+        }
+        "DRAW_VECTOR" => {
+            if arg_count != 3 && arg_count != 4 {
+                return Err(format!("DRAW_VECTOR requires 3 or 4 arguments (name, x, y / +mirror), got {}", arg_count));
             }
             return Ok(());
         }
@@ -779,9 +785,11 @@ pub fn emit_builtin(
         }
         
         // ===== Animation =====
-        // DRAW_ANIM("name")              — draw at DRAW_VEC_X/Y (caller must set)
-        // DRAW_ANIM("name", x, y)        — draw at screen position (x, y)
-        // DRAW_ANIM("name", x, y, mir)   — draw with X mirror flag
+        // DRAW_ANIM("name")                          — draw at DRAW_VEC_X/Y (caller must set)
+        // DRAW_ANIM("name", x, y)                    — draw at screen position (x, y)
+        // DRAW_ANIM("name", x, y, mirror)            — draw with X mirror flag
+        // DRAW_ANIM("name", x, y, mirror, scale)     — T1 scale ($7F=normal, $3F=half, $FF=double)
+        // DRAW_ANIM("name", x, y, mirror, scale, speed) — speed multiplier (1=normal, 2=half speed)
         "DRAW_ANIM" => {
             if let Some(Expr::StringLit(anim_name)) = args.first() {
                 let name_upper = anim_name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -802,9 +810,30 @@ pub fn emit_builtin(
                 if args.len() >= 4 {
                     expressions::emit_simple_expr(&args[3], out, assets);
                     out.push_str("    TFR B,A\n");
-                    out.push_str("    STA DRAW_ANIM_MIRROR_X\n");
+                    out.push_str("    STA >MIRROR_X\n");          // write mirror directly (extended)
+                    out.push_str("    STA >DRAW_ANIM_MIRROR_X\n"); // keep for runtime compatibility
                 } else {
-                    out.push_str("    CLR DRAW_ANIM_MIRROR_X\n");
+                    out.push_str("    CLR >MIRROR_X\n");
+                    out.push_str("    CLR >DRAW_ANIM_MIRROR_X\n");
+                }
+                out.push_str("    CLR >MIRROR_Y\n");
+                // Scale (arg[4], default $7F = normal size)
+                if args.len() >= 5 {
+                    expressions::emit_simple_expr(&args[4], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_ANIM_SCALE\n");
+                } else {
+                    out.push_str("    LDA #$7F\n");
+                    out.push_str("    STA DRAW_ANIM_SCALE\n");
+                }
+                // Speed: ticks_per_frame (arg[5]). 0 or omitted = use vanim's duration_ticks.
+                // E.g. speed=6 → each animation frame lasts 6 game ticks (~8fps at 50Hz).
+                if args.len() >= 6 {
+                    expressions::emit_simple_expr(&args[5], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_ANIM_SPEED_MUL\n");
+                } else {
+                    out.push_str("    CLR DRAW_ANIM_SPEED_MUL\n"); // 0 = use vanim timing
                 }
                 out.push_str(&format!("    LDX #_ANIM_{}\n", name_upper));
                 out.push_str(&format!("    LDU #ANIM_{}_STATE\n", name_upper));
@@ -1001,8 +1030,14 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             out.push_str("    LDA TMPPTR+1  ; Y position\n");
             out.push_str("    STA DRAW_VEC_Y\n");
             
-            // Clear mirror flags (DRAW_VECTOR uses no mirroring)
-            out.push_str("    CLR MIRROR_X\n");
+            // Mirror X: optional 4th arg (0=normal, 1=flip X)
+            if args.len() >= 4 {
+                expressions::emit_simple_expr(&args[3], out, assets);
+                out.push_str("    TFR B,A\n");
+                out.push_str("    STA MIRROR_X\n");
+            } else {
+                out.push_str("    CLR MIRROR_X\n");
+            }
             out.push_str("    CLR MIRROR_Y\n");
             // DRAW_VEC_INTENSITY was set by SET_INTENSITY() (or 0 = use $7F default in DSWM)
             

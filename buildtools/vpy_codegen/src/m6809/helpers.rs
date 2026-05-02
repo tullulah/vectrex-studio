@@ -254,6 +254,13 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
 
     if needed.contains("DRAW_ANIM_RUNTIME") {
         ram.allocate("DRAW_ANIM_MIRROR_X", 1, "DRAW_ANIM mirror X flag (0=normal, 1=flip)");
+        ram.allocate("DRAW_ANIM_SCALE", 1, "DRAW_ANIM T1 scale ($7F=normal)");
+        ram.allocate("DRAW_ANIM_SPEED_MUL", 1, "DRAW_ANIM tick multiplier (1=normal)");
+    }
+    // DRAW_SCALE needed whenever Draw_Sync_List_At_With_Mirrors is used
+    if needed.contains("DRAW_ANIM_RUNTIME") || needed.contains("SHOW_LEVEL_RUNTIME")
+        || needed.contains("DRAW_VECTOR") || needed.contains("DRAW_VECTOR_EX") {
+        ram.allocate("DRAW_SCALE", 1, "Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal)");
     }
 
     if module.meta.interleaved_frames.is_some() {
@@ -1094,8 +1101,8 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)\n\
-            LDA #$7F\n\
+            ; T1 scale from DRAW_SCALE variable ($7F=normal)\n\
+            LDA >DRAW_SCALE\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
@@ -1198,8 +1205,8 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 fixed at $7F (constant scale; brightness set via $C832 above)\n\
-            LDA #$7F\n\
+            ; T1 scale from DRAW_SCALE variable ($7F=normal)\n\
+            LDA >DRAW_SCALE\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\
@@ -1867,6 +1874,12 @@ DRAW_ANIM_RUNTIME:\n\
     LDA #$18\n\
     STA >$D00B          ; ACR=$18: SR shift-out PHI2, enable beam via SR\n\
     PSHS D,X,Y,U\n\
+    ; --- Refresh MIRROR_X from saved arg (re-assert before any BIOS call can corrupt A) ---\n\
+    LDA >DRAW_ANIM_MIRROR_X\n\
+    STA >MIRROR_X\n\
+    ; --- Apply scale: copy DRAW_ANIM_SCALE to DRAW_SCALE for DSWM ---\n\
+    LDA >DRAW_ANIM_SCALE\n\
+    STA >DRAW_SCALE\n\
     ; --- Draw base_refs (static cel layer, drawn before every frame) ---\n\
     LDB 2,X             ; base_ref_count\n\
     BEQ DAR_TICK        ; none: skip to tick management\n\
@@ -1874,8 +1887,6 @@ DRAW_ANIM_RUNTIME:\n\
 DAR_BASE_LOOP:\n\
     PSHS B,X,Y\n\
     LDX ,Y              ; X = _VECNAME_VECTORS header\n\
-    LDA >DRAW_ANIM_MIRROR_X\n\
-    STA >MIRROR_X\n\
     CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
     LDD ,X              ; D = path_count\n\
@@ -1921,7 +1932,15 @@ DAR_NO_WRAP:\n\
     ADCA #0\n\
     LEAY D,X            ; Y = &frame_table[frame_idx]\n\
     LDY ,Y              ; Y = frame data ptr\n\
-    LDA ,Y              ; duration_ticks\n\
+    LDA ,Y              ; A = duration_ticks from vanim\n\
+    LDB >DRAW_ANIM_SPEED_MUL\n\
+    BEQ DAR_SPEED1      ; speed=0: use vanim's duration_ticks as-is\n\
+    TFR B,A             ; speed>0: override with ticks_per_frame directly\n\
+DAR_SPEED1:\n\
+    CMPA #1\n\
+    BHS DAR_SPEED1_OK\n\
+    LDA #1\n\
+DAR_SPEED1_OK:\n\
     STA 1,U             ; reset ticks_remaining\n\
     BRA DAR_EMIT\n\
 DAR_FREEZE:\n\
@@ -1945,8 +1964,16 @@ DAR_INIT:\n\
     ADCA #0\n\
     LEAY D,X            ; Y = frame_table[0] entry\n\
     LDY ,Y              ; Y = frame 0 data ptr\n\
-    LDA ,Y              ; A = duration_ticks\n\
-    STA 1,U             ; ticks_left = duration_ticks\n\
+    LDA ,Y              ; A = duration_ticks from vanim\n\
+    LDB >DRAW_ANIM_SPEED_MUL\n\
+    BEQ DAR_SPEED2      ; speed=0: use vanim's duration_ticks as-is\n\
+    TFR B,A             ; speed>0: override with ticks_per_frame directly\n\
+DAR_SPEED2:\n\
+    CMPA #1\n\
+    BHS DAR_SPEED2_OK\n\
+    LDA #1\n\
+DAR_SPEED2_OK:\n\
+    STA 1,U             ; ticks_left = ticks_per_frame\n\
     BRA DAR_EMIT\n\
 DAR_DRAW:\n\
     STA 1,U             ; save decremented ticks\n\
@@ -1966,9 +1993,6 @@ DAR_EMIT:\n\
 DAR_VEC_LOOP:\n\
     PSHS B,Y\n\
     LDX ,Y\n\
-    LDA >DRAW_ANIM_MIRROR_X\n\
-    STA >MIRROR_X\n\
-    CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
     LDD ,X              ; D = path_count\n\
     BEQ DAR_VEC_DONE\n\
@@ -1994,9 +2018,6 @@ DAR_PATH_LOOP:\n\
     PSHS B\n\
     TFR Y,X\n\
     JSR $F1AA           ; DP_to_D0\n\
-    LDA >DRAW_ANIM_MIRROR_X\n\
-    STA >MIRROR_X\n\
-    CLR >MIRROR_Y\n\
     JSR Draw_Sync_List_At_With_Mirrors\n\
     JSR $F1AF           ; DP_to_C8\n\
     LEAY 5,Y            ; skip intensity + 4-byte header\n\
@@ -2013,6 +2034,9 @@ DAR_PATH_DONE:\n\
     DECB\n\
     BNE DAR_PATH_LOOP\n\
 DAR_DONE:\n\
+    ; Restore DRAW_SCALE to default ($7F) after animation draw\n\
+    LDA #$7F\n\
+    STA >DRAW_SCALE\n\
     PULS D,X,Y,U\n\
     RTS\n\n");
 }

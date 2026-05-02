@@ -11,4 +11,4 @@ def main():
 
 def loop():
     # Draw a star pattern with lines
-    DRAW_VECTOR("angkor_bg", 0, 0)
+    DRAW_VECTOR("triangule", 0, 0)

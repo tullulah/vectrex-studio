@@ -19,12 +19,14 @@ interface Point {
   x: number;
   y: number;
   z?: number; // Optional Z coordinate for 3D vectors
+  t?: 'a' | 'c'; // Bezier: 'a'=anchor, 'c'=control point
 }
 
 interface VecPath {
   name: string;
   intensity: number;
   closed: boolean;
+  type?: 'polyline' | 'bezier';
   points: Point[];
 }
 
@@ -56,6 +58,8 @@ interface VecResource {
   center_y?: number;
   // Background image stored as base64 data URL
   backgroundImage?: string;
+  // Background image offset in canvas pixels
+  backgroundOffset?: { x: number; y: number };
 }
 
 interface VectorEditorProps {
@@ -69,7 +73,7 @@ interface VectorEditorProps {
   height?: number;
 }
 
-type Tool = 'select' | 'pen' | 'line' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background';
+type Tool = 'select' | 'pen' | 'line' | 'bezier' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background';
 type ViewMode = 'xy' | 'xz' | 'yz' | '3d';
 
 const defaultResource: VecResource = {
@@ -548,6 +552,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const circlePreviewRef = useRef<{ center: { x: number; y: number }; radius: number; tool: string } | null>(null);
   // Nearest vertex to the current mouse position (for hover highlight & pen snapping)
   const hoveredVertexRef = useRef<{ point: Point; canvasX: number; canvasY: number } | null>(null);
+  // Nearest segment to cursor for point insertion (select mode only)
+  const hoveredSegmentRef = useRef<{ pathIdx: number; segIdx: number; canvasX: number; canvasY: number; resPoint: Point } | null>(null);
 
   // Dynamic canvas size — updated by ResizeObserver; all coordinate logic reads these
   const [width, setWidth] = useState(propWidth);
@@ -631,7 +637,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [rotation3D, setRotation3D] = useState({ pitch: 30, yaw: 45 }); // degrees
   const [isDrawing, setIsDrawing] = useState(false);
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
-  
+
+  // Tracks the mousedown position for bezier anchor drag detection
+  const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
+
   // Circle/Arc/Polygon tool settings
   const [circleSegments, setCircleSegments] = useState(16);
   const [arcStartAngle, setArcStartAngle] = useState(0);
@@ -837,9 +846,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // Scale all points by a factor
   const handleScale = (factor: number) => {
-    console.log('[VectorEditor] handleScale called with factor:', factor);
-    console.log('[VectorEditor] Current resource:', JSON.stringify(resource, null, 2));
-    
     const scaled = JSON.parse(JSON.stringify(resource)) as VecResource;
     let pointsScaled = 0;
     
@@ -858,8 +864,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       }
     }
     
+    // Scale background offset proportionally
+    if (scaled.backgroundOffset) {
+      scaled.backgroundOffset = {
+        x: Math.round(scaled.backgroundOffset.x * factor),
+        y: Math.round(scaled.backgroundOffset.y * factor),
+      };
+      setBackgroundOffset(scaled.backgroundOffset);
+    }
+
     console.log('[VectorEditor] Scaled', pointsScaled, 'points with factor', factor);
-    console.log('[VectorEditor] Scaled resource:', JSON.stringify(scaled, null, 2));
     updateResource(resource, scaled);
   };
   
@@ -878,6 +892,62 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null);
   const dragStartResCoordRef = useRef<{ x: number; y: number } | null>(null);
   
+  // Render a bezier path on a canvas context using bezierCurveTo.
+  // Points layout: A0, C0_out, C1_in, A1, C1_out, C2_in, A2, ...
+  const renderBezierPath = (pts: Point[], ctx2: CanvasRenderingContext2D) => {
+    if (pts.length < 4) return;
+    const sp = resourceToCanvas(pts[0]);
+    ctx2.moveTo(sp.x, sp.y);
+    for (let i = 0; i + 3 < pts.length; i += 3) {
+      const cp1 = resourceToCanvas(pts[i + 1]);
+      const cp2 = resourceToCanvas(pts[i + 2]);
+      const ep  = resourceToCanvas(pts[i + 3]);
+      ctx2.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, ep.x, ep.y);
+    }
+  };
+
+  // Draw handle lines + handle dots for a bezier path (shows control tangents).
+  const drawBezierHandles = (pts: Point[], ctx2: CanvasRenderingContext2D) => {
+    ctx2.save();
+    ctx2.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx2.lineWidth = 1;
+    ctx2.setLineDash([3, 3]);
+    // For each anchor at 3k: draw line to pts[3k-1] (cp_in, if exists) and pts[3k+1] (cp_out, if exists)
+    for (let k = 0; k * 3 < pts.length; k++) {
+      const ai = k * 3;
+      const ac = resourceToCanvas(pts[ai]);
+      const cpOutIdx = ai + 1;
+      const cpInIdx  = ai - 1;
+      if (cpOutIdx < pts.length) {
+        const cpOut = resourceToCanvas(pts[cpOutIdx]);
+        ctx2.beginPath();
+        ctx2.moveTo(ac.x, ac.y);
+        ctx2.lineTo(cpOut.x, cpOut.y);
+        ctx2.stroke();
+        ctx2.setLineDash([]);
+        ctx2.fillStyle = '#ffffff';
+        ctx2.beginPath();
+        ctx2.arc(cpOut.x, cpOut.y, 3, 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.setLineDash([3, 3]);
+      }
+      if (cpInIdx >= 0) {
+        const cpIn = resourceToCanvas(pts[cpInIdx]);
+        ctx2.beginPath();
+        ctx2.moveTo(ac.x, ac.y);
+        ctx2.lineTo(cpIn.x, cpIn.y);
+        ctx2.stroke();
+        ctx2.setLineDash([]);
+        ctx2.fillStyle = '#ffffff';
+        ctx2.beginPath();
+        ctx2.arc(cpIn.x, cpIn.y, 3, 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.setLineDash([3, 3]);
+      }
+    }
+    ctx2.restore();
+  };
+
   // Helper functions for circle/arc generation
   const generateCirclePoints = (center: Point, radius: number, segments: number, closed: boolean = true): Point[] => {
     const points: Point[] = [];
@@ -1102,14 +1172,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
-    
+
     let t = ((px - x1) * dx + (py - y1) * dy) / (len * len);
     t = Math.max(0, Math.min(1, t));
-    
+
     const closestX = x1 + t * dx;
     const closestY = y1 + t * dy;
-    
+
     return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+  };
+
+  // Returns the projected canvas point and t parameter on a segment, or null if beyond endpoints
+  const projectOnSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number): { canvasX: number; canvasY: number; t: number; dist: number } | null => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return null;
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0.01, Math.min(0.99, t)); // exclude endpoints
+    const cx = x1 + t * dx;
+    const cy = y1 + t * dy;
+    const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+    return { canvasX: cx, canvasY: cy, t, dist };
   };
 
   // Draw the canvas
@@ -1255,21 +1339,27 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.lineWidth = 2;
 
         ctx.beginPath();
-        const startPt = path.points[0];
-        if (!startPt) continue;
-        const start = resourceToCanvas(startPt);
-        ctx.moveTo(start.x, start.y);
-        for (let i = 1; i < path.points.length; i++) {
-          const pt = path.points[i];
-          if (!pt) continue;
-          const ptCanvas = resourceToCanvas(pt);
-          ctx.lineTo(ptCanvas.x, ptCanvas.y);
-        }
-
-        if (path.closed) {
-          ctx.closePath();
+        if (path.type === 'bezier') {
+          renderBezierPath(path.points, ctx);
+        } else {
+          const startPt = path.points[0];
+          if (!startPt) continue;
+          const start = resourceToCanvas(startPt);
+          ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < path.points.length; i++) {
+            const pt = path.points[i];
+            if (!pt) continue;
+            const ptCanvas = resourceToCanvas(pt);
+            ctx.lineTo(ptCanvas.x, ptCanvas.y);
+          }
+          if (path.closed) ctx.closePath();
         }
         ctx.stroke();
+
+        // For selected bezier path: draw handle lines on top
+        if (path.type === 'bezier' && layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
+          drawBezierHandles(path.points, ctx);
+        }
 
         // Tree-panel selection highlight: cyan stroke override
         const treeKey = `${layerIdx}-${pathIdx}`;
@@ -1278,31 +1368,43 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           ctx.strokeStyle = '#00ffff';
           ctx.lineWidth = 2.5;
           ctx.beginPath();
-          const sp = path.points[0];
-          if (sp) {
-            const sc = resourceToCanvas(sp);
-            ctx.moveTo(sc.x, sc.y);
-            for (let i = 1; i < path.points.length; i++) {
-              const pp = path.points[i];
-              if (!pp) continue;
-              const pc = resourceToCanvas(pp);
-              ctx.lineTo(pc.x, pc.y);
+          if (path.type === 'bezier') {
+            renderBezierPath(path.points, ctx);
+          } else {
+            const sp = path.points[0];
+            if (sp) {
+              const sc = resourceToCanvas(sp);
+              ctx.moveTo(sc.x, sc.y);
+              for (let i = 1; i < path.points.length; i++) {
+                const pp = path.points[i];
+                if (!pp) continue;
+                const pc = resourceToCanvas(pp);
+                ctx.lineTo(pc.x, pc.y);
+              }
+              if (path.closed) ctx.closePath();
             }
-            if (path.closed) ctx.closePath();
           }
           ctx.stroke();
         }
 
         if (layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
-          ctx.fillStyle = '#ffff00';
           for (let i = 0; i < path.points.length; i++) {
             const pt = path.points[i];
             if (!pt) continue;
             const ptCanvas = resourceToCanvas(pt);
             const isSelected = selectedPoints.has(`${pathIdx}-${i}`);
-            ctx.beginPath();
-            ctx.arc(ptCanvas.x, ptCanvas.y, i === selectedPointIndex || isSelected ? 6 : 4, 0, Math.PI * 2);
-            ctx.fill();
+            const isControl = path.type === 'bezier' && pt.t === 'c';
+            if (isControl) {
+              // Control points: small cyan squares
+              ctx.fillStyle = isSelected ? '#ff6600' : 'rgba(0,200,255,0.7)';
+              const s = 3;
+              ctx.fillRect(ptCanvas.x - s, ptCanvas.y - s, s * 2, s * 2);
+            } else {
+              ctx.fillStyle = isSelected ? '#ff6600' : '#ffff00';
+              ctx.beginPath();
+              ctx.arc(ptCanvas.x, ptCanvas.y, i === selectedPointIndex || isSelected ? 6 : 4, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
         }
         
@@ -1365,6 +1467,87 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
+      }
+    }
+
+    // -- Bezier tool temp-preview --
+    if (currentTool === 'bezier' && tempPoints.length >= 2) {
+      // Draw already-confirmed segments
+      ctx.strokeStyle = '#00ccff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      renderBezierPath(tempPoints, ctx);
+      ctx.stroke();
+
+      // Draw handle lines for confirmed anchors
+      drawBezierHandles(tempPoints, ctx);
+
+      // Rubber-band: preview segment from last confirmed anchor to mouse/pending
+      const lastAnchor = tempPoints[tempPoints.length - 2]; // A_last
+      const lastCpOut  = tempPoints[tempPoints.length - 1]; // C_last_out
+      if (lastAnchor && lastCpOut && mousePenPosRef.current) {
+        const mouseCanvas = mousePenPosRef.current;
+        const mouseRes = canvasToResource(mouseCanvas.x, mouseCanvas.y);
+        const md = bezierMouseDownRef.current;
+
+        let cp2Res: Point;
+        let endRes: Point;
+        if (md) {
+          // Dragging: symmetric handles at pending anchor
+          const ddx = mouseRes.x - md.resPoint.x;
+          const ddy = mouseRes.y - md.resPoint.y;
+          cp2Res = { x: Math.round(md.resPoint.x - ddx), y: Math.round(md.resPoint.y - ddy) };
+          endRes = md.resPoint;
+          // Draw pending anchor's handles
+          const pa = resourceToCanvas(md.resPoint);
+          const hIn  = resourceToCanvas(cp2Res);
+          const hOut = resourceToCanvas({ x: Math.round(md.resPoint.x + ddx), y: Math.round(md.resPoint.y + ddy) });
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(hIn.x, hIn.y); ctx.lineTo(pa.x, pa.y); ctx.lineTo(hOut.x, hOut.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ffffff';
+          for (const h of [hIn, hOut]) {
+            ctx.beginPath(); ctx.arc(h.x, h.y, 3, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.beginPath(); ctx.arc(pa.x, pa.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00ccff'; ctx.fill();
+          ctx.restore();
+        } else {
+          // Just hovering: sharp-corner preview to mouse
+          cp2Res = mouseRes;
+          endRes = mouseRes;
+        }
+
+        const laC  = resourceToCanvas(lastAnchor);
+        const cp1C = resourceToCanvas(lastCpOut);
+        const cp2C = resourceToCanvas(cp2Res);
+        const epC  = resourceToCanvas(endRes);
+        ctx.beginPath();
+        ctx.moveTo(laC.x, laC.y);
+        ctx.bezierCurveTo(cp1C.x, cp1C.y, cp2C.x, cp2C.y, epC.x, epC.y);
+        ctx.strokeStyle = '#00ccff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.globalAlpha = 0.7;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
+
+      // Draw anchor markers for already-confirmed points
+      for (let i = 0; i < tempPoints.length; i++) {
+        const pt = tempPoints[i];
+        const pc = resourceToCanvas(pt);
+        if (i % 3 === 0) {
+          ctx.fillStyle = '#00ccff';
+          ctx.beginPath(); ctx.arc(pc.x, pc.y, 5, 0, Math.PI * 2); ctx.fill();
+        }
       }
     }
 
@@ -1520,7 +1703,29 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey]);
+
+    // Draw hovered segment insert indicator (green circle with + — always on top)
+    const hs = hoveredSegmentRef.current;
+    if (hs && currentTool === 'select') {
+      ctx.save();
+      ctx.strokeStyle = '#44ff88';
+      ctx.fillStyle = '#44ff88';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(hs.canvasX, hs.canvasY, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      // Draw + symbol
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(hs.canvasX - 4, hs.canvasY);
+      ctx.lineTo(hs.canvasX + 4, hs.canvasY);
+      ctx.moveTo(hs.canvasX, hs.canvasY - 4);
+      ctx.lineTo(hs.canvasX, hs.canvasY + 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, currentTool]);
 
   useEffect(() => {
     draw();
@@ -1758,15 +1963,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     e.target.value = '';
   };
 
-  // Restore background image from resource on load
+  // Sync background image with the active resource
   useEffect(() => {
-    if (resource.backgroundImage && !backgroundImage) {
+    if (resource.backgroundImage) {
       const img = new Image();
       img.onload = () => {
         setBackgroundImage(img);
         setShowBackground(true);
       };
       img.src = resource.backgroundImage;
+      setBackgroundOffset(resource.backgroundOffset ?? { x: 0, y: 0 });
+    } else {
+      setBackgroundImage(null);
+      setShowBackground(false);
+      setShowEdgeSettings(false);
+      setBackgroundOffset({ x: 0, y: 0 });
     }
   }, [resource.backgroundImage]);
 
@@ -1820,7 +2031,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
     // Right-click (button 2) → finalise pen path if drawing, otherwise ignore
     if (e.button === 2) {
-      if (currentTool === 'pen' && tempPoints.length >= 2) {
+      if (currentTool === 'bezier' && tempPoints.length >= 5) {
+        e.preventDefault();
+        finalizeBezierPath();
+      } else if (currentTool === 'pen' && tempPoints.length >= 2) {
         e.preventDefault();
         finalizePenPath();
       }
@@ -1865,6 +2079,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const snapped = hoveredVertexRef.current;
       const penPoint = snapped ? { x: snapped.point.x, y: snapped.point.y, z: snapped.point.z ?? 0 } : point;
       setTempPoints([...tempPoints, penPoint]);
+      setIsDrawing(true);
+    } else if (currentTool === 'bezier') {
+      bezierMouseDownRef.current = { canvasX, canvasY, resPoint: point };
       setIsDrawing(true);
     } else if (currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') {
       // Start drawing circle/arc/polygon - set center
@@ -2013,9 +2230,50 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const prev = hoveredVertexRef.current;
     const nearest = findNearestVertex(canvasX, canvasY);
     hoveredVertexRef.current = nearest;
-    if (nearest !== null || prev !== null) {
-      draw(); // redraw to show/hide highlight
-    } else if (currentTool === 'pen' && tempPoints.length > 0) {
+
+    // Update hovered segment for insert-point indicator (select mode only, when no vertex is hovered)
+    const prevSeg = hoveredSegmentRef.current;
+    if (currentTool === 'select' && !nearest) {
+      const layer = resource.layers[currentLayerIndex];
+      let bestSeg: typeof hoveredSegmentRef.current = null;
+      let bestDist = 10; // px threshold for segment hover
+      if (layer && Array.isArray(layer.paths)) {
+        for (let pathIdx = 0; pathIdx < layer.paths.length; pathIdx++) {
+          const path = layer.paths[pathIdx];
+          if (!path || !Array.isArray(path.points) || path.points.length < 2) continue;
+          for (let i = 0; i < path.points.length - 1; i++) {
+            const p1 = resourceToCanvas(path.points[i]!);
+            const p2 = resourceToCanvas(path.points[i + 1]!);
+            const proj = projectOnSegment(canvasX, canvasY, p1.x, p1.y, p2.x, p2.y);
+            if (proj && proj.dist < bestDist) {
+              bestDist = proj.dist;
+              const r1 = path.points[i]!;
+              const r2 = path.points[i + 1]!;
+              bestSeg = {
+                pathIdx,
+                segIdx: i,
+                canvasX: proj.canvasX,
+                canvasY: proj.canvasY,
+                resPoint: {
+                  x: Math.round(r1.x + proj.t * (r2.x - r1.x)),
+                  y: Math.round(r1.y + proj.t * (r2.y - r1.y)),
+                  z: r1.z !== undefined && r2.z !== undefined ? Math.round(r1.z + proj.t * (r2.z - r1.z)) : 0,
+                },
+              };
+            }
+          }
+        }
+      }
+      hoveredSegmentRef.current = bestSeg;
+    } else {
+      hoveredSegmentRef.current = null;
+    }
+
+    if (nearest !== null || prev !== null || hoveredSegmentRef.current !== prevSeg) {
+      draw(); // redraw to show/hide highlights
+    } else if ((currentTool === 'pen' || currentTool === 'bezier') && tempPoints.length > 0) {
+      draw();
+    } else if (currentTool === 'bezier' && bezierMouseDownRef.current) {
       draw();
     }
 
@@ -2109,10 +2367,50 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   const handleMouseUp = () => {
+    // Persist background offset if the background was dragged
+    if (currentTool === 'background' && isDrawing && isBackgroundSelected && dragStartRef.current) {
+      const nr = { ...resource, backgroundOffset: backgroundOffset };
+      updateResource(resource, nr);
+    }
+
     // Clear drag state for 3D rotation
     dragStartRef.current = null;
     setIsBackgroundSelected(false);
     
+    // Finalize bezier anchor placement
+    if (currentTool === 'bezier' && isDrawing && bezierMouseDownRef.current) {
+      const md = bezierMouseDownRef.current;
+      bezierMouseDownRef.current = null;
+
+      const rect2 = canvasRef.current?.getBoundingClientRect();
+      // Use the last known mouse position; if unavailable, use the mousedown point
+      const curMouseCanvas = mousePenPosRef.current ?? { x: md.canvasX, y: md.canvasY };
+      const curMouseRes = canvasToResource(curMouseCanvas.x, curMouseCanvas.y);
+
+      const anchor = { ...md.resPoint, t: 'a' as const };
+      const ddx = curMouseRes.x - md.resPoint.x;
+      const ddy = curMouseRes.y - md.resPoint.y;
+      const isDrag = Math.abs(ddx) > 2 || Math.abs(ddy) > 2;
+
+      const cpOut: Point = isDrag
+        ? { x: Math.round(md.resPoint.x + ddx), y: Math.round(md.resPoint.y + ddy), t: 'c' }
+        : { ...md.resPoint, t: 'c' };
+      const cpIn: Point = isDrag
+        ? { x: Math.round(md.resPoint.x - ddx), y: Math.round(md.resPoint.y - ddy), t: 'c' }
+        : { ...md.resPoint, t: 'c' };
+
+      if (tempPoints.length === 0) {
+        // First anchor: [A0, C0_out]
+        setTempPoints([anchor, cpOut]);
+      } else {
+        // Subsequent: append [C_in, A, C_out]
+        setTempPoints(prev => [...prev, cpIn, anchor, cpOut]);
+      }
+      setIsDrawing(false);
+      void rect2; // suppress unused warning
+      return;
+    }
+
     // Finalize circle/arc/polygon
     if ((currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') && isDrawing && circleCenter && circleRadius > 0) {
       const points = currentTool === 'circle'
@@ -2277,8 +2575,55 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     }
   };
 
+  const finalizeBezierPath = () => {
+    mousePenPosRef.current = null;
+    bezierMouseDownRef.current = null;
+    if (currentTool === 'bezier' && tempPoints.length >= 5) {
+      // Remove trailing C_out (not needed after last anchor)
+      const raw = tempPoints.slice(0, -1);
+      // Tag types by position: i%3===0 → anchor, else → control
+      const tagged = raw.map((p, i) => ({ ...p, t: (i % 3 === 0 ? 'a' : 'c') as 'a' | 'c' }));
+      const newPath: VecPath = {
+        name: `bezier_${Date.now()}`,
+        intensity: 127,
+        closed: false,
+        type: 'bezier',
+        points: tagged,
+      };
+      const newResource = { ...resource };
+      newResource.layers[currentLayerIndex].paths.push(newPath);
+      updateResource(resource, newResource);
+      setTempPoints([]);
+      setCurrentPathIndex(newResource.layers[currentLayerIndex].paths.length - 1);
+    } else {
+      setTempPoints([]);
+    }
+  };
+
   const handleDoubleClick = () => {
     mousePenPosRef.current = null;
+
+    // In select mode: insert a point on the hovered segment
+    if (currentTool === 'select') {
+      const seg = hoveredSegmentRef.current;
+      if (!seg) return;
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      const path = newResource.layers[currentLayerIndex]?.paths[seg.pathIdx];
+      if (!path) return;
+      path.points.splice(seg.segIdx + 1, 0, seg.resPoint);
+      updateResource(resource, newResource);
+      setCurrentPathIndex(seg.pathIdx);
+      setSelectedPointIndex(seg.segIdx + 1);
+      setSelectedPoints(new Set([`${seg.pathIdx}-${seg.segIdx + 1}`]));
+      hoveredSegmentRef.current = null;
+      return;
+    }
+
+    if (currentTool === 'bezier') {
+      finalizeBezierPath();
+      return;
+    }
+
     if (currentTool === 'pen' && tempPoints.length >= 3) {
       // The second click of the double-click already added a duplicate last point;
       // trim it before materialising the path
@@ -2379,7 +2724,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     if (e.key === 'Enter') {
       e.preventDefault();
-      finalizePenPath();
+      if (currentTool === 'bezier') finalizeBezierPath();
+      else finalizePenPath();
       return;
     }
 
@@ -2665,6 +3011,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         title="Polygon tool - click center, drag to set radius"
       >
         ⬡ Polygon
+      </button>
+      <button
+        onClick={() => setCurrentTool('bezier')}
+        style={{
+          padding: '8px 12px',
+          background: currentTool === 'bezier' ? '#4a4a8e' : '#3a3a5e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Bezier tool - click to add sharp anchor, click+drag to add smooth anchor. Enter/Right-click to finish."
+      >
+        ∿ Bezier
       </button>
       {backgroundImage && (
         <button
