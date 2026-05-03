@@ -5,7 +5,9 @@
 use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
 use crate::animres::VanimResource;
+use crate::instrres::InstrResource;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs;
 use serde::Deserialize;
 
@@ -131,6 +133,24 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
     s.push_str("@ Asset data\n");
     s.push_str("@ ============================================================\n\n");
 
+    // Build dims map: lowercase vector name → (natural_half_w, natural_half_h)
+    let mut dims_map: HashMap<String, (i32, i32)> = HashMap::new();
+    for asset in assets {
+        if !matches!(asset.asset_type, AssetType::Vector) { continue; }
+        if let Ok(text) = fs::read_to_string(&asset.path) {
+            if let Ok(res) = serde_json::from_str::<VecResource>(&text) {
+                let (min_x, max_x) = res.calculate_x_bounds();
+                let (_min_y, max_y) = res.calculate_y_bounds();
+                let hw = ((max_x - min_x) as i32) / 2;
+                // hh = max_y: distance from local origin (0,0) to the top surface.
+                // The renderer draws at native scale (no per-object scale applied),
+                // so max_y is the correct unscaled top extent for collision.
+                let hh = (max_y as i32).max(1);
+                dims_map.insert(asset.name.to_lowercase(), (hw, hh));
+            }
+        }
+}
+
     for asset in assets {
         let sym = asset.name.to_uppercase().replace('-', "_").replace(' ', "_");
         match asset.asset_type {
@@ -205,7 +225,7 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                         continue;
                     }
                 };
-                s.push_str(&level.compile_to_arm_asm());
+                s.push_str(&level.compile_to_arm_asm(&dims_map));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
@@ -225,6 +245,23 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 };
                 s.push_str(&compile_vanim_for_arm(&resource, &asset.name));
+            }
+            AssetType::Instrument => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_INSTR\n_{sym}_INSTR:\n    .space 16\n\n"));
+                        continue;
+                    }
+                };
+                match serde_json::from_str::<InstrResource>(&text) {
+                    Ok(instr) => s.push_str(&instr.compile_to_arm_asm_with_name(&asset.name)),
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to parse vinstr '{}': {}", asset.name, e);
+                        s.push_str(&format!(".global _{sym}_INSTR\n_{sym}_INSTR:\n    .space 16\n\n"));
+                    }
+                }
             }
             #[allow(unreachable_patterns)]
             _ => {

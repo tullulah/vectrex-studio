@@ -1,4 +1,6 @@
 META TITLE = "SNOW BROS"
+META ROM_TOTAL_SIZE = 131072
+META ROM_BANK_SIZE = 16384
 
 # ── States ──────────────────────────────────────────────────────────────────
 STATE_TITLE: i16 = 0        # título + "press a button"
@@ -28,6 +30,19 @@ player_y: i16 = -100
 player_vx: i16 = 0
 player_vy: i16 = 0
 player_facing: i16 = 0
+player_on_ground: i16 = 0
+floor_y: i16 = 0
+prev_y: i16 = 0
+
+# ── Physics ──────────────────────────────────────────────────────────────────
+GRAVITY: i16 = 1
+JUMP_SPEED: i16 = 13
+MAX_FALL_SPEED: i16 = 12
+PLAYER_HH: i16 = 14     # half-height de player_idle.vec
+
+# ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
+WORLD_X_MIN: i16 = -96
+WORLD_X_MAX: i16 = 95
 
 # ── Timings (en frames a ~60fps) ────────────────────────────────────────────
 LEVEL_TIME: i16 = 3600      # 60 segundos por nivel
@@ -66,7 +81,7 @@ def loop():
 
 # ── Estado: título ───────────────────────────────────────────────────────────
 def state_title():
-    DRAW_VECTOR("init_screen", 0, 0)
+    DRAW_VECTOR("init_screen_bezier", 0, 0)
     PRINT_TEXT(-50, -90, "PRESS A BUTTON")
     if J1_BUTTON_1():
         score = 0
@@ -208,7 +223,9 @@ def load_current_level():
     time_left = LEVEL_TIME
     enemy_count = 1     # TODO: leer de datos del nivel
     player_x = 0
-    player_y = -100
+    player_y = -55          # above platform1; floor_y = -79+14 = -65 (top=-88+9=-79)
+    player_vy = 0
+    player_on_ground = 0
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
@@ -232,46 +249,92 @@ def load_current_level():
         PLAY_MUSIC("Henshoku")
     if current_level == 8:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_8
-        PLAY_MUSIC("Yukida-March")
+        PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 9:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_9
-        PLAY_MUSIC("Yukida-March")
+        PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 11:
         LOAD_LEVEL("world_1_1")         # TODO: world_2_1
-        PLAY_MUSIC("Dosukoi-Snow")
+        PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 12:
         LOAD_LEVEL("world_1_1")         # TODO: world_2_2
-        PLAY_MUSIC("Dosukoi-Snow")
+        PLAY_MUSIC("Yukidama-Ondo")
     # TODO: niveles 13-50
 
 def play_boss_music():
     if current_level == 10:
-        PLAY_MUSIC("Boss_de_Ska")
+        PLAY_MUSIC("Boss_Intro")
     if current_level == 20:
-        PLAY_MUSIC("Yoh")
+        PLAY_MUSIC("Boss_Intro")
     if current_level == 30:
-        PLAY_MUSIC("Boss-Yade")
+        PLAY_MUSIC("Boss_Intro")
     if current_level == 40:
-        PLAY_MUSIC("Dosukoi-Snow")
+        PLAY_MUSIC("Boss_Intro")
     if current_level == 50:
-        PLAY_MUSIC("Boss_de_Ska")
+        PLAY_MUSIC("Boss_Intro")
 
 # ── Jugador ──────────────────────────────────────────────────────────────────
 def update_player():
-    player_vx = clamp(J1_X() / 64, -3, 3)
-    player_vy = clamp(J1_Y() / 64, -3, 3)
-    player_x = clamp(player_x + player_vx, -120, 120)
-    player_y = clamp(player_y + player_vy, -120, 120)
+    #debug
+    f = LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH)
+    PRINT_NUMBER(-20, 120, f)
+    PRINT_NUMBER(-20, 100, player_x)
+    PRINT_NUMBER(-20, 80, player_y)
+
+    # Movimiento horizontal con joystick
+    player_vx = clamp(J1_X() / 32, -4, 4)
     if player_vx < 0:
         player_facing = 1
     if player_vx > 0:
         player_facing = 0
+    player_x = clamp(player_x + player_vx, WORLD_X_MIN, WORLD_X_MAX)
+
+    # Salto y validación de suelo: cada frame cuando está grounded
+    if player_on_ground == 1:
+        if J1_BUTTON_1():
+            player_vy = JUMP_SPEED
+            player_on_ground = 0
+        if player_on_ground == 1:
+            # Verificar que sigue habiendo suelo bajo el jugador (walkoff detection)
+            floor_y = LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH)
+            if floor_y < player_y:
+                player_on_ground = 0
+
+    # Gravedad, movimiento y colisión: solo cuando está en el aire
+    if player_on_ground == 0:
+        player_vy = player_vy - GRAVITY
+        if player_vy < -MAX_FALL_SPEED:
+            player_vy = -MAX_FALL_SPEED
+
+        prev_y = player_y
+        player_y = player_y + player_vy
+
+        # Colisión con plataformas al caer (usa prev_y para evitar tunneling)
+        if player_vy <= 0:
+            floor_y = LEVEL_COLLISION_Y(player_x, prev_y, PLAYER_HH)
+            
+            if player_y <= floor_y:
+                player_y = floor_y
+                player_vy = 0
+                player_on_ground = 1
+
+    # Límites de pantalla
+    if player_y > 110:
+        player_y = 110
+        player_vy = 0
+    if player_y < -110:
+        player_y = -110
+        player_vy = 0
+        player_on_ground = 1
 
 def draw_player():
-    if player_vx == 0:
-        DRAW_VECTOR("player_idle", player_x, player_y, player_facing)
-    else:
-        DRAW_ANIM("player_walk", player_x, player_y, player_facing, 80, 1)
+    if player_on_ground == 0:
+        DRAW_VECTOR("player_jump", player_x, player_y, player_facing)
+    if player_on_ground == 1:
+        if player_vx == 0:
+            DRAW_VECTOR("player_idle", player_x, player_y, player_facing)
+        else:
+            DRAW_VECTOR("player_walk1", player_x, player_y, player_facing)
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():

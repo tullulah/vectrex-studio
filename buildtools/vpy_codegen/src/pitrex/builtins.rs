@@ -73,6 +73,7 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_misc_stubs());
     s.push_str(&emit_pitrex_print_number_impl());
     s.push_str(&emit_pitrex_draw_anim());
+    s.push_str(&emit_pitrex_note_engine());
 
     s
 }
@@ -1057,52 +1058,95 @@ fn emit_pitrex_level_collision() -> String {
 
     // ── pitrex_level_collision_y(r0=px, r1=py, r2=hh) → r0 = floor_center_y ──
     // Scans collidable GP objects (ROM flags bit4 = 0x10).
-    // Returns best_obj_top + player_hh (where player center should sit).
-    // Returns -200 if no floor found (caller uses max(result, game_floor)).
+    // For objects with coll_mesh_ptr != 0: ray-casts against horizontal segments (local coords).
+    //   Mesh format: .word seg_count; .hword x1,y1,x2,y2 per segment.
+    //   Non-horizontal segments (y1 != y2) are skipped.
+    // For objects without a mesh (coll_mesh_ptr == 0): AABB fallback (world_y + half_h).
+    // Returns best_floor_top + player_hh. Returns -200 if no floor found.
     //
     // LEVEL_GP_BUF layout (8 bytes/entry): x i16 @0, y i16 @2, vx i16 @4, vy i16 @6
-    // ROM object layout (16 bytes): x @0, y @2, scale @4, intensity @5, flags @6,
-    //   type @7, vector_ptr @8, half_w @12, half_h @13, vel_x @14, vel_y @15
+    // ROM object layout (20 bytes): @0 x, @2 y, @4 scale, @5 intensity, @6 flags, @7 type,
+    //   @8 vector_ptr, @12 half_w, @13 half_h, @14 vel_x, @15 vel_y, @16 coll_mesh_ptr
+    //
+    // Registers:
+    //   r4=px  r5=player_feet  r6=player_hh  r7=buf_ptr  r8=count  r9=rom_ptr
+    //   r10=best_floor_top  r11=mesh_ptr (inner)  r12=seg_count (inner)  r14=scratch
     s.push_str("@ pitrex_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y\n");
     s.push_str(".global pitrex_level_collision_y\n.type pitrex_level_collision_y, %function\npitrex_level_collision_y:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
     s.push_str("    mov     r4, r0              @ px\n");
-    s.push_str("    mov     r5, r1              @ py\n");
-    s.push_str("    mov     r6, r2              @ half_h (player)\n");
-    s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n");
-    s.push_str("    ldr     r7, [r7]            @ r7 = level header ptr\n");
-    s.push_str("    ldr     r10, =-32767        @ best_floor_top sentinel (below any valid Y)\n");
-    s.push_str("    cmp     r7, #0\n    beq     plcy_finish\n");
+    s.push_str("    mov     r6, r2              @ player_hh\n");
+    s.push_str("    sub     r5, r1, r2          @ r5 = player_feet = py - hh\n");
+    s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n    ldr     r7, [r7]\n");
+    s.push_str("    cmp     r7, #0\n    beq     plcy_no_floor\n");
     s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
-    s.push_str("    cmp     r8, #0\n    beq     plcy_finish\n");
+    s.push_str("    cmp     r8, #0\n    beq     plcy_no_floor\n");
     s.push_str("    ldr     r9, [r7, #16]       @ r9 = gpObjectsPtr (ROM)\n");
     s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
-    s.push_str("    sub     r0, r5, r6          @ player_feet = py - hh\n");
+    s.push_str("    ldr     r10, =-32767        @ best_floor_top sentinel\n");
     s.push_str("plcy_loop:\n    cmp     r8, #0\n    beq     plcy_finish\n");
     // collidable flag (ROM[6] bit4)
-    s.push_str("    ldrb    r1, [r9, #6]\n    tst     r1, #0x10\n    beq     plcy_next\n");
-    // x-range check: |px - obj_x| < obj_hw + 8 (player hw = 8)
-    s.push_str("    ldrb    r1, [r9, #12]       @ obj half_w\n");
+    s.push_str("    ldrb    r0, [r9, #6]\n    tst     r0, #0x10\n    beq     plcy_next\n");
+    // x broadphase: |px - obj_x| <= half_w
+    s.push_str("    ldrb    r1, [r9, #12]       @ half_w\n");
     s.push_str("    ldrsh   r2, [r7, #0]        @ obj world_x (buf)\n");
-    s.push_str("    sub     r2, r4, r2          @ dx = px - obj_x\n");
-    s.push_str("    movs    r3, r2\n    bpl     plcy_dx_ok\n    neg     r3, r2\n");
-    s.push_str("plcy_dx_ok:\n    add     r1, r1, #8\n    cmp     r3, r1\n    bge     plcy_next\n");
-    // obj_top = world_y + half_h; only consider if obj_top <= player_feet
+    s.push_str("    sub     r0, r4, r2          @ dx = px - obj_x\n");
+    s.push_str("    movs    r3, r0\n    bpl     plcy_xabs\n    neg     r3, r0\n");
+    s.push_str("plcy_xabs:\n    cmp     r3, r1\n    bgt     plcy_next\n");
+    // check mesh ptr (ROM obj +16)
+    s.push_str("    ldr     r11, [r9, #16]      @ coll_mesh_ptr\n");
+    s.push_str("    cmp     r11, #0\n    beq     plcy_aabb\n");
+    // ---- segment mesh ray-cast ----
+    // push local_px and obj_world_y for use in inner loop
+    s.push_str("    ldrsh   r0, [r7, #0]        @ obj_world_x\n");
+    s.push_str("    sub     r0, r4, r0          @ local_px = px - obj_world_x\n");
+    s.push_str("    ldrsh   r1, [r7, #2]        @ obj_world_y\n");
+    s.push_str("    push    {r0, r1}            @ [sp]=local_px  [sp+4]=obj_world_y\n");
+    s.push_str("    ldr     r12, [r11], #4      @ seg_count; r11 now → first segment\n");
+    s.push_str("plcy_seg_loop:\n    cmp     r12, #0\n    beq     plcy_seg_done\n");
+    s.push_str("    ldrsh   r0, [r11]           @ x1\n");
+    s.push_str("    ldrsh   r1, [r11, #2]       @ y1\n");
+    s.push_str("    ldrsh   r2, [r11, #4]       @ x2\n");
+    s.push_str("    ldrsh   r3, [r11, #6]       @ y2\n");
+    s.push_str("    add     r11, r11, #8\n    subs    r12, r12, #1\n");
+    s.push_str("    cmp     r1, r3\n    bne     plcy_seg_loop    @ skip non-horizontal (y1!=y2)\n");
+    s.push_str("    ldr     r14, [sp]           @ local_px\n");
+    // x-range check
+    s.push_str("    cmp     r0, r2              @ x1 vs x2\n");
+    s.push_str("    blt     plcy_seg_x1lt\n");
+    s.push_str("    @ x1 >= x2: valid range [x2, x1]\n");
+    s.push_str("    cmp     r14, r2\n    blt     plcy_seg_loop\n");
+    s.push_str("    cmp     r14, r0\n    bgt     plcy_seg_loop\n");
+    s.push_str("    b       plcy_seg_y\n");
+    s.push_str("plcy_seg_x1lt:\n");
+    s.push_str("    @ x1 < x2: valid range [x1, x2]\n");
+    s.push_str("    cmp     r14, r0\n    blt     plcy_seg_loop\n");
+    s.push_str("    cmp     r14, r2\n    bgt     plcy_seg_loop\n");
+    s.push_str("plcy_seg_y:\n");
+    s.push_str("    ldr     r14, [sp, #4]       @ obj_world_y\n");
+    s.push_str("    add     r3, r1, r14         @ world_seg_y = y1(local) + obj_world_y\n");
+    s.push_str("    cmp     r3, r5\n    bgt     plcy_seg_loop    @ above player_feet: skip\n");
+    s.push_str("    cmp     r3, r10\n    ble     plcy_seg_loop    @ not better: skip\n");
+    s.push_str("    mov     r10, r3\n    b       plcy_seg_loop\n");
+    s.push_str("plcy_seg_done:\n    pop     {r0, r1}            @ restore stack balance\n");
+    s.push_str("    b       plcy_next\n");
+    // AABB fallback
+    s.push_str("plcy_aabb:\n");
     s.push_str("    ldrsh   r2, [r7, #2]        @ obj world_y (buf)\n");
-    s.push_str("    ldrb    r3, [r9, #13]       @ obj half_h\n");
+    s.push_str("    ldrb    r3, [r9, #13]       @ half_h\n");
     s.push_str("    add     r2, r2, r3          @ obj_top = world_y + half_h\n");
-    s.push_str("    cmp     r2, r0\n    bgt     plcy_next   @ surface above player feet\n");
-    // track highest floor_top (closest to player from below); sentinel -32767 < any valid top
-    s.push_str("    cmp     r10, r2\n    bge     plcy_next\n    mov     r10, r2\n");
-    s.push_str("plcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
+    s.push_str("    cmp     r2, r5\n    bgt     plcy_next   @ above player feet: skip\n");
+    s.push_str("    cmp     r2, r10\n    ble     plcy_next\n    mov     r10, r2\n");
+    // advance to next object
+    s.push_str("plcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #20         @ ROM obj stride = 20 bytes\n");
     s.push_str("    subs    r8, r8, #1\n    b       plcy_loop\n");
     s.push_str("plcy_finish:\n");
     s.push_str("    ldr     r1, =-32767\n    cmp     r10, r1\n    beq     plcy_no_floor\n");
     s.push_str("    add     r0, r10, r6         @ floor_center = floor_top + player_hh\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("plcy_no_floor:\n");
     s.push_str("    ldr     r0, =-200\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
     // ── pitrex_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) → r0 = push-out dx ──
@@ -1143,7 +1187,7 @@ fn emit_pitrex_level_collision() -> String {
     s.push_str("    sub     r3, r3, r2          @ overlap = total_hw - |dx|\n");
     s.push_str("    cmp     r1, #0\n    bge     plcx_push_pos\n    neg     r3, r3\n");
     s.push_str("plcx_push_pos:\n    mov     r10, r3\n");
-    s.push_str("plcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
+    s.push_str("plcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #20         @ ROM obj stride = 20 bytes\n");
     s.push_str("    subs    r8, r8, #1\n    b       plcx_loop\n");
     s.push_str("plcx_done:\n    mov     r0, r10\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
@@ -1304,7 +1348,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    strh    r1, [r7, #2]        @ buf.y\n");
     s.push_str("    strh    r2, [r7, #4]        @ buf.vx\n");
     s.push_str("    strh    r3, [r7, #6]        @ buf.vy\n");
-    s.push_str("    add     r6, r6, #16         @ advance ROM obj ptr\n");
+    s.push_str("    add     r6, r6, #20         @ advance ROM obj ptr (20 bytes)\n");
     s.push_str("    add     r7, r7, #8          @ advance buf ptr\n");
     s.push_str("    subs    r5, r5, #1\n");
     s.push_str("    bne     .Lll_copy\n");
@@ -1367,7 +1411,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
     s.push_str("    pop     {r4, r5, r10, r11}\n");
     s.push_str(".Lshl_bg_skip:\n");
-    s.push_str("    add     r5, r5, #16         @ next BG object\n");
+    s.push_str("    add     r5, r5, #20         @ next BG object (20 bytes)\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lshl_bg\n");
 
@@ -1403,7 +1447,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
     s.push_str("    pop     {r4, r5, r7, r10, r11}\n");
     s.push_str(".Lshl_gp_skip:\n");
-    s.push_str("    add     r5, r5, #16         @ next ROM GP object\n");
+    s.push_str("    add     r5, r5, #20         @ next ROM GP object (20 bytes)\n");
     s.push_str("    add     r7, r7, #8          @ next buf entry\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lshl_gp_loop\n");
@@ -1438,7 +1482,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
     s.push_str("    pop     {r4, r5, r10, r11}\n");
     s.push_str(".Lshl_fg_skip:\n");
-    s.push_str("    add     r5, r5, #16         @ next FG object\n");
+    s.push_str("    add     r5, r5, #20         @ next FG object (20 bytes)\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lshl_fg_loop\n");
 
@@ -2026,7 +2070,7 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    strh    r3, [r8, #4]        @ buf.vx (unchanged)\n");
     s.push_str("    strh    r12, [r8, #6]       @ buf.vy\n");
     s.push_str(".Lul_next:\n");
-    s.push_str("    add     r7, r7, #16         @ next ROM object\n");
+    s.push_str("    add     r7, r7, #20         @ next ROM object (20 bytes)\n");
     s.push_str("    add     r8, r8, #8          @ next buf entry\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lul_loop\n");
@@ -2331,6 +2375,193 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("PITREX_ANIM_MIRROR: .space 1\n");
     s.push_str("PITREX_ANIM_SPEED: .space 1\n");
     s.push_str(".text\n\n");
+
+    s
+}
+
+// ── NOTE engine: pitrex_play_note + pitrex_note_update ────────────────────
+
+fn emit_pitrex_note_engine() -> String {
+    let mut s = String::new();
+
+    // ── NOTE_PERIOD_TABLE in .rodata ────────────────────────────────────────
+    // 84 entries (MIDI 24-107).  period = round(88200 / (440 * 2^((n-69)/12)))
+    s.push_str("@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---\n");
+    s.push_str(".section .rodata\n");
+    s.push_str(".balign 2\n");
+    s.push_str(".global NOTE_PERIOD_TABLE\n");
+    s.push_str("NOTE_PERIOD_TABLE:\n");
+    let mut periods: Vec<u16> = Vec::new();
+    for n in 24u32..=107 {
+        let freq = 440.0 * 2f64.powf((n as f64 - 69.0) / 12.0);
+        let period = (88200.0 / freq).round() as u16;
+        let period = period.max(1).min(4095);
+        periods.push(period);
+    }
+    // Emit 8 per line for readability
+    for chunk in periods.chunks(8) {
+        let vals: Vec<String> = chunk.iter().map(|p| p.to_string()).collect();
+        s.push_str(&format!("    .hword {}\n", vals.join(", ")));
+    }
+    s.push('\n');
+    s.push_str(".section .text\n");
+    s.push_str(".align 2\n\n");
+
+    // ── pitrex_play_note(r0=instr_ptr, r1=channel, r2=note) ────────────────
+    s.push_str("@ pitrex_play_note(r0=instr_ptr, r1=channel 0-2, r2=note MIDI 24-107)\n");
+    s.push_str(".global pitrex_play_note\n.type pitrex_play_note, %function\npitrex_play_note:\n");
+    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str("    mov     r4, r0          @ r4 = instr_ptr\n");
+    s.push_str("    mov     r5, r1          @ r5 = channel\n");
+    s.push_str("    mov     r6, r2          @ r6 = note\n");
+
+    // Clamp note to 24-107
+    s.push_str("    @ clamp note to 24-107\n");
+    s.push_str("    cmp     r6, #24\n    it      lt\n    movlt   r6, #24\n");
+    s.push_str("    cmp     r6, #107\n    it      gt\n    movgt   r6, #107\n");
+
+    // Get channel state slot: &NOTE_STATE + channel*32
+    s.push_str("    @ r7 = &NOTE_STATE[channel]\n");
+    s.push_str("    ldr     r0, =NOTE_STATE\n");
+    s.push_str("    mov     r1, #32\n");
+    s.push_str("    mul     r7, r5, r1\n");
+    s.push_str("    add     r7, r0, r7\n");
+
+    // Fill state
+    s.push_str("    @ fill channel state\n");
+    s.push_str("    mov     r0, #1\n    str     r0, [r7, #0]    @ active = 1\n");
+    s.push_str("    ldrb    r0, [r4, #0]\n    str     r0, [r7, #4]    @ frames_left = duration_frames\n");
+    s.push_str("    str     r6, [r7, #8]    @ base_note\n");
+    s.push_str("    str     r4, [r7, #12]   @ instr_ptr\n");
+    s.push_str("    mov     r0, #0\n    str     r0, [r7, #16]   @ arp_pos = 0\n");
+    s.push_str("    ldrb    r0, [r4, #3]\n    str     r0, [r7, #20]   @ arp_timer = arp_speed_frames\n");
+    s.push_str("    str     r5, [r7, #28]   @ channel_id\n");
+
+    // Compute period: look up NOTE_PERIOD_TABLE[note - 24]
+    s.push_str("    @ compute period from note\n");
+    s.push_str("    sub     r0, r6, #24     @ r0 = note - 24 (index)\n");
+    s.push_str("    lsl     r0, r0, #1      @ r0 = index * 2 (hword offset)\n");
+    s.push_str("    ldr     r1, =NOTE_PERIOD_TABLE\n");
+    s.push_str("    ldrh    r2, [r1, r0]    @ r2 = period\n");
+    s.push_str("    str     r2, [r7, #24]   @ save period in state\n");
+
+    // Write tone period registers: ch A→R0/R1, ch B→R2/R3, ch C→R4/R5
+    s.push_str("    @ write period to PSG (reg_lo = channel*2, reg_hi = channel*2+1)\n");
+    s.push_str("    lsl     r0, r5, #1      @ reg_lo = channel * 2\n");
+    s.push_str("    mov     r1, r2\n    and     r1, r1, #0xFF   @ period_lo\n");
+    s.push_str("    push    {r2, r5, r7}\n    bl      v_writePSG\n    pop     {r2, r5, r7}\n");
+    s.push_str("    lsl     r0, r5, #1\n    add     r0, r0, #1      @ reg_hi\n");
+    s.push_str("    mov     r1, r2\n    lsr     r1, r1, #8      @ period_hi\n");
+    s.push_str("    push    {r5, r7}\n    bl      v_writePSG\n    pop     {r5, r7}\n");
+
+    // Write volume: ch A→R8, ch B→R9, ch C→R10
+    s.push_str("    @ write volume to PSG (vol reg = channel + 8)\n");
+    s.push_str("    ldr     r4, [r7, #12]   @ reload instr_ptr\n");
+    s.push_str("    ldrb    r1, [r4, #1]    @ volume\n");
+    s.push_str("    add     r0, r5, #8      @ vol reg = channel + 8\n");
+    s.push_str("    push    {r5, r7}\n    bl      v_writePSG\n    pop     {r5, r7}\n");
+
+    // Update mixer shadow: enable tone for channel (clear bit), disable noise (set noise bit)
+    s.push_str("    @ update PSG_MIXER_SHADOW: enable tone ch, disable noise ch\n");
+    s.push_str("    ldr     r0, =PSG_MIXER_SHADOW\n");
+    s.push_str("    ldr     r1, [r0]\n");
+    s.push_str("    mov     r2, #1\n    lsl     r2, r2, r5      @ tone bit for channel\n");
+    s.push_str("    bic     r1, r1, r2      @ clear = enable tone\n");
+    s.push_str("    add     r3, r5, #3\n    mov     r2, #1\n    lsl     r2, r2, r3      @ noise bit\n");
+    s.push_str("    orr     r1, r1, r2      @ set = disable noise\n");
+    s.push_str("    str     r1, [r0]        @ update shadow\n");
+    s.push_str("    mov     r0, #7\n");        // R7 = mixer
+    s.push_str("    push    {r5, r7}\n    bl      v_writePSG\n    pop     {r5, r7}\n");
+
+    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
+    // ── pitrex_note_update() ────────────────────────────────────────────────
+    s.push_str("@ pitrex_note_update() — advance note engine one frame (3 channels)\n");
+    s.push_str(".global pitrex_note_update\n.type pitrex_note_update, %function\npitrex_note_update:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    s.push_str("    mov     r4, #0              @ r4 = channel index\n");
+    s.push_str(".Lpnu_loop:\n");
+    s.push_str("    cmp     r4, #3\n    bge     .Lpnu_done\n");
+
+    // Get channel state ptr: &NOTE_STATE + channel*32
+    s.push_str("    ldr     r5, =NOTE_STATE\n");
+    s.push_str("    mov     r6, #32\n");
+    s.push_str("    mul     r7, r4, r6\n");
+    s.push_str("    add     r5, r5, r7      @ r5 = &NOTE_STATE[channel]\n");
+
+    // Skip if not active
+    s.push_str("    ldr     r6, [r5, #0]    @ active\n");
+    s.push_str("    cmp     r6, #0\n    beq     .Lpnu_next\n");
+
+    // Decrement frames_left
+    s.push_str("    ldr     r6, [r5, #4]    @ frames_left\n");
+    s.push_str("    subs    r6, r6, #1\n");
+    s.push_str("    str     r6, [r5, #4]\n");
+    s.push_str("    bne     .Lpnu_arp\n");
+
+    // Duration expired — mute channel volume
+    s.push_str("    @ note expired: mute channel\n");
+    s.push_str("    mov     r0, #0\n    str     r0, [r5, #0]    @ active = 0\n");
+    s.push_str("    ldr     r6, [r5, #28]   @ channel_id\n");
+    s.push_str("    add     r0, r6, #8      @ vol reg = channel_id + 8\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    push    {r4, r5}\n    bl      v_writePSG\n    pop     {r4, r5}\n");
+    s.push_str("    b       .Lpnu_next\n");
+
+    s.push_str(".Lpnu_arp:\n");
+    // Check arpeggio
+    s.push_str("    ldr     r6, [r5, #12]   @ instr_ptr\n");
+    s.push_str("    ldrb    r7, [r6, #2]    @ arpeggio_count\n");
+    s.push_str("    cmp     r7, #0\n    beq     .Lpnu_next\n");
+
+    // Decrement arp timer
+    s.push_str("    ldr     r8, [r5, #20]   @ arp_timer\n");
+    s.push_str("    subs    r8, r8, #1\n");
+    s.push_str("    str     r8, [r5, #20]\n");
+    s.push_str("    bne     .Lpnu_next\n");
+
+    // Reload arp timer
+    s.push_str("    ldrb    r8, [r6, #3]    @ arpeggio_speed_frames\n");
+    s.push_str("    str     r8, [r5, #20]\n");
+
+    // Advance arp_pos (wraps at arpeggio_count)
+    s.push_str("    ldr     r8, [r5, #16]   @ arp_pos\n");
+    s.push_str("    add     r8, r8, #1\n");
+    s.push_str("    cmp     r8, r7\n");
+    s.push_str("    it      ge\n    movge   r8, #0\n");
+    s.push_str("    str     r8, [r5, #16]\n");
+
+    // new_note = base_note + arpeggio_intervals[arp_pos], clamp 24-107
+    s.push_str("    ldr     r0, [r5, #8]    @ base_note\n");
+    s.push_str("    add     r1, r6, #4      @ ptr to arpeggio_intervals[0]\n");
+    s.push_str("    ldrsb   r1, [r1, r8]    @ signed interval at arp_pos\n");
+    s.push_str("    add     r0, r0, r1      @ new_note\n");
+    s.push_str("    cmp     r0, #24\n    it      lt\n    movlt   r0, #24\n");
+    s.push_str("    cmp     r0, #107\n    it      gt\n    movgt   r0, #107\n");
+
+    // Look up period
+    s.push_str("    sub     r0, r0, #24     @ index into table\n");
+    s.push_str("    lsl     r0, r0, #1      @ hword offset\n");
+    s.push_str("    ldr     r1, =NOTE_PERIOD_TABLE\n");
+    s.push_str("    ldrh    r2, [r1, r0]    @ period\n");
+
+    // Write period to PSG
+    s.push_str("    ldr     r3, [r5, #28]   @ channel_id\n");
+    s.push_str("    lsl     r0, r3, #1      @ reg_lo = channel_id * 2\n");
+    s.push_str("    mov     r1, r2\n    and     r1, r1, #0xFF\n");
+    s.push_str("    push    {r2, r3, r4, r5}\n    bl      v_writePSG\n    pop     {r2, r3, r4, r5}\n");
+    s.push_str("    lsl     r0, r3, #1\n    add     r0, r0, #1      @ reg_hi\n");
+    s.push_str("    mov     r1, r2\n    lsr     r1, r1, #8\n");
+    s.push_str("    push    {r3, r4, r5}\n    bl      v_writePSG\n    pop     {r3, r4, r5}\n");
+
+    s.push_str(".Lpnu_next:\n");
+    s.push_str("    add     r4, r4, #1\n");
+    s.push_str("    b       .Lpnu_loop\n");
+
+    s.push_str(".Lpnu_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+    s.push_str("    .ltorg\n\n");
 
     s
 }

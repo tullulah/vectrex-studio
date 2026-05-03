@@ -3,6 +3,7 @@
 //! Level data resources stored as JSON that can be compiled
 //! into efficient ASM/binary data for Vectrex.
 
+use std::collections::HashMap;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
@@ -161,6 +162,19 @@ pub struct VPlayCollision {
     pub bounce_walls: bool,
     #[serde(default, rename = "destroyOnCollision")]
     pub destroy_on_collision: bool,
+    /// Explicit collision segments in local (.vec) coordinates.
+    /// When present, replaces AABB half_h for Y-collision (mesh ray-cast).
+    #[serde(default)]
+    pub segments: Option<Vec<CollisionSegment>>,
+}
+
+/// A single collidable line segment in local (.vec) coordinate space.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollisionSegment {
+    pub x1: i16,
+    pub y1: i16,
+    pub x2: i16,
+    pub y2: i16,
 }
 
 impl VPlayLevel {
@@ -247,7 +261,7 @@ impl VPlayLevel {
 
     /// Compile level data to ARM Thumb2 assembly.
     ///
-    /// ARM object layout (16 bytes, little-endian):
+    /// ARM object layout (20 bytes, little-endian):
     ///   +0  x (i16 LE)
     ///   +2  y (i16 LE)
     ///   +4  scale (u8, scale*8; 8=1:1)
@@ -255,10 +269,16 @@ impl VPlayLevel {
     ///   +6  flags (u8): bit0=physics, bit1=gravity, bit4=collidable, bit5=bounce
     ///   +7  type (u8)
     ///   +8  vector_ptr (u32 LE absolute address)
-    ///   +12 half_w (u8, collision/cull half-width)
-    ///   +13 half_h (u8, collision/cull half-height)
+    ///   +12 half_w (u8, broadphase x-range)
+    ///   +13 half_h (u8, AABB fallback when coll_mesh_ptr==0)
     ///   +14 vel_x_init (i8)
     ///   +15 vel_y_init (i8)
+    ///   +16 coll_mesh_ptr (u32, 0 = use AABB fallback)
+    ///
+    /// Collision mesh format at coll_mesh_ptr:
+    ///   .word  seg_count
+    ///   .hword x1, y1, x2, y2   @ segment 0 (local coords, i16 each)
+    ///   ...                      @ segment N-1
     ///
     /// Header layout (24 bytes):
     ///   +0  xMin (i16)
@@ -272,7 +292,7 @@ impl VPlayLevel {
     ///   +12 bgObjectsPtr (u32)
     ///   +16 gpObjectsPtr (u32)
     ///   +20 fgObjectsPtr (u32)
-    pub fn compile_to_arm_asm(&self) -> String {
+    pub fn compile_to_arm_asm(&self, dims: &HashMap<String, (i32, i32)>) -> String {
         let mut out = String::new();
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
 
@@ -302,23 +322,51 @@ impl VPlayLevel {
         out.push_str(&format!("    .hword {}  @ scrollLimit bottom\n", sl_bottom));
         out.push_str("\n");
 
+        // Two-pass: first collect all mesh data (so it precedes struct arrays in the binary),
+        // then emit contiguous 20-byte struct arrays per layer.
+        let mut bg_meshes = String::new(); let mut bg_structs = String::new();
+        for obj in &self.layers.background {
+            let (m, s) = self.compile_arm_object(obj, dims);
+            bg_meshes.push_str(&m); bg_structs.push_str(&s);
+        }
+        let mut gp_meshes = String::new(); let mut gp_structs = String::new();
+        for obj in &self.layers.gameplay {
+            let (m, s) = self.compile_arm_object(obj, dims);
+            gp_meshes.push_str(&m); gp_structs.push_str(&s);
+        }
+        let mut fg_meshes = String::new(); let mut fg_structs = String::new();
+        for obj in &self.layers.foreground {
+            let (m, s) = self.compile_arm_object(obj, dims);
+            fg_meshes.push_str(&m); fg_structs.push_str(&s);
+        }
+
+        // Emit all collision meshes first
+        if !bg_meshes.is_empty() || !gp_meshes.is_empty() || !fg_meshes.is_empty() {
+            out.push_str("@ --- Collision meshes ---\n");
+            out.push_str(&bg_meshes); out.push_str(&gp_meshes); out.push_str(&fg_meshes);
+            out.push_str("\n");
+        }
+
         out.push_str(&format!("_{name}_BG_OBJECTS:\n"));
-        for obj in &self.layers.background { out.push_str(&self.compile_arm_object(obj)); }
+        out.push_str(&bg_structs);
         out.push_str("\n");
 
         out.push_str(&format!("_{name}_GP_OBJECTS:\n"));
-        for obj in &self.layers.gameplay { out.push_str(&self.compile_arm_object(obj)); }
+        out.push_str(&gp_structs);
         out.push_str("\n");
 
         out.push_str(&format!("_{name}_FG_OBJECTS:\n"));
-        for obj in &self.layers.foreground { out.push_str(&self.compile_arm_object(obj)); }
+        out.push_str(&fg_structs);
         out.push_str("\n");
 
         out
     }
 
-    /// Compile a single object for the ARM binary format (16 bytes).
-    fn compile_arm_object(&self, obj: &VPlayObject) -> String {
+    /// Compile a single object for the ARM binary format (20 bytes).
+    /// Returns (mesh_data, struct_data). mesh_data contains the _COLMESH_* label + segments
+    /// (empty string if no segments defined). struct_data is the 20-byte object struct.
+    fn compile_arm_object(&self, obj: &VPlayObject, dims: &HashMap<String, (i32, i32)>) -> (String, String) {
+        let mut mesh = String::new();
         let mut out = String::new();
         out.push_str(&format!("    @ {} ({})\n", obj.id, obj.obj_type));
 
@@ -370,17 +418,50 @@ impl VPlayLevel {
         let vec_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase().replace('-', "_").replace(' ', "_"));
         out.push_str(&format!("    .word {vec_label}  @ vector_ptr\n"));
 
-        // +12,+13: half_w, half_h (default 16 each for now)
-        out.push_str("    .byte 16   @ half_w\n");
-        out.push_str("    .byte 16   @ half_h\n");
+        // +12,+13: half_w, half_h
+        // NOTE: pitrex_show_level does NOT apply the scale byte when drawing — all objects
+        // render at native .vec coordinates. So collision dims must also be unscaled (native).
+        // Explicit collision.width/height in .vplay takes priority; falls back to vec bounds.
+        let key = obj.vector_name.to_lowercase();
+        let (nat_hw, nat_hh) = dims.get(&key).copied().unwrap_or((16, 16));
+        let coll_override_w = obj.collision.as_ref().and_then(|c| c.width);
+        let coll_override_h = obj.collision.as_ref().and_then(|c| c.height);
+        let nat_hw_final = coll_override_w.map(|v| v as i32).unwrap_or(nat_hw);
+        let nat_hh_final = coll_override_h.map(|v| v as i32).unwrap_or(nat_hh);
+        // No scale applied — renderer draws at native size, so collision must match.
+        let half_w = nat_hw_final.clamp(1, 127) as u8;
+        let half_h = nat_hh_final.clamp(1, 127) as u8;
+        let w_src = if coll_override_w.is_some() { "explicit" } else { "vec" };
+        let h_src = if coll_override_h.is_some() { "explicit" } else { "vec" };
+        out.push_str(&format!("    .byte {}   @ half_w ({}:{})\n", half_w, w_src, nat_hw_final));
+        out.push_str(&format!("    .byte {}   @ half_h ({}:{})\n", half_h, h_src, nat_hh_final));
 
         // +14,+15: initial velocity (i8)
         let vx = obj.velocity.x.clamp(-128.0, 127.0) as i8;
         let vy = obj.velocity.y.clamp(-128.0, 127.0) as i8;
         out.push_str(&format!("    .byte {}   @ vel_x_init\n", vx as u8));
-        out.push_str(&format!("    .byte {}   @ vel_y_init\n\n", vy as u8));
+        out.push_str(&format!("    .byte {}   @ vel_y_init\n", vy as u8));
 
-        out
+        // +16..+20: collision mesh pointer
+        // Build mesh label from sanitized object ID
+        let mesh_label = format!("_COLMESH_{}", obj.id.replace('-', "_").replace(' ', "_"));
+        let segs_opt = obj.collision.as_ref()
+            .and_then(|c| c.segments.as_ref())
+            .filter(|v| !v.is_empty());
+        if let Some(segs) = segs_opt {
+            mesh.push_str(&format!("{}:  @ {} collision segments (local coords)\n", mesh_label, segs.len()));
+            mesh.push_str(&format!("    .word {}  @ segment count\n", segs.len()));
+            for seg in segs {
+                mesh.push_str(&format!("    .hword {}, {}, {}, {}  @ x1={} y1={} x2={} y2={}\n",
+                    seg.x1, seg.y1, seg.x2, seg.y2,
+                    seg.x1, seg.y1, seg.x2, seg.y2));
+            }
+            out.push_str(&format!("    .word {}  @ coll_mesh_ptr\n\n", mesh_label));
+        } else {
+            out.push_str("    .word 0  @ coll_mesh_ptr (AABB fallback)\n\n");
+        }
+
+        (mesh, out)
     }
 
     /// Compile a single object to assembly (M6809 format)
@@ -502,10 +583,34 @@ impl VPlayLevel {
         // Bytes +18-19: half_width (cull margin) + half_height (collision AABB)
         // When copied to RAM via LDD ,X++; STD ,U++:
         //   RAM+13 = half_width (A), RAM+14 = half_height (B)
-        let half_width_label = format!("_{}_HALF_WIDTH", obj.vector_name.to_uppercase());
-        let half_height_label = format!("_{}_HALF_HEIGHT", obj.vector_name.to_uppercase());
-        out.push_str(&format!("    FCB {}  ; half_width (visual cull margin, ROM+18)\n", half_width_label));
-        out.push_str(&format!("    FCB {}  ; half_height (collision AABB, ROM+19)\n", half_height_label));
+        // Explicit collision.width/height in .vplay takes priority over vec bounding box.
+        let coll_override_w_m6809 = obj.collision.as_ref().and_then(|c| c.width);
+        let coll_override_h_m6809 = obj.collision.as_ref().and_then(|c| c.height);
+        let scale_pct = (obj.scale * 100.0).round() as u32;
+
+        // half_width
+        if let Some(nat_w) = coll_override_w_m6809 {
+            let hw = ((nat_w as f32 * obj.scale).round() as u32).clamp(1, 127);
+            out.push_str(&format!("    FCB {}  ; half_width (explicit override, ROM+18)\n", hw));
+        } else if (obj.scale - 1.0).abs() < 0.001 {
+            let lbl = format!("_{}_HALF_WIDTH", obj.vector_name.to_uppercase());
+            out.push_str(&format!("    FCB {}  ; half_width (ROM+18)\n", lbl));
+        } else {
+            let expr = format!("(_{}_HALF_WIDTH * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
+            out.push_str(&format!("    FCB {}  ; half_width scaled by {} (ROM+18)\n", expr, obj.scale));
+        }
+
+        // half_height
+        if let Some(nat_h) = coll_override_h_m6809 {
+            let hh = ((nat_h as f32 * obj.scale).round() as u32).clamp(1, 127);
+            out.push_str(&format!("    FCB {}  ; half_height (explicit override, ROM+19)\n", hh));
+        } else if (obj.scale - 1.0).abs() < 0.001 {
+            let lbl = format!("_{}_HALF_HEIGHT", obj.vector_name.to_uppercase());
+            out.push_str(&format!("    FCB {}  ; half_height (collision AABB, ROM+19)\n", lbl));
+        } else {
+            let expr = format!("(_{}_HALF_HEIGHT * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
+            out.push_str(&format!("    FCB {}  ; half_height scaled by {} (ROM+19)\n", expr, obj.scale));
+        }
         
         out.push_str("\n");
         out
