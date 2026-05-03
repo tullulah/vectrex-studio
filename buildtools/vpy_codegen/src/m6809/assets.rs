@@ -140,7 +140,7 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" {
+               up == "DRAW_ANIM" || up == "PLAY_NOTE" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -313,6 +313,25 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
+    // Search for instrument assets (assets/instruments/*.vinstr)
+    let instr_dir = project_root.join("assets").join("instruments");
+    if instr_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&instr_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vinstr") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Instrument,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     // Sort assets alphabetically by name for consistency
     assets.sort_by(|a, b| a.name.cmp(&b.name));
     assets
@@ -344,8 +363,8 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Vector)) {
         match crate::vecres::VecResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                let binary_size = resource.estimate_binary_size();
                 let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
+                let binary_size = estimate_asm_size(&asm_code);
                 sized_assets.push(SizedAsset {
                     info: asset.clone(),
                     binary_size,
@@ -423,6 +442,23 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load animation asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Instrument)) {
+        match crate::instrres::InstrResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
+                let binary_size = 16; // Always 16 bytes (fixed-size block)
+                sized_assets.push(SizedAsset {
+                    info: asset.clone(),
+                    binary_size,
+                    asm_code,
+                });
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load instrument asset '{}': {}", asset.name, e);
             }
         }
     }
@@ -600,6 +636,18 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
         }
     }
 
+    // Generate instrument assets
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Instrument)) {
+        match crate::instrres::InstrResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load instrument asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     Ok(out)
 }
 
@@ -645,6 +693,7 @@ pub fn generate_distributed_assets_asm(
                 AssetType::Sfx => format!("_{}_SFX", symbol_name),
                 AssetType::Level => format!("_{}_LEVEL", symbol_name),
                 AssetType::Animation => format!("_ANIM_{}", symbol_name),
+                AssetType::Instrument => format!("_{}_INSTR", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }
@@ -673,6 +722,10 @@ pub fn generate_distributed_assets_asm(
         .filter(|(_, _, _, t)| matches!(t, AssetType::Animation))
         .cloned()
         .collect();
+    let instr_entries: Vec<_> = asset_entries.iter()
+        .filter(|(_, _, _, t)| matches!(t, AssetType::Instrument))
+        .cloned()
+        .collect();
 
     // Sort each list alphabetically by name for index consistency
     let mut vector_entries = vector_entries;
@@ -680,19 +733,21 @@ pub fn generate_distributed_assets_asm(
     let mut sfx_entries = sfx_entries;
     let mut level_entries = level_entries;
     let mut anim_entries = anim_entries;
+    let mut instr_entries = instr_entries;
     vector_entries.sort_by(|a, b| a.0.cmp(&b.0));
     music_entries.sort_by(|a, b| a.0.cmp(&b.0));
     sfx_entries.sort_by(|a, b| a.0.cmp(&b.0));
     level_entries.sort_by(|a, b| a.0.cmp(&b.0));
     anim_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    instr_entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     // Generate lookup tables for helpers bank
     let mut lookup_asm = String::new();
     lookup_asm.push_str(";***************************************************************************\n");
     lookup_asm.push_str("; ASSET LOOKUP TABLES (for banked asset access)\n");
-    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels, {} animations\n",
+    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels, {} animations, {} instruments\n",
         vector_entries.len(), music_entries.len(), sfx_entries.len(),
-        level_entries.len(), anim_entries.len()));
+        level_entries.len(), anim_entries.len(), instr_entries.len()));
     lookup_asm.push_str(";***************************************************************************\n\n");
     
     // ===== VECTOR TABLES =====
@@ -799,6 +854,27 @@ pub fn generate_distributed_assets_asm(
 
         lookup_asm.push_str("ANIM_ADDR_TABLE:\n");
         for (name, _, label, _) in &anim_entries {
+            lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
+        }
+        lookup_asm.push_str("\n");
+    }
+
+    // ===== INSTRUMENT TABLES =====
+    if !instr_entries.is_empty() {
+        lookup_asm.push_str("; Instrument Asset Index Mapping:\n");
+        for (idx, (name, bank_id, _label, _)) in instr_entries.iter().enumerate() {
+            lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("INSTRUMENT_BANK_TABLE:\n");
+        for (_, bank_id, _, _) in &instr_entries {
+            lookup_asm.push_str(&format!("    FCB {}              ; Bank ID\n", bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("INSTRUMENT_ADDR_TABLE:\n");
+        for (name, _, label, _) in &instr_entries {
             lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
         }
         lookup_asm.push_str("\n");
