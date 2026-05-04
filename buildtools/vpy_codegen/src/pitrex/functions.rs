@@ -14,6 +14,41 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::AssetInfo;
 use super::expressions::{emit_expr, register_string_arrays};
 
+/// Returns true if the module contains any PLAY_NOTE() calls.
+/// Used to gate auto-injection of pitrex_note_update in the game loop.
+fn has_note_calls(module: &Module) -> bool {
+    fn scan_stmts(stmts: &[Stmt]) -> bool {
+        for stmt in stmts {
+            match stmt {
+                Stmt::Expr(expr, _) => { if scan_expr(expr) { return true; } }
+                Stmt::Assign { value, .. } => { if scan_expr(value) { return true; } }
+                Stmt::Let { value, .. } => { if scan_expr(value) { return true; } }
+                Stmt::If { cond, body, elifs, else_body, .. } => {
+                    if scan_expr(cond) || scan_stmts(body) { return true; }
+                    for (_, eb) in elifs { if scan_stmts(eb) { return true; } }
+                    if let Some(eb) = else_body { if scan_stmts(eb) { return true; } }
+                }
+                Stmt::While { cond, body, .. } => {
+                    if scan_expr(cond) || scan_stmts(body) { return true; }
+                }
+                Stmt::For { body, .. } => { if scan_stmts(body) { return true; } }
+                Stmt::Return(Some(e), _) => { if scan_expr(e) { return true; } }
+                _ => {}
+            }
+        }
+        false
+    }
+    fn scan_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "PLAY_NOTE")
+    }
+    for item in &module.items {
+        if let Item::Function(f) = item {
+            if scan_stmts(&f.body) { return true; }
+        }
+    }
+    false
+}
+
 static LABEL_CTR: AtomicU32 = AtomicU32::new(0);
 fn next_id() -> u32 { LABEL_CTR.fetch_add(1, Ordering::Relaxed) }
 
@@ -65,6 +100,10 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let sfx_ptr   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_PTR, 0x{sfx_ptr:08X}\n"));
     let sfx_act   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_ACTIVE, 0x{sfx_act:08X}\n"));
     let sfx_dly   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_DELAY, 0x{sfx_dly:08X}\n"));
+    // NOTE engine: per-channel note state (3 channels × 32 bytes each = 96 bytes)
+    let note_state = alloc.alloc(96); decls.push_str(&format!(".equ NOTE_STATE, 0x{note_state:08X}\n"));
+    // PSG mixer shadow register (AY R7) — tracks combined tone/noise enables for all users
+    let mixer_shad = alloc.alloc(4); decls.push_str(&format!(".equ PSG_MIXER_SHADOW, 0x{mixer_shad:08X}\n"));
     // Level system
     let lvl_ptr   = alloc.alloc(4); decls.push_str(&format!(".equ LEVEL_DATA_PTR, 0x{lvl_ptr:08X}\n"));
     let lvl_gpc   = alloc.alloc(4); decls.push_str(&format!(".equ LEVEL_GP_COUNT, 0x{lvl_gpc:08X}\n"));
@@ -334,6 +373,12 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     };
     flush_pool(&mut s, &mut pool_idx);
 
+    // Initialise PSG_MIXER_SHADOW to 0x3F (all tone+noise channels disabled)
+    s.push_str("    @ init PSG_MIXER_SHADOW (all channels disabled)\n");
+    s.push_str("    ldr     r1, =PSG_MIXER_SHADOW\n");
+    s.push_str("    mov     r0, #0x3F\n");
+    s.push_str("    str     r0, [r1]\n");
+
     // Initialise global variables (same pattern as ARM backend)
     s.push_str("    @ initialise globals\n");
     let mut init_count = 0usize;
@@ -440,12 +485,14 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    mov     r0, #0\n");
     s.push_str("    ldr     r1, =PITREX_CUR_X\n    str     r0, [r1]\n");
     s.push_str("    ldr     r1, =PITREX_CUR_Y\n    str     r0, [r1]\n");
-    s.push_str("    ldr     r0, =.Lstr_frame_sep\n    bl      vpy_uart_puts\n");
     s.push_str("    bl      v_readButtons\n");
     s.push_str("    bl      v_readJoystick1Analog\n");
     s.push_str("    bl      v_readJoystick2Analog\n");
     s.push_str("    bl      pitrex_music_update\n");
     s.push_str("    bl      pitrex_sfx_update\n");
+    if has_note_calls(module) {
+        s.push_str("    bl      pitrex_note_update\n");
+    }
     s.push_str("    bl      v_doSound          @ flush PSG buffer to hardware\n");
 
     if let Some(f) = loop_fn {
