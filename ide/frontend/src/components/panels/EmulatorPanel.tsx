@@ -803,8 +803,6 @@ export const EmulatorPanel: React.FC = () => {
       return;
     }
     
-    console.log('[EmulatorPanel] 🔍 checkBreakpointHit checking for breakpoint...');
-    
     try {
       const vecx = (window as any).vecx;
       if (!vecx || !vecx.e6809) return;
@@ -1875,7 +1873,6 @@ export const EmulatorPanel: React.FC = () => {
     const PITREX_MAX_Y = 20500;
     const TARGET_MS = 1000 / 50; // 50 Hz
     let lastFrameTs = 0;
-    let pitrexFrameCount = 0;
 
     const loop = (ts: number) => {
       pitrexLoopRef.current = requestAnimationFrame(loop);
@@ -1923,11 +1920,6 @@ export const EmulatorPanel: React.FC = () => {
         ctx.fillStyle = 'rgba(255, 80, 80, 0.85)';
         ctx.font = '11px monospace';
         ctx.fillText('TIMEOUT — infinite loop?', 8, 16);
-      }
-
-      pitrexFrameCount++;
-      if (pitrexFrameCount <= 5 || pitrexFrameCount % 120 === 0) {
-        console.log(`[EmulatorPanel] pitrex frame ${pitrexFrameCount}: ${segments.length} segs${timeout ? ' TIMEOUT' : ''}`);
       }
     };
 
