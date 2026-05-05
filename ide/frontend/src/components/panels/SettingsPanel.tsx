@@ -10,6 +10,8 @@ export const SettingsPanel: React.FC = () => {
     buildTarget, setBuildTarget,
     pitrexCopyToSD, setPitrexCopyToSD,
     pitrexSdPath, setPitrexSdPath,
+    uvm2CopyToSD, setUvm2CopyToSD,
+    uvm2SdPath, setUvm2SdPath,
   } = useSettings();
 
   const handleBrowseSD = async (e: React.MouseEvent) => {
@@ -22,6 +24,19 @@ export const SettingsPanel: React.FC = () => {
       }
     } catch (err) {
       console.error('[SettingsPanel] Browse SD failed:', err);
+    }
+  };
+
+  const handleBrowseUvm2SD = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const result = await (window as any).file.openFolder();
+      if (result && result.path) {
+        setUvm2SdPath(result.path);
+      }
+    } catch (err) {
+      console.error('[SettingsPanel] Browse UVM2 SD failed:', err);
     }
   };
 
@@ -154,21 +169,50 @@ export const SettingsPanel: React.FC = () => {
             )}
           </div>
 
-          <label className="settings-radio">
-            <input
-              type="radio"
-              name="buildTarget"
-              value="uvm2"
-              checked={buildTarget === 'uvm2'}
-              onChange={() => setBuildTarget('uvm2')}
-            />
-            <div className="radio-content">
-              <span className="radio-title">{t('settings.target.uvm2.title', 'UVM2 (Ultimate Vectrex Multicart)')}</span>
-              <span className="radio-description">
-                {t('settings.target.uvm2.desc', 'ARM Thumb2 target for the Ultimate Vectrex Multicart 2 (RP2350/Cortex-M33). Produces a .um2 raw binary for SD card.')}
-              </span>
-            </div>
-          </label>
+          <div className="settings-radio-group">
+            <label className="settings-radio">
+              <input
+                type="radio"
+                name="buildTarget"
+                value="uvm2"
+                checked={buildTarget === 'uvm2'}
+                onChange={() => setBuildTarget('uvm2')}
+              />
+              <div className="radio-content">
+                <span className="radio-title">{t('settings.target.uvm2.title', 'UVM2 (Ultimate Vectrex Multicart)')}</span>
+                <span className="radio-description">
+                  {t('settings.target.uvm2.desc', 'ARM Thumb2 target for the Ultimate Vectrex Multicart 2 (RP2350/Cortex-M33). Produces a .um2 raw binary for SD card.')}
+                </span>
+              </div>
+            </label>
+            {buildTarget === 'uvm2' && (
+              <div className="pitrex-suboption">
+                <label className="settings-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={uvm2CopyToSD}
+                    onChange={e => setUvm2CopyToSD(e.target.checked)}
+                  />
+                  <span>{t('settings.target.uvm2.copyToSD', 'Copy to SD card')}</span>
+                </label>
+                {uvm2CopyToSD && (
+                  <div className="pitrex-sd-path">
+                    <input
+                      className="pitrex-sd-input"
+                      type="text"
+                      placeholder="/Volumes/SD  (leave empty to auto-detect)"
+                      value={uvm2SdPath}
+                      onChange={e => setUvm2SdPath(e.target.value)}
+                      spellCheck={false}
+                    />
+                    <button type="button" className="pitrex-sd-browse" onClick={handleBrowseUvm2SD}>
+                      Browse
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -6,10 +6,10 @@
 //!
 //! UVM2 GPIO pinout (from Ralf, 2026-04-16):
 //!   IO00-IO07 = D0-D7   (data bus)
-//!   IO08-IO21 = A1-A14  (address bus, NOTE: A0 is not connected — ROM is word-aligned)
+//!   IO08-IO21 = A0-A13  (address bus — A0 IS connected at GPIO8, corrected 2026-05-04)
 //!   IO22      = PB6     (VIA Port B bit 6, beam/blank control)
 //!   IO23      = /IRQ
-//!   IO24      = A14     (duplicate — second A14 copy, used for /CART detect)
+//!   IO24      = A14
 //!   IO25      = A15
 //!   IO26      = R/W
 //!   IO27      = /HALT   (RP2350 can assert this to take bus ownership)
@@ -180,14 +180,14 @@ fn emit_sio_constants() -> String {
     s.push_str(".equ PIN_D0,         0          @ D0\n");
     s.push_str(".equ PIN_D7,         7          @ D7\n");
     s.push_str(".equ DATA_MASK,      0x000000FF  @ GPIO 0-7\n");
-    // Address bus: GPIO 8-21 = A1-A14  (A0 not connected, ROM is 16-bit aligned)
-    s.push_str(".equ PIN_A1,         8          @ A1  (GPIO8)\n");
-    s.push_str(".equ PIN_A14,        21         @ A14 (GPIO21)\n");
-    s.push_str(".equ ADDR_MASK,      0x003FFF00  @ GPIO 8-21 = A1-A14\n");
+    // Address bus: GPIO 8-21 = A0-A13
+    s.push_str(".equ PIN_A0,         8          @ A0  (GPIO8)\n");
+    s.push_str(".equ PIN_A13,        21         @ A13 (GPIO21)\n");
+    s.push_str(".equ ADDR_MASK,      0x003FFF00  @ GPIO 8-21 = A0-A13\n");
     // Control signals
     s.push_str(".equ PIN_PB6,        22         @ VIA Port B bit 6 (beam control)\n");
     s.push_str(".equ PIN_NIRQ,       23         @ /IRQ\n");
-    s.push_str(".equ PIN_A14B,       24         @ A14 copy (/CART detect)\n");
+    s.push_str(".equ PIN_A14,        24         @ A14 (GPIO24)\n");
     s.push_str(".equ PIN_A15,        25         @ A15\n");
     s.push_str(".equ PIN_RW,         26         @ R/W (1=read, 0=write)\n");
     s.push_str(".equ PIN_NHALT,      27         @ /HALT — assert LOW to take bus\n");

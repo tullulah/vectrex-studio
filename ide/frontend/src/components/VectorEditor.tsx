@@ -629,8 +629,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [selectedPoints, setSelectedPoints] = useState<Set<string>>(new Set()); // "pathIdx-pointIdx" format
   // Tree panel selection: "layerIdx-pathIdx" key, or null
   const [selectedTreePathKey, setSelectedTreePathKey] = useState<string | null>(null);
+  // Multi-selection of paths in tree: Set of "layerIdx-pathIdx" keys
+  const [selectedTreePathKeys, setSelectedTreePathKeys] = useState<Set<string>>(new Set());
+  // Intensity text input value for "Set Intensity" feature
+  const [setIntensityInput, setSetIntensityInput] = useState<string>('127');
   // Which paths are expanded in the tree to show individual points: "layerIdx-pathIdx" keys
   const [expandedTreePaths, setExpandedTreePaths] = useState<Set<string>>(new Set());
+  // Which layers have their path list collapsed (default: expanded)
+  const [collapsedLayerPaths, setCollapsedLayerPaths] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewMode, setViewMode] = useState<ViewMode>('xy');
@@ -1725,7 +1731,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, currentTool]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool]);
 
   useEffect(() => {
     draw();
@@ -2483,7 +2489,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
   
   // Handle mouse wheel for zoom (zoom to cursor position)
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+  // Registered as a native listener (passive: false) so preventDefault() works in Chrome/Electron.
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     
     const canvas = canvasRef.current;
@@ -2513,6 +2520,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     setZoom(newZoom);
     setPan({ x: newPanX, y: newPanY });
   }, [zoom, pan, width, height, resource.canvas.width]);
+
+  // Register wheel as non-passive so preventDefault() works
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
   
   // Delete selected points
   const handleDeleteSelected = useCallback(() => {
@@ -2556,6 +2571,88 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     setSelectedPointIndex(-1);
     setCurrentPathIndex(-1);
   }, [resource, currentLayerIndex, selectedPoints, updateResource]);
+
+  // Delete all tree-selected paths
+  const handleDeleteTreePaths = useCallback((overrideKeys?: Set<string>) => {
+    const keysToDelete = overrideKeys ?? (selectedTreePathKeys.size > 0 ? selectedTreePathKeys
+      : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>()));
+    if (keysToDelete.size === 0) return;
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    const byLayer = new Map<number, number[]>();
+    keysToDelete.forEach(key => {
+      const [li, pi] = key.split('-').map(Number);
+      if (!byLayer.has(li)) byLayer.set(li, []);
+      byLayer.get(li)!.push(pi);
+    });
+    byLayer.forEach((pathIndices, li) => {
+      pathIndices.sort((a, b) => b - a);
+      pathIndices.forEach(pi => newResource.layers[li].paths.splice(pi, 1));
+    });
+    updateResource(resource, newResource);
+    setSelectedTreePathKey(null);
+    setSelectedTreePathKeys(new Set());
+    setCurrentPathIndex(-1);
+    setSelectedPointIndex(-1);
+  }, [resource, selectedTreePathKey, selectedTreePathKeys, updateResource]);
+
+  // Set intensity on all selected paths (from tree selection OR from canvas point selection)
+  const handleSetIntensitySelected = useCallback((intensity: number) => {
+    // Build set of "layerIdx-pathIdx" keys from tree selection
+    const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
+      : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>());
+    // Also derive paths from selected canvas points (format "pathIdx-pointIdx", layer = currentLayerIndex)
+    const keysFromPoints = new Set<string>();
+    if (selectedPoints.size > 0) {
+      selectedPoints.forEach(key => {
+        const pathIdx = key.split('-')[0];
+        keysFromPoints.add(`${currentLayerIndex}-${pathIdx}`);
+      });
+    } else if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
+      keysFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
+    }
+    const allKeys = new Set([...keysFromTree, ...keysFromPoints]);
+    if (allKeys.size === 0) return;
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    allKeys.forEach(key => {
+      const [li, pi] = key.split('-').map(Number);
+      if (newResource.layers[li]?.paths[pi]) {
+        newResource.layers[li].paths[pi].intensity = intensity;
+      }
+    });
+    updateResource(resource, newResource);
+  }, [resource, selectedTreePathKey, selectedTreePathKeys, selectedPoints, selectedPointIndex, currentPathIndex, currentLayerIndex, updateResource]);
+
+  // Clean orphan paths: remove paths with <=1 point and fix incomplete bezier structures
+  const handleCleanOrphans = useCallback(() => {
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    let changed = false;
+    for (const layer of newResource.layers) {
+      const before = layer.paths.length;
+      layer.paths = layer.paths.filter(p => {
+        if (p.points.length <= 1) { changed = true; return false; }
+        if ((p as VecPath & { type?: string }).type === 'bezier' && p.points.length < 4) { changed = true; return false; }
+        return true;
+      });
+      if (layer.paths.length !== before) changed = true;
+      // Trim trailing orphan bezier control points so (pts-1) % 3 === 0
+      for (const p of layer.paths) {
+        if ((p as VecPath & { type?: string }).type === 'bezier') {
+          const rem = (p.points.length - 1) % 3;
+          if (rem !== 0) {
+            p.points.splice(p.points.length - rem, rem);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      updateResource(resource, newResource);
+      setSelectedTreePathKey(null);
+      setSelectedTreePathKeys(new Set());
+      setCurrentPathIndex(-1);
+      setSelectedPointIndex(-1);
+    }
+  }, [resource, updateResource]);
 
   // Finalise the in-progress pen path (Enter, right-click, or double-click)
   const finalizePenPath = () => {
@@ -2747,6 +2844,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       e.stopPropagation(); // Prevent FileTreePanel from handling this event
       if (selectedPoints.size > 0) {
         handleDeleteSelected();
+      } else if (selectedTreePathKeys.size > 0 || (selectedTreePathKey && selectedPointIndex < 0)) {
+        handleDeleteTreePaths();
       } else if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
         const newResource = { ...resource };
         const pointsBefore = newResource.layers[currentLayerIndex].paths[currentPathIndex].points.length;
@@ -3085,20 +3184,26 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       
       {/* Delete button */}
       <button
-        onClick={handleDeleteSelected}
-        disabled={selectedPoints.size === 0 && selectedPointIndex < 0}
+        onClick={() => {
+          if (selectedTreePathKeys.size > 0 || (selectedTreePathKey && selectedPoints.size === 0 && selectedPointIndex < 0)) {
+            handleDeleteTreePaths();
+          } else {
+            handleDeleteSelected();
+          }
+        }}
+        disabled={selectedPoints.size === 0 && selectedPointIndex < 0 && selectedTreePathKeys.size === 0 && !selectedTreePathKey}
         style={{ 
           padding: '8px 12px', 
-          background: (selectedPoints.size > 0 || selectedPointIndex >= 0) ? '#8a3a3e' : '#4a4a5e', 
+          background: (selectedPoints.size > 0 || selectedPointIndex >= 0 || selectedTreePathKeys.size > 0 || !!selectedTreePathKey) ? '#8a3a3e' : '#4a4a5e', 
           color: 'white', 
           border: 'none', 
           borderRadius: '4px', 
-          cursor: (selectedPoints.size > 0 || selectedPointIndex >= 0) ? 'pointer' : 'not-allowed',
-          opacity: (selectedPoints.size > 0 || selectedPointIndex >= 0) ? 1 : 0.5,
+          cursor: (selectedPoints.size > 0 || selectedPointIndex >= 0 || selectedTreePathKeys.size > 0 || !!selectedTreePathKey) ? 'pointer' : 'not-allowed',
+          opacity: (selectedPoints.size > 0 || selectedPointIndex >= 0 || selectedTreePathKeys.size > 0 || !!selectedTreePathKey) ? 1 : 0.5,
         }}
-        title="Delete selected points (Delete key)"
+        title="Delete selected points or paths (Delete key)"
       >
-        🗑️ Delete {selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
+        🗑️ Delete {selectedTreePathKeys.size > 1 ? `(${selectedTreePathKeys.size} paths)` : selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3645,15 +3750,30 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 </div>
                 <div style={{ color: '#666', fontSize: '10px', marginTop: '2px' }}>
                   {pathCount} path{pathCount !== 1 ? 's' : ''} · {pointCount} pt{pointCount !== 1 ? 's' : ''}
+                  {pathCount > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCollapsedLayerPaths(prev => {
+                          const next = new Set(prev);
+                          if (next.has(layerIdx)) next.delete(layerIdx);
+                          else next.add(layerIdx);
+                          return next;
+                        });
+                      }}
+                      style={{ marginLeft: '6px', background: 'transparent', border: 'none', color: '#556', cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1 }}
+                      title={collapsedLayerPaths.has(layerIdx) ? 'Show paths' : 'Hide paths'}
+                    >{collapsedLayerPaths.has(layerIdx) ? '▶ show' : '▼ hide'}</button>
+                  )}
                 </div>
               </div>
 
-              {/* Path tree — only shown when layer is active */}
-              {isActive && layer.paths.length > 0 && (
+              {/* Path tree — only shown when layer is active and not collapsed */}
+              {isActive && layer.paths.length > 0 && !collapsedLayerPaths.has(layerIdx) && (
                 <div style={{ marginLeft: '12px', marginTop: '2px' }}>
                   {layer.paths.map((p, pathIdx) => {
                     const treeKey = `${layerIdx}-${pathIdx}`;
-                    const isTreeSelected = selectedTreePathKey === treeKey;
+                    const isTreeSelected = selectedTreePathKeys.has(treeKey) || selectedTreePathKey === treeKey;
                     const isExpanded = expandedTreePaths.has(treeKey);
                     return (
                       <div key={pathIdx}>
@@ -3661,8 +3781,19 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedTreePathKey(isTreeSelected ? null : treeKey);
-                            // Also make this the active path for editing
+                            if (e.ctrlKey || e.metaKey) {
+                              // Ctrl/Cmd+Click: toggle in multi-selection
+                              setSelectedTreePathKeys(prev => {
+                                const next = new Set(prev);
+                                if (next.has(treeKey)) next.delete(treeKey);
+                                else next.add(treeKey);
+                                return next;
+                              });
+                              setSelectedTreePathKey(treeKey);
+                            } else {
+                              setSelectedTreePathKey(isTreeSelected && selectedTreePathKeys.size <= 1 ? null : treeKey);
+                              setSelectedTreePathKeys(isTreeSelected && selectedTreePathKeys.size <= 1 ? new Set() : new Set([treeKey]));
+                            }
                             setCurrentLayerIndex(layerIdx);
                             setCurrentPathIndex(pathIdx);
                             setSelectedPointIndex(-1);
@@ -3703,6 +3834,19 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                           <span style={{ color: '#556', fontSize: '9px', flexShrink: 0 }}>
                             {p.points.length}pt
                           </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
+                              nr.layers[layerIdx].paths.splice(pathIdx, 1);
+                              updateResource(resource, nr);
+                              setSelectedTreePathKey(prev => prev === treeKey ? null : prev);
+                              setSelectedTreePathKeys(prev => { const next = new Set(prev); next.delete(treeKey); return next; });
+                              if (currentPathIndex === pathIdx && currentLayerIndex === layerIdx) setCurrentPathIndex(-1);
+                            }}
+                            title="Delete this path"
+                            style={{ background: 'transparent', border: 'none', color: '#a55', cursor: 'pointer', fontSize: '10px', padding: '0 2px', flexShrink: 0, lineHeight: 1 }}
+                          >✕</button>
                         </div>
 
                         {/* Point sub-rows */}
@@ -4029,13 +4173,60 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   // Right side panel - fixed width so canvas takes remaining space
-  const RightPanel = () => (
+  const RightPanel = () => {
+    // Paths affected by Apply: tree selection + paths containing selected canvas points
+    const pathsFromPoints = new Set<string>();
+    selectedPoints.forEach(key => pathsFromPoints.add(`${currentLayerIndex}-${key.split('-')[0]}`));
+    if (selectedPointIndex >= 0 && currentPathIndex >= 0) pathsFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
+    const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
+      : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>());
+    const allSelKeys = new Set([...keysFromTree, ...pathsFromPoints]);
+    const hasPathSel = allSelKeys.size > 0;
+    const selCount = allSelKeys.size;
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '200px', flexShrink: 0, overflowY: 'auto' }}>
+      {/* Set Intensity + Clean Orphans — always at top */}
+      <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
+        <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Intensity</div>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <input
+            type="number" min="0" max="127"
+            value={setIntensityInput}
+            onChange={(e) => setSetIntensityInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = parseInt(setIntensityInput);
+                if (!isNaN(v)) handleSetIntensitySelected(Math.max(0, Math.min(127, v)));
+              }
+            }}
+            style={{ width: '52px', padding: '4px 6px', background: '#0e1e2e', color: '#fff', border: '1px solid #4a6a8a', borderRadius: '3px', fontSize: '12px' }}
+          />
+          <button
+            onClick={() => {
+              const v = parseInt(setIntensityInput);
+              if (!isNaN(v)) handleSetIntensitySelected(Math.max(0, Math.min(127, v)));
+            }}
+            disabled={!hasPathSel}
+            style={{ flex: 1, padding: '4px 6px', background: hasPathSel ? '#2a5a7e' : '#2a2a3e', border: '1px solid ' + (hasPathSel ? '#4a8aae' : '#3a3a5e'), color: hasPathSel ? '#7cf' : '#556', borderRadius: '3px', cursor: hasPathSel ? 'pointer' : 'not-allowed', fontSize: '11px', fontWeight: 'bold' }}
+            title={hasPathSel ? `Apply to ${selCount} path${selCount !== 1 ? 's' : ''}` : 'Select paths first'}
+          >
+            Apply{hasPathSel ? ` (${selCount})` : ''}
+          </button>
+        </div>
+        <button
+          onClick={handleCleanOrphans}
+          style={{ width: '100%', marginTop: '5px', padding: '4px 6px', background: '#2e1e1e', border: '1px solid #5a3a3a', color: '#c88', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
+          title="Remove paths with ≤1 point and fix incomplete bezier paths"
+        >
+          🧹 Clean Orphans
+        </button>
+      </div>
       <LayersPanel />
       <PathPropertiesPanel />
       <EdgeSettingsPanel />
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
@@ -4058,7 +4249,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             onContextMenu={e => e.preventDefault()}
             onDoubleClick={handleDoubleClick}
             onKeyDown={handleKeyDown}
-            onWheel={handleWheel}
             style={{
               border: '2px solid #4a4a8e',
               borderRadius: '4px',

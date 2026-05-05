@@ -1,6 +1,7 @@
 META TITLE = "SNOW BROS"
 META ROM_TOTAL_SIZE = 131072
 META ROM_BANK_SIZE = 16384
+META MAX_ENEMIES = 8
 
 # ── States ──────────────────────────────────────────────────────────────────
 STATE_TITLE: i16 = 0        # título + "press a button"
@@ -25,6 +26,8 @@ frame_timer: i16 = 0        # contador de delay para transiciones
 next_is_boss: i16 = 0       # flag auxiliar para detección de nivel boss
 
 # ── Player ──────────────────────────────────────────────────────────────────
+anim_tick: i16 = 0          # debug counter para animación manual
+walk_frame: i16 = 0         # 0-3: frame seleccionado manualmente
 player_x: i16 = 0
 player_y: i16 = -100
 player_vx: i16 = 0
@@ -43,6 +46,39 @@ PLAYER_HH: i16 = 14     # half-height de player_idle.vec
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
 WORLD_X_MIN: i16 = -96
 WORLD_X_MAX: i16 = 95
+
+# ── Snowball system ───────────────────────────────────────────────────────────
+SNOW_SPEED: i16 = 5             # velocidad horizontal
+SNOW_LAUNCH_VY: i16 = 3        # arco inicial hacia arriba
+SNOW_LIFE_NORMAL: i16 = 14     # frames de vida sin power-up (~70px)
+SNOW_LIFE_POWER: i16 = 30      # frames de vida con power-up (~150px)
+SHOOT_COOLDOWN_MAX: i16 = 15   # frames entre disparos
+
+shoot_cooldown: i16 = 0
+player_has_power: i16 = 0
+snow_life_max: i16 = 14        # cambia al recoger power-up
+snow_spawn_vx: i16 = 0         # vx calculado antes de llamar try_shoot
+
+snow0_active: i16 = 0
+snow0_x: i16 = 0
+snow0_y: i16 = 0
+snow0_vx: i16 = 0
+snow0_vy: i16 = 0
+snow0_life: i16 = 0
+
+snow1_active: i16 = 0
+snow1_x: i16 = 0
+snow1_y: i16 = 0
+snow1_vx: i16 = 0
+snow1_vy: i16 = 0
+snow1_life: i16 = 0
+
+snow2_active: i16 = 0
+snow2_x: i16 = 0
+snow2_y: i16 = 0
+snow2_vx: i16 = 0
+snow2_vy: i16 = 0
+snow2_life: i16 = 0
 
 # ── Timings (en frames a ~60fps) ────────────────────────────────────────────
 LEVEL_TIME: i16 = 3600      # 60 segundos por nivel
@@ -81,7 +117,7 @@ def loop():
 
 # ── Estado: título ───────────────────────────────────────────────────────────
 def state_title():
-    DRAW_VECTOR("init_screen_bezier", 0, 0)
+    DRAW_VECTOR("init_screen", 0, 0)
     PRINT_TEXT(-50, -90, "PRESS A BUTTON")
     if J1_BUTTON_1():
         score = 0
@@ -104,12 +140,14 @@ def state_playing():
     if time_left <= 0:
         on_player_death()
     update_player()
-    # TODO: update_enemies()
+    update_snowballs()
+    UPDATE_ENEMIES()
     # TODO: check_player_enemy_collision()
     # TODO: check_snowball_enemy_collision()
     SHOW_LEVEL()
     draw_player()
-    # TODO: draw_enemies()
+    draw_snowballs()
+    DRAW_ENEMIES()
     draw_hud()
     if enemy_count <= 0:
         enter_level_clear()
@@ -162,8 +200,12 @@ def state_boss():
     # TODO: patrones de ataque por nivel boss
     # TODO: detección de derrota del boss → enter_level_clear()
     update_player()
+    update_snowballs()
+    UPDATE_ENEMIES()
     SHOW_LEVEL()
     draw_player()
+    draw_snowballs()
+    DRAW_ENEMIES()
     draw_hud()
 
 # ── Estado: game over ────────────────────────────────────────────────────────
@@ -221,43 +263,60 @@ def check_if_boss_level():
 # ── Carga de nivel + música ──────────────────────────────────────────────────
 def load_current_level():
     time_left = LEVEL_TIME
-    enemy_count = 1     # TODO: leer de datos del nivel
+    enemy_count = 2     # world_1_1 has 2 enemies
     player_x = 0
     player_y = -55          # above platform1; floor_y = -79+14 = -65 (top=-88+9=-79)
     player_vy = 0
     player_on_ground = 0
+    shoot_cooldown = 0
+    snow0_active = 0
+    snow1_active = 0
+    snow2_active = 0
+    snow_life_max = SNOW_LIFE_NORMAL
+    player_has_power = 0
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 2:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_2
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 3:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_3
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 4:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_4
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 5:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_5
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 6:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_6
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Henshoku")
     if current_level == 7:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_7
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Henshoku")
     if current_level == 8:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_8
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 9:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_9
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 11:
         LOAD_LEVEL("world_1_1")         # TODO: world_2_1
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 12:
         LOAD_LEVEL("world_1_1")         # TODO: world_2_2
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     # TODO: niveles 13-50
 
@@ -276,17 +335,16 @@ def play_boss_music():
 # ── Jugador ──────────────────────────────────────────────────────────────────
 def update_player():
     #debug
-    f = LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH)
-    PRINT_NUMBER(-20, 120, f)
-    PRINT_NUMBER(-20, 100, player_x)
-    PRINT_NUMBER(-20, 80, player_y)
+    
+    #PRINT_NUMBER(-20, 120, player_facing)
+    
 
     # Movimiento horizontal con joystick
     player_vx = clamp(J1_X() / 32, -4, 4)
-    if player_vx < 0:
-        player_facing = 1
     if player_vx > 0:
         player_facing = 0
+    if player_vx < 0:
+        player_facing = 1
     player_x = clamp(player_x + player_vx, WORLD_X_MIN, WORLD_X_MAX)
 
     # Salto y validación de suelo: cada frame cuando está grounded
@@ -327,6 +385,16 @@ def update_player():
         player_vy = 0
         player_on_ground = 1
 
+    # Disparo con botón 2
+    if shoot_cooldown > 0:
+        shoot_cooldown = shoot_cooldown - 1
+    if J1_BUTTON_2():
+        if shoot_cooldown == 0:
+            snow_spawn_vx = SNOW_SPEED
+            if player_facing == 1:
+                snow_spawn_vx = -SNOW_SPEED
+            try_shoot()
+
 def draw_player():
     if player_on_ground == 0:
         DRAW_VECTOR("player_jump", player_x, player_y, player_facing)
@@ -334,7 +402,104 @@ def draw_player():
         if player_vx == 0:
             DRAW_VECTOR("player_idle", player_x, player_y, player_facing)
         else:
-            DRAW_VECTOR("player_walk1", player_x, player_y, player_facing)
+            # DEBUG: animación manual sin pitrex_draw_anim
+            anim_tick = anim_tick + 1
+            if anim_tick > 31:
+                anim_tick = 0
+            walk_frame = anim_tick / 8
+            if walk_frame == 0:
+                DRAW_VECTOR("player_walk1", player_x, player_y, player_facing)
+            if walk_frame == 1:
+                DRAW_VECTOR("player_walk2", player_x, player_y, player_facing)
+            if walk_frame == 2:
+                DRAW_VECTOR("player_walk3", player_x, player_y, player_facing)
+            if walk_frame == 3:
+                DRAW_VECTOR("player_walk4", player_x, player_y, player_facing)
+            PRINT_NUMBER(0, 120, walk_frame)  # debug: debe ciclar 0→1→2→3
+
+# ── Snowballs ────────────────────────────────────────────────────────────────
+def try_shoot():
+    if snow0_active == 0:
+        snow0_x = player_x
+        snow0_y = player_y
+        snow0_vx = snow_spawn_vx
+        snow0_vy = SNOW_LAUNCH_VY
+        snow0_life = snow_life_max
+        snow0_active = 1
+        shoot_cooldown = SHOOT_COOLDOWN_MAX
+    else:
+        if snow1_active == 0:
+            snow1_x = player_x
+            snow1_y = player_y
+            snow1_vx = snow_spawn_vx
+            snow1_vy = SNOW_LAUNCH_VY
+            snow1_life = snow_life_max
+            snow1_active = 1
+            shoot_cooldown = SHOOT_COOLDOWN_MAX
+        else:
+            if snow2_active == 0:
+                snow2_x = player_x
+                snow2_y = player_y
+                snow2_vx = snow_spawn_vx
+                snow2_vy = SNOW_LAUNCH_VY
+                snow2_life = snow_life_max
+                snow2_active = 1
+                shoot_cooldown = SHOOT_COOLDOWN_MAX
+
+def update_snowballs():
+    if snow0_active == 1:
+        snow0_vy = snow0_vy - GRAVITY
+        if snow0_vy < -MAX_FALL_SPEED:
+            snow0_vy = -MAX_FALL_SPEED
+        snow0_x = snow0_x + snow0_vx
+        snow0_y = snow0_y + snow0_vy
+        snow0_life = snow0_life - 1
+        if snow0_life <= 0:
+            snow0_active = 0
+        if snow0_y < -110:
+            snow0_active = 0
+        if snow0_x < -127:
+            snow0_active = 0
+        if snow0_x > 127:
+            snow0_active = 0
+    if snow1_active == 1:
+        snow1_vy = snow1_vy - GRAVITY
+        if snow1_vy < -MAX_FALL_SPEED:
+            snow1_vy = -MAX_FALL_SPEED
+        snow1_x = snow1_x + snow1_vx
+        snow1_y = snow1_y + snow1_vy
+        snow1_life = snow1_life - 1
+        if snow1_life <= 0:
+            snow1_active = 0
+        if snow1_y < -110:
+            snow1_active = 0
+        if snow1_x < -127:
+            snow1_active = 0
+        if snow1_x > 127:
+            snow1_active = 0
+    if snow2_active == 1:
+        snow2_vy = snow2_vy - GRAVITY
+        if snow2_vy < -MAX_FALL_SPEED:
+            snow2_vy = -MAX_FALL_SPEED
+        snow2_x = snow2_x + snow2_vx
+        snow2_y = snow2_y + snow2_vy
+        snow2_life = snow2_life - 1
+        if snow2_life <= 0:
+            snow2_active = 0
+        if snow2_y < -110:
+            snow2_active = 0
+        if snow2_x < -127:
+            snow2_active = 0
+        if snow2_x > 127:
+            snow2_active = 0
+
+def draw_snowballs():
+    if snow0_active == 1:
+        DRAW_CIRCLE(snow0_x, snow0_y, 5, 120)
+    if snow1_active == 1:
+        DRAW_CIRCLE(snow1_x, snow1_y, 5, 120)
+    if snow2_active == 1:
+        DRAW_CIRCLE(snow2_x, snow2_y, 5, 120)
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():

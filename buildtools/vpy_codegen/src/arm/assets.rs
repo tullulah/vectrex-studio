@@ -225,7 +225,11 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                         continue;
                     }
                 };
-                s.push_str(&level.compile_to_arm_asm(&dims_map));
+                let venemy_dir = std::path::Path::new(&asset.path)
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("enemies"));
+                s.push_str(&level.compile_to_arm_asm_with_venemy(&dims_map, venemy_dir.as_deref()));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {

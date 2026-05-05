@@ -214,7 +214,7 @@ pub fn emit_expr(
 /// Builtins whose first argument is an asset name (string literal → ROM symbol address).
 const ASSET_BUILTINS: &[&str] = &[
     "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
-    "LOAD_LEVEL", "SHOW_LEVEL",
+    "LOAD_LEVEL", "SHOW_LEVEL", "PLAY_NOTE",
 ];
 
 /// Builtins that contain string literals in any position — handled by stripping them
@@ -237,6 +237,11 @@ pub fn emit_call(
         // Fallthrough for non-Var args → returns 0 via vpy_len
     }
 
+    // M6809-only builtins — not available on ARM
+    if matches!(info.name.to_uppercase().as_str(), "SPAWN_ENEMIES" | "UPDATE_ENEMIES" | "DRAW_ENEMIES") {
+        return Ok(format!("    @ {} — M6809-only, no-op on ARM\n", info.name));
+    }
+
     let fn_name = match info.name.as_str() {
         "WAIT_RECAL"      => "vpy_wait_recal",
         "SET_INTENSITY"   => "vpy_set_intensity",
@@ -256,6 +261,7 @@ pub fn emit_call(
         "PLAY_MUSIC"      => "vpy_play_music",
         "STOP_MUSIC"      => "vpy_stop_music",
         "PLAY_SFX"        => "vpy_play_sfx",
+        "PLAY_NOTE"       => "vpy_play_note",
         "LOAD_LEVEL"      => "vpy_load_level",
         "SHOW_LEVEL"      => "vpy_show_level",
         "J1_X"            => "vpy_j1_x",
@@ -493,6 +499,35 @@ pub fn emit_call(
         }
     }
 
+    // Special case: PLAY_NOTE("name", channel, note)
+    // r0=_NAME_INSTR address, r1=channel(0-2), r2=note(MIDI 24-107)
+    if info.name == "PLAY_NOTE" {
+        if let Some(Expr::StringLit(instr_name)) = args.first() {
+            let sym_base = instr_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_INSTR");
+            // r0 = instrument ROM block address
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ instrument '{instr_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = channel
+            if let Some(ch_expr) = args.get(1) {
+                s.push_str(&emit_arg(ch_expr, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = note
+            if let Some(note_expr) = args.get(2) {
+                s.push_str(&emit_arg(note_expr, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #60\n");
+            }
+            s.push_str("    push    {r0}\n");
+            s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_play_note\n");
+            return Ok(s);
+        }
+    }
+
     // For asset builtins, the first arg is a string literal → ROM symbol address.
     // Only treat as asset builtin if first arg is actually a string literal.
     let is_asset_builtin = ASSET_BUILTINS.contains(&info.name.as_str())
@@ -511,6 +546,7 @@ pub fn emit_call(
             let suffix = match info.name.as_str() {
                 "PLAY_MUSIC"               => "MUSIC",
                 "PLAY_SFX"                 => "SFX",
+                "PLAY_NOTE"                => "INSTR",
                 "LOAD_LEVEL" | "SHOW_LEVEL" => "LEVEL",
                 _                          => "VECTORS",
             };

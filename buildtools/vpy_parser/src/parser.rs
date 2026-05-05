@@ -296,6 +296,10 @@ impl<'a> Parser<'a> {
                                 meta.interleaved_frames = Some(n as u8);
                             }
                         }
+                    } else if key.eq_ignore_ascii_case("MAX_ENEMIES") {
+                        if let Expr::Number(n) = &value {
+                            meta.max_enemies = Some((*n as u8).max(1));
+                        }
                     }
                     
                     if let Expr::StringLit(s) = &value {

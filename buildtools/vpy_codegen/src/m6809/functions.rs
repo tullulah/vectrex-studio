@@ -49,6 +49,34 @@ pub fn has_beep_calls(module: &Module) -> bool {
     })
 }
 
+/// Check if module uses PLAY_NOTE (needs NOTE_UPDATE_RUNTIME + PLAY_NOTE_RUNTIME auto-injection)
+pub fn has_note_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "PLAY_NOTE")
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
 /// Check if module uses PRINT_TEXT or PRINT_NUMBER (needs TEXT_SCALE initialization)
 pub fn has_print_calls(module: &Module) -> bool {
     fn check_expr(expr: &Expr) -> bool {
@@ -229,6 +257,19 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = normal ($7F)\n");
         asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
     }
+    if has_note_calls(module) {
+        // Pre-initialize channel_id bytes so each channel slot knows which channel it owns
+        asm.push_str("    ; Initialize NOTE_STATE channel IDs (pre-clear active flags)\n");
+        asm.push_str("    LDA #0\n");
+        asm.push_str("    STA NOTE_STATE        ; channel A: id=0, active=0 (initial)\n");
+        asm.push_str("    CLR NOTE_STATE+1      ; active=0\n");
+        asm.push_str("    LDA #1\n");
+        asm.push_str("    STA NOTE_STATE+10     ; channel B: id=1\n");
+        asm.push_str("    CLR NOTE_STATE+11     ; active=0\n");
+        asm.push_str("    LDA #2\n");
+        asm.push_str("    STA NOTE_STATE+20     ; channel C: id=2\n");
+        asm.push_str("    CLR NOTE_STATE+21     ; active=0\n");
+    }
     let mut array_copy_counter = 0;
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
@@ -307,6 +348,10 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
         if has_beep_calls(module) {
             asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
+        // Auto-inject NOTE_UPDATE_RUNTIME before user code so note timers/arpeggio run every frame
+        if has_note_calls(module) {
+            asm.push_str("    JSR NOTE_UPDATE_RUNTIME  ; Auto-injected: tick note timers + arpeggio\n");
         }
         // Auto-inject FRAME_PARITY toggle for interleaved rendering
         if let Some(n) = module.meta.interleaved_frames {
@@ -740,6 +785,18 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = normal ($7F)\n");
         bank0_asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
     }
+    if has_note_calls(module) {
+        bank0_asm.push_str("    ; Initialize NOTE_STATE channel IDs (pre-clear active flags)\n");
+        bank0_asm.push_str("    LDA #0\n");
+        bank0_asm.push_str("    STA NOTE_STATE        ; channel A: id=0\n");
+        bank0_asm.push_str("    CLR NOTE_STATE+1      ; active=0\n");
+        bank0_asm.push_str("    LDA #1\n");
+        bank0_asm.push_str("    STA NOTE_STATE+10     ; channel B: id=1\n");
+        bank0_asm.push_str("    CLR NOTE_STATE+11     ; active=0\n");
+        bank0_asm.push_str("    LDA #2\n");
+        bank0_asm.push_str("    STA NOTE_STATE+20     ; channel C: id=2\n");
+        bank0_asm.push_str("    CLR NOTE_STATE+21     ; active=0\n");
+    }
     let mut array_copy_counter = 0;
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
@@ -787,6 +844,9 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
         if has_beep_calls(module) {
             bank0_asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
+        if has_note_calls(module) {
+            bank0_asm.push_str("    JSR NOTE_UPDATE_RUNTIME  ; Auto-injected: tick note timers + arpeggio\n");
         }
         generate_function_body(loop_fn, &mut bank0_asm, assets)?;
 

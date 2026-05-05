@@ -31,6 +31,7 @@ export interface MusicResource {
   noise: NoiseEvent[];
   loopStart: number;
   loopEnd: number;
+  channel_instruments?: Record<string, string>; // e.g. { "0": "pluck", "1": "bell", "2": "bass" }
 }
 
 const TICKS_PER_BEAT = 24;
@@ -55,7 +56,7 @@ export class MusicResourceService {
   static ensureValidResource(r?: Partial<MusicResource>): MusicResource {
     const defaults = this.createDefaultResource();
     if (!r) return defaults;
-    return {
+    const result: MusicResource = {
       version: r.version || defaults.version,
       name: r.name || defaults.name,
       author: r.author || defaults.author,
@@ -67,6 +68,10 @@ export class MusicResourceService {
       loopStart: r.loopStart ?? defaults.loopStart,
       loopEnd: r.loopEnd ?? defaults.loopEnd,
     };
+    if (r.channel_instruments) {
+      result.channel_instruments = r.channel_instruments;
+    }
+    return result;
   }
 
   static generateId(): string {

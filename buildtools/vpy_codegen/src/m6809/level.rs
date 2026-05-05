@@ -342,6 +342,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD ,X++         ; D = scrollLimit bottom\n");
         out.push_str("    STD >SCROLL_LIMIT_BOTTOM\n");
         out.push_str("    \n");
+        out.push_str("    ; Read enemy data from header (+29: count, +30,+31: instances_ptr)\n");
+        out.push_str("    LDB ,X+         ; B = enemy_count\n");
+        out.push_str("    STB >LEVEL_ENEMY_COUNT\n");
+        out.push_str("    LDD ,X          ; D = enemy_instances_ptr\n");
+        out.push_str("    STD >LEVEL_ENEMY_INSTANCES_PTR\n");
+        out.push_str("    \n");
         out.push_str("    ; === Copy GP objects from ROM to RAM buffer ===\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    BEQ LLR_SKIP_GP  ; Skip if no GP objects\n");

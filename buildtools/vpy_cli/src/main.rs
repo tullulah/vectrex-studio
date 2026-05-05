@@ -1418,6 +1418,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
 ///   [12..16] LoadAddr:    load address in SRAM (e.g. 0x20000000)
 ///   [16..20] BinarySize:  length of the ARM binary in bytes
 ///   [20..]   Binary data  (ARM Thumb2, Cortex-M33)
+#[allow(dead_code)]
 fn build_um2(bin: &[u8], load_addr: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(20 + bin.len());
     // Magic "2CMU"
@@ -1533,6 +1534,7 @@ fn find_rp2350_ld(project_dir: &Path) -> Option<PathBuf> {
 
 /// Find the UVM2 linker script — looks for hardware/uvm2/uvm2_game.ld first,
 /// then falls back to the rp2350_game.ld (same Pico SDK memory map).
+#[allow(dead_code)]
 fn find_uvm2_ld(project_dir: &Path) -> Option<PathBuf> {
     fn walk_up(start: &Path) -> Option<PathBuf> {
         let mut current = start;

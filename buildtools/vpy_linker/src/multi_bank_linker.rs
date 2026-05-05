@@ -1092,6 +1092,8 @@ impl MultiBankLinker {
         // **PASS 1**: Iteratively extract global symbol table from all banks
         // This allows cross-bank references (e.g., CUSTOM_RESET referencing START)
         // We do this iteratively because some symbols may depend on others being defined first.
+        eprintln!("   🔍 DEBUG: Starting PASS 1 with {} banks, helper_bank={}", self.rom_bank_count, self.rom_bank_count - 1);
+        eprintln!("   🔍 DEBUG: sections keys = {:?}", sections.keys().collect::<Vec<_>>());
         let mut all_symbols = HashMap::new();
         let helper_bank_id = (self.rom_bank_count - 1) as u8;
         let max_iterations = 5;
@@ -1206,6 +1208,11 @@ impl MultiBankLinker {
                             for (label, addr) in symbol_table {
                                 let runtime_addr = addr;  // Use address as-is (ORG already included)
 
+                                // DEBUG: track _INIT_SCREEN_VECTORS specifically
+                                if label.contains("INIT_SCREEN_VECTORS") {
+                                    eprintln!("   🔍 DEBUG PASS1 iter={} bank={}: symbol '{}' addr=${:04X}", iteration, bank_id, label, runtime_addr);
+                                }
+
                                 // Symbol merge rules:
                                 // - New symbol (not yet seen): always add
                                 // - Helpers bank with non-zero addr: update (helpers knows its own symbols; ORG=$4000 so real symbols are ≥$4000)
@@ -1230,6 +1237,7 @@ impl MultiBankLinker {
                                     "unknown"
                                 };
                                 let _ = missing_symbol; // suppress unused variable
+                                eprintln!("   ⚠️  DEBUG PASS1 iter={} bank={}: assembly FAILED: {}", iteration, bank_id, e);
                                 // Continue - don't fail yet, more iterations may resolve this
                             } else {
                                 // Final iteration - this is a real error

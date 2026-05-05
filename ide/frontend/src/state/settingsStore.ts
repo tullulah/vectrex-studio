@@ -13,6 +13,10 @@ interface SettingsState {
   setPitrexCopyToSD: (value: boolean) => void;
   pitrexSdPath: string;
   setPitrexSdPath: (path: string) => void;
+  uvm2CopyToSD: boolean;
+  setUvm2CopyToSD: (value: boolean) => void;
+  uvm2SdPath: string;
+  setUvm2SdPath: (path: string) => void;
 }
 
 export const useSettings = create<SettingsState>()(
@@ -26,6 +30,10 @@ export const useSettings = create<SettingsState>()(
       setPitrexCopyToSD: (pitrexCopyToSD) => set({ pitrexCopyToSD }),
       pitrexSdPath: '',
       setPitrexSdPath: (pitrexSdPath) => set({ pitrexSdPath }),
+      uvm2CopyToSD: false,
+      setUvm2CopyToSD: (uvm2CopyToSD) => set({ uvm2CopyToSD }),
+      uvm2SdPath: '',
+      setUvm2SdPath: (uvm2SdPath) => set({ uvm2SdPath }),
     }),
     {
       name: 'vpy-settings',

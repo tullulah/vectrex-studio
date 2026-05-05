@@ -74,6 +74,9 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_print_number_impl());
     s.push_str(&emit_pitrex_draw_anim());
     s.push_str(&emit_pitrex_note_engine());
+    s.push_str(&emit_pitrex_spawn_enemies());
+    s.push_str(&emit_pitrex_update_enemies());
+    s.push_str(&emit_pitrex_draw_enemies());
 
     s
 }
@@ -2564,4 +2567,429 @@ fn emit_pitrex_note_engine() -> String {
     s.push_str("    .ltorg\n\n");
 
     s
+}
+
+// ── Enemy system ─────────────────────────────────────────────────────────────
+
+fn emit_pitrex_spawn_enemies() -> String {
+    // pitrex_spawn_enemies(r0=data_ptr, r1=count)
+    // ROM record layout (24 bytes):
+    //   +0  sprite_ptr (u32), +4 spawn_x (i16), +6 spawn_y (i16)
+    //   +8  ai_type (u8), +9 wp_count (u8)
+    //   +10 mirror_on_patrol (u8), +11 default_facing (u8: 0=right 1=left)
+    //   +12 wp0_x (i16), +14 wp0_y (i16), +16 wp1_x (i16), +18 wp1_y (i16)
+    //   +20 pad (u32)
+    // Pool entry layout (32 bytes):
+    //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
+    //   +8  spawn_x (i16), +10 spawn_y (i16)
+    //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
+    //   +16 wp0_x (i16), +18 wp0_y (i16), +20 wp1_x (i16), +22 wp1_y (i16)
+    //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27..+31 pad
+    let mut s = String::new();
+    s.push_str("@ pitrex_spawn_enemies(r0=data_ptr, r1=count) — fill enemy pool from ROM table\n");
+    s.push_str(".global pitrex_spawn_enemies\n.type pitrex_spawn_enemies, %function\npitrex_spawn_enemies:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    s.push_str("    mov     r4, r0          @ data_ptr\n");
+    s.push_str("    mov     r5, r1          @ count\n");
+    s.push_str("    ldr     r6, =PITREX_ENEMY_COUNT\n");
+    s.push_str("    str     r5, [r6]\n");
+    s.push_str("    ldr     r7, =PITREX_ENEMY_POOL\n");
+    s.push_str("    cmp     r5, #0\n");
+    s.push_str("    beq     .Lspe_done\n");
+    s.push_str(".Lspe_loop:\n");
+    s.push_str("    ldr     r6, [r4]        @ sprite_ptr\n");
+    s.push_str("    str     r6, [r7]        @ pool.sprite_ptr\n");
+    s.push_str("    ldrsh   r6, [r4, #4]    @ spawn_x\n");
+    s.push_str("    strh    r6, [r7, #4]    @ pool.x\n");
+    s.push_str("    strh    r6, [r7, #8]    @ pool.spawn_x\n");
+    s.push_str("    ldrsh   r6, [r4, #6]    @ spawn_y\n");
+    s.push_str("    strh    r6, [r7, #6]    @ pool.y\n");
+    s.push_str("    strh    r6, [r7, #10]   @ pool.spawn_y\n");
+    s.push_str("    ldrb    r6, [r4, #8]    @ ai_type\n");
+    s.push_str("    strb    r6, [r7, #13]   @ pool.ai_type\n");
+    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count\n");
+    s.push_str("    strb    r6, [r7, #15]   @ pool.wp_count\n");
+    // Copy waypoints
+    s.push_str("    ldrsh   r6, [r4, #12]   @ wp0_x\n");
+    s.push_str("    strh    r6, [r7, #16]   @ pool.wp0_x\n");
+    s.push_str("    ldrsh   r6, [r4, #14]   @ wp0_y\n");
+    s.push_str("    strh    r6, [r7, #18]   @ pool.wp0_y\n");
+    s.push_str("    ldrsh   r6, [r4, #16]   @ wp1_x\n");
+    s.push_str("    strh    r6, [r7, #20]   @ pool.wp1_x\n");
+    s.push_str("    ldrsh   r6, [r4, #18]   @ wp1_y\n");
+    s.push_str("    strh    r6, [r7, #22]   @ pool.wp1_y\n");
+    // mirror_on_patrol and default_facing from ROM +10/+11
+    s.push_str("    ldrb    r6, [r4, #10]   @ mirror_on_patrol\n");
+    s.push_str("    strb    r6, [r7, #24]   @ pool.mirror_on_patrol\n");
+    s.push_str("    ldrb    r6, [r4, #11]   @ default_facing\n");
+    s.push_str("    strb    r6, [r7, #25]   @ pool.default_facing\n");
+    // active=1, cur_target=0, dir=1 (start facing right), clear pad (+28..+31)
+    s.push_str("    mov     r6, #1\n");
+    s.push_str("    strb    r6, [r7, #12]   @ pool.active = 1\n");
+    s.push_str("    strb    r6, [r7, #26]   @ pool.dir = 1 (right, initial)\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("    strb    r6, [r7, #14]   @ pool.cur_target = 0\n");
+    s.push_str("    str     r6, [r7, #28]   @ pool.pad (+28..+31) = 0 (also zeros anim state)\n");
+    // is_anim flag from ROM +20 → pool +27; init anim state if vanim
+    s.push_str("    ldrb    r8, [r4, #20]   @ ROM is_anim flag\n");
+    s.push_str("    strb    r8, [r7, #27]   @ pool.is_anim\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     .Lspe_novam\n");
+    // vanim: set pool.anim_ticks_left to frame0's duration_ticks
+    s.push_str("    ldr     r6, [r4]        @ sprite_ptr (anim header)\n");
+    s.push_str("    ldrb    r8, [r6, #3]    @ frame_table_offset (byte3 of header)\n");
+    s.push_str("    ldr     r8, [r6, r8]    @ frame0_ptr = anim_header[frame_table_offset]\n");
+    s.push_str("    ldrb    r8, [r8]        @ frame0 duration_ticks\n");
+    s.push_str("    strb    r8, [r7, #29]   @ pool.anim_ticks_left = frame0.duration\n");
+    s.push_str(".Lspe_novam:\n");
+    // ROM record = 24 bytes, pool entry = 32 bytes
+    s.push_str("    add     r4, r4, #24\n");
+    s.push_str("    add     r7, r7, #32\n");
+    s.push_str("    subs    r5, r5, #1\n");
+    s.push_str("    bne     .Lspe_loop\n");
+    s.push_str(".Lspe_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+fn emit_pitrex_update_enemies() -> String {
+    // pitrex_update_enemies() — advance enemy AI one frame.
+    // Only patrol AI (ai_type=1) implemented: moves enemy along X axis
+    // between wp0 and wp1, reversing direction at each endpoint.
+    // Speed: PATROL_SPEED = 1 VPy unit/frame.
+    let mut s = String::new();
+    s.push_str("@ pitrex_update_enemies() — advance enemy AI (patrol)\n");
+    s.push_str(".global pitrex_update_enemies\n.type pitrex_update_enemies, %function\npitrex_update_enemies:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    ldr     r4, =PITREX_ENEMY_COUNT\n");
+    s.push_str("    ldr     r4, [r4]\n");
+    s.push_str("    cmp     r4, #0\n");
+    s.push_str("    beq     .Lpue_done\n");
+    s.push_str("    ldr     r5, =PITREX_ENEMY_POOL\n");
+    s.push_str(".Lpue_loop:\n");
+    // skip inactive
+    s.push_str("    ldrb    r6, [r5, #12]       @ active\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_skip\n");
+    // only patrol (ai_type==1)
+    s.push_str("    ldrb    r6, [r5, #13]       @ ai_type\n");
+    s.push_str("    cmp     r6, #1\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    // need at least 2 waypoints
+    s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
+    s.push_str("    cmp     r6, #2\n");
+    s.push_str("    blt     .Lpue_skip\n");
+    // load cur_target (0 or 1), compute target_x address: wp0 at +16, wp1 at +20
+    s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
+    s.push_str("    mov     r7, r5\n");
+    s.push_str("    add     r7, r7, #16         @ &wp0_x\n");
+    s.push_str("    lsl     r8, r6, #2          @ cur_target * 4\n");
+    s.push_str("    add     r7, r7, r8          @ &wp[cur_target].x\n");
+    s.push_str("    ldrsh   r8, [r7]            @ target_x\n");
+    // load current x
+    s.push_str("    ldrsh   r9, [r5, #4]        @ current x\n");
+    // dx = target_x - current_x
+    s.push_str("    sub     r10, r8, r9         @ dx = target_x - x\n");
+    // Update dir from dx sign (0=left, 1=right); skip if dx==0
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    beq     .Lpue_move          @ dx==0, skip dir update\n");
+    s.push_str("    movgt   r6, #1              @ dir=right if dx>0\n");
+    s.push_str("    movlt   r6, #0              @ dir=left  if dx<0\n");
+    s.push_str("    strb    r6, [r5, #26]       @ pool.dir\n");
+    s.push_str(".Lpue_move:\n");
+    // speed = 1
+    s.push_str("    mov     r7, #1              @ PATROL_SPEED\n");
+    // move or snap
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    blt     .Lpue_neg\n");
+    // dx >= 0
+    s.push_str("    cmp     r10, r7             @ dx <= speed?\n");
+    s.push_str("    ble     .Lpue_snap\n");
+    s.push_str("    add     r9, r9, r7          @ x += speed\n");
+    s.push_str("    strh    r9, [r5, #4]\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_neg:\n");
+    // dx < 0
+    s.push_str("    rsb     r10, r10, #0        @ |dx|\n");
+    s.push_str("    cmp     r10, r7             @ |dx| <= speed?\n");
+    s.push_str("    ble     .Lpue_snap\n");
+    s.push_str("    sub     r9, r9, r7          @ x -= speed\n");
+    s.push_str("    strh    r9, [r5, #4]\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_snap:\n");
+    // snap to target_x and flip cur_target
+    s.push_str("    strh    r8, [r5, #4]        @ x = target_x\n");
+    s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
+    s.push_str("    eor     r6, r6, #1          @ toggle 0↔1\n");
+    s.push_str("    strb    r6, [r5, #14]\n");
+    s.push_str(".Lpue_skip:\n");
+    s.push_str("    add     r5, r5, #32         @ next pool entry\n");
+    s.push_str("    subs    r4, r4, #1\n");
+    s.push_str("    bne     .Lpue_loop\n");
+    s.push_str(".Lpue_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+fn emit_pitrex_draw_enemies() -> String {
+    // pitrex_draw_enemies() — draw all active enemies with camera offset.
+    // Pool entry stride = 32 bytes.
+    // Mirror logic: mirror = (mirror_on_patrol && (dir XNOR default_facing))
+    //   dir=1(right), default_facing=0(right) → same → no mirror
+    //   dir=0(left),  default_facing=0(right) → diff → mirror
+    //   dir=1(right), default_facing=1(left)  → diff → mirror
+    //   dir=0(left),  default_facing=1(left)  → same → no mirror
+    // Formula: mirror = NOT (dir XOR default_facing) = (dir EOR default_facing) EOR 1
+    // Calls pitrex_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp]=intensity).
+    let mut s = String::new();
+    s.push_str("@ pitrex_draw_enemies() — draw all active entries in PITREX_ENEMY_POOL\n");
+    s.push_str(".global pitrex_draw_enemies\n.type pitrex_draw_enemies, %function\npitrex_draw_enemies:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    ldr     r4, =PITREX_ENEMY_COUNT\n");
+    s.push_str("    ldr     r4, [r4]\n");
+    s.push_str("    cmp     r4, #0\n");
+    s.push_str("    beq     .Lpde_done\n");
+    s.push_str("    ldr     r8, =CAMERA_X\n");
+    s.push_str("    ldr     r8, [r8]            @ cam_x\n");
+    s.push_str("    ldr     r9, =CAMERA_Y\n");
+    s.push_str("    ldr     r9, [r9]            @ cam_y\n");
+    s.push_str("    ldr     r5, =PITREX_ENEMY_POOL\n");
+    s.push_str(".Lpde_loop:\n");
+    s.push_str("    ldrb    r6, [r5, #12]       @ active\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpde_skip\n");
+    s.push_str("    ldr     r6, [r5]            @ sprite_ptr\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpde_skip\n");
+    // Compute screen ox, oy
+    s.push_str("    ldrsh   r7, [r5, #4]        @ pool.x\n");
+    s.push_str("    sub     r7, r7, r8          @ ox = x - cam_x\n");
+    // Compute mirror value
+    s.push_str("    ldrb    r10, [r5, #24]      @ mirror_on_patrol\n");
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    beq     .Lpde_no_mirror\n");
+    s.push_str("    ldrb    r10, [r5, #25]      @ default_facing\n");
+    s.push_str("    ldrb    r3,  [r5, #26]      @ dir\n");
+    s.push_str("    eor     r3, r3, r10         @ XOR\n");
+    s.push_str("    eor     r3, r3, #1          @ XNOR → mirror\n");
+    s.push_str("    b       .Lpde_do_draw\n");
+    s.push_str(".Lpde_no_mirror:\n");
+    s.push_str("    mov     r3, #0              @ mirror=0\n");
+    s.push_str(".Lpde_do_draw:\n");
+    // Dispatch on is_anim flag (pool +27): vec → draw directly; vanim → tick + extract frame vec
+    s.push_str("    ldrb    r10, [r5, #27]      @ is_anim\n");
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    bne     .Lpde_anim\n");
+    // ── Vector sprite: pass sprite_ptr directly ──
+    s.push_str("    push    {r4, r5, r8, r9}    @ save loop state\n");
+    s.push_str("    ldrsh   r1, [r5, #6]        @ pool.y\n");
+    s.push_str("    sub     r1, r1, r9          @ oy = y - cam_y\n");
+    s.push_str("    mov     r2, r1              @ oy\n");
+    s.push_str("    mov     r1, r7              @ ox\n");
+    s.push_str("    mov     r0, r6              @ sprite_ptr\n");
+    s.push_str("    mov     r12, #127\n");
+    s.push_str("    push    {r12}               @ 5th arg: intensity=127\n");
+    s.push_str("    bl      pitrex_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #4          @ pop intensity\n");
+    s.push_str("    pop     {r4, r5, r8, r9}\n");
+    s.push_str("    b       .Lpde_skip\n");
+    // ── Vanim sprite: tick frame state, extract current frame's vec_ref ──
+    s.push_str(".Lpde_anim:\n");
+    // r6 = sprite_ptr = anim header ptr; r5 = pool entry
+    s.push_str("    ldrb    r11, [r5, #28]      @ anim_frame_idx\n");
+    s.push_str("    ldrb    r12, [r5, #29]      @ anim_ticks_left\n");
+    s.push_str("    subs    r12, r12, #1        @ ticks--; set flags\n");
+    s.push_str("    bgt     .Lpde_anim_sf       @ ticks > 0: keep frame\n");
+    // Advance frame: frame_idx++ wrapping on frame_count
+    s.push_str("    ldrb    r10, [r6]           @ frame_count (anim_header[0])\n");
+    s.push_str("    add     r11, r11, #1\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    blt     .Lpde_no_wrap\n");
+    s.push_str("    mov     r11, #0             @ wrap to 0\n");
+    s.push_str(".Lpde_no_wrap:\n");
+    s.push_str("    strb    r11, [r5, #28]      @ store frame_idx\n");
+    // frame_ptr = anim_header[4 + frame_idx*4]  (frame_table_offset fixed at 4)
+    s.push_str("    lsl     r10, r11, #2        @ frame_idx * 4\n");
+    s.push_str("    add     r10, r10, #4        @ + 4 (header size)\n");
+    s.push_str("    ldr     r10, [r6, r10]      @ frame_ptr\n");
+    // new ticks from frame_ptr[0] = duration_ticks
+    s.push_str("    ldrb    r12, [r10]          @ new duration_ticks\n");
+    s.push_str("    strb    r12, [r5, #29]      @ store ticks_left\n");
+    // vec_ref at frame_ptr+4
+    s.push_str("    ldr     r0, [r10, #4]       @ vec_ref\n");
+    s.push_str("    b       .Lpde_anim_draw\n");
+    // Same frame: just decrement ticks and get current vec_ref
+    s.push_str(".Lpde_anim_sf:\n");
+    s.push_str("    strb    r12, [r5, #29]      @ store decremented ticks\n");
+    // frame_ptr = anim_header[4 + frame_idx*4]
+    s.push_str("    lsl     r10, r11, #2        @ frame_idx * 4\n");
+    s.push_str("    add     r10, r10, #4        @ + 4 (header size)\n");
+    s.push_str("    ldr     r10, [r6, r10]      @ frame_ptr\n");
+    // vec_ref at frame_ptr+4
+    s.push_str("    ldr     r0, [r10, #4]       @ vec_ref\n");
+    // Draw with extracted vec_ref (r0), mirror already in r3, ox in r7
+    s.push_str(".Lpde_anim_draw:\n");
+    s.push_str("    push    {r4, r5, r8, r9}    @ save loop state\n");
+    s.push_str("    ldrsh   r1, [r5, #6]        @ pool.y\n");
+    s.push_str("    sub     r1, r1, r9          @ oy = y - cam_y\n");
+    s.push_str("    mov     r2, r1              @ oy\n");
+    s.push_str("    mov     r1, r7              @ ox\n");
+    s.push_str("    mov     r12, #127\n");
+    s.push_str("    push    {r12}               @ intensity\n");
+    s.push_str("    bl      pitrex_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #4\n");
+    s.push_str("    pop     {r4, r5, r8, r9}\n");
+    s.push_str(".Lpde_skip:\n");
+    s.push_str("    add     r5, r5, #32\n");
+    s.push_str("    subs    r4, r4, #1\n");
+    s.push_str("    bne     .Lpde_loop\n");
+    s.push_str(".Lpde_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+//
+// These tests simulate the pitrex_draw_anim state machine in Rust, mirroring
+// the ARM32 assembly logic exactly. If a test fails here, the corresponding
+// ARM code has a logic bug. If tests pass but hardware shows wrong behaviour,
+// the issue is environmental (BSS not zeroed, overlapping memory, etc.).
+
+#[cfg(test)]
+mod tests {
+    /// Simulates one call to pitrex_draw_anim, replicating the ARM par_tick /
+    /// par_init_frame / par_draw / par_draw_frame state machine.
+    ///
+    /// `state`: [frame_idx, ticks_left]  (mirrors PITREX_ANIM_STATE_BUF)
+    /// `durations`: slice of duration_ticks for each frame
+    /// `speed_mul`: multiplier (1 = no change)
+    /// Returns: frame index that was drawn this call
+    fn sim_draw_anim(state: &mut [u8; 2], durations: &[u8], speed_mul: u8) -> u8 {
+        let frame_count = durations.len() as u8;
+        let ticks_left = state[1];
+
+        // par_tick
+        if ticks_left == 0 {
+            // par_init_frame path (first call or just-advanced)
+            let ticks = {
+                let t = durations[state[0] as usize];
+                if speed_mul > 1 { t.saturating_mul(speed_mul) } else { t }.max(1)
+            };
+            state[1] = ticks;
+            return state[0];
+        }
+
+        let new_ticks = ticks_left - 1;
+        if new_ticks > 0 {
+            // par_draw: still ticking
+            state[1] = new_ticks;
+            return state[0];
+        }
+
+        // ticks exhausted → advance frame
+        let next = state[0] + 1;
+        let next = if next >= frame_count { 0 } else { next }; // loop=true always in our tests
+        state[0] = next;
+
+        // par_init_frame for new frame
+        let ticks = {
+            let t = durations[next as usize];
+            if speed_mul > 1 { t.saturating_mul(speed_mul) } else { t }.max(1)
+        };
+        state[1] = ticks;
+        next
+    }
+
+    #[test]
+    fn test_first_call_draws_frame_0() {
+        let mut state = [0u8; 2]; // BSS-zeroed
+        let durations = [8u8, 8, 8, 8]; // 4 frames × 8 ticks
+        let frame = sim_draw_anim(&mut state, &durations, 1);
+        assert_eq!(frame, 0, "first call must draw frame 0");
+        assert_eq!(state, [0, 8], "after first call: frame_idx=0, ticks_left=8");
+    }
+
+    #[test]
+    fn test_frame_holds_for_duration() {
+        let mut state = [0u8; 2];
+        let durations = [8u8, 8, 8, 8];
+        // Calls 1-8 all draw frame 0
+        for call in 1..=8 {
+            let frame = sim_draw_anim(&mut state, &durations, 1);
+            assert_eq!(frame, 0, "call {call}: should still be frame 0");
+        }
+        // Call 9 advances to frame 1
+        let frame = sim_draw_anim(&mut state, &durations, 1);
+        assert_eq!(frame, 1, "call 9 must advance to frame 1");
+    }
+
+    #[test]
+    fn test_full_cycle_4_frames_8_ticks() {
+        let mut state = [0u8; 2];
+        let durations = [8u8, 8, 8, 8];
+        let mut drawn = Vec::new();
+        for _ in 0..32 {
+            drawn.push(sim_draw_anim(&mut state, &durations, 1));
+        }
+        // Expected: 8×frame0, 8×frame1, 8×frame2, 8×frame3
+        let expected: Vec<u8> = [0u8, 1, 2, 3].iter().flat_map(|&f| vec![f; 8]).collect();
+        assert_eq!(drawn, expected, "32 calls should produce exactly one full cycle");
+    }
+
+    #[test]
+    fn test_loop_wraps_to_frame_0() {
+        let mut state = [0u8; 2];
+        let durations = [8u8, 8, 8, 8];
+        // Advance through one full cycle (32 calls)
+        for _ in 0..32 {
+            sim_draw_anim(&mut state, &durations, 1);
+        }
+        // Call 33 should be back to frame 0
+        let frame = sim_draw_anim(&mut state, &durations, 1);
+        assert_eq!(frame, 0, "after full cycle, must wrap back to frame 0");
+    }
+
+    #[test]
+    fn test_speed_mul_2_doubles_duration() {
+        let mut state = [0u8; 2];
+        let durations = [4u8, 4, 4, 4]; // 4 ticks * speed_mul=2 = 8 ticks each
+        // With speed_mul=2 each frame should last 8 calls
+        for call in 1..=8 {
+            let frame = sim_draw_anim(&mut state, &durations, 2);
+            assert_eq!(frame, 0, "call {call}: speed_mul=2 should hold frame 0 for 8 calls");
+        }
+        let frame = sim_draw_anim(&mut state, &durations, 2);
+        assert_eq!(frame, 1, "call 9: speed_mul=2 should advance to frame 1");
+    }
+
+    #[test]
+    fn test_single_frame_anim_stays_on_frame_0() {
+        let mut state = [0u8; 2];
+        let durations = [5u8]; // 1 frame only (loop wraps to 0)
+        for call in 1..=20 {
+            let frame = sim_draw_anim(&mut state, &durations, 1);
+            assert_eq!(frame, 0, "call {call}: single-frame anim must always draw frame 0");
+        }
+    }
+
+    #[test]
+    fn test_player_walk_4frames_8ticks_cycle_matches_anim_tick() {
+        // This replicates the exact SnowBros player_walk animation:
+        //   4 frames (walk1/2/3/4), duration_ticks=8, loop=true
+        // VPy anim_tick increments by 1 each DRAW_ANIM call and wraps at 32.
+        // anim_tick/8 should always equal the drawn frame index.
+        let mut state = [0u8; 2];
+        let durations = [8u8, 8, 8, 8];
+        for anim_tick in 0u8..32 {
+            let frame = sim_draw_anim(&mut state, &durations, 1);
+            let expected_frame = anim_tick / 8;
+            assert_eq!(
+                frame, expected_frame,
+                "anim_tick={anim_tick}: drawn frame {frame} != expected {expected_frame}"
+            );
+        }
+    }
 }

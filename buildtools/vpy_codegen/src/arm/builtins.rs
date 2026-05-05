@@ -88,6 +88,7 @@ pub fn emit_builtins(msg_entries: &[MsgEntry]) -> String {
     s.push_str(&emit_math_builtins());
     s.push_str(&emit_utility_builtins());
     s.push_str(&emit_audio_builtins());
+    s.push_str(&emit_note_engine());
     s.push_str(&emit_state_builtins());
     s.push_str(&emit_level_builtins());
     s.push_str(&emit_msg_builtins(msg_entries));
@@ -1365,6 +1366,194 @@ fn emit_audio_builtins() -> String {
     // vpy_music_update = alias for vpy_music_update (same symbol, already defined above)
     // Actually the M6809 backend emits both audio_update and music_update. Let's make
     // vpy_music_update already defined above; audio_update handles SFX. Keep both.
+
+    s
+}
+
+// ── NOTE engine: vpy_play_note + vpy_note_update (Thumb-2, psg_write) ─────
+
+fn emit_note_engine() -> String {
+    let mut s = String::new();
+
+    // ── NOTE_PERIOD_TABLE in .rodata ──────────────────────────────────────────
+    // 84 entries (MIDI 24-107).  period = round(88200 / (440 * 2^((n-69)/12)))
+    s.push_str("@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---\n");
+    s.push_str(".section .rodata\n");
+    s.push_str(".balign 2\n");
+    s.push_str(".global NOTE_PERIOD_TABLE\n");
+    s.push_str("NOTE_PERIOD_TABLE:\n");
+    let mut periods: Vec<u16> = Vec::new();
+    for n in 24u32..=107 {
+        let freq = 440.0 * 2f64.powf((n as f64 - 69.0) / 12.0);
+        let period = (88200.0 / freq).round() as u16;
+        let period = period.max(1).min(4095);
+        periods.push(period);
+    }
+    for chunk in periods.chunks(8) {
+        let vals: Vec<String> = chunk.iter().map(|p| p.to_string()).collect();
+        s.push_str(&format!("    .hword {}\n", vals.join(", ")));
+    }
+    s.push('\n');
+    s.push_str(".section .text\n");
+    s.push_str(".align 2\n\n");
+
+    // ── vpy_play_note(r0=instr_ptr, r1=channel, r2=note) ─────────────────────
+    s.push_str("@ vpy_play_note(r0=instr_ptr, r1=channel 0-2, r2=note MIDI 24-107)\n");
+    s.push_str(".global vpy_play_note\n.type vpy_play_note, %function\n.thumb_func\nvpy_play_note:\n");
+    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str("    mov     r4, r0          @ r4 = instr_ptr\n");
+    s.push_str("    mov     r5, r1          @ r5 = channel\n");
+    s.push_str("    mov     r6, r2          @ r6 = note\n");
+
+    // Clamp note to 24-107
+    s.push_str("    @ clamp note to 24-107\n");
+    s.push_str("    cmp     r6, #24\n    it      lt\n    movlt   r6, #24\n");
+    s.push_str("    cmp     r6, #107\n    it      gt\n    movgt   r6, #107\n");
+
+    // Get channel state slot: &NOTE_STATE + channel*32
+    s.push_str("    @ r7 = &NOTE_STATE[channel]\n");
+    s.push_str("    ldr     r0, =NOTE_STATE\n");
+    s.push_str("    mov     r1, #32\n");
+    s.push_str("    mul     r7, r5, r1\n");
+    s.push_str("    add     r7, r0, r7\n");
+
+    // Fill state
+    s.push_str("    @ fill channel state\n");
+    s.push_str("    mov     r0, #1\n    str     r0, [r7, #0]    @ active = 1\n");
+    s.push_str("    ldrb    r0, [r4, #0]\n    str     r0, [r7, #4]    @ frames_left = duration_frames\n");
+    s.push_str("    str     r6, [r7, #8]    @ base_note\n");
+    s.push_str("    str     r4, [r7, #12]   @ instr_ptr\n");
+    s.push_str("    mov     r0, #0\n    str     r0, [r7, #16]   @ arp_pos = 0\n");
+    s.push_str("    ldrb    r0, [r4, #3]\n    str     r0, [r7, #20]   @ arp_timer = arp_speed_frames\n");
+    s.push_str("    str     r5, [r7, #28]   @ channel_id\n");
+
+    // Compute period: look up NOTE_PERIOD_TABLE[note - 24]
+    s.push_str("    @ compute period from note\n");
+    s.push_str("    sub     r0, r6, #24     @ r0 = note - 24 (index)\n");
+    s.push_str("    lsl     r0, r0, #1      @ r0 = index * 2 (hword offset)\n");
+    s.push_str("    ldr     r1, =NOTE_PERIOD_TABLE\n");
+    s.push_str("    ldrh    r2, [r1, r0]    @ r2 = period\n");
+    s.push_str("    str     r2, [r7, #24]   @ save period in state\n");
+
+    // Write tone period registers: ch A→R0/R1, ch B→R2/R3, ch C→R4/R5
+    s.push_str("    @ write period to PSG (reg_lo = channel*2, reg_hi = channel*2+1)\n");
+    s.push_str("    lsl     r0, r5, #1      @ reg_lo = channel * 2\n");
+    s.push_str("    mov     r1, r2\n    and     r1, r1, #0xFF   @ period_lo\n");
+    s.push_str("    push    {r2, r5, r7}\n    bl      psg_write\n    pop     {r2, r5, r7}\n");
+    s.push_str("    lsl     r0, r5, #1\n    add     r0, r0, #1      @ reg_hi\n");
+    s.push_str("    mov     r1, r2\n    lsr     r1, r1, #8      @ period_hi\n");
+    s.push_str("    push    {r5, r7}\n    bl      psg_write\n    pop     {r5, r7}\n");
+
+    // Write volume: ch A→R8, ch B→R9, ch C→R10
+    s.push_str("    @ write volume to PSG (vol reg = channel + 8)\n");
+    s.push_str("    ldr     r4, [r7, #12]   @ reload instr_ptr\n");
+    s.push_str("    ldrb    r1, [r4, #1]    @ volume\n");
+    s.push_str("    add     r0, r5, #8      @ vol reg = channel + 8\n");
+    s.push_str("    push    {r5, r7}\n    bl      psg_write\n    pop     {r5, r7}\n");
+
+    // Update mixer shadow: enable tone for channel (clear bit), disable noise (set noise bit)
+    s.push_str("    @ update PSG_MIXER_SHADOW: enable tone ch, disable noise ch\n");
+    s.push_str("    ldr     r0, =PSG_MIXER_SHADOW\n");
+    s.push_str("    ldr     r1, [r0]\n");
+    s.push_str("    mov     r2, #1\n    lsl     r2, r2, r5      @ tone bit for channel\n");
+    s.push_str("    bic     r1, r1, r2      @ clear = enable tone\n");
+    s.push_str("    add     r3, r5, #3\n    mov     r2, #1\n    lsl     r2, r2, r3      @ noise bit\n");
+    s.push_str("    orr     r1, r1, r2      @ set = disable noise\n");
+    s.push_str("    str     r1, [r0]        @ update shadow\n");
+    s.push_str("    mov     r1, r1          @ r1 = shadow value already loaded above\n");
+    s.push_str("    ldr     r1, =PSG_MIXER_SHADOW\n    ldr     r1, [r1]\n"); // reload for psg_write
+    s.push_str("    mov     r0, #7\n");        // R7 = mixer
+    s.push_str("    push    {r5, r7}\n    bl      psg_write\n    pop     {r5, r7}\n");
+
+    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
+    // ── vpy_note_update() ──────────────────────────────────────────────────────
+    s.push_str("@ vpy_note_update() — advance note engine one frame (3 channels)\n");
+    s.push_str(".global vpy_note_update\n.type vpy_note_update, %function\n.thumb_func\nvpy_note_update:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    s.push_str("    mov     r4, #0              @ r4 = channel index\n");
+    s.push_str(".Lvnu_loop:\n");
+    s.push_str("    cmp     r4, #3\n    bge     .Lvnu_done\n");
+
+    // Get channel state ptr: &NOTE_STATE + channel*32
+    s.push_str("    ldr     r5, =NOTE_STATE\n");
+    s.push_str("    mov     r6, #32\n");
+    s.push_str("    mul     r7, r4, r6\n");
+    s.push_str("    add     r5, r5, r7      @ r5 = &NOTE_STATE[channel]\n");
+
+    // Skip if not active
+    s.push_str("    ldr     r6, [r5, #0]    @ active\n");
+    s.push_str("    cmp     r6, #0\n    beq     .Lvnu_next\n");
+
+    // Decrement frames_left
+    s.push_str("    ldr     r6, [r5, #4]    @ frames_left\n");
+    s.push_str("    subs    r6, r6, #1\n");
+    s.push_str("    str     r6, [r5, #4]\n");
+    s.push_str("    bne     .Lvnu_arp\n");
+
+    // Duration expired — mute channel volume
+    s.push_str("    @ note expired: mute channel\n");
+    s.push_str("    mov     r0, #0\n    str     r0, [r5, #0]    @ active = 0\n");
+    s.push_str("    ldr     r6, [r5, #28]   @ channel_id\n");
+    s.push_str("    add     r0, r6, #8      @ vol reg = channel_id + 8\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    push    {r4, r5}\n    bl      psg_write\n    pop     {r4, r5}\n");
+    s.push_str("    b       .Lvnu_next\n");
+
+    s.push_str(".Lvnu_arp:\n");
+    // Check arpeggio
+    s.push_str("    ldr     r6, [r5, #12]   @ instr_ptr\n");
+    s.push_str("    ldrb    r7, [r6, #2]    @ arpeggio_count\n");
+    s.push_str("    cmp     r7, #0\n    beq     .Lvnu_next\n");
+
+    // Decrement arp timer
+    s.push_str("    ldr     r8, [r5, #20]   @ arp_timer\n");
+    s.push_str("    subs    r8, r8, #1\n");
+    s.push_str("    str     r8, [r5, #20]\n");
+    s.push_str("    bne     .Lvnu_next\n");
+
+    // Reload arp timer
+    s.push_str("    ldrb    r8, [r6, #3]    @ arpeggio_speed_frames\n");
+    s.push_str("    str     r8, [r5, #20]\n");
+
+    // Advance arp_pos (wraps at arpeggio_count)
+    s.push_str("    ldr     r8, [r5, #16]   @ arp_pos\n");
+    s.push_str("    add     r8, r8, #1\n");
+    s.push_str("    cmp     r8, r7\n");
+    s.push_str("    it      ge\n    movge   r8, #0\n");
+    s.push_str("    str     r8, [r5, #16]\n");
+
+    // new_note = base_note + arpeggio_intervals[arp_pos], clamp 24-107
+    s.push_str("    ldr     r0, [r5, #8]    @ base_note\n");
+    s.push_str("    add     r1, r6, #4      @ ptr to arpeggio_intervals[0]\n");
+    s.push_str("    ldrsb   r1, [r1, r8]    @ signed interval at arp_pos\n");
+    s.push_str("    add     r0, r0, r1      @ new_note\n");
+    s.push_str("    cmp     r0, #24\n    it      lt\n    movlt   r0, #24\n");
+    s.push_str("    cmp     r0, #107\n    it      gt\n    movgt   r0, #107\n");
+
+    // Look up period
+    s.push_str("    sub     r0, r0, #24     @ index into table\n");
+    s.push_str("    lsl     r0, r0, #1      @ hword offset\n");
+    s.push_str("    ldr     r1, =NOTE_PERIOD_TABLE\n");
+    s.push_str("    ldrh    r2, [r1, r0]    @ period\n");
+
+    // Write period to PSG
+    s.push_str("    ldr     r3, [r5, #28]   @ channel_id\n");
+    s.push_str("    lsl     r0, r3, #1      @ reg_lo = channel_id * 2\n");
+    s.push_str("    mov     r1, r2\n    and     r1, r1, #0xFF\n");
+    s.push_str("    push    {r2, r3, r4, r5}\n    bl      psg_write\n    pop     {r2, r3, r4, r5}\n");
+    s.push_str("    lsl     r0, r3, #1\n    add     r0, r0, #1      @ reg_hi\n");
+    s.push_str("    mov     r1, r2\n    lsr     r1, r1, #8\n");
+    s.push_str("    push    {r3, r4, r5}\n    bl      psg_write\n    pop     {r3, r4, r5}\n");
+
+    s.push_str(".Lvnu_next:\n");
+    s.push_str("    add     r4, r4, #1\n");
+    s.push_str("    b       .Lvnu_loop\n");
+
+    s.push_str(".Lvnu_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+    s.push_str("    .ltorg\n\n");
 
     s
 }

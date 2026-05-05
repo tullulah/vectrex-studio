@@ -51,7 +51,7 @@ export class MusicConversionService {
   static selectedTracksToVmus(
     importData: MidiImportData,
     selectedTracks: string[],
-    trackModes?: Map<string, 'tone' | 'noise'>
+    trackModes?: Map<string, string>
   ): MusicResource {
     const vmusNotes: NoteEvent[] = [];
     const vmusNoise: any[] = [];
@@ -112,7 +112,7 @@ export class MusicConversionService {
   }
 
   // Merge all MIDI tracks into PSG channels based on polyphony
-  static mergedTracksToVmus(importData: MidiImportData, selectedTracks: string[], trackModes?: Map<string, 'tone' | 'noise'>): MusicResource {
+  static mergedTracksToVmus(importData: MidiImportData, selectedTracks: string[], trackModes?: Map<string, string>): MusicResource {
     const tickScale = TICKS_PER_BEAT / importData.ticksPerBeat;
     const allNotes: any[] = [];
     const noiseNotes: any[] = [];
@@ -214,7 +214,7 @@ export class MusicConversionService {
   }
 
   // Tim Follin multiplex: hasta 6 canales virtuales intercalados en 3 físicos
-  static multiplexedTracksToVmus(importData: MidiImportData, selectedTracks: string[], trackModes?: Map<string, 'tone' | 'noise'>): MusicResource {
+  static multiplexedTracksToVmus(importData: MidiImportData, selectedTracks: string[], trackModes?: Map<string, string>): MusicResource {
     // Agrupa todas las notas de los tracks seleccionados
     const tickScale = TICKS_PER_BEAT / importData.ticksPerBeat;
     const allNotes: any[] = [];

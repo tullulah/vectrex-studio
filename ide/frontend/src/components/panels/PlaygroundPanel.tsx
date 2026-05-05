@@ -25,7 +25,7 @@ interface SceneObject {
   id: string;
   type: 'background' | 'enemy' | 'player' | 'projectile';
   vectorName: string;
-  layer?: 'background' | 'gameplay' | 'foreground'; // NUEVO: Layer del nivel
+  layer?: 'background' | 'gameplay' | 'foreground';
   x: number;
   y: number;
   rotation: number;
@@ -36,7 +36,17 @@ interface SceneObject {
   gravity?: number;
   bounceDamping?: number;
   physicsType?: 'gravity' | 'bounce' | 'projectile' | 'static';
-  radius?: number; // Calculated from vector bounds
+  radius?: number;
+  // Enemy-specific
+  enemyType?: string;
+  aiType?: 'static' | 'patrol' | 'chase' | 'flee';
+  patrolWaypoints?: { x: number; y: number }[];
+  wave?: number;
+  respawn?: boolean;
+  speed?: number;  // patrol speed in Vectrex units/frame (default 1.0)
+  mirrorOnPatrol?: boolean;
+  defaultFacing?: 'left' | 'right';
+  _facingRight?: boolean;  // transient — not saved
 }
 
 export function PlaygroundPanel() {
@@ -58,6 +68,7 @@ export function PlaygroundPanel() {
   const [savedScene, setSavedScene] = useState<SceneObject[] | null>(null);
   const [editingVelocity, setEditingVelocity] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
+  const enemyPatrolIdxRef = useRef<Map<string, number>>(new Map());
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [modalMode, setModalMode] = useState<'save' | 'load'>('save');
   const [sceneName, setSceneName] = useState('');
@@ -68,7 +79,10 @@ export function PlaygroundPanel() {
   const [toasts, setToasts] = useState<Array<{id: number; message: string; type: 'success' | 'error'}>>([]);
   const [hotspots, setHotspots] = useState<VPlayHotspot[]>([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<'select' | 'hotspot'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | 'hotspot' | 'enemy' | 'patrol'>('select');
+  const [availableEnemies, setAvailableEnemies] = useState<string[]>([]);
+  const [selectedEnemyType, setSelectedEnemyType] = useState<string>('');
+  const [enemyTypeVectorMap, setEnemyTypeVectorMap] = useState<Map<string, string>>(new Map());
   const [draggingHotspotId, setDraggingHotspotId] = useState<string | null>(null);
   const [hotspotDragOffset, setHotspotDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [widthScreens, setWidthScreens] = useState(1);
@@ -76,6 +90,7 @@ export function PlaygroundPanel() {
   const [scrollLimits, setScrollLimits] = useState<VPlayScrollLimits>({});
   const [draggingLimit, setDraggingLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [selectedLimit, setSelectedLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
+  const [draggingWaypointInfo, setDraggingWaypointInfo] = useState<{ enemyId: string; wpIdx: number } | null>(null);
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -212,6 +227,54 @@ export function PlaygroundPanel() {
     loadScenes();
   }, [vpyProject]);
 
+  // Load available .venemy enemy types and build enemyType → vectorName map
+  useEffect(() => {
+    const loadEnemies = async () => {
+      if (!vpyProject?.rootDir) return;
+      const filesAPI = (window as any).files;
+      try {
+        const result = await filesAPI?.readDirectory?.(`${vpyProject.rootDir}/assets/enemies`);
+        if (result?.files) {
+          const enemies: string[] = result.files
+            .filter((f: any) => f.name.endsWith('.venemy'))
+            .map((f: any) => f.name.replace('.venemy', ''));
+          setAvailableEnemies(enemies);
+
+          // Parse each venemy file to find the sprite vector name (first action)
+          const vecMap = new Map<string, string>();
+          for (const enemyName of enemies) {
+            try {
+              const path = `${vpyProject.rootDir}/assets/enemies/${enemyName}.venemy`;
+              const res = await filesAPI?.readFile?.(path);
+              if (res?.content) {
+                const data = JSON.parse(res.content);
+                // Prefer the patrol action's sprite; fall back to first action
+                let spritePath: string = '';
+                const patrolAction: string = data.behavior?.patrol?.patrolAction || '';
+                if (patrolAction) {
+                  const act = (data.actions as any[])?.find((a: any) => a.name === patrolAction);
+                  spritePath = act?.sprite || '';
+                }
+                if (!spritePath) spritePath = data.actions?.[0]?.sprite || '';
+                if (spritePath) {
+                  const filename = spritePath.split('/').pop() || '';
+                  const stem = filename.endsWith('.vanim')
+                    ? filename.replace('.vanim', '')
+                    : filename.replace('.vec', '');
+                  if (stem) vecMap.set(enemyName, stem);
+                }
+              }
+            } catch {}
+          }
+          setEnemyTypeVectorMap(vecMap);
+        }
+      } catch {
+        // enemies directory doesn't exist yet
+      }
+    };
+    loadEnemies();
+  }, [vpyProject]);
+
   // Listen for scene load requests from FileTree
   useEffect(() => {
     const handleLoadSceneRequest = (event: CustomEvent) => {
@@ -239,6 +302,25 @@ export function PlaygroundPanel() {
     const updatePhysics = () => {
       setObjects(prevObjects => {
         const newObjects = prevObjects.map(obj => {
+          // Enemy patrol simulation
+          if (obj.type === 'enemy' && (obj as any).aiType === 'patrol') {
+            const wps: { x: number; y: number }[] = (obj as any).patrolWaypoints || [];
+            if (wps.length < 2) return obj;
+            const idx = enemyPatrolIdxRef.current.get(obj.id) ?? 0;
+            const target = wps[idx % wps.length];
+            const dx = target.x - obj.x;
+            const dy = target.y - obj.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const SPEED = (obj as any).speed ?? 1.0;
+            if (dist < SPEED + 0.5) {
+              enemyPatrolIdxRef.current.set(obj.id, (idx + 1) % wps.length);
+              return { ...obj, x: target.x, y: target.y };
+            }
+            const nx = obj.x + (dx / dist) * SPEED;
+            const ny = obj.y + (dy / dist) * SPEED;
+            return { ...obj, x: nx, y: ny, _facingRight: dx > 0 };
+          }
+
           if (!obj.physicsEnabled) return obj;
 
           const physicsType = obj.physicsType || 'gravity';
@@ -726,6 +808,22 @@ export function PlaygroundPanel() {
       return;
     }
 
+    if (draggingWaypointInfo && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
+      const { enemyId, wpIdx } = draggingWaypointInfo;
+      setObjects(prev => prev.map(o => {
+        if (o.id !== enemyId) return o;
+        const wps = [...(o.patrolWaypoints || [])];
+        wps[wpIdx] = { x: vecX, y: vecY };
+        return { ...o, patrolWaypoints: wps };
+      }));
+      return;
+    }
+
     if (draggingVelocity) {
       handleVelocityArrowDrag(e);
       return;
@@ -758,6 +856,7 @@ export function PlaygroundPanel() {
     setDraggingHotspotId(null);
     setHotspotDragOffset(null);
     setDraggingLimit(null);
+    setDraggingWaypointInfo(null);
   };
 
   // Convert Vectrex coordinates to SVG viewport coordinates
@@ -773,16 +872,14 @@ export function PlaygroundPanel() {
     const target = e.target as SVGElement;
     const tag = target.tagName.toLowerCase();
 
+    const svgRect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const mouseX = e.clientX - svgRect.left;
+    const mouseY = e.clientY - svgRect.top;
+    const vecX = Math.round((mouseX / svgRect.width) * (192 * widthScreens) + worldXMin);
+    const vecY = Math.round(worldYMax - (mouseY / svgRect.height) * (256 * heightScreens));
+
     if (activeTool === 'hotspot') {
-      // Only create on background rect or svg element itself
       if (tag !== 'svg' && tag !== 'rect') return;
-
-      const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
-      const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
 
       const newHotspot: VPlayHotspot = {
         id: `hs_${Date.now()}`,
@@ -797,6 +894,37 @@ export function PlaygroundPanel() {
       setHotspots(prev => [...prev, newHotspot]);
       setSelectedHotspotId(newHotspot.id);
       setSelectedId(null);
+    } else if (activeTool === 'enemy') {
+      if (tag !== 'svg' && tag !== 'rect') return;
+
+      const newEnemy: SceneObject = {
+        id: `enemy_${Date.now()}`,
+        type: 'enemy',
+        vectorName: '',
+        layer: 'gameplay',
+        x: vecX,
+        y: vecY,
+        rotation: 0,
+        scale: 1,
+        enemyType: selectedEnemyType || '',
+        aiType: 'patrol',
+        patrolWaypoints: [],
+        wave: 0,
+        respawn: false,
+      };
+
+      setObjects(prev => [...prev, newEnemy]);
+      setSelectedId(newEnemy.id);
+      setSelectedHotspotId(null);
+    } else if (activeTool === 'patrol') {
+      // Add a waypoint to the selected enemy's patrol path
+      const sel = objects.find(o => o.id === selectedId && o.type === 'enemy');
+      if (!sel) return;
+      const updated: SceneObject = {
+        ...sel,
+        patrolWaypoints: [...(sel.patrolWaypoints || []), { x: vecX, y: vecY }],
+      };
+      setObjects(prev => prev.map(o => o.id === selectedId ? updated : o));
     } else {
       // Select tool — clicking canvas background deselects everything
       if (tag === 'svg' || tag === 'rect') {
@@ -951,6 +1079,87 @@ export function PlaygroundPanel() {
 
   // Render a vector sprite from loaded .vec data
   const renderVector = (obj: SceneObject) => {
+    // Enemy objects: try to render their sprite vector, fall back to diamond marker
+    if (obj.type === 'enemy') {
+      const svgPos = vecToSvg(obj.x, obj.y);
+      const isSelected = selectedId === obj.id;
+      const label = (obj as any).enemyType || 'enemy';
+      const color = isSelected ? '#ff44ff' : '#cc00cc';
+      const enemyVecName = enemyTypeVectorMap.get((obj as any).enemyType || '');
+      const vecData = enemyVecName ? loadedVectors.get(enemyVecName) : null;
+
+      if (vecData) {
+        // Mirror horizontally when patrolling against the default facing direction
+        const facingRight = obj._facingRight ?? (obj.defaultFacing !== 'left');
+        const defaultRight = obj.defaultFacing !== 'left';
+        const shouldMirror = obj.mirrorOnPatrol && (facingRight !== defaultRight);
+        const scaleX = shouldMirror ? -obj.scale : obj.scale;
+        return (
+          <g
+            key={obj.id}
+            transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${scaleX}, ${obj.scale}) rotate(${obj.rotation})`}
+            onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
+            style={{ cursor: draggingObjectId === obj.id ? 'grabbing' : 'grab' }}
+          >
+            {vecData.layers.map((layer: any, li: number) => {
+              if (!layer.visible) return null;
+              return layer.paths.map((path: any, pi: number) => {
+                const points = path.points.map((p: any) => `${p.x},${-p.y}`).join(' ');
+                const opacity = 0.5 + (path.intensity / 255) * 0.5;
+                const Tag = path.closed ? 'polygon' : 'polyline';
+                return (
+                  <Tag
+                    key={`${li}-${pi}`}
+                    points={points}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={isSelected ? 1.5 / obj.scale : 1 / obj.scale}
+                    opacity={opacity}
+                  />
+                );
+              });
+            })}
+            <text
+              x="0" y={14 / obj.scale}
+              textAnchor="middle"
+              fontSize={8 / obj.scale}
+              fill={color}
+              style={{ pointerEvents: 'none', userSelect: 'none' }}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      }
+
+      // Fallback diamond placeholder when no vector is found
+      return (
+        <g
+          key={obj.id}
+          transform={`translate(${svgPos.x}, ${svgPos.y})`}
+          onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
+          style={{ cursor: draggingObjectId === obj.id ? 'grabbing' : 'grab' }}
+        >
+          <polygon
+            points="0,-10 10,0 0,10 -10,0"
+            fill={isSelected ? '#440044' : '#220022'}
+            stroke={color}
+            strokeWidth={isSelected ? 2 : 1.5}
+            opacity={0.9}
+          />
+          <text
+            x="0" y="18"
+            textAnchor="middle"
+            fontSize="8"
+            fill={color}
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            {label}
+          </text>
+        </g>
+      );
+    }
+
     const vecData = loadedVectors.get(obj.vectorName);
     if (!vecData) return null;
 
@@ -1075,6 +1284,7 @@ export function PlaygroundPanel() {
           <button
             onClick={() => {
               setSavedScene(JSON.parse(JSON.stringify(objects)));
+              enemyPatrolIdxRef.current.clear();
               setIsPlaying(true);
             }}
             style={{
@@ -1139,6 +1349,39 @@ export function PlaygroundPanel() {
           }}
         >
           HOTSPOT
+        </button>
+        <button
+          onClick={() => { setActiveTool('enemy'); }}
+          title="Place enemy instances (click canvas)"
+          style={{
+            padding: '4px 10px',
+            background: activeTool === 'enemy' ? '#440044' : '#2a2a2a',
+            color: activeTool === 'enemy' ? '#ff44ff' : '#aaa',
+            border: `1px solid ${activeTool === 'enemy' ? '#ff44ff' : '#555'}`,
+            cursor: 'pointer',
+            fontSize: '12px',
+          }}
+        >
+          ENEMY
+        </button>
+        <button
+          onClick={() => {
+            const sel = objects.find(o => o.id === selectedId && o.type === 'enemy');
+            if (!sel) return;
+            setActiveTool('patrol');
+          }}
+          title="Add patrol waypoints to selected enemy"
+          disabled={!objects.find(o => o.id === selectedId && o.type === 'enemy')}
+          style={{
+            padding: '4px 10px',
+            background: activeTool === 'patrol' ? '#004444' : '#2a2a2a',
+            color: activeTool === 'patrol' ? '#44ffff' : (objects.find(o => o.id === selectedId && o.type === 'enemy') ? '#aaa' : '#555'),
+            border: `1px solid ${activeTool === 'patrol' ? '#44ffff' : '#555'}`,
+            cursor: objects.find(o => o.id === selectedId && o.type === 'enemy') ? 'pointer' : 'not-allowed',
+            fontSize: '12px',
+          }}
+        >
+          PATROL
         </button>
         <div style={{ borderLeft: '1px solid #555', height: '24px', margin: '0 4px' }} />
         {/* Scroll limit toggle buttons */}
@@ -1356,6 +1599,38 @@ export function PlaygroundPanel() {
               </div>
             ))}
           </div>
+
+          {/* Enemy Types */}
+          <h3 style={{ fontSize: '12px', margin: '8px 12px 6px 12px', color: '#888', flexShrink: 0 }}>
+            ENEMIES
+          </h3>
+          <div style={{ padding: '0 12px 12px', flexShrink: 0 }}>
+            {availableEnemies.length === 0 ? (
+              <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic' }}>
+                No .venemy files found
+              </div>
+            ) : (
+              availableEnemies.map(enemy => (
+                <div
+                  key={enemy}
+                  onClick={() => { setSelectedEnemyType(enemy); setActiveTool('enemy'); }}
+                  style={{
+                    padding: '6px 8px',
+                    marginBottom: '4px',
+                    backgroundColor: selectedEnemyType === enemy && activeTool === 'enemy' ? '#440044' : '#2d2d2d',
+                    border: `1px solid ${selectedEnemyType === enemy && activeTool === 'enemy' ? '#ff44ff' : '#444'}`,
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                    color: selectedEnemyType === enemy && activeTool === 'enemy' ? '#ff44ff' : '#d4d4d4',
+                  }}
+                >
+                  👾 {enemy}
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {/* Canvas Area */}
@@ -1382,8 +1657,8 @@ export function PlaygroundPanel() {
                 height: `${256 * heightScreens * SVG_SCALE}px`,
                 display: 'block',
                 backgroundColor: '#000',
-                border: `2px solid ${activeTool === 'hotspot' ? '#ffaa00' : '#00ff00'}`,
-                cursor: isPanning ? 'grabbing' : activeTool === 'hotspot' ? 'crosshair' : 'default',
+                border: `2px solid ${activeTool === 'hotspot' ? '#ffaa00' : activeTool === 'enemy' ? '#ff44ff' : activeTool === 'patrol' ? '#44ffff' : '#00ff00'}`,
+                cursor: isPanning ? 'grabbing' : (activeTool === 'hotspot' || activeTool === 'enemy' || activeTool === 'patrol') ? 'crosshair' : 'default',
               }}
             >
             {/* Grid */}
@@ -1416,6 +1691,41 @@ export function PlaygroundPanel() {
 
             {/* Render hotspots below objects */}
             {hotspots.map(hs => renderHotspot(hs))}
+
+            {/* Patrol paths for enemy objects */}
+            {objects.filter(o => o.type === 'enemy' && o.patrolWaypoints && o.patrolWaypoints.length > 0).map(obj => {
+              const wps = obj.patrolWaypoints!;
+              const isSelected = obj.id === selectedId;
+              const color = isSelected ? '#44ffff' : '#44ffff66';
+              const pts = wps.map(wp => vecToSvg(wp.x, wp.y));
+              return (
+                <g key={`patrol_${obj.id}`}>
+                  {pts.map((pt, i) => i < pts.length - 1 && (
+                    <line key={i} x1={pt.x} y1={pt.y} x2={pts[i+1].x} y2={pts[i+1].y}
+                      stroke={color} strokeWidth="0.5" strokeDasharray="3 2" />
+                  ))}
+                  {pts.length > 1 && (
+                    <line x1={pts[pts.length-1].x} y1={pts[pts.length-1].y} x2={pts[0].x} y2={pts[0].y}
+                      stroke={color} strokeWidth="0.5" strokeDasharray="1 3" opacity="0.5" />
+                  )}
+                  {pts.map((pt, i) => (
+                    <circle
+                      key={`wp_${i}`}
+                      cx={pt.x} cy={pt.y}
+                      r={isSelected ? 4 : 2}
+                      fill={i === 0 ? '#44ffff' : color}
+                      stroke={isSelected ? '#ffffff' : 'none'}
+                      strokeWidth={0.5}
+                      style={{ cursor: isSelected ? 'grab' : 'default' }}
+                      onMouseDown={isSelected ? (e) => {
+                        e.stopPropagation();
+                        setDraggingWaypointInfo({ enemyId: obj.id, wpIdx: i });
+                      } : undefined}
+                    />
+                  ))}
+                </g>
+              );
+            })}
 
             {/* Scroll limit guide lines */}
             {renderScrollLimitLines()}
@@ -1868,6 +2178,94 @@ export function PlaygroundPanel() {
                         {obj.collidable ? '🔷 Objeto sólido - los demás rebotan' : '⬜ Objeto atravesable - sin colisión'}
                       </div>
                     </div>
+                    {/* Enemy-specific properties */}
+                    {obj.type === 'enemy' && (
+                      <div style={{ borderTop: '1px solid #333', marginTop: '8px', paddingTop: '8px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#ff44ff', marginBottom: '6px', letterSpacing: '0.06em' }}>
+                          ENEMY
+                        </div>
+                        <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '2px' }}>Type (.venemy)</label>
+                        <select
+                          value={obj.enemyType || ''}
+                          onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, enemyType: e.target.value } : o))}
+                          style={{ width: '100%', background: '#1a1a1a', color: '#ff44ff', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', marginBottom: '6px' }}
+                        >
+                          <option value="">— none —</option>
+                          {availableEnemies.map(e => <option key={e} value={e}>{e}</option>)}
+                        </select>
+                        <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '2px' }}>AI Behavior</label>
+                        <select
+                          value={obj.aiType || 'patrol'}
+                          onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, aiType: e.target.value as any } : o))}
+                          style={{ width: '100%', background: '#1a1a1a', color: '#d4d4d4', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', marginBottom: '6px' }}
+                        >
+                          <option value="patrol">patrol</option>
+                          <option value="chase">chase</option>
+                          <option value="flee">flee</option>
+                          <option value="static">static</option>
+                        </select>
+                        <div style={{ marginBottom: '6px' }}>
+                          <label style={{ fontSize: '10px', color: '#666', display: 'block', marginBottom: '2px' }}>Patrol speed (units/frame)</label>
+                          <input type="number" min={0.1} max={20} step={0.1} value={obj.speed ?? 1.0}
+                            onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, speed: parseFloat(e.target.value) } : o))}
+                            style={{ width: '100%', background: '#1a1a1a', color: '#44ffcc', border: '1px solid #555', padding: '2px 4px', fontSize: '11px' }} />
+                        </div>
+                        {obj.aiType === 'patrol' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                            <div>
+                              <label style={{ fontSize: '10px', color: '#666', display: 'block', marginBottom: '2px' }}>Mirror on turn</label>
+                              <input type="checkbox" checked={obj.mirrorOnPatrol ?? false}
+                                onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, mirrorOnPatrol: e.target.checked } : o))}
+                                style={{ cursor: 'pointer', marginTop: '3px' }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '10px', color: '#666', display: 'block', marginBottom: '2px' }}>Default facing</label>
+                              <select
+                                value={obj.defaultFacing ?? 'right'}
+                                onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, defaultFacing: e.target.value as 'left' | 'right' } : o))}
+                                style={{ width: '100%', background: '#1a1a1a', color: '#d4d4d4', border: '1px solid #555', padding: '2px 4px', fontSize: '11px' }}
+                              >
+                                <option value="right">→ Right</option>
+                                <option value="left">← Left</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                          <div>
+                            <label style={{ fontSize: '10px', color: '#666', display: 'block' }}>Wave</label>
+                            <input type="number" min={0} max={99} value={obj.wave ?? 0}
+                              onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, wave: parseInt(e.target.value) } : o))}
+                              style={{ width: '100%', background: '#1a1a1a', color: '#d4d4d4', border: '1px solid #555', padding: '2px 4px', fontSize: '11px' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '10px', color: '#666', display: 'block' }}>Respawn</label>
+                            <input type="checkbox" checked={obj.respawn ?? false}
+                              onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, respawn: e.target.checked } : o))}
+                              style={{ marginTop: '4px', cursor: 'pointer' }} />
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+                          Patrol waypoints: {obj.patrolWaypoints?.length ?? 0}
+                          {obj.aiType === 'patrol' && (
+                            <span
+                              onClick={() => setActiveTool('patrol')}
+                              style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                            >
+                              + draw path
+                            </span>
+                          )}
+                        </div>
+                        {(obj.patrolWaypoints?.length ?? 0) > 0 && (
+                          <button
+                            onClick={() => setObjects(objects.map(o => o.id === selectedId ? { ...o, patrolWaypoints: [] } : o))}
+                            style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
+                          >
+                            Clear waypoints
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <button
                       onClick={() => {
                         setObjects(objects.filter(o => o.id !== selectedId));

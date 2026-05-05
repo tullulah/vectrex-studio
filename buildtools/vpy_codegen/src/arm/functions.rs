@@ -10,6 +10,36 @@ use crate::AssetInfo;
 static LABEL_CTR: AtomicU32 = AtomicU32::new(0);
 fn next_id() -> u32 { LABEL_CTR.fetch_add(1, Ordering::Relaxed) }
 
+/// Returns true if any function in `module` contains a PLAY_NOTE() call.
+/// Used to gate auto-injection of vpy_note_update in the game loop.
+fn has_note_calls(module: &Module) -> bool {
+    fn scan_stmts(stmts: &[Stmt]) -> bool {
+        for stmt in stmts {
+            match stmt {
+                Stmt::Expr(Expr::Call(c), _) if c.name.to_uppercase() == "PLAY_NOTE" => {
+                    return true;
+                }
+                Stmt::If { body, elifs, else_body, .. } => {
+                    if scan_stmts(body) { return true; }
+                    for (_, b) in elifs { if scan_stmts(b) { return true; } }
+                    if let Some(eb) = else_body { if scan_stmts(eb) { return true; } }
+                }
+                Stmt::While { body, .. } | Stmt::For { body, .. } => {
+                    if scan_stmts(body) { return true; }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+    for item in &module.items {
+        if let Item::Function(f) = item {
+            if scan_stmts(&f.body) { return true; }
+        }
+    }
+    false
+}
+
 pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, String> {
     let mut s = String::new();
 
@@ -342,6 +372,12 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
         }
     }
 
+    // Initialise PSG_MIXER_SHADOW to 0x3F (all tone+noise channels disabled)
+    s.push_str("    @ init PSG_MIXER_SHADOW (all channels disabled)\n");
+    s.push_str("    ldr     r1, =PSG_MIXER_SHADOW\n");
+    s.push_str("    mov     r0, #0x3F\n");
+    s.push_str("    str     r0, [r1]\n");
+
     let loop_labels: Vec<(String, String)> = Vec::new();
 
     // main() body
@@ -360,6 +396,9 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      vpy_beep_update\n");
     s.push_str("    bl      vpy_music_update\n");
     s.push_str("    bl      vpy_audio_update\n");
+    if has_note_calls(module) {
+        s.push_str("    bl      vpy_note_update\n");
+    }
     if let Some(f) = loop_fn {
         for stmt in &f.body {
             // return_label="game_main_loop": `return` in loop() jumps to next frame

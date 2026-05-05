@@ -70,8 +70,11 @@ pub fn emit_ram_layout() -> String {
         ("SCROLL_LIMIT_RIGHT",  0x290, "camera scroll limit: right world X"),
         ("SCROLL_LIMIT_TOP",    0x294, "camera scroll limit: top world Y"),
         ("SCROLL_LIMIT_BOTTOM", 0x298, "camera scroll limit: bottom world Y"),
-        // user RAM starts here (0x29C)
-        ("USER_RAM_START",      0x29C, "user variables begin here"),
+        // PSG NOTE engine (0x29C–0x2FF): 3 channels × 32 bytes = 96 bytes + 4-byte mixer shadow
+        ("NOTE_STATE",          0x29C, "note engine state: 3 channels × 32 bytes each"),
+        ("PSG_MIXER_SHADOW",    0x2FC, "shadow of AY R7 mixer register (0x3F = all disabled)"),
+        // user RAM starts here (0x300)
+        ("USER_RAM_START",      0x300, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {
@@ -94,7 +97,7 @@ pub struct RamAllocator {
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F28C } // USER_RAM_START (after runtime state + level engine vars)
+        Self { next: 0x2007_F300 } // USER_RAM_START (after note engine + level engine)
     }
 
     /// Allocate `bytes` bytes, return base address.

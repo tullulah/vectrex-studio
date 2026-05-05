@@ -81,7 +81,7 @@ pub struct VPlayObject {
     pub id: String,
     #[serde(rename = "type")]
     pub obj_type: String,
-    #[serde(rename = "vectorName")]
+    #[serde(default, rename = "vectorName")]
     pub vector_name: String,
     pub x: i16,
     pub y: i16,
@@ -117,6 +117,31 @@ pub struct VPlayObject {
     pub gravity: f32,
     #[serde(default, rename = "bounceDamping")]
     pub bounce_damping: f32,
+
+    // Enemy instance fields (from playground enemy tool)
+    #[serde(default, rename = "enemyType")]
+    pub enemy_type: Option<String>,
+    #[serde(default, rename = "aiType")]
+    pub ai_type: Option<String>,
+    #[serde(default, rename = "patrolWaypoints")]
+    pub patrol_waypoints: Option<Vec<EnemyWaypoint>>,
+    #[serde(default)]
+    pub wave: u8,
+    #[serde(default)]
+    pub respawn: bool,
+    /// Mirror sprite horizontally when moving against defaultFacing direction.
+    #[serde(default, rename = "mirrorOnPatrol")]
+    pub mirror_on_patrol: bool,
+    /// Which direction the sprite art faces by default: "right" (default) or "left".
+    #[serde(default, rename = "defaultFacing")]
+    pub default_facing: String,
+}
+
+/// A single waypoint for an enemy patrol route (local level coordinates)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnemyWaypoint {
+    pub x: i16,
+    pub y: i16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +202,23 @@ pub struct CollisionSegment {
     pub y2: i16,
 }
 
+/// Map an optional AI-type string to the byte encoding used in the ROM.
+///
+/// Encoding:
+///   0 = static
+///   1 = patrol  (default)
+///   2 = chase
+///   3 = flee
+fn ai_type_byte(ai: &Option<String>) -> u8 {
+    match ai.as_deref() {
+        Some("static") => 0,
+        Some("patrol") => 1,
+        Some("chase")  => 2,
+        Some("flee")   => 3,
+        _              => 1, // patrol is the sensible default
+    }
+}
+
 impl VPlayLevel {
     /// Load a .vplay file from disk
     pub fn load(path: &Path) -> Result<Self> {
@@ -193,7 +235,25 @@ impl VPlayLevel {
 
     /// Compile level data to M6809 assembly
     pub fn compile_to_asm(&self) -> String {
+        self.compile_to_asm_with_vec_dims(&HashMap::new())
+    }
+
+    /// Compile level to M6809 ASM, using pre-computed vec dimensions to emit literal
+    /// byte values for half_width/half_height instead of cross-bank symbol references.
+    /// `dims` maps lowercase vec asset name → (half_width, half_height).
+    pub fn compile_to_asm_with_vec_dims(&self, dims: &HashMap<String, (u32, u32)>) -> String {
         let mut out = String::new();
+
+        // Compute enemy objects BEFORE emitting the level header so we can embed the count/ptr
+        let all_objects: Vec<&VPlayObject> = self.layers.background.iter()
+            .chain(self.layers.gameplay.iter())
+            .chain(self.layers.foreground.iter())
+            .collect();
+        let enemy_objects: Vec<&VPlayObject> = all_objects.iter()
+            .filter(|o| o.enemy_type.as_ref().map_or(false, |t| !t.is_empty()))
+            .copied()
+            .collect();
+
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
 
         out.push_str(&format!("; ==== Level: {} ====\n", name));
@@ -233,28 +293,88 @@ impl VPlayLevel {
         out.push_str(&format!("    FDB {}  ; scrollLimit right (camera right cannot exceed this)\n", sl_right));
         out.push_str(&format!("    FDB {}  ; scrollLimit top\n", sl_top));
         out.push_str(&format!("    FDB {}  ; scrollLimit bottom\n", sl_bottom));
+
+        // Enemy data in header (+29 = enemy_count, +30..+31 = instances_ptr)
+        let enemy_header_count = enemy_objects.len();
+        let instances_header_label = if enemy_header_count > 0 {
+            format!("_{}_ENEMY_INSTANCES", name)
+        } else {
+            "0".to_string()
+        };
+        out.push_str(&format!("    FCB {}  ; enemy_count\n", enemy_header_count));
+        out.push_str(&format!("    FDB {}  ; enemy_instances_ptr (0 if none)\n", instances_header_label));
         out.push_str("\n");
 
         // Emit background objects
         out.push_str(&format!("_{}_BG_OBJECTS:\n", name));
         for obj in &self.layers.background {
-            out.push_str(&self.compile_object(obj));
+            out.push_str(&self.compile_object_with_dims(obj, dims));
         }
         out.push_str("\n");
 
         // Emit gameplay objects
         out.push_str(&format!("_{}_GAMEPLAY_OBJECTS:\n", name));
         for obj in &self.layers.gameplay {
-            out.push_str(&self.compile_object(obj));
+            out.push_str(&self.compile_object_with_dims(obj, dims));
         }
         out.push_str("\n");
 
         // Emit foreground objects
         out.push_str(&format!("_{}_FG_OBJECTS:\n", name));
         for obj in &self.layers.foreground {
-            out.push_str(&self.compile_object(obj));
+            out.push_str(&self.compile_object_with_dims(obj, dims));
         }
         out.push_str("\n");
+
+        // Emit enemy instances (separate section — enemy_objects computed at top of fn)
+
+        if enemy_objects.is_empty() {
+            out.push_str(&format!("_{}_ENEMY_COUNT EQU 0\n\n", name));
+        } else {
+            out.push_str(&format!("_{}_ENEMY_COUNT EQU {}\n\n", name, enemy_objects.len()));
+            out.push_str(&format!("; ---- Enemy instances for level {} ----\n", name));
+            out.push_str(&format!("_{}_ENEMY_INSTANCES:\n", name));
+
+            for (i, obj) in enemy_objects.iter().enumerate() {
+                let et = obj.enemy_type.as_deref().unwrap_or("");
+                let et_up = et.to_uppercase().replace(' ', "_").replace('-', "_");
+                let ai_byte = ai_type_byte(&obj.ai_type);
+                let wave = obj.wave;
+                let respawn_byte = if obj.respawn { 1u8 } else { 0u8 };
+
+                let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
+                let wp_count = wps.len();
+                let wp_label = if wp_count > 0 {
+                    format!("_{}_ENEMY{}_WPS", name, i)
+                } else {
+                    "0".to_string()
+                };
+
+                out.push_str(&format!("    ; instance {}\n", i));
+                out.push_str(&format!("    FDB _{}_ENEMY   ; enemy type ptr\n", et_up));
+                out.push_str(&format!("    FDB {}                   ; spawn x\n", obj.x));
+                out.push_str(&format!("    FDB {}                   ; spawn y\n", obj.y));
+                out.push_str(&format!("    FCB {}                    ; ai_type: 0=static,1=patrol,2=chase,3=flee\n", ai_byte));
+                out.push_str(&format!("    FCB {}                    ; wave (0=always present)\n", wave));
+                out.push_str(&format!("    FCB {}                    ; respawn: 0=no, 1=yes\n", respawn_byte));
+                out.push_str(&format!("    FCB {}                    ; waypoint_count\n", wp_count));
+                out.push_str(&format!("    FDB {}   ; ptr to waypoints (0 if none)\n", wp_label));
+                out.push_str("\n");
+            }
+
+            // Emit waypoint tables
+            for (i, obj) in enemy_objects.iter().enumerate() {
+                let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
+                if !wps.is_empty() {
+                    out.push_str(&format!("_{}_ENEMY{}_WPS:\n", name, i));
+                    for wp in wps {
+                        out.push_str(&format!("    FDB {}  ; wp x\n", wp.x));
+                        out.push_str(&format!("    FDB {}  ; wp y\n", wp.y));
+                    }
+                    out.push_str("\n");
+                }
+            }
+        }
 
         out
     }
@@ -292,7 +412,54 @@ impl VPlayLevel {
     ///   +12 bgObjectsPtr (u32)
     ///   +16 gpObjectsPtr (u32)
     ///   +20 fgObjectsPtr (u32)
+    /// Look up the patrol action's sprite symbol for an enemy type.
+    /// Returns `(symbol, is_anim)` e.g. `("_WALK_VECTORS", false)` or `("_ANIM_WALK", true)`.
+    /// Falls back to `None` when the file is missing, the field is unset, or the action has no sprite.
+    fn lookup_venemy_patrol_sprite(enemy_type: &str, venemy_dir: Option<&Path>) -> Option<(String, bool)> {
+        let dir = venemy_dir?;
+        let path = dir.join(format!("{}.venemy", enemy_type));
+        let text = std::fs::read_to_string(&path).ok()?;
+        let val: serde_json::Value = serde_json::from_str(&text).ok()?;
+
+        let patrol_action = val["behavior"]["patrol"]["patrolAction"].as_str().unwrap_or("");
+        if patrol_action.is_empty() {
+            return None;
+        }
+        let actions = val["actions"].as_array()?;
+        let action = actions.iter().find(|a| a["name"].as_str() == Some(patrol_action))?;
+        let sprite_path = action["sprite"].as_str().unwrap_or("");
+        if sprite_path.is_empty() {
+            return None;
+        }
+        let filename = sprite_path.split('/').last().unwrap_or(sprite_path);
+        if filename.ends_with(".vanim") {
+            let stem = filename.trim_end_matches(".vanim").to_uppercase();
+            Some((format!("_ANIM_{}", stem), true))
+        } else if filename.ends_with(".vec") {
+            let stem = filename.trim_end_matches(".vec").to_uppercase();
+            Some((format!("_{}_VECTORS", stem), false))
+        } else {
+            None
+        }
+    }
+
+    /// Look up mirror_on_patrol and default_facing for an enemy type.
+    /// Searches for `{venemy_dir}/{enemy_type}.venemy`. Returns (mirror, facing_byte).
+    fn lookup_venemy_mirror(enemy_type: &str, venemy_dir: Option<&Path>) -> (u8, u8) {
+        let Some(dir) = venemy_dir else { return (0, 0); };
+        let path = dir.join(format!("{}.venemy", enemy_type));
+        let Ok(text) = std::fs::read_to_string(&path) else { return (0, 0); };
+        let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) else { return (0, 0); };
+        let mirror = val["behavior"]["patrol"]["mirrorOnPatrol"].as_bool().unwrap_or(false);
+        let facing = val["behavior"]["patrol"]["defaultFacing"].as_str().unwrap_or("right");
+        (if mirror { 1 } else { 0 }, if facing == "left" { 1 } else { 0 })
+    }
+
     pub fn compile_to_arm_asm(&self, dims: &HashMap<String, (i32, i32)>) -> String {
+        self.compile_to_arm_asm_with_venemy(dims, None)
+    }
+
+    pub fn compile_to_arm_asm_with_venemy(&self, dims: &HashMap<String, (i32, i32)>, venemy_dir: Option<&Path>) -> String {
         let mut out = String::new();
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
 
@@ -359,6 +526,75 @@ impl VPlayLevel {
         out.push_str(&fg_structs);
         out.push_str("\n");
 
+        // ARM enemy spawn table — collected from all layers (any object with enemyType set)
+        // Layout per entry (24 bytes, .align 2):
+        //   +0  sprite_ptr (u32) — address of _{ENEMY_TYPE}_VECTORS
+        //   +4  spawn_x    (i16)
+        //   +6  spawn_y    (i16)
+        //   +8  ai_type    (u8)  — 0=static 1=patrol 2=chase
+        //   +9  wp_count   (u8)  — number of patrol waypoints (0–2)
+        //   +10 pad        (u16)
+        //   +12 wp0_x      (i16)
+        //   +14 wp0_y      (i16)
+        //   +16 wp1_x      (i16)
+        //   +18 wp1_y      (i16)
+        //   +20 pad        (u32)
+        let all_objs: Vec<&VPlayObject> = self.layers.background.iter()
+            .chain(self.layers.gameplay.iter())
+            .chain(self.layers.foreground.iter())
+            .collect();
+        let enemy_objs: Vec<&VPlayObject> = all_objs.iter()
+            .filter(|o| o.enemy_type.as_ref().map_or(false, |t| !t.is_empty()))
+            .copied()
+            .collect();
+        let ec = enemy_objs.len();
+        out.push_str(&format!("@ ARM enemy spawn table for {name}\n"));
+        out.push_str(".align 2\n");
+        out.push_str(&format!(".global _{name}_PITREX_ENEMY_COUNT\n_{name}_PITREX_ENEMY_COUNT:\n"));
+        out.push_str(&format!("    .word {ec}  @ enemy count\n\n"));
+        if ec > 0 {
+            out.push_str(&format!(".global _{name}_PITREX_ENEMIES\n_{name}_PITREX_ENEMIES:\n"));
+            for obj in &enemy_objs {
+                let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
+                let ai = ai_type_byte(&obj.ai_type);
+                let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
+                let wpc = wps.len().min(2) as u8;
+                let wp0 = wps.get(0);
+                let wp1 = wps.get(1);
+                out.push_str(&format!("    @ enemy type={et}, ai={ai}, wp_count={wpc}\n"));
+                let (sprite_sym, is_anim_bool) = Self::lookup_venemy_patrol_sprite(&et.to_lowercase(), venemy_dir)
+                    .unwrap_or_else(|| (format!("_{et}_VECTORS"), false));
+                let is_anim_byte = if is_anim_bool { 1u8 } else { 0u8 };
+                out.push_str(&format!("    .word {}  @ sprite_ptr\n", sprite_sym));
+                out.push_str(&format!("    .hword {}  @ spawn_x\n", obj.x));
+                out.push_str(&format!("    .hword {}  @ spawn_y\n", obj.y));
+                // Mirror settings: .venemy type file is authoritative (per-instance fallback)
+                let (mirror_byte, facing_byte) = {
+                    let (vm, vf) = Self::lookup_venemy_mirror(&et.to_lowercase(), venemy_dir);
+                    if vm != 0 || vf != 0 {
+                        (vm, vf)
+                    } else {
+                        let m = if obj.mirror_on_patrol { 1u8 } else { 0u8 };
+                        let f = if obj.default_facing == "left" { 1u8 } else { 0u8 };
+                        (m, f)
+                    }
+                };
+                out.push_str(&format!("    .byte {}   @ ai_type\n", ai));
+                out.push_str(&format!("    .byte {}   @ wp_count\n", wpc));
+                out.push_str(&format!("    .byte {}   @ mirror_on_patrol\n", mirror_byte));
+                out.push_str(&format!("    .byte {}   @ default_facing (0=right 1=left)\n", facing_byte));
+                out.push_str(&format!("    .hword {}  @ wp0_x\n", wp0.map_or(obj.x, |w| w.x)));
+                out.push_str(&format!("    .hword {}  @ wp0_y\n", wp0.map_or(obj.y, |w| w.y)));
+                out.push_str(&format!("    .hword {}  @ wp1_x\n", wp1.map_or(obj.x, |w| w.x)));
+                out.push_str(&format!("    .hword {}  @ wp1_y\n", wp1.map_or(obj.y, |w| w.y)));
+                out.push_str(&format!("    .byte {}   @ is_anim (0=vec 1=vanim)\n", is_anim_byte));
+                out.push_str("    .byte 0    @ pad\n");
+                out.push_str("    .byte 0    @ pad\n");
+                out.push_str("    .byte 0    @ pad\n");
+            }
+            out.push_str("\n");
+        }
+
         out
     }
 
@@ -415,8 +651,13 @@ impl VPlayLevel {
         out.push_str(&format!("    .byte {}   @ type\n", type_byte));
 
         // +8: vector_ptr (32-bit absolute address, resolved at link time)
-        let vec_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase().replace('-', "_").replace(' ', "_"));
-        out.push_str(&format!("    .word {vec_label}  @ vector_ptr\n"));
+        // Enemy placement markers have no vector — emit null pointer.
+        if obj.vector_name.is_empty() {
+            out.push_str("    .word 0  @ vector_ptr (none — enemy marker)\n");
+        } else {
+            let vec_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase().replace('-', "_").replace(' ', "_"));
+            out.push_str(&format!("    .word {vec_label}  @ vector_ptr\n"));
+        }
 
         // +12,+13: half_w, half_h
         // NOTE: pitrex_show_level does NOT apply the scale byte when drawing — all objects
@@ -465,7 +706,7 @@ impl VPlayLevel {
     }
 
     /// Compile a single object to assembly (M6809 format)
-    fn compile_object(&self, obj: &VPlayObject) -> String {
+    fn compile_object_with_dims(&self, obj: &VPlayObject, dims: &HashMap<String, (u32, u32)>) -> String {
         let mut out = String::new();
         
         out.push_str(&format!("; Object: {} ({})\n", obj.id, obj.obj_type));
@@ -577,39 +818,55 @@ impl VPlayLevel {
         out.push_str(&format!("    FDB {}  ; spawn_delay\n", obj.spawn_delay));
         
         // Pointer to vector data (will be resolved by linker)
-        let vector_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase());
-        out.push_str(&format!("    FDB {}  ; vector_ptr\n", vector_label));
-        
-        // Bytes +18-19: half_width (cull margin) + half_height (collision AABB)
-        // When copied to RAM via LDD ,X++; STD ,U++:
-        //   RAM+13 = half_width (A), RAM+14 = half_height (B)
-        // Explicit collision.width/height in .vplay takes priority over vec bounding box.
-        let coll_override_w_m6809 = obj.collision.as_ref().and_then(|c| c.width);
-        let coll_override_h_m6809 = obj.collision.as_ref().and_then(|c| c.height);
-        let scale_pct = (obj.scale * 100.0).round() as u32;
-
-        // half_width
-        if let Some(nat_w) = coll_override_w_m6809 {
-            let hw = ((nat_w as f32 * obj.scale).round() as u32).clamp(1, 127);
-            out.push_str(&format!("    FCB {}  ; half_width (explicit override, ROM+18)\n", hw));
-        } else if (obj.scale - 1.0).abs() < 0.001 {
-            let lbl = format!("_{}_HALF_WIDTH", obj.vector_name.to_uppercase());
-            out.push_str(&format!("    FCB {}  ; half_width (ROM+18)\n", lbl));
+        // Enemy placement objects with no vector_name get a null vector_ptr (they are
+        // data-only markers; their visual comes from the enemy type definition, not the level).
+        if obj.vector_name.is_empty() {
+            out.push_str("    FDB 0  ; vector_ptr (no visual for this object)\n");
+            out.push_str("    FCB 8  ; half_width (default, ROM+18)\n");
+            out.push_str("    FCB 8  ; half_height (default, ROM+19)\n");
         } else {
-            let expr = format!("(_{}_HALF_WIDTH * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
-            out.push_str(&format!("    FCB {}  ; half_width scaled by {} (ROM+18)\n", expr, obj.scale));
-        }
+            let vector_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase());
+            out.push_str(&format!("    FDB {}  ; vector_ptr\n", vector_label));
 
-        // half_height
-        if let Some(nat_h) = coll_override_h_m6809 {
-            let hh = ((nat_h as f32 * obj.scale).round() as u32).clamp(1, 127);
-            out.push_str(&format!("    FCB {}  ; half_height (explicit override, ROM+19)\n", hh));
-        } else if (obj.scale - 1.0).abs() < 0.001 {
-            let lbl = format!("_{}_HALF_HEIGHT", obj.vector_name.to_uppercase());
-            out.push_str(&format!("    FCB {}  ; half_height (collision AABB, ROM+19)\n", lbl));
-        } else {
-            let expr = format!("(_{}_HALF_HEIGHT * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
-            out.push_str(&format!("    FCB {}  ; half_height scaled by {} (ROM+19)\n", expr, obj.scale));
+            // Bytes +18-19: half_width (cull margin) + half_height (collision AABB)
+            // When copied to RAM via LDD ,X++; STD ,U++:
+            //   RAM+13 = half_width (A), RAM+14 = half_height (B)
+            // Explicit collision.width/height in .vplay takes priority over vec bounding box.
+            let coll_override_w_m6809 = obj.collision.as_ref().and_then(|c| c.width);
+            let coll_override_h_m6809 = obj.collision.as_ref().and_then(|c| c.height);
+            let vec_key = obj.vector_name.to_lowercase();
+
+            // half_width — prefer computed literal (avoids cross-bank EQU reference)
+            if let Some(nat_w) = coll_override_w_m6809 {
+                let hw = ((nat_w as f32 * obj.scale).round() as u32).clamp(1, 127);
+                out.push_str(&format!("    FCB {}  ; half_width (explicit override, ROM+18)\n", hw));
+            } else if let Some(&(hw, _)) = dims.get(&vec_key) {
+                let scaled = ((hw as f32 * obj.scale).round() as u32).clamp(1, 127);
+                out.push_str(&format!("    FCB {}  ; half_width ({:.2}x, ROM+18)\n", scaled, obj.scale));
+            } else if (obj.scale - 1.0).abs() < 0.001 {
+                let lbl = format!("_{}_HALF_WIDTH", obj.vector_name.to_uppercase());
+                out.push_str(&format!("    FCB {}  ; half_width (ROM+18)\n", lbl));
+            } else {
+                let scale_pct = (obj.scale * 100.0).round() as u32;
+                let expr = format!("(_{}_HALF_WIDTH * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
+                out.push_str(&format!("    FCB {}  ; half_width scaled by {} (ROM+18)\n", expr, obj.scale));
+            }
+
+            // half_height — prefer computed literal (avoids cross-bank EQU reference)
+            if let Some(nat_h) = coll_override_h_m6809 {
+                let hh = ((nat_h as f32 * obj.scale).round() as u32).clamp(1, 127);
+                out.push_str(&format!("    FCB {}  ; half_height (explicit override, ROM+19)\n", hh));
+            } else if let Some(&(_, hh)) = dims.get(&vec_key) {
+                let scaled = ((hh as f32 * obj.scale).round() as u32).clamp(1, 127);
+                out.push_str(&format!("    FCB {}  ; half_height ({:.2}x, ROM+19)\n", scaled, obj.scale));
+            } else if (obj.scale - 1.0).abs() < 0.001 {
+                let lbl = format!("_{}_HALF_HEIGHT", obj.vector_name.to_uppercase());
+                out.push_str(&format!("    FCB {}  ; half_height (collision AABB, ROM+19)\n", lbl));
+            } else {
+                let scale_pct = (obj.scale * 100.0).round() as u32;
+                let expr = format!("(_{}_HALF_HEIGHT * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
+                out.push_str(&format!("    FCB {}  ; half_height scaled by {} (ROM+19)\n", expr, obj.scale));
+            }
         }
         
         out.push_str("\n");

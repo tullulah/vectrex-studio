@@ -638,56 +638,109 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
 /// Evaluates an arithmetic expression: SYMBOL+10, LABEL-2, etc.
 fn evaluate_expression(expr: &str, equates: &HashMap<String, u16>) -> Result<u16, String> {
     let expr = expr.trim();
-    
+
     // Strip > or < prefix if present (extended/direct mode markers)
-    let expr = expr.trim_start_matches('>').trim_start_matches('<');
-    
-    // Detect + or - operators
-    if let Some(pos) = expr.rfind('+') {
-        let left = expr[..pos].trim();
-        let right = expr[pos+1..].trim();
-        
-        let offset = evaluate_expression(right, equates)?; // Recursivo para right
-        
-        return match evaluate_expression(left, equates) {
-            Ok(base) => {
-                let result = base.wrapping_add(offset);
-                Ok(result)
-            },
-            Err(e) if e.starts_with("SYMBOL:") => {
-                // Preserve addend when the base symbol is not yet resolved (pass 2)
-                if offset > i16::MAX as u16 {
-                    return Err(format!("Addend out of range (>{}): {}", i16::MAX, offset));
-                }
-                let sym = e.trim_start_matches("SYMBOL:");
-                Err(format!("SYMBOL:{}+{}", sym, offset))
-            }
-            Err(e) => Err(e),
-        };
+    let expr = expr.trim_start_matches('>').trim_start_matches('<').trim();
+
+    // Strip outer parentheses if they wrap the entire expression: (A+B) -> A+B
+    if expr.starts_with('(') && expr.ends_with(')') {
+        let inner = &expr[1..expr.len()-1];
+        if expr_parens_balanced(inner) {
+            return evaluate_expression(inner, equates);
+        }
     }
-    
-    if let Some(pos) = expr.rfind('-') {
-        // Be careful with negative numbers like -127
+
+    // Find last + or - outside parens (lowest precedence, left-associative via rfind)
+    if let Some(pos) = expr_find_last_addop(expr) {
         if pos > 0 {
+            let op = expr.as_bytes()[pos] as char; // safe: + and - are ASCII
             let left = expr[..pos].trim();
             let right = expr[pos+1..].trim();
-            let offset = evaluate_expression(right, equates)?; // Recursive for right
+            let offset = evaluate_expression(right, equates)?;
             return match evaluate_expression(left, equates) {
-                Ok(base) => Ok(base.wrapping_sub(offset)),
+                Ok(base) => {
+                    if op == '+' { Ok(base.wrapping_add(offset)) }
+                    else { Ok(base.wrapping_sub(offset)) }
+                },
                 Err(e) if e.starts_with("SYMBOL:") => {
+                    // Preserve addend when the base symbol is not yet resolved (pass 2)
                     if offset > i16::MAX as u16 {
                         return Err(format!("Addend out of range (>{}): {}", i16::MAX, offset));
                     }
                     let sym = e.trim_start_matches("SYMBOL:");
-                    Err(format!("SYMBOL:{}-{}", sym, offset))
+                    if op == '+' { Err(format!("SYMBOL:{}+{}", sym, offset)) }
+                    else { Err(format!("SYMBOL:{}-{}", sym, offset)) }
                 }
                 Err(e) => Err(e),
             };
         }
     }
-    
+
+    // Find last * or / outside parens (higher precedence)
+    if let Some(pos) = expr_find_last_mulop(expr) {
+        let op = expr.as_bytes()[pos] as char; // safe: * and / are ASCII
+        let left = expr[..pos].trim();
+        let right = expr[pos+1..].trim();
+        let lval = evaluate_expression(left, equates)?;
+        let rval = evaluate_expression(right, equates)?;
+        return if op == '*' {
+            Ok(lval.wrapping_mul(rval))
+        } else {
+            if rval == 0 {
+                Err(format!("Division by zero in expression: {}", expr))
+            } else {
+                Ok(((lval as u32) / (rval as u32)) as u16)
+            }
+        };
+    }
+
     // Not an expression, it is a direct value (symbol or number)
     resolve_symbol_value(expr, equates)
+}
+
+/// Returns true if parentheses in `expr` are balanced (no unmatched parens).
+fn expr_parens_balanced(expr: &str) -> bool {
+    let mut depth = 0i32;
+    for c in expr.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => { depth -= 1; if depth < 0 { return false; } }
+            _ => {}
+        }
+    }
+    depth == 0
+}
+
+/// Finds the byte position of the LAST `+` or `-` that is not inside parentheses.
+/// Returns None if no such operator exists.
+fn expr_find_last_addop(expr: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut last_pos = None;
+    for (i, c) in expr.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '+' | '-' if depth == 0 => last_pos = Some(i),
+            _ => {}
+        }
+    }
+    last_pos
+}
+
+/// Finds the byte position of the LAST `*` or `/` that is not inside parentheses.
+/// Returns None if no such operator exists.
+fn expr_find_last_mulop(expr: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut last_pos = None;
+    for (i, c) in expr.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '*' | '/' if depth == 0 => last_pos = Some(i),
+            _ => {}
+        }
+    }
+    last_pos
 }
 
 /// Resolves a symbol to its numeric value (with recursive expression evaluation)
@@ -2753,6 +2806,9 @@ fn emit_fcb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String
         // Try to resolve as EQU symbol first
         let upper = part.to_uppercase();
         if let Some(&value) = equates.get(&upper) {
+            emitter.emit_bytes(&[value as u8]);
+        } else if let Ok(value) = evaluate_expression(&upper, equates) {
+            // Expression with arithmetic (e.g. "(_PLAT_HALF_WIDTH * 80) / 100")
             emitter.emit_bytes(&[value as u8]);
         } else {
             let value = parse_immediate(part)?;

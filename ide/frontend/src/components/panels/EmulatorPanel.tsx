@@ -303,6 +303,8 @@ export const EmulatorPanel: React.FC = () => {
   const [currentOverlay, setCurrentOverlay] = useState<string | null>(null);
   const [showPitrexOverlay, setShowPitrexOverlay] = useState<boolean>(false);
   const [pitrexImgPath, setPitrexImgPath] = useState<string>('');
+  // PiTrex-specific audio enabled state (separate from JSVecX's AY chip state)
+  const [pitrexAudioEnabled, setPitrexAudioEnabled] = useState<boolean>(true);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 300, height: 400 });
@@ -321,6 +323,8 @@ export const EmulatorPanel: React.FC = () => {
   // PiTrex ARM32 interpreter loop handle and core instance
   const pitrexLoopRef = useRef<number | null>(null);
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
+  // Last assembly text loaded into PitrexCore — needed for reset (re-parse + restart loop)
+  const pitrexSFileRef = useRef<string | null>(null);
   
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
@@ -1857,7 +1861,95 @@ export const EmulatorPanel: React.FC = () => {
     }
   };
 
+  // ── PiTrex RAF loop launcher ────────────────────────────────────────────────
+  // Extracted so it can be called both from handleCompiledBin and from onReset.
+  // Requires pitrexCoreRef.current to be a loaded, ready PitrexCore instance.
+  const startPitrexRafLoop = useCallback(() => {
+    // Cancel any previous RAF loop before starting a new one
+    if (pitrexLoopRef.current !== null) {
+      cancelAnimationFrame(pitrexLoopRef.current);
+      pitrexLoopRef.current = null;
+    }
+
+    const PITREX_MAX_X = 16500;
+    const PITREX_MAX_Y = 20500;
+    const TARGET_MS = 1000 / 50; // 50 Hz
+    let lastFrameTs = 0;
+    let pitrexFrameCount = 0;
+
+    const loop = (ts: number) => {
+      pitrexLoopRef.current = requestAnimationFrame(loop);
+      const elapsed = ts - lastFrameTs;
+      if (elapsed < TARGET_MS) return;
+      lastFrameTs = ts - (elapsed % TARGET_MS);
+
+      if (useDebugStore.getState().state !== 'running') return;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const W = canvas.width;
+      const H = canvas.height;
+      const scaleX = (W / 2) / PITREX_MAX_X;
+      const scaleY = (H / 2) / PITREX_MAX_Y;
+      const cx = W / 2;
+      const cy = H / 2;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, W, H);
+
+      const result = pitrexCoreRef.current?.runFrame() ?? { segments: [], texts: [], timeout: false };
+      const { segments, timeout } = result;
+
+      for (const seg of segments) {
+        if (seg.intensity <= 0) continue;
+        const x0p = cx + seg.x0 * scaleX;
+        const y0p = cy - seg.y0 * scaleY;
+        const x1p = cx + seg.x1 * scaleX;
+        const y1p = cy - seg.y1 * scaleY;
+        const bright = Math.min(seg.intensity, 127);
+        const lum = Math.round(bright * 255 / 127);
+        ctx.strokeStyle = `rgb(${lum},${lum},${lum})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x0p, y0p);
+        ctx.lineTo(x1p, y1p);
+        ctx.stroke();
+      }
+
+      if (timeout) {
+        ctx.fillStyle = 'rgba(255, 80, 80, 0.85)';
+        ctx.font = '11px monospace';
+        ctx.fillText('TIMEOUT — infinite loop?', 8, 16);
+      }
+
+      pitrexFrameCount++;
+      if (pitrexFrameCount <= 5 || pitrexFrameCount % 120 === 0) {
+        console.log(`[EmulatorPanel] pitrex frame ${pitrexFrameCount}: ${segments.length} segs${timeout ? ' TIMEOUT' : ''}`);
+      }
+    };
+
+    pitrexLoopRef.current = requestAnimationFrame(loop);
+    console.log('[EmulatorPanel] pitrex RAF loop started');
+  }, []); // no deps — reads refs directly
+
   const onPlay = () => {
+    // PiTrex mode: the RAF loop already runs; just ungate it via debugStore state
+    if (pitrexCoreRef.current) {
+      useDebugStore.getState().setState('running');
+      setStatus('running');
+      setEmulatorRunning(true);
+      // Ensure the RAF loop is actually running (may have been stopped on reset)
+      if (pitrexLoopRef.current === null) {
+        pitrexCoreRef.current.startAudio();
+        startPitrexRafLoop();
+      }
+      console.log('[EmulatorPanel] PiTrex resumed');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // Si estaba stopped, reiniciar desde el principio
@@ -1866,12 +1958,12 @@ export const EmulatorPanel: React.FC = () => {
         vecx.stop();
         console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: Start from stopped state');
         vecx.reset();
-        
+
         // Reinicializar joystick a valores neutros
         vecx.write8(0xC81B, 0); // Vec_Joy_1_X neutral (signed $00 = center)
         vecx.write8(0xC81C, 0); // Vec_Joy_1_Y neutral (signed $00 = center)
       }
-      
+
       initPsgLogging();
       vecx.debugState = 'running';
       vecx.start();
@@ -1881,8 +1973,16 @@ export const EmulatorPanel: React.FC = () => {
       console.log('[EmulatorPanel] JSVecX started, debugStore.state set to running');
     }
   };
-  
+
   const onPause = () => {
+    // PiTrex mode: gate the RAF loop by setting debugStore state to 'paused'
+    if (pitrexCoreRef.current) {
+      useDebugStore.getState().setState('paused');
+      setStatus('paused');
+      console.log('[EmulatorPanel] PiTrex paused (RAF loop gated)');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       vecx.stop();
@@ -1892,22 +1992,74 @@ export const EmulatorPanel: React.FC = () => {
       console.log('[EmulatorPanel] JSVecX paused, debugStore.state set to paused');
     }
   };
-  
+
   const onStop = () => {
+    // PiTrex mode: gate the RAF loop and stop audio
+    if (pitrexCoreRef.current) {
+      useDebugStore.getState().setState('stopped');
+      setStatus('stopped');
+      setEmulatorRunning(false);
+      pitrexCoreRef.current.stopAudio();
+      console.log('[EmulatorPanel] PiTrex stopped');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // CRITICAL: Solo parar, NO resetear aquí
       // El reset se hará cuando se presione Play después de Stop
       vecx.stop();
-      
+
       setStatus('stopped');
       useDebugStore.getState().setState('stopped');
       setEmulatorRunning(false); // Persist state
       console.log('[EmulatorPanel] JSVecX stopped (will reset on next Play)');
     }
   };
-  
+
   const onReset = () => {
+    // PiTrex mode: re-parse saved assembly and restart the RAF loop from the beginning
+    if (pitrexCoreRef.current && pitrexSFileRef.current) {
+      console.log('[EmulatorPanel] PiTrex reset — reloading assembly');
+
+      // Stop current loop and audio
+      if (pitrexLoopRef.current !== null) {
+        cancelAnimationFrame(pitrexLoopRef.current);
+        pitrexLoopRef.current = null;
+      }
+      pitrexCoreRef.current.stopAudio();
+
+      // Re-parse assembly into a fresh core
+      import('../../pitrex/PitrexCore.js').then(({ PitrexCore }) => {
+        const core = new PitrexCore();
+        core.loadAssembly(pitrexSFileRef.current!);
+        pitrexCoreRef.current = core;
+
+        if (!core.isReady()) {
+          console.error('[EmulatorPanel] PiTrex reset: failed to reload assembly');
+          return;
+        }
+
+        // Clear canvas
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
+        }
+
+        useDebugStore.getState().setState('running');
+        setStatus('running');
+        core.startAudio();
+        startPitrexRafLoop();
+        console.log('[EmulatorPanel] PiTrex reset complete — new loop started');
+      }).catch(e => {
+        console.error('[EmulatorPanel] PiTrex reset: import failed', e);
+      });
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // Clear PSG log on reset
@@ -1915,7 +2067,7 @@ export const EmulatorPanel: React.FC = () => {
       if (!win.PSG_WRITE_LOG) win.PSG_WRITE_LOG = [];
       win.PSG_WRITE_LOG.length = 0;
       console.log('[EmulatorPanel] JSVecX reset, PSG log cleared (length=' + win.PSG_WRITE_LOG.length + ')');
-      
+
       // Clear opcode trace on reset
       if (win.clearOpcodeTrace) {
         win.clearOpcodeTrace();
@@ -1950,11 +2102,11 @@ export const EmulatorPanel: React.FC = () => {
       } catch (e) {
         // Ignore
       }
-      
+
       console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: Reset button clicked');
       console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack);
       vecx.reset();
-      
+
       // CRITICAL: Initialize debugState to 'running' after reset
       vecx.debugState = 'running';
       vecx.stepMode = null;
@@ -2313,6 +2465,7 @@ export const EmulatorPanel: React.FC = () => {
           const core = new PitrexCore();
           core.loadAssembly(payload.sFileText);
           pitrexCoreRef.current = core;
+          pitrexSFileRef.current = payload.sFileText; // persist for reset
 
           if (!core.isReady()) {
             console.error('[EmulatorPanel] PitrexCore failed to load assembly');
@@ -2328,87 +2481,10 @@ export const EmulatorPanel: React.FC = () => {
             }
           }
 
-          // PiTrex coordinate → canvas pixel conversion constants
-          // Codegen: VPy × 127 = PiTrex coord (scale=127, matches rp2350 ARM_ALG_SCALE=127).
-          // rp2350 renderer uses ALG_CENTER_X=16500, ALG_CENTER_Y=20500 as half-range.
-          // Use same values so PiTrex and rp2350 render at identical screen fractions.
-          // VPy ±96 → ±12192 → 12192/16500 = 73.9% half-width (matching rp2350).
-          const PITREX_MAX_X = 16500;
-          const PITREX_MAX_Y = 20500;
-
-          const TARGET_MS = 1000 / 50;  // 50 Hz (PiTrex default)
-          let lastFrameTs = 0;
-          let pitrexFrameCount = 0;
-
-          const loop = (ts: number) => {
-            pitrexLoopRef.current = requestAnimationFrame(loop);
-            const elapsed = ts - lastFrameTs;
-            if (elapsed < TARGET_MS) return;
-            lastFrameTs = ts - (elapsed % TARGET_MS);
-
-            if (useDebugStore.getState().state !== 'running') return;
-
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            const W = canvas.width;
-            const H = canvas.height;
-            const scaleX = (W / 2) / PITREX_MAX_X;
-            const scaleY = (H / 2) / PITREX_MAX_Y;
-            const cx = W / 2;
-            const cy = H / 2;
-
-            // Input is forwarded by the gamepad poll interval (respects axis
-            // inversion, deadzone, and button mappings from useJoystickStore).
-            // No setInput call here — avoid overwriting with raw inputManager values.
-
-            // Clear frame
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, W, H);
-
-            // Run one game frame
-            const result = pitrexCoreRef.current?.runFrame() ?? { segments: [], texts: [], timeout: false };
-            const { segments, texts, timeout } = result;
-
-            // Render vector segments
-            for (const seg of segments) {
-              if (seg.intensity <= 0) continue;
-              const x0p = cx + seg.x0 * scaleX;
-              const y0p = cy - seg.y0 * scaleY;  // y inverted (Vectrex y = up)
-              const x1p = cx + seg.x1 * scaleX;
-              const y1p = cy - seg.y1 * scaleY;
-              const bright = Math.min(seg.intensity, 127);
-              const lum = Math.round(bright * 255 / 127);
-              ctx.strokeStyle = `rgb(${lum},${lum},${lum})`;
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.moveTo(x0p, y0p);
-              ctx.lineTo(x1p, y1p);
-              ctx.stroke();
-            }
-
-            // Render text segments (now rendered as vector segments via drawTextAsSegments)
-            // texts[] is kept for interface compatibility but should be empty
-
-            // Timeout warning (infinite loop or missing v_WaitRecal)
-            if (timeout) {
-              ctx.fillStyle = 'rgba(255, 80, 80, 0.85)';
-              ctx.font = '11px monospace';
-              ctx.fillText('TIMEOUT — infinite loop?', 8, 16);
-            }
-
-            pitrexFrameCount++;
-            if (pitrexFrameCount <= 5 || pitrexFrameCount % 120 === 0) {
-              console.log(`[EmulatorPanel] pitrex frame ${pitrexFrameCount}: ${segments.length} segs, ${texts.length} texts${timeout ? ' TIMEOUT' : ''}`);
-            }
-          };
-
           useDebugStore.getState().setState('running');
+          setPitrexAudioEnabled(true);
           core.startAudio();
-          pitrexLoopRef.current = requestAnimationFrame(loop);
-          console.log('[EmulatorPanel] pitrex RAF loop started');
+          startPitrexRafLoop();
         } catch (e) {
           console.error('[EmulatorPanel] Failed to start pitrex emulator:', e);
         }
@@ -2640,7 +2716,7 @@ export const EmulatorPanel: React.FC = () => {
     console.log('[EmulatorPanel] ✓ Registered onCompiledBin listener');
     
     // No cleanup function needed - onCompiledBin typically doesn't return one
-  }, [loadOverlay, setLoadedROM]);
+  }, [loadOverlay, setLoadedROM, startPitrexRafLoop]);
 
   // Manejar cambio de ROM en dropdown
   const handleROMChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -2903,11 +2979,11 @@ export const EmulatorPanel: React.FC = () => {
         </button>
         
         {/* Botón Audio Mute/Unmute */}
-        <button 
+        <button
           style={{
             ...btn,
-            backgroundColor: getCurrentAudioState() ? '#2a4a2a' : '#4a2a2a',
-            color: getCurrentAudioState() ? '#afa' : '#faa',
+            backgroundColor: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#2a4a2a' : '#4a2a2a',
+            color: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#afa' : '#faa',
             fontSize: '20px',
             padding: '10px',
             minWidth: '50px',
@@ -2918,9 +2994,25 @@ export const EmulatorPanel: React.FC = () => {
             justifyContent: 'center'
           }} 
           onClick={() => {
+            // ── PiTrex audio path ────────────────────────────────────────────
+            if (pitrexCoreRef.current) {
+              const newEnabled = !pitrexAudioEnabled;
+              setPitrexAudioEnabled(newEnabled);
+              setAudioEnabled(newEnabled);
+              if (newEnabled) {
+                pitrexCoreRef.current.startAudio();
+                console.log('[EmulatorPanel] PiTrex audio unmuted');
+              } else {
+                pitrexCoreRef.current.stopAudio();
+                console.log('[EmulatorPanel] PiTrex audio muted');
+              }
+              return;
+            }
+
+            // ── JSVecX / PSG audio path ──────────────────────────────────────
             const currentRealState = getCurrentAudioState();
             const newState = !currentRealState;
-            
+
             console.log('[EmulatorPanel] Audio button clicked:', {
               storedState: audioEnabled,
               realCurrentState: currentRealState,
@@ -2928,20 +3020,20 @@ export const EmulatorPanel: React.FC = () => {
               status,
               vecxAvailable: !!(window as any).vecx
             });
-            
-            setAudioEnabled(newState); 
-            
+
+            setAudioEnabled(newState);
+
             const vecx = (window as any).vecx;
             if (vecx && vecx.toggleSoundEnabled) {
               const resultState = vecx.toggleSoundEnabled();
               console.log(`[EmulatorPanel] ✓ Audio toggled: ${currentRealState} → ${resultState}`);
-              
+
               if (resultState !== newState) {
                 console.log('[EmulatorPanel] Correcting stored state to match result:', resultState);
                 setAudioEnabled(resultState);
               }
             }
-            
+
             try {
               const finalState = getCurrentAudioState();
               if (finalState) {
@@ -2955,9 +3047,9 @@ export const EmulatorPanel: React.FC = () => {
               console.warn('[EmulatorPanel] Could not control PSG audio:', e);
             }
           }}
-          title={getCurrentAudioState() ? 'Mute audio' : 'Unmute audio'}
+          title={(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? 'Mute audio' : 'Unmute audio'}
         >
-          {getCurrentAudioState() ? '🔊' : '🔇'}
+          {(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '🔊' : '🔇'}
         </button>
         
         {/* Botón Toggle Overlay - Solo visible si hay overlay disponible */}

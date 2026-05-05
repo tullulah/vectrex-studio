@@ -109,7 +109,9 @@ async function createWindow() {
               { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
               { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
               { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-              { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') }
+              { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
+              { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
+              { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
             ]
           },
           {
@@ -558,7 +560,9 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
             { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') }
+            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
+            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
+            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
           ]
         },
         {
@@ -989,12 +993,54 @@ async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserW
   }
 }
 
+async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+  // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
+  let sdMount: string = sdPath.trim();
+  if (!sdMount) {
+    try {
+      const volumes = await fs.readdir('/Volumes');
+      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
+      for (const vol of volumes) {
+        if (skip.has(vol)) continue;
+        sdMount = join('/Volumes', vol);
+        break;
+      }
+    } catch {}
+  }
+
+  if (!sdMount) {
+    win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > UVM2.\n');
+    win?.webContents.send('run://status', 'Copy to SD failed: no SD card found');
+    return;
+  }
+
+  // Verify the path exists
+  try {
+    await fs.access(sdMount);
+  } catch {
+    win?.webContents.send('run://stderr', `[SD] Path not found: ${sdMount}\n`);
+    win?.webContents.send('run://status', `Copy to SD failed: path not found: ${sdMount}`);
+    return;
+  }
+
+  const um2Name = basename(um2Path);
+  const dst = join(sdMount, um2Name);
+  win?.webContents.send('run://stdout', `[SD] Copying ${um2Name} to ${sdMount}...\n`);
+  try {
+    await fs.copyFile(um2Path, dst);
+    win?.webContents.send('run://stdout', `[SD] ✓ ${um2Name} copied to SD.\n`);
+    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SD] Failed to copy ${um2Name}: ${e.message}\n`);
+  }
+}
+
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
@@ -1106,12 +1152,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     // NEW: ['build', fsPath, '--output', binPath, '--rom-size', '32768', '--bank-size', '32768', '--debug']
     
     // If outputPath is provided (from project), use it
-    const binExt = (target === 'pitrex') ? '.img' : (target === 'uvm2') ? '.um2' : '.bin';
+    const binExt = (target === 'pitrex') ? '.img' : '.bin';
     let finalBinPath = outAsm.replace(/\.asm$/, binExt);
     if (finalOutputPath) {
-      // outputPath is the .bin path, derive .asm from it
+      // outputPath is the .bin path, derive .asm from it, then apply correct extension for target
       const outAsmFromProject = finalOutputPath.replace(/\.bin$/, '.asm');
-      finalBinPath = finalOutputPath;
+      finalBinPath = finalOutputPath.replace(/\.bin$/, binExt);
       outAsm = outAsmFromProject; // CRITICAL: Use project ASM path for all checks
       // Ensure output directory exists
       const outputDir = join(finalOutputPath, '..');
@@ -1289,7 +1335,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         mainWindow?.webContents.send('run://diagnostics', []);
         
         // Phase 3: Load .pdb debug symbols if available
-        const pdbPath = binPath.replace(/\.bin$/, '.pdb');
+        const pdbPath = binPath.replace(/\.[^.]+$/, '.pdb');
         let pdbData: any = null;
         
         try {
@@ -1323,7 +1369,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
         let elfBase64: string | null = null;
         if (target === 'rp2350') {
-          const elfPath = binPath.replace(/\.bin$/, '.elf');
+          const elfPath = binPath.replace(/\.[^.]+$/, '.elf');
           try {
             const elfBuf = await fs.readFile(elfPath);
             elfBase64 = Buffer.from(elfBuf).toString('base64');
@@ -1355,6 +1401,11 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         // Copy to SD card if requested (pitrex target only)
         if (target === 'pitrex' && pitrexCopyToSD) {
           await copyPitrexToSDCard(binPath, pitrexSdPath, mainWindow ?? null);
+        }
+
+        // Copy to SD card if requested (uvm2 target)
+        if (target === 'uvm2' && uvm2CopyToSD) {
+          await copyUvm2ToSDCard(binPath, uvm2SdPath, mainWindow ?? null);
         }
 
         resolvePromise({ 
@@ -1744,7 +1795,9 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
             { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') }
+            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
+            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
+            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
           ]
         },
         {

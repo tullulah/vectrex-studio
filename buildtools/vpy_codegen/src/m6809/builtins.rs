@@ -117,6 +117,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
 
     // Animation
     ("DRAW_ANIM", 1),     // animation_name → draws current frame, advances counter
+
+    // Pitched instrument
+    ("PLAY_NOTE", 3),     // instrument_name, channel, midi_note
 ];
 
 /// Get expected arity for a builtin (None if not a builtin)
@@ -776,6 +779,37 @@ pub fn emit_builtin(
             utilities::emit_beep(args, out);
             true
         }
+
+        // ===== Pitched Instrument =====
+        // PLAY_NOTE("instrument_name", channel, midi_note)
+        //   instrument_name: string literal matching a .vinstr asset
+        //   channel: 0=A, 1=B, 2=C
+        //   midi_note: MIDI note number 24-107 (C1-B7)
+        "PLAY_NOTE" => {
+            if args.len() != 3 {
+                out.push_str("    ; ERROR: PLAY_NOTE requires 3 arguments (instrument_name, channel, midi_note)\n");
+            } else if let Expr::StringLit(instr_name) = &args[0] {
+                let symbol = format!("_{}_INSTR", instr_name.to_uppercase().replace('-', "_").replace(' ', "_"));
+                out.push_str(&format!("    ; PLAY_NOTE(\"{}\", channel, note)\n", instr_name));
+                // Load instrument ROM block address into NOTE_ARG_INSTR
+                out.push_str(&format!("    LDX #{}\n", symbol));
+                out.push_str("    STX >NOTE_ARG_INSTR\n");
+                // Evaluate channel (0/1/2) → NOTE_ARG_CHANNEL
+                expressions::emit_simple_expr(&args[1], out, assets);
+                out.push_str("    STB >NOTE_ARG_CHANNEL\n");
+                // Evaluate midi_note → NOTE_ARG_NOTE
+                expressions::emit_simple_expr(&args[2], out, assets);
+                out.push_str("    STB >NOTE_ARG_NOTE\n");
+                // Call runtime
+                out.push_str("    JSR PLAY_NOTE_RUNTIME\n");
+            } else {
+                out.push_str("    ; ERROR: PLAY_NOTE first argument must be a string literal (instrument name)\n");
+            }
+            out.push_str("    LDD #0\n");
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
         "OLD_LEN" => {
             out.push_str("    ; LEN: Get array/string length\n");
             expressions::emit_simple_expr(&args[0], out, assets);
@@ -843,6 +877,40 @@ pub fn emit_builtin(
             } else {
                 out.push_str("    ; ERROR: DRAW_ANIM requires a string literal name\n");
             }
+            true
+        }
+
+        // ===== Enemy system builtins =====
+        "SPAWN_ENEMIES" => {
+            if args.len() != 1 {
+                out.push_str("    ; ERROR: SPAWN_ENEMIES requires 1 argument (level name)\n");
+            } else if let Expr::StringLit(level_name) = &args[0] {
+                out.push_str(&format!("    ; SPAWN_ENEMIES(\"{level_name}\")\n"));
+                if use_banked_assets() {
+                    // Multibank: LOAD_LEVEL already set LEVEL_BANK/LEVEL_ENEMY_COUNT/LEVEL_ENEMY_INSTANCES_PTR
+                    out.push_str("    JSR SPAWN_ENEMIES_BANKED\n");
+                } else {
+                    // Single-bank: use direct symbol references (set by LOAD_LEVEL_RUNTIME)
+                    let sym = level_name.to_uppercase().replace('-', "_").replace(' ', "_");
+                    out.push_str(&format!("    LDB #_{sym}_ENEMY_COUNT\n"));
+                    out.push_str(&format!("    LDX #_{sym}_ENEMY_INSTANCES\n"));
+                    out.push_str("    JSR SPAWN_ENEMIES_RUNTIME\n");
+                }
+            } else {
+                out.push_str("    ; ERROR: SPAWN_ENEMIES requires a string literal level name\n");
+            }
+            true
+        }
+
+        "UPDATE_ENEMIES" => {
+            out.push_str("    ; UPDATE_ENEMIES: advance enemy AI and movement\n");
+            out.push_str("    JSR UPDATE_ENEMIES_RUNTIME\n");
+            true
+        }
+
+        "DRAW_ENEMIES" => {
+            out.push_str("    ; DRAW_ENEMIES: render all active enemies\n");
+            out.push_str("    JSR DRAW_ENEMIES_RUNTIME\n");
             true
         }
 

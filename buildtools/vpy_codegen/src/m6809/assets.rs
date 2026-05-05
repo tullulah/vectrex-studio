@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use crate::{AssetInfo, AssetType};
 use vpy_parser::{Module, Item, Stmt, Expr};
 
@@ -34,7 +34,38 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
         }
     }
 
+    // Collect enemy types referenced in used .vplay files
+    for level_name in &level_names {
+        if let Some(level_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Level) && &a.name == level_name
+        }) {
+            if let Ok(content) = std::fs::read_to_string(&level_asset.path) {
+                if let Ok(level) = serde_json::from_str::<serde_json::Value>(&content) {
+                    for layer in &["background", "gameplay", "foreground"] {
+                        if let Some(objects) = level
+                            .get("layers")
+                            .and_then(|l| l.get(layer))
+                            .and_then(|l| l.as_array())
+                        {
+                            for obj in objects {
+                                if let Some(et) = obj
+                                    .get("enemyType")
+                                    .and_then(|v| v.as_str())
+                                {
+                                    if !et.is_empty() {
+                                        used_names.insert(et.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Filter assets to only those referenced in code (or used by levels)
+    // Enemy assets that were discovered via level scanning are included here.
     assets.iter()
         .filter(|asset| used_names.contains(&asset.name))
         .cloned()
@@ -332,6 +363,23 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
+    // Search for enemy assets (assets/enemies/*.venemy)
+    let enemies_dir = project_root.join("assets").join("enemies");
+    if enemies_dir.is_dir() {
+        for entry in fs::read_dir(&enemies_dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("venemy") {
+                if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                    assets.push(AssetInfo {
+                        name: name.to_string(),
+                        path: path.display().to_string(),
+                        asset_type: AssetType::Enemy,
+                    });
+                }
+            }
+        }
+    }
+
     // Sort assets alphabetically by name for consistency
     assets.sort_by(|a, b| a.name.cmp(&b.name));
     assets
@@ -354,6 +402,31 @@ pub struct AssetDistribution {
     pub total_assets: usize,
     /// Total bytes distributed
     pub total_bytes: usize,
+}
+
+/// Build a map of vec asset name → (half_width, half_height) from already-generated vec ASM.
+/// Used to emit literal byte values in level objects instead of cross-bank EQU references.
+fn build_vec_dims(vec_assets: &[SizedAsset]) -> HashMap<String, (u32, u32)> {
+    let mut dims: HashMap<String, (u32, u32)> = HashMap::new();
+    for sa in vec_assets {
+        let name_up = sa.info.name.to_uppercase().replace('-', "_").replace(' ', "_");
+        let hw_marker = format!("_{}_HALF_WIDTH EQU ", name_up);
+        let hh_marker = format!("_{}_HALF_HEIGHT EQU ", name_up);
+        let mut hw = 0u32;
+        let mut hh = 0u32;
+        for line in sa.asm_code.lines() {
+            let t = line.trim();
+            if let Some(rest) = t.strip_prefix(&hw_marker) {
+                hw = rest.trim().parse().unwrap_or(0);
+            } else if let Some(rest) = t.strip_prefix(&hh_marker) {
+                hh = rest.trim().parse().unwrap_or(0);
+            }
+        }
+        if hw > 0 || hh > 0 {
+            dims.insert(sa.info.name.to_lowercase(), (hw, hh));
+        }
+    }
+    dims
 }
 
 /// Calculate sizes and generate ASM for all assets
@@ -395,10 +468,15 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
         }
     }
     
+    let vec_dims = build_vec_dims(&sized_assets.iter()
+        .filter(|a| matches!(a.info.asset_type, AssetType::Vector))
+        .cloned()
+        .collect::<Vec<_>>());
+
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Level)) {
         match crate::levelres::VPlayLevel::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                let asm_code = resource.compile_to_asm();
+                let asm_code = resource.compile_to_asm_with_vec_dims(&vec_dims);
                 let binary_size = estimate_asm_size(&asm_code);
                 sized_assets.push(SizedAsset {
                     info: asset.clone(),
@@ -411,7 +489,7 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
             }
         }
     }
-    
+
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Sfx)) {
         match crate::sfxres::SfxResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
@@ -459,6 +537,23 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load instrument asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Enemy)) {
+        match crate::venemy::EnemyResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                let binary_size = resource.estimate_binary_size();
+                let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
+                sized_assets.push(SizedAsset {
+                    info: asset.clone(),
+                    binary_size,
+                    asm_code,
+                });
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load enemy asset '{}': {}", asset.name, e);
             }
         }
     }
@@ -576,18 +671,22 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
     out.push_str("; EMBEDDED ASSETS (vectors, music, levels, SFX)\n");
     out.push_str(";***************************************************************************\n\n");
     
-    // Generate vector assets
+    // Generate vector assets (also collect dims for level compilation)
+    let mut sg_vec_assets: Vec<SizedAsset> = Vec::new();
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Vector)) {
         match crate::vecres::VecResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
+                let asm = resource.compile_to_asm_with_name(Some(&asset.name));
+                out.push_str(&asm);
+                sg_vec_assets.push(SizedAsset { info: asset.clone(), binary_size: 0, asm_code: asm });
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load vector asset '{}': {}", asset.name, e);
             }
         }
     }
-    
+    let sg_vec_dims = build_vec_dims(&sg_vec_assets);
+
     // Generate music assets
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Music)) {
         match crate::musres::MusicResource::load(Path::new(&asset.path)) {
@@ -599,12 +698,12 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
             }
         }
     }
-    
+
     // Generate level assets
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Level)) {
         match crate::levelres::VPlayLevel::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                out.push_str(&resource.compile_to_asm());
+                out.push_str(&resource.compile_to_asm_with_vec_dims(&sg_vec_dims));
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load level asset '{}': {}", asset.name, e);
@@ -648,6 +747,18 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
         }
     }
 
+    // Generate enemy assets
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Enemy)) {
+        match crate::venemy::EnemyResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load enemy asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     Ok(out)
 }
 
@@ -681,10 +792,15 @@ pub fn generate_distributed_assets_asm(
         asm.push_str(&format!(";***************************************************************************\n\n"));
         
         for asset in sized_assets {
+            // Enemy type data goes into the helpers bank (generated below) not switchable banks.
+            // Skipping here avoids duplicated labels; the helpers-bank entry is always accessible.
+            if matches!(asset.info.asset_type, AssetType::Enemy) {
+                continue;
+            }
             // Use pre-generated ASM code
             asm.push_str(&asset.asm_code);
             asm.push_str("\n");
-            
+
             // Track for lookup table with correct label suffix based on type
             let symbol_name = asset.info.name.to_uppercase().replace("-", "_").replace(" ", "_");
             let label = match asset.info.asset_type {
@@ -694,6 +810,7 @@ pub fn generate_distributed_assets_asm(
                 AssetType::Level => format!("_{}_LEVEL", symbol_name),
                 AssetType::Animation => format!("_ANIM_{}", symbol_name),
                 AssetType::Instrument => format!("_{}_INSTR", symbol_name),
+                AssetType::Enemy => format!("_{}_ENEMY", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }
@@ -726,6 +843,16 @@ pub fn generate_distributed_assets_asm(
         .filter(|(_, _, _, t)| matches!(t, AssetType::Instrument))
         .cloned()
         .collect();
+    // Enemy assets are placed in the helpers bank (always accessible from DRAW_ENEMIES_RUNTIME).
+    // They are NOT in asset_entries (skipped above), so rebuild from the raw AssetInfo list.
+    // bank_id is set to helpers_bank so ENEMY_BANK_TABLE correctly reflects their location.
+    let enemy_entries: Vec<(String, u8, String, AssetType)> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Enemy))
+        .map(|a| {
+            let sym = a.name.to_uppercase().replace('-', "_").replace(' ', "_");
+            (a.name.clone(), helpers_bank, format!("_{}_ENEMY", sym), AssetType::Enemy)
+        })
+        .collect();
 
     // Sort each list alphabetically by name for index consistency
     let mut vector_entries = vector_entries;
@@ -734,20 +861,22 @@ pub fn generate_distributed_assets_asm(
     let mut level_entries = level_entries;
     let mut anim_entries = anim_entries;
     let mut instr_entries = instr_entries;
+    let mut enemy_entries = enemy_entries;
     vector_entries.sort_by(|a, b| a.0.cmp(&b.0));
     music_entries.sort_by(|a, b| a.0.cmp(&b.0));
     sfx_entries.sort_by(|a, b| a.0.cmp(&b.0));
     level_entries.sort_by(|a, b| a.0.cmp(&b.0));
     anim_entries.sort_by(|a, b| a.0.cmp(&b.0));
     instr_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    enemy_entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     // Generate lookup tables for helpers bank
     let mut lookup_asm = String::new();
     lookup_asm.push_str(";***************************************************************************\n");
     lookup_asm.push_str("; ASSET LOOKUP TABLES (for banked asset access)\n");
-    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels, {} animations, {} instruments\n",
+    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels, {} animations, {} instruments, {} enemies\n",
         vector_entries.len(), music_entries.len(), sfx_entries.len(),
-        level_entries.len(), anim_entries.len(), instr_entries.len()));
+        level_entries.len(), anim_entries.len(), instr_entries.len(), enemy_entries.len()));
     lookup_asm.push_str(";***************************************************************************\n\n");
     
     // ===== VECTOR TABLES =====
@@ -880,6 +1009,58 @@ pub fn generate_distributed_assets_asm(
         lookup_asm.push_str("\n");
     }
 
+    // ===== ENEMY TABLES =====
+    // Enemy type data is emitted directly into the helpers bank so DRAW_ENEMIES_RUNTIME
+    // can always read type headers and action tables without bank switching.
+    // The action table uses FCB sprite_idx (index into VECTOR_ADDR_TABLE) instead of
+    // FDB sprite_ptr, enabling DRAW_VECTOR_BANKED for cross-bank sprite rendering.
+    if !enemy_entries.is_empty() {
+        // Build vector-name → index map for resolving sprite references in .venemy files
+        let vec_idx_map: std::collections::HashMap<String, u8> = vector_entries.iter()
+            .enumerate()
+            .map(|(i, (name, _, _, _))| (name.clone(), i as u8))
+            .collect();
+
+        lookup_asm.push_str("; Enemy Asset Index Mapping (all in helpers bank for direct access):\n");
+        for (idx, (name, bank_id, _label, _)) in enemy_entries.iter().enumerate() {
+            lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ENEMY_BANK_TABLE:\n");
+        for (_, bank_id, _, _) in &enemy_entries {
+            lookup_asm.push_str(&format!("    FCB {}              ; Bank ID (helpers bank — always mapped)\n", bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ENEMY_ADDR_TABLE:\n");
+        for (name, _, label, _) in &enemy_entries {
+            lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
+        }
+        lookup_asm.push_str("\n");
+
+        // Emit enemy type data (indexed format) directly into the helpers bank
+        lookup_asm.push_str(";***************************************************************************\n");
+        lookup_asm.push_str("; ENEMY TYPE DEFINITIONS (helpers bank — always accessible)\n");
+        lookup_asm.push_str("; Action table uses FCB sprite_idx for DRAW_VECTOR_BANKED compatibility\n");
+        lookup_asm.push_str(";***************************************************************************\n");
+        for (name, _, _, _) in &enemy_entries {
+            let enemy_asset = assets.iter()
+                .find(|a| &a.name == name && matches!(a.asset_type, AssetType::Enemy));
+            if let Some(sa) = enemy_asset {
+                match crate::venemy::EnemyResource::load(std::path::Path::new(&sa.path)) {
+                    Ok(resource) => {
+                        lookup_asm.push_str(&resource.compile_to_asm_indexed(Some(name), &vec_idx_map));
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to reload enemy '{}' for helpers bank: {}", name, e);
+                    }
+                }
+            }
+        }
+        lookup_asm.push_str("\n");
+    }
+
     // Legacy unified tables (deprecated, keep for compatibility)
     lookup_asm.push_str("; Legacy unified tables (all assets)\n");
     lookup_asm.push_str("ASSET_BANK_TABLE:\n");
@@ -908,7 +1089,10 @@ pub fn generate_distributed_assets_asm(
     if !level_entries.is_empty() {
         lookup_asm.push_str(&generate_load_level_banked_wrapper());
     }
-    
+    if !enemy_entries.is_empty() {
+        lookup_asm.push_str(&generate_spawn_enemies_banked_wrapper());
+    }
+
     Ok((bank_asm, lookup_asm))
 }
 
@@ -949,6 +1133,13 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm.push_str("    CLR MIRROR_Y\n");
     asm.push_str("    CLR DRAW_VEC_INTENSITY\n");
     asm.push_str("    JSR $F1AA            ; DP_to_D0\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Position beam at DRAW_VEC_X/Y before drawing\n");
+    asm.push_str("    ; With DP=$D0, RAM vars need extended addressing (> prefix)\n");
+    asm.push_str("    JSR Reset0Ref        ; Reset integrators to center (0,0)\n");
+    asm.push_str("    LDA >DRAW_VEC_Y      ; A = Y position\n");
+    asm.push_str("    LDB >DRAW_VEC_X      ; B = X position\n");
+    asm.push_str("    JSR Moveto_d         ; Move beam to (Y, X)\n");
     asm.push_str("\n");
     asm.push_str("    ; Loop over all paths (header bytes 0-1 = path_count FDB, +2.. = FDB table)\n");
     asm.push_str("    LDD ,X               ; D = path_count (16-bit)\n");
@@ -1127,6 +1318,36 @@ fn generate_load_level_banked_wrapper() -> String {
     asm.push_str("    LDD #1               ; Return success\n");
     asm.push_str("    STD RESULT\n");
     asm.push_str("\n");
+    asm.push_str("    RTS\n");
+    asm.push_str("\n");
+
+    asm
+}
+
+/// Generate the SPAWN_ENEMIES_BANKED runtime wrapper for helpers bank
+fn generate_spawn_enemies_banked_wrapper() -> String {
+    let mut asm = String::new();
+
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("; SPAWN_ENEMIES_BANKED - Spawn enemies using level data with bank switching\n");
+    asm.push_str("; Reads LEVEL_BANK, LEVEL_ENEMY_COUNT, LEVEL_ENEMY_INSTANCES_PTR from RAM\n");
+    asm.push_str("; (all three set by LOAD_LEVEL_BANKED/LOAD_LEVEL_RUNTIME)\n");
+    asm.push_str("; Uses: A, B, X, Y\n");
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("SPAWN_ENEMIES_BANKED:\n");
+    asm.push_str("    LDB >LEVEL_ENEMY_COUNT\n");
+    asm.push_str("    BEQ SEB_DONE             ; no enemies in this level\n");
+    asm.push_str("    LDA CURRENT_ROM_BANK\n");
+    asm.push_str("    PSHS A                   ; save current bank\n");
+    asm.push_str("    LDA >LEVEL_BANK\n");
+    asm.push_str("    STA CURRENT_ROM_BANK\n");
+    asm.push_str("    STA $DF00                ; switch to level bank\n");
+    asm.push_str("    LDX >LEVEL_ENEMY_INSTANCES_PTR\n");
+    asm.push_str("    JSR SPAWN_ENEMIES_RUNTIME ; B=count, X=instances ptr\n");
+    asm.push_str("    PULS A\n");
+    asm.push_str("    STA CURRENT_ROM_BANK\n");
+    asm.push_str("    STA $DF00                ; restore bank\n");
+    asm.push_str("SEB_DONE:\n");
     asm.push_str("    RTS\n");
     asm.push_str("\n");
 

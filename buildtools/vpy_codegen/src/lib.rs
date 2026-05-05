@@ -14,8 +14,12 @@ pub mod vecres;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;
+pub mod instrres;
 pub mod animres;
+pub mod venemy;
 pub mod stack_validator;
+
+pub use venemy::*;
 
 /// Compilation target selection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,11 +96,13 @@ pub struct AssetInfo {
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AssetType {
-    Vector,    // .vec file
-    Music,     // .vmus file (background music, loops)
-    Sfx,       // .vsfx file (sound effect, parametric SFXR-style)
-    Level,     // .vlevel file (level data for games)
-    Animation, // .vanim file (frame-by-frame vector animation)
+    Vector,     // .vec file
+    Music,      // .vmus file (background music, loops)
+    Sfx,        // .vsfx file (sound effect, parametric SFXR-style)
+    Level,      // .vlevel file (level data for games)
+    Animation,  // .vanim file (frame-by-frame vector animation)
+    Instrument, // .vinstr file (pitched instrument timbre)
+    Enemy,      // .venemy file (enemy type definition)
 }
 
 #[derive(Debug, Clone, Error)]

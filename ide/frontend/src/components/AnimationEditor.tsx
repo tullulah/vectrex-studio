@@ -424,6 +424,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
   const [selectedFrameIdx, setSelectedFrameIdx] = useState(0);
   const [selectedPathIdx, setSelectedPathIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [hoverPoint, setHoverPoint] = useState<{
     pathIdx: number;
     ptIdx: number;
@@ -561,7 +562,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         return next;
       });
     };
-    const ms = (currentFrame.duration_ticks ?? 4) * 20;
+    const ms = (currentFrame.duration_ticks ?? 4) * 20 / playbackSpeed;
     playIntervalRef.current = setInterval(tick, ms);
     return () => {
       if (playIntervalRef.current !== null) {
@@ -569,7 +570,7 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         playIntervalRef.current = null;
       }
     };
-  }, [playing, currentFrame.duration_ticks, res.frames.length, res.loop]);
+  }, [playing, currentFrame.duration_ticks, res.frames.length, res.loop, playbackSpeed]);
 
   // ---- Mutation helpers ----
 
@@ -1239,6 +1240,20 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
         <button onClick={togglePlay} style={{ ...toolBtnStyle, minWidth: 60 }}>
           {playing ? 'Pause' : 'Play'}
         </button>
+
+        <select
+          value={playbackSpeed}
+          onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+          title="Playback speed"
+          style={{ background: '#2a2a4e', color: '#ccc', border: '1px solid #3a3a6a', borderRadius: 3, fontSize: 11, padding: '2px 4px', cursor: 'pointer' }}
+        >
+          <option value={0.1}>0.1×</option>
+          <option value={0.25}>0.25×</option>
+          <option value={0.5}>0.5×</option>
+          <option value={1}>1×</option>
+          <option value={2}>2×</option>
+          <option value={4}>4×</option>
+        </select>
 
         <span style={{ color: '#aaa', fontSize: 12 }}>
           Frame {safeFrameIdx + 1} / {totalFrames}

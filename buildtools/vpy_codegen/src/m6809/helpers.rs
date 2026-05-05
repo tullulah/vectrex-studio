@@ -166,6 +166,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");
         ram.allocate("LEVEL_GP_PTR", 2, "GP active pointer (RAM buffer after LOAD_LEVEL)");
         ram.allocate("LEVEL_BANK", 1, "Bank ID for current level (for multibank)");
+        ram.allocate("LEVEL_ENEMY_COUNT", 1, "Enemy count from current level header");
+        ram.allocate("LEVEL_ENEMY_INSTANCES_PTR", 2, "Ptr to enemy instances table in level bank");
         // SHOW_LEVEL_RUNTIME draw temps (shared with DRAW_VECTOR if not already allocated)
         if !needed.contains("DRAW_VECTOR") && !needed.contains("DRAW_VECTOR_EX") {
             ram.allocate("DRAW_VEC_X_HI", 1, "SHOW_LEVEL: vector draw X high byte (16-bit)");
@@ -197,7 +199,22 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("UGFC_DX", 1, "GP-FG |dx|");
         ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
     }
-    
+
+    // Enemy system variables
+    if needed.contains("ENEMY_SYSTEM") || needed.contains("SPAWN_ENEMIES")
+        || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES")
+    {
+        let max_enemies: usize = module.meta.max_enemies.unwrap_or(8) as usize;
+        const ENEMY_STRIDE: usize = 13;
+        ram.allocate("ENEMY_POOL", max_enemies * ENEMY_STRIDE,
+            "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr × N)");
+        ram.allocate("ENEMY_LOOP_IDX", 1, "Enemy loop counter");
+        ram.allocate("ENEMY_COUNT", 1, "Active enemy count");
+        ram.allocate("ENEMY_SCRATCH_PTR", 2, "Scratch pointer for enemy iteration");
+        ram.allocate("ENEMY_SCRATCH_X", 2, "Enemy scratch X");
+        ram.allocate("ENEMY_SCRATCH_Y", 2, "Enemy scratch Y");
+    }
+
     // Text scale (2 bytes): written by SET_TEXT_SIZE, read by VECTREX_PRINT_TEXT/NUMBER
     // Vec_Text_Height ($C82A): signed byte, -n (default $F8 = -8 = normal)
     // Vec_Text_Width ($C82B): unsigned byte, n*9 (default 72 = $48 = normal)
@@ -238,6 +255,15 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
 
     if needed.contains("BEEP") {
         ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
+    }
+
+    // NOTE_STATE: per-channel state for PLAY_NOTE / NOTE_UPDATE_RUNTIME
+    // 10 bytes × 3 channels = 30 bytes
+    if crate::m6809::functions::has_note_calls(module) {
+        ram.allocate("NOTE_STATE", 30, "Pitched note state (10 bytes x 3 channels)");
+        ram.allocate("NOTE_ARG_INSTR", 2, "PLAY_NOTE argument: instrument ROM block address");
+        ram.allocate("NOTE_ARG_CHANNEL", 1, "PLAY_NOTE argument: channel (0/1/2)");
+        ram.allocate("NOTE_ARG_NOTE", 1, "PLAY_NOTE argument: MIDI note (24-107)");
     }
 
     // Animation state: 2 bytes per unique animation name used via DRAW_ANIM()
@@ -434,6 +460,14 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 if let Some(Expr::StringLit(anim_name)) = args.first() {
                     needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
                 }
+            }
+
+            // Enemy system helpers
+            if name_upper == "SPAWN_ENEMIES" || name_upper == "UPDATE_ENEMIES" || name_upper == "DRAW_ENEMIES" {
+                needed.insert("SPAWN_ENEMIES".to_string());
+                needed.insert("UPDATE_ENEMIES".to_string());
+                needed.insert("DRAW_ENEMIES".to_string());
+                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
             }
 
             // Recursively analyze arguments
@@ -692,6 +726,13 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         emit_beep_update_runtime(&mut asm);
     }
 
+    // NOTE_UPDATE_RUNTIME + PLAY_NOTE_RUNTIME: Auto-inject if PLAY_NOTE is used
+    if crate::m6809::functions::has_note_calls(module) {
+        emit_note_period_table(&mut asm);
+        emit_play_note_runtime(&mut asm);
+        emit_note_update_runtime(&mut asm);
+    }
+
     // DRAW_VECTOR_3D_RUNTIME: 3D rotation and drawing
     if needed.contains("DRAW_VECTOR_3D") {
         emit_draw_vector_3d_runtime(&mut asm);
@@ -700,6 +741,12 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
     // DRAW_ANIM_RUNTIME: animation player
     if needed.contains("DRAW_ANIM_RUNTIME") {
         emit_draw_anim_runtime(&mut asm);
+    }
+
+    // Enemy system runtime subroutines
+    if needed.contains("SPAWN_ENEMIES") || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES") {
+        let max_enemies = module.meta.max_enemies.unwrap_or(8) as usize;
+        emit_enemy_system_runtime(&mut asm, max_enemies, is_multibank);
     }
 
     Ok(asm)
@@ -1365,6 +1412,263 @@ BEEP_UPDATE_DONE:\n\
         RTS\n\n"
     );
 }
+
+/// Emit NOTE_PERIOD_TABLE: 84 FDB entries for MIDI notes 24-107 → AY period
+/// Formula (calibrated for JSVecX): period = round(88200 / (440 * 2^((n-69)/12)))
+fn emit_note_period_table(asm: &mut String) {
+    asm.push_str(
+        "; ============================================================================\n\
+        ; NOTE_PERIOD_TABLE — MIDI note 24 (C1) to 107 (B7) → AY-3-8910 period\n\
+        ; Each entry is a 2-byte FDB (big-endian). Index = midi_note - 24.\n\
+        ; Formula: period = round(88200 / (440 * 2^((midi_note - 69) / 12)))\n\
+        ; ============================================================================\n\
+        NOTE_PERIOD_TABLE:\n"
+    );
+    for midi in 24u8..=107u8 {
+        let freq = 440.0_f32 * 2.0_f32.powf((midi as f32 - 69.0) / 12.0);
+        let period = (88200.0_f32 / freq).round() as u16;
+        let period = period.max(1).min(4095);
+        // Emit note name as comment
+        let note_names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+        let octave = (midi as i32 - 12) / 12;
+        let note_name = note_names[(midi as usize) % 12];
+        asm.push_str(&format!("    FDB {}    ; MIDI {} ({}{}) freq={:.1}Hz\n",
+            period, midi, note_name, octave, freq));
+    }
+    asm.push_str("\n");
+}
+
+/// Emit PSG channel register number lookup tables
+fn emit_note_channel_tables(asm: &mut String) {
+    asm.push_str(
+        "NOTE_CH_TONE_LO_REGS:\n\
+        \tFCB 0,2,4          ; R0(A), R2(B), R4(C) — tone period low\n\
+        NOTE_CH_TONE_HI_REGS:\n\
+        \tFCB 1,3,5          ; R1(A), R3(B), R5(C) — tone period high\n\
+        NOTE_CH_VOL_REGS:\n\
+        \tFCB 8,9,10         ; R8(A), R9(B), R10(C) — volume\n\
+        NOTE_CH_MIX_TONE_BITS:\n\
+        \tFCB 1,2,4          ; mixer bit for tone A, B, C\n\
+        NOTE_CH_MIX_NOISE_BITS:\n\
+        \tFCB 8,16,32        ; mixer bit for noise A, B, C\n\
+        \n"
+    );
+}
+
+/// Emit PLAY_NOTE_RUNTIME
+/// Inputs come via NOTE_ARG_INSTR (2-byte ptr), NOTE_ARG_CHANNEL (1-byte), NOTE_ARG_NOTE (1-byte)
+/// Uses TMPPTR (channel state ptr), TMPVAL+1 (channel_id scratch), TMPPTR2 (unused scratch).
+/// Corrupts A, B, X, U. Preserves Y, S (balanced PSHS/PULS).
+fn emit_play_note_runtime(asm: &mut String) {
+    // Emit the channel register lookup tables first
+    emit_note_channel_tables(asm);
+
+    let lines = vec![
+        "; ============================================================================",
+        "; PLAY_NOTE_RUNTIME",
+        "; Inputs (RAM): NOTE_ARG_INSTR (ptr), NOTE_ARG_CHANNEL (0/1/2), NOTE_ARG_NOTE (24-107)",
+        "; Fills NOTE_STATE slot and writes tone/volume/mixer to PSG via Sound_Byte.",
+        "; ============================================================================",
+        "PLAY_NOTE_RUNTIME:",
+        "    ; X = NOTE_STATE + channel*10",
+        "    LDA >NOTE_ARG_CHANNEL",
+        "    LDB #10",
+        "    MUL",
+        "    ADDD #NOTE_STATE",
+        "    TFR D,X",
+        "    STX >TMPPTR             ; save channel state ptr",
+        "    ; Fill state slot",
+        "    LDA >NOTE_ARG_CHANNEL",
+        "    STA ,X                  ; [+0] channel_id",
+        "    LDA #1",
+        "    STA 1,X                 ; [+1] active=1",
+        "    LDU >NOTE_ARG_INSTR     ; U = instrument block",
+        "    LDA ,U                  ; [instr+0] duration_frames",
+        "    STA 2,X                 ; [+2] frames_left",
+        "    LDA >NOTE_ARG_NOTE",
+        "    STA 3,X                 ; [+3] base_note",
+        "    STU 4,X                 ; [+4,5] instr_ptr",
+        "    CLR 6,X                 ; [+6] arp_pos=0",
+        "    LDA 2,U                 ; [instr+2] arpeggio_count",
+        "    BNE PNR_arp_on",
+        "    LDA #$FF",
+        "    BRA PNR_arp_store",
+        "PNR_arp_on:",
+        "    LDA 3,U                 ; [instr+3] arpeggio_speed_frames",
+        "PNR_arp_store:",
+        "    STA 7,X                 ; [+7] arp_timer",
+        "    ; Compute period for base_note",
+        "    LDA >NOTE_ARG_NOTE",
+        "    JSR pnr_note_to_period  ; D = AY period",
+        "    LDX >TMPPTR",
+        "    STD 8,X                 ; [+8,9] period hi:lo",
+        "    ; Write PSG (DP=$D0 required)",
+        "    LDA ,X",
+        "    STA >TMPVAL+1           ; save channel_id",
+        "    PSHS DP",
+        "    LDA #$D0",
+        "    TFR A,DP",
+        "    ; Tone period low",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_LO_REGS",
+        "    LDA B,U                 ; A = PSG reg for tone-lo",
+        "    LDB 9,X                 ; B = period low byte",
+        "    JSR Sound_Byte",
+        "    ; Tone period high",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_HI_REGS",
+        "    LDA B,U",
+        "    LDB 8,X                 ; B = period high (4 bits)",
+        "    ANDB #$0F",
+        "    JSR Sound_Byte",
+        "    ; Volume",
+        "    LDU >NOTE_ARG_INSTR",
+        "    LDB >TMPVAL+1",
+        "    PSHS X",
+        "    LDX #NOTE_CH_VOL_REGS",
+        "    LDA B,X",
+        "    PULS X",
+        "    LDB 1,U                 ; [instr+1] volume",
+        "    ANDB #$0F",
+        "    JSR Sound_Byte",
+        "    ; Mixer R7: clear tone-enable bit (0=enabled)",
+        "    LDB >TMPVAL+1",
+        "    PSHS X",
+        "    LDX #NOTE_CH_MIX_TONE_BITS",
+        "    LDA B,X",
+        "    PULS X",
+        "    COMA                    ; invert: NAND mask to clear tone bit",
+        "    ANDA >$C807             ; clear bit in mixer shadow",
+        "    STA >$C807",
+        "    LDA #7",
+        "    LDB >$C807",
+        "    JSR Sound_Byte",
+        "    PULS DP",
+        "    RTS",
+        "",
+        "; pnr_note_to_period: A = MIDI note (24-107) -> D = AY period",
+        "pnr_note_to_period:",
+        "    SUBA #24",
+        "    LDB A",
+        "    CLRA",
+        "    ASLB                    ; *2 for FDB entries",
+        "    ROLA",
+        "    PSHS D",
+        "    LDU #NOTE_PERIOD_TABLE",
+        "    LDD D,U",
+        "    PULS U                  ; discard offset",
+        "    RTS",
+        "",
+    ];
+    for line in &lines {
+        asm.push_str(line);
+        asm.push('\n');
+    }
+}
+
+/// Emit NOTE_UPDATE_RUNTIME — called once per frame (auto-injected)
+/// Handles: frame countdown + mute, arpeggio cycling and period re-apply.
+fn emit_note_update_runtime(asm: &mut String) {
+    let lines = vec![
+        "; ============================================================================",
+        "; NOTE_UPDATE_RUNTIME — tick note timers and arpeggio (called every frame)",
+        "; ============================================================================",
+        "NOTE_UPDATE_RUNTIME:",
+        "    LDX #NOTE_STATE",
+        "    JSR note_upd_ch",
+        "    LDX #NOTE_STATE+10",
+        "    JSR note_upd_ch",
+        "    LDX #NOTE_STATE+20",
+        "    JSR note_upd_ch",
+        "    RTS",
+        "",
+        "; note_upd_ch: X = ptr to 10-byte channel slot",
+        "note_upd_ch:",
+        "    LDA 1,X                 ; active?",
+        "    BEQ note_upd_done",
+        "    DEC 2,X                 ; frames_left--",
+        "    BNE note_upd_arp",
+        "    ; Duration expired: mute volume register",
+        "    CLR 1,X                 ; active=0",
+        "    LDA ,X                  ; channel_id",
+        "    STA >TMPVAL+1",
+        "    PSHS DP",
+        "    LDA #$D0",
+        "    TFR A,DP",
+        "    LDB >TMPVAL+1",
+        "    LDX #NOTE_CH_VOL_REGS",
+        "    LDA B,X",
+        "    LDB #0",
+        "    JSR Sound_Byte",
+        "    PULS DP",
+        "note_upd_done:",
+        "    RTS",
+        "",
+        "note_upd_arp:",
+        "    LDU 4,X                 ; U = instr_ptr",
+        "    LDA 2,U                 ; [instr+2] arpeggio_count",
+        "    BEQ note_upd_done",
+        "    DEC 7,X                 ; arp_timer--",
+        "    BNE note_upd_done",
+        "    ; Reload timer",
+        "    LDA 3,U",
+        "    STA 7,X",
+        "    ; Advance arp_pos",
+        "    LDA 6,X",
+        "    INCA",
+        "    CMPA 2,U",
+        "    BLO note_upd_arpok",
+        "    CLRA",
+        "note_upd_arpok:",
+        "    STA 6,X",
+        "    ; new_note = base_note + intervals[arp_pos]",
+        "    STX >TMPPTR",
+        "    LEAX 4,U                ; X = &intervals[0]",
+        "    LDB A,X                 ; B = signed semitone offset",
+        "    LDX >TMPPTR",
+        "    LDA 3,X                 ; A = base_note",
+        "    ABA                     ; A = base_note + offset",
+        "    ; Clamp 24-107",
+        "    CMPA #24",
+        "    BHS note_upd_hi",
+        "    LDA #24",
+        "    BRA note_upd_period",
+        "note_upd_hi:",
+        "    CMPA #107",
+        "    BLS note_upd_period",
+        "    LDA #107",
+        "note_upd_period:",
+        "    STX >TMPPTR",
+        "    JSR pnr_note_to_period  ; D = period",
+        "    LDX >TMPPTR",
+        "    STD 8,X",
+        "    ; Write tone period to PSG",
+        "    LDA ,X                  ; channel_id",
+        "    STA >TMPVAL+1",
+        "    PSHS DP",
+        "    LDA #$D0",
+        "    TFR A,DP",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_LO_REGS",
+        "    LDA B,U",
+        "    LDB 9,X",
+        "    JSR Sound_Byte",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_HI_REGS",
+        "    LDA B,U",
+        "    LDB 8,X",
+        "    ANDB #$0F",
+        "    JSR Sound_Byte",
+        "    PULS DP",
+        "    RTS",
+        "",
+    ];
+    for line in &lines {
+        asm.push_str(line);
+        asm.push('\n');
+    }
+}
+
 
 /// Generate one inlined SMUL_LUT body with unique labels (index n = 0..9).
 /// Saves 14c JSR/RTS overhead per call vs JSR SMUL_LUT.
@@ -2039,5 +2343,387 @@ DAR_DONE:\n\
     STA >DRAW_SCALE\n\
     PULS D,X,Y,U\n\
     RTS\n\n");
+}
+
+/// Emit SPAWN_ENEMIES_RUNTIME, UPDATE_ENEMIES_RUNTIME, DRAW_ENEMIES_RUNTIME.
+///
+/// Enemy pool record layout (ENEMY_POOL_STRIDE = 13 bytes):
+///   +0   active      (1)  0=dead, 1=active
+///   +1,2 x           (2)  signed 16-bit world x (hi, lo)
+///   +3,4 y           (2)  signed 16-bit world y (hi, lo)
+///   +5,6 type_ptr    (2)  pointer to _NAME_ENEMY header
+///   +7   action      (1)  current action index
+///   +8   ai_type     (1)  0=static,1=patrol,2=chase,3=flee
+///   +9   hp          (1)  current HP
+///   +10  wp_idx      (1)  current patrol waypoint index
+///   +11,12 wp_ptr    (2)  pointer to waypoint table (0 = none)
+///
+/// Instance record layout (levelres.rs, 12 bytes):
+///   +0,1  type_ptr (FDB)
+///   +2,3  spawn_x  (FDB)
+///   +4,5  spawn_y  (FDB)
+///   +6    ai_type  (FCB)
+///   +7    wave     (FCB)
+///   +8    respawn  (FCB)
+///   +9    wp_count (FCB)
+///   +10,11 wp_ptr  (FDB)
+fn emit_enemy_system_runtime(asm: &mut String, max_enemies: usize, is_multibank: bool) {
+    asm.push_str(&format!(
+"; ============================================================================\n\
+; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 13 bytes)\n\
+; ============================================================================\n\
+ENEMY_POOL_STRIDE EQU 13\n\
+ENEMY_POOL_MAX    EQU {max_enemies}\n\
+\n\
+; SPAWN_ENEMIES_RUNTIME\n\
+; Entry: B = instance count, X = ptr to _LEVEL_ENEMY_INSTANCES table\n\
+; Initialises ENEMY_POOL from the ROM instance table.\n\
+SPAWN_ENEMIES_RUNTIME:\n\
+    STB >ENEMY_COUNT\n\
+    BEQ SPAWN_ENE_DONE\n\
+    ; Zero-clear the pool (B × 13 bytes)\n\
+    STX >ENEMY_SCRATCH_PTR\n\
+    LDY #ENEMY_POOL\n\
+    CLRA\n\
+SPAWN_CLR_LOOP:\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    DECB\n\
+    BNE SPAWN_CLR_LOOP\n\
+    ; Fill pool from instance table\n\
+    LDB >ENEMY_COUNT\n\
+    LDY #ENEMY_POOL\n\
+SPAWN_FILL_LOOP:\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LDA #1\n\
+    STA ,Y              ; +0 active=1\n\
+    LDA 2,X\n\
+    STA 1,Y             ; +1 x hi\n\
+    LDA 3,X\n\
+    STA 2,Y             ; +2 x lo\n\
+    LDA 4,X\n\
+    STA 3,Y             ; +3 y hi\n\
+    LDA 5,X\n\
+    STA 4,Y             ; +4 y lo\n\
+    LDA ,X\n\
+    STA 5,Y             ; +5 type_ptr hi\n\
+    LDA 1,X\n\
+    STA 6,Y             ; +6 type_ptr lo\n\
+    CLR 7,Y             ; +7 action=0 (idle)\n\
+    LDA 6,X\n\
+    STA 8,Y             ; +8 ai_type\n\
+    ; hp = first byte of enemy type block\n\
+    LDX >ENEMY_SCRATCH_PTR  ; reload instance ptr (X still valid here)\n\
+    PSHS B,X,Y\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X             ; X = type_ptr = _NAME_ENEMY header\n\
+    LDA ,X              ; hp byte\n\
+    PULS B,X,Y\n\
+    STA 9,Y             ; +9 hp\n\
+    CLR 10,Y            ; +10 wp_idx=0\n\
+    LDA 10,X\n\
+    STA 11,Y            ; +11 wp_ptr hi\n\
+    LDA 11,X\n\
+    STA 12,Y            ; +12 wp_ptr lo\n\
+    ; advance X by 12 (instance stride)\n\
+    LEAX 12,X\n\
+    STX >ENEMY_SCRATCH_PTR\n\
+    ; advance Y by 13 (pool stride)\n\
+    LEAY 13,Y\n\
+    DECB\n\
+    BNE SPAWN_FILL_LOOP\n\
+SPAWN_ENE_DONE:\n\
+    RTS\n\
+\n"
+    ));
+
+    // UPDATE_ENEMIES_RUNTIME — fixes loop-counter bug (B clobbered by LDB 12,Y) and,
+    // in multibank mode, switches to LEVEL_BANK before reading wp_ptr addresses.
+    if is_multibank {
+        asm.push_str(
+"; UPDATE_ENEMIES_RUNTIME (multibank)\n\
+; Waypoints live in the level bank. Bank is switched at entry and restored at exit.\n\
+; Waypoint table: each entry is 2x FDB = 4 bytes (x hi, x lo, y hi, y lo)\n\
+UPDATE_ENEMIES_RUNTIME:\n\
+    LDB >ENEMY_COUNT\n\
+    BEQ UPD_ENE_DONE\n\
+    LDA CURRENT_ROM_BANK\n\
+    PSHS A              ; save current bank\n\
+    LDA >LEVEL_BANK\n\
+    STA CURRENT_ROM_BANK\n\
+    STA $DF00           ; switch to level bank\n\
+    LDY #ENEMY_POOL\n\
+UPD_ENE_LOOP:\n\
+    PSHS B              ; save loop counter\n\
+    LDA ,Y              ; active?\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    LDA 8,Y             ; ai_type\n\
+    CMPA #1\n\
+    BNE UPD_ENE_NEXT_POP ; only patrol handled\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    BEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
+    TFR D,X             ; X = wp_ptr base (level bank)\n\
+    LDA 10,Y            ; wp_idx\n\
+    ASLA\n\
+    ASLA                ; × 4 bytes per waypoint\n\
+    LEAX A,X            ; X = &wp[wp_idx]\n\
+    LDA ,X              ; target x hi\n\
+    CMPA 1,Y\n\
+    BEQ UPD_TRY_XLO\n\
+    BGT UPD_INC_XHI\n\
+    DEC 1,Y\n\
+    BRA UPD_MOVE_Y\n\
+UPD_INC_XHI:\n\
+    INC 1,Y\n\
+    BRA UPD_MOVE_Y\n\
+UPD_TRY_XLO:\n\
+    LDA 1,X             ; target x lo\n\
+    CMPA 2,Y\n\
+    BEQ UPD_MOVE_Y\n\
+    BGT UPD_INC_XLO\n\
+    DEC 2,Y\n\
+    BRA UPD_MOVE_Y\n\
+UPD_INC_XLO:\n\
+    INC 2,Y\n\
+UPD_MOVE_Y:\n\
+    LDA 2,X             ; target y hi\n\
+    CMPA 3,Y\n\
+    BEQ UPD_TRY_YLO\n\
+    BGT UPD_INC_YHI\n\
+    DEC 3,Y\n\
+    BRA UPD_ENE_NEXT_POP\n\
+UPD_INC_YHI:\n\
+    INC 3,Y\n\
+    BRA UPD_ENE_NEXT_POP\n\
+UPD_TRY_YLO:\n\
+    LDA 3,X             ; target y lo\n\
+    CMPA 4,Y\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    BGT UPD_INC_YLO\n\
+    DEC 4,Y\n\
+    BRA UPD_ENE_NEXT_POP\n\
+UPD_INC_YLO:\n\
+    INC 4,Y\n\
+UPD_ENE_NEXT_POP:\n\
+    PULS B              ; restore loop counter\n\
+    LEAY 13,Y           ; next pool record\n\
+    DECB\n\
+    BNE UPD_ENE_LOOP\n\
+    PULS A              ; restore original bank\n\
+    STA CURRENT_ROM_BANK\n\
+    STA $DF00\n\
+UPD_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    } else {
+        asm.push_str(
+"; UPDATE_ENEMIES_RUNTIME (single-bank)\n\
+; Waypoint table: each entry is 2x FDB = 4 bytes (x hi, x lo, y hi, y lo)\n\
+UPDATE_ENEMIES_RUNTIME:\n\
+    LDB >ENEMY_COUNT\n\
+    BEQ UPD_ENE_DONE\n\
+    LDY #ENEMY_POOL\n\
+UPD_ENE_LOOP:\n\
+    PSHS B              ; save loop counter\n\
+    LDA ,Y              ; active?\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    LDA 8,Y             ; ai_type\n\
+    CMPA #1\n\
+    BNE UPD_ENE_NEXT_POP ; only patrol handled\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    BEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
+    TFR D,X             ; X = wp_ptr base\n\
+    LDA 10,Y            ; wp_idx\n\
+    ASLA\n\
+    ASLA                ; × 4 bytes per waypoint\n\
+    LEAX A,X            ; X = &wp[wp_idx]\n\
+    LDA ,X              ; target x hi\n\
+    CMPA 1,Y\n\
+    BEQ UPD_TRY_XLO\n\
+    BGT UPD_INC_XHI\n\
+    DEC 1,Y\n\
+    BRA UPD_MOVE_Y\n\
+UPD_INC_XHI:\n\
+    INC 1,Y\n\
+    BRA UPD_MOVE_Y\n\
+UPD_TRY_XLO:\n\
+    LDA 1,X             ; target x lo\n\
+    CMPA 2,Y\n\
+    BEQ UPD_MOVE_Y\n\
+    BGT UPD_INC_XLO\n\
+    DEC 2,Y\n\
+    BRA UPD_MOVE_Y\n\
+UPD_INC_XLO:\n\
+    INC 2,Y\n\
+UPD_MOVE_Y:\n\
+    LDA 2,X             ; target y hi\n\
+    CMPA 3,Y\n\
+    BEQ UPD_TRY_YLO\n\
+    BGT UPD_INC_YHI\n\
+    DEC 3,Y\n\
+    BRA UPD_ENE_NEXT_POP\n\
+UPD_INC_YHI:\n\
+    INC 3,Y\n\
+    BRA UPD_ENE_NEXT_POP\n\
+UPD_TRY_YLO:\n\
+    LDA 3,X             ; target y lo\n\
+    CMPA 4,Y\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    BGT UPD_INC_YLO\n\
+    DEC 4,Y\n\
+    BRA UPD_ENE_NEXT_POP\n\
+UPD_INC_YLO:\n\
+    INC 4,Y\n\
+UPD_ENE_NEXT_POP:\n\
+    PULS B              ; restore loop counter\n\
+    LEAY 13,Y           ; next pool record\n\
+    DECB\n\
+    BNE UPD_ENE_LOOP\n\
+UPD_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    }
+
+    asm.push_str(
+"; DRAW_ENEMIES_RUNTIME\n\
+; For each active enemy, draws its current-action sprite.\n\
+; Enemy type header layout: FCB hp, FCB speed, FDB action_dur, FCB action_count\n\
+;   followed by _NAME_ENEMY_ACTIONS table.\n\
+; Multibank action entry (4 bytes): FCB sprite_idx, FCB sprite_type, FCB loop, FCB pad\n\
+;   sprite_idx is a 0-based index into VECTOR_ADDR_TABLE; $FF = no sprite.\n\
+;   Enemy type data resides in the helpers bank (always accessible).\n\
+; Single-bank action entry (4 bytes): FDB sprite_ptr, FCB sprite_type, FCB loop\n\
+DRAW_ENEMIES_RUNTIME:\n\
+    ; === DEBUG TRACE: print enemy count at top-left of screen ===\n\
+    ; DP=$C8 at entry; ENEMY_SCRATCH_X used as 4-byte string buffer (safe: not yet in use)\n\
+    PSHS D,X,Y,U\n\
+    LDA #'E'\n\
+    STA >ENEMY_SCRATCH_X\n\
+    LDA #':'\n\
+    STA >ENEMY_SCRATCH_X+1\n\
+    LDA >ENEMY_COUNT\n\
+    ADDA #'0'\n\
+    STA >ENEMY_SCRATCH_X+2\n\
+    LDA #$80\n\
+    STA >ENEMY_SCRATCH_X+3\n\
+    JSR $F1AA               ; DP_to_D0\n\
+    JSR Intensity_5F\n\
+    JSR Reset0Ref\n\
+    LDU #ENEMY_SCRATCH_X\n\
+    LDA #100\n\
+    LDB #-120\n\
+    JSR Print_Str_d\n\
+    JSR $F1AF               ; DP_to_C8\n\
+    PULS D,X,Y,U\n\
+    ; === END DEBUG TRACE ===\n\
+    LDB >ENEMY_COUNT\n\
+    BEQ DRW_ENE_DONE\n\
+    LDY #ENEMY_POOL\n\
+DRW_ENE_LOOP:\n\
+    PSHS B              ; save outer loop counter\n\
+    LDA ,Y              ; active?\n\
+    BEQ DRW_ENE_NEXT_POP\n\
+    ; Resolve type header and action table entry\n\
+    LDA 5,Y             ; type_ptr hi (helpers bank in multibank)\n\
+    LDB 6,Y             ; type_ptr lo\n\
+    TFR D,X             ; X = _NAME_ENEMY header\n\
+    LEAX 5,X            ; skip 5-byte header → action table base\n\
+    LDA 7,Y             ; action index\n\
+    ASLA\n\
+    ASLA                ; × 4 bytes per action entry\n\
+    LEAX A,X            ; X = &actions[action]\n");
+
+    // Conditional draw code: multibank uses FCB sprite_idx + DRAW_VECTOR_BANKED,
+    // single-bank uses FDB sprite_ptr with direct Draw_Sync_List_At_With_Mirrors.
+    if is_multibank {
+        asm.push_str(
+"; --- Multibank: FCB sprite_idx at action[+0]; use DRAW_VECTOR_BANKED ---\n\
+    LDA ,X              ; sprite_idx (FCB, 0-based into VECTOR_ADDR_TABLE)\n\
+    CMPA #$FF           ; $FF = no sprite assigned\n\
+    BEQ DRW_ENE_NEXT_POP\n\
+    STA >ENEMY_SCRATCH_PTR  ; temp save sprite_idx (1 byte)\n\
+    ; Set draw position from pool x(+1,+2), y(+3,+4)\n\
+    LDA 2,Y             ; x lo\n\
+    STA >DRAW_VEC_X\n\
+    CLR >DRAW_VEC_X_HI\n\
+    LDA 4,Y             ; y lo\n\
+    STA >DRAW_VEC_Y\n\
+    ; === DEBUG TRACE: print this enemy's X position ===\n\
+    PSHS D,X,U\n\
+    LDA #'X'\n\
+    STA >ENEMY_SCRATCH_X\n\
+    LDA >DRAW_VEC_X\n\
+    ADDA #64            ; shift to printable range (0-63 → @-?)\n\
+    STA >ENEMY_SCRATCH_X+1\n\
+    LDA #$80\n\
+    STA >ENEMY_SCRATCH_X+2\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    JSR Intensity_5F\n\
+    JSR Reset0Ref\n\
+    LDU #ENEMY_SCRATCH_X\n\
+    LDA #80\n\
+    LDB #-120\n\
+    JSR Print_Str_d\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    PULS D,X,U\n\
+    ; === END DEBUG TRACE ===\n\
+    ; DRAW_VECTOR_BANKED uses Y register internally → save pool pointer\n\
+    PSHS Y\n\
+    CLRA\n\
+    LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx\n\
+    TFR D,X             ; X = sprite_idx (16-bit, A=0)\n\
+    JSR DRAW_VECTOR_BANKED\n\
+    PULS Y              ; restore pool pointer\n\
+DRW_ENE_NEXT_POP:\n\
+    PULS B              ; restore outer loop counter\n\
+    LEAY 13,Y           ; next pool record\n\
+    DECB\n\
+    BNE DRW_ENE_LOOP\n\
+DRW_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    } else {
+        asm.push_str(
+"; --- Single-bank: FDB sprite_ptr at action[+0,+1]; direct draw ---\n\
+    LDD ,X              ; sprite_ptr (FDB)\n\
+    STD >ENEMY_SCRATCH_PTR\n\
+    ; Set draw position\n\
+    LDA 2,Y             ; x lo\n\
+    STA >DRAW_VEC_X\n\
+    CLR >DRAW_VEC_X_HI\n\
+    LDA 4,Y             ; y lo\n\
+    STA >DRAW_VEC_Y\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    BEQ DRW_ENE_NEXT_POP    ; sprite_ptr == 0 → no sprite\n\
+    LDX 1,X             ; X = path0 ptr (FDB at header+1)\n\
+    LDA >DRAW_VEC_Y\n\
+    LDB >DRAW_VEC_X\n\
+    JSR $F2B0           ; Moveto_d (A=y, B=x)\n\
+    JSR $F1AA           ; Draw_Sync_List_At_With_Mirrors\n\
+DRW_ENE_NEXT_POP:\n\
+    PULS B              ; restore outer loop counter\n\
+    LEAY 13,Y           ; next pool record\n\
+    DECB\n\
+    BNE DRW_ENE_LOOP\n\
+DRW_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    }
 }
 

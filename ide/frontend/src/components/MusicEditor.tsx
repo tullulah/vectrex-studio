@@ -38,9 +38,13 @@ import {
   MusicConversionService,
   PSGAudioService,
   MusicResourceService,
+  gmProgramToPreset,
+  GM_PROGRAM_NAMES,
   type NoteEvent,
-  type MusicResource
+  type MusicResource,
+  type InstrResource,
 } from '../services';
+import { useProjectStore } from '../state/projectStore';
 
 // Tipos locales para evitar errores de importación
 interface MidiNote {
@@ -63,6 +67,7 @@ interface MidiTrackInfo {
   maxNote: number;
   startBeat: number;
   isDuplicate: boolean;
+  programNumber?: number;
 }
 
 interface MidiImportData {
@@ -104,17 +109,20 @@ const CHANNEL_COLORS = ['#ff6b6b', '#51cf66', '#339af0']; // A=red, B=green, C=b
 
 interface MidiImportDialogProps {
   importData: MidiImportData;
-  onImport: (selectedTracks: string[], mergeMode: boolean, multiplexMode: boolean, trackModes: Map<string, 'tone' | 'noise'>) => void;
+  onImport: (selectedTracks: string[], mergeMode: boolean, multiplexMode: boolean, trackModes: Map<string, string>, generateInstrs: boolean) => void;
   onCancel: () => void;
+  projectRootDir?: string;
+  availableInstrs?: string[];
 }
 
-const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImport, onCancel }) => {
+const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImport, onCancel, projectRootDir, availableInstrs = [] }) => {
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   const [previewTrack, setPreviewTrack] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mergeMode, setMergeMode] = useState(true); // merge all tracks by default
   const [multiplexMode, setMultiplexMode] = useState(false); // Tim Follin multiplex
-  const [trackModes, setTrackModes] = useState<Map<string, 'tone' | 'noise'>>(new Map()); // tone or noise per track
+  const [trackModes, setTrackModes] = useState<Map<string, string>>(new Map()); // tone, noise, or vinstr name per track
+  const [generateInstrs, setGenerateInstrs] = useState(!!projectRootDir); // generate .vinstr presets
   const psgRef = useRef<PSGAudioService | null>(null);
   const playIntervalRef = useRef<number | null>(null);
   // Debug solo si necesario
@@ -140,7 +148,7 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
     setSelectedTracks(autoSelected);
     
     // Auto-detect percussion tracks (channel 10 or low notes < MIDI 36)
-    const modes = new Map<string, 'tone' | 'noise'>();
+    const modes = new Map<string, string>();
     importData.tracks.forEach(t => {
       const isPercussion = t.channel === 10 || (t.minNote < 36 && t.maxNote < 48);
       modes.set(t.key, isPercussion ? 'noise' : 'tone');
@@ -187,7 +195,7 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
     });
   };
   
-  const previewPlay = (trackInfo: MidiTrackInfo) => {
+  const previewPlay = async (trackInfo: MidiTrackInfo) => {
     if (isPlaying && previewTrack === trackInfo.key) {
       // Stop
       if (playIntervalRef.current) clearInterval(playIntervalRef.current);
@@ -196,42 +204,58 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
       setPreviewTrack(null);
       return;
     }
-    
+
     // Stop any current playback
     if (playIntervalRef.current) clearInterval(playIntervalRef.current);
     psgRef.current?.stopAll();
-    
+
+    const mode = trackModes.get(trackInfo.key) ?? 'tone';
+    const isNoiseTrack = mode === 'noise';
+    const instrName = (mode !== 'tone' && mode !== 'noise') ? mode : null;
+
+    // Load vinstr and apply to channel 0 before playback
+    if (instrName && projectRootDir) {
+      try {
+        const filesApi = (window as any).files;
+        const instrPath = `${projectRootDir.replace(/\\/g, '/')}/assets/instruments/${instrName}.vinstr`;
+        const result = await filesApi.readFile(instrPath);
+        if (result && !result.error) {
+          const instr = JSON.parse(result.content);
+          psgRef.current?.setChannelInstr(0, instr);
+        }
+      } catch {
+        psgRef.current?.setChannelInstr(0, null);
+      }
+    } else {
+      psgRef.current?.setChannelInstr(0, null);
+    }
+
     setIsPlaying(true);
     setPreviewTrack(trackInfo.key);
-    
+
     const tickScale = TICKS_PER_BEAT / importData.ticksPerBeat;
     const msPerTick = (60000 / importData.tempo) / TICKS_PER_BEAT;
-    
-    // Check if this track should be played as noise
-    const isNoiseTrack = trackModes.get(trackInfo.key) === 'noise';
-    
+
     // Start from where the notes actually begin
-    const firstNoteStart = trackInfo.notes.length > 0 ? 
+    const firstNoteStart = trackInfo.notes.length > 0 ?
       Math.round(trackInfo.notes[0].start * tickScale) : 0;
     let pos = firstNoteStart;
-    
+
     const playing = new Map<string, MidiNote>();
-    const lastNoteEnd = trackInfo.notes.length > 0 ? 
-      Math.round((trackInfo.notes[trackInfo.notes.length - 1].start + 
+    const lastNoteEnd = trackInfo.notes.length > 0 ?
+      Math.round((trackInfo.notes[trackInfo.notes.length - 1].start +
                   trackInfo.notes[trackInfo.notes.length - 1].duration) * tickScale) : 200;
     // Play for max 300 ticks from first note (about 3 seconds at 120bpm)
     const maxTicks = Math.min(firstNoteStart + 300, lastNoteEnd + 10);
-    
+
     playIntervalRef.current = window.setInterval(() => {
       for (const note of trackInfo.notes) {
         const scaledStart = Math.round(note.start * tickScale);
         if (scaledStart === pos && !playing.has(`${note.start}-${note.note}`)) {
           if (isNoiseTrack) {
-            // Play as noise
             const period = Math.max(0, Math.min(31, Math.round(31 - (note.note - 24) / 2)));
             psgRef.current?.playNoise(period, note.velocity);
           } else {
-            // Play as tone
             psgRef.current?.playNote(0, note.note, note.velocity);
           }
           playing.set(`${note.start}-${note.note}`, note);
@@ -391,6 +415,11 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
                   <div style={{ fontWeight: '500' }}>
                     Track {track.track}, Ch {track.channel}
                     {track.isDuplicate && <span style={{ color: '#a88', marginLeft: '8px', fontSize: '11px' }}>(duplicate)</span>}
+                    {track.programNumber != null && (
+                      <span style={{ color: '#888', fontSize: '10px', marginLeft: 4 }}>
+                        ({GM_PROGRAM_NAMES[track.programNumber] ?? `prog ${track.programNumber}`})
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '11px', color: '#888' }}>
                     {track.noteCount} notes | Range: {noteToName(track.minNote)} - {noteToName(track.maxNote)}
@@ -402,14 +431,16 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
                   onChange={(e) => {
                     e.stopPropagation();
                     const newModes = new Map(trackModes);
-                    newModes.set(track.key, e.target.value as 'tone' | 'noise');
+                    newModes.set(track.key, e.target.value);
                     setTrackModes(newModes);
                   }}
                   style={{
                     padding: '4px 8px',
                     borderRadius: '4px',
                     border: '1px solid #666',
-                    background: trackModes.get(track.key) === 'noise' ? '#d84' : '#48c',
+                    background: trackModes.get(track.key) === 'noise' ? '#d84'
+                      : availableInstrs.includes(trackModes.get(track.key) || '') ? '#4a6'
+                      : '#48c',
                     color: '#fff',
                     fontSize: '11px',
                     fontWeight: 'bold',
@@ -419,6 +450,13 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
                 >
                   <option value="tone">🎵 Tone</option>
                   <option value="noise">🥁 Noise</option>
+                  {availableInstrs.length > 0 && (
+                    <optgroup label="Instruments">
+                      {availableInstrs.map(n => (
+                        <option key={n} value={n}>🎹 {n}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <button 
                   onClick={(e) => { e.stopPropagation(); previewPlay(track); }}
@@ -431,17 +469,32 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
           })}
         </div>
         
+        {projectRootDir && (
+          <div style={{ marginTop: '12px', padding: '8px 12px', background: '#252535', borderRadius: '4px', border: '1px solid #3a3a5e' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={generateInstrs}
+                onChange={e => setGenerateInstrs(e.target.checked)}
+                style={{ accentColor: '#4a8' }}
+              />
+              <span style={{ fontSize: '12px', color: '#aaa' }}>
+                Generate .vinstr instruments from GM programs
+              </span>
+            </label>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: '12px', marginTop: '20px', justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ ...btnStyle, background: '#555' }}>Cancel</button>
-          <button 
-            onClick={() => onImport(selectedTracks, mergeMode, multiplexMode, trackModes)} 
+          <button
+            onClick={() => onImport(selectedTracks, mergeMode, multiplexMode, trackModes, generateInstrs)}
             disabled={selectedTracks.length === 0}
             style={{ ...btnStyle, background: selectedTracks.length > 0 ? '#4a4' : '#333' }}
           >
             {multiplexMode
-              ? `🎚 Multiplex (${selectedTracks.length} canales)`
-              : mergeMode 
-                ? `🔀 Merge ${selectedTracks.length} Track${selectedTracks.length !== 1 ? 's' : ''}`
+              ? `Multiplex (${selectedTracks.length} canales)`
+              : mergeMode
+                ? `Merge ${selectedTracks.length} Track${selectedTracks.length !== 1 ? 's' : ''}`
                 : `Import ${selectedTracks.length} Channel${selectedTracks.length !== 1 ? 's' : ''}`
             }
           </button>
@@ -466,7 +519,9 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
   width: propWidth,
   height: propHeight,
 }) => {
+  const vpyProject = useProjectStore(s => s.vpyProject);
   const [resource, setResource] = useState<MusicResource>(() => MusicResourceService.ensureValidResource(initialResource));
+  const [availableInstrs, setAvailableInstrs] = useState<string[]>([]);
   const [currentChannel, setCurrentChannel] = useState(0);
   const [viewChannel, setViewChannel] = useState<number | 'all' | 'noise'>('all'); // Filter: 'all', 0/1/2, or 'noise'
   const [isPlaying, setIsPlaying] = useState(false);
@@ -488,6 +543,53 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
       }
     }
   }, [initialResource]);
+
+  // Scan project instruments directory for available .vinstr files
+  useEffect(() => {
+    const api = (window as any).files;
+    if (api?.readDirectory && vpyProject?.rootDir) {
+      const instrDir = `${vpyProject.rootDir}/assets/instruments`.replace(/\\/g, '/');
+      api.readDirectory(instrDir).then((result: any) => {
+        const files: Array<{ name?: string; path?: string }> = result?.files || [];
+        const names = files
+          .map(f => f.name || (f.path || '').split('/').pop() || '')
+          .filter(n => n.endsWith('.vinstr'))
+          .map(n => n.replace(/\.vinstr$/, ''));
+        setAvailableInstrs(names);
+      }).catch(() => setAvailableInstrs([]));
+    } else {
+      setAvailableInstrs([]);
+    }
+  }, [vpyProject?.rootDir]);
+
+  // Load instrument data when channel_instruments mapping changes
+  useEffect(() => {
+    const api = (window as any).files;
+    if (!api?.readFile || !vpyProject?.rootDir) {
+      for (let ch = 0; ch < 3; ch++) {
+        psgRef.current?.setChannelInstr(ch, null);
+      }
+      return;
+    }
+    const rootDir = vpyProject.rootDir.replace(/\\/g, '/');
+    for (let ch = 0; ch < 3; ch++) {
+      const instrName = resource.channel_instruments?.[String(ch)];
+      if (instrName) {
+        const instrPath = `${rootDir}/assets/instruments/${instrName}.vinstr`;
+        api.readFile(instrPath).then((result: any) => {
+          try {
+            const parsed: InstrResource = JSON.parse(result?.content || result || '{}');
+            psgRef.current?.setChannelInstr(ch, parsed);
+          } catch {
+            psgRef.current?.setChannelInstr(ch, null);
+          }
+        }).catch(() => psgRef.current?.setChannelInstr(ch, null));
+      } else {
+        psgRef.current?.setChannelInstr(ch, null);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resource.channel_instruments, vpyProject?.rootDir]);
   const [selectedNotes, setSelectedNotes] = useState<Set<string>>(new Set());
   const [dragStart, setDragStart] = useState<{ tick: number; note: number } | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -975,7 +1077,7 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
   }, []);
 
   // Handle import from dialog
-  const handleMidiImport = useCallback((selectedTracks: string[], mergeMode: boolean, multiplexMode: boolean, trackModes: Map<string, 'tone' | 'noise'>) => {
+  const handleMidiImport = useCallback(async (selectedTracks: string[], mergeMode: boolean, multiplexMode: boolean, trackModes: Map<string, string>, generateInstrs: boolean) => {
     if (!midiImportData) return;
 
     let vmusData;
@@ -989,18 +1091,91 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
       vmusData = MusicConversionService.selectedTracksToVmus(midiImportData, selectedTracks, trackModes);
       console.log('Imported:', vmusData.notes.length, 'notes (separate)');
     }
+
     // Show summary
     const chA = vmusData.notes.filter((n: NoteEvent) => n.channel === 0).length;
     const chB = vmusData.notes.filter((n: NoteEvent) => n.channel === 1).length;
     const chC = vmusData.notes.filter((n: NoteEvent) => n.channel === 2).length;
     const noiseCount = vmusData.noise.length;
     console.log(`Channels: A=${chA}, B=${chB}, C=${chC}, Noise=${noiseCount}`);
+
+    // Generate .vinstr presets from GM programs if requested
+    if (generateInstrs && vpyProject?.rootDir) {
+      const api = (window as any).files;
+      const rootDir = vpyProject.rootDir.replace(/\\/g, '/');
+      const channelInstrs: Record<string, string> = {};
+
+      // Assign the first 3 tone tracks to PSG channels A/B/C
+      let psgChannel = 0;
+      for (const trackKey of selectedTracks) {
+        if (psgChannel >= 3) break;
+        const mode = trackModes.get(trackKey) ?? 'tone';
+
+        // Skip noise tracks — they don't get a tone instrument
+        if (mode === 'noise') continue;
+
+        // If user already manually picked a vinstr, use it directly
+        if (mode !== 'tone') {
+          channelInstrs[String(psgChannel)] = mode;
+          psgChannel++;
+          continue;
+        }
+
+        // Look up GM program number (default to 0=piano if not present)
+        const trackInfo = midiImportData.tracks.find(t => t.key === trackKey);
+        const program = trackInfo?.programNumber ?? 0;
+        const { categoryName, preset } = gmProgramToPreset(program);
+        const vinstrPath = `${rootDir}/assets/instruments/${categoryName}.vinstr`;
+        const vinstrContent = JSON.stringify({ version: '1.0', name: categoryName, ...preset }, null, 2);
+
+        if (api?.saveFile) {
+          try {
+            const existing = await api.readFile(vinstrPath);
+            if (existing?.error) {
+              // File doesn't exist — create it
+              await api.saveFile({ path: vinstrPath, content: vinstrContent });
+              console.log(`[MusicEditor] Created instrument preset: ${categoryName}.vinstr`);
+              setAvailableInstrs(prev => prev.includes(categoryName) ? prev : [...prev, categoryName]);
+            }
+          } catch {
+            await api.saveFile({ path: vinstrPath, content: vinstrContent }).catch(() => {});
+            setAvailableInstrs(prev => prev.includes(categoryName) ? prev : [...prev, categoryName]);
+          }
+        }
+
+        channelInstrs[String(psgChannel)] = categoryName;
+        psgChannel++;
+      }
+
+      if (Object.keys(channelInstrs).length > 0) {
+        vmusData = { ...vmusData, channel_instruments: channelInstrs };
+      }
+    }
+
+    // Also capture manually-assigned vinstr instruments from trackModes
+    // (when user picks a vinstr directly in the dropdown instead of relying on GM auto-generation)
+    const manualInstrs: Record<string, string> = {};
+    let psgCh = 0;
+    for (const trackKey of selectedTracks) {
+      if (psgCh >= 3) break;
+      const mode = trackModes.get(trackKey) ?? 'tone';
+      if (mode !== 'tone' && mode !== 'noise') {
+        // It's a vinstr name
+        manualInstrs[String(psgCh)] = mode;
+      }
+      if (mode !== 'noise') psgCh++;
+    }
+    if (Object.keys(manualInstrs).length > 0) {
+      const existing = (vmusData as any).channel_instruments ?? {};
+      vmusData = { ...vmusData, channel_instruments: { ...existing, ...manualInstrs } } as any;
+    }
+
     updateResource(vmusData);
     setScrollX(0);
     setScrollY(NOTES_COUNT * PIANO_KEY_HEIGHT / 2 - 200);
     setPlayheadPosition(0);
     setMidiImportData(null);
-  }, [midiImportData, updateResource]);
+  }, [midiImportData, updateResource, vpyProject?.rootDir]);
 
   // Clear all notes
   const clearAll = useCallback(() => {
@@ -1057,10 +1232,28 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
         
         <span style={{ color: '#888', fontSize: '12px' }}>Draw:</span>
         {['A', 'B', 'C'].map((ch, i) => (
-          <button key={ch} onClick={() => setCurrentChannel(i)}
-            style={{ ...btnStyle, background: currentChannel === i ? CHANNEL_COLORS[i] : '#3a3a5e', fontWeight: currentChannel === i ? 'bold' : 'normal', minWidth: '28px', padding: '6px 8px' }}>
-            {ch}
-          </button>
+          <React.Fragment key={ch}>
+            <button onClick={() => setCurrentChannel(i)}
+              style={{ ...btnStyle, background: currentChannel === i ? CHANNEL_COLORS[i] : '#3a3a5e', fontWeight: currentChannel === i ? 'bold' : 'normal', minWidth: '28px', padding: '6px 8px' }}>
+              {ch}
+            </button>
+            {availableInstrs.length > 0 && (
+              <select
+                value={resource.channel_instruments?.[String(i)] ?? ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  const ci = { ...(resource.channel_instruments ?? {}) };
+                  if (val) ci[String(i)] = val; else delete ci[String(i)];
+                  updateResource({ ...resource, channel_instruments: ci });
+                }}
+                style={{ fontSize: '11px', background: '#1a1a2e', color: '#ccc', border: '1px solid #333', borderRadius: '3px', padding: '1px 4px', marginLeft: 2 }}
+                title={`Channel ${ch} instrument`}
+              >
+                <option value="">raw</option>
+                {availableInstrs.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            )}
+          </React.Fragment>
         ))}
         
         <div style={{ width: '1px', height: '24px', background: '#4a4a6e' }} />
@@ -1234,8 +1427,14 @@ export const MusicEditor: React.FC<MusicEditorProps> = ({
       </div>
       {midiImportData && (
         <>
-          {console.log('🎵 Rendering MidiImportDialog with data:', midiImportData)}
-          <MidiImportDialog importData={midiImportData} onImport={handleMidiImport} onCancel={() => setMidiImportData(null)} />
+          {console.log('Rendering MidiImportDialog with data:', midiImportData)}
+          <MidiImportDialog
+            importData={midiImportData}
+            onImport={handleMidiImport}
+            onCancel={() => setMidiImportData(null)}
+            projectRootDir={vpyProject?.rootDir}
+            availableInstrs={availableInstrs}
+          />
         </>
       )}
     </div>

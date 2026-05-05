@@ -27,7 +27,7 @@ export interface MidiImportData {
   totalTicks: number;
 }
 
-interface MidiTrackInfo {
+export interface MidiTrackInfo {
   key: string;           // "track-channel" identifier
   track: number;
   channel: number;
@@ -38,10 +38,11 @@ interface MidiTrackInfo {
   maxNote: number;       // Highest note
   startBeat: number;     // When first note starts (in beats)
   isDuplicate: boolean;
+  programNumber?: number; // GM program change (0-127)
 }
 
 export class MidiService {
-  static parseMidi(arrayBuffer: ArrayBuffer): { notes: MidiNote[]; tempo: number; ticksPerBeat: number; totalTicks: number } {
+  static parseMidi(arrayBuffer: ArrayBuffer): { notes: MidiNote[]; tempo: number; ticksPerBeat: number; totalTicks: number; programNumbers: Map<string, number> } {
     const data = new Uint8Array(arrayBuffer);
     let pos = 0;
 
@@ -75,6 +76,8 @@ export class MidiService {
     const allNotes: MidiNote[] = [];
     let tempo = 120;
     let maxTick = 0;
+    // Map of "track-channel" -> GM program number (from 0xC0 events)
+    const programNumbers = new Map<string, number>();
 
     // Read all tracks
     for (let t = 0; t < numTracks; t++) {
@@ -159,7 +162,10 @@ export class MidiService {
           }
         } else if (type === 0xa0) { pos += 2; } // Aftertouch
         else if (type === 0xb0) { pos += 2; } // Control change
-        else if (type === 0xc0) { pos += 1; } // Program change
+        else if (type === 0xc0) {
+          const program = data[pos]; pos += 1; // Program change
+          programNumbers.set(`${t}-${ch}`, program);
+        }
         else if (type === 0xd0) { pos += 1; } // Channel pressure
         else if (type === 0xe0) { pos += 2; } // Pitch bend
         else if (status === 0xff) { // Meta event
@@ -195,7 +201,7 @@ export class MidiService {
     }
 
     console.log(`MIDI: Total ${allNotes.length} notes, max tick ${maxTick}`);
-    return { notes: allNotes, tempo, ticksPerBeat, totalTicks: maxTick };
+    return { notes: allNotes, tempo, ticksPerBeat, totalTicks: maxTick, programNumbers };
   }
 
   static analyzeMidi(arrayBuffer: ArrayBuffer): MidiImportData {
@@ -236,6 +242,7 @@ export class MidiService {
         maxNote: Math.max(...noteValues),
         startBeat: firstNoteStart / midiData.ticksPerBeat,
         isDuplicate,
+        programNumber: midiData.programNumbers.get(key),
       });
     }
 

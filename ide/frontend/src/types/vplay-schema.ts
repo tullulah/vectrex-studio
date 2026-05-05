@@ -285,7 +285,7 @@ export class VPlayValidator {
       if (!obj.type) {
         errors.push(`Object ${obj.id || index} missing type`);
       }
-      if (!obj.vectorName) {
+      if (!obj.vectorName && obj.type !== 'enemy') {
         errors.push(`Object ${obj.id || index} missing vectorName`);
       }
       if (obj.x === undefined || obj.y === undefined) {

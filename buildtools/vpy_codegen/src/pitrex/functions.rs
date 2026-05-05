@@ -114,6 +114,19 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let sl_right  = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_RIGHT, 0x{sl_right:08X}\n"));
     let sl_top    = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_TOP, 0x{sl_top:08X}\n"));
     let sl_bottom = alloc.alloc(4); decls.push_str(&format!(".equ SCROLL_LIMIT_BOTTOM, 0x{sl_bottom:08X}\n"));
+    // Enemy pool (up to 32 enemies, 32 bytes each)
+    // Pool entry layout (32 bytes):
+    //   +0  sprite_ptr (u32)
+    //   +4  x (i16) current, +6 y (i16)
+    //   +8  spawn_x (i16), +10 spawn_y (i16)
+    //   +12 active (u8), +13 ai_type (u8)
+    //   +14 cur_target (u8), +15 wp_count (u8)
+    //   +16 wp0_x (i16), +18 wp0_y (i16)
+    //   +20 wp1_x (i16), +22 wp1_y (i16)
+    //   +24 mirror_on_patrol (u8), +25 default_facing (u8: 0=right 1=left)
+    //   +26 dir (u8: 0=left 1=right), +27..+31 pad
+    let ec_addr  = alloc.alloc(4);   decls.push_str(&format!(".equ PITREX_ENEMY_COUNT, 0x{ec_addr:08X}\n"));
+    let ep_addr  = alloc.alloc(32 * 32); decls.push_str(&format!(".equ PITREX_ENEMY_POOL, 0x{ep_addr:08X}\n"));
     decls.push('\n');
 
     // User globals & locals
