@@ -29,7 +29,7 @@ next_is_boss: i16 = 0       # flag auxiliar para detección de nivel boss
 anim_tick: i16 = 0          # debug counter para animación manual
 walk_frame: i16 = 0         # 0-3: frame seleccionado manualmente
 player_x: i16 = 0
-player_y: i16 = -100
+player_y: i16 = -114
 player_vx: i16 = 0
 player_vy: i16 = 0
 player_facing: i16 = 0
@@ -265,7 +265,7 @@ def load_current_level():
     time_left = LEVEL_TIME
     enemy_count = 2     # world_1_1 has 2 enemies
     player_x = 0
-    player_y = -55          # above platform1; floor_y = -79+14 = -65 (top=-88+9=-79)
+    player_y = -114
     player_vy = 0
     player_on_ground = 0
     shoot_cooldown = 0
