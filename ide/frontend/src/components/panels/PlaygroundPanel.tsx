@@ -674,9 +674,9 @@ export function PlaygroundPanel() {
 
     const newObject: SceneObject = {
       id: `obj_${Date.now()}`,
-      type: 'enemy',
+      type: activeTool === 'enemy' ? 'enemy' : 'background',
       vectorName: draggedVector,
-      layer: 'gameplay', // Por defecto gameplay
+      layer: 'gameplay',
       x: vecX,
       y: vecY,
       rotation: 0,
