@@ -533,13 +533,12 @@ pub fn emit_call(
             s.push_str("    mov     r0, #0\n");
             s.push_str("    push    {r0}\n");
 
-            // intensity = 127 on stack for pitrex_draw_vector_ex
+            // intensity = 127 on stack first (will be at [sp] when function expects it after its push)
             s.push_str("    mov     r0, #127\n");
             s.push_str("    push    {r0}\n");
 
             // pop r3=mirror, r2=pos_y, r1=pos_x, r0=asset; intensity stays on stack
-            s.push_str("    pop     {r10}\n    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
-            s.push_str("    push    {r10}\n");  // push intensity back
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
             s.push_str("    bl      vpy_draw_vector_ex\n");
             s.push_str("    add     sp, sp, #4\n"); // discard intensity
             return Ok(s);
