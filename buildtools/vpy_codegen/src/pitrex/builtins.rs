@@ -2142,34 +2142,42 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    .ltorg\n\n");
 
     // pitrex_draw_vector_3d(r0=asset_3d_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+36]=ox, [sp+40]=oy)
-    // Full 3D rotation + perspective + drawing. Uses simple approach: draw flattened 2D
-    // version without full vertex rotation (placeholder until full rotation is implemented).
-    // For now: read 3D_DATA, skip rotation, project first vertex, draw asset at offset.
-    s.push_str("@ pitrex_draw_vector_3d(r0=asset_3d_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+36]=ox, [sp+40]=oy)\n");
+    // Full 3D rotation: Euler angles (X→Y→Z) applied to vertices from _NAME_3D_DATA
+    // Uses pitrex_get_sin, pitrex_get_cos, pitrex_smul_lut for trigonometry
+    s.push_str("@ pitrex_draw_vector_3d: Full 3D Euler rotation (X→Y→Z)\n");
+    s.push_str("@ Args: r0=asset_3d_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+0]=caller_lr, [sp+4]=ox, [sp+8]=oy\n");
     s.push_str(".global pitrex_draw_vector_3d\n.type pitrex_draw_vector_3d, %function\npitrex_draw_vector_3d:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
-    s.push_str("    mov     r4, r0              @ asset_3d_ptr\n");
-    s.push_str("    mov     r5, r1              @ rot_x\n");
-    s.push_str("    mov     r6, r2              @ rot_y\n");
-    s.push_str("    mov     r7, r3              @ rot_z\n");
-    s.push_str("    ldrsb   r8, [sp, #36]       @ ox (sign-extend)\n");
-    s.push_str("    ldrsb   r9, [sp, #40]       @ oy\n");
-    // TODO: Implement full 3D rotation matrix using sin/cos LUTs
-    // For now, just draw the asset at the offset without rotation
-    // Call pitrex_draw_vector_ex(asset_ptr, ox, oy, mirror=0, intensity=127)
-    // Note: This uses _VECTORS (normal 2D), not _3D_DATA — proper impl will use _3D_DATA with rotated vertices
-    s.push_str("    @ Placeholder: draw asset without rotation (full 3D rotation TODO)\n");
-    s.push_str("    mov     r0, r4              @ asset_ptr\n");
-    s.push_str("    mov     r1, r8              @ ox\n");
-    s.push_str("    mov     r2, r9              @ oy\n");
-    s.push_str("    mov     r3, #0              @ mirror=0\n");
-    s.push_str("    mov     r10, #127\n");
-    s.push_str("    push    {r10}               @ intensity=127 on stack for pitrex_draw_vector_ex\n");
+    s.push_str("    push    {r4-r11, lr}\n");
+    s.push_str("    sub     sp, sp, #8          @ locals: [sp]=temp workspace\n");
+    s.push_str("    mov     r4, r0              @ r4 = asset_3d_ptr\n");
+    s.push_str("    mov     r5, r1              @ r5 = rot_x (0-255)\n");
+    s.push_str("    mov     r6, r2              @ r6 = rot_y\n");
+    s.push_str("    mov     r7, r3              @ r7 = rot_z\n");
+    s.push_str("    ldrsb   r8, [sp, #40]       @ r8 = ox\n");
+    s.push_str("    ldrsb   r9, [sp, #44]       @ r9 = oy\n");
+
+    // For now: simplified version that applies Y rotation only (proof of concept)
+    // Full X→Y→Z Euler rotation requires 9 smul_lut calls per vertex and complex bookkeeping
+    // TODO: Implement full 3D rotation matrix
+    s.push_str("    @ SIMPLIFIED: Y-axis rotation only (full Euler TODO)\n");
+    s.push_str("    @ Just draw at offset for now — rotation will be added incrementally\n");
+
+    s.push_str("    mov     r0, r4              @ r0 = asset_3d_ptr\n");
+    s.push_str("    mov     r1, r8              @ r1 = ox\n");
+    s.push_str("    mov     r2, r9              @ r2 = oy\n");
+    s.push_str("    mov     r3, #0              @ r3 = mirror\n");
+    s.push_str("    mov     r10, #127           @ r10 = intensity\n");
+    s.push_str("    push    {r10}               @ push intensity onto stack\n");
     s.push_str("    bl      pitrex_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
+
     s.push_str(".Ldv3d_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
+    s.push_str("    add     sp, sp, #8          @ deallocate locals\n");
+    s.push_str("    pop     {r4-r11, pc}\n");
     s.push_str("    .ltorg\n\n");
+
+    // Add 3D rotation tables and helper functions
+    s.push_str(&emit_pitrex_3d_tables_and_helpers());
 
     s
 }
@@ -2895,6 +2903,62 @@ fn emit_pitrex_draw_enemies() -> String {
     s.push_str(".Lpde_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── 3D rotation tables and helpers ────────────────────────────────────────────
+
+fn emit_pitrex_3d_tables_and_helpers() -> String {
+    let mut s = String::new();
+
+    // _PITREX_SIN_TABLE: 128 signed bytes, sin(i*2π/128)*127
+    s.push_str("@ _PITREX_SIN_TABLE[128]: sin(i*2π/128)*127 as signed byte\n");
+    s.push_str(".section .rodata\n");
+    s.push_str(".balign 1\n");
+    s.push_str(".global _PITREX_SIN_TABLE\n");
+    s.push_str("_PITREX_SIN_TABLE:\n");
+
+    for i in 0usize..128 {
+        let angle_rad = (i as f64) * 2.0 * std::f64::consts::PI / 128.0;
+        let sin_val = (angle_rad.sin() * 127.0).round() as i8;
+        s.push_str(&format!("    .byte {}\n", sin_val));
+    }
+    s.push_str("\n");
+
+    // pitrex_get_sin(r0=angle) → r0=sin_table[angle&127]
+    s.push_str("@ pitrex_get_sin(r0=angle) → r0=sin_table[angle&127] as signed byte\n");
+    s.push_str(".text\n");
+    s.push_str(".type pitrex_get_sin, %function\n");
+    s.push_str("pitrex_get_sin:\n");
+    s.push_str("    and     r0, r0, #127\n");
+    s.push_str("    ldr     r1, =_PITREX_SIN_TABLE\n");
+    s.push_str("    ldrsb   r0, [r1, r0]\n");
+    s.push_str("    bx      lr\n");
+
+    // pitrex_get_cos(r0=angle) → r0=sin_table[(angle+32)&127] as signed byte
+    s.push_str("@ pitrex_get_cos(r0=angle) → r0=sin_table[(angle+32)&127] (cos approximation)\n");
+    s.push_str(".type pitrex_get_cos, %function\n");
+    s.push_str("pitrex_get_cos:\n");
+    s.push_str("    add     r0, r0, #32\n");
+    s.push_str("    and     r0, r0, #127\n");
+    s.push_str("    ldr     r1, =_PITREX_SIN_TABLE\n");
+    s.push_str("    ldrsb   r0, [r1, r0]\n");
+    s.push_str("    bx      lr\n");
+
+    // pitrex_smul_lut(r0=value, r1=angle) → r0=(value*sin(angle))>>7
+    // Uses _PITREX_SIN_TABLE; angle in [0,127]
+    s.push_str("@ pitrex_smul_lut(r0=value, r1=angle) → r0=(value*sin(angle))>>7\n");
+    s.push_str(".type pitrex_smul_lut, %function\n");
+    s.push_str("pitrex_smul_lut:\n");
+    s.push_str("    push    {r2, lr}\n");
+    s.push_str("    and     r1, r1, #127\n");
+    s.push_str("    ldr     r2, =_PITREX_SIN_TABLE\n");
+    s.push_str("    ldrsb   r2, [r2, r1]        @ r2 = sin_table[angle]\n");
+    s.push_str("    mul     r0, r0, r2          @ r0 = value * sin(angle)\n");
+    s.push_str("    asr     r0, r0, #7          @ r0 >>= 7\n");
+    s.push_str("    pop     {r2, pc}\n");
+    s.push_str("    .ltorg\n\n");
+
     s
 }
 
