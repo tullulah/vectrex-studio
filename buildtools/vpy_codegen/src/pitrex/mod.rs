@@ -116,8 +116,11 @@ pub fn generate_pitrex_asm(
     // User-defined functions + game_main()
     asm.push_str(&functions::emit_functions(module, assets, &var_addrs)?);
 
-    // Asset data (music event tables, SFX tables)
-    asm.push_str(&assets::emit_pitrex_assets(assets));
+    // Filter assets to only those used in code (like M6809 does)
+    let used_assets = assets::filter_used_assets(assets, module);
+
+    // Asset data (vector graphics, music event tables, SFX tables)
+    asm.push_str(&assets::emit_pitrex_assets(&used_assets));
 
     Ok(asm)
 }
