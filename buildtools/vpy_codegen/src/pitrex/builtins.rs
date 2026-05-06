@@ -85,14 +85,33 @@ pub fn emit_builtins() -> String {
 
 fn emit_pitrex_wait_recal() -> String {
     let mut s = String::new();
-    s.push_str("@ pitrex_wait_recal() — frame sync via v_WaitRecal(), then fix scale=127\n");
+    s.push_str("@ pitrex_wait_recal() — frame sync + force calibrated T1=80\n");
     s.push_str(".global pitrex_wait_recal\n.type pitrex_wait_recal, %function\npitrex_wait_recal:\n");
     s.push_str("    push    {lr}\n");
     s.push_str("    bl      v_WaitRecal\n");
-    // Force currentScale=127 to match rp2350's T1=127 timer. Physical deflection
-    // = delta/MAX_USED_STRENGTH × MAX_USED_STRENGTH = delta. rp2350: VPy×127; pitrex: VPy×127.
-    s.push_str("    mov     r0, #127\n");
+    // Force currentScale=80 (matches Vectrex ROM-header Width byte $50).
+    // commonHints has PL_BASE_FORCE_USE_FIX_SIZE set, so this T1 is used for every draw.
+    s.push_str("    mov     r0, #80\n");
     s.push_str("    bl      v_setScale\n");
+    // Decrement UART trace counter; emit ">>> FRAME N START <<<" while > 0.
+    s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
+    s.push_str("    ldr     r1, [r0]\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    popeq   {pc}\n");
+    s.push_str("    sub     r1, r1, #1\n");
+    s.push_str("    str     r1, [r0]\n");
+    s.push_str("    @ increment frame number, print header\n");
+    s.push_str("    ldr     r0, =UART_FRAME_NUM\n");
+    s.push_str("    ldr     r2, [r0]\n");
+    s.push_str("    add     r2, r2, #1\n");
+    s.push_str("    str     r2, [r0]\n");
+    s.push_str("    ldr     r0, =.Lstr_frame_hdr\n");
+    s.push_str("    bl      vpy_uart_puts       @ \">>> FRAME \"\n");
+    s.push_str("    ldr     r0, =UART_FRAME_NUM\n");
+    s.push_str("    ldr     r0, [r0]\n");
+    s.push_str("    bl      vpy_uart_print_int\n");
+    s.push_str("    ldr     r0, =.Lstr_frame_hdr_end\n");
+    s.push_str("    bl      vpy_uart_puts       @ \" START <<<\\r\\n\"\n");
     s.push_str("    pop     {pc}\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -185,6 +204,13 @@ fn emit_pitrex_draw_line_rel() -> String {
     s.push_str("    ldr     r1, [r12]           @ r1 = cur_y\n");
     s.push_str("    add     r2, r0, r4          @ r2 = new_x\n");
     s.push_str("    add     r3, r1, r5          @ r3 = new_y\n");
+    // ── UART trace: log new_x, new_y before v_directDraw32 ──
+    s.push_str("    push    {r0, r1, r2, r3}    @ save call args\n");
+    s.push_str("    mov     r1, r2              @ trace x = new_x\n");
+    s.push_str("    mov     r2, r3              @ trace y = new_y\n");
+    s.push_str("    ldr     r0, =.Lstr_dr\n");
+    s.push_str("    bl      uart_trace_xy\n");
+    s.push_str("    pop     {r0, r1, r2, r3}\n");
     s.push_str("    push    {r6}               @ brightness as 5th arg\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
@@ -262,7 +288,19 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("    str     r0, [r2]            @ PITREX_CUR_X = target_x\n");
     s.push_str("    ldr     r2, =PITREX_CUR_Y\n");
     s.push_str("    str     r1, [r2]            @ PITREX_CUR_Y = target_y\n");
+    // ── UART trace: log target_x, target_y before v_directMove32 ──
+    s.push_str("    push    {r0, r1}            @ save call args\n");
+    s.push_str("    mov     r2, r1              @ trace y\n");
+    s.push_str("    mov     r1, r0              @ trace x\n");
+    s.push_str("    ldr     r0, =.Lstr_mv\n");
+    s.push_str("    bl      uart_trace_xy\n");
+    s.push_str("    pop     {r0, r1}\n");
     s.push_str("    bl      v_directMove32\n");
+    // v_directMove32 internally calls SET_OPTIMAL_SCALE which clobbers currentScale.
+    // Restore our calibrated T1=80 so the next draws (with PL_BASE_FORCE_USE_FIX_SIZE)
+    // use the correct timing.
+    s.push_str("    mov     r0, #80\n");
+    s.push_str("    bl      v_setScale\n");
     s.push_str("    b       dv_after_pool\n");
     s.push_str("    .ltorg\n");
     s.push_str("dv_after_pool:\n");
@@ -405,7 +443,17 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    str     r0, [r2]            @ PITREX_CUR_X = target_x\n");
     s.push_str("    ldr     r2, =PITREX_CUR_Y\n");
     s.push_str("    str     r1, [r2]            @ PITREX_CUR_Y = target_y\n");
+    // ── UART trace: log target_x, target_y before v_directMove32 ──
+    s.push_str("    push    {r0, r1}            @ save call args\n");
+    s.push_str("    mov     r2, r1              @ trace y\n");
+    s.push_str("    mov     r1, r0              @ trace x\n");
+    s.push_str("    ldr     r0, =.Lstr_mv\n");
+    s.push_str("    bl      uart_trace_xy\n");
+    s.push_str("    pop     {r0, r1}\n");
     s.push_str("    bl      v_directMove32\n");
+    // Restore calibrated T1=80 (v_directMove32 clobbers currentScale internally).
+    s.push_str("    mov     r0, #80\n");
+    s.push_str("    bl      v_setScale\n");
     s.push_str("dvex_seg_loop:\n");
     s.push_str("    ldrb    r0, [r9], #1\n");
     s.push_str("    cmp     r0, #2\n");

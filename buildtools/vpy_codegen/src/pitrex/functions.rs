@@ -370,12 +370,32 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    ldr     r0, =.Lstr_start\n");
     s.push_str("    bl      vpy_uart_puts\n");
 
+    // UART trace counter: number of remaining frames to emit per-vector traces.
+    // Each pitrex_wait_recal decrements it; uart_trace_xy is a no-op when 0.
+    s.push_str("    @ init UART trace counter (N frames)\n");
+    s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
+    s.push_str("    mov     r1, #2\n");
+    s.push_str("    str     r1, [r0]\n");
+    s.push_str("    ldr     r0, =UART_FRAME_NUM\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    str     r1, [r0]\n");
+
     // PiTrex SDK initialisation
     s.push_str("    @ PiTrex SDK init\n");
     s.push_str("    mov     r0, #1\n    bl      vectrexinit\n");
     s.push_str("    ldr     r0, =.Lstr_vinit\n    bl      vpy_uart_puts\n");
     s.push_str("    bl      v_init\n");
     s.push_str("    mov     r0, #50\n    bl      v_setRefresh\n\n");
+
+    // Force fixed-T1 timing for all draws: commonHints |= PL_BASE_FORCE_USE_FIX_SIZE (256).
+    // This makes the SDK skip its GET_OPTIMAL_SCALE formula and use currentScale (set
+    // via v_setScale) as the T1 timer for every draw — eliminating beam drift on small
+    // line segments while keeping a calibrated, consistent line size.
+    s.push_str("    @ commonHints |= PL_BASE_FORCE_USE_FIX_SIZE (256)\n");
+    s.push_str("    ldr     r0, =commonHints\n");
+    s.push_str("    ldr     r1, [r0]\n");
+    s.push_str("    orr     r1, r1, #256\n");
+    s.push_str("    str     r1, [r0]\n\n");
 
     // Flush literal pool after SDK init so subsequent ldr= pool entries fit within 4KB
     let mut pool_idx = 0usize;
@@ -492,7 +512,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
 
     // Game loop — PiTrex frame sync + input
     s.push_str("\npitrex_game_loop:\n");
-    s.push_str("    bl      v_WaitRecal\n");
+    s.push_str("    bl      pitrex_wait_recal   @ wraps v_WaitRecal + scale fix + UART frame trace\n");
     // v_WaitRecal resets the SDK's currentCursorX/Y to 0 via v_deflok → ZERO_AND_WAIT.
     // Mirror that here so PITREX_CUR_X/Y stays in sync for delta moves in draw_vector.
     s.push_str("    mov     r0, #0\n");
@@ -574,6 +594,28 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lpint_done:\n");
     s.push_str("    pop     {r4, r5, r6, pc}\n\n");
 
+    // uart_trace_xy(r0=label_ptr, r1=x, r2=y) — trace only while counter > 0.
+    // Format: "<label> <x>,<y>\r\n"
+    s.push_str("@ uart_trace_xy(r0=label, r1=x, r2=y) — gated by UART_TRACE_FRAMES_LEFT\n");
+    s.push_str(".global uart_trace_xy\n.type uart_trace_xy, %function\nuart_trace_xy:\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    s.push_str("    ldr     r4, =UART_TRACE_FRAMES_LEFT\n");
+    s.push_str("    ldr     r4, [r4]\n");
+    s.push_str("    cmp     r4, #0\n");
+    s.push_str("    popeq   {r4, r5, r6, pc}\n");
+    s.push_str("    mov     r5, r1              @ save x\n");
+    s.push_str("    mov     r6, r2              @ save y\n");
+    s.push_str("    bl      vpy_uart_puts       @ label (r0 already)\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    bl      vpy_uart_print_int\n");
+    s.push_str("    mov     r0, #','\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
+    s.push_str("    mov     r0, r6\n");
+    s.push_str("    bl      vpy_uart_print_int\n");
+    s.push_str("    ldr     r0, =.Lstr_crlf\n");
+    s.push_str("    bl      vpy_uart_puts\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n\n");
+
     // Debug strings
     s.push_str(".Lstr_start:  .asciz \"VPy PiTrex starting\\r\\n\"\n");
     s.push_str(".Lstr_vinit:  .asciz \"vectrexinit OK\\r\\n\"\n");
@@ -583,6 +625,10 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lstr_tgt:    .asciz \" tgt=\"\n");
     s.push_str(".Lstr_dlt:    .asciz \" dlt=\"\n");
     s.push_str(".Lstr_crlf:   .asciz \"\\r\\n\"\n");
+    s.push_str(".Lstr_mv:     .asciz \"MV \"\n");
+    s.push_str(".Lstr_dr:     .asciz \"DR \"\n");
+    s.push_str(".Lstr_frame_hdr:     .asciz \">>> FRAME \"\n");
+    s.push_str(".Lstr_frame_hdr_end: .asciz \" START <<<\\r\\n\"\n");
     s.push_str("    .ltorg\n\n");
 
     Ok(s)

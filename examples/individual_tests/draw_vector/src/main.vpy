@@ -11,4 +11,12 @@ def main():
 
 def loop():
     # Draw a star pattern with lines
-    DRAW_VECTOR("triangule", 0, 0)
+    DRAW_VECTOR_EX("platform", 0, 0,0,0)
+
+    DRAW_VECTOR_EX("platformver", 0, -50,0,0)
+
+    DRAW_LINE(0, -56, 0, 59)
+
+    
+
+    

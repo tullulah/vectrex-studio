@@ -78,6 +78,7 @@ pub fn generate_pitrex_asm(
         "v_writePSG", "v_doSound",
         "currentJoy1X", "currentJoy1Y", "currentButtonState",
         "currentJoy2X", "currentJoy2Y",
+        "commonHints",
         "__aeabi_idiv", "__aeabi_idivmod",
         "RPI_AuxUartInit", "RPI_AuxUartWrite",
     ] {
@@ -95,6 +96,8 @@ pub fn generate_pitrex_asm(
     // are allocated as .equ constants by allocate_globals_bss() above.
     asm.push_str("PITREX_CUR_X: .space 4\n");
     asm.push_str("PITREX_CUR_Y: .space 4\n");
+    asm.push_str("UART_TRACE_FRAMES_LEFT: .space 4\n");
+    asm.push_str("UART_FRAME_NUM: .space 4\n");
     asm.push('\n');
 
     // ── Read-only data: const array data ────────────────────────────────────
