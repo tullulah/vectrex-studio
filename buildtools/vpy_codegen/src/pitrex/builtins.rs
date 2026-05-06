@@ -2158,23 +2158,23 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    ldrsb   r8, [sp, #52]       @ r8 = ox (pushed by expressions, now at [sp+52])\n");
     s.push_str("    ldrsb   r9, [sp, #48]       @ r9 = oy (pushed by expressions, now at [sp+48])\n");
 
-    // For now: simplified version that applies Y rotation only (proof of concept)
-    // Full X→Y→Z Euler rotation requires 9 smul_lut calls per vertex and complex bookkeeping
-    // TODO: Implement full 3D rotation matrix
-    s.push_str("    @ SIMPLIFIED: Y-axis rotation only (full Euler TODO)\n");
-    s.push_str("    @ Just draw at offset for now — rotation will be added incrementally\n");
+    // Simplified Y-axis rotation (proof of concept)
+    // Full Euler X→Y→Z requires multiple smul_lut calls per vertex.
+    // For now: placeholder that draws asset without rotation
+    s.push_str("    @ TODO: Implement Y rotation: x'=x*cos(ry)-z*sin(ry), z'=x*sin(ry)+z*cos(ry)\n");
+    s.push_str("    @ TODO: For full 3D: also apply X and Z rotations\n");
 
-    s.push_str("    mov     r0, r4              @ r0 = asset_3d_ptr\n");
+    s.push_str("    mov     r0, r4              @ r0 = asset_ptr\n");
     s.push_str("    mov     r1, r8              @ r1 = ox\n");
     s.push_str("    mov     r2, r9              @ r2 = oy\n");
     s.push_str("    mov     r3, #0              @ r3 = mirror\n");
     s.push_str("    mov     r10, #127           @ r10 = intensity\n");
-    s.push_str("    push    {r10}               @ push intensity onto stack\n");
+    s.push_str("    push    {r10}\n");
     s.push_str("    bl      pitrex_draw_vector_ex\n");
-    s.push_str("    add     sp, sp, #4          @ pop intensity\n");
+    s.push_str("    add     sp, sp, #4\n");
 
     s.push_str(".Ldv3d_done:\n");
-    s.push_str("    add     sp, sp, #8          @ deallocate locals\n");
+    s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r4-r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
