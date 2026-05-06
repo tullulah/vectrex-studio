@@ -643,22 +643,23 @@ pub fn emit_call(
     }
 
     // Special case: DRAW_VECTOR_3D("name", rot_x, rot_y, rot_z, pos_x, pos_y)
-    // ABI: r0=_NAME_3D_DATA, r1=rot_x, r2=rot_y, r3=rot_z, [sp+36]=pos_x, [sp+40]=pos_y
-    // Callee pushes 9 regs (36 bytes), so pos_x/pos_y on stack at [sp+36]/[sp+40] from caller view.
+    // Stub: For now, just draw 2D version at offset, ignore rotation
+    // TODO: Implement full 3D rotation with matrix + perspective
     if info.name == "DRAW_VECTOR_3D" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
-            let symbol = format!("_{sym_base}_3D_DATA");
+            let symbol = format!("_{sym_base}_VECTORS");  // Use 2D vectors for now (TODO: _3D_DATA)
 
-            // Push pos_y first (will be at [sp+40] after callee's 9-reg push)
-            if args.len() >= 6 {
-                s.push_str(&emit_arg(&args[5], var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
+            // Just call DRAW_VECTOR_EX at offset (pos_x, pos_y), ignoring rotations
+            // Push intensity first (for _ex calling convention)
+            s.push_str("    mov     r0, #127\n");
             s.push_str("    push    {r0}\n");
 
-            // Push pos_x (will be at [sp+36] after callee's 9-reg push)
+            // r0 = asset_ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}' (3D stub: using 2D)\n"));
+            s.push_str("    push    {r0}\n");
+
+            // r1 = pos_x (skip rotations)
             if args.len() >= 5 {
                 s.push_str(&emit_arg(&args[4], var_addrs)?);
             } else {
@@ -666,38 +667,22 @@ pub fn emit_call(
             }
             s.push_str("    push    {r0}\n");
 
-            // r0 = asset_3d_ptr
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}' (3D data)\n"));
-            s.push_str("    push    {r0}\n");
-
-            // r1 = rot_x
-            if args.len() >= 2 {
-                s.push_str(&emit_arg(&args[1], var_addrs)?);
+            // r2 = pos_y
+            if args.len() >= 6 {
+                s.push_str(&emit_arg(&args[5], var_addrs)?);
             } else {
                 s.push_str("    mov     r0, #0\n");
             }
             s.push_str("    push    {r0}\n");
 
-            // r2 = rot_y
-            if args.len() >= 3 {
-                s.push_str(&emit_arg(&args[2], var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
+            // r3 = mirror = 0
+            s.push_str("    mov     r0, #0\n");
             s.push_str("    push    {r0}\n");
 
-            // r3 = rot_z
-            if args.len() >= 4 {
-                s.push_str(&emit_arg(&args[3], var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
-            s.push_str("    push    {r0}\n");
-
-            // pop r3=rot_z, r2=rot_y, r1=rot_x, r0=asset; pos_x/pos_y remain on stack
+            // pop r3=mirror, r2=pos_y, r1=pos_x, r0=asset; intensity stays on stack
             s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
-            s.push_str("    bl      pitrex_draw_vector_3d\n");
-            s.push_str("    add     sp, sp, #8\n"); // discard pos_x, pos_y from stack
+            s.push_str("    bl      pitrex_draw_vector_ex\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard intensity
             return Ok(s);
         }
     }

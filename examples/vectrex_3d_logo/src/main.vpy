@@ -41,5 +41,5 @@ def loop():
     if J1_BUTTON_4():
         rot_speed_y = clamp(rot_speed_y - 1, 0, 10)
 
-    # Draw rotated logo: (name, rot_x, rot_y, rot_z, pos_x, pos_y)
+    # Draw logo with 3D rotation (currently: stub that ignores rotation, draws 2D)
     DRAW_VECTOR_3D("logo", rot_x, rot_y, rot_z, 0, 0)
