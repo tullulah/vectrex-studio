@@ -2145,16 +2145,18 @@ fn emit_pitrex_misc_stubs() -> String {
     // Full 3D rotation: Euler angles (X→Y→Z) applied to vertices from _NAME_3D_DATA
     // Uses pitrex_get_sin, pitrex_get_cos, pitrex_smul_lut for trigonometry
     s.push_str("@ pitrex_draw_vector_3d: Full 3D Euler rotation (X→Y→Z)\n");
-    s.push_str("@ Args: r0=asset_3d_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+0]=caller_lr, [sp+4]=ox, [sp+8]=oy\n");
+    s.push_str("@ pitrex_draw_vector_3d(r0=asset, r1=rot_x, r2=rot_y, r3=rot_z) + [sp]=ox, [sp+4]=oy pushed by caller\n");
     s.push_str(".global pitrex_draw_vector_3d\n.type pitrex_draw_vector_3d, %function\npitrex_draw_vector_3d:\n");
     s.push_str("    push    {r4-r11, lr}\n");
-    s.push_str("    sub     sp, sp, #8          @ locals: [sp]=temp workspace\n");
-    s.push_str("    mov     r4, r0              @ r4 = asset_3d_ptr\n");
-    s.push_str("    mov     r5, r1              @ r5 = rot_x (0-255)\n");
+    // Stack: [sp+0]=r4, ..., [sp+32]=r11, [sp+36]=lr, [sp+40]=oy, [sp+44]=ox, [sp+48]=caller_lr(BL)\n");
+    s.push_str("    sub     sp, sp, #8          @ locals\n");
+    // Stack: [sp+0-7]=locals, [sp+8]=r4, ..., [sp+40]=r11, [sp+44]=lr, [sp+48]=oy, [sp+52]=ox, [sp+56]=caller_lr\n");
+    s.push_str("    mov     r4, r0              @ r4 = asset_ptr\n");
+    s.push_str("    mov     r5, r1              @ r5 = rot_x\n");
     s.push_str("    mov     r6, r2              @ r6 = rot_y\n");
     s.push_str("    mov     r7, r3              @ r7 = rot_z\n");
-    s.push_str("    ldrsb   r8, [sp, #40]       @ r8 = ox\n");
-    s.push_str("    ldrsb   r9, [sp, #44]       @ r9 = oy\n");
+    s.push_str("    ldrsb   r8, [sp, #52]       @ r8 = ox (pushed by expressions, now at [sp+52])\n");
+    s.push_str("    ldrsb   r9, [sp, #48]       @ r9 = oy (pushed by expressions, now at [sp+48])\n");
 
     // For now: simplified version that applies Y rotation only (proof of concept)
     // Full X→Y→Z Euler rotation requires 9 smul_lut calls per vertex and complex bookkeeping

@@ -648,18 +648,38 @@ pub fn emit_call(
     if info.name == "DRAW_VECTOR_3D" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
-            let symbol = format!("_{sym_base}_VECTORS");  // Use 2D vectors for now (TODO: _3D_DATA)
+            let symbol = format!("_{sym_base}_VECTORS");  // TODO: Use _3D_DATA when 3D rotation is complete
 
-            // Just call DRAW_VECTOR_EX at offset (pos_x, pos_y), ignoring rotations
-            // Push intensity first (for _ex calling convention)
-            s.push_str("    mov     r0, #127\n");
-            s.push_str("    push    {r0}\n");
-
+            // pitrex_draw_vector_3d(r0=asset_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp]=ox, [sp+4]=oy)
             // r0 = asset_ptr
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}' (3D stub: using 2D)\n"));
-            s.push_str("    push    {r0}\n");
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
 
-            // r1 = pos_x (skip rotations)
+            // r1 = rot_x
+            if args.len() >= 2 {
+                s.push_str(&emit_arg(&args[1], var_addrs)?);
+                s.push_str("    mov     r1, r0\n");
+            } else {
+                s.push_str("    mov     r1, #0\n");
+            }
+
+            // r2 = rot_y
+            if args.len() >= 3 {
+                s.push_str(&emit_arg(&args[2], var_addrs)?);
+                s.push_str("    mov     r2, r0\n");
+            } else {
+                s.push_str("    mov     r2, #0\n");
+            }
+
+            // r3 = rot_z
+            if args.len() >= 4 {
+                s.push_str(&emit_arg(&args[3], var_addrs)?);
+                s.push_str("    mov     r3, r0\n");
+            } else {
+                s.push_str("    mov     r3, #0\n");
+            }
+
+            // Push ox, oy (overflow arguments for pitrex_draw_vector_3d)
+            // ox = pos_x
             if args.len() >= 5 {
                 s.push_str(&emit_arg(&args[4], var_addrs)?);
             } else {
@@ -667,7 +687,7 @@ pub fn emit_call(
             }
             s.push_str("    push    {r0}\n");
 
-            // r2 = pos_y
+            // oy = pos_y
             if args.len() >= 6 {
                 s.push_str(&emit_arg(&args[5], var_addrs)?);
             } else {
@@ -675,14 +695,8 @@ pub fn emit_call(
             }
             s.push_str("    push    {r0}\n");
 
-            // r3 = mirror = 0
-            s.push_str("    mov     r0, #0\n");
-            s.push_str("    push    {r0}\n");
-
-            // pop r3=mirror, r2=pos_y, r1=pos_x, r0=asset; intensity stays on stack
-            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
-            s.push_str("    bl      pitrex_draw_vector_ex\n");
-            s.push_str("    add     sp, sp, #4\n"); // discard intensity
+            s.push_str("    bl      pitrex_draw_vector_3d\n");
+            s.push_str("    add     sp, sp, #8          @ pop ox, oy\n");
             return Ok(s);
         }
     }
