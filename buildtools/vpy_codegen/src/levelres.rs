@@ -552,8 +552,9 @@ impl VPlayLevel {
         out.push_str(".align 2\n");
         out.push_str(&format!(".global _{name}_PITREX_ENEMY_COUNT\n_{name}_PITREX_ENEMY_COUNT:\n"));
         out.push_str(&format!("    .word {ec}  @ enemy count\n\n"));
+        // Always emit the table label so SPAWN_ENEMIES can link even when ec==0.
+        out.push_str(&format!(".global _{name}_PITREX_ENEMIES\n_{name}_PITREX_ENEMIES:\n"));
         if ec > 0 {
-            out.push_str(&format!(".global _{name}_PITREX_ENEMIES\n_{name}_PITREX_ENEMIES:\n"));
             for obj in &enemy_objs {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
                 let ai = ai_type_byte(&obj.ai_type);
