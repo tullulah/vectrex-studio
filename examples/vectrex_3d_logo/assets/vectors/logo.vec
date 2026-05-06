@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "name": "vs_logo",
+  "canvas": { "width": 192, "height": 192, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "outer_square",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": -40, "y": -40},
+            {"x": 40, "y": -40},
+            {"x": 40, "y": 40},
+            {"x": -40, "y": 40}
+          ]
+        },
+        {
+          "name": "v_shape",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -30, "y": -30},
+            {"x": 0, "y": 20},
+            {"x": 30, "y": -30}
+          ]
+        },
+        {
+          "name": "s_curve_top",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -15, "y": 5},
+            {"x": -10, "y": 10},
+            {"x": 10, "y": 10},
+            {"x": 15, "y": 5}
+          ]
+        },
+        {
+          "name": "s_curve_bottom",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {"x": -15, "y": -5},
+            {"x": -10, "y": -10},
+            {"x": 10, "y": -10},
+            {"x": 15, "y": -5}
+          ]
+        },
+        {
+          "name": "cross_diagonal_1",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {"x": -25, "y": -25},
+            {"x": 25, "y": 25}
+          ]
+        },
+        {
+          "name": "cross_diagonal_2",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {"x": 25, "y": -25},
+            {"x": -25, "y": 25}
+          ]
+        }
+      ]
+    }
+  ]
+}
