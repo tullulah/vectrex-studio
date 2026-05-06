@@ -1233,6 +1233,7 @@ DSWM_NO_NEGATE_DX:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
+            CLR VIA_port_a          ; stop X integrator drift between segments\n\
             CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\

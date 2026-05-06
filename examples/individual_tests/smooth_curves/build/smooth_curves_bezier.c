@@ -4,20 +4,19 @@
  * Provides v_drawBezierCubic, v_drawBezierQuad, v_directDrawPolyline.
  *
  * Each function decomposes the curve into small line segments and calls
- * v_directDraw32 for each one. This integrates correctly with PiTrex's
- * pipeline system: v_directDraw32 buffers vectors, which displayPipeline()
- * draws at the right time during v_WaitRecal. The smoothness comes from
- * using many small steps (16 per 90° segment = 64 steps per full circle).
+ * v_directDraw32 for each sub-segment. To avoid the "beam off/on at every
+ * vertex" behaviour caused by beamOffBetweenConsecutiveDraws=1 (the SDK
+ * default), we set that flag to 0 so handlePipeline() keeps the beam lit
+ * continuously across all sub-segments.
  *
- * Coordinates are passed in VPy space and scaled by BEZIER_VPY_SCALE (127)
- * to match the same convention pitrex_draw_line uses before calling
- * v_directDraw32. v_directDraw32 handles sizeX/sizeY/offsetX/offsetY
- * and orientation internally.
+ * BEZIER_TRACE: define to enable UART diagnostics (prints every ~50 frames).
  *
  * Include path: -I<sdk>/pitrex/  (resolves vectrex/vectrexInterface.h)
  */
 
 #include "vectrex/vectrexInterface.h"
+
+/* beamOffBetweenConsecutiveDraws is declared as extern uint8_t in vectrexInterface.h */
 
 /* ---- de Casteljau helpers ---- */
 
@@ -44,7 +43,7 @@ static int32_t dc_quad(int32_t p0, int32_t p1, int32_t p2, int i, int steps)
 }
 
 /*
- * VPy coords are in the range ±127. pitrex_draw_line scales by 127 before
+ * VPy coords are in the range +-127. pitrex_draw_line scales by 127 before
  * calling v_directDraw32. We apply the same scale here so all drawing
  * functions use the same coordinate space.
  */
@@ -65,8 +64,14 @@ void v_drawBezierCubic(int32_t x0, int32_t y0, int32_t cx0, int32_t cy0,
     cx1 *= BEZIER_VPY_SCALE;  cy1 *= BEZIER_VPY_SCALE;
     x1  *= BEZIER_VPY_SCALE;  y1  *= BEZIER_VPY_SCALE;
 
-    int32_t prev_x = x0, prev_y = y0;
+    /* Keep beam on between all sub-segments of this curve.
+     * beamOffBetweenConsecutiveDraws=1 (SDK default) causes a PL_SWITCH_BEAM_OFF
+     * between each v_directDraw32 call, producing visible dots at every vertex.
+     * Setting it to 0 here keeps the beam lit continuously for all segments.
+     * It must be 0 when handlePipeline() reads it at v_WaitRecal time. */
+    beamOffBetweenConsecutiveDraws = 0;
 
+    int32_t prev_x = x0, prev_y = y0;
     for (int i = 1; i <= steps; i++) {
         int32_t px = dc_cubic(x0, cx0, cx1, x1, i, steps);
         int32_t py = dc_cubic(y0, cy0, cy1, y1, i, steps);
@@ -87,8 +92,9 @@ void v_drawBezierQuad(int32_t x0, int32_t y0, int32_t cx, int32_t cy,
     cx *= BEZIER_VPY_SCALE;  cy *= BEZIER_VPY_SCALE;
     x1 *= BEZIER_VPY_SCALE;  y1 *= BEZIER_VPY_SCALE;
 
-    int32_t prev_x = x0, prev_y = y0;
+    beamOffBetweenConsecutiveDraws = 0;
 
+    int32_t prev_x = x0, prev_y = y0;
     for (int i = 1; i <= steps; i++) {
         int32_t px = dc_quad(x0, cx, x1, i, steps);
         int32_t py = dc_quad(y0, cy, y1, i, steps);
@@ -101,6 +107,8 @@ void v_drawBezierQuad(int32_t x0, int32_t y0, int32_t cx, int32_t cy,
 void v_directDrawPolyline(const int32_t *xs, const int32_t *ys, int n, uint8_t brightness)
 {
     if (n < 2 || brightness == 0) return;
+
+    beamOffBetweenConsecutiveDraws = 0;
 
     for (int i = 1; i < n; i++) {
         v_directDraw32(xs[i-1], ys[i-1], xs[i], ys[i], brightness);

@@ -633,6 +633,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SLR_RAM_Y_VISIBLE:\n");
         out.push_str("    STB >DRAW_VEC_Y\n");
         out.push_str("    LDU 11,X         ; vector_ptr at RAM +11\n");
+        out.push_str("    LDA 3,X          ; scale_t1 from RAM +3 (pre-computed T1 = scale*127)\n");
+        out.push_str("    STA >DRAW_T1_SCALED\n");
         out.push_str("    BRA SLR_DRAW_VECTOR\n");
         out.push_str("    \n");
         out.push_str("SLR_ROM_OFFSETS:\n");
@@ -689,6 +691,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)\n");
         out.push_str("    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)\n");
         out.push_str("    LDU 16,X         ; vector_ptr FDB at ROM +16\n");
+        out.push_str("    LDA 6,X          ; scale_t1 from ROM +6 (low byte of scale FDB; pre-computed T1 = scale*127)\n");
+        out.push_str("    STA >DRAW_T1_SCALED\n");
         out.push_str("    \n");
         out.push_str("SLR_DRAW_VECTOR:\n");
         out.push_str("    PSHS X           ; Save object pointer\n");
@@ -821,7 +825,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    INC VIA_port_b          ; PB=1: lock Y direction\n");
         out.push_str("    PULS A                  ; restore abs_x\n");
         out.push_str("    STA VIA_port_a          ; DX → DAC\n");
-        out.push_str("    LDA #$7F\n");
+        out.push_str("    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)\n");
         out.push_str("    STA VIA_t1_cnt_lo       ; load T1 latch\n");
         out.push_str("    LEAX 2,X                ; skip next_y, next_x (the 0,0)\n");
         out.push_str("    CLR VIA_t1_cnt_hi       ; start T1 → ramp\n");

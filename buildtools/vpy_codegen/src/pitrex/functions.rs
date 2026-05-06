@@ -627,6 +627,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lstr_crlf:   .asciz \"\\r\\n\"\n");
     s.push_str(".Lstr_mv:     .asciz \"MV \"\n");
     s.push_str(".Lstr_dr:     .asciz \"DR \"\n");
+    s.push_str(".Lstr_br:     .asciz \"  br=\"\n");
     s.push_str(".Lstr_frame_hdr:     .asciz \">>> FRAME \"\n");
     s.push_str(".Lstr_frame_hdr_end: .asciz \" START <<<\\r\\n\"\n");
     s.push_str("    .ltorg\n\n");

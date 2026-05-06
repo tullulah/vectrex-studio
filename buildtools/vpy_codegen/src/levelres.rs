@@ -728,9 +728,15 @@ impl VPlayLevel {
         out.push_str(&format!("    FDB {}  ; x\n", obj.x));
         out.push_str(&format!("    FDB {}  ; y\n", obj.y));
         
-        // Scale (convert f32 to fixed-point 8.8: scale * 256)
-        let scale_fixed = (obj.scale * 256.0) as u16;
-        out.push_str(&format!("    FDB {}  ; scale (8.8 fixed)\n", scale_fixed));
+        // Scale stored as direct T1 value in the low byte of FDB (high byte = 0).
+        // T1 = scale * M6809_DRAW_SCALE. At runtime, this byte is read and used
+        // directly as VIA T1 latch without any multiplication.
+        // MUST match DRAW_SCALE default in functions.rs ($50=80).
+        // scale=1.0 → 80 ($50), scale=0.8 → 64 ($40), scale=1.25 → 100 ($64).
+        // $50 is the Width byte in the Vectrex ROM header — hardware-calibrated reference.
+        const M6809_DRAW_SCALE: f32 = 80.0;
+        let scale_t1 = (obj.scale * M6809_DRAW_SCALE).round().clamp(1.0, 255.0) as u8;
+        out.push_str(&format!("    FDB {}  ; scale (T1 direct; {:.2}x)\n", scale_t1, obj.scale));
         
         // Rotation (degrees as signed byte)
         out.push_str(&format!("    FCB {}  ; rotation\n", (obj.rotation % 360) as u8));

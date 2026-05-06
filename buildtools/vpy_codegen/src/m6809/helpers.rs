@@ -179,6 +179,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         }
         // Clipped-path draw loop tracker
         ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: tracked beam X for per-segment clipping");
+        ram.allocate("DRAW_T1_SCALED", 1, "SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale)");
         // GP objects RAM buffer (max 32 objects × 15 bytes)
         ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
         // LEVEL_COLLISION_Y input/scratch variables
@@ -1195,7 +1196,10 @@ DSWM_NO_NEGATE_DX:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
-            CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
+            CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)\n\
+            CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)\n\
+            INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)\n\
+            CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\

@@ -204,12 +204,24 @@ fn emit_pitrex_draw_line_rel() -> String {
     s.push_str("    ldr     r1, [r12]           @ r1 = cur_y\n");
     s.push_str("    add     r2, r0, r4          @ r2 = new_x\n");
     s.push_str("    add     r3, r1, r5          @ r3 = new_y\n");
-    // ── UART trace: log new_x, new_y before v_directDraw32 ──
+    // ── UART trace: log new_x, new_y, brightness before v_directDraw32 ──
     s.push_str("    push    {r0, r1, r2, r3}    @ save call args\n");
     s.push_str("    mov     r1, r2              @ trace x = new_x\n");
     s.push_str("    mov     r2, r3              @ trace y = new_y\n");
     s.push_str("    ldr     r0, =.Lstr_dr\n");
     s.push_str("    bl      uart_trace_xy\n");
+    // also log brightness
+    s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
+    s.push_str("    ldr     r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Ldlr_no_btrace\n");
+    s.push_str("    ldr     r0, =.Lstr_br\n");
+    s.push_str("    bl      vpy_uart_puts\n");
+    s.push_str("    mov     r0, r6              @ brightness\n");
+    s.push_str("    bl      vpy_uart_print_int\n");
+    s.push_str("    ldr     r0, =.Lstr_crlf\n");
+    s.push_str("    bl      vpy_uart_puts\n");
+    s.push_str(".Ldlr_no_btrace:\n");
     s.push_str("    pop     {r0, r1, r2, r3}\n");
     s.push_str("    push    {r6}               @ brightness as 5th arg\n");
     s.push_str("    bl      v_directDraw32\n");
@@ -2129,47 +2141,34 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
 
-    // pitrex_draw_vector_3d(r0=x, r1=y, r2=z, r3=asset_idx)
-    // Simple perspective projection: screen_x = x * DIST / z, screen_y = y * DIST / z
-    // DIST = 100 (fixed focal length). Calls pitrex_draw_vector_ex at projected position.
-    // asset_idx is an index into VECTOR_ADDR_TABLE (same as draw_vector).
-    // For z <= 0, skip drawing (behind camera).
-    s.push_str("@ pitrex_draw_vector_3d(r0=x, r1=y, r2=z, r3=asset_ptr) — perspective\n");
+    // pitrex_draw_vector_3d(r0=asset_3d_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+36]=ox, [sp+40]=oy)
+    // Full 3D rotation + perspective + drawing. Uses simple approach: draw flattened 2D
+    // version without full vertex rotation (placeholder until full rotation is implemented).
+    // For now: read 3D_DATA, skip rotation, project first vertex, draw asset at offset.
+    s.push_str("@ pitrex_draw_vector_3d(r0=asset_3d_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+36]=ox, [sp+40]=oy)\n");
     s.push_str(".global pitrex_draw_vector_3d\n.type pitrex_draw_vector_3d, %function\npitrex_draw_vector_3d:\n");
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
-    s.push_str("    mov     r4, r0              @ x\n");
-    s.push_str("    mov     r5, r1              @ y\n");
-    s.push_str("    mov     r6, r2              @ z\n");
-    s.push_str("    mov     r7, r3              @ asset_ptr\n");
-    // Skip if z <= 0
-    s.push_str("    cmp     r6, #0\n    ble     .Ldv3d_done\n");
-    // screen_x = x * 100 / z
-    s.push_str("    mov     r0, r4\n");
-    s.push_str("    ldr     r1, =100\n");
-    s.push_str("    mul     r0, r0, r1          @ x * 100\n");
-    s.push_str("    mov     r1, r6\n");
-    s.push_str("    bl      __aeabi_idiv        @ r0 = screen_x\n");
-    s.push_str("    mov     r4, r0              @ save screen_x\n");
-    // screen_y = y * 100 / z
-    s.push_str("    mov     r0, r5\n");
-    s.push_str("    ldr     r1, =100\n");
-    s.push_str("    mul     r0, r0, r1          @ y * 100\n");
-    s.push_str("    mov     r1, r6\n");
-    s.push_str("    bl      __aeabi_idiv        @ r0 = screen_y\n");
-    s.push_str("    mov     r5, r0              @ save screen_y\n");
-    // Call pitrex_draw_vector_ex(asset_ptr, ox=screen_x, oy=screen_y, mirror=0, intensity=127)
-    s.push_str("    push    {r4, r5}            @ save screen coords\n");
-    s.push_str("    mov     r8, #127\n");
-    s.push_str("    push    {r8}                @ 5th arg: intensity=127\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
+    s.push_str("    mov     r4, r0              @ asset_3d_ptr\n");
+    s.push_str("    mov     r5, r1              @ rot_x\n");
+    s.push_str("    mov     r6, r2              @ rot_y\n");
+    s.push_str("    mov     r7, r3              @ rot_z\n");
+    s.push_str("    ldrsb   r8, [sp, #36]       @ ox (sign-extend)\n");
+    s.push_str("    ldrsb   r9, [sp, #40]       @ oy\n");
+    // TODO: Implement full 3D rotation matrix using sin/cos LUTs
+    // For now, just draw the asset at the offset without rotation
+    // Call pitrex_draw_vector_ex(asset_ptr, ox, oy, mirror=0, intensity=127)
+    // Note: This uses _VECTORS (normal 2D), not _3D_DATA — proper impl will use _3D_DATA with rotated vertices
+    s.push_str("    @ Placeholder: draw asset without rotation (full 3D rotation TODO)\n");
+    s.push_str("    mov     r0, r4              @ asset_ptr\n");
+    s.push_str("    mov     r1, r8              @ ox\n");
+    s.push_str("    mov     r2, r9              @ oy\n");
     s.push_str("    mov     r3, #0              @ mirror=0\n");
-    s.push_str("    mov     r2, r5              @ oy = screen_y\n");
-    s.push_str("    mov     r1, r4              @ ox = screen_x\n");
-    s.push_str("    mov     r0, r7              @ asset_ptr\n");
+    s.push_str("    mov     r10, #127\n");
+    s.push_str("    push    {r10}               @ intensity=127 on stack for pitrex_draw_vector_ex\n");
     s.push_str("    bl      pitrex_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #4          @ pop intensity\n");
-    s.push_str("    pop     {r4, r5}            @ pop screen coords (discard)\n");
     s.push_str(".Ldv3d_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
 
     s

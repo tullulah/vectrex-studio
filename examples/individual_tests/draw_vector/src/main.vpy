@@ -11,11 +11,11 @@ def main():
 
 def loop():
     # Draw a star pattern with lines
-    DRAW_VECTOR_EX("platform", 0, 0,0,0)
+    DRAW_VECTOR_EX("platform", 0, 50,0,0)
 
-    DRAW_VECTOR_EX("platformver", 0, -50,0,0)
+    #DRAW_VECTOR_EX("platformver", 0, -15,0,0)
 
-    DRAW_LINE(0, -56, 0, 59)
+    #DRAW_LINE(-57,0, 58,0, 80)
 
     
 

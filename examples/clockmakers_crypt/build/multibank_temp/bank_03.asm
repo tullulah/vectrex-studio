@@ -38,176 +38,183 @@ LEVEL_BG_COUNT       EQU $C880+$41   ; BG object count (1 bytes)
 LEVEL_GP_COUNT       EQU $C880+$42   ; GP object count (1 bytes)
 LEVEL_FG_COUNT       EQU $C880+$43   ; FG object count (1 bytes)
 CAMERA_X             EQU $C880+$44   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$46   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$48   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$4A   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$4C   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$4E   ; Bank ID for current level (for multibank) (1 bytes)
-SLR_CUR_X            EQU $C880+$4F   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$50   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
-UGPC_OUTER_IDX       EQU $C880+$C8   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$C9   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$CA   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$CB   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$CD   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$CF   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$D0   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$D1   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$D2   ; GP-FG |dy| (1 bytes)
-TEXT_SCALE_H         EQU $C880+$D3   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$D4   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$D5   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_INTRO      EQU $C880+$D7   ; User variable: STATE_INTRO (2 bytes)
-VAR_STATE_ROOM       EQU $C880+$D9   ; User variable: STATE_ROOM (2 bytes)
-VAR_STATE_ENDING     EQU $C880+$DB   ; User variable: STATE_ENDING (2 bytes)
-VAR_STATE_TESTAMENT  EQU $C880+$DD   ; User variable: STATE_TESTAMENT (2 bytes)
-VAR_ROOM_ENTRANCE    EQU $C880+$DF   ; User variable: ROOM_ENTRANCE (2 bytes)
-VAR_ROOM_WORKSHOP    EQU $C880+$E1   ; User variable: ROOM_WORKSHOP (2 bytes)
-VAR_ROOM_ANTEROOM    EQU $C880+$E3   ; User variable: ROOM_ANTEROOM (2 bytes)
-VAR_ROOM_WEIGHTS     EQU $C880+$E5   ; User variable: ROOM_WEIGHTS (2 bytes)
-VAR_ROOM_OPTICS      EQU $C880+$E7   ; User variable: ROOM_OPTICS (2 bytes)
-VAR_ROOM_CONSERVATORY EQU $C880+$E9   ; User variable: ROOM_CONSERVATORY (2 bytes)
-VAR_ROOM_VAULT_CORRIDOR EQU $C880+$EB   ; User variable: ROOM_VAULT_CORRIDOR (2 bytes)
-VAR_VERB_EXAMINE     EQU $C880+$ED   ; User variable: VERB_EXAMINE (2 bytes)
-VAR_VERB_TAKE        EQU $C880+$EF   ; User variable: VERB_TAKE (2 bytes)
-VAR_VERB_USE         EQU $C880+$F1   ; User variable: VERB_USE (2 bytes)
-VAR_VERB_GIVE        EQU $C880+$F3   ; User variable: VERB_GIVE (2 bytes)
-VAR_NPC_CARETAKER    EQU $C880+$F5   ; User variable: NPC_CARETAKER (2 bytes)
-VAR_NPC_HANS         EQU $C880+$F7   ; User variable: NPC_HANS (2 bytes)
-VAR_NPC_ELISA        EQU $C880+$F9   ; User variable: NPC_ELISA (2 bytes)
-VAR_NPC_APPRENTICE   EQU $C880+$FB   ; User variable: NPC_APPRENTICE (2 bytes)
-VAR_ITEM_LENS        EQU $C880+$FD   ; User variable: ITEM_LENS (2 bytes)
-VAR_ITEM_GEAR        EQU $C880+$FF   ; User variable: ITEM_GEAR (2 bytes)
-VAR_ITEM_PRISM       EQU $C880+$101   ; User variable: ITEM_PRISM (2 bytes)
-VAR_ITEM_BLANKET     EQU $C880+$103   ; User variable: ITEM_BLANKET (2 bytes)
-VAR_ITEM_EYE         EQU $C880+$105   ; User variable: ITEM_EYE (2 bytes)
-VAR_ITEM_OIL         EQU $C880+$107   ; User variable: ITEM_OIL (2 bytes)
-VAR_ITEM_SHEET       EQU $C880+$109   ; User variable: ITEM_SHEET (2 bytes)
-VAR_ITEM_KEY         EQU $C880+$10B   ; User variable: ITEM_KEY (2 bytes)
-VAR_ITEM_COUNT       EQU $C880+$10D   ; User variable: ITEM_COUNT (2 bytes)
-VAR_ITEM_WEIGHT      EQU $C880+$10F   ; User variable: ITEM_WEIGHT (2 bytes)
-VAR_MUSIC_NONE       EQU $C880+$111   ; User variable: MUSIC_NONE (2 bytes)
-VAR_MUSIC_TITLE      EQU $C880+$113   ; User variable: MUSIC_TITLE (2 bytes)
-VAR_MUSIC_EXPLORATION EQU $C880+$115   ; User variable: MUSIC_EXPLORATION (2 bytes)
-VAR_FL_DATE_KNOWN    EQU $C880+$117   ; User variable: FL_DATE_KNOWN (2 bytes)
-VAR_FL_TALLER_OPEN   EQU $C880+$119   ; User variable: FL_TALLER_OPEN (2 bytes)
-VAR_FL_SARC_OPEN     EQU $C880+$11B   ; User variable: FL_SARC_OPEN (2 bytes)
-VAR_FL_CLOCK_READ    EQU $C880+$11D   ; User variable: FL_CLOCK_READ (2 bytes)
-VAR_FL_PANEL_ACTIVE  EQU $C880+$11F   ; User variable: FL_PANEL_ACTIVE (2 bytes)
-VAR_FL_ITEMS_DEPOSITED EQU $C880+$121   ; User variable: FL_ITEMS_DEPOSITED (2 bytes)
-VAR_FL_OPTICS_SOLVED EQU $C880+$123   ; User variable: FL_OPTICS_SOLVED (2 bytes)
-VAR_FL_OPTICS_OPEN   EQU $C880+$125   ; User variable: FL_OPTICS_OPEN (2 bytes)
-VAR_FL_PLAT_DOWN     EQU $C880+$127   ; User variable: FL_PLAT_DOWN (2 bytes)
-VAR_FL_ELISA_HELPED  EQU $C880+$129   ; User variable: FL_ELISA_HELPED (2 bytes)
-VAR_FL_HANS_HELPED   EQU $C880+$12B   ; User variable: FL_HANS_HELPED (2 bytes)
-VAR_FL_CARETAKER_DONE EQU $C880+$12D   ; User variable: FL_CARETAKER_DONE (2 bytes)
-VAR_FL_EXIT_TESTAMENT EQU $C880+$12F   ; User variable: FL_EXIT_TESTAMENT (2 bytes)
-VAR_FL_EXIT_ENDING   EQU $C880+$131   ; User variable: FL_EXIT_ENDING (2 bytes)
-VAR_ENT_HS_PAINTING  EQU $C880+$133   ; User variable: ENT_HS_PAINTING (2 bytes)
-VAR_ENT_HS_DOOR      EQU $C880+$135   ; User variable: ENT_HS_DOOR (2 bytes)
-VAR_ENT_HS_CARETAKER EQU $C880+$137   ; User variable: ENT_HS_CARETAKER (2 bytes)
-VAR_ENT_HS_CONS_DOOR EQU $C880+$139   ; User variable: ENT_HS_CONS_DOOR (2 bytes)
-VAR_ENT_HS_X         EQU $C880+$13B   ; User variable: ENT_HS_X (2 bytes)
-VAR_ENT_HS_Y         EQU $C880+$13D   ; User variable: ENT_HS_Y (2 bytes)
-VAR_ENT_HS_W         EQU $C880+$13F   ; User variable: ENT_HS_W (2 bytes)
-VAR_ENT_HS_H         EQU $C880+$141   ; User variable: ENT_HS_H (2 bytes)
-VAR_CLOCK_HS_SARC    EQU $C880+$143   ; User variable: CLOCK_HS_SARC (2 bytes)
-VAR_CLOCK_HS_CLOCK   EQU $C880+$145   ; User variable: CLOCK_HS_CLOCK (2 bytes)
-VAR_CLOCK_HS_GEAR    EQU $C880+$147   ; User variable: CLOCK_HS_GEAR (2 bytes)
-VAR_CLOCK_HS_HANS    EQU $C880+$149   ; User variable: CLOCK_HS_HANS (2 bytes)
-VAR_CLOCK_HS_OIL     EQU $C880+$14B   ; User variable: CLOCK_HS_OIL (2 bytes)
-VAR_CLOCK_HS_OPTICS  EQU $C880+$14D   ; User variable: CLOCK_HS_OPTICS (2 bytes)
-VAR_CLOCK_HS_X       EQU $C880+$14F   ; User variable: CLOCK_HS_X (2 bytes)
-VAR_CLOCK_HS_Y       EQU $C880+$151   ; User variable: CLOCK_HS_Y (2 bytes)
-VAR_CLOCK_HS_W       EQU $C880+$153   ; User variable: CLOCK_HS_W (2 bytes)
-VAR_CLOCK_HS_H       EQU $C880+$155   ; User variable: CLOCK_HS_H (2 bytes)
-VAR_ANT_HS_DIARY     EQU $C880+$157   ; User variable: ANT_HS_DIARY (2 bytes)
-VAR_ANT_HS_EXIT      EQU $C880+$159   ; User variable: ANT_HS_EXIT (2 bytes)
-VAR_ANT_HS_SHELF     EQU $C880+$15B   ; User variable: ANT_HS_SHELF (2 bytes)
-VAR_ANT_HS_CABINET   EQU $C880+$15D   ; User variable: ANT_HS_CABINET (2 bytes)
-VAR_ANT_HS_X         EQU $C880+$15F   ; User variable: ANT_HS_X (2 bytes)
-VAR_ANT_HS_Y         EQU $C880+$161   ; User variable: ANT_HS_Y (2 bytes)
-VAR_ANT_HS_W         EQU $C880+$163   ; User variable: ANT_HS_W (2 bytes)
-VAR_ANT_HS_H         EQU $C880+$165   ; User variable: ANT_HS_H (2 bytes)
-VAR_WGT_HS_PEDESTAL  EQU $C880+$167   ; User variable: WGT_HS_PEDESTAL (2 bytes)
-VAR_WGT_HS_EXIT      EQU $C880+$169   ; User variable: WGT_HS_EXIT (2 bytes)
-VAR_WGT_HS_X         EQU $C880+$16B   ; User variable: WGT_HS_X (2 bytes)
-VAR_WGT_HS_Y         EQU $C880+$16D   ; User variable: WGT_HS_Y (2 bytes)
-VAR_WGT_HS_W         EQU $C880+$16F   ; User variable: WGT_HS_W (2 bytes)
-VAR_WGT_HS_H         EQU $C880+$171   ; User variable: WGT_HS_H (2 bytes)
-VAR_OPT_HS_PEDESTAL  EQU $C880+$173   ; User variable: OPT_HS_PEDESTAL (2 bytes)
-VAR_OPT_HS_COMPARTMENT EQU $C880+$175   ; User variable: OPT_HS_COMPARTMENT (2 bytes)
-VAR_OPT_HS_X         EQU $C880+$177   ; User variable: OPT_HS_X (2 bytes)
-VAR_OPT_HS_Y         EQU $C880+$179   ; User variable: OPT_HS_Y (2 bytes)
-VAR_OPT_HS_W         EQU $C880+$17B   ; User variable: OPT_HS_W (2 bytes)
-VAR_OPT_HS_H         EQU $C880+$17D   ; User variable: OPT_HS_H (2 bytes)
-VAR_CONS_HS_ELISA    EQU $C880+$17F   ; User variable: CONS_HS_ELISA (2 bytes)
-VAR_CONS_HS_X        EQU $C880+$181   ; User variable: CONS_HS_X (2 bytes)
-VAR_CONS_HS_Y        EQU $C880+$183   ; User variable: CONS_HS_Y (2 bytes)
-VAR_CONS_HS_W        EQU $C880+$185   ; User variable: CONS_HS_W (2 bytes)
-VAR_CONS_HS_H        EQU $C880+$187   ; User variable: CONS_HS_H (2 bytes)
-VAR_VAULT_HS_APPR    EQU $C880+$189   ; User variable: VAULT_HS_APPR (2 bytes)
-VAR_VAULT_HS_DOOR    EQU $C880+$18B   ; User variable: VAULT_HS_DOOR (2 bytes)
-VAR_VAULT_HS_X       EQU $C880+$18D   ; User variable: VAULT_HS_X (2 bytes)
-VAR_VAULT_HS_Y       EQU $C880+$18F   ; User variable: VAULT_HS_Y (2 bytes)
-VAR_VAULT_HS_W       EQU $C880+$191   ; User variable: VAULT_HS_W (2 bytes)
-VAR_VAULT_HS_H       EQU $C880+$193   ; User variable: VAULT_HS_H (2 bytes)
-VAR_SCREEN           EQU $C880+$195   ; User variable: SCREEN (2 bytes)
-VAR_BLINK_TIMER      EQU $C880+$197   ; User variable: BLINK_TIMER (2 bytes)
-VAR_BLINK_ON         EQU $C880+$199   ; User variable: BLINK_ON (2 bytes)
-VAR_INTRO_PAGE       EQU $C880+$19B   ; User variable: INTRO_PAGE (2 bytes)
-VAR_CURRENT_ROOM     EQU $C880+$19D   ; User variable: CURRENT_ROOM (2 bytes)
-VAR_PLAYER_X         EQU $C880+$19F   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$1A1   ; User variable: PLAYER_Y (2 bytes)
-VAR_SCROLL_X         EQU $C880+$1A3   ; User variable: SCROLL_X (2 bytes)
-VAR_PLAYER_SPEED     EQU $C880+$1A5   ; User variable: PLAYER_SPEED (2 bytes)
-VAR_CURRENT_VERB     EQU $C880+$1A7   ; User variable: CURRENT_VERB (2 bytes)
-VAR_NEAR_HS          EQU $C880+$1A9   ; User variable: NEAR_HS (2 bytes)
-VAR_MSG_ID           EQU $C880+$1AB   ; User variable: MSG_ID (2 bytes)
-VAR_MSG_TIMER        EQU $C880+$1AD   ; User variable: MSG_TIMER (2 bytes)
-VAR_ROOM_EXIT        EQU $C880+$1AF   ; User variable: ROOM_EXIT (2 bytes)
-VAR_FLAGS_A          EQU $C880+$1B1   ; User variable: FLAGS_A (2 bytes)
-VAR_FLAGS_B          EQU $C880+$1B3   ; User variable: FLAGS_B (2 bytes)
-VAR_EXIT_ROOM_TARGET EQU $C880+$1B5   ; User variable: EXIT_ROOM_TARGET (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$1B7   ; User variable: CURRENT_MUSIC (2 bytes)
-VAR_BTN1_FIRED       EQU $C880+$1B9   ; User variable: BTN1_FIRED (2 bytes)
-VAR_BTN2_FIRED       EQU $C880+$1BB   ; User variable: BTN2_FIRED (2 bytes)
-VAR_BTN3_FIRED       EQU $C880+$1BD   ; User variable: BTN3_FIRED (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$1BF   ; User variable: PREV_BTN1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$1C1   ; User variable: PREV_BTN2 (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$1C3   ; User variable: PREV_BTN3 (2 bytes)
-VAR_INV_COUNT        EQU $C880+$1C5   ; User variable: INV_COUNT (2 bytes)
-VAR_INV_WEIGHT       EQU $C880+$1C7   ; User variable: INV_WEIGHT (2 bytes)
-VAR_SHOW_INVENTORY   EQU $C880+$1C9   ; User variable: SHOW_INVENTORY (2 bytes)
-VAR_ACTIVE_ITEM      EQU $C880+$1CB   ; User variable: ACTIVE_ITEM (2 bytes)
-VAR_INV_CURSOR       EQU $C880+$1CD   ; User variable: INV_CURSOR (2 bytes)
-VAR_HEARTBEAT_TEMPO  EQU $C880+$1CF   ; User variable: HEARTBEAT_TEMPO (2 bytes)
-VAR_HEARTBEAT_TIMER  EQU $C880+$1D1   ; User variable: HEARTBEAT_TIMER (2 bytes)
-VAR_TESTAMENT_Y      EQU $C880+$1D3   ; User variable: TESTAMENT_Y (2 bytes)
-VAR_TESTAMENT_PAGE   EQU $C880+$1D5   ; User variable: TESTAMENT_PAGE (2 bytes)
-VAR_ENDING_Y         EQU $C880+$1D7   ; User variable: ENDING_Y (2 bytes)
-VAR_SKIPPEDFRAMES    EQU $C880+$1D9   ; User variable: SKIPPEDFRAMES (2 bytes)
-VAR_RAW1             EQU $C880+$1DB   ; User variable: RAW1 (2 bytes)
-VAR_RAW2             EQU $C880+$1DD   ; User variable: RAW2 (2 bytes)
-VAR_RAW3             EQU $C880+$1DF   ; User variable: RAW3 (2 bytes)
-VAR_ROOM_ID          EQU $C880+$1E3   ; User variable: room_id (2 bytes)
-VAR_ROOM_ID          EQU $C880+$1E3   ; User variable: ROOM_ID (2 bytes)
-VAR_JOY_X            EQU $C880+$1E5   ; User variable: JOY_X (2 bytes)
-VAR_INV_ITEMS        EQU $C880+$1E7   ; User variable: INV_ITEMS (2 bytes)
-VAR_DX               EQU $C880+$1E9   ; User variable: DX (2 bytes)
-VAR_DY               EQU $C880+$1EB   ; User variable: DY (2 bytes)
-VAR_HS               EQU $C880+$1EF   ; User variable: hs (2 bytes)
-VAR_HS               EQU $C880+$1EF   ; User variable: HS (2 bytes)
-VAR_NPC_STATE        EQU $C880+$1F1   ; User variable: NPC_STATE (2 bytes)
-VAR_CARETAKER_SX     EQU $C880+$1F3   ; User variable: CARETAKER_SX (2 bytes)
-VAR_HANS_SX          EQU $C880+$1F5   ; User variable: HANS_SX (2 bytes)
-VAR_PLAT_SX          EQU $C880+$1F7   ; User variable: PLAT_SX (2 bytes)
-VAR_COMP_SX          EQU $C880+$1F9   ; User variable: COMP_SX (2 bytes)
-VAR_SCREEN_X         EQU $C880+$1FB   ; User variable: SCREEN_X (2 bytes)
-VAR_ITEM_ID          EQU $C880+$1FF   ; User variable: item_id (2 bytes)
-VAR_ITEM_ID          EQU $C880+$1FF   ; User variable: ITEM_ID (2 bytes)
-VAR_NPC_STATE_DATA   EQU $C880+$201   ; Mutable array 'NPC_STATE' data (4 elements x 2 bytes) (8 bytes)
-VAR_INV_ITEMS_DATA   EQU $C880+$209   ; Mutable array 'INV_ITEMS' data (8 elements x 2 bytes) (16 bytes)
+CAMERA_Y             EQU $C880+$46   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$48   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$4A   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$4C   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$4E   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$50   ; Bank ID for current level (for multibank) (1 bytes)
+SLR_CUR_X            EQU $C880+$51   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$232   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$234   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
+LCOL_PY              EQU $C880+$235   ; LEVEL_COLLISION player_y (lo byte) (1 bytes)
+LCOL_PHH             EQU $C880+$236   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$237   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$238   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$239   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$23A   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$23B   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$23C   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$23E   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$240   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$241   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$242   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$243   ; GP-FG |dy| (1 bytes)
+TEXT_SCALE_H         EQU $C880+$244   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$245   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_STATE_TITLE      EQU $C880+$246   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_INTRO      EQU $C880+$248   ; User variable: STATE_INTRO (2 bytes)
+VAR_STATE_ROOM       EQU $C880+$24A   ; User variable: STATE_ROOM (2 bytes)
+VAR_STATE_ENDING     EQU $C880+$24C   ; User variable: STATE_ENDING (2 bytes)
+VAR_STATE_TESTAMENT  EQU $C880+$24E   ; User variable: STATE_TESTAMENT (2 bytes)
+VAR_ROOM_ENTRANCE    EQU $C880+$250   ; User variable: ROOM_ENTRANCE (2 bytes)
+VAR_ROOM_WORKSHOP    EQU $C880+$252   ; User variable: ROOM_WORKSHOP (2 bytes)
+VAR_ROOM_ANTEROOM    EQU $C880+$254   ; User variable: ROOM_ANTEROOM (2 bytes)
+VAR_ROOM_WEIGHTS     EQU $C880+$256   ; User variable: ROOM_WEIGHTS (2 bytes)
+VAR_ROOM_OPTICS      EQU $C880+$258   ; User variable: ROOM_OPTICS (2 bytes)
+VAR_ROOM_CONSERVATORY EQU $C880+$25A   ; User variable: ROOM_CONSERVATORY (2 bytes)
+VAR_ROOM_VAULT_CORRIDOR EQU $C880+$25C   ; User variable: ROOM_VAULT_CORRIDOR (2 bytes)
+VAR_VERB_EXAMINE     EQU $C880+$25E   ; User variable: VERB_EXAMINE (2 bytes)
+VAR_VERB_TAKE        EQU $C880+$260   ; User variable: VERB_TAKE (2 bytes)
+VAR_VERB_USE         EQU $C880+$262   ; User variable: VERB_USE (2 bytes)
+VAR_VERB_GIVE        EQU $C880+$264   ; User variable: VERB_GIVE (2 bytes)
+VAR_NPC_CARETAKER    EQU $C880+$266   ; User variable: NPC_CARETAKER (2 bytes)
+VAR_NPC_HANS         EQU $C880+$268   ; User variable: NPC_HANS (2 bytes)
+VAR_NPC_ELISA        EQU $C880+$26A   ; User variable: NPC_ELISA (2 bytes)
+VAR_NPC_APPRENTICE   EQU $C880+$26C   ; User variable: NPC_APPRENTICE (2 bytes)
+VAR_ITEM_LENS        EQU $C880+$26E   ; User variable: ITEM_LENS (2 bytes)
+VAR_ITEM_GEAR        EQU $C880+$270   ; User variable: ITEM_GEAR (2 bytes)
+VAR_ITEM_PRISM       EQU $C880+$272   ; User variable: ITEM_PRISM (2 bytes)
+VAR_ITEM_BLANKET     EQU $C880+$274   ; User variable: ITEM_BLANKET (2 bytes)
+VAR_ITEM_EYE         EQU $C880+$276   ; User variable: ITEM_EYE (2 bytes)
+VAR_ITEM_OIL         EQU $C880+$278   ; User variable: ITEM_OIL (2 bytes)
+VAR_ITEM_SHEET       EQU $C880+$27A   ; User variable: ITEM_SHEET (2 bytes)
+VAR_ITEM_KEY         EQU $C880+$27C   ; User variable: ITEM_KEY (2 bytes)
+VAR_ITEM_COUNT       EQU $C880+$27E   ; User variable: ITEM_COUNT (2 bytes)
+VAR_ITEM_WEIGHT      EQU $C880+$280   ; User variable: ITEM_WEIGHT (2 bytes)
+VAR_MUSIC_NONE       EQU $C880+$282   ; User variable: MUSIC_NONE (2 bytes)
+VAR_MUSIC_TITLE      EQU $C880+$284   ; User variable: MUSIC_TITLE (2 bytes)
+VAR_MUSIC_EXPLORATION EQU $C880+$286   ; User variable: MUSIC_EXPLORATION (2 bytes)
+VAR_FL_DATE_KNOWN    EQU $C880+$288   ; User variable: FL_DATE_KNOWN (2 bytes)
+VAR_FL_TALLER_OPEN   EQU $C880+$28A   ; User variable: FL_TALLER_OPEN (2 bytes)
+VAR_FL_SARC_OPEN     EQU $C880+$28C   ; User variable: FL_SARC_OPEN (2 bytes)
+VAR_FL_CLOCK_READ    EQU $C880+$28E   ; User variable: FL_CLOCK_READ (2 bytes)
+VAR_FL_PANEL_ACTIVE  EQU $C880+$290   ; User variable: FL_PANEL_ACTIVE (2 bytes)
+VAR_FL_ITEMS_DEPOSITED EQU $C880+$292   ; User variable: FL_ITEMS_DEPOSITED (2 bytes)
+VAR_FL_OPTICS_SOLVED EQU $C880+$294   ; User variable: FL_OPTICS_SOLVED (2 bytes)
+VAR_FL_OPTICS_OPEN   EQU $C880+$296   ; User variable: FL_OPTICS_OPEN (2 bytes)
+VAR_FL_PLAT_DOWN     EQU $C880+$298   ; User variable: FL_PLAT_DOWN (2 bytes)
+VAR_FL_ELISA_HELPED  EQU $C880+$29A   ; User variable: FL_ELISA_HELPED (2 bytes)
+VAR_FL_HANS_HELPED   EQU $C880+$29C   ; User variable: FL_HANS_HELPED (2 bytes)
+VAR_FL_CARETAKER_DONE EQU $C880+$29E   ; User variable: FL_CARETAKER_DONE (2 bytes)
+VAR_FL_EXIT_TESTAMENT EQU $C880+$2A0   ; User variable: FL_EXIT_TESTAMENT (2 bytes)
+VAR_FL_EXIT_ENDING   EQU $C880+$2A2   ; User variable: FL_EXIT_ENDING (2 bytes)
+VAR_ENT_HS_PAINTING  EQU $C880+$2A4   ; User variable: ENT_HS_PAINTING (2 bytes)
+VAR_ENT_HS_DOOR      EQU $C880+$2A6   ; User variable: ENT_HS_DOOR (2 bytes)
+VAR_ENT_HS_CARETAKER EQU $C880+$2A8   ; User variable: ENT_HS_CARETAKER (2 bytes)
+VAR_ENT_HS_CONS_DOOR EQU $C880+$2AA   ; User variable: ENT_HS_CONS_DOOR (2 bytes)
+VAR_ENT_HS_X         EQU $C880+$2AC   ; User variable: ENT_HS_X (2 bytes)
+VAR_ENT_HS_Y         EQU $C880+$2AE   ; User variable: ENT_HS_Y (2 bytes)
+VAR_ENT_HS_W         EQU $C880+$2B0   ; User variable: ENT_HS_W (2 bytes)
+VAR_ENT_HS_H         EQU $C880+$2B2   ; User variable: ENT_HS_H (2 bytes)
+VAR_CLOCK_HS_SARC    EQU $C880+$2B4   ; User variable: CLOCK_HS_SARC (2 bytes)
+VAR_CLOCK_HS_CLOCK   EQU $C880+$2B6   ; User variable: CLOCK_HS_CLOCK (2 bytes)
+VAR_CLOCK_HS_GEAR    EQU $C880+$2B8   ; User variable: CLOCK_HS_GEAR (2 bytes)
+VAR_CLOCK_HS_HANS    EQU $C880+$2BA   ; User variable: CLOCK_HS_HANS (2 bytes)
+VAR_CLOCK_HS_OIL     EQU $C880+$2BC   ; User variable: CLOCK_HS_OIL (2 bytes)
+VAR_CLOCK_HS_OPTICS  EQU $C880+$2BE   ; User variable: CLOCK_HS_OPTICS (2 bytes)
+VAR_CLOCK_HS_X       EQU $C880+$2C0   ; User variable: CLOCK_HS_X (2 bytes)
+VAR_CLOCK_HS_Y       EQU $C880+$2C2   ; User variable: CLOCK_HS_Y (2 bytes)
+VAR_CLOCK_HS_W       EQU $C880+$2C4   ; User variable: CLOCK_HS_W (2 bytes)
+VAR_CLOCK_HS_H       EQU $C880+$2C6   ; User variable: CLOCK_HS_H (2 bytes)
+VAR_ANT_HS_DIARY     EQU $C880+$2C8   ; User variable: ANT_HS_DIARY (2 bytes)
+VAR_ANT_HS_EXIT      EQU $C880+$2CA   ; User variable: ANT_HS_EXIT (2 bytes)
+VAR_ANT_HS_SHELF     EQU $C880+$2CC   ; User variable: ANT_HS_SHELF (2 bytes)
+VAR_ANT_HS_CABINET   EQU $C880+$2CE   ; User variable: ANT_HS_CABINET (2 bytes)
+VAR_ANT_HS_X         EQU $C880+$2D0   ; User variable: ANT_HS_X (2 bytes)
+VAR_ANT_HS_Y         EQU $C880+$2D2   ; User variable: ANT_HS_Y (2 bytes)
+VAR_ANT_HS_W         EQU $C880+$2D4   ; User variable: ANT_HS_W (2 bytes)
+VAR_ANT_HS_H         EQU $C880+$2D6   ; User variable: ANT_HS_H (2 bytes)
+VAR_WGT_HS_PEDESTAL  EQU $C880+$2D8   ; User variable: WGT_HS_PEDESTAL (2 bytes)
+VAR_WGT_HS_EXIT      EQU $C880+$2DA   ; User variable: WGT_HS_EXIT (2 bytes)
+VAR_WGT_HS_X         EQU $C880+$2DC   ; User variable: WGT_HS_X (2 bytes)
+VAR_WGT_HS_Y         EQU $C880+$2DE   ; User variable: WGT_HS_Y (2 bytes)
+VAR_WGT_HS_W         EQU $C880+$2E0   ; User variable: WGT_HS_W (2 bytes)
+VAR_WGT_HS_H         EQU $C880+$2E2   ; User variable: WGT_HS_H (2 bytes)
+VAR_OPT_HS_PEDESTAL  EQU $C880+$2E4   ; User variable: OPT_HS_PEDESTAL (2 bytes)
+VAR_OPT_HS_COMPARTMENT EQU $C880+$2E6   ; User variable: OPT_HS_COMPARTMENT (2 bytes)
+VAR_OPT_HS_X         EQU $C880+$2E8   ; User variable: OPT_HS_X (2 bytes)
+VAR_OPT_HS_Y         EQU $C880+$2EA   ; User variable: OPT_HS_Y (2 bytes)
+VAR_OPT_HS_W         EQU $C880+$2EC   ; User variable: OPT_HS_W (2 bytes)
+VAR_OPT_HS_H         EQU $C880+$2EE   ; User variable: OPT_HS_H (2 bytes)
+VAR_CONS_HS_ELISA    EQU $C880+$2F0   ; User variable: CONS_HS_ELISA (2 bytes)
+VAR_CONS_HS_X        EQU $C880+$2F2   ; User variable: CONS_HS_X (2 bytes)
+VAR_CONS_HS_Y        EQU $C880+$2F4   ; User variable: CONS_HS_Y (2 bytes)
+VAR_CONS_HS_W        EQU $C880+$2F6   ; User variable: CONS_HS_W (2 bytes)
+VAR_CONS_HS_H        EQU $C880+$2F8   ; User variable: CONS_HS_H (2 bytes)
+VAR_VAULT_HS_APPR    EQU $C880+$2FA   ; User variable: VAULT_HS_APPR (2 bytes)
+VAR_VAULT_HS_DOOR    EQU $C880+$2FC   ; User variable: VAULT_HS_DOOR (2 bytes)
+VAR_VAULT_HS_X       EQU $C880+$2FE   ; User variable: VAULT_HS_X (2 bytes)
+VAR_VAULT_HS_Y       EQU $C880+$300   ; User variable: VAULT_HS_Y (2 bytes)
+VAR_VAULT_HS_W       EQU $C880+$302   ; User variable: VAULT_HS_W (2 bytes)
+VAR_VAULT_HS_H       EQU $C880+$304   ; User variable: VAULT_HS_H (2 bytes)
+VAR_SCREEN           EQU $C880+$306   ; User variable: SCREEN (2 bytes)
+VAR_BLINK_TIMER      EQU $C880+$308   ; User variable: BLINK_TIMER (2 bytes)
+VAR_BLINK_ON         EQU $C880+$30A   ; User variable: BLINK_ON (2 bytes)
+VAR_INTRO_PAGE       EQU $C880+$30C   ; User variable: INTRO_PAGE (2 bytes)
+VAR_CURRENT_ROOM     EQU $C880+$30E   ; User variable: CURRENT_ROOM (2 bytes)
+VAR_PLAYER_X         EQU $C880+$310   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$312   ; User variable: PLAYER_Y (2 bytes)
+VAR_SCROLL_X         EQU $C880+$314   ; User variable: SCROLL_X (2 bytes)
+VAR_PLAYER_SPEED     EQU $C880+$316   ; User variable: PLAYER_SPEED (2 bytes)
+VAR_CURRENT_VERB     EQU $C880+$318   ; User variable: CURRENT_VERB (2 bytes)
+VAR_NEAR_HS          EQU $C880+$31A   ; User variable: NEAR_HS (2 bytes)
+VAR_MSG_ID           EQU $C880+$31C   ; User variable: MSG_ID (2 bytes)
+VAR_MSG_TIMER        EQU $C880+$31E   ; User variable: MSG_TIMER (2 bytes)
+VAR_ROOM_EXIT        EQU $C880+$320   ; User variable: ROOM_EXIT (2 bytes)
+VAR_FLAGS_A          EQU $C880+$322   ; User variable: FLAGS_A (2 bytes)
+VAR_FLAGS_B          EQU $C880+$324   ; User variable: FLAGS_B (2 bytes)
+VAR_EXIT_ROOM_TARGET EQU $C880+$326   ; User variable: EXIT_ROOM_TARGET (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$328   ; User variable: CURRENT_MUSIC (2 bytes)
+VAR_BTN1_FIRED       EQU $C880+$32A   ; User variable: BTN1_FIRED (2 bytes)
+VAR_BTN2_FIRED       EQU $C880+$32C   ; User variable: BTN2_FIRED (2 bytes)
+VAR_BTN3_FIRED       EQU $C880+$32E   ; User variable: BTN3_FIRED (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$330   ; User variable: PREV_BTN1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$332   ; User variable: PREV_BTN2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$334   ; User variable: PREV_BTN3 (2 bytes)
+VAR_INV_COUNT        EQU $C880+$336   ; User variable: INV_COUNT (2 bytes)
+VAR_INV_WEIGHT       EQU $C880+$338   ; User variable: INV_WEIGHT (2 bytes)
+VAR_SHOW_INVENTORY   EQU $C880+$33A   ; User variable: SHOW_INVENTORY (2 bytes)
+VAR_ACTIVE_ITEM      EQU $C880+$33C   ; User variable: ACTIVE_ITEM (2 bytes)
+VAR_INV_CURSOR       EQU $C880+$33E   ; User variable: INV_CURSOR (2 bytes)
+VAR_HEARTBEAT_TEMPO  EQU $C880+$340   ; User variable: HEARTBEAT_TEMPO (2 bytes)
+VAR_HEARTBEAT_TIMER  EQU $C880+$342   ; User variable: HEARTBEAT_TIMER (2 bytes)
+VAR_TESTAMENT_Y      EQU $C880+$344   ; User variable: TESTAMENT_Y (2 bytes)
+VAR_TESTAMENT_PAGE   EQU $C880+$346   ; User variable: TESTAMENT_PAGE (2 bytes)
+VAR_ENDING_Y         EQU $C880+$348   ; User variable: ENDING_Y (2 bytes)
+VAR_SKIPPEDFRAMES    EQU $C880+$34A   ; User variable: SKIPPEDFRAMES (2 bytes)
+VAR_RAW1             EQU $C880+$34C   ; User variable: RAW1 (2 bytes)
+VAR_RAW2             EQU $C880+$34E   ; User variable: RAW2 (2 bytes)
+VAR_RAW3             EQU $C880+$350   ; User variable: RAW3 (2 bytes)
+VAR_ROOM_ID          EQU $C880+$354   ; User variable: room_id (2 bytes)
+VAR_ROOM_ID          EQU $C880+$354   ; User variable: ROOM_ID (2 bytes)
+VAR_JOY_X            EQU $C880+$356   ; User variable: JOY_X (2 bytes)
+VAR_INV_ITEMS        EQU $C880+$358   ; User variable: INV_ITEMS (2 bytes)
+VAR_DX               EQU $C880+$35A   ; User variable: DX (2 bytes)
+VAR_DY               EQU $C880+$35C   ; User variable: DY (2 bytes)
+VAR_HS               EQU $C880+$360   ; User variable: hs (2 bytes)
+VAR_HS               EQU $C880+$360   ; User variable: HS (2 bytes)
+VAR_NPC_STATE        EQU $C880+$362   ; User variable: NPC_STATE (2 bytes)
+VAR_CARETAKER_SX     EQU $C880+$364   ; User variable: CARETAKER_SX (2 bytes)
+VAR_HANS_SX          EQU $C880+$366   ; User variable: HANS_SX (2 bytes)
+VAR_PLAT_SX          EQU $C880+$368   ; User variable: PLAT_SX (2 bytes)
+VAR_COMP_SX          EQU $C880+$36A   ; User variable: COMP_SX (2 bytes)
+VAR_SCREEN_X         EQU $C880+$36C   ; User variable: SCREEN_X (2 bytes)
+VAR_ITEM_ID          EQU $C880+$370   ; User variable: item_id (2 bytes)
+VAR_ITEM_ID          EQU $C880+$370   ; User variable: ITEM_ID (2 bytes)
+VAR_NPC_STATE_DATA   EQU $C880+$372   ; Mutable array 'NPC_STATE' data (4 elements x 2 bytes) (8 bytes)
+VAR_INV_ITEMS_DATA   EQU $C880+$37A   ; Mutable array 'INV_ITEMS' data (8 elements x 2 bytes) (16 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -223,6 +230,38 @@ PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
 SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
 SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
 SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
+; Array length constants
+ARRAY_ITEM_WEIGHT_LEN         EQU 8   ; 8 elements
+ARRAY_ENT_HS_X_LEN         EQU 4   ; 4 elements
+ARRAY_ENT_HS_Y_LEN         EQU 4   ; 4 elements
+ARRAY_ENT_HS_W_LEN         EQU 4   ; 4 elements
+ARRAY_ENT_HS_H_LEN         EQU 4   ; 4 elements
+ARRAY_CLOCK_HS_X_LEN         EQU 6   ; 6 elements
+ARRAY_CLOCK_HS_Y_LEN         EQU 6   ; 6 elements
+ARRAY_CLOCK_HS_W_LEN         EQU 6   ; 6 elements
+ARRAY_CLOCK_HS_H_LEN         EQU 6   ; 6 elements
+ARRAY_ANT_HS_X_LEN         EQU 4   ; 4 elements
+ARRAY_ANT_HS_Y_LEN         EQU 4   ; 4 elements
+ARRAY_ANT_HS_W_LEN         EQU 4   ; 4 elements
+ARRAY_ANT_HS_H_LEN         EQU 4   ; 4 elements
+ARRAY_WGT_HS_X_LEN         EQU 2   ; 2 elements
+ARRAY_WGT_HS_Y_LEN         EQU 2   ; 2 elements
+ARRAY_WGT_HS_W_LEN         EQU 2   ; 2 elements
+ARRAY_WGT_HS_H_LEN         EQU 2   ; 2 elements
+ARRAY_OPT_HS_X_LEN         EQU 2   ; 2 elements
+ARRAY_OPT_HS_Y_LEN         EQU 2   ; 2 elements
+ARRAY_OPT_HS_W_LEN         EQU 2   ; 2 elements
+ARRAY_OPT_HS_H_LEN         EQU 2   ; 2 elements
+ARRAY_CONS_HS_X_LEN         EQU 1   ; 1 elements
+ARRAY_CONS_HS_Y_LEN         EQU 1   ; 1 elements
+ARRAY_CONS_HS_W_LEN         EQU 1   ; 1 elements
+ARRAY_CONS_HS_H_LEN         EQU 1   ; 1 elements
+ARRAY_VAULT_HS_X_LEN         EQU 2   ; 2 elements
+ARRAY_VAULT_HS_Y_LEN         EQU 2   ; 2 elements
+ARRAY_VAULT_HS_W_LEN         EQU 2   ; 2 elements
+ARRAY_VAULT_HS_H_LEN         EQU 2   ; 2 elements
+ARRAY_NPC_STATE_LEN         EQU 4   ; 4 elements
+ARRAY_INV_ITEMS_LEN         EQU 8   ; 8 elements
 
 
 
@@ -231,7 +270,7 @@ SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
 
 ;***************************************************************************
 ; ASSET LOOKUP TABLES (for banked asset access)
-; Total: 20 vectors, 2 music, 5 sfx, 7 levels
+; Total: 20 vectors, 2 music, 5 sfx, 7 levels, 0 animations
 ;***************************************************************************
 
 ; Vector Asset Index Mapping:
@@ -402,9 +441,9 @@ ASSET_ADDR_TABLE:
     FDB _INTRO_MUSIC    ; intro
     FDB _CRYPT_LOGO_VECTORS    ; crypt_logo
     FDB _DOOR_LOCKED_VECTORS    ; door_locked
-    FDB _PAINTING_VECTORS    ; painting
     FDB _CONSERVATORY_LEVEL    ; conservatory
     FDB _VAULT_CORRIDOR_LEVEL    ; vault_corridor
+    FDB _PAINTING_VECTORS    ; painting
     FDB _VAULT_CORRIDOR_VECTORS    ; vault_corridor
     FDB _CONSERVATORY_VECTORS    ; conservatory
     FDB _PUZZLE_SUCCESS_SFX    ; puzzle_success
@@ -426,8 +465,8 @@ ASSET_ADDR_TABLE:
     FDB _LOCKED_DOOR_VECTORS    ; locked_door
     FDB _OPTICS_PEDESTAL_VECTORS    ; optics_pedestal
     FDB _WALL_COMPARTMENT_VECTORS    ; wall_compartment
-    FDB _PLATFORM_UP_VECTORS    ; platform_up
     FDB _OPTICS_LAB_LEVEL    ; optics_lab
+    FDB _PLATFORM_UP_VECTORS    ; platform_up
     FDB _CANVAS_VECTORS    ; canvas
     FDB _ITEM_PICKUP_SFX    ; item_pickup
     FDB _ELISA_GHOST_VECTORS    ; elisa_ghost
@@ -467,17 +506,18 @@ DRAW_VECTOR_BANKED:
     CLR DRAW_VEC_INTENSITY
     JSR $F1AA            ; DP_to_D0
 
-    ; Loop over all paths (header byte 0 = path_count, +1.. = FDB table)
-    LDB ,X               ; B = path_count
+    ; Loop over all paths (header bytes 0-1 = path_count FDB, +2.. = FDB table)
+    LDD ,X               ; D = path_count (16-bit)
+    CMPD #0
     LBEQ DVB_DONE        ; No paths
-    LEAY 1,X             ; Y = pointer to first FDB entry
+    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)
 DVB_PATH_LOOP:
-    PSHS B               ; Save remaining path count
+    PSHS D               ; Save remaining path count (2 bytes)
     LDX ,Y               ; X = path data address (FDB entry)
     JSR Draw_Sync_List_At_With_Mirrors
     LEAY 2,Y             ; Advance to next FDB entry
-    PULS B               ; Restore count
-    DECB
+    PULS D               ; Restore count
+    SUBD #1
     BNE DVB_PATH_LOOP
 DVB_DONE:
 
@@ -898,6 +938,7 @@ LOAD_LEVEL_RUNTIME:
     ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized
     LDD #0
     STD >CAMERA_X
+    STD >CAMERA_Y
     
     ; Skip world bounds (8 bytes) + time/score (4 bytes)
     LEAX 12,X        ; X now points to object counts (+12)
@@ -925,7 +966,7 @@ LOAD_LEVEL_RUNTIME:
     ; Clear GP buffer with $FF marker (empty sentinel)
     LDA #$FF
     LDU #LEVEL_GP_BUFFER
-    LDB #8           ; Max 8 objects
+    LDB #32          ; Max 32 objects
 LLR_CLR_GP_LOOP:
     STA ,U           ; Write $FF to first byte of object slot
     LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
@@ -957,11 +998,11 @@ LLR_SKIP_GP:
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved
+;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
-;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:
@@ -1036,6 +1077,8 @@ LLR_COPY_DONE:
 SHOW_LEVEL_RUNTIME:
     PSHS D,X,Y,U     ; Preserve registers
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDA #$18
+    STA >$D00B       ; ACR=$18: SR shift-out PHI2, enable beam via SR
     ; MULTIBANK: Switch to level bank so ROM pointers are valid
     LDA >CURRENT_ROM_BANK
     PSHS A              ; Save current bank
@@ -1114,7 +1157,7 @@ SLR_OBJ_LOOP:
     ; Determine ROM vs RAM offsets via stride
     LDA 1,S          ; Peek stride from stack (+1 because B is on top)
     CMPA #20
-    BEQ SLR_ROM_OFFSETS
+    LBEQ SLR_ROM_OFFSETS
     
     ; === RAM object (stride=15) ===
     ; Need to look up intensity from ROM counterpart
@@ -1169,7 +1212,24 @@ SLR_RAM_A_ZERO:
 SLR_RAM_VISIBLE:
     LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
     STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
-    LDB 2,X          ; y at RAM +2
+    ; Apply CAMERA_Y: sign-extend world_y (8-bit), subtract CAMERA_Y, cull
+    LDB 2,X          ; world_y (signed byte at RAM +2)
+    SEX              ; sign-extend B into D
+    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y
+    TSTA
+    BEQ SLR_RAM_Y_ZERO
+    INCA
+    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above
+    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)
+    CMPB #128
+    BHS SLR_RAM_Y_VISIBLE
+    LBRA SLR_OBJ_NEXT
+SLR_RAM_Y_ZERO:
+    ; A=0: visible if B <= 127
+    CMPB #127
+    BLS SLR_RAM_Y_VISIBLE
+    LBRA SLR_OBJ_NEXT
+SLR_RAM_Y_VISIBLE:
     STB >DRAW_VEC_Y
     LDU 11,X         ; vector_ptr at RAM +11
     BRA SLR_DRAW_VECTOR
@@ -1180,7 +1240,23 @@ SLR_ROM_OFFSETS:
     CLR >MIRROR_Y
     LDA 8,X          ; intensity at ROM +8
     STA >DRAW_VEC_INTENSITY
-    LDD 3,X          ; y FDB at ROM +3; low byte into B
+    ; Apply CAMERA_Y: load world_y FDB at ROM +3, subtract CAMERA_Y, cull
+    LDD 3,X          ; world_y FDB at ROM +3 (16-bit signed)
+    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y
+    TSTA
+    BEQ SLR_ROM_Y_ZERO
+    INCA
+    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above
+    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)
+    CMPB #128
+    BHS SLR_ROM_Y_VISIBLE
+    LBRA SLR_OBJ_NEXT
+SLR_ROM_Y_ZERO:
+    ; A=0: visible if B <= 127
+    CMPB #127
+    BLS SLR_ROM_Y_VISIBLE
+    LBRA SLR_OBJ_NEXT
+SLR_ROM_Y_VISIBLE:
     STB >DRAW_VEC_Y  ; DP=$D0, must use extended addressing
     ; Load world_x (16-bit), subtract CAMERA_X, check visibility
     LDD 1,X          ; x FDB at ROM +1
@@ -1217,8 +1293,9 @@ SLR_DRAW_VECTOR:
     PSHS X           ; Save object pointer
     TFR U,X          ; X = vector data pointer (header)
     
-    ; Read path_count from vector header byte 0
-    LDB ,X+          ; B = path_count, X now at pointer table
+    ; Read path_count from vector header (FDB = 2 bytes big-endian, high byte is always $00)
+    LDA ,X+          ; skip high byte of FDB path_count (always $00 for ≤255 paths)
+    LDB ,X+          ; B = path_count (low byte), X now at pointer table
     
     ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)
 SLR_PATH_LOOP:
@@ -1910,35 +1987,52 @@ RTS
 
 ; ============================================================================
 ; UPDATE_MUSIC_PSG - Update PSG (call every frame)
+; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
+; delay = frames since previous event (0 = apply immediately)
+; End marker: FCB 0 after last event's count
+; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
+; PSG_DELAY_FRAMES counts down to the next event fire point.
+; PSG_MUSIC_PTR always points to delay byte of next pending event.
 ; ============================================================================
 UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
 LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done     ; Not playing, exit
+STA >PSG_MUSIC_ACTIVE   ; Mark music system active
+LDA >PSG_IS_PLAYING
+LBEQ PSG_update_done    ; Not playing
 
-LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)
+; Check if delay counter is running
+LDA >PSG_DELAY_FRAMES
+BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
+DECA
+STA >PSG_DELAY_FRAMES
+LBNE PSG_update_done    ; Still waiting
+BRA PSG_process_event   ; Counter just hit 0: apply the event
 
-; Read frame count byte (number of register writes)
+PSG_read_delay:
+LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
+LDB ,X+                 ; Consume delay byte, X → count byte
+CMPB #$FF
+LBEQ PSG_music_loop_d   ; $FF as delay = loop command
+STB >PSG_DELAY_FRAMES   ; Store delay count
+STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
+BEQ PSG_process_event   ; delay=0: apply immediately
+DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
+LBRA PSG_update_done    ; Wait
+
+PSG_process_event:
+LDX >PSG_MUSIC_PTR      ; PTR is at count byte
 LDB ,X+
-BEQ PSG_music_ended     ; Count=0 means end (no loop)
-CMPB #$FF               ; Check for loop command
-BEQ PSG_music_loop      ; $FF means loop (never valid as count)
+LBEQ PSG_music_ended    ; Count=0 means end
+CMPB #$FF
+LBEQ PSG_music_loop     ; Count=$FF means loop
 
-; Process frame - push counter to stack
 PSHS B                  ; Save count on stack
-
-; Write register/value pairs to PSG
 PSG_write_loop:
 LDA ,X+                 ; Load register number
 LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer (after reads)
+PSHS X                  ; Save pointer
 
-; WRITE_PSG sequence
+; WRITE_PSG sequence (direct VIA access)
 STA VIA_port_a          ; Store register number
 LDA #$19                ; BDIR=1, BC1=1 (LATCH)
 STA VIA_port_b
@@ -1953,30 +2047,32 @@ STB VIA_port_b
 
 PULS X                  ; Restore pointer
 PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ PSG_frame_done      ; Done with this frame
+DECB
+BEQ PSG_event_done      ; Done with this event
 PSHS B                  ; Save counter back
 BRA PSG_write_loop
 
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR      ; Update pointer (force extended)
-BRA PSG_update_done
+PSG_event_done:
+STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
+CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
+LBRA PSG_update_done
 
 PSG_music_ended:
-CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
+CLR >PSG_IS_PLAYING
+LBRA PSG_update_done
 
 PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                  ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR      ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
+; count=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
+LBRA PSG_update_done
+
+PSG_music_loop_d:
+; delay=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
 
 PSG_update_done:
 CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
@@ -2065,6 +2161,7 @@ BRA AU_MUSIC_PROCESS_WRITES
 AU_MUSIC_HAS_DELAY:
 ; B has delay > 0, store it and skip to next frame
 DECB                    ; Delay-1 (we consume this frame)
+BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
 STB >PSG_DELAY_FRAMES   ; Save delay counter
 STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
@@ -2239,8 +2336,24 @@ PRINT_TEXT_STR_2188049:
     FCC "GIVE"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_2209918:
+    FCC "HANS"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_2567303:
     FCC "TAKE"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_64218094:
+    FCC "CLOCK"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_65039267:
+    FCC "DIARY"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_66059856:
+    FCC "ELISA"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_100361836:
@@ -2251,8 +2364,16 @@ PRINT_TEXT_STR_3309214433:
     FCC "player"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_61386845752:
+    FCC "CABINET"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_63819514689:
     FCC "EXAMINE"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_72273926210:
+    FCC "OIL CAN"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_1863858565675:
@@ -2271,6 +2392,14 @@ PRINT_TEXT_STR_2020711006665:
     FCC "GIVE:OIL"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_2260861405892:
+    FCC "PAINTING"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2264259943554:
+    FCC "PEDESTAL"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_2376966947138:
     FCC "THE END."
     FCB $80          ; Vectrex string terminator
@@ -2281,6 +2410,14 @@ PRINT_TEXT_STR_2769766737209:
 
 PRINT_TEXT_STR_2879828691638:
     FCC "entrance"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_59006849725498:
+    FCC "CARETAKER"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_61337815899504:
+    FCC "EXIT DOOR"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_62642040964184:
@@ -2315,6 +2452,14 @@ PRINT_TEXT_STR_91568903647484:
     FCC "heartbeat"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_1789082557890417:
+    FCC "APPRENTICE"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_1937924742238227:
+    FCC "GEAR PANEL"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_1941903265492996:
     FCC "GIVE:BLNKT"
     FCB $80          ; Vectrex string terminator
@@ -2329,6 +2474,10 @@ PRINT_TEXT_STR_1941903281064854:
 
 PRINT_TEXT_STR_2290510677130451:
     FCC "TOO HEAVY."
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2331653882236156:
+    FCC "VAULT DOOR"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_2718184010937820:
@@ -2347,6 +2496,10 @@ PRINT_TEXT_STR_56993795800368113:
     FCC "CLOCK LIES."
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_57071759112686642:
+    FCC "COMPARTMENT"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_58967237406000075:
     FCC "EYE      W1"
     FCB $80          ; Vectrex string terminator
@@ -2363,12 +2516,28 @@ PRINT_TEXT_STR_64184923654817225:
     FCC "LENS TAKEN."
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_65431604815861807:
+    FCC "MUSIC SHELF"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_66746456558499436:
     FCC "OIL      W1"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_66939517582935176:
+    FCC "OPTICS DOOR"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_67802925852799259:
     FCC "PRISM    W1"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_67802925895808570:
+    FCC "PRISM MOUNT"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_69819576141689452:
+    FCC "SARCOPHAGUS"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_69993623963913400:
@@ -2683,6 +2852,10 @@ PRINT_TEXT_STR_15031601608756456041:
     FCC "THE CRYSTAL EYE!"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_15262964977784735399:
+    FCC "WORKSHOP DOOR"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_15373067420087200981:
     FCC "BTN1 TO RESTART"
     FCB $80          ; Vectrex string terminator
@@ -2737,6 +2910,10 @@ PRINT_TEXT_STR_17850884399050856369:
 
 PRINT_TEXT_STR_17877550292306147137:
     FCC "CLOCK: 11:07."
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_17953374719443405528:
+    FCC "CONSERV. DOOR"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_17954386693183881976:
@@ -2905,13 +3082,46 @@ PRINT_MSG_TABLE:
     FDB PRINT_TEXT_STR_12951030068845256446  ; msg 44 "VAULT UNSEALED!"
 
 ; === CROSS-BANK USER FUNCTION TRAMPOLINES ===
-TRAMP_UPDATE_ROOM:
+TRAMP_DRAW_TITLE:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
     LDA #$01  ; switch to bank #1
     STA CURRENT_ROM_BANK
     STA $DF00
-    JSR UPDATE_ROOM
+    JSR DRAW_TITLE
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_DRAW_INTRO:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR DRAW_INTRO
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_DRAW_INVENTORY:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR DRAW_INVENTORY
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_DRAW_ROOM:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR DRAW_ROOM
     PULS A
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
@@ -2927,57 +3137,13 @@ TRAMP_DRAW_TESTAMENT:
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
     RTS
-TRAMP_DRAW_ENDING:
+TRAMP_CHECK_ENTRANCE_HOTSPOTS:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
     LDA #$01  ; switch to bank #1
     STA CURRENT_ROM_BANK
     STA $DF00
-    JSR DRAW_ENDING
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_ENTER_ROOM:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$01  ; switch to bank #1
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR ENTER_ROOM
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_PICKUP_ITEM:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$01  ; switch to bank #1
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR PICKUP_ITEM
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_DRAW_VERB_INDICATOR:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$01  ; switch to bank #1
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR DRAW_VERB_INDICATOR
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_CHECK_WORKSHOP_HOTSPOTS:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$00  ; switch to bank #0
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR CHECK_WORKSHOP_HOTSPOTS
+    JSR CHECK_ENTRANCE_HOTSPOTS
     PULS A
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
@@ -2985,7 +3151,7 @@ TRAMP_CHECK_WORKSHOP_HOTSPOTS:
 TRAMP_CHECK_WEIGHTS_HOTSPOTS:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
-    LDA #$00  ; switch to bank #0
+    LDA #$01  ; switch to bank #1
     STA CURRENT_ROM_BANK
     STA $DF00
     JSR CHECK_WEIGHTS_HOTSPOTS
@@ -2993,10 +3159,21 @@ TRAMP_CHECK_WEIGHTS_HOTSPOTS:
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
     RTS
+TRAMP_CHECK_OPTICS_HOTSPOTS:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR CHECK_OPTICS_HOTSPOTS
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
 TRAMP_CHECK_VAULT_HOTSPOTS:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
-    LDA #$00  ; switch to bank #0
+    LDA #$01  ; switch to bank #1
     STA CURRENT_ROM_BANK
     STA $DF00
     JSR CHECK_VAULT_HOTSPOTS
@@ -3004,43 +3181,10 @@ TRAMP_CHECK_VAULT_HOTSPOTS:
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
     RTS
-TRAMP_INTERACT_ENTRANCE:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$00  ; switch to bank #0
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR INTERACT_ENTRANCE
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_INTERACT_WORKSHOP:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$00  ; switch to bank #0
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR INTERACT_WORKSHOP
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_INTERACT_ANTEROOM:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$00  ; switch to bank #0
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR INTERACT_ANTEROOM
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
 TRAMP_INTERACT_WEIGHTS:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
-    LDA #$00  ; switch to bank #0
+    LDA #$01  ; switch to bank #1
     STA CURRENT_ROM_BANK
     STA $DF00
     JSR INTERACT_WEIGHTS
@@ -3048,32 +3192,10 @@ TRAMP_INTERACT_WEIGHTS:
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
     RTS
-TRAMP_INTERACT_CONSERVATORY:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$00  ; switch to bank #0
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR INTERACT_CONSERVATORY
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
-TRAMP_INTERACT_VAULT:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$00  ; switch to bank #0
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR INTERACT_VAULT
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
 TRAMP_DROP_ITEM:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
-    LDA #$00  ; switch to bank #0
+    LDA #$01  ; switch to bank #1
     STA CURRENT_ROM_BANK
     STA $DF00
     JSR DROP_ITEM
@@ -3081,13 +3203,13 @@ TRAMP_DROP_ITEM:
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00
     RTS
-TRAMP_ACCELERATE_HEARTBEAT:
+TRAMP_ENTER_ROOM:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
     LDA #$00  ; switch to bank #0
     STA CURRENT_ROM_BANK
     STA $DF00
-    JSR ACCELERATE_HEARTBEAT
+    JSR ENTER_ROOM
     PULS A
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00

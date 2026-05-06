@@ -30,6 +30,7 @@
 .extern currentButtonState
 .extern currentJoy2X
 .extern currentJoy2Y
+.extern commonHints
 .extern __aeabi_idiv
 .extern __aeabi_idivmod
 .extern RPI_AuxUartInit
@@ -56,16 +57,22 @@
 .equ PSG_SFX_PTR, 0x00100048
 .equ PSG_SFX_ACTIVE, 0x0010004C
 .equ PSG_SFX_DELAY, 0x00100050
-.equ LEVEL_DATA_PTR, 0x00100054
-.equ LEVEL_GP_COUNT, 0x00100058
-.equ LEVEL_GP_BUF, 0x0010005C
-.equ SCROLL_LIMIT_LEFT, 0x0010015C
-.equ SCROLL_LIMIT_RIGHT, 0x00100160
-.equ SCROLL_LIMIT_TOP, 0x00100164
-.equ SCROLL_LIMIT_BOTTOM, 0x00100168
+.equ NOTE_STATE, 0x00100054
+.equ PSG_MIXER_SHADOW, 0x001000B4
+.equ LEVEL_DATA_PTR, 0x001000B8
+.equ LEVEL_GP_COUNT, 0x001000BC
+.equ LEVEL_GP_BUF, 0x001000C0
+.equ SCROLL_LIMIT_LEFT, 0x001001C0
+.equ SCROLL_LIMIT_RIGHT, 0x001001C4
+.equ SCROLL_LIMIT_TOP, 0x001001C8
+.equ SCROLL_LIMIT_BOTTOM, 0x001001CC
+.equ PITREX_ENEMY_COUNT, 0x001001D0
+.equ PITREX_ENEMY_POOL, 0x001001D4
 
 PITREX_CUR_X: .space 4
 PITREX_CUR_Y: .space 4
+UART_TRACE_FRAMES_LEFT: .space 4
+UART_FRAME_NUM: .space 4
 
 .section .rodata
 .align 2
@@ -77,14 +84,32 @@ PITREX_CUR_Y: .space 4
 @ PiTrex ARM32 builtins
 @ ================================================================
 
-@ pitrex_wait_recal() — frame sync via v_WaitRecal(), then fix scale=127
+@ pitrex_wait_recal() — frame sync + force calibrated T1=80
 .global pitrex_wait_recal
 .type pitrex_wait_recal, %function
 pitrex_wait_recal:
     push    {lr}
     bl      v_WaitRecal
-    mov     r0, #127
+    mov     r0, #80
     bl      v_setScale
+    ldr     r0, =UART_TRACE_FRAMES_LEFT
+    ldr     r1, [r0]
+    cmp     r1, #0
+    popeq   {pc}
+    sub     r1, r1, #1
+    str     r1, [r0]
+    @ increment frame number, print header
+    ldr     r0, =UART_FRAME_NUM
+    ldr     r2, [r0]
+    add     r2, r2, #1
+    str     r2, [r0]
+    ldr     r0, =.Lstr_frame_hdr
+    bl      vpy_uart_puts       @ ">>> FRAME "
+    ldr     r0, =UART_FRAME_NUM
+    ldr     r0, [r0]
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_frame_hdr_end
+    bl      vpy_uart_puts       @ " START <<<\r\n"
     pop     {pc}
     .ltorg
 
@@ -147,6 +172,12 @@ pitrex_draw_line_rel:
     ldr     r1, [r12]           @ r1 = cur_y
     add     r2, r0, r4          @ r2 = new_x
     add     r3, r1, r5          @ r3 = new_y
+    push    {r0, r1, r2, r3}    @ save call args
+    mov     r1, r2              @ trace x = new_x
+    mov     r2, r3              @ trace y = new_y
+    ldr     r0, =.Lstr_dr
+    bl      uart_trace_xy
+    pop     {r0, r1, r2, r3}
     push    {r6}               @ brightness as 5th arg
     bl      v_directDraw32
     add     sp, sp, #4
@@ -165,78 +196,108 @@ pitrex_draw_line_rel:
 .global pitrex_draw_vector
 .type pitrex_draw_vector, %function
 pitrex_draw_vector:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    push    {r1, r2}            @ [sp+0]=ox [sp+4]=oy (raw VPy units)
     mov     r4, r0              @ asset header ptr
-    mov     r10, r1             @ ox (unscaled)
-    mov     r11, r2             @ oy (unscaled)
+    mov     r3, #127
+    mul     r6, r1, r3          @ r6 = ox*127 (Rd=r6 ≠ Rm=r1)
+    mul     r7, r2, r3          @ r7 = oy*127 (Rd=r7 ≠ Rm=r2)
     ldr     r5, [r4], #4        @ path_count
     mov     r8, #0
 dv_path_loop:
     cmp     r8, r5
     bge     dv_done
     ldr     r9, [r4], #4        @ r9 = path data ptr
-    add     r9, r9, #1          @ skip intensity byte
+    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)
     ldrsb   r1, [r9], #1        @ r1 = y_start (i8)
     ldrsb   r0, [r9], #1        @ r0 = x_start (i8)
     add     r9, r9, #2          @ skip 2 hdr padding bytes
-    add     r0, r0, r10         @ r0 = x_start + ox (raw)
-    add     r1, r1, r11         @ r1 = y_start + oy (raw)
     mov     r3, #127
-    mul     r2, r0, r3          @ r2 = raw_tx*127
-    ldr     r3, =PITREX_CUR_X
-    str     r2, [r3]            @ PITREX_CUR_X = raw_tx*127
-    mov     r3, #127
-    mul     r2, r1, r3          @ r2 = raw_ty*127
-    ldr     r3, =PITREX_CUR_Y
-    str     r2, [r3]            @ PITREX_CUR_Y = raw_ty*127
-    push    {r0, r1}
-    ldr     r0, =.Lstr_dv_p
-    bl      vpy_uart_puts
-    mov     r0, r8
-    bl      vpy_uart_print_int
-    ldr     r0, =.Lstr_tgt
-    bl      vpy_uart_puts
-    ldr     r0, [sp, #0]
-    bl      vpy_uart_print_int
-    mov     r0, #','
-    bl      RPI_AuxUartWrite
-    ldr     r0, [sp, #4]
-    bl      vpy_uart_print_int
-    ldr     r0, =.Lstr_crlf
-    bl      vpy_uart_puts
+    mul     r2, r0, r3          @ r2 = x_start*127 (Rd=r2 ≠ Rm=r0)
+    add     r0, r2, r6          @ r0 = (x_start+ox)*127
+    mul     r2, r1, r3          @ r2 = y_start*127 (Rd=r2 ≠ Rm=r1)
+    add     r1, r2, r7          @ r1 = (y_start+oy)*127
+    ldr     r2, =PITREX_CUR_X
+    str     r0, [r2]            @ PITREX_CUR_X = target_x
+    ldr     r2, =PITREX_CUR_Y
+    str     r1, [r2]            @ PITREX_CUR_Y = target_y
+    push    {r0, r1}            @ save call args
+    mov     r2, r1              @ trace y
+    mov     r1, r0              @ trace x
+    ldr     r0, =.Lstr_mv
+    bl      uart_trace_xy
     pop     {r0, r1}
     bl      v_directMove32
+    mov     r0, #80
+    bl      v_setScale
     b       dv_after_pool
     .ltorg
 dv_after_pool:
 dv_seg_loop:
-    ldrb    r0, [r9], #1        @ marker (0xFF=draw, 0x02=end)
+    ldrb    r0, [r9], #1        @ marker (0xFE=bezier, 0xFF=line, 0x02=end)
     cmp     r0, #2
     beq     dv_seg_done
+    cmp     r0, #0xFE
+    beq     dv_bezier_seg
     ldrsb   r1, [r9], #1        @ dy
     ldrsb   r0, [r9], #1        @ dx
-    mov     r2, #127            @ full brightness
-    push    {r4, r5, r6, r7, r8, r9}
+    mov     r2, r10             @ intensity from .vec
+    push    {r4, r5, r6, r7, r8, r9, r10}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r8, r9}
+    pop     {r4, r5, r6, r7, r8, r9, r10}
     b       dv_seg_loop
 dv_seg_done:
     add     r8, r8, #1
     b       dv_path_loop
+dv_bezier_seg:
+    push    {r4, r5, r6, r7, r8, r9, r10}
+    sub     sp, sp, #24
+    ldr     r4, [sp, #52]        @ r4 = raw ox (VPy units)
+    ldr     r5, [sp, #56]        @ r5 = raw oy (VPy units)
+    ldrsb   r6, [r9], #1
+    add     r0, r6, r4
+    ldrsb   r6, [r9], #1
+    add     r1, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r2, r6, r4
+    ldrsb   r6, [r9], #1
+    add     r3, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r4
+    str     r7, [sp, #0]
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r5
+    str     r7, [sp, #4]
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r4
+    str     r7, [sp, #8]
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r5
+    str     r7, [sp, #12]
+    mov     r6, #16
+    str     r6, [sp, #16]
+    ldr     r6, [sp, #48]
+    uxtb    r6, r6
+    str     r6, [sp, #20]
+    str     r9, [sp, #44]
+    bl      v_drawBezierCubic
+    add     sp, sp, #24
+    pop     {r4, r5, r6, r7, r8, r9, r10}
+    b       dv_seg_loop
 dv_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    add     sp, sp, #8          @ remove saved raw ox, oy
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
     .ltorg
 
-@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity)
+@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity_unused)
 .global pitrex_draw_vector_ex
 .type pitrex_draw_vector_ex, %function
 pitrex_draw_vector_ex:
-    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 32 bytes
     mov     r4, r0              @ asset header ptr
     mov     r5, r1              @ ox
     mov     r6, r2              @ oy
     mov     r7, r3              @ mirror flag
-    ldr     r8, [sp, #28]       @ intensity (5th arg)
     ldr     r9, [r4], #4        @ path_count
     push    {r9}                @ [sp+0] = path_count
     mov     r9, #0
@@ -247,46 +308,105 @@ dvex_path_loop:
     cmp     r0, r1
     bge     dvex_done
     ldr     r9, [r4], #4        @ r9 = path data ptr
-    add     r9, r9, #1          @ skip intensity byte
+    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)
     ldrsb   r1, [r9], #1        @ r1 = y_start (i8)
     ldrsb   r0, [r9], #1        @ r0 = x_start (i8)
     add     r9, r9, #2          @ skip 2 hdr padding bytes
     cmp     r7, #1
     it      eq
-    rsbeq   r0, r0, #0          @ mirror dx
-    add     r0, r0, r5          @ r0 = x_start + ox (raw)
-    add     r1, r1, r6          @ r1 = y_start + oy (raw)
+    rsbeq   r0, r0, #0          @ mirror x_start
     mov     r12, #127
-    mul     r2, r0, r12         @ r2 = raw_tx*127
-    ldr     r3, =PITREX_CUR_X
-    str     r2, [r3]            @ PITREX_CUR_X = raw_tx*127
-    mov     r12, #127
-    mul     r2, r1, r12         @ r2 = raw_ty*127
-    ldr     r3, =PITREX_CUR_Y
-    str     r2, [r3]            @ PITREX_CUR_Y = raw_ty*127
+    mul     r2, r0, r12         @ r2 = x_start*127 (Rd=r2 ≠ Rm=r0)
+    mul     r3, r5, r12         @ r3 = ox*127     (Rd=r3 ≠ Rm=r5)
+    add     r0, r2, r3          @ r0 = (x_start+ox)*127
+    mul     r2, r1, r12         @ r2 = y_start*127 (Rd=r2 ≠ Rm=r1)
+    mul     r3, r6, r12         @ r3 = oy*127     (Rd=r3 ≠ Rm=r6)
+    add     r1, r2, r3          @ r1 = (y_start+oy)*127
+    ldr     r2, =PITREX_CUR_X
+    str     r0, [r2]            @ PITREX_CUR_X = target_x
+    ldr     r2, =PITREX_CUR_Y
+    str     r1, [r2]            @ PITREX_CUR_Y = target_y
+    push    {r0, r1}            @ save call args
+    mov     r2, r1              @ trace y
+    mov     r1, r0              @ trace x
+    ldr     r0, =.Lstr_mv
+    bl      uart_trace_xy
+    pop     {r0, r1}
     bl      v_directMove32
+    mov     r0, #80
+    bl      v_setScale
 dvex_seg_loop:
     ldrb    r0, [r9], #1
     cmp     r0, #2
     beq     dvex_seg_done
+    cmp     r0, #0xFE
+    beq     dvex_bezier_seg
     ldrsb   r1, [r9], #1        @ dy
     ldrsb   r0, [r9], #1        @ dx
     cmp     r7, #1
     it      eq
     rsbeq   r0, r0, #0
-    mov     r2, r8              @ intensity
-    push    {r4, r5, r6, r7, r8, r9}
+    mov     r2, r10             @ intensity from .vec
+    push    {r4, r5, r6, r7, r9, r10}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r8, r9}
+    pop     {r4, r5, r6, r7, r9, r10}
     b       dvex_seg_loop
 dvex_seg_done:
     ldr     r0, [sp]
     add     r0, r0, #1
     str     r0, [sp]            @ path_idx++
     b       dvex_path_loop
+dvex_bezier_seg:
+    push    {r4, r5, r6, r7, r9, r10}
+    sub     sp, sp, #24
+    ldr     r4, [sp, #28]        @ r4 = ox (raw VPy units)
+    ldr     r5, [sp, #32]        @ r5 = oy (raw VPy units)
+    ldr     r12, [sp, #36]       @ r12 = mirror flag
+    ldrsb   r6, [r9], #1
+    add     r0, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r0, r0, #0
+    ldrsb   r6, [r9], #1
+    add     r1, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r2, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r2, r2, #0
+    ldrsb   r6, [r9], #1
+    add     r3, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r6, r6, #0
+    str     r6, [sp, #0]
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r5
+    str     r6, [sp, #4]
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r6, r6, #0
+    str     r6, [sp, #8]
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r5
+    str     r6, [sp, #12]
+    mov     r6, #16
+    str     r6, [sp, #16]
+    ldr     r6, [sp, #44]
+    uxtb    r6, r6
+    str     r6, [sp, #20]
+    str     r9, [sp, #40]
+    bl      v_drawBezierCubic
+    add     sp, sp, #24
+    pop     {r4, r5, r6, r7, r9, r10}
+    b       dvex_seg_loop
 dvex_done:
     add     sp, sp, #8          @ pop path_idx + path_count
-    pop     {r4, r5, r6, r7, r8, r9, pc}
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
     .ltorg
 
 @ pitrex_j1_x() → r0 = X axis (-127..127)
@@ -1817,49 +1937,94 @@ pitrex_debug_print_str:
 .global pitrex_level_collision_y
 .type pitrex_level_collision_y, %function
 pitrex_level_collision_y:
-    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
     mov     r4, r0              @ px
-    mov     r5, r1              @ py
-    mov     r6, r2              @ half_h (player)
+    mov     r6, r2              @ player_hh
+    sub     r5, r1, r2          @ r5 = player_feet = py - hh
     ldr     r7, =LEVEL_DATA_PTR
-    ldr     r7, [r7]            @ r7 = level header ptr
-    ldr     r10, =-32767        @ best_floor_top sentinel (below any valid Y)
+    ldr     r7, [r7]
     cmp     r7, #0
-    beq     plcy_finish
+    beq     plcy_no_floor
     ldr     r8, =LEVEL_GP_COUNT
     ldr     r8, [r8]
     cmp     r8, #0
-    beq     plcy_finish
+    beq     plcy_no_floor
     ldr     r9, [r7, #16]       @ r9 = gpObjectsPtr (ROM)
     ldr     r7, =LEVEL_GP_BUF
-    sub     r0, r5, r6          @ player_feet = py - hh
+    ldr     r10, =-32767        @ best_floor_top sentinel
 plcy_loop:
     cmp     r8, #0
     beq     plcy_finish
-    ldrb    r1, [r9, #6]
-    tst     r1, #0x10
+    ldrb    r0, [r9, #6]
+    tst     r0, #0x10
     beq     plcy_next
-    ldrb    r1, [r9, #12]       @ obj half_w
+    ldrb    r1, [r9, #12]       @ half_w
     ldrsh   r2, [r7, #0]        @ obj world_x (buf)
-    sub     r2, r4, r2          @ dx = px - obj_x
-    movs    r3, r2
-    bpl     plcy_dx_ok
-    neg     r3, r2
-plcy_dx_ok:
-    add     r1, r1, #8
+    sub     r0, r4, r2          @ dx = px - obj_x
+    movs    r3, r0
+    bpl     plcy_xabs
+    neg     r3, r0
+plcy_xabs:
     cmp     r3, r1
-    bge     plcy_next
+    bgt     plcy_next
+    ldr     r11, [r9, #16]      @ coll_mesh_ptr
+    cmp     r11, #0
+    beq     plcy_aabb
+    ldrsh   r0, [r7, #0]        @ obj_world_x
+    sub     r0, r4, r0          @ local_px = px - obj_world_x
+    ldrsh   r1, [r7, #2]        @ obj_world_y
+    push    {r0, r1}            @ [sp]=local_px  [sp+4]=obj_world_y
+    ldr     r12, [r11], #4      @ seg_count; r11 now → first segment
+plcy_seg_loop:
+    cmp     r12, #0
+    beq     plcy_seg_done
+    ldrsh   r0, [r11]           @ x1
+    ldrsh   r1, [r11, #2]       @ y1
+    ldrsh   r2, [r11, #4]       @ x2
+    ldrsh   r3, [r11, #6]       @ y2
+    add     r11, r11, #8
+    subs    r12, r12, #1
+    cmp     r1, r3
+    bne     plcy_seg_loop    @ skip non-horizontal (y1!=y2)
+    ldr     r14, [sp]           @ local_px
+    cmp     r0, r2              @ x1 vs x2
+    blt     plcy_seg_x1lt
+    @ x1 >= x2: valid range [x2, x1]
+    cmp     r14, r2
+    blt     plcy_seg_loop
+    cmp     r14, r0
+    bgt     plcy_seg_loop
+    b       plcy_seg_y
+plcy_seg_x1lt:
+    @ x1 < x2: valid range [x1, x2]
+    cmp     r14, r0
+    blt     plcy_seg_loop
+    cmp     r14, r2
+    bgt     plcy_seg_loop
+plcy_seg_y:
+    ldr     r14, [sp, #4]       @ obj_world_y
+    add     r3, r1, r14         @ world_seg_y = y1(local) + obj_world_y
+    cmp     r3, r5
+    bgt     plcy_seg_loop    @ above player_feet: skip
+    cmp     r3, r10
+    ble     plcy_seg_loop    @ not better: skip
+    mov     r10, r3
+    b       plcy_seg_loop
+plcy_seg_done:
+    pop     {r0, r1}            @ restore stack balance
+    b       plcy_next
+plcy_aabb:
     ldrsh   r2, [r7, #2]        @ obj world_y (buf)
-    ldrb    r3, [r9, #13]       @ obj half_h
+    ldrb    r3, [r9, #13]       @ half_h
     add     r2, r2, r3          @ obj_top = world_y + half_h
-    cmp     r2, r0
-    bgt     plcy_next   @ surface above player feet
-    cmp     r10, r2
-    bge     plcy_next
+    cmp     r2, r5
+    bgt     plcy_next   @ above player feet: skip
+    cmp     r2, r10
+    ble     plcy_next
     mov     r10, r2
 plcy_next:
     add     r7, r7, #8
-    add     r9, r9, #16
+    add     r9, r9, #20         @ ROM obj stride = 20 bytes
     subs    r8, r8, #1
     b       plcy_loop
 plcy_finish:
@@ -1867,10 +2032,10 @@ plcy_finish:
     cmp     r10, r1
     beq     plcy_no_floor
     add     r0, r10, r6         @ floor_center = floor_top + player_hh
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
 plcy_no_floor:
     ldr     r0, =-200
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
 @ pitrex_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx
@@ -1927,7 +2092,7 @@ plcx_push_pos:
     mov     r10, r3
 plcx_next:
     add     r7, r7, #8
-    add     r9, r9, #16
+    add     r9, r9, #20         @ ROM obj stride = 20 bytes
     subs    r8, r8, #1
     b       plcx_loop
 plcx_done:
@@ -2107,7 +2272,7 @@ pitrex_load_level:
     strh    r1, [r7, #2]        @ buf.y
     strh    r2, [r7, #4]        @ buf.vx
     strh    r3, [r7, #6]        @ buf.vy
-    add     r6, r6, #16         @ advance ROM obj ptr
+    add     r6, r6, #20         @ advance ROM obj ptr (20 bytes)
     add     r7, r7, #8          @ advance buf ptr
     subs    r5, r5, #1
     bne     .Lll_copy
@@ -2169,7 +2334,7 @@ pitrex_show_level:
     add     sp, sp, #4          @ pop intensity
     pop     {r4, r5, r10, r11}
 .Lshl_bg_skip:
-    add     r5, r5, #16         @ next BG object
+    add     r5, r5, #20         @ next BG object (20 bytes)
     subs    r4, r4, #1
     bne     .Lshl_bg
 .Lshl_gp:
@@ -2204,7 +2369,7 @@ pitrex_show_level:
     add     sp, sp, #4          @ pop intensity
     pop     {r4, r5, r7, r10, r11}
 .Lshl_gp_skip:
-    add     r5, r5, #16         @ next ROM GP object
+    add     r5, r5, #20         @ next ROM GP object (20 bytes)
     add     r7, r7, #8          @ next buf entry
     subs    r4, r4, #1
     bne     .Lshl_gp_loop
@@ -2238,7 +2403,7 @@ pitrex_show_level:
     add     sp, sp, #4          @ pop intensity
     pop     {r4, r5, r10, r11}
 .Lshl_fg_skip:
-    add     r5, r5, #16         @ next FG object
+    add     r5, r5, #20         @ next FG object (20 bytes)
     subs    r4, r4, #1
     bne     .Lshl_fg_loop
 .Lshl_done:
@@ -2779,7 +2944,7 @@ pitrex_update_level:
     strh    r3, [r8, #4]        @ buf.vx (unchanged)
     strh    r12, [r8, #6]       @ buf.vy
 .Lul_next:
-    add     r7, r7, #16         @ next ROM object
+    add     r7, r7, #20         @ next ROM object (20 bytes)
     add     r8, r8, #8          @ next buf entry
     subs    r4, r4, #1
     bne     .Lul_loop
@@ -3032,6 +3197,401 @@ PITREX_ANIM_MIRROR: .space 1
 PITREX_ANIM_SPEED: .space 1
 .text
 
+@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---
+.section .rodata
+.balign 2
+.global NOTE_PERIOD_TABLE
+NOTE_PERIOD_TABLE:
+    .hword 2697, 2546, 2403, 2268, 2141, 2020, 1907, 1800
+    .hword 1699, 1604, 1514, 1429, 1348, 1273, 1201, 1134
+    .hword 1070, 1010, 954, 900, 849, 802, 757, 714
+    .hword 674, 636, 601, 567, 535, 505, 477, 450
+    .hword 425, 401, 378, 357, 337, 318, 300, 283
+    .hword 268, 253, 238, 225, 212, 200, 189, 179
+    .hword 169, 159, 150, 142, 134, 126, 119, 113
+    .hword 106, 100, 95, 89, 84, 80, 75, 71
+    .hword 67, 63, 60, 56, 53, 50, 47, 45
+    .hword 42, 40, 38, 35, 33, 32, 30, 28
+    .hword 27, 25, 24, 22
+
+.section .text
+.align 2
+
+@ pitrex_play_note(r0=instr_ptr, r1=channel 0-2, r2=note MIDI 24-107)
+.global pitrex_play_note
+.type pitrex_play_note, %function
+pitrex_play_note:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0          @ r4 = instr_ptr
+    mov     r5, r1          @ r5 = channel
+    mov     r6, r2          @ r6 = note
+    @ clamp note to 24-107
+    cmp     r6, #24
+    it      lt
+    movlt   r6, #24
+    cmp     r6, #107
+    it      gt
+    movgt   r6, #107
+    @ r7 = &NOTE_STATE[channel]
+    ldr     r0, =NOTE_STATE
+    mov     r1, #32
+    mul     r7, r5, r1
+    add     r7, r0, r7
+    @ fill channel state
+    mov     r0, #1
+    str     r0, [r7, #0]    @ active = 1
+    ldrb    r0, [r4, #0]
+    str     r0, [r7, #4]    @ frames_left = duration_frames
+    str     r6, [r7, #8]    @ base_note
+    str     r4, [r7, #12]   @ instr_ptr
+    mov     r0, #0
+    str     r0, [r7, #16]   @ arp_pos = 0
+    ldrb    r0, [r4, #3]
+    str     r0, [r7, #20]   @ arp_timer = arp_speed_frames
+    str     r5, [r7, #28]   @ channel_id
+    @ compute period from note
+    sub     r0, r6, #24     @ r0 = note - 24 (index)
+    lsl     r0, r0, #1      @ r0 = index * 2 (hword offset)
+    ldr     r1, =NOTE_PERIOD_TABLE
+    ldrh    r2, [r1, r0]    @ r2 = period
+    str     r2, [r7, #24]   @ save period in state
+    @ write period to PSG (reg_lo = channel*2, reg_hi = channel*2+1)
+    lsl     r0, r5, #1      @ reg_lo = channel * 2
+    mov     r1, r2
+    and     r1, r1, #0xFF   @ period_lo
+    push    {r2, r5, r7}
+    bl      v_writePSG
+    pop     {r2, r5, r7}
+    lsl     r0, r5, #1
+    add     r0, r0, #1      @ reg_hi
+    mov     r1, r2
+    lsr     r1, r1, #8      @ period_hi
+    push    {r5, r7}
+    bl      v_writePSG
+    pop     {r5, r7}
+    @ write volume to PSG (vol reg = channel + 8)
+    ldr     r4, [r7, #12]   @ reload instr_ptr
+    ldrb    r1, [r4, #1]    @ volume
+    add     r0, r5, #8      @ vol reg = channel + 8
+    push    {r5, r7}
+    bl      v_writePSG
+    pop     {r5, r7}
+    @ update PSG_MIXER_SHADOW: enable tone ch, disable noise ch
+    ldr     r0, =PSG_MIXER_SHADOW
+    ldr     r1, [r0]
+    mov     r2, #1
+    lsl     r2, r2, r5      @ tone bit for channel
+    bic     r1, r1, r2      @ clear = enable tone
+    add     r3, r5, #3
+    mov     r2, #1
+    lsl     r2, r2, r3      @ noise bit
+    orr     r1, r1, r2      @ set = disable noise
+    str     r1, [r0]        @ update shadow
+    mov     r0, #7
+    push    {r5, r7}
+    bl      v_writePSG
+    pop     {r5, r7}
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ pitrex_note_update() — advance note engine one frame (3 channels)
+.global pitrex_note_update
+.type pitrex_note_update, %function
+pitrex_note_update:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, #0              @ r4 = channel index
+.Lpnu_loop:
+    cmp     r4, #3
+    bge     .Lpnu_done
+    ldr     r5, =NOTE_STATE
+    mov     r6, #32
+    mul     r7, r4, r6
+    add     r5, r5, r7      @ r5 = &NOTE_STATE[channel]
+    ldr     r6, [r5, #0]    @ active
+    cmp     r6, #0
+    beq     .Lpnu_next
+    ldr     r6, [r5, #4]    @ frames_left
+    subs    r6, r6, #1
+    str     r6, [r5, #4]
+    bne     .Lpnu_arp
+    @ note expired: mute channel
+    mov     r0, #0
+    str     r0, [r5, #0]    @ active = 0
+    ldr     r6, [r5, #28]   @ channel_id
+    add     r0, r6, #8      @ vol reg = channel_id + 8
+    mov     r1, #0
+    push    {r4, r5}
+    bl      v_writePSG
+    pop     {r4, r5}
+    b       .Lpnu_next
+.Lpnu_arp:
+    ldr     r6, [r5, #12]   @ instr_ptr
+    ldrb    r7, [r6, #2]    @ arpeggio_count
+    cmp     r7, #0
+    beq     .Lpnu_next
+    ldr     r8, [r5, #20]   @ arp_timer
+    subs    r8, r8, #1
+    str     r8, [r5, #20]
+    bne     .Lpnu_next
+    ldrb    r8, [r6, #3]    @ arpeggio_speed_frames
+    str     r8, [r5, #20]
+    ldr     r8, [r5, #16]   @ arp_pos
+    add     r8, r8, #1
+    cmp     r8, r7
+    it      ge
+    movge   r8, #0
+    str     r8, [r5, #16]
+    ldr     r0, [r5, #8]    @ base_note
+    add     r1, r6, #4      @ ptr to arpeggio_intervals[0]
+    ldrsb   r1, [r1, r8]    @ signed interval at arp_pos
+    add     r0, r0, r1      @ new_note
+    cmp     r0, #24
+    it      lt
+    movlt   r0, #24
+    cmp     r0, #107
+    it      gt
+    movgt   r0, #107
+    sub     r0, r0, #24     @ index into table
+    lsl     r0, r0, #1      @ hword offset
+    ldr     r1, =NOTE_PERIOD_TABLE
+    ldrh    r2, [r1, r0]    @ period
+    ldr     r3, [r5, #28]   @ channel_id
+    lsl     r0, r3, #1      @ reg_lo = channel_id * 2
+    mov     r1, r2
+    and     r1, r1, #0xFF
+    push    {r2, r3, r4, r5}
+    bl      v_writePSG
+    pop     {r2, r3, r4, r5}
+    lsl     r0, r3, #1
+    add     r0, r0, #1      @ reg_hi
+    mov     r1, r2
+    lsr     r1, r1, #8
+    push    {r3, r4, r5}
+    bl      v_writePSG
+    pop     {r3, r4, r5}
+.Lpnu_next:
+    add     r4, r4, #1
+    b       .Lpnu_loop
+.Lpnu_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ pitrex_spawn_enemies(r0=data_ptr, r1=count) — fill enemy pool from ROM table
+.global pitrex_spawn_enemies
+.type pitrex_spawn_enemies, %function
+pitrex_spawn_enemies:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, r0          @ data_ptr
+    mov     r5, r1          @ count
+    ldr     r6, =PITREX_ENEMY_COUNT
+    str     r5, [r6]
+    ldr     r7, =PITREX_ENEMY_POOL
+    cmp     r5, #0
+    beq     .Lspe_done
+.Lspe_loop:
+    ldr     r6, [r4]        @ sprite_ptr
+    str     r6, [r7]        @ pool.sprite_ptr
+    ldrsh   r6, [r4, #4]    @ spawn_x
+    strh    r6, [r7, #4]    @ pool.x
+    strh    r6, [r7, #8]    @ pool.spawn_x
+    ldrsh   r6, [r4, #6]    @ spawn_y
+    strh    r6, [r7, #6]    @ pool.y
+    strh    r6, [r7, #10]   @ pool.spawn_y
+    ldrb    r6, [r4, #8]    @ ai_type
+    strb    r6, [r7, #13]   @ pool.ai_type
+    ldrb    r6, [r4, #9]    @ wp_count
+    strb    r6, [r7, #15]   @ pool.wp_count
+    ldrsh   r6, [r4, #12]   @ wp0_x
+    strh    r6, [r7, #16]   @ pool.wp0_x
+    ldrsh   r6, [r4, #14]   @ wp0_y
+    strh    r6, [r7, #18]   @ pool.wp0_y
+    ldrsh   r6, [r4, #16]   @ wp1_x
+    strh    r6, [r7, #20]   @ pool.wp1_x
+    ldrsh   r6, [r4, #18]   @ wp1_y
+    strh    r6, [r7, #22]   @ pool.wp1_y
+    ldrb    r6, [r4, #10]   @ mirror_on_patrol
+    strb    r6, [r7, #24]   @ pool.mirror_on_patrol
+    ldrb    r6, [r4, #11]   @ default_facing
+    strb    r6, [r7, #25]   @ pool.default_facing
+    mov     r6, #1
+    strb    r6, [r7, #12]   @ pool.active = 1
+    strb    r6, [r7, #26]   @ pool.dir = 1 (right, initial)
+    mov     r6, #0
+    strb    r6, [r7, #14]   @ pool.cur_target = 0
+    str     r6, [r7, #28]   @ pool.pad (+28..+31) = 0 (also zeros anim state)
+    ldrb    r8, [r4, #20]   @ ROM is_anim flag
+    strb    r8, [r7, #27]   @ pool.is_anim
+    cmp     r8, #0
+    beq     .Lspe_novam
+    ldr     r6, [r4]        @ sprite_ptr (anim header)
+    ldrb    r8, [r6, #3]    @ frame_table_offset (byte3 of header)
+    ldr     r8, [r6, r8]    @ frame0_ptr = anim_header[frame_table_offset]
+    ldrb    r8, [r8]        @ frame0 duration_ticks
+    strb    r8, [r7, #29]   @ pool.anim_ticks_left = frame0.duration
+.Lspe_novam:
+    add     r4, r4, #24
+    add     r7, r7, #32
+    subs    r5, r5, #1
+    bne     .Lspe_loop
+.Lspe_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ pitrex_update_enemies() — advance enemy AI (patrol)
+.global pitrex_update_enemies
+.type pitrex_update_enemies, %function
+pitrex_update_enemies:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    ldr     r4, =PITREX_ENEMY_COUNT
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq     .Lpue_done
+    ldr     r5, =PITREX_ENEMY_POOL
+.Lpue_loop:
+    ldrb    r6, [r5, #12]       @ active
+    cmp     r6, #0
+    beq     .Lpue_skip
+    ldrb    r6, [r5, #13]       @ ai_type
+    cmp     r6, #1
+    bne     .Lpue_skip
+    ldrb    r6, [r5, #15]       @ wp_count
+    cmp     r6, #2
+    blt     .Lpue_skip
+    ldrb    r6, [r5, #14]       @ cur_target
+    mov     r7, r5
+    add     r7, r7, #16         @ &wp0_x
+    lsl     r8, r6, #2          @ cur_target * 4
+    add     r7, r7, r8          @ &wp[cur_target].x
+    ldrsh   r8, [r7]            @ target_x
+    ldrsh   r9, [r5, #4]        @ current x
+    sub     r10, r8, r9         @ dx = target_x - x
+    cmp     r10, #0
+    beq     .Lpue_move          @ dx==0, skip dir update
+    movgt   r6, #1              @ dir=right if dx>0
+    movlt   r6, #0              @ dir=left  if dx<0
+    strb    r6, [r5, #26]       @ pool.dir
+.Lpue_move:
+    mov     r7, #1              @ PATROL_SPEED
+    cmp     r10, #0
+    blt     .Lpue_neg
+    cmp     r10, r7             @ dx <= speed?
+    ble     .Lpue_snap
+    add     r9, r9, r7          @ x += speed
+    strh    r9, [r5, #4]
+    b       .Lpue_skip
+.Lpue_neg:
+    rsb     r10, r10, #0        @ |dx|
+    cmp     r10, r7             @ |dx| <= speed?
+    ble     .Lpue_snap
+    sub     r9, r9, r7          @ x -= speed
+    strh    r9, [r5, #4]
+    b       .Lpue_skip
+.Lpue_snap:
+    strh    r8, [r5, #4]        @ x = target_x
+    ldrb    r6, [r5, #14]       @ cur_target
+    eor     r6, r6, #1          @ toggle 0↔1
+    strb    r6, [r5, #14]
+.Lpue_skip:
+    add     r5, r5, #32         @ next pool entry
+    subs    r4, r4, #1
+    bne     .Lpue_loop
+.Lpue_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ pitrex_draw_enemies() — draw all active entries in PITREX_ENEMY_POOL
+.global pitrex_draw_enemies
+.type pitrex_draw_enemies, %function
+pitrex_draw_enemies:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    ldr     r4, =PITREX_ENEMY_COUNT
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq     .Lpde_done
+    ldr     r8, =CAMERA_X
+    ldr     r8, [r8]            @ cam_x
+    ldr     r9, =CAMERA_Y
+    ldr     r9, [r9]            @ cam_y
+    ldr     r5, =PITREX_ENEMY_POOL
+.Lpde_loop:
+    ldrb    r6, [r5, #12]       @ active
+    cmp     r6, #0
+    beq     .Lpde_skip
+    ldr     r6, [r5]            @ sprite_ptr
+    cmp     r6, #0
+    beq     .Lpde_skip
+    ldrsh   r7, [r5, #4]        @ pool.x
+    sub     r7, r7, r8          @ ox = x - cam_x
+    ldrb    r10, [r5, #24]      @ mirror_on_patrol
+    cmp     r10, #0
+    beq     .Lpde_no_mirror
+    ldrb    r10, [r5, #25]      @ default_facing
+    ldrb    r3,  [r5, #26]      @ dir
+    eor     r3, r3, r10         @ XOR
+    eor     r3, r3, #1          @ XNOR → mirror
+    b       .Lpde_do_draw
+.Lpde_no_mirror:
+    mov     r3, #0              @ mirror=0
+.Lpde_do_draw:
+    ldrb    r10, [r5, #27]      @ is_anim
+    cmp     r10, #0
+    bne     .Lpde_anim
+    push    {r4, r5, r8, r9}    @ save loop state
+    ldrsh   r1, [r5, #6]        @ pool.y
+    sub     r1, r1, r9          @ oy = y - cam_y
+    mov     r2, r1              @ oy
+    mov     r1, r7              @ ox
+    mov     r0, r6              @ sprite_ptr
+    mov     r12, #127
+    push    {r12}               @ 5th arg: intensity=127
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4          @ pop intensity
+    pop     {r4, r5, r8, r9}
+    b       .Lpde_skip
+.Lpde_anim:
+    ldrb    r11, [r5, #28]      @ anim_frame_idx
+    ldrb    r12, [r5, #29]      @ anim_ticks_left
+    subs    r12, r12, #1        @ ticks--; set flags
+    bgt     .Lpde_anim_sf       @ ticks > 0: keep frame
+    ldrb    r10, [r6]           @ frame_count (anim_header[0])
+    add     r11, r11, #1
+    cmp     r11, r10
+    blt     .Lpde_no_wrap
+    mov     r11, #0             @ wrap to 0
+.Lpde_no_wrap:
+    strb    r11, [r5, #28]      @ store frame_idx
+    lsl     r10, r11, #2        @ frame_idx * 4
+    add     r10, r10, #4        @ + 4 (header size)
+    ldr     r10, [r6, r10]      @ frame_ptr
+    ldrb    r12, [r10]          @ new duration_ticks
+    strb    r12, [r5, #29]      @ store ticks_left
+    ldr     r0, [r10, #4]       @ vec_ref
+    b       .Lpde_anim_draw
+.Lpde_anim_sf:
+    strb    r12, [r5, #29]      @ store decremented ticks
+    lsl     r10, r11, #2        @ frame_idx * 4
+    add     r10, r10, #4        @ + 4 (header size)
+    ldr     r10, [r6, r10]      @ frame_ptr
+    ldr     r0, [r10, #4]       @ vec_ref
+.Lpde_anim_draw:
+    push    {r4, r5, r8, r9}    @ save loop state
+    ldrsh   r1, [r5, #6]        @ pool.y
+    sub     r1, r1, r9          @ oy = y - cam_y
+    mov     r2, r1              @ oy
+    mov     r1, r7              @ ox
+    mov     r12, #127
+    push    {r12}               @ intensity
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4
+    pop     {r4, r5, r8, r9}
+.Lpde_skip:
+    add     r5, r5, #32
+    subs    r4, r4, #1
+    bne     .Lpde_loop
+.Lpde_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
 @ --- main (PiTrex SDK entry point) ---
 .align 2
 .global main
@@ -3045,6 +3605,13 @@ main:
     bl      RPI_AuxUartInit
     ldr     r0, =.Lstr_start
     bl      vpy_uart_puts
+    @ init UART trace counter (N frames)
+    ldr     r0, =UART_TRACE_FRAMES_LEFT
+    mov     r1, #2
+    str     r1, [r0]
+    ldr     r0, =UART_FRAME_NUM
+    mov     r1, #0
+    str     r1, [r0]
     @ PiTrex SDK init
     mov     r0, #1
     bl      vectrexinit
@@ -3054,9 +3621,19 @@ main:
     mov     r0, #50
     bl      v_setRefresh
 
+    @ commonHints |= PL_BASE_FORCE_USE_FIX_SIZE (256)
+    ldr     r0, =commonHints
+    ldr     r1, [r0]
+    orr     r1, r1, #256
+    str     r1, [r0]
+
     b       .Lgp_0
     .ltorg
 .Lgp_0:
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
     @ initialise globals
     b       .Lgp_1
     .ltorg
@@ -3067,30 +3644,34 @@ main:
 .Lgp_2:
 
 pitrex_game_loop:
-    bl      v_WaitRecal
+    bl      pitrex_wait_recal   @ wraps v_WaitRecal + scale fix + UART frame trace
     mov     r0, #0
     ldr     r1, =PITREX_CUR_X
     str     r0, [r1]
     ldr     r1, =PITREX_CUR_Y
     str     r0, [r1]
-    ldr     r0, =.Lstr_frame_sep
-    bl      vpy_uart_puts
     bl      v_readButtons
     bl      v_readJoystick1Analog
     bl      v_readJoystick2Analog
     bl      pitrex_music_update
     bl      pitrex_sfx_update
     bl      v_doSound          @ flush PSG buffer to hardware
-    ldr     r0, =_TRIANGULE_VECTORS    @ asset 'triangule'
+    mov     r0, #0
+    push    {r0}
+    ldr     r0, =_PLATFORM_VECTORS    @ asset 'platform'
     push    {r0}
     mov     r0, #0
     push    {r0}
+    mov     r0, #50
+    push    {r0}
     mov     r0, #0
     push    {r0}
+    pop     {r3}
     pop     {r2}
     pop     {r1}
     pop     {r0}
-    bl      pitrex_draw_vector
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4
     b       pitrex_game_loop
 
 @ vpy_uart_puts(r0=str_ptr) — write null-terminated string via UART
@@ -3152,6 +3733,28 @@ vpy_uart_print_int:
 .Lpint_done:
     pop     {r4, r5, r6, pc}
 
+@ uart_trace_xy(r0=label, r1=x, r2=y) — gated by UART_TRACE_FRAMES_LEFT
+.global uart_trace_xy
+.type uart_trace_xy, %function
+uart_trace_xy:
+    push    {r4, r5, r6, lr}
+    ldr     r4, =UART_TRACE_FRAMES_LEFT
+    ldr     r4, [r4]
+    cmp     r4, #0
+    popeq   {r4, r5, r6, pc}
+    mov     r5, r1              @ save x
+    mov     r6, r2              @ save y
+    bl      vpy_uart_puts       @ label (r0 already)
+    mov     r0, r5
+    bl      vpy_uart_print_int
+    mov     r0, #','
+    bl      RPI_AuxUartWrite
+    mov     r0, r6
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_crlf
+    bl      vpy_uart_puts
+    pop     {r4, r5, r6, pc}
+
 .Lstr_start:  .asciz "VPy PiTrex starting\r\n"
 .Lstr_vinit:  .asciz "vectrexinit OK\r\n"
 .Lstr_frame_sep: .asciz "---\r\n"
@@ -3160,6 +3763,10 @@ vpy_uart_print_int:
 .Lstr_tgt:    .asciz " tgt="
 .Lstr_dlt:    .asciz " dlt="
 .Lstr_crlf:   .asciz "\r\n"
+.Lstr_mv:     .asciz "MV "
+.Lstr_dr:     .asciz "DR "
+.Lstr_frame_hdr:     .asciz ">>> FRAME "
+.Lstr_frame_hdr_end: .asciz " START <<<\r\n"
     .ltorg
 
 @ ============================================================
@@ -7145,6 +7752,478 @@ _NUMBERS_3D_DATA:
     .byte   13
     .byte   14
     .byte   15
+
+@ --- platform (21 path(s)) ---
+.global _PLATFORM_VECTORS
+_PLATFORM_VECTORS:
+    .word   21               @ path_count
+    .word   _PLATFORM_PATH0      @ ptr path 0
+    .word   _PLATFORM_PATH1      @ ptr path 1
+    .word   _PLATFORM_PATH2      @ ptr path 2
+    .word   _PLATFORM_PATH3      @ ptr path 3
+    .word   _PLATFORM_PATH4      @ ptr path 4
+    .word   _PLATFORM_PATH5      @ ptr path 5
+    .word   _PLATFORM_PATH6      @ ptr path 6
+    .word   _PLATFORM_PATH7      @ ptr path 7
+    .word   _PLATFORM_PATH8      @ ptr path 8
+    .word   _PLATFORM_PATH9      @ ptr path 9
+    .word   _PLATFORM_PATH10      @ ptr path 10
+    .word   _PLATFORM_PATH11      @ ptr path 11
+    .word   _PLATFORM_PATH12      @ ptr path 12
+    .word   _PLATFORM_PATH13      @ ptr path 13
+    .word   _PLATFORM_PATH14      @ ptr path 14
+    .word   _PLATFORM_PATH15      @ ptr path 15
+    .word   _PLATFORM_PATH16      @ ptr path 16
+    .word   _PLATFORM_PATH17      @ ptr path 17
+    .word   _PLATFORM_PATH18      @ ptr path 18
+    .word   _PLATFORM_PATH19      @ ptr path 19
+    .word   _PLATFORM_PATH20      @ ptr path 20
+
+_PLATFORM_PATH0:
+    .byte   85               @ intensity
+    .byte   0x09, 0xC6, 0x00, 0x00  @ y=9, x=-58, hdr
+    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH1:
+    .byte   85               @ intensity
+    .byte   0xFE, 0xC6, 0x00, 0x00  @ y=-2, x=-58, hdr
+    .byte   0xFF, 0xF9, 0x05  @ line dy=-7, dx=5
+    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
+    .byte   0xFF, 0x09, 0x07  @ line dy=9, dx=7
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x05  @ line dy=-9, dx=5
+    .byte   0xFF, 0x09, 0x07  @ line dy=9, dx=7
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x06  @ line dy=9, dx=6
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x09, 0x05  @ line dy=9, dx=5
+    .byte   0xFF, 0xF7, 0x06  @ line dy=-9, dx=6
+    .byte   0xFF, 0x08, 0x06  @ line dy=8, dx=6
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH2:
+    .byte   85               @ intensity
+    .byte   0x05, 0xC6, 0x00, 0x00  @ y=5, x=-58, hdr
+    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH3:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xCB, 0x00, 0x00  @ y=-9, x=-53, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH4:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xD6, 0x00, 0x00  @ y=-9, x=-42, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH5:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xE1, 0x00, 0x00  @ y=-9, x=-31, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH6:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xEE, 0x00, 0x00  @ y=-9, x=-18, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH7:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xF9, 0x00, 0x00  @ y=-9, x=-7, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH8:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x04, 0x00, 0x00  @ y=-9, x=4, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH9:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x11, 0x00, 0x00  @ y=-9, x=17, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH10:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x1C, 0x00, 0x00  @ y=-9, x=28, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH11:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x28, 0x00, 0x00  @ y=-9, x=40, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH12:
+    .byte   127               @ intensity
+    .byte   0xF7, 0x33, 0x00, 0x00  @ y=-9, x=51, hdr
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH13:
+    .byte   85               @ intensity
+    .byte   0xD8, 0xC7, 0x00, 0x00  @ y=-40, x=-57, hdr
+    .byte   0xFF, 0xAF, 0x00  @ line dy=-81, dx=0
+    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
+    .byte   0xFF, 0x51, 0x00  @ line dy=81, dx=0
+    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH14:
+    .byte   85               @ intensity
+    .byte   0xD8, 0xC7, 0x00, 0x00  @ y=-40, x=-57, hdr
+    .byte   0xFF, 0xF6, 0x0D  @ line dy=-10, dx=13
+    .byte   0xFF, 0xF9, 0xF3  @ line dy=-7, dx=-13
+    .byte   0xFF, 0xF9, 0x0D  @ line dy=-7, dx=13
+    .byte   0xFF, 0xF8, 0xF3  @ line dy=-8, dx=-13
+    .byte   0xFF, 0xF8, 0x0D  @ line dy=-8, dx=13
+    .byte   0xFF, 0xF4, 0xF3  @ line dy=-12, dx=-13
+    .byte   0xFF, 0xF9, 0x0C  @ line dy=-7, dx=12
+    .byte   0xFF, 0xF8, 0xF4  @ line dy=-8, dx=-12
+    .byte   0xFF, 0xF9, 0x0D  @ line dy=-7, dx=13
+    .byte   0xFF, 0xF9, 0xF3  @ line dy=-7, dx=-13
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH15:
+    .byte   85               @ intensity
+    .byte   0xD8, 0xD4, 0x00, 0x00  @ y=-40, x=-44, hdr
+    .byte   0xFF, 0xAE, 0x00  @ line dy=-82, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH16:
+    .byte   127               @ intensity
+    .byte   0xCE, 0xD4, 0x00, 0x00  @ y=-50, x=-44, hdr
+    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH17:
+    .byte   127               @ intensity
+    .byte   0xC0, 0xD4, 0x00, 0x00  @ y=-64, x=-44, hdr
+    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH18:
+    .byte   127               @ intensity
+    .byte   0xB0, 0xD4, 0x00, 0x00  @ y=-80, x=-44, hdr
+    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH19:
+    .byte   127               @ intensity
+    .byte   0x9D, 0xD3, 0x00, 0x00  @ y=-99, x=-45, hdr
+    .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH20:
+    .byte   127               @ intensity
+    .byte   0x8E, 0xD4, 0x00, 0x00  @ y=-114, x=-44, hdr
+    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
+    .byte   0x02            @ end marker
+
+@ --- PLATFORM_3D_DATA (21 path(s)) ---
+.global _PLATFORM_3D_DATA
+_PLATFORM_3D_DATA:
+    .word   47               @ vertex_count
+    .byte   0xC6, 0x09, 0x00  @ vert 0: x=-58,y=9,z=0
+    .byte   0x39, 0x09, 0x00  @ vert 1: x=57,y=9,z=0
+    .byte   0x39, 0xF7, 0x00  @ vert 2: x=57,y=-9,z=0
+    .byte   0xC6, 0xF7, 0x00  @ vert 3: x=-58,y=-9,z=0
+    .byte   0xC6, 0xFE, 0x00  @ vert 4: x=-58,y=-2,z=0
+    .byte   0xCB, 0xF7, 0x00  @ vert 5: x=-53,y=-9,z=0
+    .byte   0xD0, 0x00, 0x00  @ vert 6: x=-48,y=0,z=0
+    .byte   0xD6, 0xF7, 0x00  @ vert 7: x=-42,y=-9,z=0
+    .byte   0xDC, 0x00, 0x00  @ vert 8: x=-36,y=0,z=0
+    .byte   0xE1, 0xF7, 0x00  @ vert 9: x=-31,y=-9,z=0
+    .byte   0xE8, 0x00, 0x00  @ vert 10: x=-24,y=0,z=0
+    .byte   0xEE, 0xF7, 0x00  @ vert 11: x=-18,y=-9,z=0
+    .byte   0xF4, 0x00, 0x00  @ vert 12: x=-12,y=0,z=0
+    .byte   0xF9, 0xF7, 0x00  @ vert 13: x=-7,y=-9,z=0
+    .byte   0xFF, 0x00, 0x00  @ vert 14: x=-1,y=0,z=0
+    .byte   0x04, 0xF7, 0x00  @ vert 15: x=4,y=-9,z=0
+    .byte   0x0B, 0x00, 0x00  @ vert 16: x=11,y=0,z=0
+    .byte   0x11, 0xF7, 0x00  @ vert 17: x=17,y=-9,z=0
+    .byte   0x16, 0x00, 0x00  @ vert 18: x=22,y=0,z=0
+    .byte   0x1C, 0xF7, 0x00  @ vert 19: x=28,y=-9,z=0
+    .byte   0x22, 0x00, 0x00  @ vert 20: x=34,y=0,z=0
+    .byte   0x28, 0xF7, 0x00  @ vert 21: x=40,y=-9,z=0
+    .byte   0x2D, 0x00, 0x00  @ vert 22: x=45,y=0,z=0
+    .byte   0x33, 0xF7, 0x00  @ vert 23: x=51,y=-9,z=0
+    .byte   0x39, 0xFF, 0x00  @ vert 24: x=57,y=-1,z=0
+    .byte   0xC6, 0x05, 0x00  @ vert 25: x=-58,y=5,z=0
+    .byte   0x39, 0x05, 0x00  @ vert 26: x=57,y=5,z=0
+    .byte   0xCB, 0x09, 0x00  @ vert 27: x=-53,y=9,z=0
+    .byte   0xD6, 0x09, 0x00  @ vert 28: x=-42,y=9,z=0
+    .byte   0xE1, 0x09, 0x00  @ vert 29: x=-31,y=9,z=0
+    .byte   0xEE, 0x09, 0x00  @ vert 30: x=-18,y=9,z=0
+    .byte   0xF9, 0x09, 0x00  @ vert 31: x=-7,y=9,z=0
+    .byte   0x04, 0x09, 0x00  @ vert 32: x=4,y=9,z=0
+    .byte   0x11, 0x09, 0x00  @ vert 33: x=17,y=9,z=0
+    .byte   0x1C, 0x09, 0x00  @ vert 34: x=28,y=9,z=0
+    .byte   0x28, 0x09, 0x00  @ vert 35: x=40,y=9,z=0
+    .byte   0x33, 0x09, 0x00  @ vert 36: x=51,y=9,z=0
+    .byte   0xC7, 0xD8, 0x00  @ vert 37: x=-57,y=-40,z=0
+    .byte   0xC7, 0xC1, 0x00  @ vert 38: x=-57,y=-63,z=0
+    .byte   0xE4, 0xC1, 0x00  @ vert 39: x=-28,y=-63,z=0
+    .byte   0xE4, 0xD8, 0x00  @ vert 40: x=-28,y=-40,z=0
+    .byte   0xD4, 0xCE, 0x00  @ vert 41: x=-44,y=-50,z=0
+    .byte   0xC7, 0xC7, 0x00  @ vert 42: x=-57,y=-57,z=0
+    .byte   0xD4, 0xC1, 0x00  @ vert 43: x=-44,y=-63,z=0
+    .byte   0xD3, 0xC1, 0x00  @ vert 44: x=-45,y=-63,z=0
+    .byte   0xD4, 0xD8, 0x00  @ vert 45: x=-44,y=-40,z=0
+    .byte   0xC7, 0xCE, 0x00  @ vert 46: x=-57,y=-50,z=0
+    .word   21               @ path_count
+    .byte   5               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   0
+    .byte   21               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   25
+    .byte   26
+    .byte   2               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   5
+    .byte   27
+    .byte   2               @ path 4: pt_count
+    .byte   0               @ path 4: closed
+    .byte   7
+    .byte   28
+    .byte   2               @ path 5: pt_count
+    .byte   0               @ path 5: closed
+    .byte   9
+    .byte   29
+    .byte   2               @ path 6: pt_count
+    .byte   0               @ path 6: closed
+    .byte   11
+    .byte   30
+    .byte   2               @ path 7: pt_count
+    .byte   0               @ path 7: closed
+    .byte   13
+    .byte   31
+    .byte   2               @ path 8: pt_count
+    .byte   0               @ path 8: closed
+    .byte   15
+    .byte   32
+    .byte   2               @ path 9: pt_count
+    .byte   0               @ path 9: closed
+    .byte   17
+    .byte   33
+    .byte   2               @ path 10: pt_count
+    .byte   0               @ path 10: closed
+    .byte   19
+    .byte   34
+    .byte   2               @ path 11: pt_count
+    .byte   0               @ path 11: closed
+    .byte   21
+    .byte   35
+    .byte   2               @ path 12: pt_count
+    .byte   0               @ path 12: closed
+    .byte   23
+    .byte   36
+    .byte   5               @ path 13: pt_count
+    .byte   0               @ path 13: closed
+    .byte   37
+    .byte   38
+    .byte   39
+    .byte   40
+    .byte   37
+    .byte   11               @ path 14: pt_count
+    .byte   0               @ path 14: closed
+    .byte   37
+    .byte   41
+    .byte   42
+    .byte   43
+    .byte   38
+    .byte   43
+    .byte   38
+    .byte   44
+    .byte   38
+    .byte   43
+    .byte   38
+    .byte   2               @ path 15: pt_count
+    .byte   0               @ path 15: closed
+    .byte   45
+    .byte   43
+    .byte   2               @ path 16: pt_count
+    .byte   0               @ path 16: closed
+    .byte   41
+    .byte   46
+    .byte   2               @ path 17: pt_count
+    .byte   0               @ path 17: closed
+    .byte   43
+    .byte   38
+    .byte   2               @ path 18: pt_count
+    .byte   0               @ path 18: closed
+    .byte   43
+    .byte   38
+    .byte   2               @ path 19: pt_count
+    .byte   0               @ path 19: closed
+    .byte   44
+    .byte   38
+    .byte   2               @ path 20: pt_count
+    .byte   0               @ path 20: closed
+    .byte   43
+    .byte   38
+
+@ --- platformver (3 path(s)) ---
+.global _PLATFORMVER_VECTORS
+_PLATFORMVER_VECTORS:
+    .word   3               @ path_count
+    .word   _PLATFORMVER_PATH0      @ ptr path 0
+    .word   _PLATFORMVER_PATH1      @ ptr path 1
+    .word   _PLATFORMVER_PATH2      @ ptr path 2
+
+_PLATFORMVER_PATH0:
+    .byte   85               @ intensity
+    .byte   0xF7, 0x3A, 0x00, 0x00  @ y=-9, x=58, hdr
+    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0xFF, 0x00, 0x73  @ line dy=0, dx=115
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0x02            @ end marker
+
+_PLATFORMVER_PATH1:
+    .byte   85               @ intensity
+    .byte   0x02, 0x3A, 0x00, 0x00  @ y=2, x=58, hdr
+    .byte   0xFF, 0x07, 0xFB  @ line dy=7, dx=-5
+    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
+    .byte   0xFF, 0xF7, 0xF9  @ line dy=-9, dx=-7
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFB  @ line dy=9, dx=-5
+    .byte   0xFF, 0xF7, 0xF9  @ line dy=-9, dx=-7
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFA  @ line dy=-9, dx=-6
+    .byte   0xFF, 0x09, 0xFA  @ line dy=9, dx=-6
+    .byte   0xFF, 0xF7, 0xFB  @ line dy=-9, dx=-5
+    .byte   0xFF, 0x08, 0xFA  @ line dy=8, dx=-6
+    .byte   0xFF, 0xF9, 0xFA  @ line dy=-7, dx=-6
+    .byte   0x02            @ end marker
+
+_PLATFORMVER_PATH2:
+    .byte   85               @ intensity
+    .byte   0xFB, 0x3A, 0x00, 0x00  @ y=-5, x=58, hdr
+    .byte   0xFF, 0x00, 0x8D  @ line dy=0, dx=-115
+    .byte   0x02            @ end marker
+
+@ --- PLATFORMVER_3D_DATA (3 path(s)) ---
+.global _PLATFORMVER_3D_DATA
+_PLATFORMVER_3D_DATA:
+    .word   27               @ vertex_count
+    .byte   0x3A, 0xF7, 0x00  @ vert 0: x=58,y=-9,z=0
+    .byte   0xC7, 0xF7, 0x00  @ vert 1: x=-57,y=-9,z=0
+    .byte   0xC7, 0x09, 0x00  @ vert 2: x=-57,y=9,z=0
+    .byte   0x3A, 0x09, 0x00  @ vert 3: x=58,y=9,z=0
+    .byte   0x3A, 0x02, 0x00  @ vert 4: x=58,y=2,z=0
+    .byte   0x35, 0x09, 0x00  @ vert 5: x=53,y=9,z=0
+    .byte   0x30, 0x00, 0x00  @ vert 6: x=48,y=0,z=0
+    .byte   0x2A, 0x09, 0x00  @ vert 7: x=42,y=9,z=0
+    .byte   0x24, 0x00, 0x00  @ vert 8: x=36,y=0,z=0
+    .byte   0x1F, 0x09, 0x00  @ vert 9: x=31,y=9,z=0
+    .byte   0x18, 0x00, 0x00  @ vert 10: x=24,y=0,z=0
+    .byte   0x12, 0x09, 0x00  @ vert 11: x=18,y=9,z=0
+    .byte   0x0C, 0x00, 0x00  @ vert 12: x=12,y=0,z=0
+    .byte   0x07, 0x09, 0x00  @ vert 13: x=7,y=9,z=0
+    .byte   0x01, 0x00, 0x00  @ vert 14: x=1,y=0,z=0
+    .byte   0xFC, 0x09, 0x00  @ vert 15: x=-4,y=9,z=0
+    .byte   0xF5, 0x00, 0x00  @ vert 16: x=-11,y=0,z=0
+    .byte   0xEF, 0x09, 0x00  @ vert 17: x=-17,y=9,z=0
+    .byte   0xEA, 0x00, 0x00  @ vert 18: x=-22,y=0,z=0
+    .byte   0xE4, 0x09, 0x00  @ vert 19: x=-28,y=9,z=0
+    .byte   0xDE, 0x00, 0x00  @ vert 20: x=-34,y=0,z=0
+    .byte   0xD8, 0x09, 0x00  @ vert 21: x=-40,y=9,z=0
+    .byte   0xD3, 0x00, 0x00  @ vert 22: x=-45,y=0,z=0
+    .byte   0xCD, 0x08, 0x00  @ vert 23: x=-51,y=8,z=0
+    .byte   0xC7, 0x01, 0x00  @ vert 24: x=-57,y=1,z=0
+    .byte   0x3A, 0xFB, 0x00  @ vert 25: x=58,y=-5,z=0
+    .byte   0xC7, 0xFB, 0x00  @ vert 26: x=-57,y=-5,z=0
+    .word   3               @ path_count
+    .byte   5               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   0
+    .byte   21               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   25
+    .byte   26
 
 @ --- test (1 path(s)) ---
 .global _TEST_VECTORS

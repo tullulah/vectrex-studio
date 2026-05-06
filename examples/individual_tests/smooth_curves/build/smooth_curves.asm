@@ -56,13 +56,15 @@
 .equ PSG_SFX_PTR, 0x00100048
 .equ PSG_SFX_ACTIVE, 0x0010004C
 .equ PSG_SFX_DELAY, 0x00100050
-.equ LEVEL_DATA_PTR, 0x00100054
-.equ LEVEL_GP_COUNT, 0x00100058
-.equ LEVEL_GP_BUF, 0x0010005C
-.equ SCROLL_LIMIT_LEFT, 0x0010015C
-.equ SCROLL_LIMIT_RIGHT, 0x00100160
-.equ SCROLL_LIMIT_TOP, 0x00100164
-.equ SCROLL_LIMIT_BOTTOM, 0x00100168
+.equ NOTE_STATE, 0x00100054
+.equ PSG_MIXER_SHADOW, 0x001000B4
+.equ LEVEL_DATA_PTR, 0x001000B8
+.equ LEVEL_GP_COUNT, 0x001000BC
+.equ LEVEL_GP_BUF, 0x001000C0
+.equ SCROLL_LIMIT_LEFT, 0x001001C0
+.equ SCROLL_LIMIT_RIGHT, 0x001001C4
+.equ SCROLL_LIMIT_TOP, 0x001001C8
+.equ SCROLL_LIMIT_BOTTOM, 0x001001CC
 
 PITREX_CUR_X: .space 4
 PITREX_CUR_Y: .space 4
@@ -1890,49 +1892,94 @@ pitrex_debug_print_str:
 .global pitrex_level_collision_y
 .type pitrex_level_collision_y, %function
 pitrex_level_collision_y:
-    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
     mov     r4, r0              @ px
-    mov     r5, r1              @ py
-    mov     r6, r2              @ half_h (player)
+    mov     r6, r2              @ player_hh
+    sub     r5, r1, r2          @ r5 = player_feet = py - hh
     ldr     r7, =LEVEL_DATA_PTR
-    ldr     r7, [r7]            @ r7 = level header ptr
-    ldr     r10, =-32767        @ best_floor_top sentinel (below any valid Y)
+    ldr     r7, [r7]
     cmp     r7, #0
-    beq     plcy_finish
+    beq     plcy_no_floor
     ldr     r8, =LEVEL_GP_COUNT
     ldr     r8, [r8]
     cmp     r8, #0
-    beq     plcy_finish
+    beq     plcy_no_floor
     ldr     r9, [r7, #16]       @ r9 = gpObjectsPtr (ROM)
     ldr     r7, =LEVEL_GP_BUF
-    sub     r0, r5, r6          @ player_feet = py - hh
+    ldr     r10, =-32767        @ best_floor_top sentinel
 plcy_loop:
     cmp     r8, #0
     beq     plcy_finish
-    ldrb    r1, [r9, #6]
-    tst     r1, #0x10
+    ldrb    r0, [r9, #6]
+    tst     r0, #0x10
     beq     plcy_next
-    ldrb    r1, [r9, #12]       @ obj half_w
+    ldrb    r1, [r9, #12]       @ half_w
     ldrsh   r2, [r7, #0]        @ obj world_x (buf)
-    sub     r2, r4, r2          @ dx = px - obj_x
-    movs    r3, r2
-    bpl     plcy_dx_ok
-    neg     r3, r2
-plcy_dx_ok:
-    add     r1, r1, #8
+    sub     r0, r4, r2          @ dx = px - obj_x
+    movs    r3, r0
+    bpl     plcy_xabs
+    neg     r3, r0
+plcy_xabs:
     cmp     r3, r1
-    bge     plcy_next
+    bgt     plcy_next
+    ldr     r11, [r9, #16]      @ coll_mesh_ptr
+    cmp     r11, #0
+    beq     plcy_aabb
+    ldrsh   r0, [r7, #0]        @ obj_world_x
+    sub     r0, r4, r0          @ local_px = px - obj_world_x
+    ldrsh   r1, [r7, #2]        @ obj_world_y
+    push    {r0, r1}            @ [sp]=local_px  [sp+4]=obj_world_y
+    ldr     r12, [r11], #4      @ seg_count; r11 now → first segment
+plcy_seg_loop:
+    cmp     r12, #0
+    beq     plcy_seg_done
+    ldrsh   r0, [r11]           @ x1
+    ldrsh   r1, [r11, #2]       @ y1
+    ldrsh   r2, [r11, #4]       @ x2
+    ldrsh   r3, [r11, #6]       @ y2
+    add     r11, r11, #8
+    subs    r12, r12, #1
+    cmp     r1, r3
+    bne     plcy_seg_loop    @ skip non-horizontal (y1!=y2)
+    ldr     r14, [sp]           @ local_px
+    cmp     r0, r2              @ x1 vs x2
+    blt     plcy_seg_x1lt
+    @ x1 >= x2: valid range [x2, x1]
+    cmp     r14, r2
+    blt     plcy_seg_loop
+    cmp     r14, r0
+    bgt     plcy_seg_loop
+    b       plcy_seg_y
+plcy_seg_x1lt:
+    @ x1 < x2: valid range [x1, x2]
+    cmp     r14, r0
+    blt     plcy_seg_loop
+    cmp     r14, r2
+    bgt     plcy_seg_loop
+plcy_seg_y:
+    ldr     r14, [sp, #4]       @ obj_world_y
+    add     r3, r1, r14         @ world_seg_y = y1(local) + obj_world_y
+    cmp     r3, r5
+    bgt     plcy_seg_loop    @ above player_feet: skip
+    cmp     r3, r10
+    ble     plcy_seg_loop    @ not better: skip
+    mov     r10, r3
+    b       plcy_seg_loop
+plcy_seg_done:
+    pop     {r0, r1}            @ restore stack balance
+    b       plcy_next
+plcy_aabb:
     ldrsh   r2, [r7, #2]        @ obj world_y (buf)
-    ldrb    r3, [r9, #13]       @ obj half_h
+    ldrb    r3, [r9, #13]       @ half_h
     add     r2, r2, r3          @ obj_top = world_y + half_h
-    cmp     r2, r0
-    bgt     plcy_next   @ surface above player feet
-    cmp     r10, r2
-    bge     plcy_next
+    cmp     r2, r5
+    bgt     plcy_next   @ above player feet: skip
+    cmp     r2, r10
+    ble     plcy_next
     mov     r10, r2
 plcy_next:
     add     r7, r7, #8
-    add     r9, r9, #16
+    add     r9, r9, #20         @ ROM obj stride = 20 bytes
     subs    r8, r8, #1
     b       plcy_loop
 plcy_finish:
@@ -1940,10 +1987,10 @@ plcy_finish:
     cmp     r10, r1
     beq     plcy_no_floor
     add     r0, r10, r6         @ floor_center = floor_top + player_hh
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
 plcy_no_floor:
     ldr     r0, =-200
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
 @ pitrex_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx
@@ -2000,7 +2047,7 @@ plcx_push_pos:
     mov     r10, r3
 plcx_next:
     add     r7, r7, #8
-    add     r9, r9, #16
+    add     r9, r9, #20         @ ROM obj stride = 20 bytes
     subs    r8, r8, #1
     b       plcx_loop
 plcx_done:
@@ -2180,7 +2227,7 @@ pitrex_load_level:
     strh    r1, [r7, #2]        @ buf.y
     strh    r2, [r7, #4]        @ buf.vx
     strh    r3, [r7, #6]        @ buf.vy
-    add     r6, r6, #16         @ advance ROM obj ptr
+    add     r6, r6, #20         @ advance ROM obj ptr (20 bytes)
     add     r7, r7, #8          @ advance buf ptr
     subs    r5, r5, #1
     bne     .Lll_copy
@@ -2242,7 +2289,7 @@ pitrex_show_level:
     add     sp, sp, #4          @ pop intensity
     pop     {r4, r5, r10, r11}
 .Lshl_bg_skip:
-    add     r5, r5, #16         @ next BG object
+    add     r5, r5, #20         @ next BG object (20 bytes)
     subs    r4, r4, #1
     bne     .Lshl_bg
 .Lshl_gp:
@@ -2277,7 +2324,7 @@ pitrex_show_level:
     add     sp, sp, #4          @ pop intensity
     pop     {r4, r5, r7, r10, r11}
 .Lshl_gp_skip:
-    add     r5, r5, #16         @ next ROM GP object
+    add     r5, r5, #20         @ next ROM GP object (20 bytes)
     add     r7, r7, #8          @ next buf entry
     subs    r4, r4, #1
     bne     .Lshl_gp_loop
@@ -2311,7 +2358,7 @@ pitrex_show_level:
     add     sp, sp, #4          @ pop intensity
     pop     {r4, r5, r10, r11}
 .Lshl_fg_skip:
-    add     r5, r5, #16         @ next FG object
+    add     r5, r5, #20         @ next FG object (20 bytes)
     subs    r4, r4, #1
     bne     .Lshl_fg_loop
 .Lshl_done:
@@ -2852,7 +2899,7 @@ pitrex_update_level:
     strh    r3, [r8, #4]        @ buf.vx (unchanged)
     strh    r12, [r8, #6]       @ buf.vy
 .Lul_next:
-    add     r7, r7, #16         @ next ROM object
+    add     r7, r7, #20         @ next ROM object (20 bytes)
     add     r8, r8, #8          @ next buf entry
     subs    r4, r4, #1
     bne     .Lul_loop
@@ -3105,6 +3152,185 @@ PITREX_ANIM_MIRROR: .space 1
 PITREX_ANIM_SPEED: .space 1
 .text
 
+@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---
+.section .rodata
+.balign 2
+.global NOTE_PERIOD_TABLE
+NOTE_PERIOD_TABLE:
+    .hword 2697, 2546, 2403, 2268, 2141, 2020, 1907, 1800
+    .hword 1699, 1604, 1514, 1429, 1348, 1273, 1201, 1134
+    .hword 1070, 1010, 954, 900, 849, 802, 757, 714
+    .hword 674, 636, 601, 567, 535, 505, 477, 450
+    .hword 425, 401, 378, 357, 337, 318, 300, 283
+    .hword 268, 253, 238, 225, 212, 200, 189, 179
+    .hword 169, 159, 150, 142, 134, 126, 119, 113
+    .hword 106, 100, 95, 89, 84, 80, 75, 71
+    .hword 67, 63, 60, 56, 53, 50, 47, 45
+    .hword 42, 40, 38, 35, 33, 32, 30, 28
+    .hword 27, 25, 24, 22
+
+.section .text
+.align 2
+
+@ pitrex_play_note(r0=instr_ptr, r1=channel 0-2, r2=note MIDI 24-107)
+.global pitrex_play_note
+.type pitrex_play_note, %function
+pitrex_play_note:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0          @ r4 = instr_ptr
+    mov     r5, r1          @ r5 = channel
+    mov     r6, r2          @ r6 = note
+    @ clamp note to 24-107
+    cmp     r6, #24
+    it      lt
+    movlt   r6, #24
+    cmp     r6, #107
+    it      gt
+    movgt   r6, #107
+    @ r7 = &NOTE_STATE[channel]
+    ldr     r0, =NOTE_STATE
+    mov     r1, #32
+    mul     r7, r5, r1
+    add     r7, r0, r7
+    @ fill channel state
+    mov     r0, #1
+    str     r0, [r7, #0]    @ active = 1
+    ldrb    r0, [r4, #0]
+    str     r0, [r7, #4]    @ frames_left = duration_frames
+    str     r6, [r7, #8]    @ base_note
+    str     r4, [r7, #12]   @ instr_ptr
+    mov     r0, #0
+    str     r0, [r7, #16]   @ arp_pos = 0
+    ldrb    r0, [r4, #3]
+    str     r0, [r7, #20]   @ arp_timer = arp_speed_frames
+    str     r5, [r7, #28]   @ channel_id
+    @ compute period from note
+    sub     r0, r6, #24     @ r0 = note - 24 (index)
+    lsl     r0, r0, #1      @ r0 = index * 2 (hword offset)
+    ldr     r1, =NOTE_PERIOD_TABLE
+    ldrh    r2, [r1, r0]    @ r2 = period
+    str     r2, [r7, #24]   @ save period in state
+    @ write period to PSG (reg_lo = channel*2, reg_hi = channel*2+1)
+    lsl     r0, r5, #1      @ reg_lo = channel * 2
+    mov     r1, r2
+    and     r1, r1, #0xFF   @ period_lo
+    push    {r2, r5, r7}
+    bl      v_writePSG
+    pop     {r2, r5, r7}
+    lsl     r0, r5, #1
+    add     r0, r0, #1      @ reg_hi
+    mov     r1, r2
+    lsr     r1, r1, #8      @ period_hi
+    push    {r5, r7}
+    bl      v_writePSG
+    pop     {r5, r7}
+    @ write volume to PSG (vol reg = channel + 8)
+    ldr     r4, [r7, #12]   @ reload instr_ptr
+    ldrb    r1, [r4, #1]    @ volume
+    add     r0, r5, #8      @ vol reg = channel + 8
+    push    {r5, r7}
+    bl      v_writePSG
+    pop     {r5, r7}
+    @ update PSG_MIXER_SHADOW: enable tone ch, disable noise ch
+    ldr     r0, =PSG_MIXER_SHADOW
+    ldr     r1, [r0]
+    mov     r2, #1
+    lsl     r2, r2, r5      @ tone bit for channel
+    bic     r1, r1, r2      @ clear = enable tone
+    add     r3, r5, #3
+    mov     r2, #1
+    lsl     r2, r2, r3      @ noise bit
+    orr     r1, r1, r2      @ set = disable noise
+    str     r1, [r0]        @ update shadow
+    mov     r0, #7
+    push    {r5, r7}
+    bl      v_writePSG
+    pop     {r5, r7}
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ pitrex_note_update() — advance note engine one frame (3 channels)
+.global pitrex_note_update
+.type pitrex_note_update, %function
+pitrex_note_update:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, #0              @ r4 = channel index
+.Lpnu_loop:
+    cmp     r4, #3
+    bge     .Lpnu_done
+    ldr     r5, =NOTE_STATE
+    mov     r6, #32
+    mul     r7, r4, r6
+    add     r5, r5, r7      @ r5 = &NOTE_STATE[channel]
+    ldr     r6, [r5, #0]    @ active
+    cmp     r6, #0
+    beq     .Lpnu_next
+    ldr     r6, [r5, #4]    @ frames_left
+    subs    r6, r6, #1
+    str     r6, [r5, #4]
+    bne     .Lpnu_arp
+    @ note expired: mute channel
+    mov     r0, #0
+    str     r0, [r5, #0]    @ active = 0
+    ldr     r6, [r5, #28]   @ channel_id
+    add     r0, r6, #8      @ vol reg = channel_id + 8
+    mov     r1, #0
+    push    {r4, r5}
+    bl      v_writePSG
+    pop     {r4, r5}
+    b       .Lpnu_next
+.Lpnu_arp:
+    ldr     r6, [r5, #12]   @ instr_ptr
+    ldrb    r7, [r6, #2]    @ arpeggio_count
+    cmp     r7, #0
+    beq     .Lpnu_next
+    ldr     r8, [r5, #20]   @ arp_timer
+    subs    r8, r8, #1
+    str     r8, [r5, #20]
+    bne     .Lpnu_next
+    ldrb    r8, [r6, #3]    @ arpeggio_speed_frames
+    str     r8, [r5, #20]
+    ldr     r8, [r5, #16]   @ arp_pos
+    add     r8, r8, #1
+    cmp     r8, r7
+    it      ge
+    movge   r8, #0
+    str     r8, [r5, #16]
+    ldr     r0, [r5, #8]    @ base_note
+    add     r1, r6, #4      @ ptr to arpeggio_intervals[0]
+    ldrsb   r1, [r1, r8]    @ signed interval at arp_pos
+    add     r0, r0, r1      @ new_note
+    cmp     r0, #24
+    it      lt
+    movlt   r0, #24
+    cmp     r0, #107
+    it      gt
+    movgt   r0, #107
+    sub     r0, r0, #24     @ index into table
+    lsl     r0, r0, #1      @ hword offset
+    ldr     r1, =NOTE_PERIOD_TABLE
+    ldrh    r2, [r1, r0]    @ period
+    ldr     r3, [r5, #28]   @ channel_id
+    lsl     r0, r3, #1      @ reg_lo = channel_id * 2
+    mov     r1, r2
+    and     r1, r1, #0xFF
+    push    {r2, r3, r4, r5}
+    bl      v_writePSG
+    pop     {r2, r3, r4, r5}
+    lsl     r0, r3, #1
+    add     r0, r0, #1      @ reg_hi
+    mov     r1, r2
+    lsr     r1, r1, #8
+    push    {r3, r4, r5}
+    bl      v_writePSG
+    pop     {r3, r4, r5}
+.Lpnu_next:
+    add     r4, r4, #1
+    b       .Lpnu_loop
+.Lpnu_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
 @ --- main (PiTrex SDK entry point) ---
 .align 2
 .global main
@@ -3130,6 +3356,10 @@ main:
     b       .Lgp_0
     .ltorg
 .Lgp_0:
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
     @ initialise globals
     b       .Lgp_1
     .ltorg
@@ -3142,8 +3372,6 @@ pitrex_game_loop:
     str     r0, [r1]
     ldr     r1, =PITREX_CUR_Y
     str     r0, [r1]
-    ldr     r0, =.Lstr_frame_sep
-    bl      vpy_uart_puts
     bl      v_readButtons
     bl      v_readJoystick1Analog
     bl      v_readJoystick2Analog

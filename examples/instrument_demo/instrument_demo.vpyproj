@@ -1,0 +1,11 @@
+[project]
+name = "instrument_demo"
+version = "0.1.0"
+entry = "src/main.vpy"
+target = "vectrex"
+
+[build]
+output = "build/instrument_demo.bin"
+
+[[source]]
+path = "src/main.vpy"

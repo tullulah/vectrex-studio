@@ -499,6 +499,67 @@ pub fn emit_call(
         }
     }
 
+    // Special case: DRAW_VECTOR_3D("name", rot_x, rot_y, rot_z, pos_x, pos_y)
+    // ABI: r0=_NAME_3D_DATA, r1=rot_x, r2=rot_y, r3=rot_z, [sp+36]=pos_x, [sp+40]=pos_y
+    // Callee pushes 9 regs (36 bytes), so pos_x/pos_y on stack at [sp+36]/[sp+40] from caller's view.
+    if info.name == "DRAW_VECTOR_3D" {
+        if let Some(Expr::StringLit(asset_name)) = args.first() {
+            let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_3D_DATA");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+
+            // Push pos_y first (will be at [sp+40] after callee's 9-reg push)
+            if let Some(pos_y) = runtime.get(4) {
+                s.push_str(&emit_arg(pos_y, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+
+            // Push pos_x (will be at [sp+36] after callee's 9-reg push)
+            if let Some(pos_x) = runtime.get(3) {
+                s.push_str(&emit_arg(pos_x, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+
+            // r0 = asset_3d_ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}' (3D data)\n"));
+            s.push_str("    push    {r0}\n");
+
+            // r1 = rot_x
+            if let Some(rot_x) = runtime.first() {
+                s.push_str(&emit_arg(rot_x, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+
+            // r2 = rot_y
+            if let Some(rot_y) = runtime.get(1) {
+                s.push_str(&emit_arg(rot_y, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+
+            // r3 = rot_z
+            if let Some(rot_z) = runtime.get(2) {
+                s.push_str(&emit_arg(rot_z, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+
+            // pop r3=rot_z, r2=rot_y, r1=rot_x, r0=asset; pos_x/pos_y remain on stack
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_vector_3d\n");
+            s.push_str("    add     sp, sp, #8\n"); // discard pos_x, pos_y from stack
+            return Ok(s);
+        }
+    }
+
     // Special case: PLAY_NOTE("name", channel, note)
     // r0=_NAME_INSTR address, r1=channel(0-2), r2=note(MIDI 24-107)
     if info.name == "PLAY_NOTE" {

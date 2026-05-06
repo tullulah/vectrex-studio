@@ -2511,7 +2511,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     // Calculate new zoom
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.max(0.5, Math.min(4, zoom * zoomFactor));
+    const newZoom = Math.max(0.5, Math.min(16, zoom * zoomFactor));
     
     // Calculate new pan to keep world position under cursor
     const newPanX = mouseX - centerX - worldX * scale * newZoom;
@@ -3387,7 +3387,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       <div style={{ flex: 1 }} />
       
       <button
-        onClick={() => setZoom(z => Math.min(z * 1.2, 4))}
+        onClick={() => setZoom(z => Math.min(z * 1.2, 16))}
         style={{ padding: '8px 12px', background: '#3a3a5e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
       >
         +
