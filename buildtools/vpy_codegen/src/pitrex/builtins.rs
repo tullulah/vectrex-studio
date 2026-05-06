@@ -2176,26 +2176,93 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    str     r0, [sp, #20]\n");
 
     // Read vertex count from asset (first byte)
-    s.push_str("    ldrb    r5, [r4]            @ r5 = vertex_count from asset[0]\n");
-    s.push_str("    cmp     r5, #0              @ if no vertices, just return\n");
-    s.push_str("    beq     .Ldv3d_done\n");
+    s.push_str("    ldrb    r5, [r4]            @ r5 = vertex_count\n");
+    s.push_str("    cmp     r5, #0              @ if no vertices, skip to draw\n");
+    s.push_str("    beq     .Ldv3d_nodraw\n");
 
-    // For now: Y-axis rotation only (full Euler X→Y→Z can be added later)
-    // Get sin_y and cos_y from precomputed values
+    // For Y-axis rotation only (full Euler can be added incrementally)
     s.push_str("    ldr     r6, [sp, #8]        @ r6 = sin_y\n");
     s.push_str("    ldr     r7, [sp, #12]       @ r7 = cos_y\n");
 
-    // Simple Y-rotation test: just draw original asset without transformation
-    // Full rotation requires parsing asset structure, transforming vertices, and rebuilding
-    // This is complex in ARM, so for now we demonstrate the framework is in place
-    s.push_str("    @ TODO: Implement vertex transformation loop\n");
-    s.push_str("    @ For each vertex at asset[1+i*3]..asset[1+i*3+2]:\n");
-    s.push_str("    @   x' = x*cos_y - z*sin_y\n");
-    s.push_str("    @   y' = y\n");
-    s.push_str("    @   z' = x*sin_y + z*cos_y\n");
-    s.push_str("    @ Then rebuild path data to use rotated vertices\n");
+    // Allocate space for transformed vertices: count * 3 bytes (max 32 verts = 96 bytes)
+    s.push_str("    mov     r10, r5             @ r10 = count (for space calculation)\n");
+    s.push_str("    add     r10, r10, r10, lsl #1  @ r10 = count * 3\n");
+    s.push_str("    sub     sp, sp, r10         @ allocate space on stack\n");
+    s.push_str("    mov     r11, sp             @ r11 = buffer pointer for rotated vertices\n");
 
-    // For now, draw asset as-is (sin/cos precomputation demonstrates the approach)
+    // Transform each vertex: Y-axis rotation
+    // x' = x*cos_y - z*sin_y, y' = y, z' = x*sin_y + z*cos_y
+    s.push_str("    mov     r8, #0              @ r8 = vertex index counter\n");
+    s.push_str(".Ldv3d_vert_loop:\n");
+    s.push_str("    cmp     r8, r5              @ done if processed all vertices\n");
+    s.push_str("    beq     .Ldv3d_verts_done\n");
+
+    // Calculate source offset: asset[1 + index*3]
+    s.push_str("    mov     r9, r8              @ r9 = index\n");
+    s.push_str("    add     r9, r9, r9, lsl #1 @ r9 = index * 3\n");
+    s.push_str("    add     r9, r9, #1          @ r9 += 1 (skip vertex_count byte)\n");
+    s.push_str("    add     r9, r9, r4          @ r9 = asset + offset\n");
+
+    // Read x, y, z
+    s.push_str("    ldrsb   r0, [r9]            @ r0 = x\n");
+    s.push_str("    ldrsb   r1, [r9, #1]        @ r1 = y\n");
+    s.push_str("    ldrsb   r2, [r9, #2]        @ r2 = z\n");
+
+    // Apply Y rotation: x' = x*cos_y - z*sin_y
+    s.push_str("    mov     r3, r0              @ r3 = x\n");
+    s.push_str("    mov     r0, r7              @ prepare cos_y for multiply (but smul_lut takes in r0, r1)\n");
+    // x' = x*cos_y
+    s.push_str("    mov     r0, r3              @ r0 = x\n");
+    s.push_str("    mov     r1, r7              @ r1 = cos_y (but smul_lut expects angle in r1)\n");
+    // Actually, we have raw sin/cos values, not angles. Let me recalculate...
+    // smul_lut(value, angle) but we have sin_y and cos_y already computed
+    // We need: x' = x*cos_y - z*sin_y where cos_y, sin_y are -127..127 signed bytes
+
+    // Use multiply directly: x*cos_y >> 7
+    s.push_str("    mul     r3, r3, r7          @ r3 = x * cos_y\n");
+    s.push_str("    asr     r3, r3, #7          @ r3 >>= 7 (scale down)\n");
+
+    // z' = x*sin_y + z*cos_y
+    s.push_str("    mul     r12, r0, r6         @ r12 = x * sin_y\n");
+    s.push_str("    asr     r12, r12, #7        @ r12 >>= 7\n");
+    s.push_str("    mul     r10, r2, r7         @ r10 = z * cos_y\n");
+    s.push_str("    asr     r10, r10, #7        @ r10 >>= 7\n");
+
+    // x' = x*cos_y - z*sin_y
+    s.push_str("    mul     r9, r2, r6          @ r9 = z * sin_y\n");
+    s.push_str("    asr     r9, r9, #7          @ r9 >>= 7\n");
+    s.push_str("    sub     r3, r3, r9          @ r3 = x*cos_y - z*sin_y\n");
+
+    // z' = x*sin_y + z*cos_y
+    s.push_str("    add     r2, r12, r10        @ r2 = x*sin_y + z*cos_y\n");
+
+    // Clamp to signed byte range [-127, 127]
+    s.push_str("    mov     r9, #127\n");
+    s.push_str("    cmp     r3, r9\n    movgt   r3, r9\n");
+    s.push_str("    mvn     r9, #127            @ r9 = -128\n");
+    s.push_str("    cmp     r3, r9\n    movlt   r3, r9\n");
+    s.push_str("    mov     r9, #127\n");
+    s.push_str("    cmp     r2, r9\n    movgt   r2, r9\n");
+    s.push_str("    mvn     r9, #127\n");
+    s.push_str("    cmp     r2, r9\n    movlt   r2, r9\n");
+
+    // Store rotated vertex: buffer[index*3] = x', y', z'
+    s.push_str("    mov     r9, r8              @ r9 = index\n");
+    s.push_str("    add     r9, r9, r9, lsl #1 @ r9 = index * 3\n");
+    s.push_str("    add     r9, r9, r11         @ r9 = buffer + offset\n");
+    s.push_str("    strb    r3, [r9]            @ buffer[i*3] = x'\n");
+    s.push_str("    strb    r1, [r9, #1]        @ buffer[i*3+1] = y (unchanged)\n");
+    s.push_str("    strb    r2, [r9, #2]        @ buffer[i*3+2] = z'\n");
+
+    s.push_str("    add     r8, r8, #1          @ next vertex\n");
+    s.push_str("    b       .Ldv3d_vert_loop\n");
+
+    s.push_str(".Ldv3d_verts_done:\n");
+    // Vertices transformed, now draw them
+    // For now: just draw original asset (full path transformation is complex)
+    // TODO: Rebuild asset structure with rotated vertices and draw
+
+    s.push_str(".Ldv3d_nodraw:\n");
     s.push_str("    ldrsb   r8, [sp, #60]       @ r8 = ox\n");
     s.push_str("    ldrsb   r9, [sp, #56]       @ r9 = oy\n");
     s.push_str("    mov     r0, r4              @ r0 = asset_ptr\n");
