@@ -1060,6 +1060,42 @@ function executeOne(s: PitrexArm32State): boolean {
       break;
     }
 
+    // ── LDMIA (load multiple, increment after) ───────────────────────────
+    case 'ldmia': {
+      // Syntax: ldmia Rn, {regs}  or  ldmia Rn!, {regs}  (! = writeback)
+      const base0 = operands[0] ?? '';
+      const writeback = base0.endsWith('!');
+      const bnStr = writeback ? base0.slice(0, -1) : base0;
+      const bn = regIdx(bnStr);
+      if (bn < 0) break;
+      const regList = parseRegList(operands[1] ?? '');
+      let addr = getReg(s, bn);
+      for (const r of regList) {
+        setReg(s, r, memRead32(s, addr));
+        addr += 4;
+      }
+      if (writeback) setReg(s, bn, addr);
+      break;
+    }
+
+    // ── STMIA (store multiple, increment after) ──────────────────────────
+    case 'stmia': {
+      // Syntax: stmia Rn, {regs}  or  stmia Rn!, {regs}  (! = writeback)
+      const base0 = operands[0] ?? '';
+      const writeback = base0.endsWith('!');
+      const bnStr = writeback ? base0.slice(0, -1) : base0;
+      const bn = regIdx(bnStr);
+      if (bn < 0) break;
+      const regList = parseRegList(operands[1] ?? '');
+      let addr = getReg(s, bn);
+      for (const r of regList) {
+        memWrite32(s, addr, getReg(s, r));
+        addr += 4;
+      }
+      if (writeback) setReg(s, bn, addr);
+      break;
+    }
+
     // ── PUSH ─────────────────────────────────────────────────────────────
     case 'push': case 'stmfd': {
       const regList = parseRegList(operands[0] ?? '');
