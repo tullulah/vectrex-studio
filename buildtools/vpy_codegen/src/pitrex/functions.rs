@@ -374,7 +374,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     // Each pitrex_wait_recal decrements it; uart_trace_xy is a no-op when 0.
     s.push_str("    @ init UART trace counter (N frames)\n");
     s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
-    s.push_str("    mov     r1, #2\n");
+    s.push_str("    mov     r1, #5\n");
     s.push_str("    str     r1, [r0]\n");
     s.push_str("    ldr     r0, =UART_FRAME_NUM\n");
     s.push_str("    mov     r1, #0\n");
@@ -630,6 +630,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lstr_br:     .asciz \"  br=\"\n");
     s.push_str(".Lstr_frame_hdr:     .asciz \">>> FRAME \"\n");
     s.push_str(".Lstr_frame_hdr_end: .asciz \" START <<<\\r\\n\"\n");
+    s.push_str(".Lstr_sint:          .asciz \"SINT=\"\n");
     s.push_str("    .ltorg\n\n");
 
     Ok(s)

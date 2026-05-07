@@ -123,10 +123,28 @@ fn emit_pitrex_set_intensity() -> String {
     let mut s = String::new();
     s.push_str("@ pitrex_set_intensity(r0=brightness 0-127)\n");
     s.push_str(".global pitrex_set_intensity\n.type pitrex_set_intensity, %function\npitrex_set_intensity:\n");
-    s.push_str("    push    {lr}\n");
-    // v_setBrightness expects brightness in r0
+    // r4 is callee-saved (preserved across bl calls); r0-r3 are scratch (caller-saved)
+    s.push_str("    push    {r4, lr}\n");
+    s.push_str("    mov     r4, r0              @ save brightness in callee-saved r4\n");
+    // Store override so draw_vector/draw_vector_ex/draw_anim respect it
+    s.push_str("    ldr     r1, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    strb    r0, [r1]\n");
+    // UART trace: "SINT=N\r\n" — gated by UART_TRACE_FRAMES_LEFT to avoid blocking UART every frame
+    s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
+    s.push_str("    ldr     r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lsint_no_trace\n");
+    s.push_str("    ldr     r0, =.Lstr_sint\n");
+    s.push_str("    bl      vpy_uart_puts\n");
+    s.push_str("    mov     r0, r4\n");
+    s.push_str("    bl      vpy_uart_print_int\n");
+    s.push_str("    ldr     r0, =.Lstr_crlf\n");
+    s.push_str("    bl      vpy_uart_puts\n");
+    s.push_str(".Lsint_no_trace:\n");
+    // Also call v_setBrightness so DRAW_LINE etc. see the new brightness
+    s.push_str("    mov     r0, r4\n");
     s.push_str("    bl      v_setBrightness\n");
-    s.push_str("    pop     {pc}\n");
+    s.push_str("    pop     {r4, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -286,6 +304,11 @@ fn emit_pitrex_draw_vector() -> String {
     // v_directMove32 repositions the beam without drawing (no brightness concern).
     // PITREX_CUR_X/Y is updated to match so pitrex_draw_line_rel uses correct from-coords.
     s.push_str("    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)\n");
+    // Check PITREX_BRIGHTNESS_OVERRIDE: non-zero means SET_INTENSITY was called
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    ldrb    r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    movne   r10, r0             @ override from SET_INTENSITY\n");
     s.push_str("    ldrsb   r1, [r9], #1        @ r1 = y_start (i8)\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ r0 = x_start (i8)\n");
     s.push_str("    add     r9, r9, #2          @ skip 2 hdr padding bytes\n");
@@ -391,6 +414,10 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_done:\n");
     s.push_str("    add     sp, sp, #8          @ remove saved raw ox, oy\n");
+    // Clear brightness override: next DRAW_VECTOR uses .vec intensities
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -438,6 +465,11 @@ fn emit_pitrex_draw_vector_ex() -> String {
     // Move beam to absolute path start using v_directMove32(x, y).
     // r5=ox, r6=oy, r7=mirror, r10=per-path intensity from .vec
     s.push_str("    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)\n");
+    // Check PITREX_BRIGHTNESS_OVERRIDE: non-zero means SET_INTENSITY was called
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    ldrb    r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    movne   r10, r0             @ override from SET_INTENSITY\n");
     s.push_str("    ldrsb   r1, [r9], #1        @ r1 = y_start (i8)\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ r0 = x_start (i8)\n");
     s.push_str("    add     r9, r9, #2          @ skip 2 hdr padding bytes\n");
@@ -2141,141 +2173,132 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
 
-    // pitrex_draw_vector_3d: Full 3D rotation with Euler angles (X→Y→Z)
-    // r0=asset_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp+52]=ox, [sp+48]=oy
-    s.push_str("@ pitrex_draw_vector_3d: Apply Euler X→Y→Z rotation to 3D asset vertices\n");
+    // pitrex_draw_vector_3d: Y-axis rotation using static BSS buffer _DV3D_BUF
+    // Args: r0=asset_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp]=oy, [sp+4]=ox
+    // After push {r4-r11, lr} (36 bytes): [sp+36]=oy, [sp+40]=ox
+    // Register allocation (callee-saved r4-r11):
+    //   r4=asset_ptr  r5=loop_idx  r6=buf_ptr  r7=cos_y
+    //   r8=sin_y  r9=vtx_count  r10=ox  r11=oy
+    s.push_str("@ pitrex_draw_vector_3d(r0=asset,r1=rot_x,r2=rot_y,r3=rot_z,[sp]=oy,[sp+4]=ox)\n");
     s.push_str(".global pitrex_draw_vector_3d\n.type pitrex_draw_vector_3d, %function\npitrex_draw_vector_3d:\n");
-    s.push_str("    push    {r4-r11, lr}\n");
-    s.push_str("    sub     sp, sp, #32         @ locals: sin/cos values + temp workspace\n");
-    s.push_str("    mov     r4, r0              @ r4 = asset_ptr\n");
+    s.push_str("    push    {r4-r11, lr}\n");          // 36 bytes; caller args now at [sp+36]=oy [sp+40]=ox
+    s.push_str("    mov     r4, r0\n");                // r4 = asset_ptr
+    s.push_str("    ldr     r10, [sp, #40]\n");        // r10 = ox
+    s.push_str("    ldr     r11, [sp, #36]\n");        // r11 = oy
+    s.push_str("    ldrb    r9, [r4]\n");              // r9 = vertex_count
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     .Ldv3d_draw_orig\n");      // no vertices → draw original
 
-    // Precompute sin/cos for all three axes
-    // [sp+0]=sin_x, [sp+4]=cos_x, [sp+8]=sin_y, [sp+12]=cos_y, [sp+16]=sin_z, [sp+20]=cos_z
-    s.push_str("    @ Precompute sin_x, cos_x\n");
-    s.push_str("    mov     r0, r1              @ r0 = rot_x\n");
+    // Compute sin_y → r8, cos_y → r7 (pitrex_get_sin/cos only clobber r0,r1)
+    s.push_str("    mov     r0, r2\n");
     s.push_str("    bl      pitrex_get_sin\n");
-    s.push_str("    str     r0, [sp, #0]\n");
-    s.push_str("    mov     r0, r1              @ r0 = rot_x\n");
+    s.push_str("    mov     r8, r0\n");                // r8 = sin_y
+    s.push_str("    mov     r0, r2\n");
     s.push_str("    bl      pitrex_get_cos\n");
-    s.push_str("    str     r0, [sp, #4]\n");
+    s.push_str("    mov     r7, r0\n");                // r7 = cos_y
 
-    s.push_str("    @ Precompute sin_y, cos_y\n");
-    s.push_str("    mov     r0, r2              @ r0 = rot_y\n");
-    s.push_str("    bl      pitrex_get_sin\n");
-    s.push_str("    str     r0, [sp, #8]\n");
-    s.push_str("    mov     r0, r2              @ r0 = rot_y\n");
-    s.push_str("    bl      pitrex_get_cos\n");
-    s.push_str("    str     r0, [sp, #12]\n");
+    // Point r6 at static BSS buffer; write vertex count
+    s.push_str("    ldr     r6, =_DV3D_BUF\n");
+    s.push_str("    strb    r9, [r6]\n");              // buf[0] = vertex_count
 
-    s.push_str("    @ Precompute sin_z, cos_z\n");
-    s.push_str("    mov     r0, r3              @ r0 = rot_z\n");
-    s.push_str("    bl      pitrex_get_sin\n");
-    s.push_str("    str     r0, [sp, #16]\n");
-    s.push_str("    mov     r0, r3              @ r0 = rot_z\n");
-    s.push_str("    bl      pitrex_get_cos\n");
-    s.push_str("    str     r0, [sp, #20]\n");
+    // Vertex rotation loop: r5 = index 0..vtx_count
+    s.push_str("    mov     r5, #0\n");
+    s.push_str(".Lv3d_loop:\n");
+    s.push_str("    cmp     r5, r9\n");
+    s.push_str("    beq     .Lv3d_loop_done\n");
 
-    // Read vertex count from asset (first byte)
-    s.push_str("    ldrb    r5, [r4]            @ r5 = vertex_count\n");
-    s.push_str("    cmp     r5, #0              @ if no vertices, skip to draw\n");
-    s.push_str("    beq     .Ldv3d_nodraw\n");
+    // r0 = &asset.verts[r5]  (asset + 1 + r5*3)
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    add     r0, r0, r0, lsl #1\n");   // r0 = r5*3
+    s.push_str("    add     r0, r0, #1\n");            // +1 skip count byte
+    s.push_str("    add     r0, r0, r4\n");
+    // Read x→r1, y→r2, z→r3
+    s.push_str("    ldrsb   r1, [r0]\n");
+    s.push_str("    ldrsb   r2, [r0, #1]\n");
+    s.push_str("    ldrsb   r3, [r0, #2]\n");
 
-    // For Y-axis rotation only (full Euler can be added incrementally)
-    s.push_str("    ldr     r6, [sp, #8]        @ r6 = sin_y\n");
-    s.push_str("    ldr     r7, [sp, #12]       @ r7 = cos_y\n");
+    // x' = (x*cos_y - z*sin_y) >> 7   [r12 = x']
+    s.push_str("    mul     r12, r1, r7\n");           // r12 = x*cos_y  (r12≠r1, r12≠r7)
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    mul     r0, r3, r8\n");            // r0  = z*sin_y  (r0≠r3, r0≠r8)
+    s.push_str("    asr     r0, r0, #7\n");
+    s.push_str("    sub     r12, r12, r0\n");          // r12 = x'
 
-    // Allocate space for transformed vertices: count * 3 bytes (max 32 verts = 96 bytes)
-    s.push_str("    mov     r10, r5             @ r10 = count (for space calculation)\n");
-    s.push_str("    add     r10, r10, r10, lsl #1  @ r10 = count * 3\n");
-    s.push_str("    sub     sp, sp, r10         @ allocate space on stack\n");
-    s.push_str("    mov     r11, sp             @ r11 = buffer pointer for rotated vertices\n");
+    // z' = (x*sin_y + z*cos_y) >> 7   [r3 = z'; r1=x and r3=z still intact here]
+    s.push_str("    mul     r0, r1, r8\n");            // r0 = x*sin_y   (r0≠r1, r0≠r8)
+    s.push_str("    asr     r0, r0, #7\n");            // r0 = x_sin
+    s.push_str("    mul     r1, r3, r7\n");            // r1 = z*cos_y   (r1≠r3, r1≠r7)
+    s.push_str("    asr     r1, r1, #7\n");            // r1 = z_cos
+    s.push_str("    add     r3, r0, r1\n");            // r3 = z'  [r2=y untouched]
 
-    // Transform each vertex: Y-axis rotation
-    // x' = x*cos_y - z*sin_y, y' = y, z' = x*sin_y + z*cos_y
-    s.push_str("    mov     r8, #0              @ r8 = vertex index counter\n");
-    s.push_str(".Ldv3d_vert_loop:\n");
-    s.push_str("    cmp     r8, r5              @ done if processed all vertices\n");
-    s.push_str("    beq     .Ldv3d_verts_done\n");
+    // Clamp x' (r12) to [-127, 127]
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    cmp     r12, r0\n");
+    s.push_str("    movgt   r12, r0\n");
+    s.push_str("    mvn     r0, #127\n");              // r0 = -128
+    s.push_str("    cmp     r12, r0\n");
+    s.push_str("    movlt   r12, r0\n");
+    // Clamp z' (r3) to [-127, 127]
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    cmp     r3, r0\n");
+    s.push_str("    movgt   r3, r0\n");
+    s.push_str("    mvn     r0, #127\n");
+    s.push_str("    cmp     r3, r0\n");
+    s.push_str("    movlt   r3, r0\n");
 
-    // Calculate source offset: asset[1 + index*3]
-    s.push_str("    mov     r9, r8              @ r9 = index\n");
-    s.push_str("    add     r9, r9, r9, lsl #1 @ r9 = index * 3\n");
-    s.push_str("    add     r9, r9, #1          @ r9 += 1 (skip vertex_count byte)\n");
-    s.push_str("    add     r9, r9, r4          @ r9 = asset + offset\n");
+    // r0 = &buf.verts[r5]  (buf + 1 + r5*3)
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    add     r0, r0, r0, lsl #1\n");
+    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    add     r0, r0, r6\n");
+    s.push_str("    strb    r12, [r0]\n");             // x'
+    s.push_str("    strb    r2, [r0, #1]\n");          // y (unchanged, r2 never clobbered)
+    s.push_str("    strb    r3, [r0, #2]\n");          // z'
 
-    // Read x, y, z
-    s.push_str("    ldrsb   r0, [r9]            @ r0 = x\n");
-    s.push_str("    ldrsb   r1, [r9, #1]        @ r1 = y\n");
-    s.push_str("    ldrsb   r2, [r9, #2]        @ r2 = z\n");
+    s.push_str("    add     r5, r5, #1\n");
+    s.push_str("    b       .Lv3d_loop\n");
 
-    // Apply Y rotation: x' = x*cos_y - z*sin_y
-    s.push_str("    mov     r3, r0              @ r3 = x\n");
-    s.push_str("    mov     r0, r7              @ prepare cos_y for multiply (but smul_lut takes in r0, r1)\n");
-    // x' = x*cos_y
-    s.push_str("    mov     r0, r3              @ r0 = x\n");
-    s.push_str("    mov     r1, r7              @ r1 = cos_y (but smul_lut expects angle in r1)\n");
-    // Actually, we have raw sin/cos values, not angles. Let me recalculate...
-    // smul_lut(value, angle) but we have sin_y and cos_y already computed
-    // We need: x' = x*cos_y - z*sin_y where cos_y, sin_y are -127..127 signed bytes
+    s.push_str(".Lv3d_loop_done:\n");
+    // Copy path section: asset[path_off..] → buf[path_off..]
+    // path_off = 1 + vtx_count*3;  r5 = vtx_count after loop (equals r9)
+    s.push_str("    mov     r5, r9\n");
+    s.push_str("    add     r5, r5, r5, lsl #1\n");   // r5 = count*3
+    s.push_str("    add     r5, r5, #1\n");            // r5 = path section offset
+    s.push_str("    mov     r0, #0\n");                // r0 = byte index within path section
+    s.push_str(".Lpath_copy:\n");
+    s.push_str("    cmp     r0, #200\n");
+    s.push_str("    bge     .Ldv3d_draw\n");
+    s.push_str("    add     r1, r4, r5\n");
+    s.push_str("    ldrb    r2, [r1, r0]\n");          // r2 = asset_path[r0]
+    s.push_str("    add     r1, r6, r5\n");
+    s.push_str("    strb    r2, [r1, r0]\n");          // buf_path[r0] = r2
+    s.push_str("    cmp     r2, #0x02\n");             // end marker?
+    s.push_str("    beq     .Ldv3d_draw\n");
+    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    b       .Lpath_copy\n");
 
-    // Use multiply directly: x*cos_y >> 7
-    s.push_str("    mul     r3, r3, r7          @ r3 = x * cos_y\n");
-    s.push_str("    asr     r3, r3, #7          @ r3 >>= 7 (scale down)\n");
+    s.push_str(".Ldv3d_draw:\n");
+    s.push_str("    mov     r0, r6\n");                // r0 = buf_ptr (rotated asset)
+    s.push_str("    mov     r1, r10\n");               // r1 = ox
+    s.push_str("    mov     r2, r11\n");               // r2 = oy
+    s.push_str("    mov     r3, #0\n");                // r3 = mirror=0
+    s.push_str("    mov     r12, #127\n");
+    s.push_str("    push    {r12}\n");                 // intensity=127
+    s.push_str("    bl      pitrex_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #4\n");
+    s.push_str("    b       .Ldv3d_done\n");
 
-    // z' = x*sin_y + z*cos_y
-    s.push_str("    mul     r12, r0, r6         @ r12 = x * sin_y\n");
-    s.push_str("    asr     r12, r12, #7        @ r12 >>= 7\n");
-    s.push_str("    mul     r10, r2, r7         @ r10 = z * cos_y\n");
-    s.push_str("    asr     r10, r10, #7        @ r10 >>= 7\n");
-
-    // x' = x*cos_y - z*sin_y
-    s.push_str("    mul     r9, r2, r6          @ r9 = z * sin_y\n");
-    s.push_str("    asr     r9, r9, #7          @ r9 >>= 7\n");
-    s.push_str("    sub     r3, r3, r9          @ r3 = x*cos_y - z*sin_y\n");
-
-    // z' = x*sin_y + z*cos_y
-    s.push_str("    add     r2, r12, r10        @ r2 = x*sin_y + z*cos_y\n");
-
-    // Clamp to signed byte range [-127, 127]
-    s.push_str("    mov     r9, #127\n");
-    s.push_str("    cmp     r3, r9\n    movgt   r3, r9\n");
-    s.push_str("    mvn     r9, #127            @ r9 = -128\n");
-    s.push_str("    cmp     r3, r9\n    movlt   r3, r9\n");
-    s.push_str("    mov     r9, #127\n");
-    s.push_str("    cmp     r2, r9\n    movgt   r2, r9\n");
-    s.push_str("    mvn     r9, #127\n");
-    s.push_str("    cmp     r2, r9\n    movlt   r2, r9\n");
-
-    // Store rotated vertex: buffer[index*3] = x', y', z'
-    s.push_str("    mov     r9, r8              @ r9 = index\n");
-    s.push_str("    add     r9, r9, r9, lsl #1 @ r9 = index * 3\n");
-    s.push_str("    add     r9, r9, r11         @ r9 = buffer + offset\n");
-    s.push_str("    strb    r3, [r9]            @ buffer[i*3] = x'\n");
-    s.push_str("    strb    r1, [r9, #1]        @ buffer[i*3+1] = y (unchanged)\n");
-    s.push_str("    strb    r2, [r9, #2]        @ buffer[i*3+2] = z'\n");
-
-    s.push_str("    add     r8, r8, #1          @ next vertex\n");
-    s.push_str("    b       .Ldv3d_vert_loop\n");
-
-    s.push_str(".Ldv3d_verts_done:\n");
-    // Vertices transformed, now draw them
-    // For now: just draw original asset (full path transformation is complex)
-    // TODO: Rebuild asset structure with rotated vertices and draw
-
-    s.push_str(".Ldv3d_nodraw:\n");
-    s.push_str("    ldrsb   r8, [sp, #60]       @ r8 = ox\n");
-    s.push_str("    ldrsb   r9, [sp, #56]       @ r9 = oy\n");
-    s.push_str("    mov     r0, r4              @ r0 = asset_ptr\n");
-    s.push_str("    mov     r1, r8              @ r1 = ox\n");
-    s.push_str("    mov     r2, r9              @ r2 = oy\n");
-    s.push_str("    mov     r3, #0              @ r3 = mirror\n");
-    s.push_str("    mov     r10, #127           @ r10 = intensity\n");
-    s.push_str("    push    {r10}\n");
+    s.push_str(".Ldv3d_draw_orig:\n");
+    s.push_str("    mov     r0, r4\n");                // original asset, no rotation
+    s.push_str("    mov     r1, r10\n");
+    s.push_str("    mov     r2, r11\n");
+    s.push_str("    mov     r3, #0\n");
+    s.push_str("    mov     r12, #127\n");
+    s.push_str("    push    {r12}\n");
     s.push_str("    bl      pitrex_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #4\n");
 
     s.push_str(".Ldv3d_done:\n");
-    s.push_str("    add     sp, sp, #32\n");
     s.push_str("    pop     {r4-r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
@@ -2363,10 +2386,21 @@ fn emit_pitrex_print_number_impl() -> String {
     s.push_str("    ldr     r3, [r3]\n");
     s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
     s.push_str("pn_print_str:\n");
+    // Set r2 = buf start, then skip leading '0' chars (but always keep at least 1 digit).
+    s.push_str("    mov     r2, sp          @ buf ptr\n");
+    s.push_str("pn_lz_scan:\n");
+    s.push_str("    ldrb    r12, [r2]       @ current char\n");
+    s.push_str("    cmp     r12, #48        @ '0'?\n");
+    s.push_str("    bne     pn_lz_done\n");
+    s.push_str("    ldrb    r12, [r2, #1]   @ peek next char\n");
+    s.push_str("    cmp     r12, #0         @ last digit — always keep\n");
+    s.push_str("    beq     pn_lz_done\n");
+    s.push_str("    add     r2, r2, #1      @ advance past leading '0'\n");
+    s.push_str("    b       pn_lz_scan\n");
+    s.push_str("pn_lz_done:\n");
     // call v_printString(x_scaled, y_scaled, buf, textSize, brightness)
     s.push_str("    mov     r0, r4          @ x\n");
     s.push_str("    mov     r1, r5          @ y\n");
-    s.push_str("    mov     r2, sp          @ buf ptr\n");
     // Subtract cap_height first (in VPy space), then rescale 25/32.
     s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)\n");
     // Rescale VPy*127/128 so v_printString's x*128 = VPy*127 (matching draw funcs).
@@ -2526,6 +2560,10 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("    subs    r6, r6, #1\n");
     s.push_str("    bne     par_vec_loop\n");
     s.push_str("par_done:\n");
+    // Clear brightness override: next DRAW_ANIM/DRAW_VECTOR uses .vec intensities
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
@@ -2535,6 +2573,7 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("PITREX_ANIM_STATE_BUF: .space 2    @ [0]=frame_idx [1]=ticks_left\n");
     s.push_str("PITREX_ANIM_MIRROR: .space 1\n");
     s.push_str("PITREX_ANIM_SPEED: .space 1\n");
+    s.push_str("PITREX_BRIGHTNESS_OVERRIDE: .space 1  @ 0=use .vec intensity, >0=override\n");
     s.push_str(".text\n\n");
 
     s
