@@ -631,6 +631,8 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lstr_frame_hdr:     .asciz \">>> FRAME \"\n");
     s.push_str(".Lstr_frame_hdr_end: .asciz \" START <<<\\r\\n\"\n");
     s.push_str(".Lstr_sint:          .asciz \"SINT=\"\n");
+    s.push_str(".Lstr_cpu_w:         .asciz \"W=\"\n");
+    s.push_str(".Lstr_cpu_of:        .asciz \"/20000us\\r\\n\"\n");
     s.push_str("    .ltorg\n\n");
 
     Ok(s)

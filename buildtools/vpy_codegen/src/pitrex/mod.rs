@@ -81,6 +81,7 @@ pub fn generate_pitrex_asm(
         "commonHints",
         "__aeabi_idiv", "__aeabi_idivmod",
         "RPI_AuxUartInit", "RPI_AuxUartWrite",
+        "bcm2835_st",
     ] {
         asm.push_str(&format!(".extern {sym}\n"));
     }
@@ -98,6 +99,9 @@ pub fn generate_pitrex_asm(
     asm.push_str("PITREX_CUR_Y: .space 4\n");
     asm.push_str("UART_TRACE_FRAMES_LEFT: .space 4\n");
     asm.push_str("UART_FRAME_NUM: .space 4\n");
+    asm.push_str("FRAME_WORK_START: .space 4\n");    // µs timestamp after v_WaitRecal
+    asm.push_str("CPU_PRINT_CTR: .space 4\n");       // countdown: print every 50 frames
+    asm.push_str("_DV3D_BUF: .space 256\n");           // static buffer for pitrex_draw_vector_3d
     asm.push('\n');
 
     // ── Read-only data: const array data ────────────────────────────────────

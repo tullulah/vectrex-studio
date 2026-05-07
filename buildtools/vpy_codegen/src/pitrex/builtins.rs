@@ -84,35 +84,81 @@ pub fn emit_builtins() -> String {
 // ── Frame sync ────────────────────────────────────────────────────────────
 
 fn emit_pitrex_wait_recal() -> String {
+    // CPU usage measurement using BCM system timer (1µs, 32-bit free-running counter).
+    // bcm2835_st = volatile uint32_t* set by SDK; CLO (counter low) is at offset +4.
+    //
+    // Flow every frame:
+    //   [ENTRY] work_us = CLO - FRAME_WORK_START  (if not first frame)
+    //           if --CPU_PRINT_CTR <= 0: print "W=NNNNNus\r\n", reset CTR=50
+    //   [CALL]  bl v_WaitRecal        (blocks until next frame)
+    //   [EXIT]  FRAME_WORK_START = CLO  (start of new work window)
     let mut s = String::new();
-    s.push_str("@ pitrex_wait_recal() — frame sync + force calibrated T1=80\n");
+    s.push_str("@ pitrex_wait_recal() — frame sync + CPU usage measurement via BCM system timer\n");
     s.push_str(".global pitrex_wait_recal\n.type pitrex_wait_recal, %function\npitrex_wait_recal:\n");
-    s.push_str("    push    {lr}\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+
+    // Read CLO (current µs)
+    s.push_str("    ldr     r4, =bcm2835_st\n");
+    s.push_str("    ldr     r4, [r4]            @ dereference: r4 = ST base ptr\n");
+    s.push_str("    ldr     r5, [r4, #4]        @ r5 = CLO (µs counter, 32-bit)\n");
+
+    // Compute work_us, skip on first frame (FRAME_WORK_START == 0)
+    s.push_str("    ldr     r4, =FRAME_WORK_START\n");
+    s.push_str("    ldr     r6, [r4]            @ r6 = start of last work window\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lwrcal_skip_measure\n");
+    s.push_str("    sub     r6, r5, r6          @ r6 = work_us (handles 32-bit wrap)\n");
+
+    // Decrement print counter; print every 50 frames
+    s.push_str("    ldr     r4, =CPU_PRINT_CTR\n");
+    s.push_str("    ldr     r0, [r4]\n");
+    s.push_str("    subs    r0, r0, #1\n");
+    s.push_str("    str     r0, [r4]\n");
+    s.push_str("    bgt     .Lwrcal_skip_measure\n");
+    s.push_str("    mov     r0, #50\n");
+    s.push_str("    str     r0, [r4]            @ reset counter\n");
+    s.push_str("    ldr     r0, =.Lstr_cpu_w\n");
+    s.push_str("    bl      vpy_uart_puts        @ \"W=\"\n");
+    s.push_str("    mov     r0, r6\n");
+    s.push_str("    bl      vpy_uart_print_int   @ work µs\n");
+    s.push_str("    ldr     r0, =.Lstr_cpu_of\n");
+    s.push_str("    bl      vpy_uart_puts        @ \"/20000us\\r\\n\"\n");
+
+    s.push_str(".Lwrcal_skip_measure:\n");
+
+    // Call v_WaitRecal (blocks until next frame)
     s.push_str("    bl      v_WaitRecal\n");
+
+    // Save new work-window start (CLO after recal)
+    s.push_str("    ldr     r4, =bcm2835_st\n");
+    s.push_str("    ldr     r4, [r4]\n");
+    s.push_str("    ldr     r5, [r4, #4]        @ CLO after recal\n");
+    s.push_str("    ldr     r4, =FRAME_WORK_START\n");
+    s.push_str("    str     r5, [r4]\n");
+
     // Force currentScale=80 (matches Vectrex ROM-header Width byte $50).
-    // commonHints has PL_BASE_FORCE_USE_FIX_SIZE set, so this T1 is used for every draw.
     s.push_str("    mov     r0, #80\n");
     s.push_str("    bl      v_setScale\n");
-    // Decrement UART trace counter; emit ">>> FRAME N START <<<" while > 0.
+
+    // UART trace frame header (gated by UART_TRACE_FRAMES_LEFT)
     s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
     s.push_str("    ldr     r1, [r0]\n");
     s.push_str("    cmp     r1, #0\n");
-    s.push_str("    popeq   {pc}\n");
+    s.push_str("    popeq   {r4, r5, r6, pc}\n");
     s.push_str("    sub     r1, r1, #1\n");
     s.push_str("    str     r1, [r0]\n");
-    s.push_str("    @ increment frame number, print header\n");
     s.push_str("    ldr     r0, =UART_FRAME_NUM\n");
     s.push_str("    ldr     r2, [r0]\n");
     s.push_str("    add     r2, r2, #1\n");
     s.push_str("    str     r2, [r0]\n");
     s.push_str("    ldr     r0, =.Lstr_frame_hdr\n");
-    s.push_str("    bl      vpy_uart_puts       @ \">>> FRAME \"\n");
+    s.push_str("    bl      vpy_uart_puts\n");
     s.push_str("    ldr     r0, =UART_FRAME_NUM\n");
     s.push_str("    ldr     r0, [r0]\n");
     s.push_str("    bl      vpy_uart_print_int\n");
     s.push_str("    ldr     r0, =.Lstr_frame_hdr_end\n");
-    s.push_str("    bl      vpy_uart_puts       @ \" START <<<\\r\\n\"\n");
-    s.push_str("    pop     {pc}\n");
+    s.push_str("    bl      vpy_uart_puts\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
