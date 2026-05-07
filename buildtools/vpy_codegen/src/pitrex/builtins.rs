@@ -262,42 +262,42 @@ fn emit_pitrex_draw_line_rel() -> String {
     s.push_str("    mov     r5, #127\n");
     s.push_str("    mul     r5, r1, r5          @ r5 = dy * 127\n");
     s.push_str("    mov     r6, r2              @ r6 = brightness\n");
+    // OPTIMIZED: Use LDMIA to load CUR_X and CUR_Y in one burst load.
+    // CUR_X and CUR_Y are declared consecutively in .bss (mod.rs lines 98-99).
     s.push_str("    ldr     r7, =PITREX_CUR_X\n");
-    s.push_str("    ldr     r0, [r7]            @ r0 = cur_x\n");
-    s.push_str("    ldr     r12, =PITREX_CUR_Y\n");
-    s.push_str("    ldr     r1, [r12]           @ r1 = cur_y\n");
+    s.push_str("    ldmia   r7, {r0, r1}        @ r0=cur_x r1=cur_y (burst)\n");
     s.push_str("    add     r2, r0, r4          @ r2 = new_x\n");
     s.push_str("    add     r3, r1, r5          @ r3 = new_y\n");
-    // ── UART trace: log new_x, new_y, brightness before v_directDraw32 ──
-    s.push_str("    push    {r0, r1, r2, r3}    @ save call args\n");
+    // OPTIMIZED: Gate entire UART trace block before push/pop overhead.
+    // When UART_TRACE_FRAMES_LEFT==0 (normal play), skip 22+ memory ops per call.
+    s.push_str("    ldr     r12, =UART_TRACE_FRAMES_LEFT\n");
+    s.push_str("    ldr     r12, [r12]\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    beq     .Ldlr_no_trace\n");
+    // ── trace block: only reached when traces are active ──
+    s.push_str("    push    {r0, r1, r2, r3}    @ save call args across trace\n");
     s.push_str("    mov     r1, r2              @ trace x = new_x\n");
     s.push_str("    mov     r2, r3              @ trace y = new_y\n");
     s.push_str("    ldr     r0, =.Lstr_dr\n");
     s.push_str("    bl      uart_trace_xy\n");
-    // also log brightness
-    s.push_str("    ldr     r0, =UART_TRACE_FRAMES_LEFT\n");
-    s.push_str("    ldr     r0, [r0]\n");
-    s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     .Ldlr_no_btrace\n");
+    // Always log brightness when inside trace block (outer gate already checked)
     s.push_str("    ldr     r0, =.Lstr_br\n");
     s.push_str("    bl      vpy_uart_puts\n");
     s.push_str("    mov     r0, r6              @ brightness\n");
     s.push_str("    bl      vpy_uart_print_int\n");
     s.push_str("    ldr     r0, =.Lstr_crlf\n");
     s.push_str("    bl      vpy_uart_puts\n");
-    s.push_str(".Ldlr_no_btrace:\n");
     s.push_str("    pop     {r0, r1, r2, r3}\n");
+    s.push_str(".Ldlr_no_trace:\n");
     s.push_str("    push    {r6}               @ brightness as 5th arg\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
-    s.push_str("    ldr     r1, =PITREX_CUR_X\n");
-    s.push_str("    ldr     r2, [r1]\n");
-    s.push_str("    add     r2, r2, r4\n");
-    s.push_str("    str     r2, [r1]            @ PITREX_CUR_X += dx*100\n");
-    s.push_str("    ldr     r1, =PITREX_CUR_Y\n");
-    s.push_str("    ldr     r2, [r1]\n");
-    s.push_str("    add     r2, r2, r5\n");
-    s.push_str("    str     r2, [r1]            @ PITREX_CUR_Y += dy*100\n");
+    // OPTIMIZED: r7 still points to PITREX_CUR_X; use LDMIA+STMIA for both vars.
+    // Saves 4 instructions vs two separate ldr+add+str pairs.
+    s.push_str("    ldmia   r7, {r2, r3}        @ r2=cur_x r3=cur_y\n");
+    s.push_str("    add     r2, r2, r4          @ new cur_x\n");
+    s.push_str("    add     r3, r3, r5          @ new cur_y\n");
+    s.push_str("    stmia   r7, {r2, r3}        @ store both\n");
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
