@@ -249,12 +249,12 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
     }
     if has_draw_scale_calls(module) {
-        asm.push_str("    LDA #$50\n");
-        asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = calibrated ($50=80, ROM header Width byte)\n");
+        asm.push_str("    LDA #$7F\n");
+        asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)\n");
     }
     if has_draw_anim_calls(module) {
-        asm.push_str("    LDA #$50\n");
-        asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = calibrated ($50=80)\n");
+        asm.push_str("    LDA #$7F\n");
+        asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)\n");
         asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
     }
     if has_note_calls(module) {
@@ -777,12 +777,12 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
     }
     if has_draw_scale_calls(module) {
-        bank0_asm.push_str("    LDA #$50\n");
-        bank0_asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = calibrated ($50=80, ROM header Width byte)\n");
+        bank0_asm.push_str("    LDA #$7F\n");
+        bank0_asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)\n");
     }
     if has_draw_anim_calls(module) {
-        bank0_asm.push_str("    LDA #$50\n");
-        bank0_asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = calibrated ($50=80)\n");
+        bank0_asm.push_str("    LDA #$7F\n");
+        bank0_asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)\n");
         bank0_asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
     }
     if has_note_calls(module) {
