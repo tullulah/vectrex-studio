@@ -577,6 +577,10 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_done:\n");
     s.push_str("    add     sp, sp, #8          @ pop path_idx + path_count\n");
+    // Clear brightness override: next DRAW_VECTOR_EX uses .vec intensities
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s

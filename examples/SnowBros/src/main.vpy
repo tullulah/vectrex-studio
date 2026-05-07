@@ -26,8 +26,6 @@ frame_timer: i16 = 0        # contador de delay para transiciones
 next_is_boss: i16 = 0       # flag auxiliar para detección de nivel boss
 
 # ── Player ──────────────────────────────────────────────────────────────────
-anim_tick: i16 = 0          # debug counter para animación manual
-walk_frame: i16 = 0         # 0-3: frame seleccionado manualmente
 player_x: i16 = 0
 player_y: i16 = -114
 player_vx: i16 = 0
@@ -396,26 +394,14 @@ def update_player():
             try_shoot()
 
 def draw_player():
+    SET_INTENSITY(65)
     if player_on_ground == 0:
         DRAW_VECTOR("player_jump", player_x, player_y, player_facing)
     if player_on_ground == 1:
         if player_vx == 0:
             DRAW_VECTOR("player_idle", player_x, player_y, player_facing)
         else:
-            # DEBUG: animación manual sin pitrex_draw_anim
-            anim_tick = anim_tick + 1
-            if anim_tick > 31:
-                anim_tick = 0
-            walk_frame = anim_tick / 8
-            if walk_frame == 0:
-                DRAW_VECTOR("player_walk1", player_x, player_y, player_facing)
-            if walk_frame == 1:
-                DRAW_VECTOR("player_walk2", player_x, player_y, player_facing)
-            if walk_frame == 2:
-                DRAW_VECTOR("player_walk3", player_x, player_y, player_facing)
-            if walk_frame == 3:
-                DRAW_VECTOR("player_walk4", player_x, player_y, player_facing)
-            PRINT_NUMBER(0, 120, walk_frame)  # debug: debe ciclar 0→1→2→3
+            DRAW_ANIM("player_walk", player_x, player_y, player_facing)
 
 # ── Snowballs ────────────────────────────────────────────────────────────────
 def try_shoot():
