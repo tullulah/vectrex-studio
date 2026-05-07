@@ -20,6 +20,7 @@ extern void setCustomClipping(int enabled, int x0, int y0, int x1, int y1);
 void v_directDeltaMove32start(int32_t xLen, int32_t yLen);
 void v_directDeltaMoveEnd(void);
 void v_directMove32(int32_t xEnd, int32_t yEnd);
+void v_addVectorFast(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t brightness);
 void v_directDraw32(int32_t xStart, int32_t yStart, int32_t xEnd, int32_t yEnd, uint8_t brightness);
 void v_directDraw32Patterned(int32_t xStart, int32_t yStart, int32_t xEnd, int32_t yEnd, uint8_t brightness, uint8_t pattern); // only pipelined!
 void v_directDraw32Hinted(int32_t xStart, int32_t yStart, int32_t xEnd, int32_t yEnd, uint8_t brightness, int forced);
