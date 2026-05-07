@@ -415,8 +415,9 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("dv_bezier_seg:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10}\n");
     s.push_str("    sub     sp, sp, #24\n");
-    s.push_str("    ldr     r4, [sp, #52]        @ r4 = raw ox (VPy units)\n");
-    s.push_str("    ldr     r5, [sp, #56]        @ r5 = raw oy (VPy units)\n");
+    // OPTIMIZED: Use LDMIA to load ox, oy in one instruction instead of 2 LDR
+    s.push_str("    add     r0, sp, #52         @ r0 = &ox (sp after push+sub)\n");
+    s.push_str("    ldmia   r0, {r4, r5}        @ r4=ox, r5=oy (2 words loaded at once)\n");
     // x0 + ox → r0
     s.push_str("    ldrsb   r6, [r9], #1\n");
     s.push_str("    add     r0, r6, r4\n");
@@ -573,9 +574,9 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("dvex_bezier_seg:\n");
     s.push_str("    push    {r4, r5, r6, r7, r9, r10}\n");
     s.push_str("    sub     sp, sp, #24\n");
-    s.push_str("    ldr     r4, [sp, #28]        @ r4 = ox (raw VPy units)\n");
-    s.push_str("    ldr     r5, [sp, #32]        @ r5 = oy (raw VPy units)\n");
-    s.push_str("    ldr     r12, [sp, #36]       @ r12 = mirror flag\n");
+    // OPTIMIZED: Use LDMIA to load ox, oy, mirror in sequence (saves 1 instruction)
+    s.push_str("    add     r0, sp, #28         @ r0 = &ox\n");
+    s.push_str("    ldmia   r0, {r4, r5, r12}   @ r4=ox, r5=oy, r12=mirror (3 loads in 2 inst)\n");
     // x0 + ox → r0  (mirror x if needed)
     s.push_str("    ldrsb   r6, [r9], #1\n");
     s.push_str("    add     r0, r6, r4\n");
