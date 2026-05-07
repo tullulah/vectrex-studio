@@ -292,12 +292,17 @@ fn emit_pitrex_draw_line_rel() -> String {
     s.push_str("    push    {r6}               @ brightness as 5th arg\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
-    // OPTIMIZED: r7 still points to PITREX_CUR_X; use LDMIA+STMIA for both vars.
-    // Saves 4 instructions vs two separate ldr+add+str pairs.
-    s.push_str("    ldmia   r7, {r2, r3}        @ r2=cur_x r3=cur_y\n");
+    // Reload r7 and use explicit ldr/str: Thumb2 T1 ldmia always writes back
+    // the base register, so r7 no longer points to PITREX_CUR_X after the
+    // first ldmia above. ARM32 (pitrex) does not writeback without !, but
+    // the explicit ldr/str is safe for both targets.
+    s.push_str("    ldr     r7, =PITREX_CUR_X\n");
+    s.push_str("    ldr     r2, [r7]            @ r2=cur_x\n");
+    s.push_str("    ldr     r3, [r7, #4]        @ r3=cur_y\n");
     s.push_str("    add     r2, r2, r4          @ new cur_x\n");
     s.push_str("    add     r3, r3, r5          @ new cur_y\n");
-    s.push_str("    stmia   r7, {r2, r3}        @ store both\n");
+    s.push_str("    str     r2, [r7]            @ store new cur_x\n");
+    s.push_str("    str     r3, [r7, #4]        @ store new cur_y\n");
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
     s.push_str("    .ltorg\n\n");
     s

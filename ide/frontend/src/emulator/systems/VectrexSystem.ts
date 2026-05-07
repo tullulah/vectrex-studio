@@ -156,6 +156,7 @@ export class VectrexSystem implements ISystem, IBus {
    */
   runFrame(): Segment[] {
     let spent = 0;
+    let frameSegments: Segment[] = [];
 
     while (spent < FCYCLES_INIT) {
       // Assert IRQ if VIA is requesting one
@@ -182,18 +183,15 @@ export class VectrexSystem implements ISystem, IBus {
       spent      += icycles;
       this.fcycles -= icycles;
 
-      // Frame boundary
+      // Frame boundary: capture segments here (single swap per frame).
+      // A second swapBuffers() at the end would return partial next-frame data.
       if (this.fcycles <= 0) {
         this.fcycles += FCYCLES_INIT;
-        this.renderAndSwap();
+        frameSegments = this.renderAndSwap();
       }
     }
 
-    // Build Segment list from whatever was drawn this frame
-    const { draw, drawCnt } = this.beam.swapBuffers();
-    const segments = vectorsToSegments(draw, drawCnt, this.frameCounter);
-    this.frameCounter++;
-    return segments;
+    return frameSegments;
   }
 
   // ------------------------------------------------------------------ //
@@ -306,8 +304,11 @@ export class VectrexSystem implements ISystem, IBus {
   // Internal: render and swap buffers at frame boundary
   // ------------------------------------------------------------------ //
 
-  private renderAndSwap(): void {
+  private renderAndSwap(): Segment[] {
     const { draw, drawCnt, erse, erseCnt } = this.beam.swapBuffers();
     this.canvas.renderFrame(draw, drawCnt, erse, erseCnt);
+    const segments = vectorsToSegments(draw, drawCnt, this.frameCounter);
+    this.frameCounter++;
+    return segments;
   }
 }
