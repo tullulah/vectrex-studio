@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-05"
+    "description": "Created in Playground - 2026-05-06"
   },
   "worldBounds": {
     "xMin": -96,
@@ -26,7 +26,7 @@
         "x": -76,
         "y": -88,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -45,7 +45,7 @@
         "x": 76,
         "y": -88,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -64,7 +64,7 @@
         "x": 1,
         "y": -88,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -83,7 +83,7 @@
         "x": 0,
         "y": -40,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -102,7 +102,7 @@
         "x": -63,
         "y": 8,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -121,7 +121,7 @@
         "x": 62,
         "y": 8,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -140,7 +140,7 @@
         "x": 0,
         "y": 62,
         "rotation": 0,
-        "scale": 1.0,
+        "scale": 1,
         "velocity": {
           "x": 0,
           "y": 0
@@ -172,151 +172,6 @@
               "y2": -4
             }
           ]
-        }
-      },
-      {
-        "id": "enemy_1777977396795",
-        "type": "enemy",
-        "vectorName": "",
-        "layer": "gameplay",
-        "x": -37,
-        "y": -18,
-        "rotation": 0,
-        "scale": 1.0,
-        "enemyType": "enemy1",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -37,
-            "y": -18
-          },
-          {
-            "x": 38,
-            "y": -19
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "speed": 0.25
-      },
-      {
-        "id": "enemy_1777990278190",
-        "type": "enemy",
-        "vectorName": "",
-        "layer": "gameplay",
-        "x": -85,
-        "y": 27,
-        "rotation": 0,
-        "scale": 1.0,
-        "enemyType": "enemy1",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -85,
-            "y": 28
-          },
-          {
-            "x": -31,
-            "y": 27
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "speed": 0.25
-      },
-      {
-        "id": "enemy_1777990284382",
-        "type": "enemy",
-        "vectorName": "",
-        "layer": "gameplay",
-        "x": 87,
-        "y": 27,
-        "rotation": 0,
-        "scale": 1.0,
-        "enemyType": "enemy1",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": 87,
-            "y": 28
-          },
-          {
-            "x": 31,
-            "y": 28
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "speed": 0.25
-      },
-      {
-        "id": "enemy_1777990290282",
-        "type": "enemy",
-        "vectorName": "",
-        "layer": "gameplay",
-        "x": -34,
-        "y": 85,
-        "rotation": 0,
-        "scale": 1.0,
-        "enemyType": "enemy1",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -34,
-            "y": 86
-          },
-          {
-            "x": 0,
-            "y": 86
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "speed": 0.25
-      },
-      {
-        "id": "enemy_1777990329920",
-        "type": "enemy",
-        "vectorName": "",
-        "layer": "gameplay",
-        "x": 37,
-        "y": 85,
-        "rotation": 0,
-        "scale": 1.0,
-        "enemyType": "enemy1",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": 37,
-            "y": 86
-          },
-          {
-            "x": 0,
-            "y": 86
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "speed": 0.25,
-        "velocity": {
-          "x": 0,
-          "y": 0
         }
       }
     ],

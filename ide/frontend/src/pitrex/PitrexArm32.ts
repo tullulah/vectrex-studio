@@ -66,6 +66,8 @@ export interface PitrexArm32State {
   steps: number;
   /** PSG register write callback — set by PitrexCore to drive audio synthesis. */
   psgWrite: (reg: number, val: number) => void;
+  /** Buffered UART output — accumulates text until newline, then flushes. */
+  uartBuffer: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -639,6 +641,37 @@ const SDK_STUBS: Record<string, SdkStub> = {
   'RPI_AuxUartInit':         () => {},
   'RPI_AuxUartWrite':        () => {},
 
+  'vpy_uart_puts': (s) => {
+    // r0 = pointer to null-terminated string.
+    // Text-section .Lstr_* labels have fake STRING_BASE (0xF0000000+) addresses —
+    // reverse-look up in symbols to get the decoded string from parsed.strings.
+    // Rodata/bss strings are read byte-by-byte from s.mem.
+    const ptr = s.regs[0] >>> 0;  // reinterpret Int32Array value as unsigned
+    let text = '';
+    if (ptr >= 0xF0000000) {
+      for (const [name, sym] of s.parsed.symbols) {
+        if (sym.value === ptr) { text = s.parsed.strings.get(name) ?? ''; break; }
+      }
+    } else {
+      for (let i = 0; i < 128; i++) {
+        const ch = memRead8(s, ptr + i);
+        if (ch === 0) break;
+        text += String.fromCharCode(ch);
+      }
+    }
+    s.uartBuffer += text;
+    let nl: number;
+    while ((nl = s.uartBuffer.indexOf('\n')) >= 0) {
+      const uartLine = s.uartBuffer.slice(0, nl).replace(/\r$/, '');
+      if (uartLine) console.log('[UART]', uartLine);
+      s.uartBuffer = s.uartBuffer.slice(nl + 1);
+    }
+  },
+
+  'vpy_uart_print_int': (s) => {
+    s.uartBuffer += String(s.regs[0] | 0);
+  },
+
   'v_writePSG': (s) => {
     const reg = s.regs[0] & 0xFF;
     const val = s.regs[1] & 0xFF;
@@ -1142,6 +1175,7 @@ export function createState(parsed: ParsedAsm): PitrexArm32State {
     joyX2: 0, joyY2: 0, joyButtons2: 0,
     steps: 0,
     psgWrite: () => {},
+    uartBuffer: '',
   };
 
   // Copy rodata init memory into state memory

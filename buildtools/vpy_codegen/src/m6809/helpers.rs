@@ -1104,12 +1104,22 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
             ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
             LDA ,X+                 ; Read per-path intensity from vector data\n\
 DSWM_SET_INTENSITY:\n\
+            TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value\n\
+            BEQ DSWM_USE_FCB_INT\n\
+            LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)\n\
+DSWM_USE_FCB_INT:\n\
             STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            PSHS A                  ; save brightness\n\
+            LDA #$05\n\
+            STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)\n\
             LDA #$04\n\
-            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            STA >$D000              ; PB=$04: select Z-axis channel\n\
+            PULS A                  ; restore brightness\n\
+            STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H\n\
+            LDA #$00\n\
+            STA >$D000              ; PB=$00: deselect all channels\n\
             LDA #$01\n\
-            STA >$D000              ; Port B=$01: restore normal mux\n\
+            STA >$D000              ; PB=$01: restore X-integrator channel\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -1205,10 +1215,14 @@ DSWM_NO_NEGATE_DX:\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Read per-path intensity from vector data\n\
-            LDA ,X+                 ; Read intensity from vector data\n\
+            ; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)\n\
+            LDA ,X+                 ; Read FCB intensity from vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
-            PSHS A\n\
+            TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB\n\
+            BEQ DSWM_NEXT_USE_FCB_INT\n\
+            LDA >DRAW_VEC_INTENSITY  ; non-zero override\n\
+DSWM_NEXT_USE_FCB_INT:\n\
+            PSHS A                  ; save intensity for later\n\
             LDB ,X+                 ; y_start\n\
             TST >MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
@@ -1222,13 +1236,19 @@ DSWM_NEXT_NO_NEGATE_Y:\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
-            PULS A                  ; Get intensity back\n\
+            PULS A                  ; restore intensity\n\
             STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            PSHS A                  ; save brightness for Z-axis write\n\
+            LDA #$05\n\
+            STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)\n\
             LDA #$04\n\
-            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            STA >$D000              ; PB=$04: select Z-axis channel\n\
+            PULS A                  ; restore brightness\n\
+            STA >$D001              ; PA=brightness while Z-axis selected\n\
+            LDA #$00\n\
+            STA >$D000              ; PB=$00: deselect\n\
             LDA #$01\n\
-            STA >$D000              ; Port B=$01: restore normal mux\n\
+            STA >$D000              ; PB=$01: restore X-integrator channel\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\

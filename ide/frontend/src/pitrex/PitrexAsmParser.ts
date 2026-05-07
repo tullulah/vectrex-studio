@@ -240,6 +240,10 @@ export function parseAsm(src: string): ParsedAsm {
       if (line.includes('.text'))   { section = 'text';   continue; }
       continue;
     }
+    // Bare section directives (without .section prefix, e.g. just ".bss" or ".text")
+    if (line === '.bss')  { section = 'bss';    textDataActive = false; continue; }
+    if (line === '.text') { section = 'text';   textDataActive = false; continue; }
+    if (line === '.data') { section = 'text';   textDataActive = false; continue; }
 
     // ── Global .equ (can appear in bss or anywhere) ─────────────────────
     if (line.startsWith('.equ ') || line.startsWith('.equ\t')) {

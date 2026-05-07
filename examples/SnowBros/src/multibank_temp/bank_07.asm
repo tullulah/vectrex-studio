@@ -83,74 +83,76 @@ ENEMY_SCRATCH_X      EQU $C880+$2CF   ; Enemy scratch X (2 bytes)
 ENEMY_SCRATCH_Y      EQU $C880+$2D1   ; Enemy scratch Y (2 bytes)
 TEXT_SCALE_H         EQU $C880+$2D3   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$2D4   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$2D5   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$2D6   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_GAME_START EQU $C880+$2D8   ; User variable: STATE_GAME_START (2 bytes)
-VAR_STATE_PLAYING    EQU $C880+$2DA   ; User variable: STATE_PLAYING (2 bytes)
-VAR_STATE_PLAYER_DEAD EQU $C880+$2DC   ; User variable: STATE_PLAYER_DEAD (2 bytes)
-VAR_STATE_LEVEL_CLEAR EQU $C880+$2DE   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
-VAR_STATE_BOSS_INTRO EQU $C880+$2E0   ; User variable: STATE_BOSS_INTRO (2 bytes)
-VAR_STATE_BOSS       EQU $C880+$2E2   ; User variable: STATE_BOSS (2 bytes)
-VAR_STATE_GAME_OVER  EQU $C880+$2E4   ; User variable: STATE_GAME_OVER (2 bytes)
-VAR_STATE_ALL_CLEAR  EQU $C880+$2E6   ; User variable: STATE_ALL_CLEAR (2 bytes)
-VAR_GAME_STATE       EQU $C880+$2E8   ; User variable: game_state (2 bytes)
-VAR_SCORE            EQU $C880+$2EA   ; User variable: score (2 bytes)
-VAR_LIVES            EQU $C880+$2EC   ; User variable: lives (2 bytes)
-VAR_CURRENT_LEVEL    EQU $C880+$2EE   ; User variable: current_level (2 bytes)
-VAR_TIME_LEFT        EQU $C880+$2F0   ; User variable: time_left (2 bytes)
-VAR_ENEMY_COUNT      EQU $C880+$2F2   ; User variable: enemy_count (2 bytes)
-VAR_FRAME_TIMER      EQU $C880+$2F4   ; User variable: frame_timer (2 bytes)
-VAR_NEXT_IS_BOSS     EQU $C880+$2F6   ; User variable: next_is_boss (2 bytes)
-VAR_ANIM_TICK        EQU $C880+$2F8   ; User variable: anim_tick (2 bytes)
-VAR_WALK_FRAME       EQU $C880+$2FA   ; User variable: walk_frame (2 bytes)
-VAR_PLAYER_X         EQU $C880+$2FC   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$2FE   ; User variable: player_y (2 bytes)
-VAR_PLAYER_VX        EQU $C880+$300   ; User variable: player_vx (2 bytes)
-VAR_PLAYER_VY        EQU $C880+$302   ; User variable: player_vy (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$304   ; User variable: player_facing (2 bytes)
-VAR_PLAYER_ON_GROUND EQU $C880+$306   ; User variable: player_on_ground (2 bytes)
-VAR_FLOOR_Y          EQU $C880+$308   ; User variable: floor_y (2 bytes)
-VAR_PREV_Y           EQU $C880+$30A   ; User variable: prev_y (2 bytes)
-VAR_GRAVITY          EQU $C880+$30C   ; User variable: GRAVITY (2 bytes)
-VAR_JUMP_SPEED       EQU $C880+$30E   ; User variable: JUMP_SPEED (2 bytes)
-VAR_MAX_FALL_SPEED   EQU $C880+$310   ; User variable: MAX_FALL_SPEED (2 bytes)
-VAR_PLAYER_HH        EQU $C880+$312   ; User variable: PLAYER_HH (2 bytes)
-VAR_WORLD_X_MIN      EQU $C880+$314   ; User variable: WORLD_X_MIN (2 bytes)
-VAR_WORLD_X_MAX      EQU $C880+$316   ; User variable: WORLD_X_MAX (2 bytes)
-VAR_SNOW_SPEED       EQU $C880+$318   ; User variable: SNOW_SPEED (2 bytes)
-VAR_SNOW_LAUNCH_VY   EQU $C880+$31A   ; User variable: SNOW_LAUNCH_VY (2 bytes)
-VAR_SNOW_LIFE_NORMAL EQU $C880+$31C   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
-VAR_SNOW_LIFE_POWER  EQU $C880+$31E   ; User variable: SNOW_LIFE_POWER (2 bytes)
-VAR_SHOOT_COOLDOWN_MAX EQU $C880+$320   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
-VAR_SHOOT_COOLDOWN   EQU $C880+$322   ; User variable: shoot_cooldown (2 bytes)
-VAR_PLAYER_HAS_POWER EQU $C880+$324   ; User variable: player_has_power (2 bytes)
-VAR_SNOW_LIFE_MAX    EQU $C880+$326   ; User variable: snow_life_max (2 bytes)
-VAR_SNOW_SPAWN_VX    EQU $C880+$328   ; User variable: snow_spawn_vx (2 bytes)
-VAR_SNOW0_ACTIVE     EQU $C880+$32A   ; User variable: snow0_active (2 bytes)
-VAR_SNOW0_X          EQU $C880+$32C   ; User variable: snow0_x (2 bytes)
-VAR_SNOW0_Y          EQU $C880+$32E   ; User variable: snow0_y (2 bytes)
-VAR_SNOW0_VX         EQU $C880+$330   ; User variable: snow0_vx (2 bytes)
-VAR_SNOW0_VY         EQU $C880+$332   ; User variable: snow0_vy (2 bytes)
-VAR_SNOW0_LIFE       EQU $C880+$334   ; User variable: snow0_life (2 bytes)
-VAR_SNOW1_ACTIVE     EQU $C880+$336   ; User variable: snow1_active (2 bytes)
-VAR_SNOW1_X          EQU $C880+$338   ; User variable: snow1_x (2 bytes)
-VAR_SNOW1_Y          EQU $C880+$33A   ; User variable: snow1_y (2 bytes)
-VAR_SNOW1_VX         EQU $C880+$33C   ; User variable: snow1_vx (2 bytes)
-VAR_SNOW1_VY         EQU $C880+$33E   ; User variable: snow1_vy (2 bytes)
-VAR_SNOW1_LIFE       EQU $C880+$340   ; User variable: snow1_life (2 bytes)
-VAR_SNOW2_ACTIVE     EQU $C880+$342   ; User variable: snow2_active (2 bytes)
-VAR_SNOW2_X          EQU $C880+$344   ; User variable: snow2_x (2 bytes)
-VAR_SNOW2_Y          EQU $C880+$346   ; User variable: snow2_y (2 bytes)
-VAR_SNOW2_VX         EQU $C880+$348   ; User variable: snow2_vx (2 bytes)
-VAR_SNOW2_VY         EQU $C880+$34A   ; User variable: snow2_vy (2 bytes)
-VAR_SNOW2_LIFE       EQU $C880+$34C   ; User variable: snow2_life (2 bytes)
-VAR_LEVEL_TIME       EQU $C880+$34E   ; User variable: LEVEL_TIME (2 bytes)
-VAR_LIVES_START      EQU $C880+$350   ; User variable: LIVES_START (2 bytes)
-VAR_GAME_START_DELAY EQU $C880+$352   ; User variable: GAME_START_DELAY (2 bytes)
-VAR_DEATH_DELAY      EQU $C880+$354   ; User variable: DEATH_DELAY (2 bytes)
-VAR_LEVEL_CLEAR_DELAY EQU $C880+$356   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
-VAR_BOSS_INTRO_DELAY EQU $C880+$358   ; User variable: BOSS_INTRO_DELAY (2 bytes)
-VAR_ALL_CLEAR_DELAY  EQU $C880+$35A   ; User variable: ALL_CLEAR_DELAY (2 bytes)
+ANIM_PLAYER_WALK_STATE EQU $C880+$2D5   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
+DRAW_ANIM_MIRROR_X   EQU $C880+$2D7   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
+DRAW_ANIM_SCALE      EQU $C880+$2D8   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
+DRAW_ANIM_SPEED_MUL  EQU $C880+$2D9   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$2DA   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_STATE_TITLE      EQU $C880+$2DB   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_GAME_START EQU $C880+$2DD   ; User variable: STATE_GAME_START (2 bytes)
+VAR_STATE_PLAYING    EQU $C880+$2DF   ; User variable: STATE_PLAYING (2 bytes)
+VAR_STATE_PLAYER_DEAD EQU $C880+$2E1   ; User variable: STATE_PLAYER_DEAD (2 bytes)
+VAR_STATE_LEVEL_CLEAR EQU $C880+$2E3   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
+VAR_STATE_BOSS_INTRO EQU $C880+$2E5   ; User variable: STATE_BOSS_INTRO (2 bytes)
+VAR_STATE_BOSS       EQU $C880+$2E7   ; User variable: STATE_BOSS (2 bytes)
+VAR_STATE_GAME_OVER  EQU $C880+$2E9   ; User variable: STATE_GAME_OVER (2 bytes)
+VAR_STATE_ALL_CLEAR  EQU $C880+$2EB   ; User variable: STATE_ALL_CLEAR (2 bytes)
+VAR_GAME_STATE       EQU $C880+$2ED   ; User variable: game_state (2 bytes)
+VAR_SCORE            EQU $C880+$2EF   ; User variable: score (2 bytes)
+VAR_LIVES            EQU $C880+$2F1   ; User variable: lives (2 bytes)
+VAR_CURRENT_LEVEL    EQU $C880+$2F3   ; User variable: current_level (2 bytes)
+VAR_TIME_LEFT        EQU $C880+$2F5   ; User variable: time_left (2 bytes)
+VAR_ENEMY_COUNT      EQU $C880+$2F7   ; User variable: enemy_count (2 bytes)
+VAR_FRAME_TIMER      EQU $C880+$2F9   ; User variable: frame_timer (2 bytes)
+VAR_NEXT_IS_BOSS     EQU $C880+$2FB   ; User variable: next_is_boss (2 bytes)
+VAR_PLAYER_X         EQU $C880+$2FD   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$2FF   ; User variable: player_y (2 bytes)
+VAR_PLAYER_VX        EQU $C880+$301   ; User variable: player_vx (2 bytes)
+VAR_PLAYER_VY        EQU $C880+$303   ; User variable: player_vy (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$305   ; User variable: player_facing (2 bytes)
+VAR_PLAYER_ON_GROUND EQU $C880+$307   ; User variable: player_on_ground (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$309   ; User variable: floor_y (2 bytes)
+VAR_PREV_Y           EQU $C880+$30B   ; User variable: prev_y (2 bytes)
+VAR_GRAVITY          EQU $C880+$30D   ; User variable: GRAVITY (2 bytes)
+VAR_JUMP_SPEED       EQU $C880+$30F   ; User variable: JUMP_SPEED (2 bytes)
+VAR_MAX_FALL_SPEED   EQU $C880+$311   ; User variable: MAX_FALL_SPEED (2 bytes)
+VAR_PLAYER_HH        EQU $C880+$313   ; User variable: PLAYER_HH (2 bytes)
+VAR_WORLD_X_MIN      EQU $C880+$315   ; User variable: WORLD_X_MIN (2 bytes)
+VAR_WORLD_X_MAX      EQU $C880+$317   ; User variable: WORLD_X_MAX (2 bytes)
+VAR_SNOW_SPEED       EQU $C880+$319   ; User variable: SNOW_SPEED (2 bytes)
+VAR_SNOW_LAUNCH_VY   EQU $C880+$31B   ; User variable: SNOW_LAUNCH_VY (2 bytes)
+VAR_SNOW_LIFE_NORMAL EQU $C880+$31D   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
+VAR_SNOW_LIFE_POWER  EQU $C880+$31F   ; User variable: SNOW_LIFE_POWER (2 bytes)
+VAR_SHOOT_COOLDOWN_MAX EQU $C880+$321   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
+VAR_SHOOT_COOLDOWN   EQU $C880+$323   ; User variable: shoot_cooldown (2 bytes)
+VAR_PLAYER_HAS_POWER EQU $C880+$325   ; User variable: player_has_power (2 bytes)
+VAR_SNOW_LIFE_MAX    EQU $C880+$327   ; User variable: snow_life_max (2 bytes)
+VAR_SNOW_SPAWN_VX    EQU $C880+$329   ; User variable: snow_spawn_vx (2 bytes)
+VAR_SNOW0_ACTIVE     EQU $C880+$32B   ; User variable: snow0_active (2 bytes)
+VAR_SNOW0_X          EQU $C880+$32D   ; User variable: snow0_x (2 bytes)
+VAR_SNOW0_Y          EQU $C880+$32F   ; User variable: snow0_y (2 bytes)
+VAR_SNOW0_VX         EQU $C880+$331   ; User variable: snow0_vx (2 bytes)
+VAR_SNOW0_VY         EQU $C880+$333   ; User variable: snow0_vy (2 bytes)
+VAR_SNOW0_LIFE       EQU $C880+$335   ; User variable: snow0_life (2 bytes)
+VAR_SNOW1_ACTIVE     EQU $C880+$337   ; User variable: snow1_active (2 bytes)
+VAR_SNOW1_X          EQU $C880+$339   ; User variable: snow1_x (2 bytes)
+VAR_SNOW1_Y          EQU $C880+$33B   ; User variable: snow1_y (2 bytes)
+VAR_SNOW1_VX         EQU $C880+$33D   ; User variable: snow1_vx (2 bytes)
+VAR_SNOW1_VY         EQU $C880+$33F   ; User variable: snow1_vy (2 bytes)
+VAR_SNOW1_LIFE       EQU $C880+$341   ; User variable: snow1_life (2 bytes)
+VAR_SNOW2_ACTIVE     EQU $C880+$343   ; User variable: snow2_active (2 bytes)
+VAR_SNOW2_X          EQU $C880+$345   ; User variable: snow2_x (2 bytes)
+VAR_SNOW2_Y          EQU $C880+$347   ; User variable: snow2_y (2 bytes)
+VAR_SNOW2_VX         EQU $C880+$349   ; User variable: snow2_vx (2 bytes)
+VAR_SNOW2_VY         EQU $C880+$34B   ; User variable: snow2_vy (2 bytes)
+VAR_SNOW2_LIFE       EQU $C880+$34D   ; User variable: snow2_life (2 bytes)
+VAR_LEVEL_TIME       EQU $C880+$34F   ; User variable: LEVEL_TIME (2 bytes)
+VAR_LIVES_START      EQU $C880+$351   ; User variable: LIVES_START (2 bytes)
+VAR_GAME_START_DELAY EQU $C880+$353   ; User variable: GAME_START_DELAY (2 bytes)
+VAR_DEATH_DELAY      EQU $C880+$355   ; User variable: DEATH_DELAY (2 bytes)
+VAR_LEVEL_CLEAR_DELAY EQU $C880+$357   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
+VAR_BOSS_INTRO_DELAY EQU $C880+$359   ; User variable: BOSS_INTRO_DELAY (2 bytes)
+VAR_ALL_CLEAR_DELAY  EQU $C880+$35B   ; User variable: ALL_CLEAR_DELAY (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -174,29 +176,21 @@ SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
 
 ;***************************************************************************
 ; ASSET LOOKUP TABLES (for banked asset access)
-; Total: 12 vectors, 4 music, 0 sfx, 1 levels, 0 animations, 0 instruments, 1 enemies
+; Total: 8 vectors, 4 music, 0 sfx, 1 levels, 0 animations, 0 instruments, 1 enemies
 ;***************************************************************************
 
 ; Vector Asset Index Mapping:
-;   0 = enemy1 (Bank #2)
+;   0 = enemy1 (Bank #1)
 ;   1 = init_screen (Bank #1)
-;   2 = platform1 (Bank #2)
+;   2 = platform1 (Bank #1)
 ;   3 = platform2 (Bank #1)
-;   4 = platform3 (Bank #2)
+;   4 = platform3 (Bank #1)
 ;   5 = platform4 (Bank #1)
 ;   6 = player_idle (Bank #1)
 ;   7 = player_jump (Bank #1)
-;   8 = player_walk1 (Bank #1)
-;   9 = player_walk2 (Bank #1)
-;   10 = player_walk3 (Bank #1)
-;   11 = player_walk4 (Bank #1)
 
 VECTOR_BANK_TABLE:
-    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
-    FCB 2              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
@@ -214,19 +208,15 @@ VECTOR_ADDR_TABLE:
     FDB _PLATFORM4_VECTORS    ; platform4
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
     FDB _PLAYER_JUMP_VECTORS    ; player_jump
-    FDB _PLAYER_WALK1_VECTORS    ; player_walk1
-    FDB _PLAYER_WALK2_VECTORS    ; player_walk2
-    FDB _PLAYER_WALK3_VECTORS    ; player_walk3
-    FDB _PLAYER_WALK4_VECTORS    ; player_walk4
 
 ; Music Asset Index Mapping:
-;   0 = Boss_Intro (Bank #2)
+;   0 = Boss_Intro (Bank #1)
 ;   1 = Game_Over (Bank #1)
 ;   2 = Henshoku (Bank #2)
 ;   3 = Yukidama-Ondo (Bank #1)
 
 MUSIC_BANK_TABLE:
-    FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 2              ; Bank ID
     FCB 1              ; Bank ID
@@ -283,10 +273,6 @@ _ENEMY1_ENEMY_ACTIONS:
 ; Legacy unified tables (all assets)
 ASSET_BANK_TABLE:
     FCB 2              ; Bank ID
-    FCB 2              ; Bank ID
-    FCB 2              ; Bank ID
-    FCB 2              ; Bank ID
-    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
@@ -302,22 +288,18 @@ ASSET_BANK_TABLE:
 
 ASSET_ADDR_TABLE:
     FDB _HENSHOKU_MUSIC    ; Henshoku
-    FDB _BOSS_INTRO_MUSIC    ; Boss_Intro
-    FDB _PLATFORM3_VECTORS    ; platform3
-    FDB _PLATFORM1_VECTORS    ; platform1
-    FDB _ENEMY1_VECTORS    ; enemy1
     FDB _YUKIDAMA_ONDO_MUSIC    ; Yukidama-Ondo
     FDB _INIT_SCREEN_VECTORS    ; init_screen
-    FDB _PLAYER_WALK4_VECTORS    ; player_walk4
-    FDB _PLAYER_JUMP_VECTORS    ; player_jump
-    FDB _PLAYER_WALK1_VECTORS    ; player_walk1
-    FDB _PLAYER_WALK3_VECTORS    ; player_walk3
-    FDB _PLATFORM4_VECTORS    ; platform4
-    FDB _PLAYER_WALK2_VECTORS    ; player_walk2
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
+    FDB _PLAYER_JUMP_VECTORS    ; player_jump
     FDB _WORLD_1_1_LEVEL    ; world_1_1
+    FDB _PLATFORM4_VECTORS    ; platform4
     FDB _GAME_OVER_MUSIC    ; Game_Over
+    FDB _BOSS_INTRO_MUSIC    ; Boss_Intro
     FDB _PLATFORM2_VECTORS    ; platform2
+    FDB _PLATFORM1_VECTORS    ; platform1
+    FDB _PLATFORM3_VECTORS    ; platform3
+    FDB _ENEMY1_VECTORS    ; enemy1
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
@@ -498,6 +480,817 @@ SPAWN_ENEMIES_BANKED:
     STA $DF00                ; restore bank
 SEB_DONE:
     RTS
+
+;***************************************************************************
+; ANIMATION DATA (helpers bank — always accessible for DRAW_ANIM_RUNTIME)
+;***************************************************************************
+
+; .vanim animation data: player_walk (4 frames, loop=true, base_refs=0)
+
+_ANIM_PLAYER_WALK:
+    FCB 4               ; frame_count
+    FCB 1               ; loop flag (1=loop, 0=freeze)
+    FCB 0               ; base_ref_count
+    FCB 4               ; frame_table_offset
+    FDB _ANIM_PLAYER_WALK_F0       ; frame 0 pointer
+    FDB _ANIM_PLAYER_WALK_F1       ; frame 1 pointer
+    FDB _ANIM_PLAYER_WALK_F2       ; frame 2 pointer
+    FDB _ANIM_PLAYER_WALK_F3       ; frame 3 pointer
+
+_ANIM_PLAYER_WALK_F0:
+    FCB 8               ; duration_ticks
+    FCB 1               ; vec_ref_count
+    FDB _PLAYER_WALK1_VECTORS      ; vec_ref: player_walk1
+    FCB 0               ; inline_path_count
+
+_ANIM_PLAYER_WALK_F1:
+    FCB 8               ; duration_ticks
+    FCB 1               ; vec_ref_count
+    FDB _PLAYER_WALK2_VECTORS      ; vec_ref: player_walk2
+    FCB 0               ; inline_path_count
+
+_ANIM_PLAYER_WALK_F2:
+    FCB 8               ; duration_ticks
+    FCB 1               ; vec_ref_count
+    FDB _PLAYER_WALK3_VECTORS      ; vec_ref: player_walk3
+    FCB 0               ; inline_path_count
+
+_ANIM_PLAYER_WALK_F3:
+    FCB 8               ; duration_ticks
+    FCB 1               ; vec_ref_count
+    FDB _PLAYER_WALK4_VECTORS      ; vec_ref: player_walk4
+    FCB 0               ; inline_path_count
+
+
+; Vec files referenced by animations (helpers bank for cross-bank safety)
+
+; Generated from player_walk1.vec (Malban Draw_Sync_List format)
+; Total paths: 17, points: 87
+; X bounds: min=-5, max=6, width=11
+; Center: (0, 0)
+
+_PLAYER_WALK1_WIDTH EQU 11
+_PLAYER_WALK1_HALF_WIDTH EQU 5
+_PLAYER_WALK1_HEIGHT EQU 19
+_PLAYER_WALK1_HALF_HEIGHT EQU 9
+_PLAYER_WALK1_CENTER_X EQU 0
+_PLAYER_WALK1_CENTER_Y EQU 0
+
+_PLAYER_WALK1_VECTORS:  ; Main entry (header + 17 path(s))
+    FDB 17               ; path_count (runtime metadata, 2 bytes)
+    FDB _PLAYER_WALK1_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK1_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK1_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK1_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK1_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK1_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK1_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK1_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK1_PATH8        ; pointer to path 8
+    FDB _PLAYER_WALK1_PATH9        ; pointer to path 9
+    FDB _PLAYER_WALK1_PATH10        ; pointer to path 10
+    FDB _PLAYER_WALK1_PATH11        ; pointer to path 11
+    FDB _PLAYER_WALK1_PATH12        ; pointer to path 12
+    FDB _PLAYER_WALK1_PATH13        ; pointer to path 13
+    FDB _PLAYER_WALK1_PATH14        ; pointer to path 14
+    FDB _PLAYER_WALK1_PATH15        ; pointer to path 15
+    FDB _PLAYER_WALK1_PATH16        ; pointer to path 16
+
+_PLAYER_WALK1_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $08,$FD,0,0        ; path0: header (y=8, x=-3)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $06,$FE,0,0        ; path1: header (y=6, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $02,$FD,0,0        ; path2: header (y=2, x=-3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $FF,$01,0,0        ; path3: header (y=-1, x=1)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $FD,$02,0,0        ; path4: header (y=-3, x=2)
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $FB,$02,0,0        ; path5: header (y=-5, x=2)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $FC,$FC,0,0        ; path6: header (y=-4, x=-4)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $FB,$FD,0,0        ; path7: header (y=-5, x=-3)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $F9,$FB,0,0        ; path8: header (y=-7, x=-5)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $00,$03,0,0        ; path9: header (y=0, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $FF,$03,0,0        ; path10: header (y=-1, x=3)
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $02,$01,0,0        ; path11: header (y=2, x=1)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$02,0,0        ; path12: header (y=5, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $05,$04,0,0        ; path13: header (y=5, x=4)
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $05,$02,0,0        ; path14: header (y=5, x=2)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $04,$03,0,0        ; path15: header (y=4, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK1_PATH16:    ; Path 16
+    FCB 65              ; path16: intensity
+    FCB $05,$03,0,0        ; path16: header (y=5, x=3)
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk2.vec (Malban Draw_Sync_List format)
+; Total paths: 17, points: 87
+; X bounds: min=-5, max=6, width=11
+; Center: (0, 0)
+
+_PLAYER_WALK2_WIDTH EQU 11
+_PLAYER_WALK2_HALF_WIDTH EQU 5
+_PLAYER_WALK2_HEIGHT EQU 19
+_PLAYER_WALK2_HALF_HEIGHT EQU 9
+_PLAYER_WALK2_CENTER_X EQU 0
+_PLAYER_WALK2_CENTER_Y EQU 0
+
+_PLAYER_WALK2_VECTORS:  ; Main entry (header + 17 path(s))
+    FDB 17               ; path_count (runtime metadata, 2 bytes)
+    FDB _PLAYER_WALK2_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK2_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK2_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK2_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK2_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK2_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK2_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK2_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK2_PATH8        ; pointer to path 8
+    FDB _PLAYER_WALK2_PATH9        ; pointer to path 9
+    FDB _PLAYER_WALK2_PATH10        ; pointer to path 10
+    FDB _PLAYER_WALK2_PATH11        ; pointer to path 11
+    FDB _PLAYER_WALK2_PATH12        ; pointer to path 12
+    FDB _PLAYER_WALK2_PATH13        ; pointer to path 13
+    FDB _PLAYER_WALK2_PATH14        ; pointer to path 14
+    FDB _PLAYER_WALK2_PATH15        ; pointer to path 15
+    FDB _PLAYER_WALK2_PATH16        ; pointer to path 16
+
+_PLAYER_WALK2_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $08,$FD,0,0        ; path0: header (y=8, x=-3)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $06,$FE,0,0        ; path1: header (y=6, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $02,$FD,0,0        ; path2: header (y=2, x=-3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $FF,$01,0,0        ; path3: header (y=-1, x=1)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $FD,$02,0,0        ; path4: header (y=-3, x=2)
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $FB,$02,0,0        ; path5: header (y=-5, x=2)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $FC,$FC,0,0        ; path6: header (y=-4, x=-4)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $FB,$FD,0,0        ; path7: header (y=-5, x=-3)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $F9,$FB,0,0        ; path8: header (y=-7, x=-5)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $00,$03,0,0        ; path9: header (y=0, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $FF,$03,0,0        ; path10: header (y=-1, x=3)
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $02,$01,0,0        ; path11: header (y=2, x=1)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$02,0,0        ; path12: header (y=5, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $05,$04,0,0        ; path13: header (y=5, x=4)
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $05,$02,0,0        ; path14: header (y=5, x=2)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $04,$03,0,0        ; path15: header (y=4, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH16:    ; Path 16
+    FCB 65              ; path16: intensity
+    FCB $05,$03,0,0        ; path16: header (y=5, x=3)
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk3.vec (Malban Draw_Sync_List format)
+; Total paths: 20, points: 82
+; X bounds: min=-7, max=6, width=13
+; Center: (0, 0)
+
+_PLAYER_WALK3_WIDTH EQU 13
+_PLAYER_WALK3_HALF_WIDTH EQU 6
+_PLAYER_WALK3_HEIGHT EQU 19
+_PLAYER_WALK3_HALF_HEIGHT EQU 9
+_PLAYER_WALK3_CENTER_X EQU 0
+_PLAYER_WALK3_CENTER_Y EQU 0
+
+_PLAYER_WALK3_VECTORS:  ; Main entry (header + 20 path(s))
+    FDB 20               ; path_count (runtime metadata, 2 bytes)
+    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK3_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK3_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK3_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK3_PATH8        ; pointer to path 8
+    FDB _PLAYER_WALK3_PATH9        ; pointer to path 9
+    FDB _PLAYER_WALK3_PATH10        ; pointer to path 10
+    FDB _PLAYER_WALK3_PATH11        ; pointer to path 11
+    FDB _PLAYER_WALK3_PATH12        ; pointer to path 12
+    FDB _PLAYER_WALK3_PATH13        ; pointer to path 13
+    FDB _PLAYER_WALK3_PATH14        ; pointer to path 14
+    FDB _PLAYER_WALK3_PATH15        ; pointer to path 15
+    FDB _PLAYER_WALK3_PATH16        ; pointer to path 16
+    FDB _PLAYER_WALK3_PATH17        ; pointer to path 17
+    FDB _PLAYER_WALK3_PATH18        ; pointer to path 18
+    FDB _PLAYER_WALK3_PATH19        ; pointer to path 19
+
+_PLAYER_WALK3_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $06,$FE,0,0        ; path0: header (y=6, x=-2)
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $06,$FE,0,0        ; path1: header (y=6, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $01,$FD,0,0        ; path2: header (y=1, x=-3)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $00,$00,0,0        ; path3: header (y=0, x=0)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $00,$02,0,0        ; path4: header (y=0, x=2)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $F8,$FE,0,0        ; path5: header (y=-8, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $F8,$FE,0,0        ; path6: header (y=-8, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $F9,$FE,0,0        ; path7: header (y=-7, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $F8,$04,0,0        ; path8: header (y=-8, x=4)
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $FE,$03,0,0        ; path9: header (y=-2, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $02,$00,0,0        ; path10: header (y=2, x=0)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $05,$02,0,0        ; path11: header (y=5, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$03,0,0        ; path12: header (y=5, x=3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $FF,$FD,0,0        ; path13: header (y=-1, x=-3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $F9,$FE,0,0        ; path14: header (y=-7, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $FF,$03,0,0        ; path15: header (y=-1, x=3)
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH16:    ; Path 16
+    FCB 65              ; path16: intensity
+    FCB $05,$03,0,0        ; path16: header (y=5, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH17:    ; Path 17
+    FCB 65              ; path17: intensity
+    FCB $07,$02,0,0        ; path17: header (y=7, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH18:    ; Path 18
+    FCB 65              ; path18: intensity
+    FCB $FD,$FB,0,0        ; path18: header (y=-3, x=-5)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH19:    ; Path 19
+    FCB 65              ; path19: intensity
+    FCB $F8,$FD,0,0        ; path19: header (y=-8, x=-3)
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB $FF,$01,$05          ; flag=-1, dy=1, dx=5
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk4.vec (Malban Draw_Sync_List format)
+; Total paths: 20, points: 82
+; X bounds: min=-7, max=6, width=13
+; Center: (0, 0)
+
+_PLAYER_WALK4_WIDTH EQU 13
+_PLAYER_WALK4_HALF_WIDTH EQU 6
+_PLAYER_WALK4_HEIGHT EQU 19
+_PLAYER_WALK4_HALF_HEIGHT EQU 9
+_PLAYER_WALK4_CENTER_X EQU 0
+_PLAYER_WALK4_CENTER_Y EQU 0
+
+_PLAYER_WALK4_VECTORS:  ; Main entry (header + 20 path(s))
+    FDB 20               ; path_count (runtime metadata, 2 bytes)
+    FDB _PLAYER_WALK4_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK4_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK4_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK4_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK4_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK4_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK4_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK4_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK4_PATH8        ; pointer to path 8
+    FDB _PLAYER_WALK4_PATH9        ; pointer to path 9
+    FDB _PLAYER_WALK4_PATH10        ; pointer to path 10
+    FDB _PLAYER_WALK4_PATH11        ; pointer to path 11
+    FDB _PLAYER_WALK4_PATH12        ; pointer to path 12
+    FDB _PLAYER_WALK4_PATH13        ; pointer to path 13
+    FDB _PLAYER_WALK4_PATH14        ; pointer to path 14
+    FDB _PLAYER_WALK4_PATH15        ; pointer to path 15
+    FDB _PLAYER_WALK4_PATH16        ; pointer to path 16
+    FDB _PLAYER_WALK4_PATH17        ; pointer to path 17
+    FDB _PLAYER_WALK4_PATH18        ; pointer to path 18
+    FDB _PLAYER_WALK4_PATH19        ; pointer to path 19
+
+_PLAYER_WALK4_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $06,$FE,0,0        ; path0: header (y=6, x=-2)
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $06,$FE,0,0        ; path1: header (y=6, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $01,$FD,0,0        ; path2: header (y=1, x=-3)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $00,$00,0,0        ; path3: header (y=0, x=0)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $00,$02,0,0        ; path4: header (y=0, x=2)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $F8,$FE,0,0        ; path5: header (y=-8, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $F8,$FE,0,0        ; path6: header (y=-8, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $F9,$FE,0,0        ; path7: header (y=-7, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $F8,$04,0,0        ; path8: header (y=-8, x=4)
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $FE,$03,0,0        ; path9: header (y=-2, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $02,$00,0,0        ; path10: header (y=2, x=0)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $05,$02,0,0        ; path11: header (y=5, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$03,0,0        ; path12: header (y=5, x=3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $FF,$FD,0,0        ; path13: header (y=-1, x=-3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $F9,$FE,0,0        ; path14: header (y=-7, x=-2)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $FF,$03,0,0        ; path15: header (y=-1, x=3)
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH16:    ; Path 16
+    FCB 65              ; path16: intensity
+    FCB $05,$03,0,0        ; path16: header (y=5, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH17:    ; Path 17
+    FCB 65              ; path17: intensity
+    FCB $07,$02,0,0        ; path17: header (y=7, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH18:    ; Path 18
+    FCB 65              ; path18: intensity
+    FCB $FD,$FB,0,0        ; path18: header (y=-3, x=-5)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK4_PATH19:    ; Path 19
+    FCB 65              ; path19: intensity
+    FCB $F8,$FD,0,0        ; path19: header (y=-8, x=-3)
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB $FF,$01,$05          ; flag=-1, dy=1, dx=5
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
 
 ;***************************************************************************
 ; RUNTIME HELPERS
@@ -941,18 +1734,26 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
+; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
 LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
+BEQ DSWM_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
+DSWM_USE_FCB_INT:
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
+LDA #$00
+STA >$D000              ; PB=$00: deselect all channels
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -1048,10 +1849,14 @@ LBRA DSWM_LOOP          ; Long branch
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
+LDA ,X+                 ; Read FCB intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
-PSHS A
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
+BEQ DSWM_NEXT_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override
+DSWM_NEXT_USE_FCB_INT:
+PSHS A                  ; save intensity for later
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -1065,13 +1870,19 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; Get intensity back
+PULS A                  ; restore intensity
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness for Z-axis write
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected
+LDA #$00
+STA >$D000              ; PB=$00: deselect
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 PULS D
 ADDD #3
 TFR D,X
@@ -2162,6 +2973,189 @@ STD >SFX_PTR            ; Clear pointer
 RTS
 
 ; ============================================================================
+; DRAW_ANIM_RUNTIME
+; Input: X = animation ROM header (_ANIM_XXX)
+;        U = 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)
+;
+; Header layout:
+;   byte 0: frame_count
+;   byte 1: loop_flag (1=loop, 0=freeze)
+;   byte 2: base_ref_count  (static cel layer — drawn before every frame)
+;   byte 3: frame_table_offset (= 4 + base_ref_count*2)
+;   bytes 4..: FDB ptrs to base_ref _VECNAME_VECTORS
+;   at frame_table_offset: FDB ptrs to per-frame data
+; ============================================================================
+DRAW_ANIM_RUNTIME:
+LDA #$18
+STA >$D00B          ; ACR=$18: SR shift-out PHI2, enable beam via SR
+PSHS D,X,Y,U
+; --- Refresh MIRROR_X from saved arg (re-assert before any BIOS call can corrupt A) ---
+LDA >DRAW_ANIM_MIRROR_X
+STA >MIRROR_X
+; --- Apply scale: copy DRAW_ANIM_SCALE to DRAW_SCALE for DSWM ---
+LDA >DRAW_ANIM_SCALE
+STA >DRAW_SCALE
+; --- Draw base_refs (static cel layer, drawn before every frame) ---
+LDB 2,X             ; base_ref_count
+BEQ DAR_TICK        ; none: skip to tick management
+LEAY 4,X            ; Y = first base_ref FDB entry
+DAR_BASE_LOOP:
+PSHS B,X,Y
+LDX ,Y              ; X = _VECNAME_VECTORS header
+CLR >MIRROR_Y
+JSR $F1AA           ; DP_to_D0
+LDD ,X              ; D = path_count
+BEQ DAR_BASE_SKIP
+LEAY 2,X            ; Y = first path FDB in vec table
+DAR_BASE_PATH_LOOP:
+PSHS D,Y
+LDX ,Y
+JSR Draw_Sync_List_At_With_Mirrors
+PULS D,Y
+LEAY 2,Y
+SUBD #1
+BNE DAR_BASE_PATH_LOOP
+DAR_BASE_SKIP:
+JSR $F1AF           ; DP_to_C8
+PULS B,X,Y
+LEAY 2,Y            ; next base_ref FDB
+DECB
+LBNE DAR_BASE_LOOP
+; --- Tick counter management ---
+DAR_TICK:
+LDU 6,S             ; reload U from stack — BIOS may corrupt live U
+LDA 1,U             ; ticks_left
+BEQ DAR_INIT        ; 0 = first call: initialize frame 0
+DECA
+BNE DAR_DRAW        ; still on this frame: skip frame advance
+; ticks exhausted: advance frame index
+LDB ,U              ; current frame_idx
+INCB
+CMPB ,X             ; frame_count (byte 0)
+BLT DAR_NO_WRAP
+LDA 1,X             ; loop flag (byte 1)
+BEQ DAR_FREEZE      ; loop=0: freeze on last frame
+CLRB                ; loop=1: back to frame 0
+DAR_NO_WRAP:
+STB ,U              ; save new frame_idx
+; frame_ptr = X + frame_table_offset + frame_idx*2
+LDB ,U              ; new frame_idx
+CLRA
+LSLB
+ROLA                ; D = frame_idx*2
+ADDB 3,X            ; D += frame_table_offset (byte 3)
+ADCA #0
+LEAY D,X            ; Y = &frame_table[frame_idx]
+LDY ,Y              ; Y = frame data ptr
+LDA ,Y              ; A = duration_ticks from vanim
+LDB >DRAW_ANIM_SPEED_MUL
+BEQ DAR_SPEED1      ; speed=0: use vanim's duration_ticks as-is
+TFR B,A             ; speed>0: override with ticks_per_frame directly
+DAR_SPEED1:
+CMPA #1
+BHS DAR_SPEED1_OK
+LDA #1
+DAR_SPEED1_OK:
+STA 1,U             ; reset ticks_remaining
+BRA DAR_EMIT
+DAR_FREEZE:
+LDA #1
+STA 1,U
+LDB ,U              ; last frame_idx
+CLRA
+LSLB
+ROLA
+ADDB 3,X
+ADCA #0
+LEAY D,X
+LDY ,Y
+BRA DAR_EMIT
+DAR_INIT:
+; First call: frame_idx=0, load frame 0 duration and draw it
+CLRB                ; frame_idx = 0
+STB ,U
+CLRA                ; D = 0 (frame_idx*2 = 0)
+ADDB 3,X            ; B = frame_table_offset (frame 0 offset from header)
+ADCA #0
+LEAY D,X            ; Y = frame_table[0] entry
+LDY ,Y              ; Y = frame 0 data ptr
+LDA ,Y              ; A = duration_ticks from vanim
+LDB >DRAW_ANIM_SPEED_MUL
+BEQ DAR_SPEED2      ; speed=0: use vanim's duration_ticks as-is
+TFR B,A             ; speed>0: override with ticks_per_frame directly
+DAR_SPEED2:
+CMPA #1
+BHS DAR_SPEED2_OK
+LDA #1
+DAR_SPEED2_OK:
+STA 1,U             ; ticks_left = ticks_per_frame
+BRA DAR_EMIT
+DAR_DRAW:
+STA 1,U             ; save decremented ticks
+LDB ,U              ; frame_idx
+CLRA
+LSLB
+ROLA
+ADDB 3,X
+ADCA #0
+LEAY D,X
+LDY ,Y              ; Y = frame data ptr
+DAR_EMIT:
+; frame data: byte 0=duration_ticks (skip), byte 1=vec_ref_count
+LEAY 1,Y
+LDB ,Y+             ; B = vec_ref_count, Y at first vec ptr
+BEQ DAR_INLINE
+DAR_VEC_LOOP:
+PSHS B,Y
+LDX ,Y
+JSR $F1AA           ; DP_to_D0
+LDD ,X              ; D = path_count
+BEQ DAR_VEC_DONE
+LEAY 2,X
+DAR_VEC_PATH_LOOP:
+PSHS D,Y
+LDX ,Y
+JSR Draw_Sync_List_At_With_Mirrors
+PULS D,Y
+LEAY 2,Y
+SUBD #1
+BNE DAR_VEC_PATH_LOOP
+DAR_VEC_DONE:
+JSR $F1AF           ; DP_to_C8
+PULS B,Y
+LEAY 2,Y
+DECB
+BNE DAR_VEC_LOOP
+DAR_INLINE:
+LDB ,Y+             ; B = inline_path_count
+BEQ DAR_DONE
+DAR_PATH_LOOP:
+PSHS B
+TFR Y,X
+JSR $F1AA           ; DP_to_D0
+JSR Draw_Sync_List_At_With_Mirrors
+JSR $F1AF           ; DP_to_C8
+LEAY 5,Y            ; skip intensity + 4-byte header
+DAR_SCAN:
+LDA ,Y+
+CMPA #2
+BEQ DAR_PATH_DONE
+CMPA #$FF
+BNE DAR_SCAN
+LEAY 2,Y
+BRA DAR_SCAN
+DAR_PATH_DONE:
+PULS B
+DECB
+BNE DAR_PATH_LOOP
+DAR_DONE:
+; Restore DRAW_SCALE to default ($7F) after animation draw
+LDA #$7F
+STA >DRAW_SCALE
+PULS D,X,Y,U
+RTS
+
+; ============================================================================
 ; ENEMY SYSTEM RUNTIME  (max 8 enemies, stride 13 bytes)
 ; ============================================================================
 ENEMY_POOL_STRIDE EQU 13
@@ -2456,24 +3450,12 @@ PRINT_TEXT_STR_94739999784744652:
     FCC "player_jump"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_94739999785112679:
+    FCC "player_walk"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_1989933374265095120:
     FCC "LEVEL CLEAR!"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2936939993338493098:
-    FCC "player_walk1"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2936939993338493099:
-    FCC "player_walk2"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2936939993338493100:
-    FCC "player_walk3"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2936939993338493101:
-    FCC "player_walk4"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_9120385685437879118:

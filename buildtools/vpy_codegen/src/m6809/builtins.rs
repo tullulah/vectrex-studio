@@ -930,10 +930,12 @@ fn emit_set_intensity(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Evaluate intensity argument
     expressions::emit_simple_expr(&args[0], out, assets);
     
-    // Load result into A, store in our own var (BIOS-safe), then call BIOS
+    // Store intensity in DRAW_VEC_INTENSITY — DSWM reads this with extended addressing and
+    // uses the correct BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01).
+    // Do NOT call JSR Intensity_a here: SET_INTENSITY runs with DP=$C8 so Intensity_a's
+    // direct-mode VIA writes go to RAM ($C800) instead of the VIA ($D000).
     out.push_str("    TFR B,A         ; Intensity (8-bit) — B already holds low byte\n");
-    out.push_str("    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)\n");
-    out.push_str("    JSR Intensity_a\n");
+    out.push_str("    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }

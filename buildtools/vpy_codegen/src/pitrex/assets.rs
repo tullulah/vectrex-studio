@@ -20,11 +20,82 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
     // Scan all statements for asset references
     collect_asset_names(&module.items, &mut used_names);
 
-    // Filter assets to only those referenced in code
+    // Also scan any used level files to include the vectors they reference
+    let level_names: Vec<String> = used_names.iter().cloned().collect();
+    for level_name in &level_names {
+        if let Some(level_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Level) && &a.name == level_name
+        }) {
+            collect_level_vector_names(&level_asset.path, &mut used_names);
+        }
+    }
+
+    // Also scan used .vanim files to include their vec_refs
+    let anim_names: Vec<String> = used_names.iter().cloned().collect();
+    for anim_name in &anim_names {
+        if let Some(anim_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Animation) && &a.name == anim_name
+        }) {
+            collect_vanim_vec_refs(&anim_asset.path, &mut used_names);
+        }
+    }
+
+    // Collect enemy types and vectors referenced in used .vplay level files
+    for level_name in &level_names {
+        if let Some(level_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Level) && &a.name == level_name
+        }) {
+            if let Ok(content) = std::fs::read_to_string(&level_asset.path) {
+                if let Ok(level) = serde_json::from_str::<serde_json::Value>(&content) {
+                    for layer in &["background", "gameplay", "foreground"] {
+                        if let Some(objects) = level
+                            .get("layers")
+                            .and_then(|l| l.get(layer))
+                            .and_then(|l| l.as_array())
+                        {
+                            for obj in objects {
+                                if let Some(et) = obj.get("enemyType").and_then(|v| v.as_str()) {
+                                    if !et.is_empty() { used_names.insert(et.to_string()); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Filter assets to only those referenced in code or used by levels/anims
     assets.iter()
         .filter(|asset| used_names.contains(&asset.name))
         .cloned()
         .collect()
+}
+
+/// Scan a .vplay JSON file and add the vector_name of every object to used_names.
+fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>) {
+    let Ok(content) = fs::read_to_string(level_path) else { return };
+    let Ok(level) = serde_json::from_str::<crate::levelres::VPlayLevel>(&content) else { return };
+    for obj in level.layers.background.iter()
+        .chain(level.layers.gameplay.iter())
+        .chain(level.layers.foreground.iter())
+    {
+        used_names.insert(obj.vector_name.clone());
+    }
+}
+
+/// Scan a .vanim JSON file and add all vec_refs (base_refs + per-frame) to used_names.
+fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
+    use std::path::Path;
+    let Ok(resource) = crate::animres::VanimResource::load(Path::new(vanim_path)) else { return };
+    for vec_name in &resource.base_refs {
+        used_names.insert(vec_name.clone());
+    }
+    for frame in &resource.frames {
+        for vec_name in &frame.vec_refs {
+            used_names.insert(vec_name.clone());
+        }
+    }
 }
 
 /// Recursively collect asset names from statements

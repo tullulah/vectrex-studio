@@ -65,9 +65,12 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
     }
 
     // Filter assets to only those referenced in code (or used by levels)
-    // Enemy assets that were discovered via level scanning are included here.
+    // Enemy assets are always included: they're loaded dynamically via SPAWN_ENEMIES
+    // and referenced through level data at runtime, not by name in VPy source.
     assets.iter()
-        .filter(|asset| used_names.contains(&asset.name))
+        .filter(|asset| {
+            matches!(asset.asset_type, AssetType::Enemy) || used_names.contains(&asset.name)
+        })
         .cloned()
         .collect()
 }
@@ -774,29 +777,39 @@ pub fn generate_distributed_assets_asm(
 ) -> Result<(std::collections::HashMap<u8, String>, String), String> {
     use std::collections::HashMap;
     
+    // Collect vec names referenced by animations — these must stay in the helpers bank
+    // so DRAW_ANIM_RUNTIME can follow FDB pointers without bank switching.
+    let mut anim_vec_refs: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Animation)) {
+        collect_vanim_vec_refs(&asset.path, &mut anim_vec_refs);
+    }
+
     // Distribute assets across banks 1..(helpers_bank-1)
     // Bank 0 has main code, helpers_bank has runtime
-    let distribution = distribute_assets(assets, bank_size, 1, helpers_bank.saturating_sub(1));
-    
+    // Exclude animations and animation-referenced vecs from distribution (they go to helpers bank)
+    let distributable: Vec<AssetInfo> = assets.iter()
+        .filter(|a| {
+            !matches!(a.asset_type, AssetType::Enemy | AssetType::Animation)
+                && !anim_vec_refs.contains(&a.name)
+        })
+        .cloned()
+        .collect();
+    let distribution = distribute_assets(&distributable, bank_size, 1, helpers_bank.saturating_sub(1));
+
     let mut bank_asm: HashMap<u8, String> = HashMap::new();
     let _asset_index = 0u16;
-    
+
     // Track asset info for lookup table generation
     let mut asset_entries: Vec<(String, u8, String, AssetType)> = Vec::new(); // (name, bank_id, label, type)
-    
+
     // Generate ASM for each bank
     for (bank_id, sized_assets) in &distribution.bank_assignments {
         let mut asm = String::new();
         asm.push_str(&format!(";***************************************************************************\n"));
         asm.push_str(&format!("; ASSETS IN BANK #{} ({} assets)\n", bank_id, sized_assets.len()));
         asm.push_str(&format!(";***************************************************************************\n\n"));
-        
+
         for asset in sized_assets {
-            // Enemy type data goes into the helpers bank (generated below) not switchable banks.
-            // Skipping here avoids duplicated labels; the helpers-bank entry is always accessible.
-            if matches!(asset.info.asset_type, AssetType::Enemy) {
-                continue;
-            }
             // Use pre-generated ASM code
             asm.push_str(&asset.asm_code);
             asm.push_str("\n");
@@ -814,7 +827,7 @@ pub fn generate_distributed_assets_asm(
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }
-        
+
         bank_asm.insert(*bank_id, asm);
     }
     
@@ -1091,6 +1104,52 @@ pub fn generate_distributed_assets_asm(
     }
     if !enemy_entries.is_empty() {
         lookup_asm.push_str(&generate_spawn_enemies_banked_wrapper());
+    }
+
+    // ===== ANIMATION DATA IN HELPERS BANK =====
+    // Animation headers + frame data + their referenced vec files are emitted here so
+    // DRAW_ANIM_RUNTIME can follow FDB pointers without bank switching.
+    // All these labels will be at $4000+ (helpers bank ORG) and always accessible.
+    {
+        // Collect vec assets that are animation-referenced (need to be in helpers bank)
+        let anim_assets: Vec<&AssetInfo> = assets.iter()
+            .filter(|a| matches!(a.asset_type, AssetType::Animation))
+            .collect();
+
+        if !anim_assets.is_empty() {
+            lookup_asm.push_str(";***************************************************************************\n");
+            lookup_asm.push_str("; ANIMATION DATA (helpers bank — always accessible for DRAW_ANIM_RUNTIME)\n");
+            lookup_asm.push_str(";***************************************************************************\n\n");
+
+            // Emit animation headers + frame data
+            for asset in &anim_assets {
+                match crate::animres::VanimResource::load(std::path::Path::new(&asset.path)) {
+                    Ok(resource) => {
+                        lookup_asm.push_str(&crate::animres::compile_vanim_to_asm(&resource, &asset.name));
+                        lookup_asm.push('\n');
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to load animation '{}' for helpers bank: {}", asset.name, e);
+                    }
+                }
+            }
+
+            // Emit vec files referenced by animations (also in helpers bank)
+            lookup_asm.push_str("; Vec files referenced by animations (helpers bank for cross-bank safety)\n\n");
+            for vec_name in &anim_vec_refs {
+                if let Some(vec_asset) = assets.iter().find(|a| matches!(a.asset_type, AssetType::Vector) && &a.name == vec_name) {
+                    match crate::vecres::VecResource::load(std::path::Path::new(&vec_asset.path)) {
+                        Ok(resource) => {
+                            lookup_asm.push_str(&resource.compile_to_asm_with_name(Some(vec_name)));
+                            lookup_asm.push('\n');
+                        }
+                        Err(e) => {
+                            eprintln!("[WARNING] Failed to load vec '{}' for helpers bank (animation ref): {}", vec_name, e);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Ok((bank_asm, lookup_asm))
