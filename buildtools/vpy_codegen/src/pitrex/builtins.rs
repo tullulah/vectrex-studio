@@ -240,7 +240,7 @@ fn emit_pitrex_draw_line() -> String {
     s.push_str("    mul     r2, r2, r12         @ x1 * 127\n");
     s.push_str("    mul     r3, r3, r12         @ y1 * 127\n");
     s.push_str("    push    {r4}               @ brightness as 5th arg\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r4, pc}\n");
     s.push_str("    .ltorg\n\n");
@@ -290,7 +290,7 @@ fn emit_pitrex_draw_line_rel() -> String {
     s.push_str("    pop     {r0, r1, r2, r3}\n");
     s.push_str(".Ldlr_no_trace:\n");
     s.push_str("    push    {r6}               @ brightness as 5th arg\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     // OPTIMIZED: r7 still points to PITREX_CUR_X; use LDMIA+STMIA for both vars.
     // Saves 4 instructions vs two separate ldr+add+str pairs.
@@ -761,7 +761,7 @@ fn emit_pitrex_draw_rect() -> String {
     s.push_str("    mov     r3, r5\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
     s.push_str("    push    {r12}\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     // Right edge: (x+w, y) -> (x+w, y+h)
     s.push_str("    add     r0, r4, r6\n");
@@ -770,7 +770,7 @@ fn emit_pitrex_draw_rect() -> String {
     s.push_str("    add     r3, r5, r7\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
     s.push_str("    push    {r12}\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     // Top edge: (x+w, y+h) -> (x, y+h)
     s.push_str("    add     r0, r4, r6\n");
@@ -779,7 +779,7 @@ fn emit_pitrex_draw_rect() -> String {
     s.push_str("    add     r3, r5, r7\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
     s.push_str("    push    {r12}\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     // Left edge: (x, y+h) -> (x, y)
     s.push_str("    mov     r0, r4\n");
@@ -788,7 +788,7 @@ fn emit_pitrex_draw_rect() -> String {
     s.push_str("    mov     r3, r5\n");
     s.push_str("    ldr     r12, [sp, #20]\n");
     s.push_str("    push    {r12}\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r4, r5, r6, r7, pc}\n\n");
     s
@@ -846,7 +846,7 @@ fn emit_pitrex_draw_circle() -> String {
     s.push_str("    mov     r0, r8          @ x0 → r0\n");
     s.push_str("    mov     r1, r9          @ y0 → r1\n");
     s.push_str("    push    {r7}            @ brightness as 5th arg\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    add     r10, r10, #1    @ i++\n");
     s.push_str("    b       .Lcircle_loop\n");
@@ -901,7 +901,7 @@ fn emit_pitrex_draw_filled_rect() -> String {
     s.push_str("    push    {r0}            @ save scan_y for after the call\n");
     s.push_str("    mov     r0, r4          @ x0 = x_s\n");
     s.push_str("    push    {r8}            @ brightness as 5th arg ([sp+0])\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4      @ pop brightness\n");
     s.push_str("    pop     {r0}            @ restore scan_y\n");
     s.push_str("    add     r0, r0, r9      @ scan_y += step\n");
@@ -944,7 +944,7 @@ fn emit_pitrex_draw_polygon() -> String {
     s.push_str("    mov     r0, r7\n    mov     r1, r8\n");
     s.push_str("    mov     r2, r9\n    mov     r3, r10\n");
     s.push_str("    push    {r6}            @ brightness ([sp+0])\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r9, r10}       @ r9=cur_x=x1_s, r10=cur_y=y1_s\n");
     // loop k=2..n-1: vk on stack at [caller_sp+(2k-2)*4]=xk, [caller_sp+(2k-1)*4]=yk
@@ -974,7 +974,7 @@ fn emit_pitrex_draw_polygon() -> String {
     s.push_str("    mov     r2, r0\n    mov     r3, r1\n");
     s.push_str("    mov     r0, r9\n    mov     r1, r10\n");
     s.push_str("    push    {r6}            @ brightness\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r9, r10}       @ r9=xk_s, r10=yk_s\n");
     s.push_str("    add     r11, r11, #1\n");
@@ -984,7 +984,7 @@ fn emit_pitrex_draw_polygon() -> String {
     s.push_str("    mov     r0, r9\n    mov     r1, r10\n");
     s.push_str("    mov     r2, r7\n    mov     r3, r8\n");
     s.push_str("    push    {r6}            @ brightness\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
@@ -1041,7 +1041,7 @@ fn emit_pitrex_draw_ellipse() -> String {
     // Prepare args: v_directDraw32(x0, y0, x1, y1, brightness)
     s.push_str("    mov     r0, r9\n");
     s.push_str("    push    {r8}            @ brightness\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     s.push_str("    add     r10, r10, #1\n");
     s.push_str("    b       .Lellipse_loop\n");
@@ -1128,7 +1128,7 @@ fn emit_pitrex_draw_arc() -> String {
         s.push_str("    mov     r3, r9\n");
         s.push_str("    ldr     r9, [sp, #0]\n"); // r9=brightness
         s.push_str("    push    {r9}\n");
-        s.push_str("    bl      v_addVectorFast\n");
+        s.push_str("    bl      v_directDraw32\n");
         s.push_str("    add     sp, sp, #4\n");
         s.push_str("    pop     {r3, r9}\n");
         s.push_str(&format!("{label}:\n"));
@@ -2410,7 +2410,7 @@ fn emit_pitrex_print_number_impl() -> String {
     s.push_str("    mov     r3, r1              @ y1 = y0 (horizontal line)\n");
     s.push_str("    mov     r12, #0x50\n");
     s.push_str("    push    {r12}\n");
-    s.push_str("    bl      v_addVectorFast\n");
+    s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
     // Reload textSize (clobbered by v_directDraw32 as r3 is caller-saved)
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
