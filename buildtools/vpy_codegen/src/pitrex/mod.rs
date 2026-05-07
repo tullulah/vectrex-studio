@@ -104,9 +104,28 @@ pub fn generate_pitrex_asm(
     asm.push_str("_DV3D_BUF: .space 256\n");           // static buffer for pitrex_draw_vector_3d
     asm.push('\n');
 
-    // ── Read-only data: const array data ────────────────────────────────────
+    // ── Read-only data: const array data + circle table ─────────────────────
     asm.push_str(".section .rodata\n");
     asm.push_str(".align 2\n");
+    
+    // Precomputed unit circle table (16 segments, 17 vertices for closed loop)
+    // Each entry is (x, y) scaled by 1024 for fixed-point math
+    // Used by draw_circle, draw_ellipse, and draw_arc to avoid runtime trig
+    asm.push_str("@ Precomputed unit circle table: 16 segments × 2 coords (x,y) × 4 bytes = 136 bytes\n");
+    asm.push_str(".global PITREX_CIRCLE_TABLE\n");
+    asm.push_str("PITREX_CIRCLE_TABLE:\n");
+    let circle_pts: [(i32, i32); 17] = [
+        (1024, 0), (946, 392), (724, 724), (392, 946),
+        (0, 1024), (-392, 946), (-724, 724), (-946, 392),
+        (-1024, 0), (-946, -392), (-724, -724), (-392, -946),
+        (0, -1024), (392, -946), (724, -724), (946, -392),
+        (1024, 0),
+    ];
+    for (x, y) in circle_pts.iter() {
+        asm.push_str(&format!("    .word {x}, {y}\n"));
+    }
+    asm.push_str("\n");
+    
     asm.push_str(&functions::emit_const_array_data(module));
     asm.push('\n');
 
