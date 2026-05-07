@@ -394,9 +394,10 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("    ldrsb   r1, [r9], #1        @ dy\n");
     s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
     s.push_str("    mov     r2, r10             @ intensity from .vec\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10}\n");
+    // OPTIMIZED: No push/pop needed — pitrex_draw_line_rel saves r4-r7 itself,
+    // and does NOT modify r8, r9, r10 (verified by inspection).
+    // Removing push/pop saves 14 memory operations per segment.
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10}\n");
     s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_seg_done:\n");
     s.push_str("    add     r8, r8, #1\n");
@@ -494,19 +495,17 @@ fn emit_pitrex_draw_vector_ex() -> String {
     let mut s = String::new();
     s.push_str("@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity_unused)\n");
     s.push_str(".global pitrex_draw_vector_ex\n.type pitrex_draw_vector_ex, %function\npitrex_draw_vector_ex:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 32 bytes\n");
+    // OPTIMIZED: Use r8=path_idx and r11=path_count in registers instead of stack.
+    // Saves 2 push + 2 ldr + 1 str + 2 add_sp = 7+ memory operations per vector draw.
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
     s.push_str("    mov     r4, r0              @ asset header ptr\n");
     s.push_str("    mov     r5, r1              @ ox\n");
     s.push_str("    mov     r6, r2              @ oy\n");
     s.push_str("    mov     r7, r3              @ mirror flag\n");
-    s.push_str("    ldr     r9, [r4], #4        @ path_count\n");
-    s.push_str("    push    {r9}                @ [sp+0] = path_count\n");
-    s.push_str("    mov     r9, #0\n");
-    s.push_str("    push    {r9}                @ [sp+0] = path_idx, [sp+4] = path_count\n");
+    s.push_str("    ldr     r11, [r4], #4       @ r11 = path_count\n");
+    s.push_str("    mov     r8, #0              @ r8 = path_idx = 0\n");
     s.push_str("dvex_path_loop:\n");
-    s.push_str("    ldr     r0, [sp]            @ path_idx\n");
-    s.push_str("    ldr     r1, [sp, #4]        @ path_count\n");
-    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    cmp     r8, r11\n");
     s.push_str("    bge     dvex_done\n");
     s.push_str("    ldr     r9, [r4], #4        @ r9 = path data ptr\n");
     // Move beam to absolute path start using v_directMove32(x, y).
@@ -555,14 +554,13 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    ldrsb   r0, [r9], #1        @ dx\n");
     s.push_str("    cmp     r7, #1\n    it      eq\n    rsbeq   r0, r0, #0\n");
     s.push_str("    mov     r2, r10             @ intensity from .vec\n");
-    s.push_str("    push    {r4, r5, r6, r7, r9, r10}\n");
+    // OPTIMIZED: No push/pop needed — pitrex_draw_line_rel saves r4-r7 itself,
+    // and does NOT modify r9, r10 (verified by inspection).
+    // Removing push/pop saves 12 memory operations per segment.
     s.push_str("    bl      pitrex_draw_line_rel\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r9, r10}\n");
     s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_seg_done:\n");
-    s.push_str("    ldr     r0, [sp]\n");
-    s.push_str("    add     r0, r0, #1\n");
-    s.push_str("    str     r0, [sp]            @ path_idx++\n");
+    s.push_str("    add     r8, r8, #1          @ path_idx++\n");
     s.push_str("    b       dvex_path_loop\n");
     // ── 0xFE runtime-bezier handler (ex: supports mirror, r5=ox r6=oy r7=mirror) ──
     // dvex stores ox/oy as raw VPy units in r5, r6 (no pre-multiply).
@@ -623,12 +621,11 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r9, r10}\n");
     s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_done:\n");
-    s.push_str("    add     sp, sp, #8          @ pop path_idx + path_count\n");
     // Clear brightness override: next DRAW_VECTOR_EX uses .vec intensities
     s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
     s.push_str("    mov     r1, #0\n");
     s.push_str("    strb    r1, [r0]\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
