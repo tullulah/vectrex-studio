@@ -39,7 +39,7 @@ import { Beam }           from '../hardware/Beam.js';
 import { Psg }            from '../hardware/Psg.js';
 import { Canvas }         from '../hardware/Canvas.js';
 import { Thumb2 }         from '../cpu/Thumb2.js';
-import { extractElf32Symbols, readElf32Entry } from '../util/Elf32Symbols.js';
+import { extractElf32Symbols, readElf32Entry, loadElf32IntoFlash } from '../util/Elf32Symbols.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -264,13 +264,22 @@ export class Rp2350System implements ISystem, IBus {
   init(rom: Uint8Array, elfData?: Uint8Array): void {
     console.log(`[Rp2350System.init] START rom=${rom.length}b elf=${elfData?.length ?? 0}b`);
 
-    // Load binary into flash
+    // Load binary into flash.
+    // Prefer ELF program-header segments when available: the ELF is always the
+    // ARM binary, whereas the raw .bin may have been overwritten by an M6809
+    // compilation (both targets share the same SnowBros.bin output path).
     this.flash.fill(0xFF);
-    const len = Math.min(rom.length, FLASH_SIZE - GAME_FLASH_OFFSET);
-    this.flash.set(rom.subarray(0, len), GAME_FLASH_OFFSET);
-    console.log(`[Rp2350System.init] Flash loaded: ${len}b at offset 0x${GAME_FLASH_OFFSET.toString(16)}`);
+    if (elfData && elfData.length >= 52) {
+      const segsLoaded = loadElf32IntoFlash(elfData, this.flash, FLASH_BASE);
+      console.log(`[Rp2350System.init] Flash loaded from ELF: ${segsLoaded} PT_LOAD segments`);
+    } else {
+      // Fallback: raw binary at fixed game offset
+      const len = Math.min(rom.length, FLASH_SIZE - GAME_FLASH_OFFSET);
+      this.flash.set(rom.subarray(0, len), GAME_FLASH_OFFSET);
+      console.log(`[Rp2350System.init] Flash loaded from binary: ${len}b at offset 0x${GAME_FLASH_OFFSET.toString(16)}`);
+    }
 
-    // Spot-check: log first 8 bytes at flash offset (should be ARM vector table)
+    // Spot-check: log first 8 bytes at game offset (should be ARM code)
     const fb = this.flash.subarray(GAME_FLASH_OFFSET, GAME_FLASH_OFFSET + 8);
     console.log(`[Rp2350System.init] Flash[0x${GAME_FLASH_OFFSET.toString(16)}..+8]:`,
       Array.from(fb).map(b => b.toString(16).padStart(2,'0')).join(' '));

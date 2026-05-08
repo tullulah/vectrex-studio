@@ -73,10 +73,10 @@ MAIN:
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    LDA #$50
-    STA DRAW_SCALE        ; Default T1 scale = calibrated ($50=80, ROM header Width byte)
-    LDA #$50
-    STA DRAW_ANIM_SCALE   ; Default anim scale = calibrated ($50=80)
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
+    LDA #$7F
+    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)
     CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)
     LDD #0
     STD VAR_STATE_TITLE
@@ -380,7 +380,7 @@ IF_END_16:
 ; Function: state_title (Bank #0)
 state_title:
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: init_screen (index=1, 57 paths)
+    ; Asset: init_screen (index=0, 57 paths)
     LDD #0
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
@@ -393,7 +393,7 @@ state_title:
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
-    LDX #1        ; Asset index for lookup
+    LDX #0        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
     CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
@@ -1829,7 +1829,7 @@ draw_player:
 .CMP_57_END:
     LBEQ IF_NEXT_123
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: player_jump (index=7, 18 paths)
+    ; Asset: player_jump (index=6, 18 paths)
     LDD >VAR_PLAYER_X
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
@@ -1844,7 +1844,7 @@ draw_player:
     TFR B,A
     STA MIRROR_X
     CLR MIRROR_Y
-    LDX #7        ; Asset index for lookup
+    LDX #6        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
     CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
@@ -1875,7 +1875,7 @@ IF_END_122:
 .CMP_59_END:
     LBEQ IF_NEXT_127
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: player_idle (index=6, 18 paths)
+    ; Asset: player_idle (index=5, 18 paths)
     LDD >VAR_PLAYER_X
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
@@ -1890,7 +1890,7 @@ IF_END_122:
     TFR B,A
     STA MIRROR_X
     CLR MIRROR_Y
-    LDX #6        ; Asset index for lookup
+    LDX #5        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
     CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
@@ -2534,7 +2534,7 @@ draw_hud:
     ORG $0000  ; Sequential bank model
 
 ;***************************************************************************
-; ASSETS IN BANK #1 (12 assets)
+; ASSETS IN BANK #1 (11 assets)
 ;***************************************************************************
 
 ; Generated from Yukidama-Ondo.vmus (internal name: Imported MIDI)
@@ -13523,325 +13523,6 @@ _PLAYER_JUMP_PATH17:    ; Path 17
     FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
     FCB 2                ; End marker (path complete)
 
-; ==== Level: WORLD_1_1 ====
-; Author: 
-; Difficulty: medium
-
-_WORLD_1_1_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 0  ; Background object count
-    FCB 12  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _WORLD_1_1_BG_OBJECTS
-    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
-    FDB _WORLD_1_1_FG_OBJECTS
-    FDB -96  ; scrollLimit left (camera left cannot go below this)
-    FDB 95  ; scrollLimit right (camera right cannot exceed this)
-    FDB 127  ; scrollLimit top
-    FDB -128  ; scrollLimit bottom
-    FCB 5  ; enemy_count
-    FDB _WORLD_1_1_ENEMY_INSTANCES  ; enemy_instances_ptr (0 if none)
-
-_WORLD_1_1_BG_OBJECTS:
-
-_WORLD_1_1_GAMEPLAY_OBJECTS:
-; Object: obj_1777629435866 (obstacle)
-    FCB 2  ; type
-    FDB -76  ; x
-    FDB -88  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629603657 (obstacle)
-    FCB 2  ; type
-    FDB 76  ; x
-    FDB -88  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629716564 (obstacle)
-    FCB 2  ; type
-    FDB 1  ; x
-    FDB -88  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629652016 (obstacle)
-    FCB 2  ; type
-    FDB 0  ; x
-    FDB -40  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM2_VECTORS  ; vector_ptr
-    FCB 57  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629837468 (obstacle)
-    FCB 2  ; type
-    FDB -63  ; x
-    FDB 8  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM3_VECTORS  ; vector_ptr
-    FCB 40  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629850372 (obstacle)
-    FCB 2  ; type
-    FDB 62  ; x
-    FDB 8  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM3_VECTORS  ; vector_ptr
-    FCB 40  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629612161 (obstacle)
-    FCB 2  ; type
-    FDB 0  ; x
-    FDB 62  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM4_VECTORS  ; vector_ptr
-    FCB 70  ; half_width (1.00x, ROM+18)
-    FCB 18  ; half_height (1.00x, ROM+19)
-
-; Object: enemy_1777977396795 (enemy)
-    FCB 1  ; type
-    FDB -37  ; x
-    FDB -18  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1777990278190 (enemy)
-    FCB 1  ; type
-    FDB -85  ; x
-    FDB 27  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1777990284382 (enemy)
-    FCB 1  ; type
-    FDB 87  ; x
-    FDB 27  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1777990290282 (enemy)
-    FCB 1  ; type
-    FDB -34  ; x
-    FDB 85  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1777990329920 (enemy)
-    FCB 1  ; type
-    FDB 37  ; x
-    FDB 85  ; y
-    FDB 80  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-
-_WORLD_1_1_FG_OBJECTS:
-
-_WORLD_1_1_ENEMY_COUNT EQU 5
-
-; ---- Enemy instances for level WORLD_1_1 ----
-_WORLD_1_1_ENEMY_INSTANCES:
-    ; instance 0
-    FDB _ENEMY1_ENEMY   ; enemy type ptr
-    FDB -37                   ; spawn x
-    FDB -18                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY0_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 1
-    FDB _ENEMY1_ENEMY   ; enemy type ptr
-    FDB -85                   ; spawn x
-    FDB 27                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY1_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 2
-    FDB _ENEMY1_ENEMY   ; enemy type ptr
-    FDB 87                   ; spawn x
-    FDB 27                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY2_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 3
-    FDB _ENEMY1_ENEMY   ; enemy type ptr
-    FDB -34                   ; spawn x
-    FDB 85                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY3_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 4
-    FDB _ENEMY1_ENEMY   ; enemy type ptr
-    FDB 37                   ; spawn x
-    FDB 85                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY4_WPS   ; ptr to waypoints (0 if none)
-
-_WORLD_1_1_ENEMY0_WPS:
-    FDB -37  ; wp x
-    FDB -18  ; wp y
-    FDB 38  ; wp x
-    FDB -19  ; wp y
-
-_WORLD_1_1_ENEMY1_WPS:
-    FDB -85  ; wp x
-    FDB 28  ; wp y
-    FDB -31  ; wp x
-    FDB 27  ; wp y
-
-_WORLD_1_1_ENEMY2_WPS:
-    FDB 87  ; wp x
-    FDB 28  ; wp y
-    FDB 31  ; wp x
-    FDB 28  ; wp y
-
-_WORLD_1_1_ENEMY3_WPS:
-    FDB -34  ; wp x
-    FDB 86  ; wp y
-    FDB 0  ; wp x
-    FDB 86  ; wp y
-
-_WORLD_1_1_ENEMY4_WPS:
-    FDB 37  ; wp x
-    FDB 86  ; wp y
-    FDB 0  ; wp x
-    FDB 86  ; wp y
-
-
 ; Generated from platform4.vec (Malban Draw_Sync_List format)
 ; Total paths: 11, points: 55
 ; X bounds: min=-70, max=70, width=140
@@ -14295,6 +13976,243 @@ _GAME_OVER_MUSIC:
     FDB     _GAME_OVER_MUSIC       ; Jump to start (absolute address)
 
 
+; ==== Level: WORLD_1_1 ====
+; Author: 
+; Difficulty: medium
+
+_WORLD_1_1_LEVEL:
+    FDB -96  ; World bounds: xMin (16-bit signed)
+    FDB 95  ; xMax (16-bit signed)
+    FDB -128  ; yMin (16-bit signed)
+    FDB 127  ; yMax (16-bit signed)
+    FDB 0  ; Time limit (seconds)
+    FDB 0  ; Target score
+    FCB 0  ; Background object count
+    FCB 12  ; Gameplay object count
+    FCB 0  ; Foreground object count
+    FDB _WORLD_1_1_BG_OBJECTS
+    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
+    FDB _WORLD_1_1_FG_OBJECTS
+    FDB -96  ; scrollLimit left (camera left cannot go below this)
+    FDB 95  ; scrollLimit right (camera right cannot exceed this)
+    FDB 127  ; scrollLimit top
+    FDB -128  ; scrollLimit bottom
+    FCB 0  ; enemy_count
+    FDB 0  ; enemy_instances_ptr (0 if none)
+
+_WORLD_1_1_BG_OBJECTS:
+
+_WORLD_1_1_GAMEPLAY_OBJECTS:
+; Object: obj_1777629435866 (obstacle)
+    FCB 2  ; type
+    FDB -76  ; x
+    FDB -88  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629603657 (obstacle)
+    FCB 2  ; type
+    FDB 76  ; x
+    FDB -88  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629716564 (obstacle)
+    FCB 2  ; type
+    FDB 1  ; x
+    FDB -88  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629652016 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -40  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629837468 (obstacle)
+    FCB 2  ; type
+    FDB -63  ; x
+    FDB 8  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629850372 (obstacle)
+    FCB 2  ; type
+    FDB 62  ; x
+    FDB 8  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629612161 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB 62  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM4_VECTORS  ; vector_ptr
+    FCB 70  ; half_width (1.00x, ROM+18)
+    FCB 18  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1778168745975 (background)
+    FCB 4  ; type
+    FDB -35  ; x
+    FDB 92  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLAYER_IDLE_VECTORS  ; vector_ptr
+    FCB 6  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1778168748754 (background)
+    FCB 4  ; type
+    FDB 35  ; x
+    FDB 94  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLAYER_IDLE_VECTORS  ; vector_ptr
+    FCB 6  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1778168753324 (background)
+    FCB 4  ; type
+    FDB -54  ; x
+    FDB 29  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLAYER_JUMP_VECTORS  ; vector_ptr
+    FCB 6  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1778168756304 (background)
+    FCB 4  ; type
+    FDB 59  ; x
+    FDB 30  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLAYER_JUMP_VECTORS  ; vector_ptr
+    FCB 6  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1778168759165 (background)
+    FCB 4  ; type
+    FDB -1  ; x
+    FDB -17  ; y
+    FDB 80  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLAYER_IDLE_VECTORS  ; vector_ptr
+    FCB 6  ; half_width (1.00x, ROM+18)
+    FCB 9  ; half_height (1.00x, ROM+19)
+
+
+_WORLD_1_1_FG_OBJECTS:
+
+_WORLD_1_1_ENEMY_COUNT EQU 0
+
+
 ; Generated from Boss_Intro.vmus (internal name: Imported MIDI)
 ; Tempo: 120 BPM, Total events: 12 (PSG Direct format)
 ; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
@@ -14572,37 +14490,6 @@ _PLATFORM3_PATH2:    ; Path 2
     FCB $FF,$F2,$14          ; flag=-1, dy=-14, dx=20
     FCB $FF,$0E,$14          ; flag=-1, dy=14, dx=20
     FCB $FF,$F2,$14          ; flag=-1, dy=-14, dx=20
-    FCB 2                ; End marker (path complete)
-
-; Generated from enemy1.vec (Malban Draw_Sync_List format)
-; Total paths: 2, points: 5
-; X bounds: min=-15, max=28, width=43
-; Center: (6, 0)
-
-_ENEMY1_WIDTH EQU 43
-_ENEMY1_HALF_WIDTH EQU 21
-_ENEMY1_HEIGHT EQU 30
-_ENEMY1_HALF_HEIGHT EQU 15
-_ENEMY1_CENTER_X EQU 6
-_ENEMY1_CENTER_Y EQU 0
-
-_ENEMY1_VECTORS:  ; Main entry (header + 2 path(s))
-    FDB 2               ; path_count (runtime metadata, 2 bytes)
-    FDB _ENEMY1_PATH0        ; pointer to path 0
-    FDB _ENEMY1_PATH1        ; pointer to path 1
-
-_ENEMY1_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $0F,$00,0,0        ; path0: header (y=15, x=0)
-    FCB $FF,$E2,$F1          ; flag=-1, dy=-30, dx=-15
-    FCB $FF,$00,$1E          ; flag=-1, dy=0, dx=30
-    FCB $FF,$1E,$F1          ; flag=-1, dy=30, dx=-15
-    FCB 2                ; End marker (path complete)
-
-_ENEMY1_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $FD,$01,0,0        ; path1: header (y=-3, x=1)
-    FCB $FF,$09,$1B          ; flag=-1, dy=9, dx=27
     FCB 2                ; End marker (path complete)
 
 
@@ -23652,10 +23539,8 @@ VECTOR_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
 
 VECTOR_ADDR_TABLE:
-    FDB _ENEMY1_VECTORS    ; enemy1
     FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _PLATFORM1_VECTORS    ; platform1
     FDB _PLATFORM2_VECTORS    ; platform2
@@ -23715,7 +23600,7 @@ _ENEMY1_ENEMY:
     FCB 2          ; [4] action_count
 
 _ENEMY1_ENEMY_ACTIONS:
-    FCB $06   ; action 0 (idle) sprite_idx ($FF=none)
+    FCB $05   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 0                   ; loop=false
     FCB 0                    ; pad (keeps 4-byte entry stride)
@@ -23739,7 +23624,6 @@ ASSET_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
 
 ASSET_ADDR_TABLE:
     FDB _HENSHOKU_MUSIC    ; Henshoku
@@ -23747,14 +23631,13 @@ ASSET_ADDR_TABLE:
     FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
     FDB _PLAYER_JUMP_VECTORS    ; player_jump
-    FDB _WORLD_1_1_LEVEL    ; world_1_1
     FDB _PLATFORM4_VECTORS    ; platform4
     FDB _GAME_OVER_MUSIC    ; Game_Over
+    FDB _WORLD_1_1_LEVEL    ; world_1_1
     FDB _BOSS_INTRO_MUSIC    ; Boss_Intro
     FDB _PLATFORM2_VECTORS    ; platform2
     FDB _PLATFORM1_VECTORS    ; platform1
     FDB _PLATFORM3_VECTORS    ; platform3
-    FDB _ENEMY1_VECTORS    ; enemy1
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
@@ -24166,193 +24049,6 @@ _PLAYER_WALK1_PATH16:    ; Path 16
     FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
     FCB 2                ; End marker (path complete)
 
-; Generated from player_walk2.vec (Malban Draw_Sync_List format)
-; Total paths: 17, points: 87
-; X bounds: min=-5, max=6, width=11
-; Center: (0, 0)
-
-_PLAYER_WALK2_WIDTH EQU 11
-_PLAYER_WALK2_HALF_WIDTH EQU 5
-_PLAYER_WALK2_HEIGHT EQU 19
-_PLAYER_WALK2_HALF_HEIGHT EQU 9
-_PLAYER_WALK2_CENTER_X EQU 0
-_PLAYER_WALK2_CENTER_Y EQU 0
-
-_PLAYER_WALK2_VECTORS:  ; Main entry (header + 17 path(s))
-    FDB 17               ; path_count (runtime metadata, 2 bytes)
-    FDB _PLAYER_WALK2_PATH0        ; pointer to path 0
-    FDB _PLAYER_WALK2_PATH1        ; pointer to path 1
-    FDB _PLAYER_WALK2_PATH2        ; pointer to path 2
-    FDB _PLAYER_WALK2_PATH3        ; pointer to path 3
-    FDB _PLAYER_WALK2_PATH4        ; pointer to path 4
-    FDB _PLAYER_WALK2_PATH5        ; pointer to path 5
-    FDB _PLAYER_WALK2_PATH6        ; pointer to path 6
-    FDB _PLAYER_WALK2_PATH7        ; pointer to path 7
-    FDB _PLAYER_WALK2_PATH8        ; pointer to path 8
-    FDB _PLAYER_WALK2_PATH9        ; pointer to path 9
-    FDB _PLAYER_WALK2_PATH10        ; pointer to path 10
-    FDB _PLAYER_WALK2_PATH11        ; pointer to path 11
-    FDB _PLAYER_WALK2_PATH12        ; pointer to path 12
-    FDB _PLAYER_WALK2_PATH13        ; pointer to path 13
-    FDB _PLAYER_WALK2_PATH14        ; pointer to path 14
-    FDB _PLAYER_WALK2_PATH15        ; pointer to path 15
-    FDB _PLAYER_WALK2_PATH16        ; pointer to path 16
-
-_PLAYER_WALK2_PATH0:    ; Path 0
-    FCB 65              ; path0: intensity
-    FCB $08,$FD,0,0        ; path0: header (y=8, x=-3)
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH1:    ; Path 1
-    FCB 65              ; path1: intensity
-    FCB $06,$FE,0,0        ; path1: header (y=6, x=-2)
-    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
-    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
-    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
-    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH2:    ; Path 2
-    FCB 65              ; path2: intensity
-    FCB $02,$FD,0,0        ; path2: header (y=2, x=-3)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
-    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
-    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH3:    ; Path 3
-    FCB 65              ; path3: intensity
-    FCB $FF,$01,0,0        ; path3: header (y=-1, x=1)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH4:    ; Path 4
-    FCB 65              ; path4: intensity
-    FCB $FD,$02,0,0        ; path4: header (y=-3, x=2)
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH5:    ; Path 5
-    FCB 65              ; path5: intensity
-    FCB $FB,$02,0,0        ; path5: header (y=-5, x=2)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
-    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH6:    ; Path 6
-    FCB 65              ; path6: intensity
-    FCB $FC,$FC,0,0        ; path6: header (y=-4, x=-4)
-    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH7:    ; Path 7
-    FCB 65              ; path7: intensity
-    FCB $FB,$FD,0,0        ; path7: header (y=-5, x=-3)
-    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
-    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH8:    ; Path 8
-    FCB 65              ; path8: intensity
-    FCB $F9,$FB,0,0        ; path8: header (y=-7, x=-5)
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH9:    ; Path 9
-    FCB 65              ; path9: intensity
-    FCB $00,$03,0,0        ; path9: header (y=0, x=3)
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH10:    ; Path 10
-    FCB 65              ; path10: intensity
-    FCB $FF,$03,0,0        ; path10: header (y=-1, x=3)
-    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
-    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH11:    ; Path 11
-    FCB 65              ; path11: intensity
-    FCB $02,$01,0,0        ; path11: header (y=2, x=1)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
-    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH12:    ; Path 12
-    FCB 65              ; path12: intensity
-    FCB $05,$02,0,0        ; path12: header (y=5, x=2)
-    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
-    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH13:    ; Path 13
-    FCB 65              ; path13: intensity
-    FCB $05,$04,0,0        ; path13: header (y=5, x=4)
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH14:    ; Path 14
-    FCB 65              ; path14: intensity
-    FCB $05,$02,0,0        ; path14: header (y=5, x=2)
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH15:    ; Path 15
-    FCB 65              ; path15: intensity
-    FCB $04,$03,0,0        ; path15: header (y=4, x=3)
-    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK2_PATH16:    ; Path 16
-    FCB 65              ; path16: intensity
-    FCB $05,$03,0,0        ; path16: header (y=5, x=3)
-    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
-    FCB 2                ; End marker (path complete)
-
 ; Generated from player_walk3.vec (Malban Draw_Sync_List format)
 ; Total paths: 20, points: 82
 ; X bounds: min=-7, max=6, width=13
@@ -24548,6 +24244,193 @@ _PLAYER_WALK3_PATH19:    ; Path 19
     FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
     FCB $FF,$01,$05          ; flag=-1, dy=1, dx=5
     FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk2.vec (Malban Draw_Sync_List format)
+; Total paths: 17, points: 87
+; X bounds: min=-5, max=6, width=11
+; Center: (0, 0)
+
+_PLAYER_WALK2_WIDTH EQU 11
+_PLAYER_WALK2_HALF_WIDTH EQU 5
+_PLAYER_WALK2_HEIGHT EQU 19
+_PLAYER_WALK2_HALF_HEIGHT EQU 9
+_PLAYER_WALK2_CENTER_X EQU 0
+_PLAYER_WALK2_CENTER_Y EQU 0
+
+_PLAYER_WALK2_VECTORS:  ; Main entry (header + 17 path(s))
+    FDB 17               ; path_count (runtime metadata, 2 bytes)
+    FDB _PLAYER_WALK2_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK2_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK2_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK2_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK2_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK2_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK2_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK2_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK2_PATH8        ; pointer to path 8
+    FDB _PLAYER_WALK2_PATH9        ; pointer to path 9
+    FDB _PLAYER_WALK2_PATH10        ; pointer to path 10
+    FDB _PLAYER_WALK2_PATH11        ; pointer to path 11
+    FDB _PLAYER_WALK2_PATH12        ; pointer to path 12
+    FDB _PLAYER_WALK2_PATH13        ; pointer to path 13
+    FDB _PLAYER_WALK2_PATH14        ; pointer to path 14
+    FDB _PLAYER_WALK2_PATH15        ; pointer to path 15
+    FDB _PLAYER_WALK2_PATH16        ; pointer to path 16
+
+_PLAYER_WALK2_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $08,$FD,0,0        ; path0: header (y=8, x=-3)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $06,$FE,0,0        ; path1: header (y=6, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $02,$FD,0,0        ; path2: header (y=2, x=-3)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $FF,$01,0,0        ; path3: header (y=-1, x=1)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $FD,$02,0,0        ; path4: header (y=-3, x=2)
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $FB,$02,0,0        ; path5: header (y=-5, x=2)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $FC,$FC,0,0        ; path6: header (y=-4, x=-4)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $FB,$FD,0,0        ; path7: header (y=-5, x=-3)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $F9,$FB,0,0        ; path8: header (y=-7, x=-5)
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $00,$03,0,0        ; path9: header (y=0, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $FF,$03,0,0        ; path10: header (y=-1, x=3)
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $02,$01,0,0        ; path11: header (y=2, x=1)
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$02,0,0        ; path12: header (y=5, x=2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $05,$04,0,0        ; path13: header (y=5, x=4)
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $05,$02,0,0        ; path14: header (y=5, x=2)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $04,$03,0,0        ; path15: header (y=4, x=3)
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK2_PATH16:    ; Path 16
+    FCB 65              ; path16: intensity
+    FCB $05,$03,0,0        ; path16: header (y=5, x=3)
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Generated from player_walk4.vec (Malban Draw_Sync_List format)

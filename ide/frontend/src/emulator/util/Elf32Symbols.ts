@@ -162,3 +162,57 @@ export function readElf32Entry(elf: Uint8Array): number {
   if (readU32LE(elf, 0) !== ELF_MAGIC) return 0;
   return readU32LE(elf, 24) & ~1; // e_entry, Thumb bit stripped
 }
+
+/**
+ * Load all PT_LOAD segments from an ELF32 binary into a flash buffer.
+ *
+ * For each LOAD segment whose VMA falls within [flashBase, flashBase+flash.length),
+ * the segment file data is copied into flash at offset (vaddr - flashBase).
+ *
+ * This is preferred over using a raw .bin file because the raw binary can be
+ * contaminated by a different compilation target (e.g. M6809 128KB ROM
+ * overwriting the same SnowBros.bin path as the 163KB ARM binary).
+ *
+ * @param elf       Raw ELF32 bytes.
+ * @param flash     Destination buffer (pre-filled with 0xFF).
+ * @param flashBase Base address of flash in the target's address space.
+ * @returns         Number of segments loaded, or 0 on failure.
+ */
+export function loadElf32IntoFlash(elf: Uint8Array, flash: Uint8Array, flashBase: number): number {
+  if (elf.length < 52) return 0;
+  if (readU32LE(elf, 0) !== ELF_MAGIC) return 0;
+  if (elf[4] !== 1) return 0; // must be ELF32
+  if (elf[5] !== 1) return 0; // must be little-endian
+
+  const PT_LOAD   = 1;
+  const PHDR_SIZE = 32; // ELF32 program header entry is 32 bytes
+
+  const e_phoff    = readU32LE(elf, 28); // offset of program header table
+  const e_phnum    = readU16LE(elf, 44); // number of program headers
+
+  if (e_phoff === 0 || e_phnum === 0) return 0;
+
+  let loaded = 0;
+  for (let i = 0; i < e_phnum; i++) {
+    const base = e_phoff + i * PHDR_SIZE;
+    if (base + PHDR_SIZE > elf.length) break;
+
+    const p_type   = readU32LE(elf, base +  0);
+    const p_offset = readU32LE(elf, base +  4);
+    const p_vaddr  = readU32LE(elf, base +  8);
+    const p_filesz = readU32LE(elf, base + 16);
+
+    if (p_type !== PT_LOAD) continue;
+    if (p_filesz === 0) continue;
+
+    // Map VMA to flash offset
+    const flashOffset = (p_vaddr - flashBase) >>> 0;
+    if (flashOffset >= flash.length) continue; // outside flash range
+
+    const copyLen = Math.min(p_filesz, flash.length - flashOffset);
+    flash.set(elf.subarray(p_offset, p_offset + copyLen), flashOffset);
+    loaded++;
+  }
+
+  return loaded;
+}

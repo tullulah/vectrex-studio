@@ -1230,6 +1230,41 @@ export class Thumb2 implements ICpu {
       return count + 1;
     }
 
+    // ── LDMIA (load multiple, increment after) T2 ───────────────────────
+    // hw0 = 0xE890|Rn (W=0) or 0xE8B0|Rn (W=1, writeback). hw1 = reglist.
+    // Note: 0xE8BD (LDMIA SP!, …) is already handled as POP T2 above.
+    if ((hw0 & 0xFFF0) === 0xE890 || (hw0 & 0xFFF0) === 0xE8B0) {
+      const rn2 = hw0 & 0xF;
+      const writeback = (hw0 & 0x0020) !== 0;
+      let addr = u32(this.regs[rn2]);
+      for (let r = 0; r <= 15; r++) {
+        if (hw1 & (1 << r)) {
+          const val = this.read32(bus, addr);
+          if (r === 15) this.regs[15] = val & ~1;
+          else if (r !== 13) this.regs[r] = val;
+          addr = u32(addr + 4);
+        }
+      }
+      if (writeback) this.regs[rn2] = addr;
+      return 2;
+    }
+
+    // ── STMIA (store multiple, increment after) T2 ──────────────────────
+    // hw0 = 0xE880|Rn (W=0) or 0xE8A0|Rn (W=1, writeback). hw1 = reglist.
+    if ((hw0 & 0xFFF0) === 0xE880 || (hw0 & 0xFFF0) === 0xE8A0) {
+      const rn2 = hw0 & 0xF;
+      const writeback = (hw0 & 0x0020) !== 0;
+      let addr = u32(this.regs[rn2]);
+      for (let r = 0; r <= 14; r++) {
+        if (hw1 & (1 << r)) {
+          this.write32(bus, addr, this.regs[r]);
+          addr = u32(addr + 4);
+        }
+      }
+      if (writeback) this.regs[rn2] = addr;
+      return 2;
+    }
+
     const rn  = hw0 & 0xf;
     const rt  = (hw1 >>> 12) & 0xf;
 

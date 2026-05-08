@@ -3978,7 +3978,6 @@ function osint()
         for( v = 0; v < vector_draw_cnt; v++ )
         {
             draw = vectors_draw[v];
-            console.log(`[Vector ${v}] Drawing line: (${draw.x0}, ${draw.y0}) -> (${draw.x1}, ${draw.y1}), color: ${draw.color}`);
             this.osint_line(draw.x0, draw.y0, draw.x1, draw.y1, draw.color);
         }
 
@@ -4406,11 +4405,6 @@ function VecX()
 
                     /* fall through */
                 case 0xf:
-                    // DEBUG: Log VIA Port A read
-                    if (this.snd_select === 14 && typeof window !== 'undefined' && window.injectedButtonStatePSG !== undefined) {
-                        console.log('[JSVecx VIA Read case 0xf] via_orb:', (this.via_orb & 0x18).toString(16), 'snd_select:', this.snd_select);
-                    }
-                    
                     if( (this.via_orb & 0x18) == 0x08 )
                     {
                         /* the snd chip is driving port a */
@@ -4419,10 +4413,8 @@ function VecX()
                         if (this.snd_select === 14) {
                             if (typeof window !== 'undefined' && window.injectedButtonStatePSG !== undefined) {
                                 data = window.injectedButtonStatePSG;
-                                console.log('[JSVecx VIA Read] ✓ Using injected PSG reg 14:', data.toString(16).padStart(2, '0'));
                             } else {
                                 data = this.snd_regs[this.snd_select];
-                                console.log('[JSVecx VIA Read] ✗ No injected value, using snd_regs[14]:', data.toString(16).padStart(2, '0'));
                             }
                         } else {
                             data = this.snd_regs[this.snd_select];
@@ -4639,6 +4631,13 @@ function VecX()
                         this.via_t1on = 1; /* timer 1 starts running */
                         this.via_t1int = 1;
                         this.via_t1pb7 = 0;
+
+                        // DEBUG: log T1 start
+                        if (!this._t1log_count) this._t1log_count = 0;
+                        if (this._t1log_count < 20) {
+                            console.log(`[T1 START #${this._t1log_count}] t1ll=${this.via_t1ll} t1c=${this.via_t1c} alg_curr=(${this.alg_curr_x},${this.alg_curr_y}) alg_dx=${this.alg_dx} alg_dy=${this.alg_dy} ca2=${this.via_ca2} orb=${this.via_orb}`);
+                            this._t1log_count++;
+                        }
 
                         //this.int_update();
                         // int_update inline begin
@@ -5364,6 +5363,12 @@ function VecX()
                     if( (this.via_t1c & 0xffff) == 0xffff )
                     {
                         /* counter just rolled over */
+                        // DEBUG: log T1 fire
+                        if (!this._t1fire_count) this._t1fire_count = 0;
+                        if (this._t1fire_count < 20) {
+                            console.log(`[T1 FIRE  #${this._t1fire_count}] alg_curr=(${this.alg_curr_x},${this.alg_curr_y}) ca2=${this.via_ca2}`);
+                            this._t1fire_count++;
+                        }
                         if( this.via_acr & 0x40 )
                         {
                             /* continuous interrupt mode */
