@@ -95,6 +95,7 @@ fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>
 }
 
 /// Resolve a .venemy file and add all sprite (.vec / .vanim stems) to used_names.
+/// For .vanim sprites, also recursively collects the vec_refs inside the vanim.
 fn collect_venemy_sprite_names(enemy_type: &str, venemy_dir: &std::path::Path, used_names: &mut HashSet<String>) {
     let path = venemy_dir.join(format!("{}.venemy", enemy_type));
     let Ok(text) = fs::read_to_string(&path) else { return };
@@ -104,14 +105,20 @@ fn collect_venemy_sprite_names(enemy_type: &str, venemy_dir: &std::path::Path, u
         let sprite = action["sprite"].as_str().unwrap_or("");
         if sprite.is_empty() { continue; }
         let filename = sprite.split('/').last().unwrap_or(sprite);
-        let stem = if filename.ends_with(".vec") {
-            filename.trim_end_matches(".vec")
+        if filename.ends_with(".vec") {
+            let stem = filename.trim_end_matches(".vec");
+            used_names.insert(stem.to_string());
         } else if filename.ends_with(".vanim") {
-            filename.trim_end_matches(".vanim")
-        } else {
-            continue;
-        };
-        used_names.insert(stem.to_string());
+            let stem = filename.trim_end_matches(".vanim");
+            used_names.insert(stem.to_string());
+            // Also collect the individual .vec frames referenced inside the vanim
+            let vanim_path = venemy_dir.parent()
+                .map(|p| p.join("animations").join(filename))
+                .filter(|p| p.exists());
+            if let Some(vanim_path) = vanim_path {
+                collect_vanim_vec_refs(vanim_path.to_str().unwrap_or(""), used_names);
+            }
+        }
     }
 }
 
