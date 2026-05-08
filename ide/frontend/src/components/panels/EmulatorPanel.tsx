@@ -2428,6 +2428,8 @@ export const EmulatorPanel: React.FC = () => {
         console.log('[EmulatorPanel] uvm2 target — hardware only, no browser emulation');
         setPitrexImgPath(payload.binPath);
         setShowPitrexOverlay(true);
+        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
+        loadOverlay(romName + '.bin');
         return;
       }
 
@@ -2480,6 +2482,8 @@ export const EmulatorPanel: React.FC = () => {
         } catch (e) {
           console.error('[EmulatorPanel] Failed to start pitrex emulator:', e);
         }
+        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
+        loadOverlay(romName + '.bin');
         return;
       }
 
@@ -2553,6 +2557,8 @@ export const EmulatorPanel: React.FC = () => {
         } catch (e) {
           console.error('[EmulatorPanel] Failed to load ARM binary:', e);
         }
+        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
+        loadOverlay(romName + '.bin');
         return;
       }
 
