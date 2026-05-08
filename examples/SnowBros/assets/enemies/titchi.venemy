@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "name": "titchi",
+  "actions": [
+    {
+      "name": "idle",
+      "sprite": "assets/vectors/titchi_idle.vec",
+      "loop": true
+    },
+    {
+      "name": "walk",
+      "sprite": "assets/animations/titchi_walk.vanim",
+      "loop": true
+    }
+  ],
+  "stats": {
+    "hp": 3,
+    "speed": 40,
+    "action_duration": 180
+  },
+  "behavior": {
+    "type": "patrol",
+    "patrol": {
+      "waypoints": [],
+      "loop": false,
+      "mirrorOnPatrol": false,
+      "defaultFacing": "right",
+      "patrolAction": "walk"
+    },
+    "chase_range": 80,
+    "respawn": false,
+    "wave": 0
+  }
+}

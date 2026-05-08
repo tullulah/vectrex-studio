@@ -1,0 +1,134 @@
+{
+  "version": "1.0",
+  "name": "titchi_walk2",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "path_titchi_w2_1",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 5, "y": -1, "z": 0 },
+            { "x": 5, "y": -4, "z": 0 },
+            { "x": -1, "y": -5, "z": 0 },
+            { "x": 1, "y": -7, "z": 0 },
+            { "x": -5, "y": -7, "z": 0 },
+            { "x": -3, "y": -5, "z": 0 },
+            { "x": -5, "y": 1, "z": 0 },
+            { "x": -3, "y": 4, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_2",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 3, "y": -5, "z": 0 },
+            { "x": 6, "y": -7, "z": 0 },
+            { "x": 1, "y": -7, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_3",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 4, "y": -1, "z": 0 },
+            { "x": 7, "y": -1, "z": 0 },
+            { "x": 5, "y": 1, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_4",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 4, "y": 3, "z": 0 },
+            { "x": -1, "y": 5, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_5",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": -2, "y": 3, "z": 0 },
+            { "x": -2, "y": 6, "z": 0 },
+            { "x": 0, "y": 4, "z": 0 },
+            { "x": -2, "y": 3, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_6",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 3, "y": 3, "z": 0 },
+            { "x": 4, "y": 5, "z": 0 },
+            { "x": 5, "y": 3, "z": 0 },
+            { "x": 3, "y": 3, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_7",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": -2, "y": -1, "z": 0 },
+            { "x": -1, "y": -4, "z": 0 },
+            { "x": 0, "y": -1, "z": 0 },
+            { "x": -2, "y": -1, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_8",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": -4, "y": -4, "z": 0 },
+            { "x": -7, "y": -3, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_9",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 2, "y": 3, "z": 0 },
+            { "x": 1, "y": 1, "z": 0 },
+            { "x": 3, "y": 1, "z": 0 },
+            { "x": 2, "y": 3, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_10",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 4, "y": 3, "z": 0 },
+            { "x": 5, "y": 1, "z": 0 },
+            { "x": 4, "y": 3, "z": 0 }
+          ]
+        },
+        {
+          "name": "path_titchi_w2_11",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            { "x": 5, "y": -3, "z": 0 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}
