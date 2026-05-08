@@ -327,10 +327,12 @@ function VecX()
         data &= 0xff;
 
         // Multi-bank ROM bank switch register (write-only, single address intercept)
+        // MUST return here - $DF00 is in VIA range ($D000-$DFFF), falling through would
+        // corrupt VIA_port_b (register 0) which destroys ALG beam positioning state.
         if (this.isMultibank && address === this.bankRegister) {
             const numBanks = Math.floor(this.multibankRom.length / 0x4000);
-            this.currentBank = data & (numBanks - 1); // Mask to valid bank range
-            // DON'T return - let the write complete normally so CPU cycle continues
+            this.currentBank = data & (numBanks - 1);
+            return;
         }
         
         if( (address & 0xe000) == 0xe000 )

@@ -1502,6 +1502,16 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("@ pitrex_show_level() — draw all level objects (BG+GP+FG)\n");
     s.push_str(".global pitrex_show_level\n.type pitrex_show_level, %function\npitrex_show_level:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    // Save and clear PITREX_BRIGHTNESS_OVERRIDE so level objects use their .vec intensities.
+    // SET_INTENSITY() sets this global; if left non-zero it would override all .vec path
+    // intensities and show everything at the same brightness (e.g. always 127).
+    // 36 bytes already pushed (9 regs). sub sp,#4 → total 40 (8-aligned). Saved at [sp].
+    s.push_str("    sub     sp, sp, #4\n");
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    ldrb    r1, [r0]\n");
+    s.push_str("    str     r1, [sp]            @ save PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]            @ clear override → use .vec per-path intensities\n");
     // Load level header ptr
     s.push_str("    ldr     r9, =LEVEL_DATA_PTR\n");
     s.push_str("    ldr     r9, [r9]            @ r9 = header ptr\n");
@@ -1618,6 +1628,11 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    bne     .Lshl_fg_loop\n");
 
     s.push_str(".Lshl_done:\n");
+    // Restore PITREX_BRIGHTNESS_OVERRIDE and clean up the saved word from stack
+    s.push_str("    ldr     r0, [sp]            @ restore saved PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    ldr     r1, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    strb    r0, [r1]\n");
+    s.push_str("    add     sp, sp, #4          @ pop saved override word\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
