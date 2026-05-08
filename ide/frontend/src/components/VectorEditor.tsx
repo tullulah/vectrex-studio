@@ -2898,6 +2898,35 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     updateResource(resource, newResource);
   }, [resource, updateResource]);
 
+  // Simplify — apply Ramer-Douglas-Peucker to all paths in ALL layers
+  // Removes near-collinear intermediate points (invisible at Vectrex scale).
+  // Supports undo via the standard updateResource history mechanism.
+  const handleSimplify = useCallback((epsilon: number = 2.0) => {
+    const newResource: VecResource = {
+      ...resource,
+      layers: resource.layers.map(layer => ({
+        ...layer,
+        paths: layer.paths.map(path => {
+          const simplified = simplifyPath(path.points, epsilon);
+          // Only update if we actually removed points
+          if (simplified.length === path.points.length) return path;
+          return { ...path, points: simplified };
+        }),
+      })),
+    };
+
+    // Count removed points for feedback
+    const origPts = resource.layers.flatMap(l => l.paths).reduce((s, p) => s + p.points.length, 0);
+    const newPts  = newResource.layers.flatMap(l => l.paths).reduce((s, p) => s + p.points.length, 0);
+    const removed = origPts - newPts;
+    if (removed === 0) {
+      console.log('[VectorEditor] Simplify: nothing to remove at epsilon=' + epsilon);
+      return;
+    }
+    console.log(`[VectorEditor] Simplify ε=${epsilon}: removed ${removed} pts (${origPts}→${newPts}), ~${Math.round(removed/origPts*100)}%`);
+    updateResource(resource, newResource);
+  }, [resource, updateResource]);
+
   // Chain edges — merge 2-point open paths that share endpoints into polylines
   const chainEdges = useCallback(() => {
     const layer = resource.layers[currentLayerIndex];
@@ -3293,6 +3322,13 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         title="Chain edges — merge 2-point paths that share endpoints into polylines, reducing path count"
       >
         🔗 Chain Edges
+      </button>
+      <button
+        onClick={() => handleSimplify(2.0)}
+        style={{ padding: '8px 12px', background: '#5a3a2e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Simplify paths (ε=2) — Ramer-Douglas-Peucker: removes near-collinear points invisible at Vectrex scale. Undoable with Ctrl+Z."
+      >
+        ✂️ Simplify
       </button>
 
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
