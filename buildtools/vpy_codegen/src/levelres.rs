@@ -422,11 +422,14 @@ impl VPlayLevel {
         let val: serde_json::Value = serde_json::from_str(&text).ok()?;
 
         let patrol_action = val["behavior"]["patrol"]["patrolAction"].as_str().unwrap_or("");
-        if patrol_action.is_empty() {
-            return None;
-        }
         let actions = val["actions"].as_array()?;
-        let action = actions.iter().find(|a| a["name"].as_str() == Some(patrol_action))?;
+        // If patrolAction is set, use that action; otherwise fall back to "idle", then first action
+        let action = if !patrol_action.is_empty() {
+            actions.iter().find(|a| a["name"].as_str() == Some(patrol_action))?
+        } else {
+            actions.iter().find(|a| a["name"].as_str() == Some("idle"))
+                .or_else(|| actions.first())?
+        };
         let sprite_path = action["sprite"].as_str().unwrap_or("");
         if sprite_path.is_empty() {
             return None;

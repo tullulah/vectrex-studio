@@ -55,7 +55,17 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
                         {
                             for obj in objects {
                                 if let Some(et) = obj.get("enemyType").and_then(|v| v.as_str()) {
-                                    if !et.is_empty() { used_names.insert(et.to_string()); }
+                                    if !et.is_empty() {
+                                        used_names.insert(et.to_string());
+                                        // Resolve venemy → actual sprite vec/vanim names
+                                        let venemy_dir = std::path::Path::new(&level_asset.path)
+                                            .parent()
+                                            .and_then(|p| p.parent())
+                                            .map(|p| p.join("enemies"));
+                                        if let Some(ref dir) = venemy_dir {
+                                            collect_venemy_sprite_names(et, dir, &mut used_names);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -81,6 +91,27 @@ fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>
         .chain(level.layers.foreground.iter())
     {
         used_names.insert(obj.vector_name.clone());
+    }
+}
+
+/// Resolve a .venemy file and add all sprite (.vec / .vanim stems) to used_names.
+fn collect_venemy_sprite_names(enemy_type: &str, venemy_dir: &std::path::Path, used_names: &mut HashSet<String>) {
+    let path = venemy_dir.join(format!("{}.venemy", enemy_type));
+    let Ok(text) = fs::read_to_string(&path) else { return };
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) else { return };
+    let Some(actions) = val["actions"].as_array() else { return };
+    for action in actions {
+        let sprite = action["sprite"].as_str().unwrap_or("");
+        if sprite.is_empty() { continue; }
+        let filename = sprite.split('/').last().unwrap_or(sprite);
+        let stem = if filename.ends_with(".vec") {
+            filename.trim_end_matches(".vec")
+        } else if filename.ends_with(".vanim") {
+            filename.trim_end_matches(".vanim")
+        } else {
+            continue;
+        };
+        used_names.insert(stem.to_string());
     }
 }
 
