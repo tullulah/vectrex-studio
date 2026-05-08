@@ -27,7 +27,7 @@ next_is_boss: i16 = 0       # flag auxiliar para detección de nivel boss
 
 # ── Player ──────────────────────────────────────────────────────────────────
 player_x: i16 = 0
-player_y: i16 = -114
+player_y: i16 = -120
 player_vx: i16 = 0
 player_vy: i16 = 0
 player_facing: i16 = 0
@@ -37,13 +37,15 @@ prev_y: i16 = 0
 
 # ── Physics ──────────────────────────────────────────────────────────────────
 GRAVITY: i16 = 1
-JUMP_SPEED: i16 = 13
+JUMP_SPEED: i16 = 12
 MAX_FALL_SPEED: i16 = 12
 PLAYER_HH: i16 = 14     # half-height de player_idle.vec
 
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
 WORLD_X_MIN: i16 = -96
 WORLD_X_MAX: i16 = 95
+WORLD_Y_MIN: i16 = -110    # suelo + margen sprite
+WORLD_Y_MAX: i16 = 120     # techo + margen sprite (pantalla llega a 127)
 
 # ── Snowball system ───────────────────────────────────────────────────────────
 SNOW_SPEED: i16 = 5             # velocidad horizontal
@@ -375,11 +377,11 @@ def update_player():
                 player_on_ground = 1
 
     # Límites de pantalla
-    if player_y > 110:
-        player_y = 110
+    if player_y > WORLD_Y_MAX:
+        player_y = WORLD_Y_MAX
         player_vy = 0
-    if player_y < -110:
-        player_y = -110
+    if player_y < WORLD_Y_MIN:
+        player_y = WORLD_Y_MIN
         player_vy = 0
         player_on_ground = 1
 
@@ -489,6 +491,6 @@ def draw_snowballs():
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
-    PRINT_NUMBER(-80, 110, score)          # puntuación, arriba-izquierda
-    PRINT_NUMBER(-80, 95, lives)           # vidas, debajo del score
-    PRINT_NUMBER(60, 110, time_left / 60)   # tiempo en segundos, arriba-derecha
+    PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
+    PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
+    PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha
