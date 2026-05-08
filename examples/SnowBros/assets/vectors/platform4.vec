@@ -136,50 +136,6 @@
           ]
         },
         {
-          "name": "path_1777629172669",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": -8,
-              "y": -18,
-              "z": 0
-            },
-            {
-              "x": -7,
-              "y": -16,
-              "z": 0
-            },
-            {
-              "x": -6,
-              "y": -18,
-              "z": 0
-            }
-          ]
-        },
-        {
-          "name": "path_1777629177900",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": 7,
-              "y": -18,
-              "z": 0
-            },
-            {
-              "x": 8,
-              "y": -15,
-              "z": 0
-            },
-            {
-              "x": 9,
-              "y": -18,
-              "z": 0
-            }
-          ]
-        },
-        {
           "name": "path_1777629205378",
           "intensity": 85,
           "closed": false,
@@ -331,7 +287,7 @@
         },
         {
           "name": "path_1778165908589",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -348,7 +304,7 @@
         },
         {
           "name": "path_1778165911873",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {

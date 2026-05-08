@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-07"
+    "description": "Created in Playground - 2026-05-08"
   },
   "worldBounds": {
     "xMin": -96,
@@ -61,7 +61,7 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 1,
+        "x": 0,
         "y": -88,
         "rotation": 0,
         "scale": 1,
@@ -118,7 +118,7 @@
         "type": "obstacle",
         "vectorName": "platform3",
         "layer": "gameplay",
-        "x": 62,
+        "x": 63,
         "y": 8,
         "rotation": 0,
         "scale": 1,
@@ -175,99 +175,144 @@
         }
       },
       {
-        "id": "obj_1778168745975",
-        "type": "background",
-        "vectorName": "player_idle",
+        "id": "enemy_1778250201678",
+        "type": "enemy",
+        "vectorName": "",
         "layer": "gameplay",
-        "x": -35,
-        "y": 92,
+        "x": -45,
+        "y": 90,
         "rotation": 0,
         "scale": 1,
+        "enemyType": "enemy1",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -44,
+            "y": 89
+          },
+          {
+            "x": -4,
+            "y": 89
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        }
       },
       {
-        "id": "obj_1778168748754",
-        "type": "background",
-        "vectorName": "player_idle",
+        "id": "enemy_1778250209582",
+        "type": "enemy",
+        "vectorName": "",
         "layer": "gameplay",
-        "x": 35,
-        "y": 94,
+        "x": 45,
+        "y": 90,
         "rotation": 0,
         "scale": 1,
+        "enemyType": "enemy1",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": 45,
+            "y": 89
+          },
+          {
+            "x": 4,
+            "y": 89
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        }
       },
       {
-        "id": "obj_1778168753324",
-        "type": "background",
-        "vectorName": "player_jump",
+        "id": "enemy_1778250211554",
+        "type": "enemy",
+        "vectorName": "",
         "layer": "gameplay",
-        "x": -54,
-        "y": 29,
+        "x": -92,
+        "y": 27,
         "rotation": 0,
         "scale": 1,
+        "enemyType": "enemy1",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -92,
+            "y": 27
+          },
+          {
+            "x": -24,
+            "y": 27
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        }
       },
       {
-        "id": "obj_1778168756304",
-        "type": "background",
-        "vectorName": "player_jump",
+        "id": "enemy_1778250212985",
+        "type": "enemy",
+        "vectorName": "",
         "layer": "gameplay",
-        "x": 59,
-        "y": 30,
+        "x": 92,
+        "y": 27,
         "rotation": 0,
         "scale": 1,
+        "enemyType": "enemy1",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": 93,
+            "y": 26
+          },
+          {
+            "x": 23,
+            "y": 26
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        }
       },
       {
-        "id": "obj_1778168759165",
-        "type": "background",
-        "vectorName": "player_idle",
+        "id": "enemy_1778250214379",
+        "type": "enemy",
+        "vectorName": "",
         "layer": "gameplay",
-        "x": -1,
-        "y": -17,
+        "x": -56,
+        "y": -21,
         "rotation": 0,
         "scale": 1,
+        "enemyType": "enemy1",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -57,
+            "y": -21
+          },
+          {
+            "x": 56,
+            "y": -21
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        }
       }
     ],
     "foreground": []
