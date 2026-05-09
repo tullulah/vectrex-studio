@@ -2507,8 +2507,18 @@ SPAWN_FILL_LOOP:\n\
     CMPD #0\n\
     BEQ SPAWN_SM_NOSM   ; no state machine\n\
     TFR D,X             ; X = SM table header\n\
-    LDA 1,X   ; initial_state_idx\n\
+    PSHS X              ; save SM header ptr\n\
+    LDA 1,X             ; initial_state_idx\n\
     STA 13,Y            ; pool.sm_state = initial\n\
+    ; Look up initial state action\n\
+    TFR A,B             ; B = initial_state_idx\n\
+    PULS X              ; X = SM header\n\
+    LEAX 2,X            ; X = &states[0]\n\
+    LDA #13             ; stride = 13 bytes per state record\n\
+    MUL                 ; D = initial_state_idx * 13\n\
+    LEAX D,X            ; X = &states[initial]\n\
+    LDA ,X              ; action_idx from state[0]\n\
+    STA 7,Y             ; pool.action = initial action\n\
     BRA SPAWN_SM_DONE\n\
 SPAWN_SM_NOSM:\n\
     LDA #$FF\n\
@@ -2827,7 +2837,7 @@ DRW_ENE_LOOP:\n\
     LDA 5,Y             ; type_ptr hi (helpers bank in multibank)\n\
     LDB 6,Y             ; type_ptr lo\n\
     TFR D,X             ; X = _NAME_ENEMY header\n\
-    LEAX 5,X            ; skip 5-byte header → action table base\n\
+    LEAX 7,X            ; skip 7-byte header (hp,speed,action_dur×2,action_count,sm_ptr×2) → action table\n\
     LDA 7,Y             ; action index\n\
     ASLA\n\
     ASLA                ; × 4 bytes per action entry\n\

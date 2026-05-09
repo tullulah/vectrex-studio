@@ -931,11 +931,10 @@ pub fn emit_builtin(
             }
             expressions::emit_simple_expr(&args[0], out, assets);
             out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
-            out.push_str("    LDB #ENEMY_POOL_STRIDE\n");
+            out.push_str("    LDB #16             ; ENEMY_POOL_STRIDE\n");
             out.push_str("    MUL                 ; D = A * stride\n");
-            out.push_str("    TFR D,U\n");
             out.push_str("    LDX #ENEMY_POOL\n");
-            out.push_str("    LEAX U,X            ; X = &pool[i]\n");
+            out.push_str("    LEAX D,X            ; X = &pool[i]\n");
             match up.as_str() {
                 "GET_ENEMY_ACTIVE" => {
                     out.push_str("    CLRA\n");

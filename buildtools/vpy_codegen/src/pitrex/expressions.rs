@@ -289,6 +289,81 @@ pub fn emit_call(
         return Ok("    @ DRAW_ENEMIES\n    bl      pitrex_draw_enemies\n".to_string());
     }
 
+    // ── Enemy query/command builtins — ARM32 pool access ───────────────────
+    // Pool layout: stride=32, active@+12, x@+4(i16), y@+6(i16), sm_state@+28
+    if info.name.to_uppercase() == "GET_ENEMY_ACTIVE" {
+        let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_ACTIVE: missing arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ GET_ENEMY_ACTIVE(idx)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   ldrb    r0, [r1, #12]   @ active\n"
+        ));
+    }
+    if info.name.to_uppercase() == "GET_ENEMY_X" {
+        let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_X: missing arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ GET_ENEMY_X(idx)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   ldrsh   r0, [r1, #4]    @ x (i16)\n"
+        ));
+    }
+    if info.name.to_uppercase() == "GET_ENEMY_Y" {
+        let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_Y: missing arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ GET_ENEMY_Y(idx)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   ldrsh   r0, [r1, #6]    @ y (i16)\n"
+        ));
+    }
+    if info.name.to_uppercase() == "GET_ENEMY_STATE" {
+        let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_STATE: missing arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ GET_ENEMY_STATE(idx)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   ldrb    r0, [r1, #28]   @ sm_state\n"
+        ));
+    }
+    if info.name.to_uppercase() == "KILL_ENEMY" {
+        let idx_s = emit_expr(info.args.first().ok_or("KILL_ENEMY: missing arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ KILL_ENEMY(idx)\n\
+             {idx_s}\
+             \x20   bl      pitrex_kill_enemy\n"
+        ));
+    }
+    if info.name.to_uppercase() == "ENEMY_FIRE_EVENT" {
+        let idx_s = emit_expr(info.args.first().ok_or("ENEMY_FIRE_EVENT: missing idx arg")?, var_addrs)?;
+        // Second arg must be a string literal — compute FNV-1a hash at compile time
+        let hash: u8 = if let Some(Expr::StringLit(ev)) = info.args.get(1) {
+            // FNV-1a hash (same as M6809 builtins.rs fnv1a_u8)
+            let mut h: u32 = 2166136261;
+            for b in ev.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
+            (h & 0xFF) as u8
+        } else { 0 };
+        return Ok(format!(
+            "    @ ENEMY_FIRE_EVENT(idx, hash=0x{hash:02X})\n\
+             {idx_s}\
+             \x20   mov     r1, #{hash}\n\
+             \x20   bl      pitrex_enemy_fire_event\n"
+        ));
+    }
+
     let fn_name = match info.name.as_str() {
         "WAIT_RECAL"      => "pitrex_wait_recal",
         "SET_INTENSITY"   => "pitrex_set_intensity",

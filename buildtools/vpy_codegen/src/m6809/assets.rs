@@ -64,6 +64,37 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
         }
     }
 
+    // Also scan .venemy files for their action sprite names so those sprites are included
+    // in vector_entries and thus get a valid index in vec_idx_map.
+    let enemy_asset_names: Vec<(String, String)> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Enemy))
+        .map(|a| (a.name.clone(), a.path.clone()))
+        .collect();
+    for (_, enemy_path) in &enemy_asset_names {
+        if let Ok(resource) = crate::venemy::EnemyResource::load(std::path::Path::new(enemy_path)) {
+            for action in &resource.actions {
+                let stem = std::path::Path::new(&action.sprite)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !stem.is_empty() {
+                    used_names.insert(stem);
+                }
+            }
+        }
+    }
+    // Second pass: scan any newly added .vanim files for their vec_refs
+    let new_anim_names: Vec<String> = used_names.iter()
+        .filter(|n| assets.iter().any(|a| matches!(a.asset_type, AssetType::Animation) && &a.name == *n))
+        .cloned()
+        .collect();
+    for anim_name in &new_anim_names {
+        if let Some(anim_asset) = assets.iter().find(|a| matches!(a.asset_type, AssetType::Animation) && &a.name == anim_name) {
+            collect_vanim_vec_refs(&anim_asset.path, &mut used_names);
+        }
+    }
+
     // Filter assets to only those referenced in code (or used by levels)
     // Enemy assets are always included: they're loaded dynamically via SPAWN_ENEMIES
     // and referenced through level data at runtime, not by name in VPy source.

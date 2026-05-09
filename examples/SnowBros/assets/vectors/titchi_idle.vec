@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "name": "titchi_walk1",
+  "name": "titchi_idle",
   "canvas": {
     "width": 256,
     "height": 256,
@@ -32,7 +32,7 @@
               "z": 0
             },
             {
-              "x": 0,
+              "x": 1,
               "y": -7,
               "z": 0
             },
@@ -64,22 +64,17 @@
           "closed": false,
           "points": [
             {
-              "x": 2,
-              "y": -7,
-              "z": 0
-            },
-            {
               "x": 3,
               "y": -5,
               "z": 0
             },
             {
-              "x": 7,
-              "y": -6,
+              "x": 6,
+              "y": -7,
               "z": 0
             },
             {
-              "x": 2,
+              "x": 1,
               "y": -7,
               "z": 0
             }
@@ -212,7 +207,7 @@
             },
             {
               "x": -7,
-              "y": -4,
+              "y": -3,
               "z": 0
             }
           ]
@@ -274,30 +269,6 @@
             {
               "x": 5,
               "y": -3,
-              "z": 0
-            }
-          ]
-        },
-        {
-          "name": "path_titchi_w1_foot1",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": -5,
-              "y": -7,
-              "z": 0
-            }
-          ]
-        },
-        {
-          "name": "path_titchi_w1_foot2",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": 1,
-              "y": -7,
               "z": 0
             }
           ]

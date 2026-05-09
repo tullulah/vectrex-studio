@@ -35,6 +35,7 @@
 .extern __aeabi_idivmod
 .extern RPI_AuxUartInit
 .extern RPI_AuxUartWrite
+.extern bcm2835_st
 
 .section .bss
 .align 2
@@ -159,9 +160,33 @@ PITREX_CUR_X: .space 4
 PITREX_CUR_Y: .space 4
 UART_TRACE_FRAMES_LEFT: .space 4
 UART_FRAME_NUM: .space 4
+FRAME_WORK_START: .space 4
+CPU_PRINT_CTR: .space 4
+_DV3D_BUF: .space 256
 
 .section .rodata
 .align 2
+@ Precomputed unit circle table: 16 segments × 2 coords (x,y) × 4 bytes = 136 bytes
+.global PITREX_CIRCLE_TABLE
+PITREX_CIRCLE_TABLE:
+    .word 1024, 0
+    .word 946, 392
+    .word 724, 724
+    .word 392, 946
+    .word 0, 1024
+    .word -392, 946
+    .word -724, 724
+    .word -946, 392
+    .word -1024, 0
+    .word -946, -392
+    .word -724, -724
+    .word -392, -946
+    .word 0, -1024
+    .word 392, -946
+    .word 724, -724
+    .word 946, -392
+    .word 1024, 0
+
 .align 2
 ARRAY_LOCATION_X_COORDS_DATA:
     .hword 40
@@ -352,42 +377,83 @@ ARRAY_LEVEL_ENEMY_SPEED_DATA:
 @ PiTrex ARM32 builtins
 @ ================================================================
 
-@ pitrex_wait_recal() — frame sync + force calibrated T1=80
+@ pitrex_wait_recal() — frame sync + CPU usage measurement via BCM system timer
 .global pitrex_wait_recal
 .type pitrex_wait_recal, %function
 pitrex_wait_recal:
-    push    {lr}
+    push    {r4, r5, r6, lr}
+    ldr     r4, =bcm2835_st
+    ldr     r4, [r4]            @ dereference: r4 = ST base ptr
+    ldr     r5, [r4, #4]        @ r5 = CLO (µs counter, 32-bit)
+    ldr     r4, =FRAME_WORK_START
+    ldr     r6, [r4]            @ r6 = start of last work window
+    cmp     r6, #0
+    beq     .Lwrcal_skip_measure
+    sub     r6, r5, r6          @ r6 = work_us (handles 32-bit wrap)
+    ldr     r4, =CPU_PRINT_CTR
+    ldr     r0, [r4]
+    subs    r0, r0, #1
+    str     r0, [r4]
+    bgt     .Lwrcal_skip_measure
+    mov     r0, #50
+    str     r0, [r4]            @ reset counter
+    ldr     r0, =.Lstr_cpu_w
+    bl      vpy_uart_puts        @ "W="
+    mov     r0, r6
+    bl      vpy_uart_print_int   @ work µs
+    ldr     r0, =.Lstr_cpu_of
+    bl      vpy_uart_puts        @ "/20000us\r\n"
+.Lwrcal_skip_measure:
     bl      v_WaitRecal
+    ldr     r4, =bcm2835_st
+    ldr     r4, [r4]
+    ldr     r5, [r4, #4]        @ CLO after recal
+    ldr     r4, =FRAME_WORK_START
+    str     r5, [r4]
     mov     r0, #80
     bl      v_setScale
     ldr     r0, =UART_TRACE_FRAMES_LEFT
     ldr     r1, [r0]
     cmp     r1, #0
-    popeq   {pc}
+    popeq   {r4, r5, r6, pc}
     sub     r1, r1, #1
     str     r1, [r0]
-    @ increment frame number, print header
     ldr     r0, =UART_FRAME_NUM
     ldr     r2, [r0]
     add     r2, r2, #1
     str     r2, [r0]
     ldr     r0, =.Lstr_frame_hdr
-    bl      vpy_uart_puts       @ ">>> FRAME "
+    bl      vpy_uart_puts
     ldr     r0, =UART_FRAME_NUM
     ldr     r0, [r0]
     bl      vpy_uart_print_int
     ldr     r0, =.Lstr_frame_hdr_end
-    bl      vpy_uart_puts       @ " START <<<\r\n"
-    pop     {pc}
+    bl      vpy_uart_puts
+    pop     {r4, r5, r6, pc}
     .ltorg
 
 @ pitrex_set_intensity(r0=brightness 0-127)
 .global pitrex_set_intensity
 .type pitrex_set_intensity, %function
 pitrex_set_intensity:
-    push    {lr}
+    push    {r4, lr}
+    mov     r4, r0              @ save brightness in callee-saved r4
+    ldr     r1, =PITREX_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]
+    ldr     r0, =UART_TRACE_FRAMES_LEFT
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     .Lsint_no_trace
+    ldr     r0, =.Lstr_sint
+    bl      vpy_uart_puts
+    mov     r0, r4
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_crlf
+    bl      vpy_uart_puts
+.Lsint_no_trace:
+    mov     r0, r4
     bl      v_setBrightness
-    pop     {pc}
+    pop     {r4, pc}
     .ltorg
 
 @ pitrex_move(r0=x, r1=y) — move beam, no draw
@@ -435,28 +501,36 @@ pitrex_draw_line_rel:
     mul     r5, r1, r5          @ r5 = dy * 127
     mov     r6, r2              @ r6 = brightness
     ldr     r7, =PITREX_CUR_X
-    ldr     r0, [r7]            @ r0 = cur_x
-    ldr     r12, =PITREX_CUR_Y
-    ldr     r1, [r12]           @ r1 = cur_y
+    ldmia   r7, {r0, r1}        @ r0=cur_x r1=cur_y (burst)
     add     r2, r0, r4          @ r2 = new_x
     add     r3, r1, r5          @ r3 = new_y
-    push    {r0, r1, r2, r3}    @ save call args
+    ldr     r12, =UART_TRACE_FRAMES_LEFT
+    ldr     r12, [r12]
+    cmp     r12, #0
+    beq     .Ldlr_no_trace
+    push    {r0, r1, r2, r3}    @ save call args across trace
     mov     r1, r2              @ trace x = new_x
     mov     r2, r3              @ trace y = new_y
     ldr     r0, =.Lstr_dr
     bl      uart_trace_xy
+    ldr     r0, =.Lstr_br
+    bl      vpy_uart_puts
+    mov     r0, r6              @ brightness
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_crlf
+    bl      vpy_uart_puts
     pop     {r0, r1, r2, r3}
+.Ldlr_no_trace:
     push    {r6}               @ brightness as 5th arg
     bl      v_directDraw32
     add     sp, sp, #4
-    ldr     r1, =PITREX_CUR_X
-    ldr     r2, [r1]
-    add     r2, r2, r4
-    str     r2, [r1]            @ PITREX_CUR_X += dx*100
-    ldr     r1, =PITREX_CUR_Y
-    ldr     r2, [r1]
-    add     r2, r2, r5
-    str     r2, [r1]            @ PITREX_CUR_Y += dy*100
+    ldr     r7, =PITREX_CUR_X
+    ldr     r2, [r7]            @ r2=cur_x
+    ldr     r3, [r7, #4]        @ r3=cur_y
+    add     r2, r2, r4          @ new cur_x
+    add     r3, r3, r5          @ new cur_y
+    str     r2, [r7]            @ store new cur_x
+    str     r3, [r7, #4]        @ store new cur_y
     pop     {r4, r5, r6, r7, pc}
     .ltorg
 
@@ -477,6 +551,10 @@ dv_path_loop:
     bge     dv_done
     ldr     r9, [r4], #4        @ r9 = path data ptr
     ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    ldrb    r0, [r0]
+    cmp     r0, #0
+    movne   r10, r0             @ override from SET_INTENSITY
     ldrsb   r1, [r9], #1        @ r1 = y_start (i8)
     ldrsb   r0, [r9], #1        @ r0 = x_start (i8)
     add     r9, r9, #2          @ skip 2 hdr padding bytes
@@ -510,9 +588,7 @@ dv_seg_loop:
     ldrsb   r1, [r9], #1        @ dy
     ldrsb   r0, [r9], #1        @ dx
     mov     r2, r10             @ intensity from .vec
-    push    {r4, r5, r6, r7, r8, r9, r10}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r8, r9, r10}
     b       dv_seg_loop
 dv_seg_done:
     add     r8, r8, #1
@@ -520,8 +596,8 @@ dv_seg_done:
 dv_bezier_seg:
     push    {r4, r5, r6, r7, r8, r9, r10}
     sub     sp, sp, #24
-    ldr     r4, [sp, #52]        @ r4 = raw ox (VPy units)
-    ldr     r5, [sp, #56]        @ r5 = raw oy (VPy units)
+    add     r0, sp, #52         @ r0 = &ox (sp after push+sub)
+    ldmia   r0, {r4, r5}        @ r4=ox, r5=oy (2 words loaded at once)
     ldrsb   r6, [r9], #1
     add     r0, r6, r4
     ldrsb   r6, [r9], #1
@@ -554,6 +630,9 @@ dv_bezier_seg:
     b       dv_seg_loop
 dv_done:
     add     sp, sp, #8          @ remove saved raw ox, oy
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
     pop     {r4, r5, r6, r7, r8, r9, r10, pc}
     .ltorg
 
@@ -561,22 +640,22 @@ dv_done:
 .global pitrex_draw_vector_ex
 .type pitrex_draw_vector_ex, %function
 pitrex_draw_vector_ex:
-    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 32 bytes
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
     mov     r4, r0              @ asset header ptr
     mov     r5, r1              @ ox
     mov     r6, r2              @ oy
     mov     r7, r3              @ mirror flag
-    ldr     r9, [r4], #4        @ path_count
-    push    {r9}                @ [sp+0] = path_count
-    mov     r9, #0
-    push    {r9}                @ [sp+0] = path_idx, [sp+4] = path_count
+    ldr     r11, [r4], #4       @ r11 = path_count
+    mov     r8, #0              @ r8 = path_idx = 0
 dvex_path_loop:
-    ldr     r0, [sp]            @ path_idx
-    ldr     r1, [sp, #4]        @ path_count
-    cmp     r0, r1
+    cmp     r8, r11
     bge     dvex_done
     ldr     r9, [r4], #4        @ r9 = path data ptr
     ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    ldrb    r0, [r0]
+    cmp     r0, #0
+    movne   r10, r0             @ override from SET_INTENSITY
     ldrsb   r1, [r9], #1        @ r1 = y_start (i8)
     ldrsb   r0, [r9], #1        @ r0 = x_start (i8)
     add     r9, r9, #2          @ skip 2 hdr padding bytes
@@ -615,21 +694,16 @@ dvex_seg_loop:
     it      eq
     rsbeq   r0, r0, #0
     mov     r2, r10             @ intensity from .vec
-    push    {r4, r5, r6, r7, r9, r10}
     bl      pitrex_draw_line_rel
-    pop     {r4, r5, r6, r7, r9, r10}
     b       dvex_seg_loop
 dvex_seg_done:
-    ldr     r0, [sp]
-    add     r0, r0, #1
-    str     r0, [sp]            @ path_idx++
+    add     r8, r8, #1          @ path_idx++
     b       dvex_path_loop
 dvex_bezier_seg:
     push    {r4, r5, r6, r7, r9, r10}
     sub     sp, sp, #24
-    ldr     r4, [sp, #28]        @ r4 = ox (raw VPy units)
-    ldr     r5, [sp, #32]        @ r5 = oy (raw VPy units)
-    ldr     r12, [sp, #36]       @ r12 = mirror flag
+    add     r0, sp, #28         @ r0 = &ox
+    ldmia   r0, {r4, r5, r12}   @ r4=ox, r5=oy, r12=mirror (3 loads in 2 inst)
     ldrsb   r6, [r9], #1
     add     r0, r6, r4
     cmp     r12, #1
@@ -673,8 +747,10 @@ dvex_bezier_seg:
     pop     {r4, r5, r6, r7, r9, r10}
     b       dvex_seg_loop
 dvex_done:
-    add     sp, sp, #8          @ pop path_idx + path_count
-    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
 @ pitrex_j1_x() → r0 = X axis (-127..127)
@@ -924,698 +1000,93 @@ pitrex_draw_polygon:
 .global pitrex_draw_circle
 .type pitrex_draw_circle, %function
 pitrex_draw_circle:
-    push    {r4, r5, r6, r7, lr}
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
     mov     r4, r0          @ cx
     mov     r5, r1          @ cy
     asr     r6, r2, #1      @ radius = diameter/2
     mov     r7, r3          @ brightness
     mov     r0, #127
-    mul     r4, r4, r0
-    mul     r5, r5, r0
-    mul     r6, r6, r0
-    ldr     r0, =1024
+    mul     r4, r4, r0      @ cx_s
+    mul     r5, r5, r0      @ cy_s
+    mul     r6, r6, r0      @ radius_s
+    ldr     r11, =PITREX_CIRCLE_TABLE
+    mov     r10, #0         @ segment index
+.Lcircle_loop:
+    cmp     r10, #16
+    bge     .Lcircle_done
+    lsl     r0, r10, #3     @ offset = i * 8 (2 words per vertex)
+    add     r0, r11, r0
+    ldmia   r0!, {r8, r9}   @ r8=x0_raw, r9=y0_raw (from table)
+    ldmia   r0, {r0, r1}    @ r0=x1_raw, r1=y1_raw
+    mul     r8, r8, r6
+    asr     r8, r8, #10
+    add     r8, r8, r4      @ x0 = (x0_raw*r)>>10 + cx
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5      @ y0
     mul     r0, r0, r6
     asr     r0, r0, #10
-    add     r0, r0, r4
-    mov     r1, #0
+    add     r0, r0, r4      @ x1
     mul     r1, r1, r6
     asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
+    add     r1, r1, r5      @ y1
+    mov     r2, r0          @ x1 → r2
+    mov     r3, r1          @ y1 → r3
+    mov     r0, r8          @ x0 → r0
+    mov     r1, r9          @ y0 → r1
+    push    {r7}            @ brightness as 5th arg
     bl      v_directDraw32
     add     sp, sp, #4
-    ldr     r0, =946
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    mov     r2, #0
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =1024
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    mov     r0, #0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =1024
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =946
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =1024
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    mov     r3, #0
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =1024
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    mov     r1, #0
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =946
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    mov     r2, #0
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =1024
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    mov     r0, #0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =1024
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    neg     r3, r3
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =946
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    neg     r1, r1
-    mul     r1, r1, r6
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =1024
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    mov     r3, #0
-    mul     r3, r3, r6
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r7}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    pop     {r4, r5, r6, r7, pc}
+    add     r10, r10, #1    @ i++
+    b       .Lcircle_loop
+.Lcircle_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
 @ pitrex_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=brightness)
 .global pitrex_draw_ellipse
 .type pitrex_draw_ellipse, %function
 pitrex_draw_ellipse:
-    push    {r4, r5, r6, r7, r8, r9, lr}
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
     mov     r4, r0          @ cx
     mov     r5, r1          @ cy
     mov     r6, r2          @ rx
     mov     r7, r3          @ ry
-    ldr     r8, [sp, #28]   @ brightness
+    ldr     r8, [sp, #36]   @ brightness ([sp+9regs*4])
     mov     r9, #127
-    mul     r4, r4, r9
-    mul     r5, r5, r9
-    mul     r6, r6, r9
-    mul     r7, r7, r9
-    ldr     r0, =1024
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    mov     r1, #0
-    mul     r1, r1, r7
+    mul     r4, r4, r9      @ cx_s
+    mul     r5, r5, r9      @ cy_s
+    mul     r6, r6, r9      @ rx_s
+    mul     r7, r7, r9      @ ry_s
+    ldr     r11, =PITREX_CIRCLE_TABLE
+    mov     r10, #0         @ segment index
+.Lellipse_loop:
+    cmp     r10, #16
+    bge     .Lellipse_done
+    lsl     r0, r10, #3
+    add     r0, r11, r0
+    ldmia   r0!, {r9, r1}   @ r9=x0_raw, r1=y0_raw
+    ldmia   r0, {r2, r3}    @ r2=x1_raw, r3=y1_raw
+    mul     r9, r9, r6      @ x0 = x0_raw * rx
+    asr     r9, r9, #10
+    add     r9, r9, r4      @ x0 += cx
+    mul     r1, r1, r7      @ y0 = y0_raw * ry
     asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    mul     r2, r2, r6
+    add     r1, r1, r5      @ y0 += cy
+    mul     r2, r2, r6      @ x1
     asr     r2, r2, #10
     add     r2, r2, r4
-    ldr     r3, =392
-    mul     r3, r3, r7
+    mul     r3, r3, r7      @ y1
     asr     r3, r3, #10
     add     r3, r3, r5
-    push    {r8}
+    mov     r0, r9
+    push    {r8}            @ brightness
     bl      v_directDraw32
     add     sp, sp, #4
-    ldr     r0, =946
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    mov     r2, #0
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =1024
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    mov     r0, #0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =1024
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =946
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =1024
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    mov     r3, #0
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =1024
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    mov     r1, #0
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =946
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    neg     r2, r2
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    neg     r0, r0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    mov     r2, #0
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =1024
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    mov     r0, #0
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =1024
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =392
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =946
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =392
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =946
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =724
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =724
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =724
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =724
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =946
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    ldr     r3, =392
-    neg     r3, r3
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    ldr     r0, =946
-    mul     r0, r0, r6
-    asr     r0, r0, #10
-    add     r0, r0, r4
-    ldr     r1, =392
-    neg     r1, r1
-    mul     r1, r1, r7
-    asr     r1, r1, #10
-    add     r1, r1, r5
-    ldr     r2, =1024
-    mul     r2, r2, r6
-    asr     r2, r2, #10
-    add     r2, r2, r4
-    mov     r3, #0
-    mul     r3, r3, r7
-    asr     r3, r3, #10
-    add     r3, r3, r5
-    push    {r8}
-    bl      v_directDraw32
-    add     sp, sp, #4
-    pop     {r4, r5, r6, r7, r8, r9, pc}
+    add     r10, r10, #1
+    b       .Lellipse_loop
+.Lellipse_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
 @ pitrex_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp]=start,[sp+4]=sweep,[sp+8]=bright)
@@ -2565,6 +2036,12 @@ pitrex_load_level:
 .type pitrex_show_level, %function
 pitrex_show_level:
     push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    sub     sp, sp, #4
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r0]
+    str     r1, [sp]            @ save PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]            @ clear override → use .vec per-path intensities
     ldr     r9, =LEVEL_DATA_PTR
     ldr     r9, [r9]            @ r9 = header ptr
     cmp     r9, #0
@@ -2675,6 +2152,10 @@ pitrex_show_level:
     subs    r4, r4, #1
     bne     .Lshl_fg_loop
 .Lshl_done:
+    ldr     r0, [sp]            @ restore saved PITREX_BRIGHTNESS_OVERRIDE
+    ldr     r1, =PITREX_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]
+    add     sp, sp, #4          @ pop saved override word
     pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
@@ -3220,41 +2701,266 @@ pitrex_update_level:
     pop     {r4, r5, r6, r7, r8, r9, pc}
     .ltorg
 
-@ pitrex_draw_vector_3d(r0=x, r1=y, r2=z, r3=asset_ptr) — perspective
+@ pitrex_draw_vector_3d(r0=asset,r1=rot_x,r2=rot_y,r3=rot_z,[sp]=oy,[sp+4]=ox)
 .global pitrex_draw_vector_3d
 .type pitrex_draw_vector_3d, %function
 pitrex_draw_vector_3d:
-    push    {r4, r5, r6, r7, lr}
-    mov     r4, r0              @ x
-    mov     r5, r1              @ y
-    mov     r6, r2              @ z
-    mov     r7, r3              @ asset_ptr
-    cmp     r6, #0
-    ble     .Ldv3d_done
-    mov     r0, r4
-    ldr     r1, =100
-    mul     r0, r0, r1          @ x * 100
-    mov     r1, r6
-    bl      __aeabi_idiv        @ r0 = screen_x
-    mov     r4, r0              @ save screen_x
+    push    {r4-r11, lr}
+    mov     r4, r0
+    ldr     r10, [sp, #40]
+    ldr     r11, [sp, #36]
+    ldrb    r9, [r4]
+    cmp     r9, #0
+    beq     .Ldv3d_draw_orig
+    mov     r0, r2
+    bl      pitrex_get_sin
+    mov     r8, r0
+    mov     r0, r2
+    bl      pitrex_get_cos
+    mov     r7, r0
+    ldr     r6, =_DV3D_BUF
+    strb    r9, [r6]
+    mov     r5, #0
+.Lv3d_loop:
+    cmp     r5, r9
+    beq     .Lv3d_loop_done
     mov     r0, r5
-    ldr     r1, =100
-    mul     r0, r0, r1          @ y * 100
-    mov     r1, r6
-    bl      __aeabi_idiv        @ r0 = screen_y
-    mov     r5, r0              @ save screen_y
-    push    {r4, r5}            @ save screen coords
-    mov     r8, #127
-    push    {r8}                @ 5th arg: intensity=127
-    mov     r3, #0              @ mirror=0
-    mov     r2, r5              @ oy = screen_y
-    mov     r1, r4              @ ox = screen_x
-    mov     r0, r7              @ asset_ptr
+    add     r0, r0, r0, lsl #1
+    add     r0, r0, #1
+    add     r0, r0, r4
+    ldrsb   r1, [r0]
+    ldrsb   r2, [r0, #1]
+    ldrsb   r3, [r0, #2]
+    mul     r12, r1, r7
+    asr     r12, r12, #7
+    mul     r0, r3, r8
+    asr     r0, r0, #7
+    sub     r12, r12, r0
+    mul     r0, r1, r8
+    asr     r0, r0, #7
+    mul     r1, r3, r7
+    asr     r1, r1, #7
+    add     r3, r0, r1
+    mov     r0, #127
+    cmp     r12, r0
+    movgt   r12, r0
+    mvn     r0, #127
+    cmp     r12, r0
+    movlt   r12, r0
+    mov     r0, #127
+    cmp     r3, r0
+    movgt   r3, r0
+    mvn     r0, #127
+    cmp     r3, r0
+    movlt   r3, r0
+    mov     r0, r5
+    add     r0, r0, r0, lsl #1
+    add     r0, r0, #1
+    add     r0, r0, r6
+    strb    r12, [r0]
+    strb    r2, [r0, #1]
+    strb    r3, [r0, #2]
+    add     r5, r5, #1
+    b       .Lv3d_loop
+.Lv3d_loop_done:
+    mov     r5, r9
+    add     r5, r5, r5, lsl #1
+    add     r5, r5, #1
+    mov     r0, #0
+.Lpath_copy:
+    cmp     r0, #200
+    bge     .Ldv3d_draw
+    add     r1, r4, r5
+    ldrb    r2, [r1, r0]
+    add     r1, r6, r5
+    strb    r2, [r1, r0]
+    cmp     r2, #0x02
+    beq     .Ldv3d_draw
+    add     r0, r0, #1
+    b       .Lpath_copy
+.Ldv3d_draw:
+    mov     r0, r6
+    mov     r1, r10
+    mov     r2, r11
+    mov     r3, #0
+    mov     r12, #127
+    push    {r12}
     bl      pitrex_draw_vector_ex
-    add     sp, sp, #4          @ pop intensity
-    pop     {r4, r5}            @ pop screen coords (discard)
+    add     sp, sp, #4
+    b       .Ldv3d_done
+.Ldv3d_draw_orig:
+    mov     r0, r4
+    mov     r1, r10
+    mov     r2, r11
+    mov     r3, #0
+    mov     r12, #127
+    push    {r12}
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4
 .Ldv3d_done:
-    pop     {r4, r5, r6, r7, pc}
+    pop     {r4-r11, pc}
+    .ltorg
+
+@ _PITREX_SIN_TABLE[128]: sin(i*2π/128)*127 as signed byte
+.section .rodata
+.balign 1
+.global _PITREX_SIN_TABLE
+_PITREX_SIN_TABLE:
+    .byte 0
+    .byte 6
+    .byte 12
+    .byte 19
+    .byte 25
+    .byte 31
+    .byte 37
+    .byte 43
+    .byte 49
+    .byte 54
+    .byte 60
+    .byte 65
+    .byte 71
+    .byte 76
+    .byte 81
+    .byte 85
+    .byte 90
+    .byte 94
+    .byte 98
+    .byte 102
+    .byte 106
+    .byte 109
+    .byte 112
+    .byte 115
+    .byte 117
+    .byte 120
+    .byte 122
+    .byte 123
+    .byte 125
+    .byte 126
+    .byte 126
+    .byte 127
+    .byte 127
+    .byte 127
+    .byte 126
+    .byte 126
+    .byte 125
+    .byte 123
+    .byte 122
+    .byte 120
+    .byte 117
+    .byte 115
+    .byte 112
+    .byte 109
+    .byte 106
+    .byte 102
+    .byte 98
+    .byte 94
+    .byte 90
+    .byte 85
+    .byte 81
+    .byte 76
+    .byte 71
+    .byte 65
+    .byte 60
+    .byte 54
+    .byte 49
+    .byte 43
+    .byte 37
+    .byte 31
+    .byte 25
+    .byte 19
+    .byte 12
+    .byte 6
+    .byte 0
+    .byte -6
+    .byte -12
+    .byte -19
+    .byte -25
+    .byte -31
+    .byte -37
+    .byte -43
+    .byte -49
+    .byte -54
+    .byte -60
+    .byte -65
+    .byte -71
+    .byte -76
+    .byte -81
+    .byte -85
+    .byte -90
+    .byte -94
+    .byte -98
+    .byte -102
+    .byte -106
+    .byte -109
+    .byte -112
+    .byte -115
+    .byte -117
+    .byte -120
+    .byte -122
+    .byte -123
+    .byte -125
+    .byte -126
+    .byte -126
+    .byte -127
+    .byte -127
+    .byte -127
+    .byte -126
+    .byte -126
+    .byte -125
+    .byte -123
+    .byte -122
+    .byte -120
+    .byte -117
+    .byte -115
+    .byte -112
+    .byte -109
+    .byte -106
+    .byte -102
+    .byte -98
+    .byte -94
+    .byte -90
+    .byte -85
+    .byte -81
+    .byte -76
+    .byte -71
+    .byte -65
+    .byte -60
+    .byte -54
+    .byte -49
+    .byte -43
+    .byte -37
+    .byte -31
+    .byte -25
+    .byte -19
+    .byte -12
+    .byte -6
+
+@ pitrex_get_sin(r0=angle) → r0=sin_table[angle&127] as signed byte
+.text
+.type pitrex_get_sin, %function
+pitrex_get_sin:
+    and     r0, r0, #127
+    ldr     r1, =_PITREX_SIN_TABLE
+    ldrsb   r0, [r1, r0]
+    bx      lr
+@ pitrex_get_cos(r0=angle) → r0=sin_table[(angle+32)&127] (cos approximation)
+.type pitrex_get_cos, %function
+pitrex_get_cos:
+    add     r0, r0, #32
+    and     r0, r0, #127
+    ldr     r1, =_PITREX_SIN_TABLE
+    ldrsb   r0, [r1, r0]
+    bx      lr
+@ pitrex_smul_lut(r0=value, r1=angle) → r0=(value*sin(angle))>>7
+.type pitrex_smul_lut, %function
+pitrex_smul_lut:
+    push    {r2, lr}
+    and     r1, r1, #127
+    ldr     r2, =_PITREX_SIN_TABLE
+    ldrsb   r2, [r2, r1]        @ r2 = sin_table[angle]
+    mul     r0, r0, r2          @ r0 = value * sin(angle)
+    asr     r0, r0, #7          @ r0 >>= 7
+    pop     {r2, pc}
     .ltorg
 
 @ pitrex_print_number(r0=x, r1=y, r2=value) — print decimal integer
@@ -3337,9 +3043,19 @@ pn_positive:
     it eq
     moveq   r3, #5
 pn_print_str:
+    mov     r2, sp          @ buf ptr
+pn_lz_scan:
+    ldrb    r12, [r2]       @ current char
+    cmp     r12, #48        @ '0'?
+    bne     pn_lz_done
+    ldrb    r12, [r2, #1]   @ peek next char
+    cmp     r12, #0         @ last digit — always keep
+    beq     pn_lz_done
+    add     r2, r2, #1      @ advance past leading '0'
+    b       pn_lz_scan
+pn_lz_done:
     mov     r0, r4          @ x
     mov     r1, r5          @ y
-    mov     r2, sp          @ buf ptr
     sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)
     mov     r12, #127
     mul     r0, r0, r12          @ r0  = x*127
@@ -3455,6 +3171,9 @@ par_vec_loop:
     subs    r6, r6, #1
     bne     par_vec_loop
 par_done:
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
     pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
     .ltorg
 
@@ -3463,6 +3182,7 @@ par_done:
 PITREX_ANIM_STATE_BUF: .space 2    @ [0]=frame_idx [1]=ticks_left
 PITREX_ANIM_MIRROR: .space 1
 PITREX_ANIM_SPEED: .space 1
+PITREX_BRIGHTNESS_OVERRIDE: .space 1  @ 0=use .vec intensity, >0=override
 .text
 
 @ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---
@@ -6356,7 +6076,7 @@ main:
     bl      vpy_uart_puts
     @ init UART trace counter (N frames)
     ldr     r0, =UART_TRACE_FRAMES_LEFT
-    mov     r1, #2
+    ldr     r1, =0
     str     r1, [r0]
     ldr     r0, =UART_FRAME_NUM
     mov     r1, #0
@@ -8149,8 +7869,12 @@ uart_trace_xy:
 .Lstr_crlf:   .asciz "\r\n"
 .Lstr_mv:     .asciz "MV "
 .Lstr_dr:     .asciz "DR "
+.Lstr_br:     .asciz "  br="
 .Lstr_frame_hdr:     .asciz ">>> FRAME "
 .Lstr_frame_hdr_end: .asciz " START <<<\r\n"
+.Lstr_sint:          .asciz "SINT="
+.Lstr_cpu_w:         .asciz "W="
+.Lstr_cpu_of:        .asciz "/20000us\r\n"
     .ltorg
 
 @ ============================================================
@@ -11099,1838 +10823,6 @@ _ANGKOR_BG_3D_DATA:
     .byte   195
     .byte   195
 
-@ --- angkor_bg_clean (120 path(s)) ---
-.global _ANGKOR_BG_CLEAN_VECTORS
-_ANGKOR_BG_CLEAN_VECTORS:
-    .word   120               @ path_count
-    .word   _ANGKOR_BG_CLEAN_PATH0      @ ptr path 0
-    .word   _ANGKOR_BG_CLEAN_PATH1      @ ptr path 1
-    .word   _ANGKOR_BG_CLEAN_PATH2      @ ptr path 2
-    .word   _ANGKOR_BG_CLEAN_PATH3      @ ptr path 3
-    .word   _ANGKOR_BG_CLEAN_PATH4      @ ptr path 4
-    .word   _ANGKOR_BG_CLEAN_PATH5      @ ptr path 5
-    .word   _ANGKOR_BG_CLEAN_PATH6      @ ptr path 6
-    .word   _ANGKOR_BG_CLEAN_PATH7      @ ptr path 7
-    .word   _ANGKOR_BG_CLEAN_PATH8      @ ptr path 8
-    .word   _ANGKOR_BG_CLEAN_PATH9      @ ptr path 9
-    .word   _ANGKOR_BG_CLEAN_PATH10      @ ptr path 10
-    .word   _ANGKOR_BG_CLEAN_PATH11      @ ptr path 11
-    .word   _ANGKOR_BG_CLEAN_PATH12      @ ptr path 12
-    .word   _ANGKOR_BG_CLEAN_PATH13      @ ptr path 13
-    .word   _ANGKOR_BG_CLEAN_PATH14      @ ptr path 14
-    .word   _ANGKOR_BG_CLEAN_PATH15      @ ptr path 15
-    .word   _ANGKOR_BG_CLEAN_PATH16      @ ptr path 16
-    .word   _ANGKOR_BG_CLEAN_PATH17      @ ptr path 17
-    .word   _ANGKOR_BG_CLEAN_PATH18      @ ptr path 18
-    .word   _ANGKOR_BG_CLEAN_PATH19      @ ptr path 19
-    .word   _ANGKOR_BG_CLEAN_PATH20      @ ptr path 20
-    .word   _ANGKOR_BG_CLEAN_PATH21      @ ptr path 21
-    .word   _ANGKOR_BG_CLEAN_PATH22      @ ptr path 22
-    .word   _ANGKOR_BG_CLEAN_PATH23      @ ptr path 23
-    .word   _ANGKOR_BG_CLEAN_PATH24      @ ptr path 24
-    .word   _ANGKOR_BG_CLEAN_PATH25      @ ptr path 25
-    .word   _ANGKOR_BG_CLEAN_PATH26      @ ptr path 26
-    .word   _ANGKOR_BG_CLEAN_PATH27      @ ptr path 27
-    .word   _ANGKOR_BG_CLEAN_PATH28      @ ptr path 28
-    .word   _ANGKOR_BG_CLEAN_PATH29      @ ptr path 29
-    .word   _ANGKOR_BG_CLEAN_PATH30      @ ptr path 30
-    .word   _ANGKOR_BG_CLEAN_PATH31      @ ptr path 31
-    .word   _ANGKOR_BG_CLEAN_PATH32      @ ptr path 32
-    .word   _ANGKOR_BG_CLEAN_PATH33      @ ptr path 33
-    .word   _ANGKOR_BG_CLEAN_PATH34      @ ptr path 34
-    .word   _ANGKOR_BG_CLEAN_PATH35      @ ptr path 35
-    .word   _ANGKOR_BG_CLEAN_PATH36      @ ptr path 36
-    .word   _ANGKOR_BG_CLEAN_PATH37      @ ptr path 37
-    .word   _ANGKOR_BG_CLEAN_PATH38      @ ptr path 38
-    .word   _ANGKOR_BG_CLEAN_PATH39      @ ptr path 39
-    .word   _ANGKOR_BG_CLEAN_PATH40      @ ptr path 40
-    .word   _ANGKOR_BG_CLEAN_PATH41      @ ptr path 41
-    .word   _ANGKOR_BG_CLEAN_PATH42      @ ptr path 42
-    .word   _ANGKOR_BG_CLEAN_PATH43      @ ptr path 43
-    .word   _ANGKOR_BG_CLEAN_PATH44      @ ptr path 44
-    .word   _ANGKOR_BG_CLEAN_PATH45      @ ptr path 45
-    .word   _ANGKOR_BG_CLEAN_PATH46      @ ptr path 46
-    .word   _ANGKOR_BG_CLEAN_PATH47      @ ptr path 47
-    .word   _ANGKOR_BG_CLEAN_PATH48      @ ptr path 48
-    .word   _ANGKOR_BG_CLEAN_PATH49      @ ptr path 49
-    .word   _ANGKOR_BG_CLEAN_PATH50      @ ptr path 50
-    .word   _ANGKOR_BG_CLEAN_PATH51      @ ptr path 51
-    .word   _ANGKOR_BG_CLEAN_PATH52      @ ptr path 52
-    .word   _ANGKOR_BG_CLEAN_PATH53      @ ptr path 53
-    .word   _ANGKOR_BG_CLEAN_PATH54      @ ptr path 54
-    .word   _ANGKOR_BG_CLEAN_PATH55      @ ptr path 55
-    .word   _ANGKOR_BG_CLEAN_PATH56      @ ptr path 56
-    .word   _ANGKOR_BG_CLEAN_PATH57      @ ptr path 57
-    .word   _ANGKOR_BG_CLEAN_PATH58      @ ptr path 58
-    .word   _ANGKOR_BG_CLEAN_PATH59      @ ptr path 59
-    .word   _ANGKOR_BG_CLEAN_PATH60      @ ptr path 60
-    .word   _ANGKOR_BG_CLEAN_PATH61      @ ptr path 61
-    .word   _ANGKOR_BG_CLEAN_PATH62      @ ptr path 62
-    .word   _ANGKOR_BG_CLEAN_PATH63      @ ptr path 63
-    .word   _ANGKOR_BG_CLEAN_PATH64      @ ptr path 64
-    .word   _ANGKOR_BG_CLEAN_PATH65      @ ptr path 65
-    .word   _ANGKOR_BG_CLEAN_PATH66      @ ptr path 66
-    .word   _ANGKOR_BG_CLEAN_PATH67      @ ptr path 67
-    .word   _ANGKOR_BG_CLEAN_PATH68      @ ptr path 68
-    .word   _ANGKOR_BG_CLEAN_PATH69      @ ptr path 69
-    .word   _ANGKOR_BG_CLEAN_PATH70      @ ptr path 70
-    .word   _ANGKOR_BG_CLEAN_PATH71      @ ptr path 71
-    .word   _ANGKOR_BG_CLEAN_PATH72      @ ptr path 72
-    .word   _ANGKOR_BG_CLEAN_PATH73      @ ptr path 73
-    .word   _ANGKOR_BG_CLEAN_PATH74      @ ptr path 74
-    .word   _ANGKOR_BG_CLEAN_PATH75      @ ptr path 75
-    .word   _ANGKOR_BG_CLEAN_PATH76      @ ptr path 76
-    .word   _ANGKOR_BG_CLEAN_PATH77      @ ptr path 77
-    .word   _ANGKOR_BG_CLEAN_PATH78      @ ptr path 78
-    .word   _ANGKOR_BG_CLEAN_PATH79      @ ptr path 79
-    .word   _ANGKOR_BG_CLEAN_PATH80      @ ptr path 80
-    .word   _ANGKOR_BG_CLEAN_PATH81      @ ptr path 81
-    .word   _ANGKOR_BG_CLEAN_PATH82      @ ptr path 82
-    .word   _ANGKOR_BG_CLEAN_PATH83      @ ptr path 83
-    .word   _ANGKOR_BG_CLEAN_PATH84      @ ptr path 84
-    .word   _ANGKOR_BG_CLEAN_PATH85      @ ptr path 85
-    .word   _ANGKOR_BG_CLEAN_PATH86      @ ptr path 86
-    .word   _ANGKOR_BG_CLEAN_PATH87      @ ptr path 87
-    .word   _ANGKOR_BG_CLEAN_PATH88      @ ptr path 88
-    .word   _ANGKOR_BG_CLEAN_PATH89      @ ptr path 89
-    .word   _ANGKOR_BG_CLEAN_PATH90      @ ptr path 90
-    .word   _ANGKOR_BG_CLEAN_PATH91      @ ptr path 91
-    .word   _ANGKOR_BG_CLEAN_PATH92      @ ptr path 92
-    .word   _ANGKOR_BG_CLEAN_PATH93      @ ptr path 93
-    .word   _ANGKOR_BG_CLEAN_PATH94      @ ptr path 94
-    .word   _ANGKOR_BG_CLEAN_PATH95      @ ptr path 95
-    .word   _ANGKOR_BG_CLEAN_PATH96      @ ptr path 96
-    .word   _ANGKOR_BG_CLEAN_PATH97      @ ptr path 97
-    .word   _ANGKOR_BG_CLEAN_PATH98      @ ptr path 98
-    .word   _ANGKOR_BG_CLEAN_PATH99      @ ptr path 99
-    .word   _ANGKOR_BG_CLEAN_PATH100      @ ptr path 100
-    .word   _ANGKOR_BG_CLEAN_PATH101      @ ptr path 101
-    .word   _ANGKOR_BG_CLEAN_PATH102      @ ptr path 102
-    .word   _ANGKOR_BG_CLEAN_PATH103      @ ptr path 103
-    .word   _ANGKOR_BG_CLEAN_PATH104      @ ptr path 104
-    .word   _ANGKOR_BG_CLEAN_PATH105      @ ptr path 105
-    .word   _ANGKOR_BG_CLEAN_PATH106      @ ptr path 106
-    .word   _ANGKOR_BG_CLEAN_PATH107      @ ptr path 107
-    .word   _ANGKOR_BG_CLEAN_PATH108      @ ptr path 108
-    .word   _ANGKOR_BG_CLEAN_PATH109      @ ptr path 109
-    .word   _ANGKOR_BG_CLEAN_PATH110      @ ptr path 110
-    .word   _ANGKOR_BG_CLEAN_PATH111      @ ptr path 111
-    .word   _ANGKOR_BG_CLEAN_PATH112      @ ptr path 112
-    .word   _ANGKOR_BG_CLEAN_PATH113      @ ptr path 113
-    .word   _ANGKOR_BG_CLEAN_PATH114      @ ptr path 114
-    .word   _ANGKOR_BG_CLEAN_PATH115      @ ptr path 115
-    .word   _ANGKOR_BG_CLEAN_PATH116      @ ptr path 116
-    .word   _ANGKOR_BG_CLEAN_PATH117      @ ptr path 117
-    .word   _ANGKOR_BG_CLEAN_PATH118      @ ptr path 118
-    .word   _ANGKOR_BG_CLEAN_PATH119      @ ptr path 119
-
-_ANGKOR_BG_CLEAN_PATH0:
-    .byte   127               @ intensity
-    .byte   0xD2, 0xA0, 0x00, 0x00  @ y=-46, x=-96, hdr
-    .byte   0xFF, 0x0D, 0x00  @ line dy=13, dx=0
-    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH1:
-    .byte   127               @ intensity
-    .byte   0xDA, 0xA0, 0x00, 0x00  @ y=-38, x=-96, hdr
-    .byte   0xFF, 0x00, 0x4C  @ line dy=0, dx=76
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH2:
-    .byte   127               @ intensity
-    .byte   0xE0, 0xEC, 0x00, 0x00  @ y=-32, x=-20, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH3:
-    .byte   127               @ intensity
-    .byte   0xE0, 0xEE, 0x00, 0x00  @ y=-32, x=-18, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH4:
-    .byte   127               @ intensity
-    .byte   0xDF, 0xA4, 0x00, 0x00  @ y=-33, x=-92, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH5:
-    .byte   127               @ intensity
-    .byte   0xDF, 0xA4, 0x00, 0x00  @ y=-33, x=-92, hdr
-    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH6:
-    .byte   127               @ intensity
-    .byte   0xF1, 0xA4, 0x00, 0x00  @ y=-15, x=-92, hdr
-    .byte   0xFF, 0x00, 0x49  @ line dy=0, dx=73
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH7:
-    .byte   127               @ intensity
-    .byte   0xEF, 0xEE, 0x00, 0x00  @ y=-17, x=-18, hdr
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH8:
-    .byte   127               @ intensity
-    .byte   0x04, 0x00, 0x00, 0x00  @ y=4, x=0, hdr
-    .byte   0xFF, 0xEF, 0xED  @ line dy=-17, dx=-19
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH9:
-    .byte   127               @ intensity
-    .byte   0xF1, 0xA9, 0x00, 0x00  @ y=-15, x=-87, hdr
-    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
-    .byte   0xFF, 0x00, 0x30  @ line dy=0, dx=48
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH10:
-    .byte   127               @ intensity
-    .byte   0x05, 0xDA, 0x00, 0x00  @ y=5, x=-38, hdr
-    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH11:
-    .byte   127               @ intensity
-    .byte   0xFF, 0xB3, 0x00, 0x00  @ y=-1, x=-77, hdr
-    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
-    .byte   0xFF, 0x00, 0x1B  @ line dy=0, dx=27
-    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH12:
-    .byte   127               @ intensity
-    .byte   0x0F, 0xB4, 0x00, 0x00  @ y=15, x=-76, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH13:
-    .byte   127               @ intensity
-    .byte   0x0F, 0xCB, 0x00, 0x00  @ y=15, x=-53, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH14:
-    .byte   127               @ intensity
-    .byte   0x14, 0xB1, 0x00, 0x00  @ y=20, x=-79, hdr
-    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH15:
-    .byte   127               @ intensity
-    .byte   0x1C, 0xCC, 0x00, 0x00  @ y=28, x=-52, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH16:
-    .byte   127               @ intensity
-    .byte   0x1C, 0xCC, 0x00, 0x00  @ y=28, x=-52, hdr
-    .byte   0xFF, 0x00, 0xE7  @ line dy=0, dx=-25
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH17:
-    .byte   127               @ intensity
-    .byte   0x1C, 0xCC, 0x00, 0x00  @ y=28, x=-52, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH18:
-    .byte   127               @ intensity
-    .byte   0x1C, 0xB3, 0x00, 0x00  @ y=28, x=-77, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH19:
-    .byte   127               @ intensity
-    .byte   0x24, 0xCB, 0x00, 0x00  @ y=36, x=-53, hdr
-    .byte   0xFF, 0x00, 0xE9  @ line dy=0, dx=-23
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH20:
-    .byte   127               @ intensity
-    .byte   0x24, 0xB4, 0x00, 0x00  @ y=36, x=-76, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH21:
-    .byte   127               @ intensity
-    .byte   0x24, 0xCB, 0x00, 0x00  @ y=36, x=-53, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH22:
-    .byte   127               @ intensity
-    .byte   0x24, 0xCB, 0x00, 0x00  @ y=36, x=-53, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH23:
-    .byte   127               @ intensity
-    .byte   0x26, 0xB9, 0x00, 0x00  @ y=38, x=-71, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH24:
-    .byte   127               @ intensity
-    .byte   0x2B, 0xB7, 0x00, 0x00  @ y=43, x=-73, hdr
-    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH25:
-    .byte   127               @ intensity
-    .byte   0x26, 0xC6, 0x00, 0x00  @ y=38, x=-58, hdr
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH26:
-    .byte   127               @ intensity
-    .byte   0x2C, 0xB9, 0x00, 0x00  @ y=44, x=-71, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0x0D  @ line dy=0, dx=13
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH27:
-    .byte   127               @ intensity
-    .byte   0x31, 0xBA, 0x00, 0x00  @ y=49, x=-70, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH28:
-    .byte   127               @ intensity
-    .byte   0x35, 0xBC, 0x00, 0x00  @ y=53, x=-68, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH29:
-    .byte   127               @ intensity
-    .byte   0x38, 0xBD, 0x00, 0x00  @ y=56, x=-67, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH30:
-    .byte   127               @ intensity
-    .byte   0x38, 0xC2, 0x00, 0x00  @ y=56, x=-62, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH31:
-    .byte   127               @ intensity
-    .byte   0x0C, 0xBC, 0x00, 0x00  @ y=12, x=-68, hdr
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH32:
-    .byte   127               @ intensity
-    .byte   0xFB, 0xFC, 0x00, 0x00  @ y=-5, x=-4, hdr
-    .byte   0xFF, 0xFC, 0xFD  @ line dy=-4, dx=-3
-    .byte   0xFF, 0xE9, 0x00  @ line dy=-23, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH33:
-    .byte   127               @ intensity
-    .byte   0xFB, 0xFC, 0x00, 0x00  @ y=-5, x=-4, hdr
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH34:
-    .byte   127               @ intensity
-    .byte   0xD8, 0xEC, 0x00, 0x00  @ y=-40, x=-20, hdr
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
-    .byte   0xFF, 0x00, 0x0B  @ line dy=0, dx=11
-    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH35:
-    .byte   127               @ intensity
-    .byte   0x05, 0xF5, 0x00, 0x00  @ y=5, x=-11, hdr
-    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH36:
-    .byte   127               @ intensity
-    .byte   0x05, 0xF5, 0x00, 0x00  @ y=5, x=-11, hdr
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH37:
-    .byte   127               @ intensity
-    .byte   0x0F, 0xCE, 0x00, 0x00  @ y=15, x=-50, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH38:
-    .byte   127               @ intensity
-    .byte   0x0E, 0xF0, 0x00, 0x00  @ y=14, x=-16, hdr
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH39:
-    .byte   127               @ intensity
-    .byte   0x14, 0xFA, 0x00, 0x00  @ y=20, x=-6, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH40:
-    .byte   127               @ intensity
-    .byte   0x14, 0xFA, 0x00, 0x00  @ y=20, x=-6, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFF, 0x01  @ line dy=-1, dx=1
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH41:
-    .byte   127               @ intensity
-    .byte   0x18, 0xF5, 0x00, 0x00  @ y=24, x=-11, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x03, 0xFD  @ line dy=3, dx=-3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH42:
-    .byte   127               @ intensity
-    .byte   0x20, 0xF2, 0x00, 0x00  @ y=32, x=-14, hdr
-    .byte   0xFF, 0x00, 0x1C  @ line dy=0, dx=28
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH43:
-    .byte   127               @ intensity
-    .byte   0x29, 0x0D, 0x00, 0x00  @ y=41, x=13, hdr
-    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH44:
-    .byte   127               @ intensity
-    .byte   0x29, 0xF3, 0x00, 0x00  @ y=41, x=-13, hdr
-    .byte   0xFF, 0xFC, 0x03  @ line dy=-4, dx=3
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH45:
-    .byte   127               @ intensity
-    .byte   0x38, 0x08, 0x00, 0x00  @ y=56, x=8, hdr
-    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH46:
-    .byte   127               @ intensity
-    .byte   0x38, 0xF8, 0x00, 0x00  @ y=56, x=-8, hdr
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH47:
-    .byte   127               @ intensity
-    .byte   0x30, 0x0B, 0x00, 0x00  @ y=48, x=11, hdr
-    .byte   0xFF, 0x00, 0xEA  @ line dy=0, dx=-22
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH48:
-    .byte   127               @ intensity
-    .byte   0x30, 0xF5, 0x00, 0x00  @ y=48, x=-11, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH49:
-    .byte   127               @ intensity
-    .byte   0x3E, 0xFB, 0x00, 0x00  @ y=62, x=-5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH50:
-    .byte   127               @ intensity
-    .byte   0x42, 0xFD, 0x00, 0x00  @ y=66, x=-3, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH51:
-    .byte   127               @ intensity
-    .byte   0x45, 0xFE, 0x00, 0x00  @ y=69, x=-2, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH52:
-    .byte   127               @ intensity
-    .byte   0x19, 0xFD, 0x00, 0x00  @ y=25, x=-3, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH53:
-    .byte   127               @ intensity
-    .byte   0x0E, 0xF5, 0x00, 0x00  @ y=14, x=-11, hdr
-    .byte   0xFF, 0x01, 0x01  @ line dy=1, dx=1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH54:
-    .byte   127               @ intensity
-    .byte   0x09, 0xF5, 0x00, 0x00  @ y=9, x=-11, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH55:
-    .byte   127               @ intensity
-    .byte   0xD2, 0x60, 0x00, 0x00  @ y=-46, x=96, hdr
-    .byte   0xFF, 0x0D, 0x00  @ line dy=13, dx=0
-    .byte   0xFF, 0x00, 0xB4  @ line dy=0, dx=-76
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH56:
-    .byte   127               @ intensity
-    .byte   0xDA, 0x60, 0x00, 0x00  @ y=-38, x=96, hdr
-    .byte   0xFF, 0x00, 0xB4  @ line dy=0, dx=-76
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH57:
-    .byte   127               @ intensity
-    .byte   0xE0, 0x14, 0x00, 0x00  @ y=-32, x=20, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0x09  @ line dy=0, dx=9
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH58:
-    .byte   127               @ intensity
-    .byte   0xE0, 0x12, 0x00, 0x00  @ y=-32, x=18, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH59:
-    .byte   127               @ intensity
-    .byte   0xEB, 0x12, 0x00, 0x00  @ y=-21, x=18, hdr
-    .byte   0xFF, 0x00, 0x4A  @ line dy=0, dx=74
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH60:
-    .byte   127               @ intensity
-    .byte   0xEB, 0x5C, 0x00, 0x00  @ y=-21, x=92, hdr
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH61:
-    .byte   127               @ intensity
-    .byte   0xF1, 0x5C, 0x00, 0x00  @ y=-15, x=92, hdr
-    .byte   0xFF, 0x00, 0xB7  @ line dy=0, dx=-73
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH62:
-    .byte   127               @ intensity
-    .byte   0xEF, 0x12, 0x00, 0x00  @ y=-17, x=18, hdr
-    .byte   0xFF, 0x00, 0x01  @ line dy=0, dx=1
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH63:
-    .byte   127               @ intensity
-    .byte   0x04, 0x00, 0x00, 0x00  @ y=4, x=0, hdr
-    .byte   0xFF, 0xEF, 0x13  @ line dy=-17, dx=19
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH64:
-    .byte   127               @ intensity
-    .byte   0xEB, 0x5B, 0x00, 0x00  @ y=-21, x=91, hdr
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH65:
-    .byte   127               @ intensity
-    .byte   0xF1, 0x57, 0x00, 0x00  @ y=-15, x=87, hdr
-    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
-    .byte   0xFF, 0x00, 0xCF  @ line dy=0, dx=-49
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH66:
-    .byte   127               @ intensity
-    .byte   0x05, 0x26, 0x00, 0x00  @ y=5, x=38, hdr
-    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH67:
-    .byte   127               @ intensity
-    .byte   0xFF, 0x4D, 0x00, 0x00  @ y=-1, x=77, hdr
-    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
-    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
-    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH68:
-    .byte   127               @ intensity
-    .byte   0x0F, 0x4C, 0x00, 0x00  @ y=15, x=76, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH69:
-    .byte   127               @ intensity
-    .byte   0x0F, 0x35, 0x00, 0x00  @ y=15, x=53, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH70:
-    .byte   127               @ intensity
-    .byte   0x14, 0x4F, 0x00, 0x00  @ y=20, x=79, hdr
-    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH71:
-    .byte   127               @ intensity
-    .byte   0x1C, 0x34, 0x00, 0x00  @ y=28, x=52, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH72:
-    .byte   127               @ intensity
-    .byte   0x1C, 0x4D, 0x00, 0x00  @ y=28, x=77, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH73:
-    .byte   127               @ intensity
-    .byte   0x1C, 0x34, 0x00, 0x00  @ y=28, x=52, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH74:
-    .byte   127               @ intensity
-    .byte   0x1C, 0x4D, 0x00, 0x00  @ y=28, x=77, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH75:
-    .byte   127               @ intensity
-    .byte   0x24, 0x35, 0x00, 0x00  @ y=36, x=53, hdr
-    .byte   0xFF, 0x00, 0x17  @ line dy=0, dx=23
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH76:
-    .byte   127               @ intensity
-    .byte   0x24, 0x4C, 0x00, 0x00  @ y=36, x=76, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH77:
-    .byte   127               @ intensity
-    .byte   0x24, 0x35, 0x00, 0x00  @ y=36, x=53, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH78:
-    .byte   127               @ intensity
-    .byte   0x24, 0x35, 0x00, 0x00  @ y=36, x=53, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH79:
-    .byte   127               @ intensity
-    .byte   0x26, 0x47, 0x00, 0x00  @ y=38, x=71, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH80:
-    .byte   127               @ intensity
-    .byte   0x2B, 0x49, 0x00, 0x00  @ y=43, x=73, hdr
-    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH81:
-    .byte   127               @ intensity
-    .byte   0x26, 0x3A, 0x00, 0x00  @ y=38, x=58, hdr
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH82:
-    .byte   127               @ intensity
-    .byte   0x2C, 0x47, 0x00, 0x00  @ y=44, x=71, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0xF3  @ line dy=0, dx=-13
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH83:
-    .byte   127               @ intensity
-    .byte   0x31, 0x46, 0x00, 0x00  @ y=49, x=70, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH84:
-    .byte   127               @ intensity
-    .byte   0x35, 0x44, 0x00, 0x00  @ y=53, x=68, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH85:
-    .byte   127               @ intensity
-    .byte   0x38, 0x43, 0x00, 0x00  @ y=56, x=67, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH86:
-    .byte   127               @ intensity
-    .byte   0x38, 0x3E, 0x00, 0x00  @ y=56, x=62, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH87:
-    .byte   127               @ intensity
-    .byte   0x0C, 0x44, 0x00, 0x00  @ y=12, x=68, hdr
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
-    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH88:
-    .byte   127               @ intensity
-    .byte   0xF7, 0x07, 0x00, 0x00  @ y=-9, x=7, hdr
-    .byte   0xFF, 0xE9, 0x00  @ line dy=-23, dx=0
-    .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH89:
-    .byte   127               @ intensity
-    .byte   0xFB, 0x04, 0x00, 0x00  @ y=-5, x=4, hdr
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH90:
-    .byte   127               @ intensity
-    .byte   0xD8, 0x14, 0x00, 0x00  @ y=-40, x=20, hdr
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0xF2, 0x00  @ line dy=-14, dx=0
-    .byte   0xFF, 0x00, 0xF5  @ line dy=0, dx=-11
-    .byte   0xFF, 0x0E, 0x00  @ line dy=14, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH91:
-    .byte   127               @ intensity
-    .byte   0xDC, 0x09, 0x00, 0x00  @ y=-36, x=9, hdr
-    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH92:
-    .byte   127               @ intensity
-    .byte   0xD9, 0xF7, 0x00, 0x00  @ y=-39, x=-9, hdr
-    .byte   0xFF, 0x00, 0x13  @ line dy=0, dx=19
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH93:
-    .byte   127               @ intensity
-    .byte   0xD4, 0x0C, 0x00, 0x00  @ y=-44, x=12, hdr
-    .byte   0xFF, 0x00, 0xE9  @ line dy=0, dx=-23
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH94:
-    .byte   127               @ intensity
-    .byte   0xCF, 0xF3, 0x00, 0x00  @ y=-49, x=-13, hdr
-    .byte   0xFF, 0x00, 0x1A  @ line dy=0, dx=26
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH95:
-    .byte   127               @ intensity
-    .byte   0xC8, 0x0E, 0x00, 0x00  @ y=-56, x=14, hdr
-    .byte   0xFF, 0x00, 0xE4  @ line dy=0, dx=-28
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH96:
-    .byte   127               @ intensity
-    .byte   0x05, 0x0B, 0x00, 0x00  @ y=5, x=11, hdr
-    .byte   0xFF, 0x00, 0x1D  @ line dy=0, dx=29
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0xFF, 0x00, 0xE3  @ line dy=0, dx=-29
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH97:
-    .byte   127               @ intensity
-    .byte   0x05, 0x0B, 0x00, 0x00  @ y=5, x=11, hdr
-    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH98:
-    .byte   127               @ intensity
-    .byte   0x0F, 0x33, 0x00, 0x00  @ y=15, x=51, hdr
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH99:
-    .byte   127               @ intensity
-    .byte   0x0E, 0x10, 0x00, 0x00  @ y=14, x=16, hdr
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH100:
-    .byte   127               @ intensity
-    .byte   0x14, 0x06, 0x00, 0x00  @ y=20, x=6, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFF, 0xFF  @ line dy=-1, dx=-1
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH101:
-    .byte   127               @ intensity
-    .byte   0x18, 0x0B, 0x00, 0x00  @ y=24, x=11, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x03, 0x03  @ line dy=3, dx=3
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH102:
-    .byte   127               @ intensity
-    .byte   0x29, 0x0D, 0x00, 0x00  @ y=41, x=13, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH103:
-    .byte   127               @ intensity
-    .byte   0x29, 0x0D, 0x00, 0x00  @ y=41, x=13, hdr
-    .byte   0xFF, 0xFC, 0xFD  @ line dy=-4, dx=-3
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH104:
-    .byte   127               @ intensity
-    .byte   0x38, 0x08, 0x00, 0x00  @ y=56, x=8, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH105:
-    .byte   127               @ intensity
-    .byte   0x38, 0x08, 0x00, 0x00  @ y=56, x=8, hdr
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH106:
-    .byte   127               @ intensity
-    .byte   0x30, 0x0B, 0x00, 0x00  @ y=48, x=11, hdr
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH107:
-    .byte   127               @ intensity
-    .byte   0x30, 0x0B, 0x00, 0x00  @ y=48, x=11, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH108:
-    .byte   127               @ intensity
-    .byte   0x3E, 0x06, 0x00, 0x00  @ y=62, x=6, hdr
-    .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
-    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH109:
-    .byte   127               @ intensity
-    .byte   0x3E, 0x05, 0x00, 0x00  @ y=62, x=5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH110:
-    .byte   127               @ intensity
-    .byte   0x42, 0x03, 0x00, 0x00  @ y=66, x=3, hdr
-    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH111:
-    .byte   127               @ intensity
-    .byte   0x45, 0x02, 0x00, 0x00  @ y=69, x=2, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH112:
-    .byte   127               @ intensity
-    .byte   0x0E, 0x0B, 0x00, 0x00  @ y=14, x=11, hdr
-    .byte   0xFF, 0x01, 0xFF  @ line dy=1, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH113:
-    .byte   127               @ intensity
-    .byte   0x1C, 0x34, 0x00, 0x00  @ y=28, x=52, hdr
-    .byte   0xFF, 0x00, 0x19  @ line dy=0, dx=25
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH114:
-    .byte   127               @ intensity
-    .byte   0x14, 0xCE, 0x00, 0x00  @ y=20, x=-50, hdr
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH115:
-    .byte   127               @ intensity
-    .byte   0x12, 0xCB, 0x00, 0x00  @ y=18, x=-53, hdr
-    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH116:
-    .byte   127               @ intensity
-    .byte   0xFB, 0x04, 0x00, 0x00  @ y=-5, x=4, hdr
-    .byte   0xFF, 0xFC, 0x03  @ line dy=-4, dx=3
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH117:
-    .byte   127               @ intensity
-    .byte   0x14, 0xFA, 0x00, 0x00  @ y=20, x=-6, hdr
-    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH118:
-    .byte   127               @ intensity
-    .byte   0x3E, 0x06, 0x00, 0x00  @ y=62, x=6, hdr
-    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
-    .byte   0x02            @ end marker
-
-_ANGKOR_BG_CLEAN_PATH119:
-    .byte   127               @ intensity
-    .byte   0x1D, 0xFD, 0x00, 0x00  @ y=29, x=-3, hdr
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0x02            @ end marker
-
-@ --- ANGKOR_BG_CLEAN_3D_DATA (120 path(s)) ---
-.global _ANGKOR_BG_CLEAN_3D_DATA
-_ANGKOR_BG_CLEAN_3D_DATA:
-    .word   248               @ vertex_count
-    .byte   0xC1, 0xD2, 0x00  @ vert 0: x=-63,y=-46,z=0
-    .byte   0xC1, 0xDF, 0x00  @ vert 1: x=-63,y=-33,z=0
-    .byte   0xEC, 0xDF, 0x00  @ vert 2: x=-20,y=-33,z=0
-    .byte   0xC1, 0xDA, 0x00  @ vert 3: x=-63,y=-38,z=0
-    .byte   0xEC, 0xDA, 0x00  @ vert 4: x=-20,y=-38,z=0
-    .byte   0xEC, 0xE0, 0x00  @ vert 5: x=-20,y=-32,z=0
-    .byte   0xEC, 0xD8, 0x00  @ vert 6: x=-20,y=-40,z=0
-    .byte   0xF3, 0xD8, 0x00  @ vert 7: x=-13,y=-40,z=0
-    .byte   0xF5, 0xD7, 0x00  @ vert 8: x=-11,y=-41,z=0
-    .byte   0xF5, 0xE0, 0x00  @ vert 9: x=-11,y=-32,z=0
-    .byte   0xEE, 0xE0, 0x00  @ vert 10: x=-18,y=-32,z=0
-    .byte   0xEE, 0xEF, 0x00  @ vert 11: x=-18,y=-17,z=0
-    .byte   0xC1, 0xF1, 0x00  @ vert 12: x=-63,y=-15,z=0
-    .byte   0xED, 0xF1, 0x00  @ vert 13: x=-19,y=-15,z=0
-    .byte   0xED, 0xEF, 0x00  @ vert 14: x=-19,y=-17,z=0
-    .byte   0xED, 0xF3, 0x00  @ vert 15: x=-19,y=-13,z=0
-    .byte   0x00, 0x04, 0x00  @ vert 16: x=0,y=4,z=0
-    .byte   0xC1, 0xFF, 0x00  @ vert 17: x=-63,y=-1,z=0
-    .byte   0xD9, 0xFF, 0x00  @ vert 18: x=-39,y=-1,z=0
-    .byte   0xDA, 0x05, 0x00  @ vert 19: x=-38,y=5,z=0
-    .byte   0xDA, 0xF1, 0x00  @ vert 20: x=-38,y=-15,z=0
-    .byte   0xC1, 0x0F, 0x00  @ vert 21: x=-63,y=15,z=0
-    .byte   0xCE, 0x0F, 0x00  @ vert 22: x=-50,y=15,z=0
-    .byte   0xCE, 0xFF, 0x00  @ vert 23: x=-50,y=-1,z=0
-    .byte   0xC1, 0x12, 0x00  @ vert 24: x=-63,y=18,z=0
-    .byte   0xC1, 0x14, 0x00  @ vert 25: x=-63,y=20,z=0
-    .byte   0xC1, 0x1A, 0x00  @ vert 26: x=-63,y=26,z=0
-    .byte   0xCB, 0x0F, 0x00  @ vert 27: x=-53,y=15,z=0
-    .byte   0xCB, 0x12, 0x00  @ vert 28: x=-53,y=18,z=0
-    .byte   0xCE, 0x14, 0x00  @ vert 29: x=-50,y=20,z=0
-    .byte   0xCC, 0x1C, 0x00  @ vert 30: x=-52,y=28,z=0
-    .byte   0xCC, 0x21, 0x00  @ vert 31: x=-52,y=33,z=0
-    .byte   0xC1, 0x1C, 0x00  @ vert 32: x=-63,y=28,z=0
-    .byte   0xC1, 0x21, 0x00  @ vert 33: x=-63,y=33,z=0
-    .byte   0xCA, 0x1A, 0x00  @ vert 34: x=-54,y=26,z=0
-    .byte   0xCA, 0x17, 0x00  @ vert 35: x=-54,y=23,z=0
-    .byte   0xC1, 0x17, 0x00  @ vert 36: x=-63,y=23,z=0
-    .byte   0xCB, 0x24, 0x00  @ vert 37: x=-53,y=36,z=0
-    .byte   0xC1, 0x24, 0x00  @ vert 38: x=-63,y=36,z=0
-    .byte   0xC1, 0x29, 0x00  @ vert 39: x=-63,y=41,z=0
-    .byte   0xC1, 0x22, 0x00  @ vert 40: x=-63,y=34,z=0
-    .byte   0xC1, 0x1F, 0x00  @ vert 41: x=-63,y=31,z=0
-    .byte   0xCB, 0x28, 0x00  @ vert 42: x=-53,y=40,z=0
-    .byte   0xC9, 0x22, 0x00  @ vert 43: x=-55,y=34,z=0
-    .byte   0xC9, 0x1F, 0x00  @ vert 44: x=-55,y=31,z=0
-    .byte   0xC1, 0x26, 0x00  @ vert 45: x=-63,y=38,z=0
-    .byte   0xC1, 0x2A, 0x00  @ vert 46: x=-63,y=42,z=0
-    .byte   0xC1, 0x2F, 0x00  @ vert 47: x=-63,y=47,z=0
-    .byte   0xC1, 0x2B, 0x00  @ vert 48: x=-63,y=43,z=0
-    .byte   0xC8, 0x2B, 0x00  @ vert 49: x=-56,y=43,z=0
-    .byte   0xC6, 0x26, 0x00  @ vert 50: x=-58,y=38,z=0
-    .byte   0xC6, 0x28, 0x00  @ vert 51: x=-58,y=40,z=0
-    .byte   0xC8, 0x2F, 0x00  @ vert 52: x=-56,y=47,z=0
-    .byte   0xC1, 0x2C, 0x00  @ vert 53: x=-63,y=44,z=0
-    .byte   0xC1, 0x31, 0x00  @ vert 54: x=-63,y=49,z=0
-    .byte   0xC6, 0x31, 0x00  @ vert 55: x=-58,y=49,z=0
-    .byte   0xC6, 0x2C, 0x00  @ vert 56: x=-58,y=44,z=0
-    .byte   0xC1, 0x35, 0x00  @ vert 57: x=-63,y=53,z=0
-    .byte   0xC5, 0x35, 0x00  @ vert 58: x=-59,y=53,z=0
-    .byte   0xC5, 0x31, 0x00  @ vert 59: x=-59,y=49,z=0
-    .byte   0xC1, 0x38, 0x00  @ vert 60: x=-63,y=56,z=0
-    .byte   0xC3, 0x38, 0x00  @ vert 61: x=-61,y=56,z=0
-    .byte   0xC3, 0x35, 0x00  @ vert 62: x=-61,y=53,z=0
-    .byte   0xC1, 0x3B, 0x00  @ vert 63: x=-63,y=59,z=0
-    .byte   0xC2, 0x3B, 0x00  @ vert 64: x=-62,y=59,z=0
-    .byte   0xC2, 0x38, 0x00  @ vert 65: x=-62,y=56,z=0
-    .byte   0xC1, 0x0C, 0x00  @ vert 66: x=-63,y=12,z=0
-    .byte   0xC3, 0x0C, 0x00  @ vert 67: x=-61,y=12,z=0
-    .byte   0xC3, 0x03, 0x00  @ vert 68: x=-61,y=3,z=0
-    .byte   0xC1, 0x03, 0x00  @ vert 69: x=-63,y=3,z=0
-    .byte   0xFC, 0xFB, 0x00  @ vert 70: x=-4,y=-5,z=0
-    .byte   0xF9, 0xF7, 0x00  @ vert 71: x=-7,y=-9,z=0
-    .byte   0xF9, 0xE0, 0x00  @ vert 72: x=-7,y=-32,z=0
-    .byte   0x00, 0xFC, 0x00  @ vert 73: x=0,y=-4,z=0
-    .byte   0xE6, 0xD8, 0x00  @ vert 74: x=-26,y=-40,z=0
-    .byte   0xE6, 0xCA, 0x00  @ vert 75: x=-26,y=-54,z=0
-    .byte   0xF1, 0xCA, 0x00  @ vert 76: x=-15,y=-54,z=0
-    .byte   0xF1, 0xD8, 0x00  @ vert 77: x=-15,y=-40,z=0
-    .byte   0xF5, 0x05, 0x00  @ vert 78: x=-11,y=5,z=0
-    .byte   0xD8, 0x05, 0x00  @ vert 79: x=-40,y=5,z=0
-    .byte   0xD8, 0x0E, 0x00  @ vert 80: x=-40,y=14,z=0
-    .byte   0xF5, 0x0E, 0x00  @ vert 81: x=-11,y=14,z=0
-    .byte   0xF0, 0x0E, 0x00  @ vert 82: x=-16,y=14,z=0
-    .byte   0xF0, 0x18, 0x00  @ vert 83: x=-16,y=24,z=0
-    .byte   0xFA, 0x18, 0x00  @ vert 84: x=-6,y=24,z=0
-    .byte   0xFA, 0x14, 0x00  @ vert 85: x=-6,y=20,z=0
-    .byte   0xFA, 0x19, 0x00  @ vert 86: x=-6,y=25,z=0
-    .byte   0xFC, 0x19, 0x00  @ vert 87: x=-4,y=25,z=0
-    .byte   0xFD, 0x18, 0x00  @ vert 88: x=-3,y=24,z=0
-    .byte   0xF5, 0x18, 0x00  @ vert 89: x=-11,y=24,z=0
-    .byte   0xF5, 0x1D, 0x00  @ vert 90: x=-11,y=29,z=0
-    .byte   0xF2, 0x20, 0x00  @ vert 91: x=-14,y=32,z=0
-    .byte   0xF2, 0x26, 0x00  @ vert 92: x=-14,y=38,z=0
-    .byte   0x0E, 0x20, 0x00  @ vert 93: x=14,y=32,z=0
-    .byte   0x0D, 0x29, 0x00  @ vert 94: x=13,y=41,z=0
-    .byte   0xF3, 0x29, 0x00  @ vert 95: x=-13,y=41,z=0
-    .byte   0xF3, 0x2D, 0x00  @ vert 96: x=-13,y=45,z=0
-    .byte   0xF6, 0x25, 0x00  @ vert 97: x=-10,y=37,z=0
-    .byte   0xF6, 0x23, 0x00  @ vert 98: x=-10,y=35,z=0
-    .byte   0x08, 0x38, 0x00  @ vert 99: x=8,y=56,z=0
-    .byte   0xF8, 0x38, 0x00  @ vert 100: x=-8,y=56,z=0
-    .byte   0xF8, 0x3B, 0x00  @ vert 101: x=-8,y=59,z=0
-    .byte   0xFA, 0x35, 0x00  @ vert 102: x=-6,y=53,z=0
-    .byte   0xFA, 0x33, 0x00  @ vert 103: x=-6,y=51,z=0
-    .byte   0x0B, 0x30, 0x00  @ vert 104: x=11,y=48,z=0
-    .byte   0xF5, 0x30, 0x00  @ vert 105: x=-11,y=48,z=0
-    .byte   0xF5, 0x35, 0x00  @ vert 106: x=-11,y=53,z=0
-    .byte   0xF7, 0x2E, 0x00  @ vert 107: x=-9,y=46,z=0
-    .byte   0xF7, 0x2C, 0x00  @ vert 108: x=-9,y=44,z=0
-    .byte   0xFB, 0x3E, 0x00  @ vert 109: x=-5,y=62,z=0
-    .byte   0xFB, 0x3F, 0x00  @ vert 110: x=-5,y=63,z=0
-    .byte   0x05, 0x3F, 0x00  @ vert 111: x=5,y=63,z=0
-    .byte   0xFD, 0x3F, 0x00  @ vert 112: x=-3,y=63,z=0
-    .byte   0xFE, 0x3F, 0x00  @ vert 113: x=-2,y=63,z=0
-    .byte   0xFD, 0x19, 0x00  @ vert 114: x=-3,y=25,z=0
-    .byte   0xFD, 0x1D, 0x00  @ vert 115: x=-3,y=29,z=0
-    .byte   0xF6, 0x0F, 0x00  @ vert 116: x=-10,y=15,z=0
-    .byte   0xF9, 0x0F, 0x00  @ vert 117: x=-7,y=15,z=0
-    .byte   0xFB, 0x11, 0x00  @ vert 118: x=-5,y=17,z=0
-    .byte   0xFC, 0x14, 0x00  @ vert 119: x=-4,y=20,z=0
-    .byte   0xF5, 0x09, 0x00  @ vert 120: x=-11,y=9,z=0
-    .byte   0x3F, 0xD2, 0x00  @ vert 121: x=63,y=-46,z=0
-    .byte   0x3F, 0xDF, 0x00  @ vert 122: x=63,y=-33,z=0
-    .byte   0x14, 0xDF, 0x00  @ vert 123: x=20,y=-33,z=0
-    .byte   0x3F, 0xDA, 0x00  @ vert 124: x=63,y=-38,z=0
-    .byte   0x14, 0xDA, 0x00  @ vert 125: x=20,y=-38,z=0
-    .byte   0x14, 0xE0, 0x00  @ vert 126: x=20,y=-32,z=0
-    .byte   0x14, 0xD8, 0x00  @ vert 127: x=20,y=-40,z=0
-    .byte   0x0D, 0xD8, 0x00  @ vert 128: x=13,y=-40,z=0
-    .byte   0x0B, 0xD7, 0x00  @ vert 129: x=11,y=-41,z=0
-    .byte   0x0B, 0xE0, 0x00  @ vert 130: x=11,y=-32,z=0
-    .byte   0x12, 0xE0, 0x00  @ vert 131: x=18,y=-32,z=0
-    .byte   0x12, 0xEF, 0x00  @ vert 132: x=18,y=-17,z=0
-    .byte   0x12, 0xEB, 0x00  @ vert 133: x=18,y=-21,z=0
-    .byte   0x3F, 0xEB, 0x00  @ vert 134: x=63,y=-21,z=0
-    .byte   0x3F, 0xF1, 0x00  @ vert 135: x=63,y=-15,z=0
-    .byte   0x13, 0xF1, 0x00  @ vert 136: x=19,y=-15,z=0
-    .byte   0x13, 0xEF, 0x00  @ vert 137: x=19,y=-17,z=0
-    .byte   0x13, 0xF3, 0x00  @ vert 138: x=19,y=-13,z=0
-    .byte   0x3F, 0xFF, 0x00  @ vert 139: x=63,y=-1,z=0
-    .byte   0x26, 0xFF, 0x00  @ vert 140: x=38,y=-1,z=0
-    .byte   0x26, 0x05, 0x00  @ vert 141: x=38,y=5,z=0
-    .byte   0x26, 0xF1, 0x00  @ vert 142: x=38,y=-15,z=0
-    .byte   0x3F, 0x0F, 0x00  @ vert 143: x=63,y=15,z=0
-    .byte   0x33, 0x0F, 0x00  @ vert 144: x=51,y=15,z=0
-    .byte   0x33, 0xFF, 0x00  @ vert 145: x=51,y=-1,z=0
-    .byte   0x32, 0xFF, 0x00  @ vert 146: x=50,y=-1,z=0
-    .byte   0x3F, 0x12, 0x00  @ vert 147: x=63,y=18,z=0
-    .byte   0x3F, 0x14, 0x00  @ vert 148: x=63,y=20,z=0
-    .byte   0x3F, 0x1A, 0x00  @ vert 149: x=63,y=26,z=0
-    .byte   0x35, 0x0F, 0x00  @ vert 150: x=53,y=15,z=0
-    .byte   0x35, 0x12, 0x00  @ vert 151: x=53,y=18,z=0
-    .byte   0x32, 0x14, 0x00  @ vert 152: x=50,y=20,z=0
-    .byte   0x32, 0x1A, 0x00  @ vert 153: x=50,y=26,z=0
-    .byte   0x34, 0x1C, 0x00  @ vert 154: x=52,y=28,z=0
-    .byte   0x34, 0x21, 0x00  @ vert 155: x=52,y=33,z=0
-    .byte   0x3F, 0x1C, 0x00  @ vert 156: x=63,y=28,z=0
-    .byte   0x3F, 0x21, 0x00  @ vert 157: x=63,y=33,z=0
-    .byte   0x36, 0x1A, 0x00  @ vert 158: x=54,y=26,z=0
-    .byte   0x36, 0x17, 0x00  @ vert 159: x=54,y=23,z=0
-    .byte   0x3F, 0x17, 0x00  @ vert 160: x=63,y=23,z=0
-    .byte   0x35, 0x24, 0x00  @ vert 161: x=53,y=36,z=0
-    .byte   0x3F, 0x24, 0x00  @ vert 162: x=63,y=36,z=0
-    .byte   0x3F, 0x29, 0x00  @ vert 163: x=63,y=41,z=0
-    .byte   0x3F, 0x22, 0x00  @ vert 164: x=63,y=34,z=0
-    .byte   0x3F, 0x1F, 0x00  @ vert 165: x=63,y=31,z=0
-    .byte   0x35, 0x28, 0x00  @ vert 166: x=53,y=40,z=0
-    .byte   0x37, 0x22, 0x00  @ vert 167: x=55,y=34,z=0
-    .byte   0x37, 0x1F, 0x00  @ vert 168: x=55,y=31,z=0
-    .byte   0x3F, 0x26, 0x00  @ vert 169: x=63,y=38,z=0
-    .byte   0x3F, 0x2A, 0x00  @ vert 170: x=63,y=42,z=0
-    .byte   0x3F, 0x2F, 0x00  @ vert 171: x=63,y=47,z=0
-    .byte   0x3F, 0x2B, 0x00  @ vert 172: x=63,y=43,z=0
-    .byte   0x38, 0x2B, 0x00  @ vert 173: x=56,y=43,z=0
-    .byte   0x3A, 0x26, 0x00  @ vert 174: x=58,y=38,z=0
-    .byte   0x3A, 0x28, 0x00  @ vert 175: x=58,y=40,z=0
-    .byte   0x38, 0x2F, 0x00  @ vert 176: x=56,y=47,z=0
-    .byte   0x3F, 0x2C, 0x00  @ vert 177: x=63,y=44,z=0
-    .byte   0x3F, 0x31, 0x00  @ vert 178: x=63,y=49,z=0
-    .byte   0x3A, 0x31, 0x00  @ vert 179: x=58,y=49,z=0
-    .byte   0x3A, 0x2C, 0x00  @ vert 180: x=58,y=44,z=0
-    .byte   0x3F, 0x35, 0x00  @ vert 181: x=63,y=53,z=0
-    .byte   0x3B, 0x35, 0x00  @ vert 182: x=59,y=53,z=0
-    .byte   0x3B, 0x31, 0x00  @ vert 183: x=59,y=49,z=0
-    .byte   0x3F, 0x38, 0x00  @ vert 184: x=63,y=56,z=0
-    .byte   0x3D, 0x38, 0x00  @ vert 185: x=61,y=56,z=0
-    .byte   0x3D, 0x35, 0x00  @ vert 186: x=61,y=53,z=0
-    .byte   0x3F, 0x3B, 0x00  @ vert 187: x=63,y=59,z=0
-    .byte   0x3E, 0x3B, 0x00  @ vert 188: x=62,y=59,z=0
-    .byte   0x3E, 0x38, 0x00  @ vert 189: x=62,y=56,z=0
-    .byte   0x3F, 0x0C, 0x00  @ vert 190: x=63,y=12,z=0
-    .byte   0x3D, 0x0C, 0x00  @ vert 191: x=61,y=12,z=0
-    .byte   0x3D, 0x03, 0x00  @ vert 192: x=61,y=3,z=0
-    .byte   0x3F, 0x03, 0x00  @ vert 193: x=63,y=3,z=0
-    .byte   0x07, 0xF7, 0x00  @ vert 194: x=7,y=-9,z=0
-    .byte   0x07, 0xE0, 0x00  @ vert 195: x=7,y=-32,z=0
-    .byte   0x04, 0xFB, 0x00  @ vert 196: x=4,y=-5,z=0
-    .byte   0x1A, 0xD8, 0x00  @ vert 197: x=26,y=-40,z=0
-    .byte   0x1A, 0xCA, 0x00  @ vert 198: x=26,y=-54,z=0
-    .byte   0x0F, 0xCA, 0x00  @ vert 199: x=15,y=-54,z=0
-    .byte   0x0F, 0xD8, 0x00  @ vert 200: x=15,y=-40,z=0
-    .byte   0x09, 0xDC, 0x00  @ vert 201: x=9,y=-36,z=0
-    .byte   0xF8, 0xDC, 0x00  @ vert 202: x=-8,y=-36,z=0
-    .byte   0xF7, 0xD9, 0x00  @ vert 203: x=-9,y=-39,z=0
-    .byte   0x0A, 0xD9, 0x00  @ vert 204: x=10,y=-39,z=0
-    .byte   0x0C, 0xD4, 0x00  @ vert 205: x=12,y=-44,z=0
-    .byte   0xF5, 0xD4, 0x00  @ vert 206: x=-11,y=-44,z=0
-    .byte   0xF3, 0xCF, 0x00  @ vert 207: x=-13,y=-49,z=0
-    .byte   0x0D, 0xCF, 0x00  @ vert 208: x=13,y=-49,z=0
-    .byte   0x0E, 0xC8, 0x00  @ vert 209: x=14,y=-56,z=0
-    .byte   0xF2, 0xC8, 0x00  @ vert 210: x=-14,y=-56,z=0
-    .byte   0x0B, 0x05, 0x00  @ vert 211: x=11,y=5,z=0
-    .byte   0x28, 0x05, 0x00  @ vert 212: x=40,y=5,z=0
-    .byte   0x28, 0x0E, 0x00  @ vert 213: x=40,y=14,z=0
-    .byte   0x0B, 0x0E, 0x00  @ vert 214: x=11,y=14,z=0
-    .byte   0x10, 0x0E, 0x00  @ vert 215: x=16,y=14,z=0
-    .byte   0x10, 0x18, 0x00  @ vert 216: x=16,y=24,z=0
-    .byte   0x06, 0x18, 0x00  @ vert 217: x=6,y=24,z=0
-    .byte   0x06, 0x14, 0x00  @ vert 218: x=6,y=20,z=0
-    .byte   0x06, 0x19, 0x00  @ vert 219: x=6,y=25,z=0
-    .byte   0x04, 0x19, 0x00  @ vert 220: x=4,y=25,z=0
-    .byte   0x03, 0x18, 0x00  @ vert 221: x=3,y=24,z=0
-    .byte   0x0B, 0x18, 0x00  @ vert 222: x=11,y=24,z=0
-    .byte   0x0B, 0x1D, 0x00  @ vert 223: x=11,y=29,z=0
-    .byte   0x0E, 0x26, 0x00  @ vert 224: x=14,y=38,z=0
-    .byte   0x0D, 0x2D, 0x00  @ vert 225: x=13,y=45,z=0
-    .byte   0x0A, 0x25, 0x00  @ vert 226: x=10,y=37,z=0
-    .byte   0x0A, 0x23, 0x00  @ vert 227: x=10,y=35,z=0
-    .byte   0x08, 0x3B, 0x00  @ vert 228: x=8,y=59,z=0
-    .byte   0x06, 0x35, 0x00  @ vert 229: x=6,y=53,z=0
-    .byte   0x06, 0x33, 0x00  @ vert 230: x=6,y=51,z=0
-    .byte   0x0B, 0x35, 0x00  @ vert 231: x=11,y=53,z=0
-    .byte   0x09, 0x2E, 0x00  @ vert 232: x=9,y=46,z=0
-    .byte   0x09, 0x2C, 0x00  @ vert 233: x=9,y=44,z=0
-    .byte   0x06, 0x3E, 0x00  @ vert 234: x=6,y=62,z=0
-    .byte   0xFA, 0x3E, 0x00  @ vert 235: x=-6,y=62,z=0
-    .byte   0xFA, 0x38, 0x00  @ vert 236: x=-6,y=56,z=0
-    .byte   0x05, 0x3E, 0x00  @ vert 237: x=5,y=62,z=0
-    .byte   0x03, 0x3F, 0x00  @ vert 238: x=3,y=63,z=0
-    .byte   0x02, 0x3F, 0x00  @ vert 239: x=2,y=63,z=0
-    .byte   0x0A, 0x0F, 0x00  @ vert 240: x=10,y=15,z=0
-    .byte   0x07, 0x0F, 0x00  @ vert 241: x=7,y=15,z=0
-    .byte   0x05, 0x11, 0x00  @ vert 242: x=5,y=17,z=0
-    .byte   0x04, 0x14, 0x00  @ vert 243: x=4,y=20,z=0
-    .byte   0xCE, 0x1A, 0x00  @ vert 244: x=-50,y=26,z=0
-    .byte   0x06, 0x38, 0x00  @ vert 245: x=6,y=56,z=0
-    .byte   0x03, 0x1D, 0x00  @ vert 246: x=3,y=29,z=0
-    .byte   0x03, 0x19, 0x00  @ vert 247: x=3,y=25,z=0
-    .word   120               @ path_count
-    .byte   5               @ path 0: pt_count
-    .byte   0               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   2
-    .byte   2
-    .byte   2               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   3
-    .byte   4
-    .byte   7               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   8
-    .byte   9
-    .byte   5
-    .byte   5
-    .byte   4               @ path 3: pt_count
-    .byte   0               @ path 3: closed
-    .byte   10
-    .byte   11
-    .byte   11
-    .byte   11
-    .byte   1               @ path 4: pt_count
-    .byte   0               @ path 4: closed
-    .byte   1
-    .byte   2               @ path 5: pt_count
-    .byte   0               @ path 5: closed
-    .byte   1
-    .byte   12
-    .byte   2               @ path 6: pt_count
-    .byte   0               @ path 6: closed
-    .byte   12
-    .byte   13
-    .byte   4               @ path 7: pt_count
-    .byte   0               @ path 7: closed
-    .byte   11
-    .byte   14
-    .byte   15
-    .byte   15
-    .byte   2               @ path 8: pt_count
-    .byte   0               @ path 8: closed
-    .byte   16
-    .byte   15
-    .byte   3               @ path 9: pt_count
-    .byte   0               @ path 9: closed
-    .byte   12
-    .byte   17
-    .byte   18
-    .byte   2               @ path 10: pt_count
-    .byte   0               @ path 10: closed
-    .byte   19
-    .byte   20
-    .byte   4               @ path 11: pt_count
-    .byte   0               @ path 11: closed
-    .byte   17
-    .byte   21
-    .byte   22
-    .byte   23
-    .byte   4               @ path 12: pt_count
-    .byte   0               @ path 12: closed
-    .byte   21
-    .byte   24
-    .byte   25
-    .byte   26
-    .byte   2               @ path 13: pt_count
-    .byte   0               @ path 13: closed
-    .byte   27
-    .byte   28
-    .byte   2               @ path 14: pt_count
-    .byte   0               @ path 14: closed
-    .byte   25
-    .byte   29
-    .byte   2               @ path 15: pt_count
-    .byte   0               @ path 15: closed
-    .byte   30
-    .byte   31
-    .byte   3               @ path 16: pt_count
-    .byte   0               @ path 16: closed
-    .byte   30
-    .byte   32
-    .byte   33
-    .byte   4               @ path 17: pt_count
-    .byte   0               @ path 17: closed
-    .byte   30
-    .byte   34
-    .byte   35
-    .byte   35
-    .byte   4               @ path 18: pt_count
-    .byte   0               @ path 18: closed
-    .byte   32
-    .byte   26
-    .byte   36
-    .byte   36
-    .byte   3               @ path 19: pt_count
-    .byte   0               @ path 19: closed
-    .byte   37
-    .byte   38
-    .byte   39
-    .byte   3               @ path 20: pt_count
-    .byte   0               @ path 20: closed
-    .byte   38
-    .byte   40
-    .byte   41
-    .byte   3               @ path 21: pt_count
-    .byte   0               @ path 21: closed
-    .byte   37
-    .byte   42
-    .byte   42
-    .byte   4               @ path 22: pt_count
-    .byte   0               @ path 22: closed
-    .byte   37
-    .byte   43
-    .byte   44
-    .byte   44
-    .byte   5               @ path 23: pt_count
-    .byte   0               @ path 23: closed
-    .byte   45
-    .byte   39
-    .byte   46
-    .byte   47
-    .byte   47
-    .byte   2               @ path 24: pt_count
-    .byte   0               @ path 24: closed
-    .byte   48
-    .byte   49
-    .byte   5               @ path 25: pt_count
-    .byte   0               @ path 25: closed
-    .byte   50
-    .byte   51
-    .byte   49
-    .byte   52
-    .byte   52
-    .byte   4               @ path 26: pt_count
-    .byte   0               @ path 26: closed
-    .byte   53
-    .byte   54
-    .byte   55
-    .byte   56
-    .byte   5               @ path 27: pt_count
-    .byte   0               @ path 27: closed
-    .byte   54
-    .byte   57
-    .byte   58
-    .byte   59
-    .byte   59
-    .byte   5               @ path 28: pt_count
-    .byte   0               @ path 28: closed
-    .byte   57
-    .byte   60
-    .byte   61
-    .byte   62
-    .byte   62
-    .byte   3               @ path 29: pt_count
-    .byte   0               @ path 29: closed
-    .byte   60
-    .byte   63
-    .byte   64
-    .byte   3               @ path 30: pt_count
-    .byte   0               @ path 30: closed
-    .byte   65
-    .byte   64
-    .byte   64
-    .byte   6               @ path 31: pt_count
-    .byte   0               @ path 31: closed
-    .byte   66
-    .byte   67
-    .byte   68
-    .byte   69
-    .byte   66
-    .byte   66
-    .byte   3               @ path 32: pt_count
-    .byte   0               @ path 32: closed
-    .byte   70
-    .byte   71
-    .byte   72
-    .byte   2               @ path 33: pt_count
-    .byte   0               @ path 33: closed
-    .byte   70
-    .byte   73
-    .byte   6               @ path 34: pt_count
-    .byte   0               @ path 34: closed
-    .byte   6
-    .byte   74
-    .byte   75
-    .byte   76
-    .byte   77
-    .byte   77
-    .byte   5               @ path 35: pt_count
-    .byte   0               @ path 35: closed
-    .byte   78
-    .byte   79
-    .byte   80
-    .byte   81
-    .byte   81
-    .byte   2               @ path 36: pt_count
-    .byte   0               @ path 36: closed
-    .byte   78
-    .byte   81
-    .byte   1               @ path 37: pt_count
-    .byte   0               @ path 37: closed
-    .byte   22
-    .byte   3               @ path 38: pt_count
-    .byte   0               @ path 38: closed
-    .byte   82
-    .byte   83
-    .byte   84
-    .byte   1               @ path 39: pt_count
-    .byte   0               @ path 39: closed
-    .byte   85
-    .byte   4               @ path 40: pt_count
-    .byte   0               @ path 40: closed
-    .byte   85
-    .byte   86
-    .byte   87
-    .byte   88
-    .byte   4               @ path 41: pt_count
-    .byte   0               @ path 41: closed
-    .byte   89
-    .byte   90
-    .byte   91
-    .byte   92
-    .byte   2               @ path 42: pt_count
-    .byte   0               @ path 42: closed
-    .byte   91
-    .byte   93
-    .byte   4               @ path 43: pt_count
-    .byte   0               @ path 43: closed
-    .byte   94
-    .byte   95
-    .byte   96
-    .byte   96
-    .byte   4               @ path 44: pt_count
-    .byte   0               @ path 44: closed
-    .byte   95
-    .byte   97
-    .byte   98
-    .byte   98
-    .byte   3               @ path 45: pt_count
-    .byte   0               @ path 45: closed
-    .byte   99
-    .byte   100
-    .byte   101
-    .byte   4               @ path 46: pt_count
-    .byte   0               @ path 46: closed
-    .byte   100
-    .byte   102
-    .byte   103
-    .byte   103
-    .byte   4               @ path 47: pt_count
-    .byte   0               @ path 47: closed
-    .byte   104
-    .byte   105
-    .byte   106
-    .byte   106
-    .byte   4               @ path 48: pt_count
-    .byte   0               @ path 48: closed
-    .byte   105
-    .byte   107
-    .byte   108
-    .byte   108
-    .byte   3               @ path 49: pt_count
-    .byte   0               @ path 49: closed
-    .byte   109
-    .byte   110
-    .byte   111
-    .byte   2               @ path 50: pt_count
-    .byte   0               @ path 50: closed
-    .byte   112
-    .byte   112
-    .byte   2               @ path 51: pt_count
-    .byte   0               @ path 51: closed
-    .byte   113
-    .byte   113
-    .byte   2               @ path 52: pt_count
-    .byte   0               @ path 52: closed
-    .byte   114
-    .byte   115
-    .byte   5               @ path 53: pt_count
-    .byte   0               @ path 53: closed
-    .byte   81
-    .byte   116
-    .byte   117
-    .byte   118
-    .byte   119
-    .byte   1               @ path 54: pt_count
-    .byte   0               @ path 54: closed
-    .byte   120
-    .byte   5               @ path 55: pt_count
-    .byte   0               @ path 55: closed
-    .byte   121
-    .byte   122
-    .byte   123
-    .byte   123
-    .byte   123
-    .byte   2               @ path 56: pt_count
-    .byte   0               @ path 56: closed
-    .byte   124
-    .byte   125
-    .byte   7               @ path 57: pt_count
-    .byte   0               @ path 57: closed
-    .byte   126
-    .byte   127
-    .byte   128
-    .byte   129
-    .byte   130
-    .byte   126
-    .byte   126
-    .byte   4               @ path 58: pt_count
-    .byte   0               @ path 58: closed
-    .byte   131
-    .byte   132
-    .byte   132
-    .byte   132
-    .byte   4               @ path 59: pt_count
-    .byte   0               @ path 59: closed
-    .byte   133
-    .byte   134
-    .byte   134
-    .byte   134
-    .byte   2               @ path 60: pt_count
-    .byte   0               @ path 60: closed
-    .byte   134
-    .byte   135
-    .byte   2               @ path 61: pt_count
-    .byte   0               @ path 61: closed
-    .byte   135
-    .byte   136
-    .byte   3               @ path 62: pt_count
-    .byte   0               @ path 62: closed
-    .byte   132
-    .byte   137
-    .byte   138
-    .byte   2               @ path 63: pt_count
-    .byte   0               @ path 63: closed
-    .byte   16
-    .byte   138
-    .byte   2               @ path 64: pt_count
-    .byte   0               @ path 64: closed
-    .byte   134
-    .byte   122
-    .byte   4               @ path 65: pt_count
-    .byte   0               @ path 65: closed
-    .byte   135
-    .byte   139
-    .byte   140
-    .byte   140
-    .byte   2               @ path 66: pt_count
-    .byte   0               @ path 66: closed
-    .byte   141
-    .byte   142
-    .byte   5               @ path 67: pt_count
-    .byte   0               @ path 67: closed
-    .byte   139
-    .byte   143
-    .byte   144
-    .byte   145
-    .byte   146
-    .byte   4               @ path 68: pt_count
-    .byte   0               @ path 68: closed
-    .byte   143
-    .byte   147
-    .byte   148
-    .byte   149
-    .byte   4               @ path 69: pt_count
-    .byte   0               @ path 69: closed
-    .byte   150
-    .byte   151
-    .byte   152
-    .byte   153
-    .byte   2               @ path 70: pt_count
-    .byte   0               @ path 70: closed
-    .byte   148
-    .byte   152
-    .byte   2               @ path 71: pt_count
-    .byte   0               @ path 71: closed
-    .byte   154
-    .byte   155
-    .byte   2               @ path 72: pt_count
-    .byte   0               @ path 72: closed
-    .byte   156
-    .byte   157
-    .byte   4               @ path 73: pt_count
-    .byte   0               @ path 73: closed
-    .byte   154
-    .byte   158
-    .byte   159
-    .byte   159
-    .byte   4               @ path 74: pt_count
-    .byte   0               @ path 74: closed
-    .byte   156
-    .byte   149
-    .byte   160
-    .byte   160
-    .byte   3               @ path 75: pt_count
-    .byte   0               @ path 75: closed
-    .byte   161
-    .byte   162
-    .byte   163
-    .byte   3               @ path 76: pt_count
-    .byte   0               @ path 76: closed
-    .byte   162
-    .byte   164
-    .byte   165
-    .byte   3               @ path 77: pt_count
-    .byte   0               @ path 77: closed
-    .byte   161
-    .byte   166
-    .byte   166
-    .byte   4               @ path 78: pt_count
-    .byte   0               @ path 78: closed
-    .byte   161
-    .byte   167
-    .byte   168
-    .byte   168
-    .byte   5               @ path 79: pt_count
-    .byte   0               @ path 79: closed
-    .byte   169
-    .byte   163
-    .byte   170
-    .byte   171
-    .byte   171
-    .byte   2               @ path 80: pt_count
-    .byte   0               @ path 80: closed
-    .byte   172
-    .byte   173
-    .byte   5               @ path 81: pt_count
-    .byte   0               @ path 81: closed
-    .byte   174
-    .byte   175
-    .byte   173
-    .byte   176
-    .byte   176
-    .byte   4               @ path 82: pt_count
-    .byte   0               @ path 82: closed
-    .byte   177
-    .byte   178
-    .byte   179
-    .byte   180
-    .byte   5               @ path 83: pt_count
-    .byte   0               @ path 83: closed
-    .byte   178
-    .byte   181
-    .byte   182
-    .byte   183
-    .byte   183
-    .byte   5               @ path 84: pt_count
-    .byte   0               @ path 84: closed
-    .byte   181
-    .byte   184
-    .byte   185
-    .byte   186
-    .byte   186
-    .byte   3               @ path 85: pt_count
-    .byte   0               @ path 85: closed
-    .byte   184
-    .byte   187
-    .byte   188
-    .byte   3               @ path 86: pt_count
-    .byte   0               @ path 86: closed
-    .byte   189
-    .byte   188
-    .byte   188
-    .byte   6               @ path 87: pt_count
-    .byte   0               @ path 87: closed
-    .byte   190
-    .byte   191
-    .byte   192
-    .byte   193
-    .byte   190
-    .byte   190
-    .byte   3               @ path 88: pt_count
-    .byte   0               @ path 88: closed
-    .byte   194
-    .byte   195
-    .byte   72
-    .byte   2               @ path 89: pt_count
-    .byte   0               @ path 89: closed
-    .byte   196
-    .byte   73
-    .byte   6               @ path 90: pt_count
-    .byte   0               @ path 90: closed
-    .byte   127
-    .byte   197
-    .byte   198
-    .byte   199
-    .byte   200
-    .byte   200
-    .byte   2               @ path 91: pt_count
-    .byte   0               @ path 91: closed
-    .byte   201
-    .byte   202
-    .byte   2               @ path 92: pt_count
-    .byte   0               @ path 92: closed
-    .byte   203
-    .byte   204
-    .byte   2               @ path 93: pt_count
-    .byte   0               @ path 93: closed
-    .byte   205
-    .byte   206
-    .byte   2               @ path 94: pt_count
-    .byte   0               @ path 94: closed
-    .byte   207
-    .byte   208
-    .byte   2               @ path 95: pt_count
-    .byte   0               @ path 95: closed
-    .byte   209
-    .byte   210
-    .byte   5               @ path 96: pt_count
-    .byte   0               @ path 96: closed
-    .byte   211
-    .byte   212
-    .byte   213
-    .byte   214
-    .byte   214
-    .byte   2               @ path 97: pt_count
-    .byte   0               @ path 97: closed
-    .byte   211
-    .byte   214
-    .byte   1               @ path 98: pt_count
-    .byte   0               @ path 98: closed
-    .byte   144
-    .byte   3               @ path 99: pt_count
-    .byte   0               @ path 99: closed
-    .byte   215
-    .byte   216
-    .byte   217
-    .byte   5               @ path 100: pt_count
-    .byte   0               @ path 100: closed
-    .byte   218
-    .byte   219
-    .byte   220
-    .byte   221
-    .byte   88
-    .byte   4               @ path 101: pt_count
-    .byte   0               @ path 101: closed
-    .byte   222
-    .byte   223
-    .byte   93
-    .byte   224
-    .byte   3               @ path 102: pt_count
-    .byte   0               @ path 102: closed
-    .byte   94
-    .byte   225
-    .byte   225
-    .byte   4               @ path 103: pt_count
-    .byte   0               @ path 103: closed
-    .byte   94
-    .byte   226
-    .byte   227
-    .byte   227
-    .byte   2               @ path 104: pt_count
-    .byte   0               @ path 104: closed
-    .byte   99
-    .byte   228
-    .byte   4               @ path 105: pt_count
-    .byte   0               @ path 105: closed
-    .byte   99
-    .byte   229
-    .byte   230
-    .byte   230
-    .byte   3               @ path 106: pt_count
-    .byte   0               @ path 106: closed
-    .byte   104
-    .byte   231
-    .byte   231
-    .byte   4               @ path 107: pt_count
-    .byte   0               @ path 107: closed
-    .byte   104
-    .byte   232
-    .byte   233
-    .byte   233
-    .byte   3               @ path 108: pt_count
-    .byte   0               @ path 108: closed
-    .byte   234
-    .byte   235
-    .byte   236
-    .byte   2               @ path 109: pt_count
-    .byte   0               @ path 109: closed
-    .byte   237
-    .byte   111
-    .byte   3               @ path 110: pt_count
-    .byte   0               @ path 110: closed
-    .byte   238
-    .byte   238
-    .byte   112
-    .byte   3               @ path 111: pt_count
-    .byte   0               @ path 111: closed
-    .byte   239
-    .byte   239
-    .byte   113
-    .byte   5               @ path 112: pt_count
-    .byte   0               @ path 112: closed
-    .byte   214
-    .byte   240
-    .byte   241
-    .byte   242
-    .byte   243
-    .byte   2               @ path 113: pt_count
-    .byte   0               @ path 113: closed
-    .byte   154
-    .byte   156
-    .byte   2               @ path 114: pt_count
-    .byte   0               @ path 114: closed
-    .byte   29
-    .byte   244
-    .byte   2               @ path 115: pt_count
-    .byte   0               @ path 115: closed
-    .byte   28
-    .byte   29
-    .byte   2               @ path 116: pt_count
-    .byte   0               @ path 116: closed
-    .byte   196
-    .byte   194
-    .byte   2               @ path 117: pt_count
-    .byte   0               @ path 117: closed
-    .byte   85
-    .byte   218
-    .byte   2               @ path 118: pt_count
-    .byte   0               @ path 118: closed
-    .byte   234
-    .byte   245
-    .byte   4               @ path 119: pt_count
-    .byte   0               @ path 119: closed
-    .byte   115
-    .byte   246
-    .byte   247
-    .byte   247
-
 @ --- antarctica_bg (20 path(s)) ---
 .global _ANTARCTICA_BG_VECTORS
 _ANTARCTICA_BG_VECTORS:
@@ -13313,34 +11205,6 @@ _ANTARCTICA_BG_3D_DATA:
     .byte   54
     .byte   54
     .byte   54
-
-@ --- arc (1 path(s)) ---
-.global _ARC_VECTORS
-_ARC_VECTORS:
-    .word   1               @ path_count
-    .word   _ARC_PATH0      @ ptr path 0
-
-_ARC_PATH0:
-    .byte   127               @ intensity
-    .byte   0x14, 0x00, 0x00, 0x00  @ y=20, x=0, hdr
-    .byte   0xFF, 0xE2, 0xF1  @ line dy=-30, dx=-15
-    .byte   0xFF, 0x00, 0x1E  @ line dy=0, dx=30
-    .byte   0xFF, 0x1E, 0xF1  @ line dy=30, dx=-15
-    .byte   0x02            @ end marker
-
-@ --- ARC_3D_DATA (1 path(s)) ---
-.global _ARC_3D_DATA
-_ARC_3D_DATA:
-    .word   3               @ vertex_count
-    .byte   0x00, 0x14, 0x00  @ vert 0: x=0,y=20,z=0
-    .byte   0xF1, 0xF6, 0x00  @ vert 1: x=-15,y=-10,z=0
-    .byte   0x0F, 0xF6, 0x00  @ vert 2: x=15,y=-10,z=0
-    .word   1               @ path_count
-    .byte   3               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
 
 @ --- athens_bg (41 path(s)) ---
 .global _ATHENS_BG_VECTORS
@@ -14435,49 +12299,6 @@ _AYERS_BG_3D_DATA:
     .byte   85
     .byte   86
 
-@ --- ball (1 path(s)) ---
-.global _BALL_VECTORS
-_BALL_VECTORS:
-    .word   1               @ path_count
-    .word   _BALL_PATH0      @ ptr path 0
-
-_BALL_PATH0:
-    .byte   127               @ intensity
-    .byte   0x03, 0x00, 0x00, 0x00  @ y=3, x=0, hdr
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0x02            @ end marker
-
-@ --- BALL_3D_DATA (1 path(s)) ---
-.global _BALL_3D_DATA
-_BALL_3D_DATA:
-    .word   8               @ vertex_count
-    .byte   0x00, 0x03, 0x00  @ vert 0: x=0,y=3,z=0
-    .byte   0x02, 0x02, 0x00  @ vert 1: x=2,y=2,z=0
-    .byte   0x03, 0x00, 0x00  @ vert 2: x=3,y=0,z=0
-    .byte   0x02, 0xFE, 0x00  @ vert 3: x=2,y=-2,z=0
-    .byte   0x00, 0xFD, 0x00  @ vert 4: x=0,y=-3,z=0
-    .byte   0xFE, 0xFE, 0x00  @ vert 5: x=-2,y=-2,z=0
-    .byte   0xFD, 0x00, 0x00  @ vert 6: x=-3,y=0,z=0
-    .byte   0xFE, 0x02, 0x00  @ vert 7: x=-2,y=2,z=0
-    .word   1               @ path_count
-    .byte   8               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-
 @ --- barcelona_bg (60 path(s)) ---
 .global _BARCELONA_BG_VECTORS
 _BARCELONA_BG_VECTORS:
@@ -15436,1093 +13257,6 @@ _BARCELONA_BG_3D_DATA:
     .byte   154
     .byte   155
 
-@ --- barcelona_bg_clean (68 path(s)) ---
-.global _BARCELONA_BG_CLEAN_VECTORS
-_BARCELONA_BG_CLEAN_VECTORS:
-    .word   68               @ path_count
-    .word   _BARCELONA_BG_CLEAN_PATH0      @ ptr path 0
-    .word   _BARCELONA_BG_CLEAN_PATH1      @ ptr path 1
-    .word   _BARCELONA_BG_CLEAN_PATH2      @ ptr path 2
-    .word   _BARCELONA_BG_CLEAN_PATH3      @ ptr path 3
-    .word   _BARCELONA_BG_CLEAN_PATH4      @ ptr path 4
-    .word   _BARCELONA_BG_CLEAN_PATH5      @ ptr path 5
-    .word   _BARCELONA_BG_CLEAN_PATH6      @ ptr path 6
-    .word   _BARCELONA_BG_CLEAN_PATH7      @ ptr path 7
-    .word   _BARCELONA_BG_CLEAN_PATH8      @ ptr path 8
-    .word   _BARCELONA_BG_CLEAN_PATH9      @ ptr path 9
-    .word   _BARCELONA_BG_CLEAN_PATH10      @ ptr path 10
-    .word   _BARCELONA_BG_CLEAN_PATH11      @ ptr path 11
-    .word   _BARCELONA_BG_CLEAN_PATH12      @ ptr path 12
-    .word   _BARCELONA_BG_CLEAN_PATH13      @ ptr path 13
-    .word   _BARCELONA_BG_CLEAN_PATH14      @ ptr path 14
-    .word   _BARCELONA_BG_CLEAN_PATH15      @ ptr path 15
-    .word   _BARCELONA_BG_CLEAN_PATH16      @ ptr path 16
-    .word   _BARCELONA_BG_CLEAN_PATH17      @ ptr path 17
-    .word   _BARCELONA_BG_CLEAN_PATH18      @ ptr path 18
-    .word   _BARCELONA_BG_CLEAN_PATH19      @ ptr path 19
-    .word   _BARCELONA_BG_CLEAN_PATH20      @ ptr path 20
-    .word   _BARCELONA_BG_CLEAN_PATH21      @ ptr path 21
-    .word   _BARCELONA_BG_CLEAN_PATH22      @ ptr path 22
-    .word   _BARCELONA_BG_CLEAN_PATH23      @ ptr path 23
-    .word   _BARCELONA_BG_CLEAN_PATH24      @ ptr path 24
-    .word   _BARCELONA_BG_CLEAN_PATH25      @ ptr path 25
-    .word   _BARCELONA_BG_CLEAN_PATH26      @ ptr path 26
-    .word   _BARCELONA_BG_CLEAN_PATH27      @ ptr path 27
-    .word   _BARCELONA_BG_CLEAN_PATH28      @ ptr path 28
-    .word   _BARCELONA_BG_CLEAN_PATH29      @ ptr path 29
-    .word   _BARCELONA_BG_CLEAN_PATH30      @ ptr path 30
-    .word   _BARCELONA_BG_CLEAN_PATH31      @ ptr path 31
-    .word   _BARCELONA_BG_CLEAN_PATH32      @ ptr path 32
-    .word   _BARCELONA_BG_CLEAN_PATH33      @ ptr path 33
-    .word   _BARCELONA_BG_CLEAN_PATH34      @ ptr path 34
-    .word   _BARCELONA_BG_CLEAN_PATH35      @ ptr path 35
-    .word   _BARCELONA_BG_CLEAN_PATH36      @ ptr path 36
-    .word   _BARCELONA_BG_CLEAN_PATH37      @ ptr path 37
-    .word   _BARCELONA_BG_CLEAN_PATH38      @ ptr path 38
-    .word   _BARCELONA_BG_CLEAN_PATH39      @ ptr path 39
-    .word   _BARCELONA_BG_CLEAN_PATH40      @ ptr path 40
-    .word   _BARCELONA_BG_CLEAN_PATH41      @ ptr path 41
-    .word   _BARCELONA_BG_CLEAN_PATH42      @ ptr path 42
-    .word   _BARCELONA_BG_CLEAN_PATH43      @ ptr path 43
-    .word   _BARCELONA_BG_CLEAN_PATH44      @ ptr path 44
-    .word   _BARCELONA_BG_CLEAN_PATH45      @ ptr path 45
-    .word   _BARCELONA_BG_CLEAN_PATH46      @ ptr path 46
-    .word   _BARCELONA_BG_CLEAN_PATH47      @ ptr path 47
-    .word   _BARCELONA_BG_CLEAN_PATH48      @ ptr path 48
-    .word   _BARCELONA_BG_CLEAN_PATH49      @ ptr path 49
-    .word   _BARCELONA_BG_CLEAN_PATH50      @ ptr path 50
-    .word   _BARCELONA_BG_CLEAN_PATH51      @ ptr path 51
-    .word   _BARCELONA_BG_CLEAN_PATH52      @ ptr path 52
-    .word   _BARCELONA_BG_CLEAN_PATH53      @ ptr path 53
-    .word   _BARCELONA_BG_CLEAN_PATH54      @ ptr path 54
-    .word   _BARCELONA_BG_CLEAN_PATH55      @ ptr path 55
-    .word   _BARCELONA_BG_CLEAN_PATH56      @ ptr path 56
-    .word   _BARCELONA_BG_CLEAN_PATH57      @ ptr path 57
-    .word   _BARCELONA_BG_CLEAN_PATH58      @ ptr path 58
-    .word   _BARCELONA_BG_CLEAN_PATH59      @ ptr path 59
-    .word   _BARCELONA_BG_CLEAN_PATH60      @ ptr path 60
-    .word   _BARCELONA_BG_CLEAN_PATH61      @ ptr path 61
-    .word   _BARCELONA_BG_CLEAN_PATH62      @ ptr path 62
-    .word   _BARCELONA_BG_CLEAN_PATH63      @ ptr path 63
-    .word   _BARCELONA_BG_CLEAN_PATH64      @ ptr path 64
-    .word   _BARCELONA_BG_CLEAN_PATH65      @ ptr path 65
-    .word   _BARCELONA_BG_CLEAN_PATH66      @ ptr path 66
-    .word   _BARCELONA_BG_CLEAN_PATH67      @ ptr path 67
-
-_BARCELONA_BG_CLEAN_PATH0:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xD1, 0x00, 0x00  @ y=-64, x=-47, hdr
-    .byte   0xFF, 0x0D, 0x05  @ line dy=13, dx=5
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x14, 0x2A  @ line dy=20, dx=42
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH1:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xD5, 0x00, 0x00  @ y=-64, x=-43, hdr
-    .byte   0xFF, 0x14, 0x07  @ line dy=20, dx=7
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0xEC, 0xFA  @ line dy=-20, dx=-6
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH2:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xDF, 0x00, 0x00  @ y=-64, x=-33, hdr
-    .byte   0xFF, 0x18, 0x08  @ line dy=24, dx=8
-    .byte   0xFF, 0x01, 0x09  @ line dy=1, dx=9
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH3:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x00, 0x00, 0x00  @ y=-29, x=0, hdr
-    .byte   0xFF, 0xF6, 0xF5  @ line dy=-10, dx=-11
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH4:
-    .byte   127               @ intensity
-    .byte   0xC0, 0xFB, 0x00, 0x00  @ y=-64, x=-5, hdr
-    .byte   0xFF, 0x0C, 0x01  @ line dy=12, dx=1
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH5:
-    .byte   127               @ intensity
-    .byte   0xCC, 0x04, 0x00, 0x00  @ y=-52, x=4, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH6:
-    .byte   127               @ intensity
-    .byte   0xD9, 0xF5, 0x00, 0x00  @ y=-39, x=-11, hdr
-    .byte   0xFF, 0xE7, 0xF9  @ line dy=-25, dx=-7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH7:
-    .byte   127               @ intensity
-    .byte   0xD9, 0xF0, 0x00, 0x00  @ y=-39, x=-16, hdr
-    .byte   0xFF, 0xE7, 0xFC  @ line dy=-25, dx=-4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH8:
-    .byte   127               @ intensity
-    .byte   0xD5, 0xD8, 0x00, 0x00  @ y=-43, x=-40, hdr
-    .byte   0xFF, 0x16, 0x28  @ line dy=22, dx=40
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH9:
-    .byte   127               @ intensity
-    .byte   0xEB, 0x00, 0x00, 0x00  @ y=-21, x=0, hdr
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH10:
-    .byte   127               @ intensity
-    .byte   0xD8, 0xDA, 0x00, 0x00  @ y=-40, x=-38, hdr
-    .byte   0xFF, 0x0B, 0x02  @ line dy=11, dx=2
-    .byte   0xFF, 0x12, 0x24  @ line dy=18, dx=36
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH11:
-    .byte   127               @ intensity
-    .byte   0xE4, 0xDE, 0x00, 0x00  @ y=-28, x=-34, hdr
-    .byte   0xFF, 0x3A, 0x07  @ line dy=58, dx=7
-    .byte   0xFF, 0x0F, 0x03  @ line dy=15, dx=3
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xF2, 0x02  @ line dy=-14, dx=2
-    .byte   0xFF, 0xCB, 0xFF  @ line dy=-53, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH12:
-    .byte   127               @ intensity
-    .byte   0xEA, 0xEB, 0x00, 0x00  @ y=-22, x=-21, hdr
-    .byte   0xFF, 0x41, 0x05  @ line dy=65, dx=5
-    .byte   0xFF, 0x0F, 0x03  @ line dy=15, dx=3
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xF3, 0x03  @ line dy=-13, dx=3
-    .byte   0xFF, 0xC4, 0x00  @ line dy=-60, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH13:
-    .byte   127               @ intensity
-    .byte   0x12, 0xF8, 0x00, 0x00  @ y=18, x=-8, hdr
-    .byte   0xFF, 0x03, 0x08  @ line dy=3, dx=8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH14:
-    .byte   127               @ intensity
-    .byte   0x0B, 0xF8, 0x00, 0x00  @ y=11, x=-8, hdr
-    .byte   0xFF, 0x06, 0x08  @ line dy=6, dx=8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH15:
-    .byte   127               @ intensity
-    .byte   0xF3, 0xFC, 0x00, 0x00  @ y=-13, x=-4, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
-    .byte   0xFF, 0x0A, 0x04  @ line dy=10, dx=4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH16:
-    .byte   127               @ intensity
-    .byte   0x2B, 0xF0, 0x00, 0x00  @ y=43, x=-16, hdr
-    .byte   0xFF, 0x01, 0x08  @ line dy=1, dx=8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH17:
-    .byte   127               @ intensity
-    .byte   0x1D, 0xE5, 0x00, 0x00  @ y=29, x=-27, hdr
-    .byte   0xFF, 0x01, 0x07  @ line dy=1, dx=7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH18:
-    .byte   127               @ intensity
-    .byte   0x28, 0xF3, 0x00, 0x00  @ y=40, x=-13, hdr
-    .byte   0xFF, 0xE5, 0xFD  @ line dy=-27, dx=-3
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH19:
-    .byte   127               @ intensity
-    .byte   0x28, 0xF6, 0x00, 0x00  @ y=40, x=-10, hdr
-    .byte   0xFF, 0xE6, 0x00  @ line dy=-26, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH20:
-    .byte   127               @ intensity
-    .byte   0x0E, 0xF4, 0x00, 0x00  @ y=14, x=-12, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH21:
-    .byte   127               @ intensity
-    .byte   0x07, 0xF0, 0x00, 0x00  @ y=7, x=-16, hdr
-    .byte   0xFF, 0xF0, 0xFF  @ line dy=-16, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH22:
-    .byte   127               @ intensity
-    .byte   0x07, 0xF3, 0x00, 0x00  @ y=7, x=-13, hdr
-    .byte   0xFF, 0xF2, 0xFF  @ line dy=-14, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH23:
-    .byte   127               @ intensity
-    .byte   0x07, 0xF6, 0x00, 0x00  @ y=7, x=-10, hdr
-    .byte   0xFF, 0xF4, 0xFF  @ line dy=-12, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH24:
-    .byte   127               @ intensity
-    .byte   0x1B, 0xE7, 0x00, 0x00  @ y=27, x=-25, hdr
-    .byte   0xFF, 0xEB, 0xFE  @ line dy=-21, dx=-2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH25:
-    .byte   127               @ intensity
-    .byte   0x1B, 0xE9, 0x00, 0x00  @ y=27, x=-23, hdr
-    .byte   0xFF, 0xEB, 0x00  @ line dy=-21, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH26:
-    .byte   127               @ intensity
-    .byte   0x00, 0xE4, 0x00, 0x00  @ y=0, x=-28, hdr
-    .byte   0xFF, 0xF0, 0xFE  @ line dy=-16, dx=-2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH27:
-    .byte   127               @ intensity
-    .byte   0x00, 0xE6, 0x00, 0x00  @ y=0, x=-26, hdr
-    .byte   0xFF, 0xF1, 0xFF  @ line dy=-15, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH28:
-    .byte   127               @ intensity
-    .byte   0x00, 0xE9, 0x00, 0x00  @ y=0, x=-23, hdr
-    .byte   0xFF, 0xF3, 0xFF  @ line dy=-13, dx=-1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH29:
-    .byte   127               @ intensity
-    .byte   0x3D, 0xF7, 0x00, 0x00  @ y=61, x=-9, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH30:
-    .byte   127               @ intensity
-    .byte   0x30, 0xEC, 0x00, 0x00  @ y=48, x=-20, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH31:
-    .byte   127               @ intensity
-    .byte   0x01, 0xF9, 0x00, 0x00  @ y=1, x=-7, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH32:
-    .byte   127               @ intensity
-    .byte   0x03, 0xFC, 0x00, 0x00  @ y=3, x=-4, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH33:
-    .byte   127               @ intensity
-    .byte   0x05, 0xFF, 0x00, 0x00  @ y=5, x=-1, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH34:
-    .byte   127               @ intensity
-    .byte   0xC0, 0x2F, 0x00, 0x00  @ y=-64, x=47, hdr
-    .byte   0xFF, 0x0D, 0xFB  @ line dy=13, dx=-5
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x14, 0xD6  @ line dy=20, dx=-42
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH35:
-    .byte   127               @ intensity
-    .byte   0xC0, 0x2B, 0x00, 0x00  @ y=-64, x=43, hdr
-    .byte   0xFF, 0x14, 0xF9  @ line dy=20, dx=-7
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0xFF, 0xEC, 0x06  @ line dy=-20, dx=6
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH36:
-    .byte   127               @ intensity
-    .byte   0xC0, 0x21, 0x00, 0x00  @ y=-64, x=33, hdr
-    .byte   0xFF, 0x18, 0xF8  @ line dy=24, dx=-8
-    .byte   0xFF, 0x01, 0xF7  @ line dy=1, dx=-9
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH37:
-    .byte   127               @ intensity
-    .byte   0xE3, 0x00, 0x00, 0x00  @ y=-29, x=0, hdr
-    .byte   0xFF, 0xF6, 0x0B  @ line dy=-10, dx=11
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH38:
-    .byte   127               @ intensity
-    .byte   0xC0, 0x05, 0x00, 0x00  @ y=-64, x=5, hdr
-    .byte   0xFF, 0x0C, 0xFF  @ line dy=12, dx=-1
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH39:
-    .byte   127               @ intensity
-    .byte   0xCC, 0xFC, 0x00, 0x00  @ y=-52, x=-4, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH40:
-    .byte   127               @ intensity
-    .byte   0xD9, 0x0B, 0x00, 0x00  @ y=-39, x=11, hdr
-    .byte   0xFF, 0xE7, 0x07  @ line dy=-25, dx=7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH41:
-    .byte   127               @ intensity
-    .byte   0xD9, 0x10, 0x00, 0x00  @ y=-39, x=16, hdr
-    .byte   0xFF, 0xE7, 0x04  @ line dy=-25, dx=4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH42:
-    .byte   127               @ intensity
-    .byte   0xD5, 0x28, 0x00, 0x00  @ y=-43, x=40, hdr
-    .byte   0xFF, 0x16, 0xD8  @ line dy=22, dx=-40
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH43:
-    .byte   127               @ intensity
-    .byte   0xEB, 0x00, 0x00, 0x00  @ y=-21, x=0, hdr
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH44:
-    .byte   127               @ intensity
-    .byte   0xD8, 0x26, 0x00, 0x00  @ y=-40, x=38, hdr
-    .byte   0xFF, 0x0B, 0xFE  @ line dy=11, dx=-2
-    .byte   0xFF, 0x12, 0xDC  @ line dy=18, dx=-36
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH45:
-    .byte   127               @ intensity
-    .byte   0xE4, 0x22, 0x00, 0x00  @ y=-28, x=34, hdr
-    .byte   0xFF, 0x3A, 0xF9  @ line dy=58, dx=-7
-    .byte   0xFF, 0x0F, 0xFD  @ line dy=15, dx=-3
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xF2, 0xFE  @ line dy=-14, dx=-2
-    .byte   0xFF, 0xCB, 0x01  @ line dy=-53, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH46:
-    .byte   127               @ intensity
-    .byte   0xEA, 0x15, 0x00, 0x00  @ y=-22, x=21, hdr
-    .byte   0xFF, 0x40, 0xFA  @ line dy=64, dx=-6
-    .byte   0xFF, 0x10, 0xFE  @ line dy=16, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xF3, 0xFD  @ line dy=-13, dx=-3
-    .byte   0xFF, 0xC4, 0x00  @ line dy=-60, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH47:
-    .byte   127               @ intensity
-    .byte   0x12, 0x08, 0x00, 0x00  @ y=18, x=8, hdr
-    .byte   0xFF, 0x03, 0xF8  @ line dy=3, dx=-8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH48:
-    .byte   127               @ intensity
-    .byte   0x0B, 0x08, 0x00, 0x00  @ y=11, x=8, hdr
-    .byte   0xFF, 0x06, 0xF8  @ line dy=6, dx=-8
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH49:
-    .byte   127               @ intensity
-    .byte   0xF3, 0x04, 0x00, 0x00  @ y=-13, x=4, hdr
-    .byte   0xFF, 0x0F, 0x00  @ line dy=15, dx=0
-    .byte   0xFF, 0x0A, 0xFC  @ line dy=10, dx=-4
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH50:
-    .byte   127               @ intensity
-    .byte   0x2A, 0x0F, 0x00, 0x00  @ y=42, x=15, hdr
-    .byte   0xFF, 0x03, 0xF9  @ line dy=3, dx=-7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH51:
-    .byte   127               @ intensity
-    .byte   0x1D, 0x1B, 0x00, 0x00  @ y=29, x=27, hdr
-    .byte   0xFF, 0x02, 0xF9  @ line dy=2, dx=-7
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH52:
-    .byte   127               @ intensity
-    .byte   0x28, 0x0D, 0x00, 0x00  @ y=40, x=13, hdr
-    .byte   0xFF, 0xE5, 0x03  @ line dy=-27, dx=3
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH53:
-    .byte   127               @ intensity
-    .byte   0x28, 0x0A, 0x00, 0x00  @ y=40, x=10, hdr
-    .byte   0xFF, 0xE6, 0x00  @ line dy=-26, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH54:
-    .byte   127               @ intensity
-    .byte   0x0E, 0x0C, 0x00, 0x00  @ y=14, x=12, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH55:
-    .byte   127               @ intensity
-    .byte   0x07, 0x10, 0x00, 0x00  @ y=7, x=16, hdr
-    .byte   0xFF, 0xF0, 0x01  @ line dy=-16, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH56:
-    .byte   127               @ intensity
-    .byte   0x07, 0x0D, 0x00, 0x00  @ y=7, x=13, hdr
-    .byte   0xFF, 0xF2, 0x01  @ line dy=-14, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH57:
-    .byte   127               @ intensity
-    .byte   0x07, 0x0A, 0x00, 0x00  @ y=7, x=10, hdr
-    .byte   0xFF, 0xF4, 0x01  @ line dy=-12, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH58:
-    .byte   127               @ intensity
-    .byte   0x1B, 0x19, 0x00, 0x00  @ y=27, x=25, hdr
-    .byte   0xFF, 0xEB, 0x02  @ line dy=-21, dx=2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH59:
-    .byte   127               @ intensity
-    .byte   0x1B, 0x17, 0x00, 0x00  @ y=27, x=23, hdr
-    .byte   0xFF, 0xEB, 0x00  @ line dy=-21, dx=0
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH60:
-    .byte   127               @ intensity
-    .byte   0x00, 0x1C, 0x00, 0x00  @ y=0, x=28, hdr
-    .byte   0xFF, 0xF0, 0x02  @ line dy=-16, dx=2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH61:
-    .byte   127               @ intensity
-    .byte   0x00, 0x1A, 0x00, 0x00  @ y=0, x=26, hdr
-    .byte   0xFF, 0xF1, 0x01  @ line dy=-15, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH62:
-    .byte   127               @ intensity
-    .byte   0x00, 0x17, 0x00, 0x00  @ y=0, x=23, hdr
-    .byte   0xFF, 0xF3, 0x01  @ line dy=-13, dx=1
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH63:
-    .byte   127               @ intensity
-    .byte   0x3D, 0x09, 0x00, 0x00  @ y=61, x=9, hdr
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH64:
-    .byte   127               @ intensity
-    .byte   0x30, 0x14, 0x00, 0x00  @ y=48, x=20, hdr
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH65:
-    .byte   127               @ intensity
-    .byte   0x01, 0x07, 0x00, 0x00  @ y=1, x=7, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH66:
-    .byte   127               @ intensity
-    .byte   0x03, 0x04, 0x00, 0x00  @ y=3, x=4, hdr
-    .byte   0x02            @ end marker
-
-_BARCELONA_BG_CLEAN_PATH67:
-    .byte   127               @ intensity
-    .byte   0x05, 0x01, 0x00, 0x00  @ y=5, x=1, hdr
-    .byte   0x02            @ end marker
-
-@ --- BARCELONA_BG_CLEAN_3D_DATA (68 path(s)) ---
-.global _BARCELONA_BG_CLEAN_3D_DATA
-_BARCELONA_BG_CLEAN_3D_DATA:
-    .word   142               @ vertex_count
-    .byte   0xD1, 0xC1, 0x00  @ vert 0: x=-47,y=-63,z=0
-    .byte   0xD6, 0xCD, 0x00  @ vert 1: x=-42,y=-51,z=0
-    .byte   0xD6, 0xD2, 0x00  @ vert 2: x=-42,y=-46,z=0
-    .byte   0x00, 0xE6, 0x00  @ vert 3: x=0,y=-26,z=0
-    .byte   0xD5, 0xC1, 0x00  @ vert 4: x=-43,y=-63,z=0
-    .byte   0xDC, 0xD4, 0x00  @ vert 5: x=-36,y=-44,z=0
-    .byte   0xE2, 0xD4, 0x00  @ vert 6: x=-30,y=-44,z=0
-    .byte   0xDC, 0xC1, 0x00  @ vert 7: x=-36,y=-63,z=0
-    .byte   0xDF, 0xC1, 0x00  @ vert 8: x=-33,y=-63,z=0
-    .byte   0xE7, 0xD8, 0x00  @ vert 9: x=-25,y=-40,z=0
-    .byte   0xF0, 0xD9, 0x00  @ vert 10: x=-16,y=-39,z=0
-    .byte   0x00, 0xE3, 0x00  @ vert 11: x=0,y=-29,z=0
-    .byte   0xF5, 0xD9, 0x00  @ vert 12: x=-11,y=-39,z=0
-    .byte   0xFB, 0xC1, 0x00  @ vert 13: x=-5,y=-63,z=0
-    .byte   0xFC, 0xCC, 0x00  @ vert 14: x=-4,y=-52,z=0
-    .byte   0x00, 0xCD, 0x00  @ vert 15: x=0,y=-51,z=0
-    .byte   0x04, 0xCC, 0x00  @ vert 16: x=4,y=-52,z=0
-    .byte   0xEE, 0xC1, 0x00  @ vert 17: x=-18,y=-63,z=0
-    .byte   0xEC, 0xC1, 0x00  @ vert 18: x=-20,y=-63,z=0
-    .byte   0xD8, 0xD5, 0x00  @ vert 19: x=-40,y=-43,z=0
-    .byte   0x00, 0xEB, 0x00  @ vert 20: x=0,y=-21,z=0
-    .byte   0xDA, 0xD8, 0x00  @ vert 21: x=-38,y=-40,z=0
-    .byte   0xDC, 0xE3, 0x00  @ vert 22: x=-36,y=-29,z=0
-    .byte   0x00, 0xF5, 0x00  @ vert 23: x=0,y=-11,z=0
-    .byte   0xDE, 0xE4, 0x00  @ vert 24: x=-34,y=-28,z=0
-    .byte   0xE5, 0x1E, 0x00  @ vert 25: x=-27,y=30,z=0
-    .byte   0xE8, 0x2D, 0x00  @ vert 26: x=-24,y=45,z=0
-    .byte   0xEA, 0x2D, 0x00  @ vert 27: x=-22,y=45,z=0
-    .byte   0xEC, 0x1F, 0x00  @ vert 28: x=-20,y=31,z=0
-    .byte   0xEB, 0xEA, 0x00  @ vert 29: x=-21,y=-22,z=0
-    .byte   0xF0, 0x2B, 0x00  @ vert 30: x=-16,y=43,z=0
-    .byte   0xF3, 0x3A, 0x00  @ vert 31: x=-13,y=58,z=0
-    .byte   0xF5, 0x3A, 0x00  @ vert 32: x=-11,y=58,z=0
-    .byte   0xF8, 0x2D, 0x00  @ vert 33: x=-8,y=45,z=0
-    .byte   0xF8, 0xF1, 0x00  @ vert 34: x=-8,y=-15,z=0
-    .byte   0xF8, 0x12, 0x00  @ vert 35: x=-8,y=18,z=0
-    .byte   0x00, 0x15, 0x00  @ vert 36: x=0,y=21,z=0
-    .byte   0xF8, 0x0B, 0x00  @ vert 37: x=-8,y=11,z=0
-    .byte   0x00, 0x11, 0x00  @ vert 38: x=0,y=17,z=0
-    .byte   0xFC, 0xF3, 0x00  @ vert 39: x=-4,y=-13,z=0
-    .byte   0xFC, 0x02, 0x00  @ vert 40: x=-4,y=2,z=0
-    .byte   0x00, 0x0C, 0x00  @ vert 41: x=0,y=12,z=0
-    .byte   0xF8, 0x2C, 0x00  @ vert 42: x=-8,y=44,z=0
-    .byte   0xE5, 0x1D, 0x00  @ vert 43: x=-27,y=29,z=0
-    .byte   0xEC, 0x1E, 0x00  @ vert 44: x=-20,y=30,z=0
-    .byte   0xF3, 0x28, 0x00  @ vert 45: x=-13,y=40,z=0
-    .byte   0xF0, 0x0D, 0x00  @ vert 46: x=-16,y=13,z=0
-    .byte   0xF6, 0x28, 0x00  @ vert 47: x=-10,y=40,z=0
-    .byte   0xF6, 0x0E, 0x00  @ vert 48: x=-10,y=14,z=0
-    .byte   0xF4, 0x0E, 0x00  @ vert 49: x=-12,y=14,z=0
-    .byte   0xF0, 0x07, 0x00  @ vert 50: x=-16,y=7,z=0
-    .byte   0xEF, 0xF7, 0x00  @ vert 51: x=-17,y=-9,z=0
-    .byte   0xF3, 0x07, 0x00  @ vert 52: x=-13,y=7,z=0
-    .byte   0xF2, 0xF9, 0x00  @ vert 53: x=-14,y=-7,z=0
-    .byte   0xF6, 0x07, 0x00  @ vert 54: x=-10,y=7,z=0
-    .byte   0xF5, 0xFB, 0x00  @ vert 55: x=-11,y=-5,z=0
-    .byte   0xE7, 0x1B, 0x00  @ vert 56: x=-25,y=27,z=0
-    .byte   0xE5, 0x06, 0x00  @ vert 57: x=-27,y=6,z=0
-    .byte   0xE9, 0x1B, 0x00  @ vert 58: x=-23,y=27,z=0
-    .byte   0xE9, 0x06, 0x00  @ vert 59: x=-23,y=6,z=0
-    .byte   0xE4, 0x00, 0x00  @ vert 60: x=-28,y=0,z=0
-    .byte   0xE2, 0xF0, 0x00  @ vert 61: x=-30,y=-16,z=0
-    .byte   0xE6, 0x00, 0x00  @ vert 62: x=-26,y=0,z=0
-    .byte   0xE5, 0xF1, 0x00  @ vert 63: x=-27,y=-15,z=0
-    .byte   0xE9, 0x00, 0x00  @ vert 64: x=-23,y=0,z=0
-    .byte   0xE8, 0xF3, 0x00  @ vert 65: x=-24,y=-13,z=0
-    .byte   0xF7, 0x3D, 0x00  @ vert 66: x=-9,y=61,z=0
-    .byte   0xF6, 0x3F, 0x00  @ vert 67: x=-10,y=63,z=0
-    .byte   0xF3, 0x3F, 0x00  @ vert 68: x=-13,y=63,z=0
-    .byte   0xF2, 0x3D, 0x00  @ vert 69: x=-14,y=61,z=0
-    .byte   0xEC, 0x30, 0x00  @ vert 70: x=-20,y=48,z=0
-    .byte   0xEB, 0x33, 0x00  @ vert 71: x=-21,y=51,z=0
-    .byte   0xE8, 0x33, 0x00  @ vert 72: x=-24,y=51,z=0
-    .byte   0xE6, 0x30, 0x00  @ vert 73: x=-26,y=48,z=0
-    .byte   0xF9, 0x01, 0x00  @ vert 74: x=-7,y=1,z=0
-    .byte   0xFC, 0x03, 0x00  @ vert 75: x=-4,y=3,z=0
-    .byte   0xFF, 0x05, 0x00  @ vert 76: x=-1,y=5,z=0
-    .byte   0x2F, 0xC1, 0x00  @ vert 77: x=47,y=-63,z=0
-    .byte   0x2A, 0xCD, 0x00  @ vert 78: x=42,y=-51,z=0
-    .byte   0x2A, 0xD2, 0x00  @ vert 79: x=42,y=-46,z=0
-    .byte   0x2B, 0xC1, 0x00  @ vert 80: x=43,y=-63,z=0
-    .byte   0x24, 0xD4, 0x00  @ vert 81: x=36,y=-44,z=0
-    .byte   0x1E, 0xD4, 0x00  @ vert 82: x=30,y=-44,z=0
-    .byte   0x24, 0xC1, 0x00  @ vert 83: x=36,y=-63,z=0
-    .byte   0x21, 0xC1, 0x00  @ vert 84: x=33,y=-63,z=0
-    .byte   0x19, 0xD8, 0x00  @ vert 85: x=25,y=-40,z=0
-    .byte   0x10, 0xD9, 0x00  @ vert 86: x=16,y=-39,z=0
-    .byte   0x0B, 0xD9, 0x00  @ vert 87: x=11,y=-39,z=0
-    .byte   0x05, 0xC1, 0x00  @ vert 88: x=5,y=-63,z=0
-    .byte   0x12, 0xC1, 0x00  @ vert 89: x=18,y=-63,z=0
-    .byte   0x14, 0xC1, 0x00  @ vert 90: x=20,y=-63,z=0
-    .byte   0x28, 0xD5, 0x00  @ vert 91: x=40,y=-43,z=0
-    .byte   0x26, 0xD8, 0x00  @ vert 92: x=38,y=-40,z=0
-    .byte   0x24, 0xE3, 0x00  @ vert 93: x=36,y=-29,z=0
-    .byte   0x22, 0xE4, 0x00  @ vert 94: x=34,y=-28,z=0
-    .byte   0x1B, 0x1E, 0x00  @ vert 95: x=27,y=30,z=0
-    .byte   0x18, 0x2D, 0x00  @ vert 96: x=24,y=45,z=0
-    .byte   0x16, 0x2D, 0x00  @ vert 97: x=22,y=45,z=0
-    .byte   0x14, 0x1F, 0x00  @ vert 98: x=20,y=31,z=0
-    .byte   0x15, 0xEA, 0x00  @ vert 99: x=21,y=-22,z=0
-    .byte   0x0F, 0x2A, 0x00  @ vert 100: x=15,y=42,z=0
-    .byte   0x0D, 0x3A, 0x00  @ vert 101: x=13,y=58,z=0
-    .byte   0x0B, 0x3A, 0x00  @ vert 102: x=11,y=58,z=0
-    .byte   0x08, 0x2D, 0x00  @ vert 103: x=8,y=45,z=0
-    .byte   0x08, 0xF1, 0x00  @ vert 104: x=8,y=-15,z=0
-    .byte   0x08, 0x12, 0x00  @ vert 105: x=8,y=18,z=0
-    .byte   0x08, 0x0B, 0x00  @ vert 106: x=8,y=11,z=0
-    .byte   0x04, 0xF3, 0x00  @ vert 107: x=4,y=-13,z=0
-    .byte   0x04, 0x02, 0x00  @ vert 108: x=4,y=2,z=0
-    .byte   0x1B, 0x1D, 0x00  @ vert 109: x=27,y=29,z=0
-    .byte   0x0D, 0x28, 0x00  @ vert 110: x=13,y=40,z=0
-    .byte   0x10, 0x0D, 0x00  @ vert 111: x=16,y=13,z=0
-    .byte   0x0A, 0x28, 0x00  @ vert 112: x=10,y=40,z=0
-    .byte   0x0A, 0x0E, 0x00  @ vert 113: x=10,y=14,z=0
-    .byte   0x0C, 0x0E, 0x00  @ vert 114: x=12,y=14,z=0
-    .byte   0x10, 0x07, 0x00  @ vert 115: x=16,y=7,z=0
-    .byte   0x11, 0xF7, 0x00  @ vert 116: x=17,y=-9,z=0
-    .byte   0x0D, 0x07, 0x00  @ vert 117: x=13,y=7,z=0
-    .byte   0x0E, 0xF9, 0x00  @ vert 118: x=14,y=-7,z=0
-    .byte   0x0A, 0x07, 0x00  @ vert 119: x=10,y=7,z=0
-    .byte   0x0B, 0xFB, 0x00  @ vert 120: x=11,y=-5,z=0
-    .byte   0x19, 0x1B, 0x00  @ vert 121: x=25,y=27,z=0
-    .byte   0x1B, 0x06, 0x00  @ vert 122: x=27,y=6,z=0
-    .byte   0x17, 0x1B, 0x00  @ vert 123: x=23,y=27,z=0
-    .byte   0x17, 0x06, 0x00  @ vert 124: x=23,y=6,z=0
-    .byte   0x1C, 0x00, 0x00  @ vert 125: x=28,y=0,z=0
-    .byte   0x1E, 0xF0, 0x00  @ vert 126: x=30,y=-16,z=0
-    .byte   0x1A, 0x00, 0x00  @ vert 127: x=26,y=0,z=0
-    .byte   0x1B, 0xF1, 0x00  @ vert 128: x=27,y=-15,z=0
-    .byte   0x17, 0x00, 0x00  @ vert 129: x=23,y=0,z=0
-    .byte   0x18, 0xF3, 0x00  @ vert 130: x=24,y=-13,z=0
-    .byte   0x09, 0x3D, 0x00  @ vert 131: x=9,y=61,z=0
-    .byte   0x0A, 0x3F, 0x00  @ vert 132: x=10,y=63,z=0
-    .byte   0x0D, 0x3F, 0x00  @ vert 133: x=13,y=63,z=0
-    .byte   0x0E, 0x3D, 0x00  @ vert 134: x=14,y=61,z=0
-    .byte   0x14, 0x30, 0x00  @ vert 135: x=20,y=48,z=0
-    .byte   0x15, 0x33, 0x00  @ vert 136: x=21,y=51,z=0
-    .byte   0x18, 0x33, 0x00  @ vert 137: x=24,y=51,z=0
-    .byte   0x1A, 0x30, 0x00  @ vert 138: x=26,y=48,z=0
-    .byte   0x07, 0x01, 0x00  @ vert 139: x=7,y=1,z=0
-    .byte   0x04, 0x03, 0x00  @ vert 140: x=4,y=3,z=0
-    .byte   0x01, 0x05, 0x00  @ vert 141: x=1,y=5,z=0
-    .word   68               @ path_count
-    .byte   4               @ path 0: pt_count
-    .byte   0               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   3               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   8
-    .byte   9
-    .byte   10
-    .byte   2               @ path 3: pt_count
-    .byte   0               @ path 3: closed
-    .byte   11
-    .byte   12
-    .byte   3               @ path 4: pt_count
-    .byte   0               @ path 4: closed
-    .byte   13
-    .byte   14
-    .byte   15
-    .byte   1               @ path 5: pt_count
-    .byte   0               @ path 5: closed
-    .byte   16
-    .byte   3               @ path 6: pt_count
-    .byte   0               @ path 6: closed
-    .byte   12
-    .byte   17
-    .byte   17
-    .byte   3               @ path 7: pt_count
-    .byte   0               @ path 7: closed
-    .byte   10
-    .byte   18
-    .byte   18
-    .byte   2               @ path 8: pt_count
-    .byte   0               @ path 8: closed
-    .byte   19
-    .byte   20
-    .byte   2               @ path 9: pt_count
-    .byte   0               @ path 9: closed
-    .byte   20
-    .byte   3
-    .byte   3               @ path 10: pt_count
-    .byte   0               @ path 10: closed
-    .byte   21
-    .byte   22
-    .byte   23
-    .byte   7               @ path 11: pt_count
-    .byte   0               @ path 11: closed
-    .byte   24
-    .byte   25
-    .byte   26
-    .byte   27
-    .byte   28
-    .byte   29
-    .byte   29
-    .byte   8               @ path 12: pt_count
-    .byte   0               @ path 12: closed
-    .byte   29
-    .byte   29
-    .byte   30
-    .byte   31
-    .byte   32
-    .byte   33
-    .byte   34
-    .byte   34
-    .byte   2               @ path 13: pt_count
-    .byte   0               @ path 13: closed
-    .byte   35
-    .byte   36
-    .byte   2               @ path 14: pt_count
-    .byte   0               @ path 14: closed
-    .byte   37
-    .byte   38
-    .byte   3               @ path 15: pt_count
-    .byte   0               @ path 15: closed
-    .byte   39
-    .byte   40
-    .byte   41
-    .byte   2               @ path 16: pt_count
-    .byte   0               @ path 16: closed
-    .byte   30
-    .byte   42
-    .byte   2               @ path 17: pt_count
-    .byte   0               @ path 17: closed
-    .byte   43
-    .byte   44
-    .byte   3               @ path 18: pt_count
-    .byte   0               @ path 18: closed
-    .byte   45
-    .byte   46
-    .byte   46
-    .byte   2               @ path 19: pt_count
-    .byte   0               @ path 19: closed
-    .byte   47
-    .byte   48
-    .byte   2               @ path 20: pt_count
-    .byte   0               @ path 20: closed
-    .byte   49
-    .byte   49
-    .byte   2               @ path 21: pt_count
-    .byte   0               @ path 21: closed
-    .byte   50
-    .byte   51
-    .byte   2               @ path 22: pt_count
-    .byte   0               @ path 22: closed
-    .byte   52
-    .byte   53
-    .byte   2               @ path 23: pt_count
-    .byte   0               @ path 23: closed
-    .byte   54
-    .byte   55
-    .byte   2               @ path 24: pt_count
-    .byte   0               @ path 24: closed
-    .byte   56
-    .byte   57
-    .byte   2               @ path 25: pt_count
-    .byte   0               @ path 25: closed
-    .byte   58
-    .byte   59
-    .byte   2               @ path 26: pt_count
-    .byte   0               @ path 26: closed
-    .byte   60
-    .byte   61
-    .byte   2               @ path 27: pt_count
-    .byte   0               @ path 27: closed
-    .byte   62
-    .byte   63
-    .byte   2               @ path 28: pt_count
-    .byte   0               @ path 28: closed
-    .byte   64
-    .byte   65
-    .byte   6               @ path 29: pt_count
-    .byte   1               @ path 29: closed
-    .byte   66
-    .byte   67
-    .byte   68
-    .byte   69
-    .byte   31
-    .byte   32
-    .byte   6               @ path 30: pt_count
-    .byte   1               @ path 30: closed
-    .byte   70
-    .byte   71
-    .byte   72
-    .byte   73
-    .byte   26
-    .byte   27
-    .byte   1               @ path 31: pt_count
-    .byte   0               @ path 31: closed
-    .byte   74
-    .byte   1               @ path 32: pt_count
-    .byte   0               @ path 32: closed
-    .byte   75
-    .byte   1               @ path 33: pt_count
-    .byte   0               @ path 33: closed
-    .byte   76
-    .byte   4               @ path 34: pt_count
-    .byte   0               @ path 34: closed
-    .byte   77
-    .byte   78
-    .byte   79
-    .byte   3
-    .byte   4               @ path 35: pt_count
-    .byte   0               @ path 35: closed
-    .byte   80
-    .byte   81
-    .byte   82
-    .byte   83
-    .byte   3               @ path 36: pt_count
-    .byte   0               @ path 36: closed
-    .byte   84
-    .byte   85
-    .byte   86
-    .byte   2               @ path 37: pt_count
-    .byte   0               @ path 37: closed
-    .byte   11
-    .byte   87
-    .byte   3               @ path 38: pt_count
-    .byte   0               @ path 38: closed
-    .byte   88
-    .byte   16
-    .byte   15
-    .byte   1               @ path 39: pt_count
-    .byte   0               @ path 39: closed
-    .byte   14
-    .byte   3               @ path 40: pt_count
-    .byte   0               @ path 40: closed
-    .byte   87
-    .byte   89
-    .byte   89
-    .byte   3               @ path 41: pt_count
-    .byte   0               @ path 41: closed
-    .byte   86
-    .byte   90
-    .byte   90
-    .byte   2               @ path 42: pt_count
-    .byte   0               @ path 42: closed
-    .byte   91
-    .byte   20
-    .byte   2               @ path 43: pt_count
-    .byte   0               @ path 43: closed
-    .byte   20
-    .byte   3
-    .byte   3               @ path 44: pt_count
-    .byte   0               @ path 44: closed
-    .byte   92
-    .byte   93
-    .byte   23
-    .byte   7               @ path 45: pt_count
-    .byte   0               @ path 45: closed
-    .byte   94
-    .byte   95
-    .byte   96
-    .byte   97
-    .byte   98
-    .byte   99
-    .byte   99
-    .byte   8               @ path 46: pt_count
-    .byte   0               @ path 46: closed
-    .byte   99
-    .byte   99
-    .byte   100
-    .byte   101
-    .byte   102
-    .byte   103
-    .byte   104
-    .byte   104
-    .byte   2               @ path 47: pt_count
-    .byte   0               @ path 47: closed
-    .byte   105
-    .byte   36
-    .byte   2               @ path 48: pt_count
-    .byte   0               @ path 48: closed
-    .byte   106
-    .byte   38
-    .byte   3               @ path 49: pt_count
-    .byte   0               @ path 49: closed
-    .byte   107
-    .byte   108
-    .byte   41
-    .byte   2               @ path 50: pt_count
-    .byte   0               @ path 50: closed
-    .byte   100
-    .byte   103
-    .byte   2               @ path 51: pt_count
-    .byte   0               @ path 51: closed
-    .byte   109
-    .byte   98
-    .byte   3               @ path 52: pt_count
-    .byte   0               @ path 52: closed
-    .byte   110
-    .byte   111
-    .byte   111
-    .byte   2               @ path 53: pt_count
-    .byte   0               @ path 53: closed
-    .byte   112
-    .byte   113
-    .byte   2               @ path 54: pt_count
-    .byte   0               @ path 54: closed
-    .byte   114
-    .byte   114
-    .byte   2               @ path 55: pt_count
-    .byte   0               @ path 55: closed
-    .byte   115
-    .byte   116
-    .byte   2               @ path 56: pt_count
-    .byte   0               @ path 56: closed
-    .byte   117
-    .byte   118
-    .byte   2               @ path 57: pt_count
-    .byte   0               @ path 57: closed
-    .byte   119
-    .byte   120
-    .byte   2               @ path 58: pt_count
-    .byte   0               @ path 58: closed
-    .byte   121
-    .byte   122
-    .byte   2               @ path 59: pt_count
-    .byte   0               @ path 59: closed
-    .byte   123
-    .byte   124
-    .byte   2               @ path 60: pt_count
-    .byte   0               @ path 60: closed
-    .byte   125
-    .byte   126
-    .byte   2               @ path 61: pt_count
-    .byte   0               @ path 61: closed
-    .byte   127
-    .byte   128
-    .byte   2               @ path 62: pt_count
-    .byte   0               @ path 62: closed
-    .byte   129
-    .byte   130
-    .byte   6               @ path 63: pt_count
-    .byte   1               @ path 63: closed
-    .byte   131
-    .byte   132
-    .byte   133
-    .byte   134
-    .byte   101
-    .byte   102
-    .byte   6               @ path 64: pt_count
-    .byte   1               @ path 64: closed
-    .byte   135
-    .byte   136
-    .byte   137
-    .byte   138
-    .byte   96
-    .byte   97
-    .byte   1               @ path 65: pt_count
-    .byte   0               @ path 65: closed
-    .byte   139
-    .byte   1               @ path 66: pt_count
-    .byte   0               @ path 66: closed
-    .byte   140
-    .byte   1               @ path 67: pt_count
-    .byte   0               @ path 67: closed
-    .byte   141
-
-@ --- bomber_shot SFX (23 frames, 16 events) ---
-.global _BOMBER_SHOT_SFX
-_BOMBER_SHOT_SFX:
-    .word   16  @ num_events
-    .byte   0, 5  @ frame=0
-    .byte   6, 30  @ PSG r6
-    .byte   4, 255  @ PSG r4
-    .byte   5, 15  @ PSG r5
-    .byte   10, 15  @ PSG r10
-    .byte   7, 27  @ PSG r7
-    .byte   1, 1  @ frame=2
-    .byte   10, 14  @ PSG r10
-    .byte   0, 1  @ frame=3
-    .byte   10, 13  @ PSG r10
-    .byte   0, 1  @ frame=4
-    .byte   10, 12  @ PSG r10
-    .byte   1, 1  @ frame=6
-    .byte   10, 11  @ PSG r10
-    .byte   0, 1  @ frame=7
-    .byte   10, 10  @ PSG r10
-    .byte   1, 1  @ frame=9
-    .byte   10, 9  @ PSG r10
-    .byte   0, 1  @ frame=10
-    .byte   10, 8  @ PSG r10
-    .byte   1, 1  @ frame=12
-    .byte   10, 7  @ PSG r10
-    .byte   1, 1  @ frame=14
-    .byte   10, 6  @ PSG r10
-    .byte   0, 1  @ frame=15
-    .byte   10, 5  @ PSG r10
-    .byte   1, 1  @ frame=17
-    .byte   10, 4  @ PSG r10
-    .byte   0, 1  @ frame=18
-    .byte   10, 3  @ PSG r10
-    .byte   1, 1  @ frame=20
-    .byte   10, 2  @ PSG r10
-    .byte   0, 1  @ frame=21
-    .byte   10, 1  @ PSG r10
-    .byte   1, 2  @ frame=23
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
-
-@ --- bonus_collected SFX (23 frames, 4 events) ---
-.global _BONUS_COLLECTED_SFX
-_BONUS_COLLECTED_SFX:
-    .word   4  @ num_events
-    .byte   0, 5  @ frame=0
-    .byte   6, 0  @ PSG r6
-    .byte   4, 255  @ PSG r4
-    .byte   5, 15  @ PSG r5
-    .byte   10, 14  @ PSG r10
-    .byte   7, 27  @ PSG r7
-    .byte   4, 1  @ frame=5
-    .byte   10, 13  @ PSG r10
-    .byte   4, 1  @ frame=10
-    .byte   10, 12  @ PSG r10
-    .byte   12, 2  @ frame=23
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
-
-@ --- brick (1 path(s)) ---
-.global _BRICK_VECTORS
-_BRICK_VECTORS:
-    .word   1               @ path_count
-    .word   _BRICK_PATH0      @ ptr path 0
-
-_BRICK_PATH0:
-    .byte   127               @ intensity
-    .byte   0x29, 0xD7, 0x00, 0x00  @ y=41, x=-41, hdr
-    .byte   0xFF, 0xF6, 0x5E  @ line dy=-10, dx=94
-    .byte   0xFF, 0xE8, 0x9E  @ line dy=-24, dx=-98
-    .byte   0xFF, 0x22, 0x04  @ line dy=34, dx=4
-    .byte   0x02            @ end marker
-
-@ --- BRICK_3D_DATA (1 path(s)) ---
-.global _BRICK_3D_DATA
-_BRICK_3D_DATA:
-    .word   3               @ vertex_count
-    .byte   0xD7, 0x29, 0x00  @ vert 0: x=-41,y=41,z=0
-    .byte   0x35, 0x1F, 0x00  @ vert 1: x=53,y=31,z=0
-    .byte   0xD3, 0x07, 0x00  @ vert 2: x=-45,y=7,z=0
-    .word   1               @ path_count
-    .byte   5               @ path 0: pt_count
-    .byte   0               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   0
-    .byte   0
-
 @ --- bubble_huge (1 path(s)) ---
 .global _BUBBLE_HUGE_VECTORS
 _BUBBLE_HUGE_VECTORS:
@@ -16909,121 +13643,6 @@ _BUDDHA_BG_3D_DATA:
     .byte   8
     .byte   9
 
-@ --- coin SFX (30 frames, 30 events) ---
-.global _COIN_SFX
-_COIN_SFX:
-    .word   30  @ num_events
-    .byte   0, 4  @ frame=0
-    .byte   4, 103  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 4  @ frame=1
-    .byte   4, 98  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 5  @ PSG r10
-    .byte   7, 59  @ PSG r7
-    .byte   0, 3  @ frame=2
-    .byte   4, 93  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 10  @ PSG r10
-    .byte   0, 3  @ frame=3
-    .byte   4, 89  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 15  @ PSG r10
-    .byte   0, 3  @ frame=4
-    .byte   4, 85  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 14  @ PSG r10
-    .byte   0, 3  @ frame=5
-    .byte   4, 81  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 12  @ PSG r10
-    .byte   0, 3  @ frame=6
-    .byte   4, 78  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 11  @ PSG r10
-    .byte   0, 3  @ frame=7
-    .byte   4, 74  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   0, 3  @ frame=8
-    .byte   4, 72  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   0, 3  @ frame=9
-    .byte   4, 69  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 6  @ PSG r10
-    .byte   0, 3  @ frame=10
-    .byte   4, 66  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 5  @ PSG r10
-    .byte   0, 2  @ frame=11
-    .byte   4, 64  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 3  @ frame=12
-    .byte   4, 62  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 4  @ PSG r10
-    .byte   0, 2  @ frame=13
-    .byte   4, 60  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 3  @ frame=14
-    .byte   4, 58  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 3  @ PSG r10
-    .byte   0, 2  @ frame=15
-    .byte   4, 56  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 3  @ frame=16
-    .byte   4, 55  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 2  @ PSG r10
-    .byte   0, 2  @ frame=17
-    .byte   4, 53  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 3  @ frame=18
-    .byte   4, 52  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 1  @ PSG r10
-    .byte   0, 2  @ frame=19
-    .byte   4, 50  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 4  @ frame=20
-    .byte   4, 49  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 2  @ frame=21
-    .byte   4, 48  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=22
-    .byte   4, 47  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=23
-    .byte   4, 45  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=24
-    .byte   4, 44  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=25
-    .byte   4, 43  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=26
-    .byte   4, 42  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=27
-    .byte   4, 41  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   1, 2  @ frame=29
-    .byte   4, 40  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=30
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
-
 @ --- easter_bg (5 path(s)) ---
 .global _EASTER_BG_VECTORS
 _EASTER_BG_VECTORS:
@@ -17125,29 +13744,6 @@ _EASTER_BG_3D_DATA:
     .byte   0               @ path 4: closed
     .byte   16
     .byte   17
-
-@ --- explosion1 SFX (37 frames, 6 events) ---
-.global _EXPLOSION1_SFX
-_EXPLOSION1_SFX:
-    .word   6  @ num_events
-    .byte   0, 5  @ frame=0
-    .byte   6, 26  @ PSG r6
-    .byte   4, 5  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 14  @ PSG r10
-    .byte   7, 27  @ PSG r7
-    .byte   7, 1  @ frame=8
-    .byte   10, 13  @ PSG r10
-    .byte   5, 1  @ frame=14
-    .byte   10, 12  @ PSG r10
-    .byte   5, 1  @ frame=20
-    .byte   10, 11  @ PSG r10
-    .byte   15, 1  @ frame=36
-    .byte   7, 59  @ PSG r7
-    .byte   0, 2  @ frame=37
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
 
 @ --- fuji_bg (6 path(s)) ---
 .global _FUJI_BG_VECTORS
@@ -17463,456 +14059,8 @@ _FUJI_LEVEL1_V2_FG_OBJECTS:
 _FUJI_LEVEL1_V2_PITREX_ENEMY_COUNT:
     .word 0  @ enemy count
 
-@ --- fuji_theme MUSIC (64 events, loop@0) ---
-.global _FUJI_THEME_MUSIC
-_FUJI_THEME_MUSIC:
-    .word   64           @ num_events
-    .word   8           @ loop_event_byte_offset from base
-    .byte   0, 11  @ frame=0 delay=0 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 213  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   2, 170  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 10  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   10, 2  @ frame=11 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 7  @ frame=21 delay=9 writes=7
-    .byte   0, 169  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=32 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 11  @ frame=43 delay=10 writes=11
-    .byte   6, 10  @ PSG r6
-    .byte   0, 142  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 14  @ PSG r8
-    .byte   2, 84  @ PSG r2
-    .byte   3, 3  @ PSG r3
-    .byte   9, 12  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   6, 1  @ frame=50 delay=6 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   3, 2  @ frame=54 delay=3 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 10  @ frame=64 delay=9 writes=10
-    .byte   0, 169  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 11  @ PSG r8
-    .byte   2, 170  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 9  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=75 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 11  @ frame=86 delay=10 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 107  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 15  @ PSG r8
-    .byte   2, 170  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 11  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   9, 2  @ frame=96 delay=9 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 4  @ frame=107 delay=10 writes=4
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=118 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 11  @ frame=129 delay=10 writes=11
-    .byte   6, 10  @ PSG r6
-    .byte   0, 127  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   2, 84  @ PSG r2
-    .byte   3, 3  @ PSG r3
-    .byte   9, 12  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   6, 1  @ frame=136 delay=6 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   2, 2  @ frame=139 delay=2 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 10  @ frame=150 delay=10 writes=10
-    .byte   0, 142  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   2, 170  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 9  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=161 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 11  @ frame=171 delay=9 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 169  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 11  @ PSG r8
-    .byte   2, 82  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 10  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   10, 2  @ frame=182 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 7  @ frame=193 delay=10 writes=7
-    .byte   0, 142  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=204 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 11  @ frame=214 delay=9 writes=11
-    .byte   6, 10  @ PSG r6
-    .byte   0, 127  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 13  @ PSG r8
-    .byte   2, 164  @ PSG r2
-    .byte   3, 2  @ PSG r3
-    .byte   9, 12  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   6, 1  @ frame=221 delay=6 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   3, 2  @ frame=225 delay=3 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 10  @ frame=236 delay=10 writes=10
-    .byte   0, 107  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 14  @ PSG r8
-    .byte   2, 82  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 9  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   9, 2  @ frame=246 delay=9 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 11  @ frame=257 delay=10 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 85  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 15  @ PSG r8
-    .byte   2, 28  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 11  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   10, 2  @ frame=268 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 4  @ frame=279 delay=10 writes=4
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   9, 2  @ frame=289 delay=9 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 8  @ frame=300 delay=10 writes=8
-    .byte   6, 10  @ PSG r6
-    .byte   2, 57  @ PSG r2
-    .byte   3, 2  @ PSG r3
-    .byte   9, 12  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   6, 1  @ frame=307 delay=6 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   3, 2  @ frame=311 delay=3 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 8  @ frame=321 delay=9 writes=8
-    .byte   8, 0  @ PSG r8
-    .byte   2, 28  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 9  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 57  @ PSG r7
-    .byte   10, 2  @ frame=332 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 61  @ PSG r7
-    .byte   10, 11  @ frame=343 delay=10 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 213  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   2, 170  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 10  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   10, 2  @ frame=354 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 7  @ frame=364 delay=9 writes=7
-    .byte   0, 169  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 12  @ PSG r8
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=375 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 11  @ frame=386 delay=10 writes=11
-    .byte   6, 10  @ PSG r6
-    .byte   0, 142  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 14  @ PSG r8
-    .byte   2, 84  @ PSG r2
-    .byte   3, 3  @ PSG r3
-    .byte   9, 12  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   6, 1  @ frame=393 delay=6 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   2, 2  @ frame=396 delay=2 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 10  @ frame=407 delay=10 writes=10
-    .byte   0, 127  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 13  @ PSG r8
-    .byte   2, 170  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 9  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=418 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 11  @ frame=429 delay=10 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 107  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 15  @ PSG r8
-    .byte   2, 82  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 10  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   9, 2  @ frame=439 delay=9 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 4  @ frame=450 delay=10 writes=4
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=461 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 11  @ frame=471 delay=9 writes=11
-    .byte   6, 10  @ PSG r6
-    .byte   0, 95  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 13  @ PSG r8
-    .byte   2, 164  @ PSG r2
-    .byte   3, 2  @ PSG r3
-    .byte   9, 12  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   7, 1  @ frame=479 delay=7 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   2, 2  @ frame=482 delay=2 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 10  @ frame=493 delay=10 writes=10
-    .byte   0, 85  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 14  @ PSG r8
-    .byte   2, 82  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 9  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   10, 2  @ frame=504 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   9, 11  @ frame=514 delay=9 writes=11
-    .byte   6, 4  @ PSG r6
-    .byte   0, 71  @ PSG r0
-    .byte   1, 0  @ PSG r1
-    .byte   8, 15  @ PSG r8
-    .byte   2, 28  @ PSG r2
-    .byte   3, 1  @ PSG r3
-    .byte   9, 11  @ PSG r9
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 8  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   10, 2  @ frame=525 delay=10 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 4  @ frame=536 delay=10 writes=4
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   9, 2  @ frame=546 delay=9 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 5  @ frame=557 delay=10 writes=5
-    .byte   6, 10  @ PSG r6
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   7, 24  @ PSG r7
-    .byte   6, 1  @ frame=564 delay=6 writes=1
-    .byte   7, 56  @ PSG r7
-    .byte   3, 2  @ frame=568 delay=3 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 4  @ frame=579 delay=10 writes=4
-    .byte   4, 71  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   7, 56  @ PSG r7
-    .byte   9, 2  @ frame=589 delay=9 writes=2
-    .byte   10, 0  @ PSG r10
-    .byte   7, 60  @ PSG r7
-    .byte   10, 3  @ frame=600 delay=10 writes=3
-    .byte   8, 0  @ PSG r8
-    .byte   9, 0  @ PSG r9
-    .byte   7, 63  @ PSG r7
-    .byte   85, 0xFF   @ loop back (fires frame ~686)
-
-@ --- hit SFX (15 frames, 16 events) ---
-.global _HIT_SFX
-_HIT_SFX:
-    .word   16  @ num_events
-    .byte   0, 5  @ frame=0
-    .byte   6, 8  @ PSG r6
-    .byte   4, 112  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 12  @ PSG r10
-    .byte   7, 27  @ PSG r7
-    .byte   0, 3  @ frame=1
-    .byte   4, 132  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 11  @ PSG r10
-    .byte   0, 3  @ frame=2
-    .byte   4, 156  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 15  @ PSG r10
-    .byte   0, 2  @ frame=3
-    .byte   4, 182  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   0, 3  @ frame=4
-    .byte   4, 212  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 14  @ PSG r10
-    .byte   0, 3  @ frame=5
-    .byte   4, 246  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 13  @ PSG r10
-    .byte   0, 3  @ frame=6
-    .byte   4, 30  @ PSG r4
-    .byte   5, 2  @ PSG r5
-    .byte   10, 12  @ PSG r10
-    .byte   0, 3  @ frame=7
-    .byte   4, 76  @ PSG r4
-    .byte   5, 2  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   0, 3  @ frame=8
-    .byte   4, 131  @ PSG r4
-    .byte   5, 2  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   0, 3  @ frame=9
-    .byte   4, 198  @ PSG r4
-    .byte   5, 2  @ PSG r5
-    .byte   10, 4  @ PSG r10
-    .byte   0, 4  @ frame=10
-    .byte   4, 24  @ PSG r4
-    .byte   5, 3  @ PSG r5
-    .byte   10, 2  @ PSG r10
-    .byte   7, 59  @ PSG r7
-    .byte   0, 4  @ frame=11
-    .byte   4, 127  @ PSG r4
-    .byte   5, 3  @ PSG r5
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 2  @ frame=12
-    .byte   4, 5  @ PSG r4
-    .byte   5, 4  @ PSG r5
-    .byte   0, 2  @ frame=13
-    .byte   4, 187  @ PSG r4
-    .byte   5, 4  @ PSG r5
-    .byte   0, 2  @ frame=14
-    .byte   4, 190  @ PSG r4
-    .byte   5, 5  @ PSG r5
-    .byte   0, 2  @ frame=15
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
-
+.global _FUJI_LEVEL1_V2_PITREX_ENEMIES
+_FUJI_LEVEL1_V2_PITREX_ENEMIES:
 @ --- hook (1 path(s)) ---
 .global _HOOK_VECTORS
 _HOOK_VECTORS:
@@ -17959,52 +14107,6 @@ _HOOK_3D_DATA:
     .byte   7
     .byte   8
     .byte   0
-
-@ --- jump SFX (9 frames, 10 events) ---
-.global _JUMP_SFX
-_JUMP_SFX:
-    .word   10  @ num_events
-    .byte   0, 4  @ frame=0
-    .byte   4, 189  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 4  @ frame=1
-    .byte   4, 119  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 14  @ PSG r10
-    .byte   7, 59  @ PSG r7
-    .byte   0, 2  @ frame=2
-    .byte   4, 68  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   0, 3  @ frame=3
-    .byte   4, 29  @ PSG r4
-    .byte   5, 1  @ PSG r5
-    .byte   10, 13  @ PSG r10
-    .byte   0, 3  @ frame=4
-    .byte   4, 255  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 12  @ PSG r10
-    .byte   0, 3  @ frame=5
-    .byte   4, 230  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   0, 3  @ frame=6
-    .byte   4, 210  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   0, 3  @ frame=7
-    .byte   4, 193  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 4  @ PSG r10
-    .byte   0, 3  @ frame=8
-    .byte   4, 178  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 2  @ PSG r10
-    .byte   0, 2  @ frame=9
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
 
 @ --- keirin_bg (3 path(s)) ---
 .global _KEIRIN_BG_VECTORS
@@ -18146,98 +14248,6 @@ _KILIMANJARO_BG_3D_DATA:
     .byte   8
     .byte   9
 
-@ --- laser SFX (25 frames, 26 events) ---
-.global _LASER_SFX
-_LASER_SFX:
-    .word   26  @ num_events
-    .byte   0, 4  @ frame=0
-    .byte   4, 50  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 12  @ PSG r10
-    .byte   7, 59  @ PSG r7
-    .byte   0, 3  @ frame=1
-    .byte   4, 52  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 9  @ PSG r10
-    .byte   0, 3  @ frame=2
-    .byte   4, 53  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 7  @ PSG r10
-    .byte   0, 3  @ frame=3
-    .byte   4, 55  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 4  @ PSG r10
-    .byte   0, 3  @ frame=4
-    .byte   4, 57  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 2  @ PSG r10
-    .byte   0, 4  @ frame=5
-    .byte   4, 59  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 2  @ frame=6
-    .byte   4, 62  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=7
-    .byte   4, 64  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=8
-    .byte   4, 67  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=9
-    .byte   4, 70  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=10
-    .byte   4, 73  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=11
-    .byte   4, 76  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=12
-    .byte   4, 80  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=13
-    .byte   4, 84  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=14
-    .byte   4, 89  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=15
-    .byte   4, 94  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=16
-    .byte   4, 100  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=17
-    .byte   4, 107  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=18
-    .byte   4, 115  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=19
-    .byte   4, 123  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=20
-    .byte   4, 134  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=21
-    .byte   4, 146  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=22
-    .byte   4, 160  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=23
-    .byte   4, 178  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=24
-    .byte   4, 200  @ PSG r4
-    .byte   5, 0  @ PSG r5
-    .byte   0, 2  @ frame=25
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
-
 @ --- leningrad_bg (5 path(s)) ---
 .global _LENINGRAD_BG_VECTORS
 _LENINGRAD_BG_VECTORS:
@@ -18343,34 +14353,6 @@ _LENINGRAD_BG_3D_DATA:
     .byte   16
     .byte   17
     .byte   14
-
-@ --- location (1 path(s)) ---
-.global _LOCATION_VECTORS
-_LOCATION_VECTORS:
-    .word   1               @ path_count
-    .word   _LOCATION_PATH0      @ ptr path 0
-
-_LOCATION_PATH0:
-    .byte   127               @ intensity
-    .byte   0x0A, 0x00, 0x00, 0x00  @ y=10, x=0, hdr
-    .byte   0xFF, 0xF1, 0xF8  @ line dy=-15, dx=-8
-    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
-    .byte   0xFF, 0x0F, 0xF8  @ line dy=15, dx=-8
-    .byte   0x02            @ end marker
-
-@ --- LOCATION_3D_DATA (1 path(s)) ---
-.global _LOCATION_3D_DATA
-_LOCATION_3D_DATA:
-    .word   3               @ vertex_count
-    .byte   0x00, 0x0A, 0x00  @ vert 0: x=0,y=10,z=0
-    .byte   0xF8, 0xFB, 0x00  @ vert 1: x=-8,y=-5,z=0
-    .byte   0x08, 0xFB, 0x00  @ vert 2: x=8,y=-5,z=0
-    .word   1               @ path_count
-    .byte   3               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
 
 @ --- location_marker (1 path(s)) ---
 .global _LOCATION_MARKER_VECTORS
@@ -19667,256 +15649,6 @@ _NEWYORK_BG_3D_DATA:
     .byte   20
     .byte   21
 
-@ --- pang_logo (14 path(s)) ---
-.global _PANG_LOGO_VECTORS
-_PANG_LOGO_VECTORS:
-    .word   14               @ path_count
-    .word   _PANG_LOGO_PATH0      @ ptr path 0
-    .word   _PANG_LOGO_PATH1      @ ptr path 1
-    .word   _PANG_LOGO_PATH2      @ ptr path 2
-    .word   _PANG_LOGO_PATH3      @ ptr path 3
-    .word   _PANG_LOGO_PATH4      @ ptr path 4
-    .word   _PANG_LOGO_PATH5      @ ptr path 5
-    .word   _PANG_LOGO_PATH6      @ ptr path 6
-    .word   _PANG_LOGO_PATH7      @ ptr path 7
-    .word   _PANG_LOGO_PATH8      @ ptr path 8
-    .word   _PANG_LOGO_PATH9      @ ptr path 9
-    .word   _PANG_LOGO_PATH10      @ ptr path 10
-    .word   _PANG_LOGO_PATH11      @ ptr path 11
-    .word   _PANG_LOGO_PATH12      @ ptr path 12
-    .word   _PANG_LOGO_PATH13      @ ptr path 13
-
-_PANG_LOGO_PATH0:
-    .byte   127               @ intensity
-    .byte   0xCE, 0xA1, 0x00, 0x00  @ y=-50, x=-95, hdr
-    .byte   0xFF, 0x64, 0x00  @ line dy=100, dx=0
-    .byte   0xFF, 0x00, 0x1E  @ line dy=0, dx=30
-    .byte   0xFF, 0xF6, 0x14  @ line dy=-10, dx=20
-    .byte   0xFF, 0xD3, 0x00  @ line dy=-45, dx=0
-    .byte   0xFF, 0xFB, 0xEC  @ line dy=-5, dx=-20
-    .byte   0xFF, 0x0A, 0xE2  @ line dy=10, dx=-30
-    .byte   0xFF, 0xCE, 0x00  @ line dy=-50, dx=0
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH1:
-    .byte   127               @ intensity
-    .byte   0x32, 0xE2, 0x00, 0x00  @ y=50, x=-30, hdr
-    .byte   0xFF, 0x9C, 0x0F  @ line dy=-100, dx=15
-    .byte   0xFF, 0x64, 0x0F  @ line dy=100, dx=15
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH2:
-    .byte   127               @ intensity
-    .byte   0x05, 0xE7, 0x00, 0x00  @ y=5, x=-25, hdr
-    .byte   0xFF, 0x00, 0x1E  @ line dy=0, dx=30
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH3:
-    .byte   127               @ intensity
-    .byte   0xCE, 0x0F, 0x00, 0x00  @ y=-50, x=15, hdr
-    .byte   0xFF, 0x64, 0x00  @ line dy=100, dx=0
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH4:
-    .byte   127               @ intensity
-    .byte   0x32, 0x0F, 0x00, 0x00  @ y=50, x=15, hdr
-    .byte   0xFF, 0x9C, 0x23  @ line dy=-100, dx=35
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH5:
-    .byte   127               @ intensity
-    .byte   0xCE, 0x32, 0x00, 0x00  @ y=-50, x=50, hdr
-    .byte   0xFF, 0x64, 0x00  @ line dy=100, dx=0
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH6:
-    .byte   127               @ intensity
-    .byte   0xD3, 0x5F, 0x00, 0x00  @ y=-45, x=95, hdr
-    .byte   0xFF, 0xFB, 0xEC  @ line dy=-5, dx=-20
-    .byte   0xFF, 0x0A, 0xF1  @ line dy=10, dx=-15
-    .byte   0xFF, 0x50, 0x00  @ line dy=80, dx=0
-    .byte   0xFF, 0x0A, 0x0F  @ line dy=10, dx=15
-    .byte   0xFF, 0xFB, 0x14  @ line dy=-5, dx=20
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH7:
-    .byte   127               @ intensity
-    .byte   0x0F, 0x5F, 0x00, 0x00  @ y=15, x=95, hdr
-    .byte   0xFF, 0xFB, 0xEC  @ line dy=-5, dx=-20
-    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
-    .byte   0xFF, 0xFB, 0x14  @ line dy=-5, dx=20
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH8:
-    .byte   127               @ intensity
-    .byte   0xB0, 0x00, 0x00, 0x00  @ y=-80, x=0, hdr
-    .byte   0xFF, 0x14, 0x04  @ line dy=20, dx=4
-    .byte   0xFF, 0xFB, 0x15  @ line dy=-5, dx=21
-    .byte   0xFF, 0x0F, 0xF1  @ line dy=15, dx=-15
-    .byte   0xFF, 0x14, 0x05  @ line dy=20, dx=5
-    .byte   0xFF, 0xF4, 0xF1  @ line dy=-12, dx=-15
-    .byte   0xFF, 0x0C, 0xF1  @ line dy=12, dx=-15
-    .byte   0xFF, 0xEC, 0x05  @ line dy=-20, dx=5
-    .byte   0xFF, 0xF1, 0xF1  @ line dy=-15, dx=-15
-    .byte   0xFF, 0x05, 0x15  @ line dy=5, dx=21
-    .byte   0xFF, 0xEC, 0x04  @ line dy=-20, dx=4
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH9:
-    .byte   100               @ intensity
-    .byte   0x00, 0x00, 0x00, 0x00  @ y=0, x=0, hdr
-    .byte   0xFF, 0xDD, 0x23  @ line dy=-35, dx=35
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH10:
-    .byte   100               @ intensity
-    .byte   0x00, 0x00, 0x00, 0x00  @ y=0, x=0, hdr
-    .byte   0xFF, 0x00, 0x28  @ line dy=0, dx=40
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH11:
-    .byte   100               @ intensity
-    .byte   0x00, 0x00, 0x00, 0x00  @ y=0, x=0, hdr
-    .byte   0xFF, 0x23, 0x1E  @ line dy=35, dx=30
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH12:
-    .byte   100               @ intensity
-    .byte   0x00, 0x00, 0x00, 0x00  @ y=0, x=0, hdr
-    .byte   0xFF, 0x0A, 0xD8  @ line dy=10, dx=-40
-    .byte   0x02            @ end marker
-
-_PANG_LOGO_PATH13:
-    .byte   127               @ intensity
-    .byte   0x3C, 0x92, 0x00, 0x00  @ y=60, x=-110, hdr
-    .byte   0xFF, 0x00, 0x6E  @ line dy=0, dx=110
-    .byte   0xFF, 0x00, 0x6E  @ line dy=0, dx=110
-    .byte   0x02            @ end marker
-
-@ --- PANG_LOGO_3D_DATA (14 path(s)) ---
-.global _PANG_LOGO_3D_DATA
-_PANG_LOGO_3D_DATA:
-    .word   42               @ vertex_count
-    .byte   0xC1, 0xCE, 0x00  @ vert 0: x=-63,y=-50,z=0
-    .byte   0xC1, 0x32, 0x00  @ vert 1: x=-63,y=50,z=0
-    .byte   0xD3, 0x28, 0x00  @ vert 2: x=-45,y=40,z=0
-    .byte   0xD3, 0xFB, 0x00  @ vert 3: x=-45,y=-5,z=0
-    .byte   0xC1, 0xF6, 0x00  @ vert 4: x=-63,y=-10,z=0
-    .byte   0xC1, 0x00, 0x00  @ vert 5: x=-63,y=0,z=0
-    .byte   0xE2, 0x32, 0x00  @ vert 6: x=-30,y=50,z=0
-    .byte   0xF1, 0xCE, 0x00  @ vert 7: x=-15,y=-50,z=0
-    .byte   0x00, 0x32, 0x00  @ vert 8: x=0,y=50,z=0
-    .byte   0xE7, 0x05, 0x00  @ vert 9: x=-25,y=5,z=0
-    .byte   0x05, 0x05, 0x00  @ vert 10: x=5,y=5,z=0
-    .byte   0x0F, 0xCE, 0x00  @ vert 11: x=15,y=-50,z=0
-    .byte   0x0F, 0x32, 0x00  @ vert 12: x=15,y=50,z=0
-    .byte   0x32, 0xCE, 0x00  @ vert 13: x=50,y=-50,z=0
-    .byte   0x32, 0x32, 0x00  @ vert 14: x=50,y=50,z=0
-    .byte   0x3F, 0xD3, 0x00  @ vert 15: x=63,y=-45,z=0
-    .byte   0x3F, 0xCE, 0x00  @ vert 16: x=63,y=-50,z=0
-    .byte   0x3C, 0xD8, 0x00  @ vert 17: x=60,y=-40,z=0
-    .byte   0x3C, 0x28, 0x00  @ vert 18: x=60,y=40,z=0
-    .byte   0x3F, 0x32, 0x00  @ vert 19: x=63,y=50,z=0
-    .byte   0x3F, 0x2D, 0x00  @ vert 20: x=63,y=45,z=0
-    .byte   0x3F, 0x0F, 0x00  @ vert 21: x=63,y=15,z=0
-    .byte   0x3F, 0x0A, 0x00  @ vert 22: x=63,y=10,z=0
-    .byte   0x3F, 0xF6, 0x00  @ vert 23: x=63,y=-10,z=0
-    .byte   0x3F, 0xF1, 0x00  @ vert 24: x=63,y=-15,z=0
-    .byte   0x00, 0xC1, 0x00  @ vert 25: x=0,y=-63,z=0
-    .byte   0x04, 0xC4, 0x00  @ vert 26: x=4,y=-60,z=0
-    .byte   0x19, 0xC1, 0x00  @ vert 27: x=25,y=-63,z=0
-    .byte   0x0A, 0xCE, 0x00  @ vert 28: x=10,y=-50,z=0
-    .byte   0x0F, 0xE2, 0x00  @ vert 29: x=15,y=-30,z=0
-    .byte   0x00, 0xD6, 0x00  @ vert 30: x=0,y=-42,z=0
-    .byte   0xF1, 0xE2, 0x00  @ vert 31: x=-15,y=-30,z=0
-    .byte   0xF6, 0xCE, 0x00  @ vert 32: x=-10,y=-50,z=0
-    .byte   0xE7, 0xC1, 0x00  @ vert 33: x=-25,y=-63,z=0
-    .byte   0xFC, 0xC4, 0x00  @ vert 34: x=-4,y=-60,z=0
-    .byte   0x00, 0x00, 0x00  @ vert 35: x=0,y=0,z=0
-    .byte   0x23, 0xDD, 0x00  @ vert 36: x=35,y=-35,z=0
-    .byte   0x28, 0x00, 0x00  @ vert 37: x=40,y=0,z=0
-    .byte   0x1E, 0x23, 0x00  @ vert 38: x=30,y=35,z=0
-    .byte   0xD8, 0x0A, 0x00  @ vert 39: x=-40,y=10,z=0
-    .byte   0xC1, 0x3C, 0x00  @ vert 40: x=-63,y=60,z=0
-    .byte   0x3F, 0x3C, 0x00  @ vert 41: x=63,y=60,z=0
-    .word   14               @ path_count
-    .byte   7               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   3               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   6
-    .byte   7
-    .byte   8
-    .byte   2               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   9
-    .byte   10
-    .byte   2               @ path 3: pt_count
-    .byte   0               @ path 3: closed
-    .byte   11
-    .byte   12
-    .byte   2               @ path 4: pt_count
-    .byte   0               @ path 4: closed
-    .byte   12
-    .byte   13
-    .byte   2               @ path 5: pt_count
-    .byte   0               @ path 5: closed
-    .byte   13
-    .byte   14
-    .byte   6               @ path 6: pt_count
-    .byte   0               @ path 6: closed
-    .byte   15
-    .byte   16
-    .byte   17
-    .byte   18
-    .byte   19
-    .byte   20
-    .byte   4               @ path 7: pt_count
-    .byte   0               @ path 7: closed
-    .byte   21
-    .byte   22
-    .byte   23
-    .byte   24
-    .byte   10               @ path 8: pt_count
-    .byte   1               @ path 8: closed
-    .byte   25
-    .byte   26
-    .byte   27
-    .byte   28
-    .byte   29
-    .byte   30
-    .byte   31
-    .byte   32
-    .byte   33
-    .byte   34
-    .byte   2               @ path 9: pt_count
-    .byte   0               @ path 9: closed
-    .byte   35
-    .byte   36
-    .byte   2               @ path 10: pt_count
-    .byte   0               @ path 10: closed
-    .byte   35
-    .byte   37
-    .byte   2               @ path 11: pt_count
-    .byte   0               @ path 11: closed
-    .byte   35
-    .byte   38
-    .byte   2               @ path 12: pt_count
-    .byte   0               @ path 12: closed
-    .byte   35
-    .byte   39
-    .byte   2               @ path 13: pt_count
-    .byte   0               @ path 13: closed
-    .byte   40
-    .byte   41
-
 @ --- pang_theme MUSIC (23 events, loop@0) ---
 .global _PANG_THEME_MUSIC
 _PANG_THEME_MUSIC:
@@ -20143,1100 +15875,6 @@ _PARIS_BG_3D_DATA:
     .byte   0               @ path 4: closed
     .byte   1
     .byte   4
-
-@ --- player (16 path(s)) ---
-.global _PLAYER_VECTORS
-_PLAYER_VECTORS:
-    .word   16               @ path_count
-    .word   _PLAYER_PATH0      @ ptr path 0
-    .word   _PLAYER_PATH1      @ ptr path 1
-    .word   _PLAYER_PATH2      @ ptr path 2
-    .word   _PLAYER_PATH3      @ ptr path 3
-    .word   _PLAYER_PATH4      @ ptr path 4
-    .word   _PLAYER_PATH5      @ ptr path 5
-    .word   _PLAYER_PATH6      @ ptr path 6
-    .word   _PLAYER_PATH7      @ ptr path 7
-    .word   _PLAYER_PATH8      @ ptr path 8
-    .word   _PLAYER_PATH9      @ ptr path 9
-    .word   _PLAYER_PATH10      @ ptr path 10
-    .word   _PLAYER_PATH11      @ ptr path 11
-    .word   _PLAYER_PATH12      @ ptr path 12
-    .word   _PLAYER_PATH13      @ ptr path 13
-    .word   _PLAYER_PATH14      @ ptr path 14
-    .word   _PLAYER_PATH15      @ ptr path 15
-
-_PLAYER_PATH0:
-    .byte   127               @ intensity
-    .byte   0x05, 0xF8, 0x00, 0x00  @ y=5, x=-8, hdr
-    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
-    .byte   0xFF, 0xF9, 0x02  @ line dy=-7, dx=2
-    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
-    .byte   0xFF, 0xFC, 0xFE  @ line dy=-4, dx=-2
-    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
-    .byte   0xFF, 0x04, 0xFE  @ line dy=4, dx=-2
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0xFF, 0x07, 0x02  @ line dy=7, dx=2
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH1:
-    .byte   100               @ intensity
-    .byte   0x03, 0xFA, 0x00, 0x00  @ y=3, x=-6, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH2:
-    .byte   127               @ intensity
-    .byte   0xF8, 0xF8, 0x00, 0x00  @ y=-8, x=-8, hdr
-    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH3:
-    .byte   127               @ intensity
-    .byte   0xF4, 0xF8, 0x00, 0x00  @ y=-12, x=-8, hdr
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0xFF, 0xF6, 0x01  @ line dy=-10, dx=1
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0xFF, 0x0A, 0x01  @ line dy=10, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH4:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x04, 0x00, 0x00  @ y=-12, x=4, hdr
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0xFF, 0xF6, 0x01  @ line dy=-10, dx=1
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0xFF, 0x0A, 0x01  @ line dy=10, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH5:
-    .byte   127               @ intensity
-    .byte   0xE7, 0xF9, 0x00, 0x00  @ y=-25, x=-7, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH6:
-    .byte   127               @ intensity
-    .byte   0xE7, 0x05, 0x00, 0x00  @ y=-25, x=5, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH7:
-    .byte   127               @ intensity
-    .byte   0x02, 0xF6, 0x00, 0x00  @ y=2, x=-10, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFB, 0xFE  @ line dy=-5, dx=-2
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH8:
-    .byte   127               @ intensity
-    .byte   0x02, 0x0A, 0x00, 0x00  @ y=2, x=10, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFB, 0x02  @ line dy=-5, dx=2
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH9:
-    .byte   127               @ intensity
-    .byte   0xF4, 0xF4, 0x00, 0x00  @ y=-12, x=-12, hdr
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH10:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x0C, 0x00, 0x00  @ y=-12, x=12, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH11:
-    .byte   127               @ intensity
-    .byte   0x05, 0xF9, 0x00, 0x00  @ y=5, x=-7, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0xFF, 0x01, 0x06  @ line dy=1, dx=6
-    .byte   0xFF, 0xFF, 0x06  @ line dy=-1, dx=6
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH12:
-    .byte   127               @ intensity
-    .byte   0x05, 0xF9, 0x00, 0x00  @ y=5, x=-7, hdr
-    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
-    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0x00, 0xEE  @ line dy=0, dx=-18
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH13:
-    .byte   100               @ intensity
-    .byte   0x0F, 0xFF, 0x00, 0x00  @ y=15, x=-1, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH14:
-    .byte   127               @ intensity
-    .byte   0x03, 0xFA, 0x00, 0x00  @ y=3, x=-6, hdr
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x05, 0x00  @ line dy=5, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_PATH15:
-    .byte   80               @ intensity
-    .byte   0x02, 0xF8, 0x00, 0x00  @ y=2, x=-8, hdr
-    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
-    .byte   0x02            @ end marker
-
-@ --- PLAYER_3D_DATA (16 path(s)) ---
-.global _PLAYER_3D_DATA
-_PLAYER_3D_DATA:
-    .word   79               @ vertex_count
-    .byte   0xF8, 0x05, 0x00  @ vert 0: x=-8,y=5,z=0
-    .byte   0x08, 0x05, 0x00  @ vert 1: x=8,y=5,z=0
-    .byte   0x0A, 0xFE, 0x00  @ vert 2: x=10,y=-2,z=0
-    .byte   0x0A, 0xF8, 0x00  @ vert 3: x=10,y=-8,z=0
-    .byte   0x08, 0xF4, 0x00  @ vert 4: x=8,y=-12,z=0
-    .byte   0xF8, 0xF4, 0x00  @ vert 5: x=-8,y=-12,z=0
-    .byte   0xF6, 0xF8, 0x00  @ vert 6: x=-10,y=-8,z=0
-    .byte   0xF6, 0xFE, 0x00  @ vert 7: x=-10,y=-2,z=0
-    .byte   0xFA, 0x03, 0x00  @ vert 8: x=-6,y=3,z=0
-    .byte   0xFA, 0xFB, 0x00  @ vert 9: x=-6,y=-5,z=0
-    .byte   0x06, 0xFB, 0x00  @ vert 10: x=6,y=-5,z=0
-    .byte   0x06, 0x03, 0x00  @ vert 11: x=6,y=3,z=0
-    .byte   0xF8, 0xF8, 0x00  @ vert 12: x=-8,y=-8,z=0
-    .byte   0x08, 0xF8, 0x00  @ vert 13: x=8,y=-8,z=0
-    .byte   0xFC, 0xF4, 0x00  @ vert 14: x=-4,y=-12,z=0
-    .byte   0xFD, 0xEA, 0x00  @ vert 15: x=-3,y=-22,z=0
-    .byte   0xFB, 0xE7, 0x00  @ vert 16: x=-5,y=-25,z=0
-    .byte   0xF9, 0xE7, 0x00  @ vert 17: x=-7,y=-25,z=0
-    .byte   0xF7, 0xEA, 0x00  @ vert 18: x=-9,y=-22,z=0
-    .byte   0x04, 0xF4, 0x00  @ vert 19: x=4,y=-12,z=0
-    .byte   0x09, 0xEA, 0x00  @ vert 20: x=9,y=-22,z=0
-    .byte   0x07, 0xE7, 0x00  @ vert 21: x=7,y=-25,z=0
-    .byte   0x05, 0xE7, 0x00  @ vert 22: x=5,y=-25,z=0
-    .byte   0x03, 0xEA, 0x00  @ vert 23: x=3,y=-22,z=0
-    .byte   0xFB, 0xE5, 0x00  @ vert 24: x=-5,y=-27,z=0
-    .byte   0xF7, 0xE5, 0x00  @ vert 25: x=-9,y=-27,z=0
-    .byte   0xF7, 0xE7, 0x00  @ vert 26: x=-9,y=-25,z=0
-    .byte   0x09, 0xE7, 0x00  @ vert 27: x=9,y=-25,z=0
-    .byte   0x09, 0xE5, 0x00  @ vert 28: x=9,y=-27,z=0
-    .byte   0x05, 0xE5, 0x00  @ vert 29: x=5,y=-27,z=0
-    .byte   0xF6, 0x02, 0x00  @ vert 30: x=-10,y=2,z=0
-    .byte   0xF4, 0x00, 0x00  @ vert 31: x=-12,y=0,z=0
-    .byte   0xF2, 0xFB, 0x00  @ vert 32: x=-14,y=-5,z=0
-    .byte   0xF2, 0xF6, 0x00  @ vert 33: x=-14,y=-10,z=0
-    .byte   0xF4, 0xF4, 0x00  @ vert 34: x=-12,y=-12,z=0
-    .byte   0xF6, 0xF6, 0x00  @ vert 35: x=-10,y=-10,z=0
-    .byte   0xF6, 0xFB, 0x00  @ vert 36: x=-10,y=-5,z=0
-    .byte   0x0A, 0x02, 0x00  @ vert 37: x=10,y=2,z=0
-    .byte   0x0C, 0x00, 0x00  @ vert 38: x=12,y=0,z=0
-    .byte   0x0E, 0xFB, 0x00  @ vert 39: x=14,y=-5,z=0
-    .byte   0x0E, 0xF6, 0x00  @ vert 40: x=14,y=-10,z=0
-    .byte   0x0C, 0xF4, 0x00  @ vert 41: x=12,y=-12,z=0
-    .byte   0x0A, 0xF6, 0x00  @ vert 42: x=10,y=-10,z=0
-    .byte   0x0A, 0xFB, 0x00  @ vert 43: x=10,y=-5,z=0
-    .byte   0xF2, 0xF4, 0x00  @ vert 44: x=-14,y=-12,z=0
-    .byte   0xF1, 0xF2, 0x00  @ vert 45: x=-15,y=-14,z=0
-    .byte   0xF3, 0xF1, 0x00  @ vert 46: x=-13,y=-15,z=0
-    .byte   0xF5, 0xF2, 0x00  @ vert 47: x=-11,y=-14,z=0
-    .byte   0x0E, 0xF4, 0x00  @ vert 48: x=14,y=-12,z=0
-    .byte   0x0F, 0xF2, 0x00  @ vert 49: x=15,y=-14,z=0
-    .byte   0x0D, 0xF1, 0x00  @ vert 50: x=13,y=-15,z=0
-    .byte   0x0B, 0xF2, 0x00  @ vert 51: x=11,y=-14,z=0
-    .byte   0xF9, 0x05, 0x00  @ vert 52: x=-7,y=5,z=0
-    .byte   0xF8, 0x08, 0x00  @ vert 53: x=-8,y=8,z=0
-    .byte   0xF8, 0x0C, 0x00  @ vert 54: x=-8,y=12,z=0
-    .byte   0xFA, 0x0F, 0x00  @ vert 55: x=-6,y=15,z=0
-    .byte   0x00, 0x10, 0x00  @ vert 56: x=0,y=16,z=0
-    .byte   0x06, 0x0F, 0x00  @ vert 57: x=6,y=15,z=0
-    .byte   0x08, 0x0C, 0x00  @ vert 58: x=8,y=12,z=0
-    .byte   0x08, 0x08, 0x00  @ vert 59: x=8,y=8,z=0
-    .byte   0x07, 0x05, 0x00  @ vert 60: x=7,y=5,z=0
-    .byte   0x09, 0x03, 0x00  @ vert 61: x=9,y=3,z=0
-    .byte   0x0A, 0x00, 0x00  @ vert 62: x=10,y=0,z=0
-    .byte   0x09, 0xFE, 0x00  @ vert 63: x=9,y=-2,z=0
-    .byte   0xF7, 0xFE, 0x00  @ vert 64: x=-9,y=-2,z=0
-    .byte   0xF6, 0x00, 0x00  @ vert 65: x=-10,y=0,z=0
-    .byte   0xF7, 0x03, 0x00  @ vert 66: x=-9,y=3,z=0
-    .byte   0xFF, 0x0F, 0x00  @ vert 67: x=-1,y=15,z=0
-    .byte   0x01, 0x0F, 0x00  @ vert 68: x=1,y=15,z=0
-    .byte   0x01, 0x11, 0x00  @ vert 69: x=1,y=17,z=0
-    .byte   0xFF, 0x11, 0x00  @ vert 70: x=-1,y=17,z=0
-    .byte   0xFB, 0x05, 0x00  @ vert 71: x=-5,y=5,z=0
-    .byte   0x05, 0x05, 0x00  @ vert 72: x=5,y=5,z=0
-    .byte   0x06, 0xFE, 0x00  @ vert 73: x=6,y=-2,z=0
-    .byte   0x04, 0xFC, 0x00  @ vert 74: x=4,y=-4,z=0
-    .byte   0xFC, 0xFC, 0x00  @ vert 75: x=-4,y=-4,z=0
-    .byte   0xFA, 0xFE, 0x00  @ vert 76: x=-6,y=-2,z=0
-    .byte   0xF8, 0x02, 0x00  @ vert 77: x=-8,y=2,z=0
-    .byte   0x08, 0x02, 0x00  @ vert 78: x=8,y=2,z=0
-    .word   16               @ path_count
-    .byte   8               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   4               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   8
-    .byte   9
-    .byte   10
-    .byte   11
-    .byte   2               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   12
-    .byte   13
-    .byte   6               @ path 3: pt_count
-    .byte   1               @ path 3: closed
-    .byte   5
-    .byte   14
-    .byte   15
-    .byte   16
-    .byte   17
-    .byte   18
-    .byte   6               @ path 4: pt_count
-    .byte   1               @ path 4: closed
-    .byte   19
-    .byte   4
-    .byte   20
-    .byte   21
-    .byte   22
-    .byte   23
-    .byte   5               @ path 5: pt_count
-    .byte   1               @ path 5: closed
-    .byte   17
-    .byte   16
-    .byte   24
-    .byte   25
-    .byte   26
-    .byte   5               @ path 6: pt_count
-    .byte   1               @ path 6: closed
-    .byte   22
-    .byte   21
-    .byte   27
-    .byte   28
-    .byte   29
-    .byte   7               @ path 7: pt_count
-    .byte   1               @ path 7: closed
-    .byte   30
-    .byte   31
-    .byte   32
-    .byte   33
-    .byte   34
-    .byte   35
-    .byte   36
-    .byte   7               @ path 8: pt_count
-    .byte   1               @ path 8: closed
-    .byte   37
-    .byte   38
-    .byte   39
-    .byte   40
-    .byte   41
-    .byte   42
-    .byte   43
-    .byte   5               @ path 9: pt_count
-    .byte   1               @ path 9: closed
-    .byte   34
-    .byte   44
-    .byte   45
-    .byte   46
-    .byte   47
-    .byte   5               @ path 10: pt_count
-    .byte   1               @ path 10: closed
-    .byte   41
-    .byte   48
-    .byte   49
-    .byte   50
-    .byte   51
-    .byte   9               @ path 11: pt_count
-    .byte   1               @ path 11: closed
-    .byte   52
-    .byte   53
-    .byte   54
-    .byte   55
-    .byte   56
-    .byte   57
-    .byte   58
-    .byte   59
-    .byte   60
-    .byte   8               @ path 12: pt_count
-    .byte   1               @ path 12: closed
-    .byte   52
-    .byte   60
-    .byte   61
-    .byte   62
-    .byte   63
-    .byte   64
-    .byte   65
-    .byte   66
-    .byte   4               @ path 13: pt_count
-    .byte   1               @ path 13: closed
-    .byte   67
-    .byte   68
-    .byte   69
-    .byte   70
-    .byte   8               @ path 14: pt_count
-    .byte   1               @ path 14: closed
-    .byte   8
-    .byte   71
-    .byte   72
-    .byte   11
-    .byte   73
-    .byte   74
-    .byte   75
-    .byte   76
-    .byte   2               @ path 15: pt_count
-    .byte   0               @ path 15: closed
-    .byte   77
-    .byte   78
-
-@ --- player_left (15 path(s)) ---
-.global _PLAYER_LEFT_VECTORS
-_PLAYER_LEFT_VECTORS:
-    .word   15               @ path_count
-    .word   _PLAYER_LEFT_PATH0      @ ptr path 0
-    .word   _PLAYER_LEFT_PATH1      @ ptr path 1
-    .word   _PLAYER_LEFT_PATH2      @ ptr path 2
-    .word   _PLAYER_LEFT_PATH3      @ ptr path 3
-    .word   _PLAYER_LEFT_PATH4      @ ptr path 4
-    .word   _PLAYER_LEFT_PATH5      @ ptr path 5
-    .word   _PLAYER_LEFT_PATH6      @ ptr path 6
-    .word   _PLAYER_LEFT_PATH7      @ ptr path 7
-    .word   _PLAYER_LEFT_PATH8      @ ptr path 8
-    .word   _PLAYER_LEFT_PATH9      @ ptr path 9
-    .word   _PLAYER_LEFT_PATH10      @ ptr path 10
-    .word   _PLAYER_LEFT_PATH11      @ ptr path 11
-    .word   _PLAYER_LEFT_PATH12      @ ptr path 12
-    .word   _PLAYER_LEFT_PATH13      @ ptr path 13
-    .word   _PLAYER_LEFT_PATH14      @ ptr path 14
-
-_PLAYER_LEFT_PATH0:
-    .byte   127               @ intensity
-    .byte   0x05, 0xFE, 0x00, 0x00  @ y=5, x=-2, hdr
-    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH1:
-    .byte   100               @ intensity
-    .byte   0x03, 0x00, 0x00, 0x00  @ y=3, x=0, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH2:
-    .byte   127               @ intensity
-    .byte   0xF6, 0xFE, 0x00, 0x00  @ y=-10, x=-2, hdr
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH3:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x00, 0x00, 0x00  @ y=-12, x=0, hdr
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0xFF, 0xF6, 0x01  @ line dy=-10, dx=1
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0xFF, 0x0A, 0x01  @ line dy=10, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH4:
-    .byte   100               @ intensity
-    .byte   0xF4, 0x03, 0x00, 0x00  @ y=-12, x=3, hdr
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0xF8, 0x01  @ line dy=-8, dx=1
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x08, 0x01  @ line dy=8, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH5:
-    .byte   127               @ intensity
-    .byte   0xE7, 0x01, 0x00, 0x00  @ y=-25, x=1, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH6:
-    .byte   100               @ intensity
-    .byte   0xE9, 0x03, 0x00, 0x00  @ y=-23, x=3, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH7:
-    .byte   127               @ intensity
-    .byte   0x02, 0xFC, 0x00, 0x00  @ y=2, x=-4, hdr
-    .byte   0xFF, 0xFE, 0xFC  @ line dy=-2, dx=-4
-    .byte   0xFF, 0xFA, 0xFE  @ line dy=-6, dx=-2
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x05, 0x02  @ line dy=5, dx=2
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH8:
-    .byte   100               @ intensity
-    .byte   0x00, 0x08, 0x00, 0x00  @ y=0, x=8, hdr
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFA, 0x01  @ line dy=-6, dx=1
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH9:
-    .byte   127               @ intensity
-    .byte   0xF4, 0xF8, 0x00, 0x00  @ y=-12, x=-8, hdr
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH10:
-    .byte   100               @ intensity
-    .byte   0xF5, 0x0A, 0x00, 0x00  @ y=-11, x=10, hdr
-    .byte   0xFF, 0xFF, 0x01  @ line dy=-1, dx=1
-    .byte   0xFF, 0xFF, 0x00  @ line dy=-1, dx=0
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH11:
-    .byte   127               @ intensity
-    .byte   0x05, 0xFD, 0x00, 0x00  @ y=5, x=-3, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0xFF, 0xFE, 0x03  @ line dy=-2, dx=3
-    .byte   0xFF, 0xFC, 0x01  @ line dy=-4, dx=1
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0xFF, 0xFF, 0xF7  @ line dy=-1, dx=-9
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH12:
-    .byte   127               @ intensity
-    .byte   0x0A, 0xFC, 0x00, 0x00  @ y=10, x=-4, hdr
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH13:
-    .byte   127               @ intensity
-    .byte   0x0B, 0xFE, 0x00, 0x00  @ y=11, x=-2, hdr
-    .byte   0xFF, 0x00, 0x01  @ line dy=0, dx=1
-    .byte   0xFF, 0xFF, 0x00  @ line dy=-1, dx=0
-    .byte   0xFF, 0x00, 0xFF  @ line dy=0, dx=-1
-    .byte   0xFF, 0x01, 0x00  @ line dy=1, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_LEFT_PATH14:
-    .byte   100               @ intensity
-    .byte   0x08, 0xFE, 0x00, 0x00  @ y=8, x=-2, hdr
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0x02            @ end marker
-
-@ --- PLAYER_LEFT_3D_DATA (15 path(s)) ---
-.global _PLAYER_LEFT_3D_DATA
-_PLAYER_LEFT_3D_DATA:
-    .word   62               @ vertex_count
-    .byte   0xFE, 0x05, 0x00  @ vert 0: x=-2,y=5,z=0
-    .byte   0x06, 0x05, 0x00  @ vert 1: x=6,y=5,z=0
-    .byte   0x08, 0x02, 0x00  @ vert 2: x=8,y=2,z=0
-    .byte   0x08, 0xF6, 0x00  @ vert 3: x=8,y=-10,z=0
-    .byte   0x06, 0xF4, 0x00  @ vert 4: x=6,y=-12,z=0
-    .byte   0xFE, 0xF4, 0x00  @ vert 5: x=-2,y=-12,z=0
-    .byte   0xFC, 0xF6, 0x00  @ vert 6: x=-4,y=-10,z=0
-    .byte   0xFC, 0x02, 0x00  @ vert 7: x=-4,y=2,z=0
-    .byte   0x00, 0x03, 0x00  @ vert 8: x=0,y=3,z=0
-    .byte   0x00, 0xFB, 0x00  @ vert 9: x=0,y=-5,z=0
-    .byte   0x06, 0xFB, 0x00  @ vert 10: x=6,y=-5,z=0
-    .byte   0x06, 0x03, 0x00  @ vert 11: x=6,y=3,z=0
-    .byte   0xFE, 0xF6, 0x00  @ vert 12: x=-2,y=-10,z=0
-    .byte   0x00, 0xF4, 0x00  @ vert 13: x=0,y=-12,z=0
-    .byte   0x04, 0xF4, 0x00  @ vert 14: x=4,y=-12,z=0
-    .byte   0x05, 0xEA, 0x00  @ vert 15: x=5,y=-22,z=0
-    .byte   0x03, 0xE7, 0x00  @ vert 16: x=3,y=-25,z=0
-    .byte   0x01, 0xE7, 0x00  @ vert 17: x=1,y=-25,z=0
-    .byte   0xFF, 0xEA, 0x00  @ vert 18: x=-1,y=-22,z=0
-    .byte   0x03, 0xF4, 0x00  @ vert 19: x=3,y=-12,z=0
-    .byte   0x07, 0xEC, 0x00  @ vert 20: x=7,y=-20,z=0
-    .byte   0x05, 0xE9, 0x00  @ vert 21: x=5,y=-23,z=0
-    .byte   0x03, 0xE9, 0x00  @ vert 22: x=3,y=-23,z=0
-    .byte   0x02, 0xEC, 0x00  @ vert 23: x=2,y=-20,z=0
-    .byte   0x04, 0xE5, 0x00  @ vert 24: x=4,y=-27,z=0
-    .byte   0x00, 0xE5, 0x00  @ vert 25: x=0,y=-27,z=0
-    .byte   0x06, 0xE7, 0x00  @ vert 26: x=6,y=-25,z=0
-    .byte   0xF8, 0x00, 0x00  @ vert 27: x=-8,y=0,z=0
-    .byte   0xF6, 0xFA, 0x00  @ vert 28: x=-10,y=-6,z=0
-    .byte   0xF6, 0xF6, 0x00  @ vert 29: x=-10,y=-10,z=0
-    .byte   0xF8, 0xF4, 0x00  @ vert 30: x=-8,y=-12,z=0
-    .byte   0xFA, 0xF6, 0x00  @ vert 31: x=-6,y=-10,z=0
-    .byte   0xFC, 0xFB, 0x00  @ vert 32: x=-4,y=-5,z=0
-    .byte   0x08, 0x00, 0x00  @ vert 33: x=8,y=0,z=0
-    .byte   0x0A, 0xFE, 0x00  @ vert 34: x=10,y=-2,z=0
-    .byte   0x0B, 0xF8, 0x00  @ vert 35: x=11,y=-8,z=0
-    .byte   0x0A, 0xF5, 0x00  @ vert 36: x=10,y=-11,z=0
-    .byte   0xF6, 0xF4, 0x00  @ vert 37: x=-10,y=-12,z=0
-    .byte   0xF5, 0xF2, 0x00  @ vert 38: x=-11,y=-14,z=0
-    .byte   0xF7, 0xF1, 0x00  @ vert 39: x=-9,y=-15,z=0
-    .byte   0xF9, 0xF2, 0x00  @ vert 40: x=-7,y=-14,z=0
-    .byte   0x0B, 0xF4, 0x00  @ vert 41: x=11,y=-12,z=0
-    .byte   0x0B, 0xF3, 0x00  @ vert 42: x=11,y=-13,z=0
-    .byte   0x09, 0xF3, 0x00  @ vert 43: x=9,y=-13,z=0
-    .byte   0xFD, 0x05, 0x00  @ vert 44: x=-3,y=5,z=0
-    .byte   0xFC, 0x08, 0x00  @ vert 45: x=-4,y=8,z=0
-    .byte   0xFC, 0x0C, 0x00  @ vert 46: x=-4,y=12,z=0
-    .byte   0xFE, 0x0F, 0x00  @ vert 47: x=-2,y=15,z=0
-    .byte   0x02, 0x10, 0x00  @ vert 48: x=2,y=16,z=0
-    .byte   0x05, 0x0E, 0x00  @ vert 49: x=5,y=14,z=0
-    .byte   0x06, 0x0A, 0x00  @ vert 50: x=6,y=10,z=0
-    .byte   0x06, 0x06, 0x00  @ vert 51: x=6,y=6,z=0
-    .byte   0xFC, 0x0A, 0x00  @ vert 52: x=-4,y=10,z=0
-    .byte   0xF8, 0x0B, 0x00  @ vert 53: x=-8,y=11,z=0
-    .byte   0xF6, 0x0A, 0x00  @ vert 54: x=-10,y=10,z=0
-    .byte   0xF7, 0x08, 0x00  @ vert 55: x=-9,y=8,z=0
-    .byte   0xFE, 0x0B, 0x00  @ vert 56: x=-2,y=11,z=0
-    .byte   0xFF, 0x0B, 0x00  @ vert 57: x=-1,y=11,z=0
-    .byte   0xFF, 0x0A, 0x00  @ vert 58: x=-1,y=10,z=0
-    .byte   0xFE, 0x0A, 0x00  @ vert 59: x=-2,y=10,z=0
-    .byte   0xFE, 0x08, 0x00  @ vert 60: x=-2,y=8,z=0
-    .byte   0x00, 0x07, 0x00  @ vert 61: x=0,y=7,z=0
-    .word   15               @ path_count
-    .byte   8               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   4               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   8
-    .byte   9
-    .byte   10
-    .byte   11
-    .byte   2               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   12
-    .byte   3
-    .byte   6               @ path 3: pt_count
-    .byte   1               @ path 3: closed
-    .byte   13
-    .byte   14
-    .byte   15
-    .byte   16
-    .byte   17
-    .byte   18
-    .byte   6               @ path 4: pt_count
-    .byte   1               @ path 4: closed
-    .byte   19
-    .byte   4
-    .byte   20
-    .byte   21
-    .byte   22
-    .byte   23
-    .byte   4               @ path 5: pt_count
-    .byte   1               @ path 5: closed
-    .byte   17
-    .byte   16
-    .byte   24
-    .byte   25
-    .byte   4               @ path 6: pt_count
-    .byte   1               @ path 6: closed
-    .byte   22
-    .byte   21
-    .byte   26
-    .byte   16
-    .byte   7               @ path 7: pt_count
-    .byte   1               @ path 7: closed
-    .byte   7
-    .byte   27
-    .byte   28
-    .byte   29
-    .byte   30
-    .byte   31
-    .byte   32
-    .byte   5               @ path 8: pt_count
-    .byte   1               @ path 8: closed
-    .byte   33
-    .byte   34
-    .byte   35
-    .byte   36
-    .byte   3
-    .byte   5               @ path 9: pt_count
-    .byte   1               @ path 9: closed
-    .byte   30
-    .byte   37
-    .byte   38
-    .byte   39
-    .byte   40
-    .byte   4               @ path 10: pt_count
-    .byte   1               @ path 10: closed
-    .byte   36
-    .byte   41
-    .byte   42
-    .byte   43
-    .byte   8               @ path 11: pt_count
-    .byte   1               @ path 11: closed
-    .byte   44
-    .byte   45
-    .byte   46
-    .byte   47
-    .byte   48
-    .byte   49
-    .byte   50
-    .byte   51
-    .byte   5               @ path 12: pt_count
-    .byte   1               @ path 12: closed
-    .byte   52
-    .byte   53
-    .byte   54
-    .byte   55
-    .byte   45
-    .byte   4               @ path 13: pt_count
-    .byte   1               @ path 13: closed
-    .byte   56
-    .byte   57
-    .byte   58
-    .byte   59
-    .byte   2               @ path 14: pt_count
-    .byte   0               @ path 14: closed
-    .byte   60
-    .byte   61
-
-@ --- player_right (16 path(s)) ---
-.global _PLAYER_RIGHT_VECTORS
-_PLAYER_RIGHT_VECTORS:
-    .word   16               @ path_count
-    .word   _PLAYER_RIGHT_PATH0      @ ptr path 0
-    .word   _PLAYER_RIGHT_PATH1      @ ptr path 1
-    .word   _PLAYER_RIGHT_PATH2      @ ptr path 2
-    .word   _PLAYER_RIGHT_PATH3      @ ptr path 3
-    .word   _PLAYER_RIGHT_PATH4      @ ptr path 4
-    .word   _PLAYER_RIGHT_PATH5      @ ptr path 5
-    .word   _PLAYER_RIGHT_PATH6      @ ptr path 6
-    .word   _PLAYER_RIGHT_PATH7      @ ptr path 7
-    .word   _PLAYER_RIGHT_PATH8      @ ptr path 8
-    .word   _PLAYER_RIGHT_PATH9      @ ptr path 9
-    .word   _PLAYER_RIGHT_PATH10      @ ptr path 10
-    .word   _PLAYER_RIGHT_PATH11      @ ptr path 11
-    .word   _PLAYER_RIGHT_PATH12      @ ptr path 12
-    .word   _PLAYER_RIGHT_PATH13      @ ptr path 13
-    .word   _PLAYER_RIGHT_PATH14      @ ptr path 14
-    .word   _PLAYER_RIGHT_PATH15      @ ptr path 15
-
-_PLAYER_RIGHT_PATH0:
-    .byte   127               @ intensity
-    .byte   0x05, 0x02, 0x00, 0x00  @ y=5, x=2, hdr
-    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
-    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
-    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH1:
-    .byte   100               @ intensity
-    .byte   0x03, 0x00, 0x00, 0x00  @ y=3, x=0, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH2:
-    .byte   127               @ intensity
-    .byte   0xF6, 0x02, 0x00, 0x00  @ y=-10, x=2, hdr
-    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH3:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x00, 0x00, 0x00  @ y=-12, x=0, hdr
-    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
-    .byte   0xFF, 0xF6, 0xFF  @ line dy=-10, dx=-1
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
-    .byte   0xFF, 0x0A, 0xFF  @ line dy=10, dx=-1
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH4:
-    .byte   100               @ intensity
-    .byte   0xF4, 0xFD, 0x00, 0x00  @ y=-12, x=-3, hdr
-    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
-    .byte   0xFF, 0xF8, 0xFF  @ line dy=-8, dx=-1
-    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0xFF, 0x08, 0xFF  @ line dy=8, dx=-1
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH5:
-    .byte   127               @ intensity
-    .byte   0xE7, 0xFF, 0x00, 0x00  @ y=-25, x=-1, hdr
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH6:
-    .byte   100               @ intensity
-    .byte   0xE9, 0xFD, 0x00, 0x00  @ y=-23, x=-3, hdr
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH7:
-    .byte   127               @ intensity
-    .byte   0x02, 0x04, 0x00, 0x00  @ y=2, x=4, hdr
-    .byte   0xFF, 0xFE, 0x04  @ line dy=-2, dx=4
-    .byte   0xFF, 0xFA, 0x02  @ line dy=-6, dx=2
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x05, 0xFE  @ line dy=5, dx=-2
-    .byte   0xFF, 0x07, 0x00  @ line dy=7, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH8:
-    .byte   100               @ intensity
-    .byte   0x00, 0xF8, 0x00, 0x00  @ y=0, x=-8, hdr
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFA, 0xFF  @ line dy=-6, dx=-1
-    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH9:
-    .byte   127               @ intensity
-    .byte   0xF4, 0x08, 0x00, 0x00  @ y=-12, x=8, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH10:
-    .byte   100               @ intensity
-    .byte   0xF5, 0xF6, 0x00, 0x00  @ y=-11, x=-10, hdr
-    .byte   0xFF, 0xFF, 0xFF  @ line dy=-1, dx=-1
-    .byte   0xFF, 0xFF, 0x00  @ line dy=-1, dx=0
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH11:
-    .byte   127               @ intensity
-    .byte   0x05, 0x03, 0x00, 0x00  @ y=5, x=3, hdr
-    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
-    .byte   0xFF, 0xFE, 0xFD  @ line dy=-2, dx=-3
-    .byte   0xFF, 0xFC, 0xFF  @ line dy=-4, dx=-1
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0xFF, 0xFF, 0x09  @ line dy=-1, dx=9
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH12:
-    .byte   127               @ intensity
-    .byte   0x0A, 0x04, 0x00, 0x00  @ y=10, x=4, hdr
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH13:
-    .byte   127               @ intensity
-    .byte   0x0F, 0xFE, 0x00, 0x00  @ y=15, x=-2, hdr
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0x00, 0xF9  @ line dy=0, dx=-7
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH14:
-    .byte   80               @ intensity
-    .byte   0x09, 0x00, 0x00, 0x00  @ y=9, x=0, hdr
-    .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
-    .byte   0x02            @ end marker
-
-_PLAYER_RIGHT_PATH15:
-    .byte   127               @ intensity
-    .byte   0xF5, 0x0A, 0x00, 0x00  @ y=-11, x=10, hdr
-    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0x02            @ end marker
-
-@ --- PLAYER_RIGHT_3D_DATA (16 path(s)) ---
-.global _PLAYER_RIGHT_3D_DATA
-_PLAYER_RIGHT_3D_DATA:
-    .word   66               @ vertex_count
-    .byte   0x02, 0x05, 0x00  @ vert 0: x=2,y=5,z=0
-    .byte   0xFA, 0x05, 0x00  @ vert 1: x=-6,y=5,z=0
-    .byte   0xF8, 0x02, 0x00  @ vert 2: x=-8,y=2,z=0
-    .byte   0xF8, 0xF6, 0x00  @ vert 3: x=-8,y=-10,z=0
-    .byte   0xFA, 0xF4, 0x00  @ vert 4: x=-6,y=-12,z=0
-    .byte   0x02, 0xF4, 0x00  @ vert 5: x=2,y=-12,z=0
-    .byte   0x04, 0xF6, 0x00  @ vert 6: x=4,y=-10,z=0
-    .byte   0x04, 0x02, 0x00  @ vert 7: x=4,y=2,z=0
-    .byte   0x00, 0x03, 0x00  @ vert 8: x=0,y=3,z=0
-    .byte   0x00, 0xFB, 0x00  @ vert 9: x=0,y=-5,z=0
-    .byte   0xFA, 0xFB, 0x00  @ vert 10: x=-6,y=-5,z=0
-    .byte   0xFA, 0x03, 0x00  @ vert 11: x=-6,y=3,z=0
-    .byte   0x02, 0xF6, 0x00  @ vert 12: x=2,y=-10,z=0
-    .byte   0x00, 0xF4, 0x00  @ vert 13: x=0,y=-12,z=0
-    .byte   0xFC, 0xF4, 0x00  @ vert 14: x=-4,y=-12,z=0
-    .byte   0xFB, 0xEA, 0x00  @ vert 15: x=-5,y=-22,z=0
-    .byte   0xFD, 0xE7, 0x00  @ vert 16: x=-3,y=-25,z=0
-    .byte   0xFF, 0xE7, 0x00  @ vert 17: x=-1,y=-25,z=0
-    .byte   0x01, 0xEA, 0x00  @ vert 18: x=1,y=-22,z=0
-    .byte   0xFD, 0xF4, 0x00  @ vert 19: x=-3,y=-12,z=0
-    .byte   0xF9, 0xEC, 0x00  @ vert 20: x=-7,y=-20,z=0
-    .byte   0xFB, 0xE9, 0x00  @ vert 21: x=-5,y=-23,z=0
-    .byte   0xFD, 0xE9, 0x00  @ vert 22: x=-3,y=-23,z=0
-    .byte   0xFE, 0xEC, 0x00  @ vert 23: x=-2,y=-20,z=0
-    .byte   0xFC, 0xE5, 0x00  @ vert 24: x=-4,y=-27,z=0
-    .byte   0x00, 0xE5, 0x00  @ vert 25: x=0,y=-27,z=0
-    .byte   0xFA, 0xE7, 0x00  @ vert 26: x=-6,y=-25,z=0
-    .byte   0x08, 0x00, 0x00  @ vert 27: x=8,y=0,z=0
-    .byte   0x0A, 0xFA, 0x00  @ vert 28: x=10,y=-6,z=0
-    .byte   0x0A, 0xF6, 0x00  @ vert 29: x=10,y=-10,z=0
-    .byte   0x08, 0xF4, 0x00  @ vert 30: x=8,y=-12,z=0
-    .byte   0x06, 0xF6, 0x00  @ vert 31: x=6,y=-10,z=0
-    .byte   0x04, 0xFB, 0x00  @ vert 32: x=4,y=-5,z=0
-    .byte   0xF8, 0x00, 0x00  @ vert 33: x=-8,y=0,z=0
-    .byte   0xF6, 0xFE, 0x00  @ vert 34: x=-10,y=-2,z=0
-    .byte   0xF5, 0xF8, 0x00  @ vert 35: x=-11,y=-8,z=0
-    .byte   0xF6, 0xF5, 0x00  @ vert 36: x=-10,y=-11,z=0
-    .byte   0x0A, 0xF4, 0x00  @ vert 37: x=10,y=-12,z=0
-    .byte   0x0B, 0xF2, 0x00  @ vert 38: x=11,y=-14,z=0
-    .byte   0x09, 0xF1, 0x00  @ vert 39: x=9,y=-15,z=0
-    .byte   0x07, 0xF2, 0x00  @ vert 40: x=7,y=-14,z=0
-    .byte   0xF5, 0xF4, 0x00  @ vert 41: x=-11,y=-12,z=0
-    .byte   0xF5, 0xF3, 0x00  @ vert 42: x=-11,y=-13,z=0
-    .byte   0xF7, 0xF3, 0x00  @ vert 43: x=-9,y=-13,z=0
-    .byte   0x03, 0x05, 0x00  @ vert 44: x=3,y=5,z=0
-    .byte   0x04, 0x08, 0x00  @ vert 45: x=4,y=8,z=0
-    .byte   0x04, 0x0C, 0x00  @ vert 46: x=4,y=12,z=0
-    .byte   0x02, 0x0F, 0x00  @ vert 47: x=2,y=15,z=0
-    .byte   0xFE, 0x10, 0x00  @ vert 48: x=-2,y=16,z=0
-    .byte   0xFB, 0x0E, 0x00  @ vert 49: x=-5,y=14,z=0
-    .byte   0xFA, 0x0A, 0x00  @ vert 50: x=-6,y=10,z=0
-    .byte   0xFA, 0x06, 0x00  @ vert 51: x=-6,y=6,z=0
-    .byte   0x04, 0x0A, 0x00  @ vert 52: x=4,y=10,z=0
-    .byte   0x08, 0x0B, 0x00  @ vert 53: x=8,y=11,z=0
-    .byte   0x0A, 0x0A, 0x00  @ vert 54: x=10,y=10,z=0
-    .byte   0x0A, 0x08, 0x00  @ vert 55: x=10,y=8,z=0
-    .byte   0xFE, 0x0F, 0x00  @ vert 56: x=-2,y=15,z=0
-    .byte   0x00, 0x11, 0x00  @ vert 57: x=0,y=17,z=0
-    .byte   0x03, 0x11, 0x00  @ vert 58: x=3,y=17,z=0
-    .byte   0x05, 0x0F, 0x00  @ vert 59: x=5,y=15,z=0
-    .byte   0x00, 0x09, 0x00  @ vert 60: x=0,y=9,z=0
-    .byte   0x02, 0x0A, 0x00  @ vert 61: x=2,y=10,z=0
-    .byte   0x0A, 0xF5, 0x00  @ vert 62: x=10,y=-11,z=0
-    .byte   0x12, 0xF5, 0x00  @ vert 63: x=18,y=-11,z=0
-    .byte   0x14, 0xF7, 0x00  @ vert 64: x=20,y=-9,z=0
-    .byte   0x14, 0xF3, 0x00  @ vert 65: x=20,y=-13,z=0
-    .word   16               @ path_count
-    .byte   8               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   4               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   8
-    .byte   9
-    .byte   10
-    .byte   11
-    .byte   2               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   12
-    .byte   3
-    .byte   6               @ path 3: pt_count
-    .byte   1               @ path 3: closed
-    .byte   13
-    .byte   14
-    .byte   15
-    .byte   16
-    .byte   17
-    .byte   18
-    .byte   6               @ path 4: pt_count
-    .byte   1               @ path 4: closed
-    .byte   19
-    .byte   4
-    .byte   20
-    .byte   21
-    .byte   22
-    .byte   23
-    .byte   4               @ path 5: pt_count
-    .byte   1               @ path 5: closed
-    .byte   17
-    .byte   16
-    .byte   24
-    .byte   25
-    .byte   4               @ path 6: pt_count
-    .byte   1               @ path 6: closed
-    .byte   22
-    .byte   21
-    .byte   26
-    .byte   16
-    .byte   7               @ path 7: pt_count
-    .byte   1               @ path 7: closed
-    .byte   7
-    .byte   27
-    .byte   28
-    .byte   29
-    .byte   30
-    .byte   31
-    .byte   32
-    .byte   5               @ path 8: pt_count
-    .byte   1               @ path 8: closed
-    .byte   33
-    .byte   34
-    .byte   35
-    .byte   36
-    .byte   3
-    .byte   5               @ path 9: pt_count
-    .byte   1               @ path 9: closed
-    .byte   30
-    .byte   37
-    .byte   38
-    .byte   39
-    .byte   40
-    .byte   4               @ path 10: pt_count
-    .byte   1               @ path 10: closed
-    .byte   36
-    .byte   41
-    .byte   42
-    .byte   43
-    .byte   8               @ path 11: pt_count
-    .byte   1               @ path 11: closed
-    .byte   44
-    .byte   45
-    .byte   46
-    .byte   47
-    .byte   48
-    .byte   49
-    .byte   50
-    .byte   51
-    .byte   5               @ path 12: pt_count
-    .byte   1               @ path 12: closed
-    .byte   52
-    .byte   53
-    .byte   54
-    .byte   55
-    .byte   45
-    .byte   4               @ path 13: pt_count
-    .byte   1               @ path 13: closed
-    .byte   56
-    .byte   57
-    .byte   58
-    .byte   59
-    .byte   2               @ path 14: pt_count
-    .byte   0               @ path 14: closed
-    .byte   60
-    .byte   61
-    .byte   5               @ path 15: pt_count
-    .byte   0               @ path 15: closed
-    .byte   62
-    .byte   63
-    .byte   64
-    .byte   65
-    .byte   63
 
 @ --- player_walk_1 (17 path(s)) ---
 .global _PLAYER_WALK_1_VECTORS
@@ -22890,20 +17528,6 @@ _PYRAMIDS_BG_3D_DATA:
     .byte   4
     .byte   2
 
-@ --- star_vrelease SFX (86 frames, 2 events) ---
-.global _STAR_VRELEASE_SFX
-_STAR_VRELEASE_SFX:
-    .word   2  @ num_events
-    .byte   0, 4  @ frame=0
-    .byte   4, 255  @ PSG r4
-    .byte   5, 15  @ PSG r5
-    .byte   10, 13  @ PSG r10
-    .byte   7, 59  @ PSG r7
-    .byte   85, 2  @ frame=86
-    .byte   10, 0  @ PSG r10
-    .byte   7, 63  @ PSG r7
-    .byte   0, 0  @ end
-
 @ --- taj_bg (4 path(s)) ---
 .global _TAJ_BG_VECTORS
 _TAJ_BG_VECTORS:
@@ -22981,37 +17605,4 @@ _TAJ_BG_3D_DATA:
     .byte   0               @ path 3: closed
     .byte   11
     .byte   12
-
-@ --- test (1 path(s)) ---
-.global _TEST_VECTORS
-_TEST_VECTORS:
-    .word   1               @ path_count
-    .word   _TEST_PATH0      @ ptr path 0
-
-_TEST_PATH0:
-    .byte   127               @ intensity
-    .byte   0x14, 0x00, 0x00, 0x00  @ y=20, x=0, hdr
-    .byte   0xFF, 0xE2, 0xF1  @ line dy=-30, dx=-15
-    .byte   0xFF, 0x00, 0x1E  @ line dy=0, dx=30
-    .byte   0xFF, 0x1E, 0xF1  @ line dy=30, dx=-15
-    .byte   0x02            @ end marker
-
-@ --- TEST_3D_DATA (1 path(s)) ---
-.global _TEST_3D_DATA
-_TEST_3D_DATA:
-    .word   3               @ vertex_count
-    .byte   0x00, 0x14, 0x00  @ vert 0: x=0,y=20,z=0
-    .byte   0xF1, 0xF6, 0x00  @ vert 1: x=-15,y=-10,z=0
-    .byte   0x0F, 0xF6, 0x00  @ vert 2: x=15,y=-10,z=0
-    .word   1               @ path_count
-    .byte   3               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-
-@ WARNING: could not parse level /Users/daniel/projects/vectrex-pseudo-python/examples/pang/assets/playground/test.vplay: missing field `type` at line 24 column 1
-.global _TEST_LEVEL
-_TEST_LEVEL:
-    .word 0
 

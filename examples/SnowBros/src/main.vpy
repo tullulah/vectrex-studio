@@ -14,6 +14,18 @@ STATE_BOSS: i16 = 6         # combate boss
 STATE_GAME_OVER: i16 = 7    # game over
 STATE_ALL_CLEAR: i16 = 8    # completados los 50 niveles
 
+# ── Enemy SM state indices (must match titchi.venemy state order) ─────────
+TITCHI_STATE_NORMAL: i16 = 0
+TITCHI_STATE_SNOW1:  i16 = 1
+TITCHI_STATE_SNOW2:  i16 = 2
+TITCHI_STATE_BALL:   i16 = 3
+
+# Half-sizes for AABB collision (approx from vec files)
+SNOW_HW: i16 = 6    # snowball half-width
+SNOW_HH: i16 = 6    # snowball half-height
+ENEMY_HW: i16 = 10  # enemy half-width
+ENEMY_HH: i16 = 14  # enemy half-height
+
 # ── Globals de partida ──────────────────────────────────────────────────────
 game_state: i16 = 0
 
@@ -215,6 +227,15 @@ def state_boss():
     PRINT_NUMBER(30, -10, score)
     if J1_BUTTON_1():
         STOP_MUSIC()
+        game_state = STATE_TITLE
+
+# ── Estado: game over ────────────────────────────────────────────────────────
+def state_game_over():
+    PRINT_TEXT(-30, 20, "GAME OVER")
+    PRINT_TEXT(-30, 0, "SCORE")
+    PRINT_NUMBER(30, 0, score)
+    frame_timer = frame_timer - 1
+    if frame_timer <= 0:
         game_state = STATE_TITLE
 
 # ── Estado: all clear ────────────────────────────────────────────────────────
@@ -494,19 +515,6 @@ def draw_hud():
     PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
     PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
     PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha
-
-# ── Enemy constants ───────────────────────────────────────────────────────────
-# SM state indices for titchi (must match titchi.venemy state order)
-TITCHI_STATE_NORMAL: i16 = 0
-TITCHI_STATE_SNOW1:  i16 = 1
-TITCHI_STATE_SNOW2:  i16 = 2
-TITCHI_STATE_BALL:   i16 = 3
-
-# Half-sizes for AABB collision (approx from vec files)
-SNOW_HW: i16 = 6    # snowball half-width
-SNOW_HH: i16 = 6    # snowball half-height
-ENEMY_HW: i16 = 10  # enemy half-width
-ENEMY_HH: i16 = 14  # enemy half-height
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():

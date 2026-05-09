@@ -77,6 +77,8 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_spawn_enemies());
     s.push_str(&emit_pitrex_update_enemies());
     s.push_str(&emit_pitrex_draw_enemies());
+    s.push_str(&emit_pitrex_kill_enemy());
+    s.push_str(&emit_pitrex_enemy_fire_event());
 
     s
 }
@@ -3152,6 +3154,56 @@ fn emit_pitrex_3d_tables_and_helpers() -> String {
     s.push_str("    pop     {r2, pc}\n");
     s.push_str("    .ltorg\n\n");
 
+    s
+}
+
+fn emit_pitrex_kill_enemy() -> String {
+    // pitrex_kill_enemy(r0=idx) — deactivate enemy at pool slot idx.
+    // Sets pool[idx*32+12] (active) to 0.
+    let mut s = String::new();
+    s.push_str("@ pitrex_kill_enemy(r0=idx)\n");
+    s.push_str(".global pitrex_kill_enemy\n.type pitrex_kill_enemy, %function\npitrex_kill_enemy:\n");
+    s.push_str("    push    {r1, r2, lr}\n");
+    s.push_str("    mov     r1, #32\n");
+    s.push_str("    mul     r0, r0, r1\n");
+    s.push_str("    ldr     r1, =PITREX_ENEMY_POOL\n");
+    s.push_str("    add     r1, r1, r0\n");
+    s.push_str("    mov     r2, #0\n");
+    s.push_str("    strb    r2, [r1, #12]   @ active = 0\n");
+    s.push_str("    pop     {r1, r2, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+fn emit_pitrex_enemy_fire_event() -> String {
+    // pitrex_enemy_fire_event(r0=idx, r1=event_hash) — transition enemy SM state.
+    // Pool[idx*32+28] = sm_state (u8). Iterates the state's event table looking
+    // for a matching hash; if found, sets sm_state to the target state.
+    // SM record layout (13 bytes, at _NAME_SM_STATES + state_idx*13):
+    //   +0: action_idx, +1-2: decay_frames, +3: decay_to, +4: event_count
+    //   +5,+6: event0 (hash,to), +7,+8: event1, +9,+10: event2, +11,+12: event3
+    // NOTE: ARM32 SM table uses .byte/.hword (same layout as M6809 FCB/FDB).
+    // sprite_ptr at pool+0 → enemy type header; SM ptr is embedded in the level
+    // data. For now we use a simplified hardcoded bump: sm_state = min(sm_state+1, 3).
+    // TODO: look up SM table from sprite header when ARM32 SM tables are emitted.
+    let mut s = String::new();
+    s.push_str("@ pitrex_enemy_fire_event(r0=idx, r1=event_hash) — bump SM state\n");
+    s.push_str(".global pitrex_enemy_fire_event\n.type pitrex_enemy_fire_event, %function\npitrex_enemy_fire_event:\n");
+    s.push_str("    push    {r2, r3, lr}\n");
+    // r0 = idx, r2 = pool base + idx*32
+    s.push_str("    mov     r2, #32\n");
+    s.push_str("    mul     r2, r0, r2\n");
+    s.push_str("    ldr     r3, =PITREX_ENEMY_POOL\n");
+    s.push_str("    add     r2, r3, r2\n");
+    // r0 = current sm_state
+    s.push_str("    ldrb    r0, [r2, #28]   @ sm_state\n");
+    // bump: sm_state = min(sm_state+1, 3)
+    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    cmp     r0, #3\n");
+    s.push_str("    movgt   r0, #3\n");
+    s.push_str("    strb    r0, [r2, #28]   @ store new sm_state\n");
+    s.push_str("    pop     {r2, r3, pc}\n");
+    s.push_str("    .ltorg\n\n");
     s
 }
 
