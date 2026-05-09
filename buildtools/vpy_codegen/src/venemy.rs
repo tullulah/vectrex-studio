@@ -37,6 +37,10 @@ pub struct EnemyResource {
     /// AI behaviour definition
     #[serde(default)]
     pub behavior: EnemyBehavior,
+
+    /// Optional state machine (snow/freeze mechanic etc.)
+    #[serde(default, rename = "state_machine")]
+    pub state_machine: Option<EnemyStateMachine>,
 }
 
 /// A single enemy action (animation state)
@@ -102,6 +106,45 @@ pub struct PatrolConfig {
     pub waypoints: Vec<serde_json::Value>, // raw — not compiled directly
     #[serde(default = "default_loop_true", rename = "loop")]
     pub loop_patrol: bool,
+}
+
+// ── State Machine ────────────────────────────────────────────────────────────
+
+/// A single event-driven transition: when `event` fires → move to state `to`
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EnemyStateTransition {
+    /// Event name, e.g. "onSnowHit", "onKick"
+    pub event: String,
+    /// Name of the target state
+    pub to: String,
+}
+
+/// One state in the enemy FSM
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EnemyState {
+    /// Unique state identifier, e.g. "normal", "snow1", "ball"
+    pub name: String,
+    /// Which action (from actions[]) plays while in this state
+    #[serde(default)]
+    pub action: String,
+    /// After this many frames, auto-transition to `decay_to` (0 = no decay)
+    #[serde(default)]
+    pub decay_frames: u16,
+    /// State name to transition to on decay (empty = stay)
+    #[serde(default)]
+    pub decay_to: String,
+    /// Event-driven transitions
+    #[serde(default)]
+    pub on_event: Vec<EnemyStateTransition>,
+}
+
+/// Enemy finite-state machine definition
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EnemyStateMachine {
+    /// Name of the initial state
+    pub initial_state: String,
+    /// All states in this FSM
+    pub states: Vec<EnemyState>,
 }
 
 fn default_version()         -> String { "1.0".to_string() }
@@ -215,6 +258,12 @@ impl EnemyResource {
         out.push_str(&format!("    FCB {}          ; [4] action_count\n", action_count));
         // Keep the individual bytes accessible as documentation
         let _ = (action_dur_hi, action_dur_lo); // suppress unused warnings
+        // State machine pointer ([5-6], 0000 = no SM)
+        if self.state_machine.is_some() {
+            out.push_str(&format!("    FDB _{}_SM      ; [5-6] state machine ptr\n", name_up));
+        } else {
+            out.push_str("    FDB 0           ; [5-6] no state machine\n");
+        }
         out.push_str("\n");
 
         // ---- action table ----
@@ -238,6 +287,11 @@ impl EnemyResource {
             ));
         }
         out.push_str("\n");
+
+        // ---- state machine ----
+        if let Some(sm) = &self.state_machine {
+            out.push_str(&emit_state_machine_asm(&name_up, sm, &self.actions));
+        }
 
         out
     }
@@ -294,6 +348,12 @@ impl EnemyResource {
             self.stats.action_duration
         ));
         out.push_str(&format!("    FCB {}          ; [4] action_count\n", action_count));
+        // State machine pointer ([5-6], 0000 = no SM)
+        if self.state_machine.is_some() {
+            out.push_str(&format!("    FDB _{}_SM      ; [5-6] state machine ptr\n", name_up));
+        } else {
+            out.push_str("    FDB 0           ; [5-6] no state machine\n");
+        }
         out.push_str("\n");
 
         // Action table — FCB sprite_idx instead of FDB sprite_ptr
@@ -332,8 +392,133 @@ impl EnemyResource {
         }
         out.push_str("\n");
 
+        // ---- state machine ----
+        if let Some(sm) = &self.state_machine {
+            out.push_str(&emit_state_machine_asm(&name_up, sm, &self.actions));
+        }
+
         out
     }
+}
+
+// ---------------------------------------------------------------------------
+// State Machine ASM emitter
+// ---------------------------------------------------------------------------
+
+/// FNV-1a 8-bit hash — used to encode event names as a single byte for
+/// fast runtime dispatch.  Collisions are harmless in practice (extremely
+/// unlikely for the small event vocabularies used in .venemy files).
+fn fnv1a_u8(s: &str) -> u8 {
+    let mut h: u32 = 2166136261;
+    for b in s.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(16777619);
+    }
+    (h & 0xFF) as u8
+}
+
+/// Emit the state machine ROM table for a single enemy type.
+///
+/// Layout:
+/// ```text
+/// _NAME_SM:
+///     FCB state_count        ; number of states
+///     FCB initial_state_idx  ; index of the initial state
+/// _NAME_SM_STATES:
+///     ; For each state (variable-length record):
+///     FCB action_idx         ; index into _NAME_ENEMY_ACTIONS ($FF = keep current)
+///     FDB decay_frames       ; 0 = no automatic decay
+///     FCB decay_to_idx       ; target state for decay ($FF = none)
+///     FCB on_event_count     ; number of event transitions
+///     ; For each event (2 bytes each):
+///     FCB event_hash         ; FNV-1a u8 of event name
+///     FCB to_state_idx       ; target state index
+/// ```
+fn emit_state_machine_asm(
+    name_up: &str,
+    sm: &EnemyStateMachine,
+    actions: &[EnemyAction],
+) -> String {
+    let mut out = String::new();
+    let states = &sm.states;
+    let state_count = states.len();
+
+    // Helper: resolve state name → index ($FF if not found)
+    let state_idx = |name: &str| -> u8 {
+        states
+            .iter()
+            .position(|s| s.name == name)
+            .map(|i| i as u8)
+            .unwrap_or_else(|| {
+                eprintln!("[WARNING] State machine '{}': unknown state '{}'", name_up, name);
+                0xFF
+            })
+    };
+
+    // Helper: resolve action name → index ($FF if not found)
+    let action_idx_for = |name: &str| -> u8 {
+        if name.is_empty() {
+            return 0xFF;
+        }
+        actions
+            .iter()
+            .position(|a| a.name == name)
+            .map(|i| i as u8)
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "[WARNING] State machine '{}': action '{}' not in actions list",
+                    name_up, name
+                );
+                0xFF
+            })
+    };
+
+    let initial_idx = state_idx(&sm.initial_state);
+
+    out.push_str(&format!("; ---- State machine: {} ----\n", name_up));
+    out.push_str(&format!("_{}_SM:\n", name_up));
+    out.push_str(&format!("    FCB {}          ; state_count\n", state_count));
+    out.push_str(&format!("    FCB {}          ; initial_state_idx\n", initial_idx));
+    out.push_str(&format!("_{}_SM_STATES:\n", name_up));
+
+    for (si, state) in states.iter().enumerate() {
+        let act_idx      = action_idx_for(&state.action);
+        let decay_frames = state.decay_frames;
+        let decay_to_idx = if state.decay_to.is_empty() {
+            0xFF
+        } else {
+            state_idx(&state.decay_to)
+        };
+        let event_count  = state.on_event.len() as u8;
+
+        out.push_str(&format!(
+            "    ; state {} ({})\n", si, state.name
+        ));
+        out.push_str(&format!(
+            "    FCB ${:02X}   ; action_idx ($FF=keep)\n", act_idx
+        ));
+        out.push_str(&format!(
+            "    FDB {}       ; decay_frames\n", decay_frames
+        ));
+        out.push_str(&format!(
+            "    FCB ${:02X}   ; decay_to ($FF=none)\n", decay_to_idx
+        ));
+        out.push_str(&format!(
+            "    FCB {}       ; on_event_count\n", event_count
+        ));
+        for evt in &state.on_event {
+            let hash    = fnv1a_u8(&evt.event);
+            let to_idx  = state_idx(&evt.to);
+            out.push_str(&format!(
+                "    FCB ${:02X}   ; event hash '{}'\n", hash, evt.event
+            ));
+            out.push_str(&format!(
+                "    FCB {}       ; -> state {}\n", to_idx, evt.to
+            ));
+        }
+    }
+    out.push_str("\n");
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +558,7 @@ mod tests {
                 respawn: false,
                 wave: 0,
             },
+            state_machine: None,
         }
     }
 
@@ -491,5 +677,63 @@ mod tests {
         let resource = EnemyResource::load(path).expect("load failed");
         assert_eq!(resource.name, "enemy1");
         assert!(!resource.actions.is_empty());
+    }
+
+    #[test]
+    fn test_state_machine_codegen() {
+        let sm = EnemyStateMachine {
+            initial_state: "normal".to_string(),
+            states: vec![
+                EnemyState {
+                    name: "normal".to_string(),
+                    action: "walk".to_string(),
+                    decay_frames: 0,
+                    decay_to: String::new(),
+                    on_event: vec![EnemyStateTransition {
+                        event: "onSnowHit".to_string(),
+                        to: "snow1".to_string(),
+                    }],
+                },
+                EnemyState {
+                    name: "snow1".to_string(),
+                    action: "snow1".to_string(),
+                    decay_frames: 120,
+                    decay_to: "normal".to_string(),
+                    on_event: vec![EnemyStateTransition {
+                        event: "onSnowHit".to_string(),
+                        to: "ball".to_string(),
+                    }],
+                },
+                EnemyState {
+                    name: "ball".to_string(),
+                    action: "idle".to_string(),
+                    decay_frames: 0,
+                    decay_to: String::new(),
+                    on_event: vec![EnemyStateTransition {
+                        event: "onKick".to_string(),
+                        to: "normal".to_string(),
+                    }],
+                },
+            ],
+        };
+        let mut enemy = make_snowbrother();
+        // Add matching actions
+        enemy.actions.push(EnemyAction { name: "snow1".to_string(), sprite: "".to_string(), loop_anim: true });
+        enemy.actions.push(EnemyAction { name: "ball".to_string(), sprite: "".to_string(), loop_anim: false });
+        enemy.state_machine = Some(sm);
+
+        let asm = enemy.compile_to_asm_with_name(None);
+        assert!(asm.contains("_SNOWBROTHER_SM:"));
+        assert!(asm.contains("_SNOWBROTHER_SM_STATES:"));
+        // state_count=3, initial=0
+        assert!(asm.contains("FCB 3          ; state_count"));
+        assert!(asm.contains("FCB 0          ; initial_state_idx"));
+        // decay of snow1 = 120 frames → decay_to = state 0 (normal)
+        assert!(asm.contains("FDB 120       ; decay_frames"));
+        // event hash for onSnowHit
+        let hash = fnv1a_u8("onSnowHit");
+        assert!(asm.contains(&format!("FCB ${:02X}   ; event hash 'onSnowHit'", hash)));
+        // Header contains SM pointer
+        assert!(asm.contains("FDB _SNOWBROTHER_SM      ; [5-6] state machine ptr"));
     }
 }

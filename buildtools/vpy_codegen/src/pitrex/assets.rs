@@ -100,11 +100,32 @@ fn collect_venemy_sprite_names(enemy_type: &str, venemy_dir: &std::path::Path, u
     let path = venemy_dir.join(format!("{}.venemy", enemy_type));
     let Ok(text) = fs::read_to_string(&path) else { return };
     let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) else { return };
-    let Some(actions) = val["actions"].as_array() else { return };
-    for action in actions {
-        let sprite = action["sprite"].as_str().unwrap_or("");
+
+    // Collect sprite names from both actions[] and state_machine.states[]
+    let mut sprite_paths: Vec<String> = Vec::new();
+
+    if let Some(actions) = val["actions"].as_array() {
+        for action in actions {
+            if let Some(s) = action["sprite"].as_str() {
+                sprite_paths.push(s.to_string());
+            }
+        }
+    }
+    // Also collect sprites referenced in state_machine states
+    if let Some(states) = val["state_machine"]["states"].as_array() {
+        // States only hold action *names*, not paths — so this is a no-op here;
+        // the actual paths come from the actions[] list above.  But if a future
+        // venemy format ever includes sprite overrides per-state, we handle them:
+        for state in states {
+            if let Some(s) = state["sprite"].as_str() {
+                sprite_paths.push(s.to_string());
+            }
+        }
+    }
+
+    for sprite in &sprite_paths {
         if sprite.is_empty() { continue; }
-        let filename = sprite.split('/').last().unwrap_or(sprite);
+        let filename = sprite.split('/').last().unwrap_or(sprite.as_str());
         if filename.ends_with(".vec") {
             let stem = filename.trim_end_matches(".vec");
             used_names.insert(stem.to_string());
