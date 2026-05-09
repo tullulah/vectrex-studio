@@ -42,6 +42,35 @@ export interface EnemyResource {
   actions: EnemyAction[];
   stats: EnemyStats;
   behavior: EnemyBehavior;
+  state_machine?: EnemyStateMachine;
+}
+
+// ── State machine ──────────────────────────────────────────────────────────
+
+/** A transition: when `event` fires, move to state `to` */
+export interface EnemyStateTransition {
+  event: string;   // e.g. "onSnowHit", "onKick"
+  to: string;      // target state name
+}
+
+/** One state in the enemy state machine */
+export interface EnemyState {
+  /** Unique state name, used as identifier in code (e.g. "snow1") */
+  name: string;
+  /** Which action (from actions[]) to play while in this state */
+  action: string;
+  /** Frames before auto-returning to decay_to (0 = no decay) */
+  decay_frames: number;
+  /** State to transition to after decay_frames (empty = stay) */
+  decay_to: string;
+  /** Event-driven transitions */
+  on_event: EnemyStateTransition[];
+}
+
+export interface EnemyStateMachine {
+  /** Name of the initial state */
+  initial_state: string;
+  states: EnemyState[];
 }
 
 interface EnemyEditorProps {
@@ -406,6 +435,73 @@ export const EnemyEditor: React.FC<EnemyEditorProps> = ({ resource, onChange }) 
     }
   };
 
+  // ── State machine helpers ──────────────────────────────────────────────────
+
+  const sm = res.state_machine;
+
+  const updateSM = useCallback((patch: Partial<EnemyStateMachine>) => {
+    update({ state_machine: { ...(res.state_machine ?? { initial_state: '', states: [] }), ...patch } });
+  }, [res.state_machine, update]);
+
+  const updateSMState = useCallback((i: number, patch: Partial<EnemyState>) => {
+    if (!res.state_machine) return;
+    const next = res.state_machine.states.map((s, idx) => idx === i ? { ...s, ...patch } : s);
+    updateSM({ states: next });
+  }, [res.state_machine, updateSM]);
+
+  const addSMState = useCallback(() => {
+    const existing = res.state_machine ?? { initial_state: 'normal', states: [] };
+    const newState: EnemyState = {
+      name: `state${existing.states.length + 1}`,
+      action: '',
+      decay_frames: 0,
+      decay_to: '',
+      on_event: [],
+    };
+    updateSM({ states: [...existing.states, newState] });
+  }, [res.state_machine, updateSM]);
+
+  const removeSMState = useCallback((i: number) => {
+    if (!res.state_machine) return;
+    updateSM({ states: res.state_machine.states.filter((_, idx) => idx !== i) });
+  }, [res.state_machine, updateSM]);
+
+  const addSMTransition = useCallback((stateIdx: number) => {
+    if (!res.state_machine) return;
+    updateSMState(stateIdx, {
+      on_event: [...res.state_machine.states[stateIdx].on_event, { event: '', to: '' }],
+    });
+  }, [res.state_machine, updateSMState]);
+
+  const updateSMTransition = useCallback((stateIdx: number, evtIdx: number, patch: Partial<EnemyStateTransition>) => {
+    if (!res.state_machine) return;
+    const transitions = res.state_machine.states[stateIdx].on_event.map((t, i) =>
+      i === evtIdx ? { ...t, ...patch } : t
+    );
+    updateSMState(stateIdx, { on_event: transitions });
+  }, [res.state_machine, updateSMState]);
+
+  const removeSMTransition = useCallback((stateIdx: number, evtIdx: number) => {
+    if (!res.state_machine) return;
+    const transitions = res.state_machine.states[stateIdx].on_event.filter((_, i) => i !== evtIdx);
+    updateSMState(stateIdx, { on_event: transitions });
+  }, [res.state_machine, updateSMState]);
+
+  const enableSM = useCallback(() => {
+    update({
+      state_machine: {
+        initial_state: 'normal',
+        states: [
+          { name: 'normal', action: res.behavior.patrol.patrolAction || 'walk', decay_frames: 0, decay_to: '', on_event: [] },
+        ],
+      },
+    });
+  }, [res.behavior.patrol.patrolAction, update]);
+
+  const disableSM = useCallback(() => {
+    update({ state_machine: undefined });
+  }, [update]);
+
   const BEHAVIOR_COLORS: Record<EnemyBehaviorType, string> = {
     patrol: '#4488ff',
     chase: '#ff4444',
@@ -748,6 +844,99 @@ export const EnemyEditor: React.FC<EnemyEditorProps> = ({ resource, onChange }) 
             </div>
           </div>
         )}
+
+        {/* ── STATE MACHINE ── */}
+        <div style={sectionStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={headingStyle}>State Machine</div>
+            {sm
+              ? <button onClick={disableSM} style={{ background: 'transparent', border: '1px solid #553333', color: '#aa5555', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: 11 }}>Disable</button>
+              : <button onClick={enableSM} style={{ background: '#1a2a1a', border: '1px solid #44aa44', color: '#44aa44', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: 11 }}>Enable</button>
+            }
+          </div>
+          {!sm && (
+            <div style={{ fontSize: 11, color: '#555', fontStyle: 'italic' }}>
+              No state machine — enemy uses a single action. Enable to add snow/hit states, death sequences, etc.
+            </div>
+          )}
+          {sm && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Initial state</label>
+                <select value={sm.initial_state} onChange={e => updateSM({ initial_state: e.target.value })} style={selectStyle}>
+                  {sm.states.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+
+              {sm.states.map((st, si) => (
+                <div key={si} style={{ background: '#0d0d1a', border: '1px solid #2a2a4e', borderRadius: 4, padding: '8px 10px', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                    <input value={st.name} onChange={e => updateSMState(si, { name: e.target.value })}
+                      style={{ ...inputStyle, flex: 1, fontWeight: 700, color: '#ffcc44' }} placeholder="state name" />
+                    <select value={st.action} onChange={e => updateSMState(si, { action: e.target.value })} style={{ ...selectStyle, flex: 1 }}>
+                      <option value="">— action —</option>
+                      {res.actions.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                    </select>
+                    <button onClick={() => removeSMState(si)} style={{ background: 'transparent', border: 'none', color: '#883333', cursor: 'pointer', fontSize: 14 }}>×</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>Decay frames (0=none)</label>
+                      <input type="number" value={st.decay_frames} min={0} step={10}
+                        onChange={e => updateSMState(si, { decay_frames: Number(e.target.value) })}
+                        style={{ ...inputStyle, width: '100%' }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>Decay to</label>
+                      <select value={st.decay_to} onChange={e => updateSMState(si, { decay_to: e.target.value })} style={selectStyle}>
+                        <option value="">— stay —</option>
+                        {sm.states.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#4466aa', marginBottom: 4, letterSpacing: '0.06em' }}>EVENT TRANSITIONS</div>
+                  {st.on_event.map((t, ti) => (
+                    <div key={ti} style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+                      <input value={t.event} onChange={e => updateSMTransition(si, ti, { event: e.target.value })}
+                        placeholder="event (e.g. onSnowHit)" style={{ ...inputStyle, flex: 1, fontSize: 11 }} />
+                      <span style={{ color: '#555', fontSize: 11 }}>→</span>
+                      <select value={t.to} onChange={e => updateSMTransition(si, ti, { to: e.target.value })} style={{ ...selectStyle, flex: 1, fontSize: 11 }}>
+                        <option value="">— state —</option>
+                        {sm.states.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                      </select>
+                      <button onClick={() => removeSMTransition(si, ti)} style={{ background: 'transparent', border: 'none', color: '#883333', cursor: 'pointer', fontSize: 12 }}>×</button>
+                    </div>
+                  ))}
+                  <button onClick={() => addSMTransition(si)}
+                    style={{ background: 'transparent', border: '1px solid #2a3a5a', color: '#4466aa', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: 11 }}>
+                    + event
+                  </button>
+                </div>
+              ))}
+
+              <button onClick={addSMState}
+                style={{ background: '#1a2a1a', border: '1px solid #44aa44', color: '#44aa44', borderRadius: 3, padding: '4px 12px', cursor: 'pointer', fontSize: 12, width: '100%' }}>
+                + Add State
+              </button>
+
+              {sm.states.some(s => s.on_event.length > 0) && (
+                <div style={{ marginTop: 10, background: '#0a0a16', borderRadius: 4, padding: '8px 10px', fontSize: 10 }}>
+                  <div style={{ color: '#4466aa', marginBottom: 4, letterSpacing: '0.06em' }}>GENERATED HANDLERS (implement in .vpy)</div>
+                  {sm.states.flatMap(s => s.on_event.map(t => t.event)).filter((e, i, a) => e && a.indexOf(e) === i).map(evt => (
+                    <div key={evt} style={{ color: '#66aa66', fontFamily: 'monospace', marginBottom: 2 }}>
+                      def {res.name}_{evt}(idx):
+                    </div>
+                  ))}
+                  {sm.states.map(s => (
+                    <div key={s.name} style={{ color: '#aa6644', fontFamily: 'monospace', marginBottom: 2 }}>
+                      def {res.name}_on_enter_{s.name}(idx):
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

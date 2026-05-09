@@ -48,6 +48,9 @@ pub struct VanimFrame {
     /// Inline vector paths defined only for this frame
     #[serde(default)]
     pub paths: Vec<VanimPath>,
+    /// Named events fired when this frame becomes active (e.g. "onFootstep", "onAttackHit")
+    #[serde(default)]
+    pub events: Vec<String>,
 }
 
 fn default_ticks() -> u8 { 4 }
