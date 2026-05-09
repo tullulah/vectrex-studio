@@ -425,14 +425,19 @@ fn fnv1a_u8(s: &str) -> u8 {
 ///     FCB state_count        ; number of states
 ///     FCB initial_state_idx  ; index of the initial state
 /// _NAME_SM_STATES:
-///     ; For each state (variable-length record):
-///     FCB action_idx         ; index into _NAME_ENEMY_ACTIONS ($FF = keep current)
-///     FDB decay_frames       ; 0 = no automatic decay
-///     FCB decay_to_idx       ; target state for decay ($FF = none)
-///     FCB on_event_count     ; number of event transitions
-///     ; For each event (2 bytes each):
-///     FCB event_hash         ; FNV-1a u8 of event name
-///     FCB to_state_idx       ; target state index
+///     ; For each state (FIXED 13-byte record, max 4 events):
+///     FCB action_idx         ; [0] index into _NAME_ENEMY_ACTIONS ($FF = keep current)
+///     FDB decay_frames       ; [1-2] 0 = no automatic decay
+///     FCB decay_to_idx       ; [3] target state for decay ($FF = none)
+///     FCB on_event_count     ; [4] number of event transitions (capped at 4)
+///     FCB event0_hash        ; [5] FNV-1a u8 of event name ($FF if unused)
+///     FCB event0_to          ; [6] target state index ($FF if unused)
+///     FCB event1_hash        ; [7]
+///     FCB event1_to          ; [8]
+///     FCB event2_hash        ; [9]
+///     FCB event2_to          ; [10]
+///     FCB event3_hash        ; [11]
+///     FCB event3_to          ; [12]
 /// ```
 fn emit_state_machine_asm(
     name_up: &str,
@@ -489,32 +494,53 @@ fn emit_state_machine_asm(
         } else {
             state_idx(&state.decay_to)
         };
-        let event_count  = state.on_event.len() as u8;
+
+        // Clamp events to max 4; warn if truncated
+        let events = &state.on_event;
+        if events.len() > 4 {
+            eprintln!(
+                "[WARNING] State machine '{}' state '{}': {} events > max 4; truncating",
+                name_up, state.name, events.len()
+            );
+        }
+        let event_count = events.len().min(4) as u8;
 
         out.push_str(&format!(
-            "    ; state {} ({})\n", si, state.name
+            "    ; state {} ({}) — fixed 13-byte record\n", si, state.name
         ));
         out.push_str(&format!(
-            "    FCB ${:02X}   ; action_idx ($FF=keep)\n", act_idx
+            "    FCB ${:02X}   ; [0] action_idx ($FF=keep)\n", act_idx
         ));
         out.push_str(&format!(
-            "    FDB {}       ; decay_frames\n", decay_frames
+            "    FDB {}       ; [1-2] decay_frames\n", decay_frames
         ));
         out.push_str(&format!(
-            "    FCB ${:02X}   ; decay_to ($FF=none)\n", decay_to_idx
+            "    FCB ${:02X}   ; [3] decay_to ($FF=none)\n", decay_to_idx
         ));
         out.push_str(&format!(
-            "    FCB {}       ; on_event_count\n", event_count
+            "    FCB {}       ; [4] on_event_count\n", event_count
         ));
-        for evt in &state.on_event {
-            let hash    = fnv1a_u8(&evt.event);
-            let to_idx  = state_idx(&evt.to);
-            out.push_str(&format!(
-                "    FCB ${:02X}   ; event hash '{}'\n", hash, evt.event
-            ));
-            out.push_str(&format!(
-                "    FCB {}       ; -> state {}\n", to_idx, evt.to
-            ));
+
+        // Emit up to 4 event pairs (hash + to_idx), padding unused slots with $FF
+        for slot in 0..4usize {
+            if slot < events.len() {
+                let evt    = &events[slot];
+                let hash   = fnv1a_u8(&evt.event);
+                let to_idx = state_idx(&evt.to);
+                out.push_str(&format!(
+                    "    FCB ${:02X}   ; [{}] event hash '{}'\n", hash, 5 + slot * 2, evt.event
+                ));
+                out.push_str(&format!(
+                    "    FCB {}       ; [{}] -> state {}\n", to_idx, 6 + slot * 2, evt.to
+                ));
+            } else {
+                out.push_str(&format!(
+                    "    FCB $FF   ; [{}] unused event slot hash\n", 5 + slot * 2
+                ));
+                out.push_str(&format!(
+                    "    FCB $FF   ; [{}] unused event slot to\n", 6 + slot * 2
+                ));
+            }
         }
     }
     out.push_str("\n");
@@ -729,10 +755,10 @@ mod tests {
         assert!(asm.contains("FCB 3          ; state_count"));
         assert!(asm.contains("FCB 0          ; initial_state_idx"));
         // decay of snow1 = 120 frames → decay_to = state 0 (normal)
-        assert!(asm.contains("FDB 120       ; decay_frames"));
-        // event hash for onSnowHit
+        assert!(asm.contains("FDB 120       ; [1-2] decay_frames"));
+        // event hash for onSnowHit (first event in state, slot 0 → offset [5])
         let hash = fnv1a_u8("onSnowHit");
-        assert!(asm.contains(&format!("FCB ${:02X}   ; event hash 'onSnowHit'", hash)));
+        assert!(asm.contains(&format!("FCB ${:02X}   ; [5] event hash 'onSnowHit'", hash)));
         // Header contains SM pointer
         assert!(asm.contains("FDB _SNOWBROTHER_SM      ; [5-6] state machine ptr"));
     }

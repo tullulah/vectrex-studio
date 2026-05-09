@@ -45,7 +45,7 @@ PLAYER_HH: i16 = 14     # half-height de player_idle.vec
 WORLD_X_MIN: i16 = -96
 WORLD_X_MAX: i16 = 95
 WORLD_Y_MIN: i16 = -110    # suelo + margen sprite
-WORLD_Y_MAX: i16 = 120     # techo + margen sprite (pantalla llega a 127)
+WORLD_Y_MAX: i16 = 127     # techo + margen sprite (pantalla llega a 127)
 
 # ── Snowball system ───────────────────────────────────────────────────────────
 SNOW_SPEED: i16 = 5             # velocidad horizontal
@@ -142,8 +142,8 @@ def state_playing():
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
-    # TODO: check_player_enemy_collision()
-    # TODO: check_snowball_enemy_collision()
+    check_snowball_enemy_collision()
+    check_player_enemy_collision()
     SHOW_LEVEL()
     draw_player()
     draw_snowballs()
@@ -202,6 +202,7 @@ def state_boss():
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
+    check_snowball_enemy_collision()
     SHOW_LEVEL()
     draw_player()
     draw_snowballs()
@@ -209,7 +210,6 @@ def state_boss():
     draw_hud()
 
 # ── Estado: game over ────────────────────────────────────────────────────────
-def state_game_over():
     PRINT_TEXT(-35, 20, "GAME OVER")
     PRINT_TEXT(-25, -10, "SCORE")
     PRINT_NUMBER(30, -10, score)
@@ -494,3 +494,92 @@ def draw_hud():
     PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
     PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
     PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha
+
+# ── Enemy constants ───────────────────────────────────────────────────────────
+# SM state indices for titchi (must match titchi.venemy state order)
+TITCHI_STATE_NORMAL: i16 = 0
+TITCHI_STATE_SNOW1:  i16 = 1
+TITCHI_STATE_SNOW2:  i16 = 2
+TITCHI_STATE_BALL:   i16 = 3
+
+# Half-sizes for AABB collision (approx from vec files)
+SNOW_HW: i16 = 6    # snowball half-width
+SNOW_HH: i16 = 6    # snowball half-height
+ENEMY_HW: i16 = 10  # enemy half-width
+ENEMY_HH: i16 = 14  # enemy half-height
+
+# ── Colisión nieve vs enemigos ────────────────────────────────────────────────
+def check_snowball_enemy_collision():
+    i = 0
+    while i < 8:
+        if GET_ENEMY_ACTIVE(i) == 1:
+            ex = GET_ENEMY_X(i)
+            ey = GET_ENEMY_Y(i)
+            check_snow_vs_enemy(i, ex, ey)
+        i = i + 1
+
+def check_snow_vs_enemy(idx, ex, ey):
+    thw = SNOW_HW + ENEMY_HW
+    thh = SNOW_HH + ENEMY_HH
+    if snow0_active == 1:
+        dx = snow0_x - ex
+        if dx < 0:
+            dx = -dx
+        dy = snow0_y - ey
+        if dy < 0:
+            dy = -dy
+        if dx < thw:
+            if dy < thh:
+                snow0_active = 0
+                on_snow_hit_enemy(idx)
+    if snow1_active == 1:
+        dx = snow1_x - ex
+        if dx < 0:
+            dx = -dx
+        dy = snow1_y - ey
+        if dy < 0:
+            dy = -dy
+        if dx < thw:
+            if dy < thh:
+                snow1_active = 0
+                on_snow_hit_enemy(idx)
+    if snow2_active == 1:
+        dx = snow2_x - ex
+        if dx < 0:
+            dx = -dx
+        dy = snow2_y - ey
+        if dy < 0:
+            dy = -dy
+        if dx < thw:
+            if dy < thh:
+                snow2_active = 0
+                on_snow_hit_enemy(idx)
+
+def on_snow_hit_enemy(idx):
+    ENEMY_FIRE_EVENT(idx, "onSnowHit")
+
+# ── Colisión jugador vs enemigos ──────────────────────────────────────────────
+def check_player_enemy_collision():
+    i = 0
+    while i < 8:
+        if GET_ENEMY_ACTIVE(i) == 1:
+            st = GET_ENEMY_STATE(i)
+            ex = GET_ENEMY_X(i)
+            ey = GET_ENEMY_Y(i)
+            dx = player_x - ex
+            if dx < 0:
+                dx = -dx
+            dy = player_y - ey
+            if dy < 0:
+                dy = -dy
+            if dx < 20:
+                if dy < 20:
+                    if st == TITCHI_STATE_BALL:
+                        # Patear bola → matar enemy y sumar puntos
+                        KILL_ENEMY(i)
+                        enemy_count = enemy_count - 1
+                        score = score + 100
+                    if st != TITCHI_STATE_BALL:
+                        # Daño al jugador
+                        on_player_death()
+        i = i + 1

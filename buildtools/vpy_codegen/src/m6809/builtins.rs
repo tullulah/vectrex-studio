@@ -120,6 +120,15 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
 
     // Pitched instrument
     ("PLAY_NOTE", 3),     // instrument_name, channel, midi_note
+
+    // Enemy access (collision / state machine)
+    ("GET_ENEMY_ACTIVE", 1),  // i → 0 or 1
+    ("GET_ENEMY_X", 1),       // i → i16 x
+    ("GET_ENEMY_Y", 1),       // i → i16 y
+    ("GET_ENEMY_HP", 1),      // i → u8 hp
+    ("GET_ENEMY_STATE", 1),   // i → u8 sm_state ($FF = no SM)
+    ("KILL_ENEMY", 1),        // i → kills enemy, returns new ENEMY_COUNT
+    ("ENEMY_FIRE_EVENT", 2),  // i, "eventName" → fires event hash
 ];
 
 /// Get expected arity for a builtin (None if not a builtin)
@@ -914,9 +923,88 @@ pub fn emit_builtin(
             true
         }
 
+        // ===== Enemy read/kill/event builtins =====
+        "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_HP" | "GET_ENEMY_STATE" => {
+            if args.len() != 1 {
+                out.push_str(&format!("    ; ERROR: {} requires 1 argument\n", name));
+                return true;
+            }
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
+            out.push_str("    LDB #ENEMY_POOL_STRIDE\n");
+            out.push_str("    MUL                 ; D = A * stride\n");
+            out.push_str("    TFR D,U\n");
+            out.push_str("    LDX #ENEMY_POOL\n");
+            out.push_str("    LEAX U,X            ; X = &pool[i]\n");
+            match up.as_str() {
+                "GET_ENEMY_ACTIVE" => {
+                    out.push_str("    CLRA\n");
+                    out.push_str("    LDB ,X              ; active byte\n");
+                }
+                "GET_ENEMY_X" => {
+                    out.push_str("    LDA 1,X             ; x hi\n");
+                    out.push_str("    LDB 2,X             ; x lo\n");
+                }
+                "GET_ENEMY_Y" => {
+                    out.push_str("    LDA 3,X             ; y hi\n");
+                    out.push_str("    LDB 4,X             ; y lo\n");
+                }
+                "GET_ENEMY_HP" => {
+                    out.push_str("    CLRA\n");
+                    out.push_str("    LDB 9,X             ; hp byte\n");
+                }
+                "GET_ENEMY_STATE" => {
+                    out.push_str("    CLRA\n");
+                    out.push_str("    LDB 13,X            ; sm_state byte\n");
+                }
+                _ => {}
+            }
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
+        "KILL_ENEMY" => {
+            if args.len() != 1 {
+                out.push_str("    ; ERROR: KILL_ENEMY requires 1 argument\n");
+                return true;
+            }
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index\n");
+            out.push_str("    JSR KILL_ENEMY_RUNTIME\n");
+            true
+        }
+
+        "ENEMY_FIRE_EVENT" => {
+            if args.len() != 2 {
+                out.push_str("    ; ERROR: ENEMY_FIRE_EVENT requires 2 arguments (i, \"eventName\")\n");
+                return true;
+            }
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index\n");
+            if let Expr::StringLit(event_name) = &args[1] {
+                let hash = fnv1a_u8(event_name.as_str());
+                out.push_str(&format!("    LDB #${:02X}              ; event hash '{}'\n", hash, event_name));
+            } else {
+                out.push_str("    ; ERROR: ENEMY_FIRE_EVENT second arg must be a string literal\n");
+                out.push_str("    LDB #0\n");
+            }
+            out.push_str("    JSR ENEMY_FIRE_EVENT_RUNTIME\n");
+            true
+        }
+
         // ===== Default: Not a builtin =====
         _ => false,
     }
+}
+
+/// FNV-1a 8-bit hash — same algorithm used in venemy.rs for SM event name encoding.
+fn fnv1a_u8(s: &str) -> u8 {
+    let mut h: u32 = 2166136261;
+    for b in s.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(16777619);
+    }
+    (h & 0xFF) as u8
 }
 
 fn emit_set_intensity(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {

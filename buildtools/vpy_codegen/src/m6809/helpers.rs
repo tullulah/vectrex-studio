@@ -206,9 +206,9 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES")
     {
         let max_enemies: usize = module.meta.max_enemies.unwrap_or(8) as usize;
-        const ENEMY_STRIDE: usize = 13;
+        const ENEMY_STRIDE: usize = 16;
         ram.allocate("ENEMY_POOL", max_enemies * ENEMY_STRIDE,
-            "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr × N)");
+            "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+sm_state+sm_timer × N)");
         ram.allocate("ENEMY_LOOP_IDX", 1, "Enemy loop counter");
         ram.allocate("ENEMY_COUNT", 1, "Active enemy count");
         ram.allocate("ENEMY_SCRATCH_PTR", 2, "Scratch pointer for enemy iteration");
@@ -2394,10 +2394,44 @@ DAR_DONE:\n\
 fn emit_enemy_system_runtime(asm: &mut String, max_enemies: usize, is_multibank: bool) {
     asm.push_str(&format!(
 "; ============================================================================\n\
-; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 13 bytes)\n\
+; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 16 bytes)\n\
 ; ============================================================================\n\
-ENEMY_POOL_STRIDE EQU 13\n\
+ENEMY_POOL_STRIDE EQU 16\n\
 ENEMY_POOL_MAX    EQU {max_enemies}\n\
+\n\
+; Pool record offsets\n\
+POOL_ACTIVE  EQU 0\n\
+POOL_X_HI    EQU 1\n\
+POOL_X_LO    EQU 2\n\
+POOL_Y_HI    EQU 3\n\
+POOL_Y_LO    EQU 4\n\
+POOL_TYPE_HI EQU 5\n\
+POOL_TYPE_LO EQU 6\n\
+POOL_ACTION  EQU 7\n\
+POOL_AI      EQU 8\n\
+POOL_HP      EQU 9\n\
+POOL_WPIDX   EQU 10\n\
+POOL_WPPTR   EQU 11\n\
+POOL_SM_STATE EQU 13\n\
+POOL_SM_TMR_HI EQU 14\n\
+POOL_SM_TMR_LO EQU 15\n\
+; SM state record layout (SM_STATE_STRIDE = 13 bytes, max 4 events)\n\
+SM_STATE_STRIDE EQU 13\n\
+SM_HDR_INIT   EQU 1\n\
+SM_HDR_STATES EQU 2\n\
+SM_ST_ACTION  EQU 0\n\
+SM_ST_DCY_HI  EQU 1\n\
+SM_ST_DCY_LO  EQU 2\n\
+SM_ST_DCYTO   EQU 3\n\
+SM_ST_NEVT    EQU 4\n\
+SM_ST_EVT0H   EQU 5\n\
+SM_ST_EVT0T   EQU 6\n\
+SM_ST_EVT1H   EQU 7\n\
+SM_ST_EVT1T   EQU 8\n\
+SM_ST_EVT2H   EQU 9\n\
+SM_ST_EVT2T   EQU 10\n\
+SM_ST_EVT3H   EQU 11\n\
+SM_ST_EVT3T   EQU 12\n\
 \n\
 ; SPAWN_ENEMIES_RUNTIME\n\
 ; Entry: B = instance count, X = ptr to _LEVEL_ENEMY_INSTANCES table\n\
@@ -2410,6 +2444,9 @@ SPAWN_ENEMIES_RUNTIME:\n\
     LDY #ENEMY_POOL\n\
     CLRA\n\
 SPAWN_CLR_LOOP:\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
     STA ,Y+\n\
     STA ,Y+\n\
     STA ,Y+\n\
@@ -2461,11 +2498,30 @@ SPAWN_FILL_LOOP:\n\
     STA 11,Y            ; +11 wp_ptr hi\n\
     LDA 11,X\n\
     STA 12,Y            ; +12 wp_ptr lo\n\
+    ; Init SM state (+13) from type header [5-6] = SM ptr\n\
+    LDA 5,Y             ; type_ptr hi (pool)\n\
+    LDB 6,Y             ; type_ptr lo (pool)\n\
+    TFR D,X             ; X = _NAME_ENEMY header\n\
+    LDA 5,X             ; SM ptr hi (header[5])\n\
+    LDB 6,X             ; SM ptr lo (header[6])\n\
+    CMPD #0\n\
+    BEQ SPAWN_SM_NOSM   ; no state machine\n\
+    TFR D,X             ; X = SM table header\n\
+    LDA SM_HDR_INIT,X   ; initial_state_idx\n\
+    STA 13,Y            ; pool.sm_state = initial\n\
+    BRA SPAWN_SM_DONE\n\
+SPAWN_SM_NOSM:\n\
+    LDA #$FF\n\
+    STA 13,Y            ; pool.sm_state = $FF (no SM)\n\
+SPAWN_SM_DONE:\n\
+    CLR 14,Y            ; pool.sm_decay_timer hi = 0\n\
+    CLR 15,Y            ; pool.sm_decay_timer lo = 0\n\
+    LDX >ENEMY_SCRATCH_PTR ; restore instance ptr (clobbered above)\n\
     ; advance X by 12 (instance stride)\n\
     LEAX 12,X\n\
     STX >ENEMY_SCRATCH_PTR\n\
-    ; advance Y by 13 (pool stride)\n\
-    LEAY 13,Y\n\
+    ; advance Y by 16 (pool stride)\n\
+    LEAY 16,Y\n\
     DECB\n\
     BNE SPAWN_FILL_LOOP\n\
 SPAWN_ENE_DONE:\n\
@@ -2542,9 +2598,63 @@ UPD_TRY_YLO:\n\
     BRA UPD_ENE_NEXT_POP\n\
 UPD_INC_YLO:\n\
     INC 4,Y\n\
+UPD_SM_DECAY:\n\
+    LDA 13,Y            ; sm_state ($FF = no SM)\n\
+    CMPA #$FF\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    LDD 14,Y            ; sm_decay_timer (16-bit)\n\
+    CMPD #0\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    SUBD #1\n\
+    STD 14,Y\n\
+    CMPD #0\n\
+    BNE UPD_ENE_NEXT_POP\n\
+    ; Timer hit 0: look up decay_to\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    CMPD #0\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X\n\
+    LEAX SM_HDR_STATES,X\n\
+    LDB 13,Y\n\
+    LDA #SM_STATE_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X\n\
+    LEAX SM_HDR_STATES,X\n\
+    LEAX U,X\n\
+    LDA SM_ST_DCYTO,X\n\
+    CMPA #$FF\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    STA 13,Y\n\
+    LDB #SM_STATE_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X\n\
+    LEAX SM_HDR_STATES,X\n\
+    LEAX U,X\n\
+    LDA SM_ST_ACTION,X\n\
+    STA 7,Y\n\
+    LDA SM_ST_DCY_HI,X\n\
+    STA 14,Y\n\
+    LDA SM_ST_DCY_LO,X\n\
+    STA 15,Y\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
-    LEAY 13,Y           ; next pool record\n\
+    LEAY 16,Y           ; next pool record\n\
     DECB\n\
     BNE UPD_ENE_LOOP\n\
     PULS A              ; restore original bank\n\
@@ -2614,9 +2724,63 @@ UPD_TRY_YLO:\n\
     BRA UPD_ENE_NEXT_POP\n\
 UPD_INC_YLO:\n\
     INC 4,Y\n\
+UPD_SM_DECAY:\n\
+    LDA 13,Y            ; sm_state ($FF = no SM)\n\
+    CMPA #$FF\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    LDD 14,Y            ; sm_decay_timer (16-bit)\n\
+    CMPD #0\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    SUBD #1\n\
+    STD 14,Y\n\
+    CMPD #0\n\
+    BNE UPD_ENE_NEXT_POP\n\
+    ; Timer hit 0: look up decay_to\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    CMPD #0\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X\n\
+    LEAX SM_HDR_STATES,X\n\
+    LDB 13,Y\n\
+    LDA #SM_STATE_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X\n\
+    LEAX SM_HDR_STATES,X\n\
+    LEAX U,X\n\
+    LDA SM_ST_DCYTO,X\n\
+    CMPA #$FF\n\
+    BEQ UPD_ENE_NEXT_POP\n\
+    STA 13,Y\n\
+    LDB #SM_STATE_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X\n\
+    LEAX SM_HDR_STATES,X\n\
+    LEAX U,X\n\
+    LDA SM_ST_ACTION,X\n\
+    STA 7,Y\n\
+    LDA SM_ST_DCY_HI,X\n\
+    STA 14,Y\n\
+    LDA SM_ST_DCY_LO,X\n\
+    STA 15,Y\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
-    LEAY 13,Y           ; next pool record\n\
+    LEAY 16,Y           ; next pool record\n\
     DECB\n\
     BNE UPD_ENE_LOOP\n\
 UPD_ENE_DONE:\n\
@@ -2716,7 +2880,7 @@ DRW_ENE_LOOP:\n\
     PULS Y              ; restore pool pointer\n\
 DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
-    LEAY 13,Y           ; next pool record\n\
+    LEAY 16,Y           ; next pool record\n\
     DECB\n\
     BNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
@@ -2742,12 +2906,104 @@ DRW_ENE_DONE:\n\
     JSR $F1AA           ; Draw_Sync_List_At_With_Mirrors\n\
 DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
-    LEAY 13,Y           ; next pool record\n\
+    LEAY 16,Y           ; next pool record\n\
     DECB\n\
     BNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
     RTS\n\n"
         );
     }
+
+    // KILL_ENEMY_RUNTIME and ENEMY_FIRE_EVENT_RUNTIME subroutines
+    asm.push_str(
+"\n\
+; KILL_ENEMY_RUNTIME\n\
+; Entry: A = enemy index (0-based)\n\
+; Effect: pool[A].active=0, ENEMY_COUNT--\n\
+; Return: RESULT = new ENEMY_COUNT (D)\n\
+KILL_ENEMY_RUNTIME:\n\
+    LDB #ENEMY_POOL_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LDX #ENEMY_POOL\n\
+    LEAX U,X\n\
+    CLR ,X              ; active = 0\n\
+    DEC >ENEMY_COUNT\n\
+    CLRA\n\
+    LDB >ENEMY_COUNT\n\
+    STD RESULT\n\
+    RTS\n\
+\n\
+; ENEMY_FIRE_EVENT_RUNTIME\n\
+; Entry: A = enemy index, B = event hash (FNV-1a u8)\n\
+; Looks up the current SM state, scans on_event table, applies transition.\n\
+; Uses ENEMY_SCRATCH_PTR (2 bytes) and ENEMY_SCRATCH_X (1 byte) as temporals.\n\
+ENEMY_FIRE_EVENT_RUNTIME:\n\
+    STB >ENEMY_SCRATCH_X    ; save event hash (1 byte)\n\
+    LDB #ENEMY_POOL_STRIDE\n\
+    MUL                     ; D = A * stride\n\
+    TFR D,U\n\
+    LDX #ENEMY_POOL\n\
+    LEAX U,X                ; X = &pool[A]\n\
+    STX >ENEMY_SCRATCH_PTR  ; save pool ptr\n\
+    LDA POOL_SM_STATE,X     ; sm_state\n\
+    CMPA #$FF\n\
+    BEQ FIRE_EVT_RTS        ; no SM\n\
+    LDA POOL_TYPE_HI,X\n\
+    LDB POOL_TYPE_LO,X\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X                 ; SM hi\n\
+    LDB 6,X                 ; SM lo\n\
+    CMPD #0\n\
+    BEQ FIRE_EVT_RTS\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX SM_HDR_STATES,X    ; X = &states[0]\n\
+    LDY >ENEMY_SCRATCH_PTR\n\
+    LDA POOL_SM_STATE,Y     ; current state\n\
+    LDB #SM_STATE_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LEAX U,X                ; X = &states[current]\n\
+    LDB SM_ST_NEVT,X        ; event count\n\
+    BEQ FIRE_EVT_RTS\n\
+    LEAX SM_ST_EVT0H,X      ; X = first event pair\n\
+    LDA >ENEMY_SCRATCH_X    ; event hash\n\
+FIRE_EVT_SCAN:\n\
+    CMPA ,X\n\
+    BEQ FIRE_EVT_MATCH\n\
+    LEAX 2,X\n\
+    DECB\n\
+    BNE FIRE_EVT_SCAN\n\
+    BRA FIRE_EVT_RTS\n\
+FIRE_EVT_MATCH:\n\
+    LDB 1,X                 ; to_state_idx\n\
+    STB >ENEMY_SCRATCH_X    ; save to_state_idx\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    STB POOL_SM_STATE,X     ; apply new state\n\
+    ; Look up new state record for action/decay\n\
+    LDA POOL_TYPE_HI,X\n\
+    LDB POOL_TYPE_LO,X\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX SM_HDR_STATES,X    ; X = &states[0]\n\
+    LDA >ENEMY_SCRATCH_X    ; to_state_idx\n\
+    LDB #SM_STATE_STRIDE\n\
+    MUL\n\
+    TFR D,U\n\
+    LEAX U,X                ; X = &states[to]\n\
+    LDA SM_ST_ACTION,X      ; action_idx\n\
+    LDY >ENEMY_SCRATCH_PTR\n\
+    STA POOL_ACTION,Y       ; update pool action\n\
+    LDA SM_ST_DCY_HI,X\n\
+    STA POOL_SM_TMR_HI,Y\n\
+    LDA SM_ST_DCY_LO,X\n\
+    STA POOL_SM_TMR_LO,Y\n\
+FIRE_EVT_RTS:\n\
+    RTS\n\
+\n\
+"
+    );
 }
 
