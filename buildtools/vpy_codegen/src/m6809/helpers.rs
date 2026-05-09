@@ -2507,7 +2507,7 @@ SPAWN_FILL_LOOP:\n\
     CMPD #0\n\
     BEQ SPAWN_SM_NOSM   ; no state machine\n\
     TFR D,X             ; X = SM table header\n\
-    LDA SM_HDR_INIT,X   ; initial_state_idx\n\
+    LDA 1,X   ; initial_state_idx\n\
     STA 13,Y            ; pool.sm_state = initial\n\
     BRA SPAWN_SM_DONE\n\
 SPAWN_SM_NOSM:\n\
@@ -2618,39 +2618,37 @@ UPD_SM_DECAY:\n\
     CMPD #0\n\
     BEQ UPD_ENE_NEXT_POP\n\
     TFR D,X\n\
-    LEAX SM_HDR_STATES,X\n\
+    LEAX 2,X\n\
     LDB 13,Y\n\
-    LDA #SM_STATE_STRIDE\n\
+    LDA #13\n\
     MUL\n\
-    TFR D,U\n\
     LDA 5,Y\n\
     LDB 6,Y\n\
     TFR D,X\n\
     LDA 5,X\n\
     LDB 6,X\n\
     TFR D,X\n\
-    LEAX SM_HDR_STATES,X\n\
-    LEAX U,X\n\
-    LDA SM_ST_DCYTO,X\n\
+    LEAX 2,X\n\
+    LEAX D,X\n\
+    LDA 3,X\n\
     CMPA #$FF\n\
     BEQ UPD_ENE_NEXT_POP\n\
     STA 13,Y\n\
-    LDB #SM_STATE_STRIDE\n\
+    LDB #13\n\
     MUL\n\
-    TFR D,U\n\
     LDA 5,Y\n\
     LDB 6,Y\n\
     TFR D,X\n\
     LDA 5,X\n\
     LDB 6,X\n\
     TFR D,X\n\
-    LEAX SM_HDR_STATES,X\n\
-    LEAX U,X\n\
-    LDA SM_ST_ACTION,X\n\
+    LEAX 2,X\n\
+    LEAX D,X\n\
+    LDA 0,X\n\
     STA 7,Y\n\
-    LDA SM_ST_DCY_HI,X\n\
+    LDA 1,X\n\
     STA 14,Y\n\
-    LDA SM_ST_DCY_LO,X\n\
+    LDA 2,X\n\
     STA 15,Y\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
@@ -2744,39 +2742,37 @@ UPD_SM_DECAY:\n\
     CMPD #0\n\
     BEQ UPD_ENE_NEXT_POP\n\
     TFR D,X\n\
-    LEAX SM_HDR_STATES,X\n\
+    LEAX 2,X\n\
     LDB 13,Y\n\
-    LDA #SM_STATE_STRIDE\n\
+    LDA #13\n\
     MUL\n\
-    TFR D,U\n\
     LDA 5,Y\n\
     LDB 6,Y\n\
     TFR D,X\n\
     LDA 5,X\n\
     LDB 6,X\n\
     TFR D,X\n\
-    LEAX SM_HDR_STATES,X\n\
-    LEAX U,X\n\
-    LDA SM_ST_DCYTO,X\n\
+    LEAX 2,X\n\
+    LEAX D,X\n\
+    LDA 3,X\n\
     CMPA #$FF\n\
     BEQ UPD_ENE_NEXT_POP\n\
     STA 13,Y\n\
-    LDB #SM_STATE_STRIDE\n\
+    LDB #13\n\
     MUL\n\
-    TFR D,U\n\
     LDA 5,Y\n\
     LDB 6,Y\n\
     TFR D,X\n\
     LDA 5,X\n\
     LDB 6,X\n\
     TFR D,X\n\
-    LEAX SM_HDR_STATES,X\n\
-    LEAX U,X\n\
-    LDA SM_ST_ACTION,X\n\
+    LEAX 2,X\n\
+    LEAX D,X\n\
+    LDA 0,X\n\
     STA 7,Y\n\
-    LDA SM_ST_DCY_HI,X\n\
+    LDA 1,X\n\
     STA 14,Y\n\
-    LDA SM_ST_DCY_LO,X\n\
+    LDA 2,X\n\
     STA 15,Y\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
@@ -2922,11 +2918,10 @@ DRW_ENE_DONE:\n\
 ; Effect: pool[A].active=0, ENEMY_COUNT--\n\
 ; Return: RESULT = new ENEMY_COUNT (D)\n\
 KILL_ENEMY_RUNTIME:\n\
-    LDB #ENEMY_POOL_STRIDE\n\
+    LDB #16\n\
     MUL\n\
-    TFR D,U\n\
     LDX #ENEMY_POOL\n\
-    LEAX U,X\n\
+    LEAX D,X\n\
     CLR ,X              ; active = 0\n\
     DEC >ENEMY_COUNT\n\
     CLRA\n\
@@ -2940,33 +2935,33 @@ KILL_ENEMY_RUNTIME:\n\
 ; Uses ENEMY_SCRATCH_PTR (2 bytes) and ENEMY_SCRATCH_X (1 byte) as temporals.\n\
 ENEMY_FIRE_EVENT_RUNTIME:\n\
     STB >ENEMY_SCRATCH_X    ; save event hash (1 byte)\n\
-    LDB #ENEMY_POOL_STRIDE\n\
+    LDB #16\n\
     MUL                     ; D = A * stride\n\
-    TFR D,U\n\
     LDX #ENEMY_POOL\n\
-    LEAX U,X                ; X = &pool[A]\n\
+    LEAX D,X                ; X = &pool[A]\n\
     STX >ENEMY_SCRATCH_PTR  ; save pool ptr\n\
-    LDA POOL_SM_STATE,X     ; sm_state\n\
+    LDA 13,X     ; sm_state\n\
     CMPA #$FF\n\
     BEQ FIRE_EVT_RTS        ; no SM\n\
-    LDA POOL_TYPE_HI,X\n\
-    LDB POOL_TYPE_LO,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
     TFR D,X                 ; X = type header\n\
     LDA 5,X                 ; SM hi\n\
     LDB 6,X                 ; SM lo\n\
     CMPD #0\n\
     BEQ FIRE_EVT_RTS\n\
     TFR D,X                 ; X = SM header\n\
-    LEAX SM_HDR_STATES,X    ; X = &states[0]\n\
-    LDY >ENEMY_SCRATCH_PTR\n\
-    LDA POOL_SM_STATE,Y     ; current state\n\
-    LDB #SM_STATE_STRIDE\n\
+    LEAX 2,X    ; X = &states[0]\n\
+    PSHS X                  ; save states[0] ptr on stack\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    LDA 13,X     ; current state\n\
+    PULS X                  ; X = states[0] again\n\
+    LDB #13\n\
     MUL\n\
-    TFR D,U\n\
-    LEAX U,X                ; X = &states[current]\n\
-    LDB SM_ST_NEVT,X        ; event count\n\
+    LEAX D,X                ; X = &states[current]\n\
+    LDB 4,X        ; event count\n\
     BEQ FIRE_EVT_RTS\n\
-    LEAX SM_ST_EVT0H,X      ; X = first event pair\n\
+    LEAX 5,X      ; X = first event pair\n\
     LDA >ENEMY_SCRATCH_X    ; event hash\n\
 FIRE_EVT_SCAN:\n\
     CMPA ,X\n\
@@ -2979,27 +2974,32 @@ FIRE_EVT_MATCH:\n\
     LDB 1,X                 ; to_state_idx\n\
     STB >ENEMY_SCRATCH_X    ; save to_state_idx\n\
     LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
-    STB POOL_SM_STATE,X     ; apply new state\n\
+    STB 13,X     ; apply new state\n\
     ; Look up new state record for action/decay\n\
-    LDA POOL_TYPE_HI,X\n\
-    LDB POOL_TYPE_LO,X\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
     TFR D,X                 ; X = type header\n\
     LDA 5,X\n\
     LDB 6,X\n\
     TFR D,X                 ; X = SM header\n\
-    LEAX SM_HDR_STATES,X    ; X = &states[0]\n\
+    LEAX 2,X    ; X = &states[0]\n\
     LDA >ENEMY_SCRATCH_X    ; to_state_idx\n\
-    LDB #SM_STATE_STRIDE\n\
+    LDB #13\n\
     MUL\n\
-    TFR D,U\n\
-    LEAX U,X                ; X = &states[to]\n\
-    LDA SM_ST_ACTION,X      ; action_idx\n\
-    LDY >ENEMY_SCRATCH_PTR\n\
-    STA POOL_ACTION,Y       ; update pool action\n\
-    LDA SM_ST_DCY_HI,X\n\
-    STA POOL_SM_TMR_HI,Y\n\
-    LDA SM_ST_DCY_LO,X\n\
-    STA POOL_SM_TMR_LO,Y\n\
+    LEAX D,X                ; X = &states[to]\n\
+    ; Store action/decay into pool without LDY (VASM LDY extended mode bug workaround)\n\
+    LDA 1,X\n\
+    LDB 2,X\n\
+    STD >ENEMY_SCRATCH_Y    ; save decay hi+lo in 2-byte scratch\n\
+    LDA 0,X      ; action_idx\n\
+    PSHS A                  ; save action on stack\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    PULS A\n\
+    STA 7,X       ; update pool action\n\
+    LDA >ENEMY_SCRATCH_Y\n\
+    STA 14,X\n\
+    LDA >ENEMY_SCRATCH_Y+1\n\
+    STA 15,X\n\
 FIRE_EVT_RTS:\n\
     RTS\n\
 \n\
