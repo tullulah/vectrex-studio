@@ -2821,7 +2821,7 @@ fn emit_pitrex_note_engine() -> String {
 
 // ── Enemy system ─────────────────────────────────────────────────────────────
 
-fn emit_pitrex_spawn_enemies() -> String {
+pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // pitrex_spawn_enemies(r0=data_ptr, r1=count)
     // ROM record layout (24 bytes):
     //   +0  sprite_ptr (u32), +4 spawn_x (i16), +6 spawn_y (i16)
@@ -2983,7 +2983,7 @@ fn emit_pitrex_update_enemies() -> String {
     s
 }
 
-fn emit_pitrex_draw_enemies() -> String {
+pub(crate) fn emit_pitrex_draw_enemies() -> String {
     // pitrex_draw_enemies() — draw all active enemies with camera offset.
     // Pool entry stride = 32 bytes.
     // Mirror logic: mirror = (mirror_on_patrol && (dir XNOR default_facing))
@@ -3060,9 +3060,12 @@ fn emit_pitrex_draw_enemies() -> String {
     s.push_str("    mov     r11, #0             @ wrap to 0\n");
     s.push_str(".Lpde_no_wrap:\n");
     s.push_str("    strb    r11, [r5, #28]      @ store frame_idx\n");
-    // frame_ptr = anim_header[4 + frame_idx*4]  (frame_table_offset fixed at 4)
-    s.push_str("    lsl     r10, r11, #2        @ frame_idx * 4\n");
-    s.push_str("    add     r10, r10, #4        @ + 4 (header size)\n");
+    // frame_ptr = anim_header[frame_table_offset + frame_idx*4]
+    // Read frame_table_offset from header byte 3 (= 4 + base_ref_count*4).
+    // Hardcoding #4 breaks animations that have base_refs (base_ref_count > 0).
+    s.push_str("    ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)\n");
+    s.push_str("    lsl     r9, r11, #2         @ frame_idx * 4  (use r9; r10 = offset)\n");
+    s.push_str("    add     r10, r10, r9        @ frame_table_offset + frame_idx*4\n");
     s.push_str("    ldr     r10, [r6, r10]      @ frame_ptr\n");
     // new ticks from frame_ptr[0] = duration_ticks
     s.push_str("    ldrb    r12, [r10]          @ new duration_ticks\n");
@@ -3073,9 +3076,10 @@ fn emit_pitrex_draw_enemies() -> String {
     // Same frame: just decrement ticks and get current vec_ref
     s.push_str(".Lpde_anim_sf:\n");
     s.push_str("    strb    r12, [r5, #29]      @ store decremented ticks\n");
-    // frame_ptr = anim_header[4 + frame_idx*4]
-    s.push_str("    lsl     r10, r11, #2        @ frame_idx * 4\n");
-    s.push_str("    add     r10, r10, #4        @ + 4 (header size)\n");
+    // frame_ptr = anim_header[frame_table_offset + frame_idx*4]
+    s.push_str("    ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)\n");
+    s.push_str("    lsl     r9, r11, #2         @ frame_idx * 4\n");
+    s.push_str("    add     r10, r10, r9        @ frame_table_offset + frame_idx*4\n");
     s.push_str("    ldr     r10, [r6, r10]      @ frame_ptr\n");
     // vec_ref at frame_ptr+4
     s.push_str("    ldr     r0, [r10, #4]       @ vec_ref\n");
@@ -3347,5 +3351,77 @@ mod tests {
                 "anim_tick={anim_tick}: drawn frame {frame} != expected {expected_frame}"
             );
         }
+    }
+
+    // ── Bug 3 regression tests ────────────────────────────────────────────────
+
+    /// Regression test for Bug 3 (part A): pitrex_spawn_enemies must set is_anim
+    /// in the pool entry from the ROM record's is_anim byte at offset +20.
+    ///
+    /// The generated pitrex_spawn_enemies code reads ROM[+20] and stores it to
+    /// pool[+27].  This test verifies the generated assembly contains those exact
+    /// load/store instructions so that vanim enemies are drawn with animation.
+    #[test]
+    fn test_pitrex_spawn_sets_is_anim_from_rom() {
+        let asm = super::emit_pitrex_spawn_enemies();
+
+        // Must read is_anim from ROM offset +20
+        assert!(
+            asm.contains("[r4, #20]"),
+            "Bug 3A regression: pitrex_spawn must read ROM[+20] for is_anim (got: ...)"
+        );
+        // Must store is_anim into pool offset +27
+        assert!(
+            asm.contains("[r7, #27]"),
+            "Bug 3A regression: pitrex_spawn must write pool[+27] for is_anim (got: ...)"
+        );
+        // The read and store must both reference is_anim in comments
+        let rom20_pos  = asm.find("[r4, #20]").unwrap();
+        let pool27_pos = asm.find("[r7, #27]").unwrap();
+        assert!(
+            rom20_pos < pool27_pos,
+            "Bug 3A regression: ROM[+20] must be read before pool[+27] is written"
+        );
+    }
+
+    /// Regression test for Bug 3 (part B): pitrex_draw_enemies must read the
+    /// frame_table_offset from the animation header byte 3 instead of
+    /// hardcoding the value 4.
+    ///
+    /// Hardcoding `add r10, r10, #4` is wrong for animations that have base_refs
+    /// (base_ref_count > 0), because the frame table starts at
+    /// `4 + base_ref_count * 4`, not at 4.  The correct code reads byte 3 of
+    /// the header (`ldrb r10, [r6, #3]`).
+    ///
+    /// Previously the generated code contained:
+    ///   lsl  r10, r11, #2
+    ///   add  r10, r10, #4   ← hardcoded offset 4
+    ///   ldr  r10, [r6, r10]
+    ///
+    /// After the fix it must contain:
+    ///   ldrb r10, [r6, #3]  ← read frame_table_offset from header
+    ///   ...
+    ///   add  r10, r10, r9   ← dynamic offset
+    #[test]
+    fn test_pitrex_draw_enemies_reads_frame_table_offset_from_header() {
+        let asm = super::emit_pitrex_draw_enemies();
+
+        // The fixed code must read frame_table_offset from anim header byte 3.
+        assert!(
+            asm.contains("[r6, #3]"),
+            "Bug 3B regression: pitrex_draw_enemies must read frame_table_offset from \
+             anim_header[3] (ldrb r10, [r6, #3])"
+        );
+
+        // The OLD hardcoded `add r10, r10, #4` must NOT appear in the anim path.
+        // (Only the first occurrence matters; search within the .Lpde_anim block.)
+        let anim_label_pos = asm.find(".Lpde_anim:").expect(".Lpde_anim label must exist");
+        let anim_draw_pos  = asm.find(".Lpde_anim_draw:").expect(".Lpde_anim_draw label must exist");
+        let anim_section   = &asm[anim_label_pos..anim_draw_pos];
+        assert!(
+            !anim_section.contains("add     r10, r10, #4"),
+            "Bug 3B regression: hardcoded `add r10, r10, #4` found in .Lpde_anim block; \
+             frame_table_offset must be read from header byte 3 instead"
+        );
     }
 }

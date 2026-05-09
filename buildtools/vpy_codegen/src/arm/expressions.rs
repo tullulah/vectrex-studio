@@ -237,9 +237,28 @@ pub fn emit_call(
         // Fallthrough for non-Var args → returns 0 via vpy_len
     }
 
-    // M6809-only builtins — not available on ARM
-    if matches!(info.name.to_uppercase().as_str(), "SPAWN_ENEMIES" | "UPDATE_ENEMIES" | "DRAW_ENEMIES") {
-        return Ok(format!("    @ {} — M6809-only, no-op on ARM\n", info.name));
+    // M6809-only builtins — no-op on rp2350.
+    // SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES drive the Vectrex vector engine
+    // directly and have no ARM equivalent.  The query/command builtins
+    // (GET_ENEMY_ACTIVE, GET_ENEMY_X/Y/STATE, KILL_ENEMY, ENEMY_FIRE_EVENT) only
+    // exist in the pitrex target; on bare rp2350 they return 0 (queries) or are
+    // no-ops (commands) so the VPy game logic still compiles cleanly.
+    {
+        let name_up = info.name.to_uppercase();
+        let is_query = matches!(name_up.as_str(),
+            "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE");
+        let is_m6809_only = matches!(name_up.as_str(),
+            "SPAWN_ENEMIES" | "UPDATE_ENEMIES" | "DRAW_ENEMIES" |
+            "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE" |
+            "KILL_ENEMY" | "ENEMY_FIRE_EVENT");
+        if is_m6809_only {
+            let mut s = format!("    @ {} — M6809-only, no-op on rp2350\n", info.name);
+            if is_query {
+                // Return 0 in r0 so the result can be safely used as a value.
+                s.push_str("    mov     r0, #0\n");
+            }
+            return Ok(s);
+        }
     }
 
     let fn_name = match info.name.as_str() {
@@ -656,5 +675,87 @@ fn emit_arg(
         Ok(s)
     } else {
         emit_expr(expr, var_addrs)
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vpy_parser::CallInfo;
+
+    fn make_call(name: &str) -> CallInfo {
+        CallInfo { name: name.to_string(), source_line: 0, col: 0, args: vec![] }
+    }
+
+    fn make_call_with_arg(name: &str, arg: i32) -> CallInfo {
+        CallInfo {
+            name: name.to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![vpy_parser::Expr::Number(arg)],
+        }
+    }
+
+    /// Regression test for Bug 1: M6809-only enemy builtins must be no-ops on
+    /// rp2350 and must NOT emit an unresolved external `bl` symbol.
+    /// Previously GET_ENEMY_ACTIVE / GET_ENEMY_X / GET_ENEMY_Y / GET_ENEMY_STATE /
+    /// KILL_ENEMY / ENEMY_FIRE_EVENT fell through to `other => other` and emitted
+    /// `bl GET_ENEMY_ACTIVE` (and similar), which would fail at link time with
+    /// "undefined symbol".
+    #[test]
+    fn test_arm_enemy_builtins_are_noop() {
+        let var_addrs = std::collections::HashMap::new();
+
+        // Commands (no return value) — must NOT emit a bare `bl NAME` call.
+        for name in &["SPAWN_ENEMIES", "UPDATE_ENEMIES", "DRAW_ENEMIES",
+                      "KILL_ENEMY", "ENEMY_FIRE_EVENT"] {
+            let info = make_call(name);
+            let asm = emit_call(&info, &var_addrs).expect(name);
+            assert!(
+                !asm.contains(&format!("bl      {name}")),
+                "Bug 1 regression: {name} must not emit `bl {name}` on rp2350 (got: {asm:?})"
+            );
+            // Must contain a comment indicating it's a no-op
+            assert!(
+                asm.contains("no-op"),
+                "{name}: expected 'no-op' comment in output (got: {asm:?})"
+            );
+            // Commands must NOT return a value (no `mov r0, #0`)
+            assert!(
+                !asm.contains("mov     r0, #0"),
+                "{name}: command builtins must not set r0 (got: {asm:?})"
+            );
+        }
+
+        // Query builtins (return a value) — must emit `mov r0, #0` (return 0).
+        for name in &["GET_ENEMY_ACTIVE", "GET_ENEMY_X", "GET_ENEMY_Y", "GET_ENEMY_STATE"] {
+            let info = make_call_with_arg(name, 0);
+            let asm = emit_call(&info, &var_addrs).expect(name);
+            assert!(
+                !asm.contains(&format!("bl      {name}")),
+                "Bug 1 regression: {name} must not emit `bl {name}` on rp2350 (got: {asm:?})"
+            );
+            assert!(
+                asm.contains("mov     r0, #0"),
+                "{name}: query builtin must return 0 via `mov r0, #0` (got: {asm:?})"
+            );
+        }
+    }
+
+    /// SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES were already no-ops before
+    /// the fix. This test ensures they remain no-ops after the refactor.
+    #[test]
+    fn test_arm_original_m6809_noops_still_noop() {
+        let var_addrs = std::collections::HashMap::new();
+        for name in &["SPAWN_ENEMIES", "UPDATE_ENEMIES", "DRAW_ENEMIES"] {
+            let info = make_call(name);
+            let asm = emit_call(&info, &var_addrs).expect(name);
+            assert!(
+                !asm.contains(&format!("bl      {name}")),
+                "{name}: must remain a no-op on rp2350"
+            );
+        }
     }
 }

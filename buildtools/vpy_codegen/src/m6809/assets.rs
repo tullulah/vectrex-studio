@@ -1284,7 +1284,7 @@ fn generate_draw_vector_banked_wrapper() -> String {
 ///         U = pointer to 2-byte RAM animation state (frame_idx, ticks_left)
 ///             DRAW_VEC_X / DRAW_VEC_Y already set by caller
 /// Clobbers: A, B, X (Y is preserved by DRAW_ANIM_RUNTIME via PSHS/PULS)
-fn generate_draw_anim_banked_wrapper() -> String {
+pub(crate) fn generate_draw_anim_banked_wrapper() -> String {
     let mut asm = String::new();
 
     asm.push_str(";***************************************************************************\n");
@@ -1311,6 +1311,7 @@ fn generate_draw_anim_banked_wrapper() -> String {
     asm.push_str("    LDX #ANIM_ADDR_TABLE\n");
     asm.push_str("    LEAX D,X             ; X points to FDB entry\n");
     asm.push_str("    LDX ,X               ; X = _ANIM_XXX header ptr\n");
+    asm.push_str("    PSHS X               ; SAVE header ptr — Reset0Ref/Moveto_d may clobber X\n");
     asm.push_str("\n");
     asm.push_str("    ; Position beam at enemy screen coordinates (DRAW_VEC_X/Y set by caller)\n");
     asm.push_str("    JSR $F1AA            ; DP_to_D0 (required before BIOS positioning calls)\n");
@@ -1319,6 +1320,7 @@ fn generate_draw_anim_banked_wrapper() -> String {
     asm.push_str("    LDB >DRAW_VEC_X      ; B = X position\n");
     asm.push_str("    JSR Moveto_d         ; Move beam to (Y, X)\n");
     asm.push_str("    JSR $F1AF            ; DP_to_C8 (restore DP before DRAW_ANIM_RUNTIME)\n");
+    asm.push_str("    PULS X               ; RESTORE header ptr (Reset0Ref/Moveto_d may have clobbered X)\n");
     asm.push_str("\n");
     asm.push_str("    ; Call animation runtime: X=header, U=state ptr\n");
     asm.push_str("    JSR DRAW_ANIM_RUNTIME\n");
@@ -1535,4 +1537,47 @@ pub fn generate_3d_data_asm(assets: &[AssetInfo]) -> String {
         }
     }
     out
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::generate_draw_anim_banked_wrapper;
+
+    /// Regression test for Bug 2: DRAW_ANIM_BANKED must save X on the stack
+    /// before the Vectrex BIOS calls (Reset0Ref, Moveto_d) that may clobber it,
+    /// and restore it afterwards so that DRAW_ANIM_RUNTIME receives the correct
+    /// animation header pointer.
+    ///
+    /// Previously, X was loaded with the animation header pointer and then the
+    /// BIOS calls ran *before* X was saved.  If Reset0Ref or Moveto_d corrupted
+    /// X, DRAW_ANIM_RUNTIME received a garbage header — causing it to loop for
+    /// thousands of iterations, hanging the frame and making the level invisible.
+    #[test]
+    fn test_draw_anim_banked_saves_x_around_bios_calls() {
+        let asm = generate_draw_anim_banked_wrapper();
+
+        let pshs_x_pos   = asm.find("PSHS X").expect("PSHS X must be present in DRAW_ANIM_BANKED");
+        let reset0_pos   = asm.find("Reset0Ref").expect("Reset0Ref must be present in DRAW_ANIM_BANKED");
+        let puls_x_pos   = asm.find("PULS X").expect("PULS X must be present in DRAW_ANIM_BANKED");
+        // Use the JSR instruction, not the symbol in comments/docs
+        let dar_pos      = asm.find("JSR DRAW_ANIM_RUNTIME").expect("JSR DRAW_ANIM_RUNTIME must be present in DRAW_ANIM_BANKED");
+
+        assert!(
+            pshs_x_pos < reset0_pos,
+            "Bug 2 regression: PSHS X must come before Reset0Ref (positions: {} vs {})",
+            pshs_x_pos, reset0_pos
+        );
+        assert!(
+            puls_x_pos > reset0_pos,
+            "Bug 2 regression: PULS X must come after Reset0Ref (positions: {} vs {})",
+            puls_x_pos, reset0_pos
+        );
+        assert!(
+            puls_x_pos < dar_pos,
+            "Bug 2 regression: PULS X must come before DRAW_ANIM_RUNTIME (positions: {} vs {})",
+            puls_x_pos, dar_pos
+        );
+    }
 }
