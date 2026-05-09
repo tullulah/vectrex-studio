@@ -299,19 +299,23 @@ impl EnemyResource {
     /// Compile to M6809 assembly for **multibank** mode.
     ///
     /// The action table uses `FCB sprite_idx` (a 0-based index into
-    /// `VECTOR_ADDR_TABLE`) instead of `FDB sprite_ptr`.  This allows
-    /// `DRAW_ENEMIES_RUNTIME` to call `DRAW_VECTOR_BANKED` directly, avoiding
-    /// the need to switch to the vector's switchable bank from helpers code.
+    /// `VECTOR_ADDR_TABLE` for vec sprites, or `ANIM_ADDR_TABLE` for vanim
+    /// sprites) instead of `FDB sprite_ptr`.  This allows `DRAW_ENEMIES_RUNTIME`
+    /// to call `DRAW_VECTOR_BANKED` / `DRAW_ANIM_BANKED` without resolving full
+    /// addresses in the helpers bank.
     ///
-    /// Action table entry format (4 bytes, same total size as the FDB version):
-    ///   FCB sprite_idx  ; 0-based index into VECTOR_ADDR_TABLE ($FF = none)
-    ///   FCB sprite_type ; 0=vec, 1=vanim
-    ///   FCB loop        ; 0=no loop, 1=loop
-    ///   FCB 0           ; pad
+    /// Action table entry format (6 bytes per entry):
+    ///   byte [0]: sprite_idx  FCB — index into VECTOR_ADDR_TABLE (vec) or ANIM_ADDR_TABLE (vanim); $FF = none
+    ///   byte [1]: sprite_type FCB — 0=vec, 1=vanim
+    ///   byte [2]: loop        FCB — 0=no loop, 1=loop
+    ///   byte [3]: pad         FCB — reserved
+    ///   bytes [4-5]: anim_state FDB — 16-bit RAM address of 2-byte animation state
+    ///                               (byte0=frame_idx, byte1=ticks_left); FDB 0 for vec actions
     pub fn compile_to_asm_indexed(
         &self,
         override_name: Option<&str>,
         vec_idx_map: &HashMap<String, u8>,
+        anim_idx_map: &HashMap<String, u8>,
     ) -> String {
         let raw_name = override_name.unwrap_or(&self.name);
         let name_up = raw_name
@@ -356,39 +360,67 @@ impl EnemyResource {
         }
         out.push_str("\n");
 
-        // Action table — FCB sprite_idx instead of FDB sprite_ptr
+        // Action table — 6-byte entries: FCB sprite_idx, FCB sprite_type, FCB loop, FCB pad, FDB anim_state_ptr
         out.push_str(&format!("_{}_ENEMY_ACTIONS:\n", name_up));
         for (i, action) in self.actions.iter().enumerate() {
+            let ext = Path::new(&action.sprite)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            let is_vanim = ext == "vanim";
+
             let sprite_idx: u8 = if !action.sprite.is_empty() {
                 let stem = Path::new(&action.sprite)
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("")
                     .to_string();
-                // Try exact match, then lowercase
-                vec_idx_map
-                    .get(&stem)
-                    .or_else(|| vec_idx_map.get(&stem.to_lowercase()))
+                // Select the correct lookup table based on sprite type
+                let map = if is_vanim { anim_idx_map } else { vec_idx_map };
+                map.get(&stem)
+                    .or_else(|| map.get(&stem.to_lowercase()))
                     .copied()
                     .unwrap_or_else(|| {
                         eprintln!(
-                            "[WARNING] Enemy '{}' action '{}' sprite '{}' not found in vector index map",
-                            name_up, action.name, action.sprite
+                            "[WARNING] Enemy '{}' action '{}' sprite '{}' not found in {} index map",
+                            name_up, action.name, action.sprite,
+                            if is_vanim { "anim" } else { "vector" }
                         );
                         0xFF // $FF = no sprite
                     })
             } else {
                 0xFF
             };
+
             let sprite_type = sprite_type_byte(&action.sprite);
             let loop_val    = if action.loop_anim { 1u8 } else { 0u8 };
+
+            // Vanim actions reference a per-action 2-byte RAM state block
+            let anim_state_sym: Option<String> = if is_vanim && !action.sprite.is_empty() {
+                let action_up = action.name
+                    .to_uppercase()
+                    .replace(' ', "_")
+                    .replace('-', "_");
+                Some(format!("ANIM_ENEMY_{}_{}_STATE", name_up, action_up))
+            } else {
+                None
+            };
+
             out.push_str(&format!(
                 "    FCB ${:02X}   ; action {} ({}) sprite_idx ($FF=none)\n",
                 sprite_idx, i, action.name
             ));
             out.push_str(&format!("    FCB {}                   ; sprite_type: 0=vec, 1=vanim\n", sprite_type));
             out.push_str(&format!("    FCB {}                   ; loop={}\n", loop_val, action.loop_anim));
-            out.push_str("    FCB 0                    ; pad (keeps 4-byte entry stride)\n");
+            out.push_str("    FCB 0                    ; pad (entry byte [3])\n");
+            if let Some(sym) = &anim_state_sym {
+                out.push_str(&format!(
+                    "    FDB {}    ; [4-5] anim state RAM ptr (frame_idx, ticks_left)\n",
+                    sym
+                ));
+            } else {
+                out.push_str("    FDB 0                    ; [4-5] no anim state (vec action)\n");
+            }
         }
         out.push_str("\n");
 

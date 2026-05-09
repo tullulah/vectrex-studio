@@ -879,9 +879,13 @@ pub fn generate_distributed_assets_asm(
         .filter(|(_, _, _, t)| matches!(t, AssetType::Level))
         .cloned()
         .collect();
-    let anim_entries: Vec<_> = asset_entries.iter()
-        .filter(|(_, _, _, t)| matches!(t, AssetType::Animation))
-        .cloned()
+    let anim_entries: Vec<(String, u8, String, AssetType)> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Animation))
+        .map(|a| {
+            let sym = a.name.to_uppercase().replace('-', "_").replace(' ', "_");
+            // Animations always reside in the helpers bank (emitted there for DRAW_ANIM_RUNTIME access)
+            (a.name.clone(), helpers_bank, format!("_ANIM_{}", sym), AssetType::Animation)
+        })
         .collect();
     let instr_entries: Vec<_> = asset_entries.iter()
         .filter(|(_, _, _, t)| matches!(t, AssetType::Instrument))
@@ -1065,6 +1069,12 @@ pub fn generate_distributed_assets_asm(
             .map(|(i, (name, _, _, _))| (name.clone(), i as u8))
             .collect();
 
+        // Build anim-name → index map for resolving vanim sprite references in .venemy files
+        let anim_idx_map: std::collections::HashMap<String, u8> = anim_entries.iter()
+            .enumerate()
+            .map(|(i, (name, _, _, _))| (name.clone(), i as u8))
+            .collect();
+
         lookup_asm.push_str("; Enemy Asset Index Mapping (all in helpers bank for direct access):\n");
         for (idx, (name, bank_id, _label, _)) in enemy_entries.iter().enumerate() {
             lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
@@ -1094,7 +1104,7 @@ pub fn generate_distributed_assets_asm(
             if let Some(sa) = enemy_asset {
                 match crate::venemy::EnemyResource::load(std::path::Path::new(&sa.path)) {
                     Ok(resource) => {
-                        lookup_asm.push_str(&resource.compile_to_asm_indexed(Some(name), &vec_idx_map));
+                        lookup_asm.push_str(&resource.compile_to_asm_indexed(Some(name), &vec_idx_map, &anim_idx_map));
                     }
                     Err(e) => {
                         eprintln!("[WARNING] Failed to reload enemy '{}' for helpers bank: {}", name, e);
@@ -1135,6 +1145,10 @@ pub fn generate_distributed_assets_asm(
     }
     if !enemy_entries.is_empty() {
         lookup_asm.push_str(&generate_spawn_enemies_banked_wrapper());
+    }
+    // Emit DRAW_ANIM_BANKED if there are both animations and enemies (vanim sprite support)
+    if !anim_entries.is_empty() && !enemy_entries.is_empty() {
+        lookup_asm.push_str(&generate_draw_anim_banked_wrapper());
     }
 
     // ===== ANIMATION DATA IN HELPERS BANK =====
@@ -1259,7 +1273,60 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm
 }
 
-/// Generate the PLAY_MUSIC_BANKED runtime wrapper for helpers bank
+/// Generate the DRAW_ANIM_BANKED runtime wrapper for helpers bank.
+///
+/// Animations live in the helpers bank (always visible at $4000+), so no bank
+/// switching is required.  The wrapper simply looks up the anim header address
+/// from ANIM_ADDR_TABLE, sets up DRAW_ANIM parameters, positions the beam, and
+/// calls DRAW_ANIM_RUNTIME.
+///
+/// Input:  X = animation index (0-based into ANIM_ADDR_TABLE)
+///         U = pointer to 2-byte RAM animation state (frame_idx, ticks_left)
+///             DRAW_VEC_X / DRAW_VEC_Y already set by caller
+/// Clobbers: A, B, X (Y is preserved by DRAW_ANIM_RUNTIME via PSHS/PULS)
+fn generate_draw_anim_banked_wrapper() -> String {
+    let mut asm = String::new();
+
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("; DRAW_ANIM_BANKED - Draw vanim sprite for enemies\n");
+    asm.push_str("; Animations are always in the helpers bank (fixed $4000+); no bank switch.\n");
+    asm.push_str("; Input: X = anim index (0-based into ANIM_ADDR_TABLE)\n");
+    asm.push_str(";        U = ptr to 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)\n");
+    asm.push_str(";        DRAW_VEC_X / DRAW_VEC_Y set for enemy screen position\n");
+    asm.push_str("; Clobbers: A, B, X  (DRAW_ANIM_RUNTIME preserves D,X,Y,U via PSHS/PULS)\n");
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("DRAW_ANIM_BANKED:\n");
+    asm.push_str("    ; Set up animation draw parameters (defaults: normal size, no mirror, vanim timing)\n");
+    asm.push_str("    CLR >DRAW_ANIM_MIRROR_X\n");
+    asm.push_str("    CLR >MIRROR_X\n");
+    asm.push_str("    CLR >MIRROR_Y\n");
+    asm.push_str("    LDA #$7F\n");
+    asm.push_str("    STA >DRAW_ANIM_SCALE\n");
+    asm.push_str("    CLR >DRAW_ANIM_SPEED_MUL\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Look up anim header from ANIM_ADDR_TABLE[index * 2]\n");
+    asm.push_str("    TFR X,D              ; D = anim index\n");
+    asm.push_str("    ASLB                 ; *2 for FDB entries\n");
+    asm.push_str("    ROLA\n");
+    asm.push_str("    LDX #ANIM_ADDR_TABLE\n");
+    asm.push_str("    LEAX D,X             ; X points to FDB entry\n");
+    asm.push_str("    LDX ,X               ; X = _ANIM_XXX header ptr\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Position beam at enemy screen coordinates (DRAW_VEC_X/Y set by caller)\n");
+    asm.push_str("    JSR $F1AA            ; DP_to_D0 (required before BIOS positioning calls)\n");
+    asm.push_str("    JSR Reset0Ref        ; Reset integrators to centre (0, 0)\n");
+    asm.push_str("    LDA >DRAW_VEC_Y      ; A = Y position\n");
+    asm.push_str("    LDB >DRAW_VEC_X      ; B = X position\n");
+    asm.push_str("    JSR Moveto_d         ; Move beam to (Y, X)\n");
+    asm.push_str("    JSR $F1AF            ; DP_to_C8 (restore DP before DRAW_ANIM_RUNTIME)\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Call animation runtime: X=header, U=state ptr\n");
+    asm.push_str("    JSR DRAW_ANIM_RUNTIME\n");
+    asm.push_str("    RTS\n");
+    asm.push_str("\n");
+
+    asm
+}
 fn generate_play_music_banked_wrapper() -> String {
     let mut asm = String::new();
     

@@ -25,7 +25,7 @@ pub fn analyze_module_helpers(module: &Module) -> HashSet<String> {
 
 /// Generate RAM definitions and array data (called BEFORE user functions)
 /// Returns tuple: (ASM string, RamLayout for later use by generate_helpers)
-pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
+pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> Result<String, String> {
     let mut asm = String::new();
     
     // Analyze module to detect which helpers are needed (for RAM allocation)
@@ -214,6 +214,35 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("ENEMY_SCRATCH_PTR", 2, "Scratch pointer for enemy iteration");
         ram.allocate("ENEMY_SCRATCH_X", 2, "Enemy scratch X");
         ram.allocate("ENEMY_SCRATCH_Y", 2, "Enemy scratch Y");
+
+        // Allocate 2-byte animation state RAM for each vanim action across all enemy types.
+        // Named ANIM_ENEMY_{TYPE}_{ACTION}_STATE and referenced by FDB in the action table.
+        for asset in assets.iter().filter(|a| matches!(a.asset_type, crate::AssetType::Enemy)) {
+            if let Ok(resource) = crate::venemy::EnemyResource::load(std::path::Path::new(&asset.path)) {
+                for action in &resource.actions {
+                    let ext = std::path::Path::new(&action.sprite)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("");
+                    if ext == "vanim" && !action.sprite.is_empty() {
+                        let type_up = asset.name
+                            .to_uppercase()
+                            .replace(' ', "_")
+                            .replace('-', "_");
+                        let action_up = action.name
+                            .to_uppercase()
+                            .replace(' ', "_")
+                            .replace('-', "_");
+                        let var_name = format!("ANIM_ENEMY_{}_{}_STATE", type_up, action_up);
+                        ram.allocate(
+                            &var_name,
+                            2,
+                            &format!("Enemy '{}' action '{}' animation state (frame_idx, ticks_left)", asset.name, action.name),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     // Text scale (2 bytes): written by SET_TEXT_SIZE, read by VECTREX_PRINT_TEXT/NUMBER
@@ -469,6 +498,10 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 needed.insert("UPDATE_ENEMIES".to_string());
                 needed.insert("DRAW_ENEMIES".to_string());
                 needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+                // Enemies may have vanim actions → always include DRAW_ANIM_RUNTIME so its
+                // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
+                // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
+                needed.insert("DRAW_ANIM_RUNTIME".to_string());
             }
 
             // Recursively analyze arguments
@@ -2799,33 +2832,14 @@ UPD_ENE_DONE:\n\
 ; For each active enemy, draws its current-action sprite.\n\
 ; Enemy type header layout: FCB hp, FCB speed, FDB action_dur, FCB action_count\n\
 ;   followed by _NAME_ENEMY_ACTIONS table.\n\
-; Multibank action entry (4 bytes): FCB sprite_idx, FCB sprite_type, FCB loop, FCB pad\n\
-;   sprite_idx is a 0-based index into VECTOR_ADDR_TABLE; $FF = no sprite.\n\
-;   Enemy type data resides in the helpers bank (always accessible).\n\
-; Single-bank action entry (4 bytes): FDB sprite_ptr, FCB sprite_type, FCB loop\n\
+; Multibank action entry (6 bytes):\n\
+;   [0] FCB sprite_idx   — 0-based index into VECTOR_ADDR_TABLE (vec) or ANIM_ADDR_TABLE (vanim); $FF=none\n\
+;   [1] FCB sprite_type  — 0=vec, 1=vanim\n\
+;   [2] FCB loop         — 0=one-shot, 1=loop\n\
+;   [3] FCB pad\n\
+;   [4-5] FDB anim_state — 16-bit RAM address of 2-byte animation state; 0 for vec actions\n\
+; Enemy type data resides in the helpers bank (always accessible).\n\
 DRAW_ENEMIES_RUNTIME:\n\
-    ; === DEBUG TRACE: print enemy count at top-left of screen ===\n\
-    ; DP=$C8 at entry; ENEMY_SCRATCH_X used as 4-byte string buffer (safe: not yet in use)\n\
-    PSHS D,X,Y,U\n\
-    LDA #'E'\n\
-    STA >ENEMY_SCRATCH_X\n\
-    LDA #':'\n\
-    STA >ENEMY_SCRATCH_X+1\n\
-    LDA >ENEMY_COUNT\n\
-    ADDA #'0'\n\
-    STA >ENEMY_SCRATCH_X+2\n\
-    LDA #$80\n\
-    STA >ENEMY_SCRATCH_X+3\n\
-    JSR $F1AA               ; DP_to_D0\n\
-    JSR Intensity_5F\n\
-    JSR Reset0Ref\n\
-    LDU #ENEMY_SCRATCH_X\n\
-    LDA #100\n\
-    LDB #-120\n\
-    JSR Print_Str_d\n\
-    JSR $F1AF               ; DP_to_C8\n\
-    PULS D,X,Y,U\n\
-    ; === END DEBUG TRACE ===\n\
     LDB >ENEMY_COUNT\n\
     BEQ DRW_ENE_DONE\n\
     LDY #ENEMY_POOL\n\
@@ -2839,50 +2853,56 @@ DRW_ENE_LOOP:\n\
     TFR D,X             ; X = _NAME_ENEMY header\n\
     LEAX 7,X            ; skip 7-byte header (hp,speed,action_dur×2,action_count,sm_ptr×2) → action table\n\
     LDA 7,Y             ; action index\n\
-    ASLA\n\
-    ASLA                ; × 4 bytes per action entry\n\
-    LEAX A,X            ; X = &actions[action]\n");
+    LDB #6              ; 6 bytes per action entry\n\
+    MUL                 ; D = action_idx * 6\n\
+    LEAX D,X            ; X = &actions[action]\n");
 
-    // Conditional draw code: multibank uses FCB sprite_idx + DRAW_VECTOR_BANKED,
+    // Conditional draw code: multibank uses FCB sprite_idx + DRAW_VECTOR_BANKED / DRAW_ANIM_BANKED,
     // single-bank uses FDB sprite_ptr with direct Draw_Sync_List_At_With_Mirrors.
     if is_multibank {
         asm.push_str(
-"; --- Multibank: FCB sprite_idx at action[+0]; use DRAW_VECTOR_BANKED ---\n\
-    LDA ,X              ; sprite_idx (FCB, 0-based into VECTOR_ADDR_TABLE)\n\
+"; --- Multibank: FCB sprite_idx at action[+0], FCB sprite_type at action[+1] ---\n\
+    LDA ,X              ; sprite_idx (byte [0])\n\
     CMPA #$FF           ; $FF = no sprite assigned\n\
     BEQ DRW_ENE_NEXT_POP\n\
-    STA >ENEMY_SCRATCH_PTR  ; temp save sprite_idx (1 byte)\n\
-    ; Set draw position from pool x(+1,+2), y(+3,+4)\n\
+    STA >ENEMY_SCRATCH_PTR  ; save sprite_idx (hi byte of 2-byte scratch)\n\
+    LDB 1,X             ; sprite_type (byte [1]): 0=vec, 1=vanim\n\
+    STB >ENEMY_SCRATCH_Y    ; save sprite_type (lo byte of 2-byte scratch)\n\
+    ; Read FDB anim_state ptr from bytes [4,5] while X still points to action entry\n\
+    LDA 4,X             ; anim_state addr hi\n\
+    STA >ENEMY_SCRATCH_X    ; save hi\n\
+    LDA 5,X             ; anim_state addr lo\n\
+    STA >ENEMY_SCRATCH_X+1  ; save lo\n\
+    ; Set draw position from enemy pool: x at +2 (lo), y at +4 (lo)\n\
     LDA 2,Y             ; x lo\n\
     STA >DRAW_VEC_X\n\
     CLR >DRAW_VEC_X_HI\n\
     LDA 4,Y             ; y lo\n\
     STA >DRAW_VEC_Y\n\
-    ; === DEBUG TRACE: print this enemy's X position ===\n\
-    PSHS D,X,U\n\
-    LDA #'X'\n\
-    STA >ENEMY_SCRATCH_X\n\
-    LDA >DRAW_VEC_X\n\
-    ADDA #64            ; shift to printable range (0-63 → @-?)\n\
-    STA >ENEMY_SCRATCH_X+1\n\
-    LDA #$80\n\
-    STA >ENEMY_SCRATCH_X+2\n\
-    JSR $F1AA           ; DP_to_D0\n\
-    JSR Intensity_5F\n\
-    JSR Reset0Ref\n\
-    LDU #ENEMY_SCRATCH_X\n\
-    LDA #80\n\
-    LDB #-120\n\
-    JSR Print_Str_d\n\
-    JSR $F1AF           ; DP_to_C8\n\
-    PULS D,X,U\n\
-    ; === END DEBUG TRACE ===\n\
-    ; DRAW_VECTOR_BANKED uses Y register internally → save pool pointer\n\
-    PSHS Y\n\
+    ; Branch on sprite_type\n\
+    LDB >ENEMY_SCRATCH_Y\n\
+    CMPB #1\n\
+    BEQ DRW_ENE_VANIM\n\
+; --- Vec path: DRAW_VECTOR_BANKED (bank-switches to vector's bank) ---\n\
+    PSHS Y              ; save pool pointer (DRAW_VECTOR_BANKED clobbers Y)\n\
     CLRA\n\
-    LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx\n\
+    LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx (vec index)\n\
     TFR D,X             ; X = sprite_idx (16-bit, A=0)\n\
     JSR DRAW_VECTOR_BANKED\n\
+    PULS Y              ; restore pool pointer\n\
+    BRA DRW_ENE_NEXT_POP\n\
+; --- Vanim path: DRAW_ANIM_BANKED (anim data is in helpers bank; no bank switch) ---\n\
+DRW_ENE_VANIM:\n\
+    LDA >ENEMY_SCRATCH_X    ; anim_state ptr hi\n\
+    LDB >ENEMY_SCRATCH_X+1  ; anim_state ptr lo\n\
+    CMPD #0\n\
+    BEQ DRW_ENE_NEXT_POP    ; no state allocated → skip\n\
+    TFR D,U             ; U = anim_state ptr (frame_idx, ticks_left)\n\
+    PSHS Y              ; save pool pointer\n\
+    CLRA\n\
+    LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx (anim index)\n\
+    TFR D,X             ; X = anim_idx (16-bit, A=0)\n\
+    JSR DRAW_ANIM_BANKED\n\
     PULS Y              ; restore pool pointer\n\
 DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\

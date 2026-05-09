@@ -24454,6 +24454,18 @@ LEVEL_BANK_TABLE:
 LEVEL_ADDR_TABLE:
     FDB _WORLD_1_1_LEVEL    ; world_1_1
 
+; Animation Asset Index Mapping:
+;   0 = player_walk (Bank #7)
+;   1 = titchi_walk (Bank #7)
+
+ANIM_BANK_TABLE:
+    FCB 7              ; Bank ID
+    FCB 7              ; Bank ID
+
+ANIM_ADDR_TABLE:
+    FDB _ANIM_PLAYER_WALK    ; player_walk
+    FDB _ANIM_TITCHI_WALK    ; titchi_walk
+
 ; Enemy Asset Index Mapping (all in helpers bank for direct access):
 ;   0 = enemy1 (Bank #7)
 ;   1 = titchi (Bank #7)
@@ -24485,11 +24497,13 @@ _ENEMY1_ENEMY_ACTIONS:
     FCB $05   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 0                   ; loop=false
-    FCB 0                    ; pad (keeps 4-byte entry stride)
-    FCB $FF   ; action 1 (walk) sprite_idx ($FF=none)
+    FCB 0                    ; pad (entry byte [3])
+    FDB 0                    ; [4-5] no anim state (vec action)
+    FCB $00   ; action 1 (walk) sprite_idx ($FF=none)
     FCB 1                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
-    FCB 0                    ; pad (keeps 4-byte entry stride)
+    FCB 0                    ; pad (entry byte [3])
+    FDB ANIM_ENEMY_ENEMY1_WALK_STATE    ; [4-5] anim state RAM ptr (frame_idx, ticks_left)
 
 ; ---- Enemy type: TITCHI (multibank indexed) ----
 _TITCHI_ACTION_IDLE EQU 0
@@ -24509,23 +24523,28 @@ _TITCHI_ENEMY_ACTIONS:
     FCB $08   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
-    FCB 0                    ; pad (keeps 4-byte entry stride)
-    FCB $FF   ; action 1 (walk) sprite_idx ($FF=none)
+    FCB 0                    ; pad (entry byte [3])
+    FDB 0                    ; [4-5] no anim state (vec action)
+    FCB $01   ; action 1 (walk) sprite_idx ($FF=none)
     FCB 1                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
-    FCB 0                    ; pad (keeps 4-byte entry stride)
+    FCB 0                    ; pad (entry byte [3])
+    FDB ANIM_ENEMY_TITCHI_WALK_STATE    ; [4-5] anim state RAM ptr (frame_idx, ticks_left)
     FCB $09   ; action 2 (snow1) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
-    FCB 0                    ; pad (keeps 4-byte entry stride)
+    FCB 0                    ; pad (entry byte [3])
+    FDB 0                    ; [4-5] no anim state (vec action)
     FCB $0A   ; action 3 (snow2) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
-    FCB 0                    ; pad (keeps 4-byte entry stride)
+    FCB 0                    ; pad (entry byte [3])
+    FDB 0                    ; [4-5] no anim state (vec action)
     FCB $07   ; action 4 (ball) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
-    FCB 0                    ; pad (keeps 4-byte entry stride)
+    FCB 0                    ; pad (entry byte [3])
+    FDB 0                    ; [4-5] no anim state (vec action)
 
 ; ---- State machine: TITCHI ----
 _TITCHI_SM:
@@ -24588,25 +24607,24 @@ _TITCHI_SM_STATES:
 
 ; Legacy unified tables (all assets)
 ASSET_BANK_TABLE:
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
     FCB 2              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
 
 ASSET_ADDR_TABLE:
-    FDB _HENSHOKU_MUSIC    ; Henshoku
     FDB _YUKIDAMA_ONDO_MUSIC    ; Yukidama-Ondo
     FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _WORLD_1_1_LEVEL    ; world_1_1
@@ -24622,6 +24640,7 @@ ASSET_ADDR_TABLE:
     FDB _PLATFORM2_VECTORS    ; platform2
     FDB _PLATFORM1_VECTORS    ; platform1
     FDB _PLATFORM3_VECTORS    ; platform3
+    FDB _HENSHOKU_MUSIC    ; Henshoku
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
@@ -24804,6 +24823,43 @@ SEB_DONE:
     RTS
 
 ;***************************************************************************
+; DRAW_ANIM_BANKED - Draw vanim sprite for enemies
+; Animations are always in the helpers bank (fixed $4000+); no bank switch.
+; Input: X = anim index (0-based into ANIM_ADDR_TABLE)
+;        U = ptr to 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)
+;        DRAW_VEC_X / DRAW_VEC_Y set for enemy screen position
+; Clobbers: A, B, X  (DRAW_ANIM_RUNTIME preserves D,X,Y,U via PSHS/PULS)
+;***************************************************************************
+DRAW_ANIM_BANKED:
+    ; Set up animation draw parameters (defaults: normal size, no mirror, vanim timing)
+    CLR >DRAW_ANIM_MIRROR_X
+    CLR >MIRROR_X
+    CLR >MIRROR_Y
+    LDA #$7F
+    STA >DRAW_ANIM_SCALE
+    CLR >DRAW_ANIM_SPEED_MUL
+
+    ; Look up anim header from ANIM_ADDR_TABLE[index * 2]
+    TFR X,D              ; D = anim index
+    ASLB                 ; *2 for FDB entries
+    ROLA
+    LDX #ANIM_ADDR_TABLE
+    LEAX D,X             ; X points to FDB entry
+    LDX ,X               ; X = _ANIM_XXX header ptr
+
+    ; Position beam at enemy screen coordinates (DRAW_VEC_X/Y set by caller)
+    JSR $F1AA            ; DP_to_D0 (required before BIOS positioning calls)
+    JSR Reset0Ref        ; Reset integrators to centre (0, 0)
+    LDA >DRAW_VEC_Y      ; A = Y position
+    LDB >DRAW_VEC_X      ; B = X position
+    JSR Moveto_d         ; Move beam to (Y, X)
+    JSR $F1AF            ; DP_to_C8 (restore DP before DRAW_ANIM_RUNTIME)
+
+    ; Call animation runtime: X=header, U=state ptr
+    JSR DRAW_ANIM_RUNTIME
+    RTS
+
+;***************************************************************************
 ; ANIMATION DATA (helpers bank — always accessible for DRAW_ANIM_RUNTIME)
 ;***************************************************************************
 
@@ -24876,71 +24932,71 @@ _ANIM_TITCHI_WALK_F2:
 
 ; Vec files referenced by animations (helpers bank for cross-bank safety)
 
-; Generated from player_walk1.vec (Malban Draw_Sync_List format)
+; Generated from player_walk2.vec (Malban Draw_Sync_List format)
 ; Total paths: 8, points: 25
 ; X bounds: min=-5, max=5, width=10
 ; Center: (0, 0)
 
-_PLAYER_WALK1_WIDTH EQU 10
-_PLAYER_WALK1_HALF_WIDTH EQU 5
-_PLAYER_WALK1_HEIGHT EQU 17
-_PLAYER_WALK1_HALF_HEIGHT EQU 8
-_PLAYER_WALK1_CENTER_X EQU 0
-_PLAYER_WALK1_CENTER_Y EQU 0
+_PLAYER_WALK2_WIDTH EQU 10
+_PLAYER_WALK2_HALF_WIDTH EQU 5
+_PLAYER_WALK2_HEIGHT EQU 17
+_PLAYER_WALK2_HALF_HEIGHT EQU 8
+_PLAYER_WALK2_CENTER_X EQU 0
+_PLAYER_WALK2_CENTER_Y EQU 0
 
-_PLAYER_WALK1_VECTORS:  ; Main entry (header + 8 path(s))
+_PLAYER_WALK2_VECTORS:  ; Main entry (header + 8 path(s))
     FDB 8               ; path_count (runtime metadata, 2 bytes)
-    FDB _PLAYER_WALK1_PATH0        ; pointer to path 0
-    FDB _PLAYER_WALK1_PATH1        ; pointer to path 1
-    FDB _PLAYER_WALK1_PATH2        ; pointer to path 2
-    FDB _PLAYER_WALK1_PATH3        ; pointer to path 3
-    FDB _PLAYER_WALK1_PATH4        ; pointer to path 4
-    FDB _PLAYER_WALK1_PATH5        ; pointer to path 5
-    FDB _PLAYER_WALK1_PATH6        ; pointer to path 6
-    FDB _PLAYER_WALK1_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK2_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK2_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK2_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK2_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK2_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK2_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK2_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK2_PATH7        ; pointer to path 7
 
-_PLAYER_WALK1_PATH0:    ; Path 0
+_PLAYER_WALK2_PATH0:    ; Path 0
     FCB 65              ; path0: intensity
     FCB $02,$01,0,0        ; path0: header (y=2, x=1)
     FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH1:    ; Path 1
+_PLAYER_WALK2_PATH1:    ; Path 1
     FCB 65              ; path1: intensity
     FCB $00,$03,0,0        ; path1: header (y=0, x=3)
     FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH2:    ; Path 2
+_PLAYER_WALK2_PATH2:    ; Path 2
     FCB 65              ; path2: intensity
-    FCB $FD,$02,0,0        ; path2: header (y=-3, x=2)
-    FCB $FF,$FA,$FF          ; flag=-1, dy=-6, dx=-1
+    FCB $FC,$02,0,0        ; path2: header (y=-4, x=2)
+    FCB $FF,$FB,$FF          ; flag=-1, dy=-5, dx=-1
     FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH3:    ; Path 3
+_PLAYER_WALK2_PATH3:    ; Path 3
     FCB 65              ; path3: intensity
     FCB $FB,$FD,0,0        ; path3: header (y=-5, x=-3)
     FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
     FCB $FF,$02,$04          ; flag=-1, dy=2, dx=4
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH4:    ; Path 4
+_PLAYER_WALK2_PATH4:    ; Path 4
     FCB 65              ; path4: intensity
     FCB $F7,$01,0,0        ; path4: header (y=-9, x=1)
     FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
     FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH5:    ; Path 5
+_PLAYER_WALK2_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
     FCB $FD,$FF,0,0        ; path5: header (y=-3, x=-1)
     FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
     FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH6:    ; Path 6
+_PLAYER_WALK2_PATH6:    ; Path 6
     FCB 65              ; path6: intensity
     FCB $06,$FE,0,0        ; path6: header (y=6, x=-2)
     FCB $FF,$FC,$FF          ; flag=-1, dy=-4, dx=-1
@@ -24949,7 +25005,7 @@ _PLAYER_WALK1_PATH6:    ; Path 6
     FCB $FF,$05,$FD          ; flag=-1, dy=5, dx=-3
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK1_PATH7:    ; Path 7
+_PLAYER_WALK2_PATH7:    ; Path 7
     FCB 65              ; path7: intensity
     FCB $08,$FD,0,0        ; path7: header (y=8, x=-3)
     FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
@@ -25025,191 +25081,6 @@ _PLAYER_WALK4_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
     FCB $FF,$03,0,0        ; path5: header (y=-1, x=3)
     FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-; Generated from player_walk3.vec (Malban Draw_Sync_List format)
-; Total paths: 5, points: 26
-; X bounds: min=-7, max=6, width=13
-; Center: (0, 0)
-
-_PLAYER_WALK3_WIDTH EQU 13
-_PLAYER_WALK3_HALF_WIDTH EQU 6
-_PLAYER_WALK3_HEIGHT EQU 19
-_PLAYER_WALK3_HALF_HEIGHT EQU 9
-_PLAYER_WALK3_CENTER_X EQU 0
-_PLAYER_WALK3_CENTER_Y EQU 0
-
-_PLAYER_WALK3_VECTORS:  ; Main entry (header + 5 path(s))
-    FDB 5               ; path_count (runtime metadata, 2 bytes)
-    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
-    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
-    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
-    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
-    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
-
-_PLAYER_WALK3_PATH0:    ; Path 0
-    FCB 65              ; path0: intensity
-    FCB $02,$00,0,0        ; path0: header (y=2, x=0)
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH1:    ; Path 1
-    FCB 65              ; path1: intensity
-    FCB $FF,$03,0,0        ; path1: header (y=-1, x=3)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH2:    ; Path 2
-    FCB 65              ; path2: intensity
-    FCB $FE,$FE,0,0        ; path2: header (y=-2, x=-2)
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
-    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
-    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
-    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$02,$FA          ; flag=-1, dy=2, dx=-6
-    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH3:    ; Path 3
-    FCB 65              ; path3: intensity
-    FCB $06,$FE,0,0        ; path3: header (y=6, x=-2)
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH4:    ; Path 4
-    FCB 65              ; path4: intensity
-    FCB $07,$01,0,0        ; path4: header (y=7, x=1)
-    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB 2                ; End marker (path complete)
-
-; Generated from titchi_walk2.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 39
-; X bounds: min=-7, max=7, width=14
-; Center: (0, 0)
-
-_TITCHI_WALK2_WIDTH EQU 14
-_TITCHI_WALK2_HALF_WIDTH EQU 7
-_TITCHI_WALK2_HEIGHT EQU 13
-_TITCHI_WALK2_HALF_HEIGHT EQU 6
-_TITCHI_WALK2_CENTER_X EQU 0
-_TITCHI_WALK2_CENTER_Y EQU 0
-
-_TITCHI_WALK2_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (runtime metadata, 2 bytes)
-    FDB _TITCHI_WALK2_PATH0        ; pointer to path 0
-    FDB _TITCHI_WALK2_PATH1        ; pointer to path 1
-    FDB _TITCHI_WALK2_PATH2        ; pointer to path 2
-    FDB _TITCHI_WALK2_PATH3        ; pointer to path 3
-    FDB _TITCHI_WALK2_PATH4        ; pointer to path 4
-    FDB _TITCHI_WALK2_PATH5        ; pointer to path 5
-    FDB _TITCHI_WALK2_PATH6        ; pointer to path 6
-    FDB _TITCHI_WALK2_PATH7        ; pointer to path 7
-    FDB _TITCHI_WALK2_PATH8        ; pointer to path 8
-    FDB _TITCHI_WALK2_PATH9        ; pointer to path 9
-    FDB _TITCHI_WALK2_PATH10        ; pointer to path 10
-    FDB _TITCHI_WALK2_PATH11        ; pointer to path 11
-    FDB _TITCHI_WALK2_PATH12        ; pointer to path 12
-
-_TITCHI_WALK2_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $FC,$FC,0,0        ; path1: header (y=-4, x=-4)
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $F9,$FB,0,0        ; path2: header (y=-7, x=-5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $F9,$01,0,0        ; path3: header (y=-7, x=1)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $FD,$05,0,0        ; path4: header (y=-3, x=5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $FF,$05,0,0        ; path5: header (y=-1, x=5)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $03,$FE,0,0        ; path6: header (y=3, x=-2)
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $05,$FF,0,0        ; path7: header (y=5, x=-1)
-    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $03,$04,0,0        ; path8: header (y=3, x=4)
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $03,$02,0,0        ; path9: header (y=3, x=2)
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $03,$04,0,0        ; path10: header (y=3, x=4)
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $01,$05,0,0        ; path11: header (y=1, x=5)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $F9,$01,0,0        ; path12: header (y=-7, x=1)
     FCB 2                ; End marker (path complete)
 
 ; Generated from titchi_walk1.vec (Malban Draw_Sync_List format)
@@ -25332,6 +25203,125 @@ _TITCHI_WALK1_PATH12:    ; Path 12
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
+; Generated from titchi_walk2.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 39
+; X bounds: min=-7, max=7, width=14
+; Center: (0, 0)
+
+_TITCHI_WALK2_WIDTH EQU 14
+_TITCHI_WALK2_HALF_WIDTH EQU 7
+_TITCHI_WALK2_HEIGHT EQU 13
+_TITCHI_WALK2_HALF_HEIGHT EQU 6
+_TITCHI_WALK2_CENTER_X EQU 0
+_TITCHI_WALK2_CENTER_Y EQU 0
+
+_TITCHI_WALK2_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (runtime metadata, 2 bytes)
+    FDB _TITCHI_WALK2_PATH0        ; pointer to path 0
+    FDB _TITCHI_WALK2_PATH1        ; pointer to path 1
+    FDB _TITCHI_WALK2_PATH2        ; pointer to path 2
+    FDB _TITCHI_WALK2_PATH3        ; pointer to path 3
+    FDB _TITCHI_WALK2_PATH4        ; pointer to path 4
+    FDB _TITCHI_WALK2_PATH5        ; pointer to path 5
+    FDB _TITCHI_WALK2_PATH6        ; pointer to path 6
+    FDB _TITCHI_WALK2_PATH7        ; pointer to path 7
+    FDB _TITCHI_WALK2_PATH8        ; pointer to path 8
+    FDB _TITCHI_WALK2_PATH9        ; pointer to path 9
+    FDB _TITCHI_WALK2_PATH10        ; pointer to path 10
+    FDB _TITCHI_WALK2_PATH11        ; pointer to path 11
+    FDB _TITCHI_WALK2_PATH12        ; pointer to path 12
+
+_TITCHI_WALK2_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $FC,$FC,0,0        ; path1: header (y=-4, x=-4)
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $F9,$FB,0,0        ; path2: header (y=-7, x=-5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $F9,$01,0,0        ; path3: header (y=-7, x=1)
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH4:    ; Path 4
+    FCB 85              ; path4: intensity
+    FCB $FD,$05,0,0        ; path4: header (y=-3, x=5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH5:    ; Path 5
+    FCB 85              ; path5: intensity
+    FCB $FF,$05,0,0        ; path5: header (y=-1, x=5)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH6:    ; Path 6
+    FCB 85              ; path6: intensity
+    FCB $03,$FE,0,0        ; path6: header (y=3, x=-2)
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH7:    ; Path 7
+    FCB 85              ; path7: intensity
+    FCB $05,$FF,0,0        ; path7: header (y=5, x=-1)
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH8:    ; Path 8
+    FCB 85              ; path8: intensity
+    FCB $03,$04,0,0        ; path8: header (y=3, x=4)
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH9:    ; Path 9
+    FCB 85              ; path9: intensity
+    FCB $03,$02,0,0        ; path9: header (y=3, x=2)
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH10:    ; Path 10
+    FCB 85              ; path10: intensity
+    FCB $03,$04,0,0        ; path10: header (y=3, x=4)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH11:    ; Path 11
+    FCB 85              ; path11: intensity
+    FCB $01,$05,0,0        ; path11: header (y=1, x=5)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH12:    ; Path 12
+    FCB 85              ; path12: intensity
+    FCB $F9,$01,0,0        ; path12: header (y=-7, x=1)
+    FCB 2                ; End marker (path complete)
+
 ; Generated from titchi_walk3.vec (Malban Draw_Sync_List format)
 ; Total paths: 13, points: 39
 ; X bounds: min=-7, max=7, width=14
@@ -25451,71 +25441,137 @@ _TITCHI_WALK3_PATH12:    ; Path 12
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
-; Generated from player_walk2.vec (Malban Draw_Sync_List format)
+; Generated from player_walk3.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 26
+; X bounds: min=-7, max=6, width=13
+; Center: (0, 0)
+
+_PLAYER_WALK3_WIDTH EQU 13
+_PLAYER_WALK3_HALF_WIDTH EQU 6
+_PLAYER_WALK3_HEIGHT EQU 19
+_PLAYER_WALK3_HALF_HEIGHT EQU 9
+_PLAYER_WALK3_CENTER_X EQU 0
+_PLAYER_WALK3_CENTER_Y EQU 0
+
+_PLAYER_WALK3_VECTORS:  ; Main entry (header + 5 path(s))
+    FDB 5               ; path_count (runtime metadata, 2 bytes)
+    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
+
+_PLAYER_WALK3_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $02,$00,0,0        ; path0: header (y=2, x=0)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $FF,$03,0,0        ; path1: header (y=-1, x=3)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FE,$FE,0,0        ; path2: header (y=-2, x=-2)
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
+    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
+    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$02,$FA          ; flag=-1, dy=2, dx=-6
+    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $06,$FE,0,0        ; path3: header (y=6, x=-2)
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $07,$01,0,0        ; path4: header (y=7, x=1)
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk1.vec (Malban Draw_Sync_List format)
 ; Total paths: 8, points: 25
 ; X bounds: min=-5, max=5, width=10
 ; Center: (0, 0)
 
-_PLAYER_WALK2_WIDTH EQU 10
-_PLAYER_WALK2_HALF_WIDTH EQU 5
-_PLAYER_WALK2_HEIGHT EQU 17
-_PLAYER_WALK2_HALF_HEIGHT EQU 8
-_PLAYER_WALK2_CENTER_X EQU 0
-_PLAYER_WALK2_CENTER_Y EQU 0
+_PLAYER_WALK1_WIDTH EQU 10
+_PLAYER_WALK1_HALF_WIDTH EQU 5
+_PLAYER_WALK1_HEIGHT EQU 17
+_PLAYER_WALK1_HALF_HEIGHT EQU 8
+_PLAYER_WALK1_CENTER_X EQU 0
+_PLAYER_WALK1_CENTER_Y EQU 0
 
-_PLAYER_WALK2_VECTORS:  ; Main entry (header + 8 path(s))
+_PLAYER_WALK1_VECTORS:  ; Main entry (header + 8 path(s))
     FDB 8               ; path_count (runtime metadata, 2 bytes)
-    FDB _PLAYER_WALK2_PATH0        ; pointer to path 0
-    FDB _PLAYER_WALK2_PATH1        ; pointer to path 1
-    FDB _PLAYER_WALK2_PATH2        ; pointer to path 2
-    FDB _PLAYER_WALK2_PATH3        ; pointer to path 3
-    FDB _PLAYER_WALK2_PATH4        ; pointer to path 4
-    FDB _PLAYER_WALK2_PATH5        ; pointer to path 5
-    FDB _PLAYER_WALK2_PATH6        ; pointer to path 6
-    FDB _PLAYER_WALK2_PATH7        ; pointer to path 7
+    FDB _PLAYER_WALK1_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK1_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK1_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK1_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK1_PATH4        ; pointer to path 4
+    FDB _PLAYER_WALK1_PATH5        ; pointer to path 5
+    FDB _PLAYER_WALK1_PATH6        ; pointer to path 6
+    FDB _PLAYER_WALK1_PATH7        ; pointer to path 7
 
-_PLAYER_WALK2_PATH0:    ; Path 0
+_PLAYER_WALK1_PATH0:    ; Path 0
     FCB 65              ; path0: intensity
     FCB $02,$01,0,0        ; path0: header (y=2, x=1)
     FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH1:    ; Path 1
+_PLAYER_WALK1_PATH1:    ; Path 1
     FCB 65              ; path1: intensity
     FCB $00,$03,0,0        ; path1: header (y=0, x=3)
     FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH2:    ; Path 2
+_PLAYER_WALK1_PATH2:    ; Path 2
     FCB 65              ; path2: intensity
-    FCB $FC,$02,0,0        ; path2: header (y=-4, x=2)
-    FCB $FF,$FB,$FF          ; flag=-1, dy=-5, dx=-1
+    FCB $FD,$02,0,0        ; path2: header (y=-3, x=2)
+    FCB $FF,$FA,$FF          ; flag=-1, dy=-6, dx=-1
     FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH3:    ; Path 3
+_PLAYER_WALK1_PATH3:    ; Path 3
     FCB 65              ; path3: intensity
     FCB $FB,$FD,0,0        ; path3: header (y=-5, x=-3)
     FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
     FCB $FF,$02,$04          ; flag=-1, dy=2, dx=4
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH4:    ; Path 4
+_PLAYER_WALK1_PATH4:    ; Path 4
     FCB 65              ; path4: intensity
     FCB $F7,$01,0,0        ; path4: header (y=-9, x=1)
     FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
     FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH5:    ; Path 5
+_PLAYER_WALK1_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
     FCB $FD,$FF,0,0        ; path5: header (y=-3, x=-1)
     FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
     FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH6:    ; Path 6
+_PLAYER_WALK1_PATH6:    ; Path 6
     FCB 65              ; path6: intensity
     FCB $06,$FE,0,0        ; path6: header (y=6, x=-2)
     FCB $FF,$FC,$FF          ; flag=-1, dy=-4, dx=-1
@@ -25524,7 +25580,7 @@ _PLAYER_WALK2_PATH6:    ; Path 6
     FCB $FF,$05,$FD          ; flag=-1, dy=5, dx=-3
     FCB 2                ; End marker (path complete)
 
-_PLAYER_WALK2_PATH7:    ; Path 7
+_PLAYER_WALK1_PATH7:    ; Path 7
     FCB 65              ; path7: intensity
     FCB $08,$FD,0,0        ; path7: header (y=8, x=-3)
     FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
@@ -27670,33 +27726,14 @@ RTS
 ; For each active enemy, draws its current-action sprite.
 ; Enemy type header layout: FCB hp, FCB speed, FDB action_dur, FCB action_count
 ;   followed by _NAME_ENEMY_ACTIONS table.
-; Multibank action entry (4 bytes): FCB sprite_idx, FCB sprite_type, FCB loop, FCB pad
-;   sprite_idx is a 0-based index into VECTOR_ADDR_TABLE; $FF = no sprite.
-;   Enemy type data resides in the helpers bank (always accessible).
-; Single-bank action entry (4 bytes): FDB sprite_ptr, FCB sprite_type, FCB loop
+; Multibank action entry (6 bytes):
+;   [0] FCB sprite_idx   — 0-based index into VECTOR_ADDR_TABLE (vec) or ANIM_ADDR_TABLE (vanim); $FF=none
+;   [1] FCB sprite_type  — 0=vec, 1=vanim
+;   [2] FCB loop         — 0=one-shot, 1=loop
+;   [3] FCB pad
+;   [4-5] FDB anim_state — 16-bit RAM address of 2-byte animation state; 0 for vec actions
+; Enemy type data resides in the helpers bank (always accessible).
 DRAW_ENEMIES_RUNTIME:
-; === DEBUG TRACE: print enemy count at top-left of screen ===
-; DP=$C8 at entry; ENEMY_SCRATCH_X used as 4-byte string buffer (safe: not yet in use)
-PSHS D,X,Y,U
-LDA #'E'
-STA >ENEMY_SCRATCH_X
-LDA #':'
-STA >ENEMY_SCRATCH_X+1
-LDA >ENEMY_COUNT
-ADDA #'0'
-STA >ENEMY_SCRATCH_X+2
-LDA #$80
-STA >ENEMY_SCRATCH_X+3
-JSR $F1AA               ; DP_to_D0
-JSR Intensity_5F
-JSR Reset0Ref
-LDU #ENEMY_SCRATCH_X
-LDA #100
-LDB #-120
-JSR Print_Str_d
-JSR $F1AF               ; DP_to_C8
-PULS D,X,Y,U
-; === END DEBUG TRACE ===
 LDB >ENEMY_COUNT
 BEQ DRW_ENE_DONE
 LDY #ENEMY_POOL
@@ -27710,45 +27747,51 @@ LDB 6,Y             ; type_ptr lo
 TFR D,X             ; X = _NAME_ENEMY header
 LEAX 7,X            ; skip 7-byte header (hp,speed,action_dur×2,action_count,sm_ptr×2) → action table
 LDA 7,Y             ; action index
-ASLA
-ASLA                ; × 4 bytes per action entry
-LEAX A,X            ; X = &actions[action]
-; --- Multibank: FCB sprite_idx at action[+0]; use DRAW_VECTOR_BANKED ---
-LDA ,X              ; sprite_idx (FCB, 0-based into VECTOR_ADDR_TABLE)
+LDB #6              ; 6 bytes per action entry
+MUL                 ; D = action_idx * 6
+LEAX D,X            ; X = &actions[action]
+; --- Multibank: FCB sprite_idx at action[+0], FCB sprite_type at action[+1] ---
+LDA ,X              ; sprite_idx (byte [0])
 CMPA #$FF           ; $FF = no sprite assigned
 BEQ DRW_ENE_NEXT_POP
-STA >ENEMY_SCRATCH_PTR  ; temp save sprite_idx (1 byte)
-; Set draw position from pool x(+1,+2), y(+3,+4)
+STA >ENEMY_SCRATCH_PTR  ; save sprite_idx (hi byte of 2-byte scratch)
+LDB 1,X             ; sprite_type (byte [1]): 0=vec, 1=vanim
+STB >ENEMY_SCRATCH_Y    ; save sprite_type (lo byte of 2-byte scratch)
+; Read FDB anim_state ptr from bytes [4,5] while X still points to action entry
+LDA 4,X             ; anim_state addr hi
+STA >ENEMY_SCRATCH_X    ; save hi
+LDA 5,X             ; anim_state addr lo
+STA >ENEMY_SCRATCH_X+1  ; save lo
+; Set draw position from enemy pool: x at +2 (lo), y at +4 (lo)
 LDA 2,Y             ; x lo
 STA >DRAW_VEC_X
 CLR >DRAW_VEC_X_HI
 LDA 4,Y             ; y lo
 STA >DRAW_VEC_Y
-; === DEBUG TRACE: print this enemy's X position ===
-PSHS D,X,U
-LDA #'X'
-STA >ENEMY_SCRATCH_X
-LDA >DRAW_VEC_X
-ADDA #64            ; shift to printable range (0-63 → @-?)
-STA >ENEMY_SCRATCH_X+1
-LDA #$80
-STA >ENEMY_SCRATCH_X+2
-JSR $F1AA           ; DP_to_D0
-JSR Intensity_5F
-JSR Reset0Ref
-LDU #ENEMY_SCRATCH_X
-LDA #80
-LDB #-120
-JSR Print_Str_d
-JSR $F1AF           ; DP_to_C8
-PULS D,X,U
-; === END DEBUG TRACE ===
-; DRAW_VECTOR_BANKED uses Y register internally → save pool pointer
-PSHS Y
+; Branch on sprite_type
+LDB >ENEMY_SCRATCH_Y
+CMPB #1
+BEQ DRW_ENE_VANIM
+; --- Vec path: DRAW_VECTOR_BANKED (bank-switches to vector's bank) ---
+PSHS Y              ; save pool pointer (DRAW_VECTOR_BANKED clobbers Y)
 CLRA
-LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx
+LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx (vec index)
 TFR D,X             ; X = sprite_idx (16-bit, A=0)
 JSR DRAW_VECTOR_BANKED
+PULS Y              ; restore pool pointer
+BRA DRW_ENE_NEXT_POP
+; --- Vanim path: DRAW_ANIM_BANKED (anim data is in helpers bank; no bank switch) ---
+DRW_ENE_VANIM:
+LDA >ENEMY_SCRATCH_X    ; anim_state ptr hi
+LDB >ENEMY_SCRATCH_X+1  ; anim_state ptr lo
+CMPD #0
+BEQ DRW_ENE_NEXT_POP    ; no state allocated → skip
+TFR D,U             ; U = anim_state ptr (frame_idx, ticks_left)
+PSHS Y              ; save pool pointer
+CLRA
+LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx (anim index)
+TFR D,X             ; X = anim_idx (16-bit, A=0)
+JSR DRAW_ANIM_BANKED
 PULS Y              ; restore pool pointer
 DRW_ENE_NEXT_POP:
 PULS B              ; restore outer loop counter
