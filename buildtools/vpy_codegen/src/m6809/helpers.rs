@@ -2473,7 +2473,7 @@ SM_ST_EVT3T   EQU 12\n\
 ; Initialises ENEMY_POOL from the ROM instance table.\n\
 SPAWN_ENEMIES_RUNTIME:\n\
     STB >ENEMY_COUNT\n\
-    BEQ SPAWN_ENE_DONE\n\
+    LBEQ SPAWN_ENE_DONE\n\
     ; Zero-clear the pool (B × 13 bytes)\n\
     STX >ENEMY_SCRATCH_PTR\n\
     LDY #ENEMY_POOL\n\
@@ -2583,7 +2583,7 @@ SPAWN_ENE_DONE:\n\
 ; Waypoint table: each entry is 2x FDB = 4 bytes (x hi, x lo, y hi, y lo)\n\
 UPDATE_ENEMIES_RUNTIME:\n\
     LDB >ENEMY_COUNT\n\
-    BEQ UPD_ENE_DONE\n\
+    LBEQ UPD_ENE_DONE\n\
     LDA CURRENT_ROM_BANK\n\
     PSHS A              ; save current bank\n\
     LDA >LEVEL_BANK\n\
@@ -2593,14 +2593,14 @@ UPDATE_ENEMIES_RUNTIME:\n\
 UPD_ENE_LOOP:\n\
     PSHS B              ; save loop counter\n\
     LDA ,Y              ; active?\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     LDA 8,Y             ; ai_type\n\
     CMPA #1\n\
-    BNE UPD_ENE_NEXT_POP ; only patrol handled\n\
+    LBNE UPD_ENE_NEXT_POP ; only patrol handled\n\
     LDA 11,Y\n\
     LDB 12,Y\n\
     CMPD #0\n\
-    BEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
+    LBEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
     TFR D,X             ; X = wp_ptr base (level bank)\n\
     LDA 10,Y            ; wp_idx\n\
     ASLA\n\
@@ -2630,30 +2630,30 @@ UPD_MOVE_Y:\n\
     BEQ UPD_TRY_YLO\n\
     BGT UPD_INC_YHI\n\
     DEC 3,Y\n\
-    BRA UPD_ENE_NEXT_POP\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_INC_YHI:\n\
     INC 3,Y\n\
-    BRA UPD_ENE_NEXT_POP\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_TRY_YLO:\n\
     LDA 3,X             ; target y lo\n\
     CMPA 4,Y\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     BGT UPD_INC_YLO\n\
     DEC 4,Y\n\
-    BRA UPD_ENE_NEXT_POP\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_INC_YLO:\n\
     INC 4,Y\n\
 UPD_SM_DECAY:\n\
     LDA 13,Y            ; sm_state ($FF = no SM)\n\
     CMPA #$FF\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     LDD 14,Y            ; sm_decay_timer (16-bit)\n\
     CMPD #0\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     SUBD #1\n\
     STD 14,Y\n\
     CMPD #0\n\
-    BNE UPD_ENE_NEXT_POP\n\
+    LBNE UPD_ENE_NEXT_POP\n\
     ; Timer hit 0: look up decay_to\n\
     LDA 5,Y\n\
     LDB 6,Y\n\
@@ -2661,7 +2661,7 @@ UPD_SM_DECAY:\n\
     LDA 5,X\n\
     LDB 6,X\n\
     CMPD #0\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     TFR D,X\n\
     LEAX 2,X\n\
     LDB 13,Y\n\
@@ -2677,7 +2677,7 @@ UPD_SM_DECAY:\n\
     LEAX D,X\n\
     LDA 3,X\n\
     CMPA #$FF\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     STA 13,Y\n\
     LDB #13\n\
     MUL\n\
@@ -2699,7 +2699,7 @@ UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
     LEAY 16,Y           ; next pool record\n\
     DECB\n\
-    BNE UPD_ENE_LOOP\n\
+    LBNE UPD_ENE_LOOP\n\
     PULS A              ; restore original bank\n\
     STA CURRENT_ROM_BANK\n\
     STA $DF00\n\
@@ -2712,19 +2712,19 @@ UPD_ENE_DONE:\n\
 ; Waypoint table: each entry is 2x FDB = 4 bytes (x hi, x lo, y hi, y lo)\n\
 UPDATE_ENEMIES_RUNTIME:\n\
     LDB >ENEMY_COUNT\n\
-    BEQ UPD_ENE_DONE\n\
+    LBEQ UPD_ENE_DONE\n\
     LDY #ENEMY_POOL\n\
 UPD_ENE_LOOP:\n\
     PSHS B              ; save loop counter\n\
     LDA ,Y              ; active?\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     LDA 8,Y             ; ai_type\n\
     CMPA #1\n\
-    BNE UPD_ENE_NEXT_POP ; only patrol handled\n\
+    LBNE UPD_ENE_NEXT_POP ; only patrol handled\n\
     LDA 11,Y\n\
     LDB 12,Y\n\
     CMPD #0\n\
-    BEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
+    LBEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
     TFR D,X             ; X = wp_ptr base\n\
     LDA 10,Y            ; wp_idx\n\
     ASLA\n\
@@ -2754,30 +2754,30 @@ UPD_MOVE_Y:\n\
     BEQ UPD_TRY_YLO\n\
     BGT UPD_INC_YHI\n\
     DEC 3,Y\n\
-    BRA UPD_ENE_NEXT_POP\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_INC_YHI:\n\
     INC 3,Y\n\
-    BRA UPD_ENE_NEXT_POP\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_TRY_YLO:\n\
     LDA 3,X             ; target y lo\n\
     CMPA 4,Y\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     BGT UPD_INC_YLO\n\
     DEC 4,Y\n\
-    BRA UPD_ENE_NEXT_POP\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_INC_YLO:\n\
     INC 4,Y\n\
 UPD_SM_DECAY:\n\
     LDA 13,Y            ; sm_state ($FF = no SM)\n\
     CMPA #$FF\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     LDD 14,Y            ; sm_decay_timer (16-bit)\n\
     CMPD #0\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     SUBD #1\n\
     STD 14,Y\n\
     CMPD #0\n\
-    BNE UPD_ENE_NEXT_POP\n\
+    LBNE UPD_ENE_NEXT_POP\n\
     ; Timer hit 0: look up decay_to\n\
     LDA 5,Y\n\
     LDB 6,Y\n\
@@ -2785,7 +2785,7 @@ UPD_SM_DECAY:\n\
     LDA 5,X\n\
     LDB 6,X\n\
     CMPD #0\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     TFR D,X\n\
     LEAX 2,X\n\
     LDB 13,Y\n\
@@ -2801,7 +2801,7 @@ UPD_SM_DECAY:\n\
     LEAX D,X\n\
     LDA 3,X\n\
     CMPA #$FF\n\
-    BEQ UPD_ENE_NEXT_POP\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
     STA 13,Y\n\
     LDB #13\n\
     MUL\n\
@@ -2823,7 +2823,7 @@ UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
     LEAY 16,Y           ; next pool record\n\
     DECB\n\
-    BNE UPD_ENE_LOOP\n\
+    LBNE UPD_ENE_LOOP\n\
 UPD_ENE_DONE:\n\
     RTS\n\n"
         );
@@ -2843,12 +2843,12 @@ UPD_ENE_DONE:\n\
 ; Enemy type data resides in the helpers bank (always accessible).\n\
 DRAW_ENEMIES_RUNTIME:\n\
     LDB >ENEMY_COUNT\n\
-    BEQ DRW_ENE_DONE\n\
+    LBEQ DRW_ENE_DONE\n\
     LDY #ENEMY_POOL\n\
 DRW_ENE_LOOP:\n\
     PSHS B              ; save outer loop counter\n\
     LDA ,Y              ; active?\n\
-    BEQ DRW_ENE_NEXT_POP\n\
+    LBEQ DRW_ENE_NEXT_POP\n\
     ; Resolve type header and action table entry\n\
     LDA 5,Y             ; type_ptr hi (helpers bank in multibank)\n\
     LDB 6,Y             ; type_ptr lo\n\
@@ -2866,7 +2866,7 @@ DRW_ENE_LOOP:\n\
 "; --- Multibank: FCB sprite_idx at action[+0], FCB sprite_type at action[+1] ---\n\
     LDA ,X              ; sprite_idx (byte [0])\n\
     CMPA #$FF           ; $FF = no sprite assigned\n\
-    BEQ DRW_ENE_NEXT_POP\n\
+    LBEQ DRW_ENE_NEXT_POP\n\
     STA >ENEMY_SCRATCH_PTR  ; save sprite_idx (hi byte of 2-byte scratch)\n\
     LDB 1,X             ; sprite_type (byte [1]): 0=vec, 1=vanim\n\
     STB >ENEMY_SCRATCH_Y    ; save sprite_type (lo byte of 2-byte scratch)\n\
@@ -2892,13 +2892,13 @@ DRW_ENE_LOOP:\n\
     TFR D,X             ; X = sprite_idx (16-bit, A=0)\n\
     JSR DRAW_VECTOR_BANKED\n\
     PULS Y              ; restore pool pointer\n\
-    BRA DRW_ENE_NEXT_POP\n\
+    LBRA DRW_ENE_NEXT_POP\n\
 ; --- Vanim path: DRAW_ANIM_BANKED (anim data is in helpers bank; no bank switch) ---\n\
 DRW_ENE_VANIM:\n\
     LDA >ENEMY_SCRATCH_X    ; anim_state ptr hi\n\
     LDB >ENEMY_SCRATCH_X+1  ; anim_state ptr lo\n\
     CMPD #0\n\
-    BEQ DRW_ENE_NEXT_POP    ; no state allocated → skip\n\
+    LBEQ DRW_ENE_NEXT_POP    ; no state allocated → skip\n\
     TFR D,U             ; U = anim_state ptr (frame_idx, ticks_left)\n\
     PSHS Y              ; save pool pointer\n\
     CLRA\n\
@@ -2910,7 +2910,7 @@ DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
     LEAY 16,Y           ; next pool record\n\
     DECB\n\
-    BNE DRW_ENE_LOOP\n\
+    LBNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
     RTS\n\n"
         );
@@ -2926,7 +2926,7 @@ DRW_ENE_DONE:\n\
     LDA 4,Y             ; y lo\n\
     STA >DRAW_VEC_Y\n\
     LDX >ENEMY_SCRATCH_PTR\n\
-    BEQ DRW_ENE_NEXT_POP    ; sprite_ptr == 0 → no sprite\n\
+    LBEQ DRW_ENE_NEXT_POP    ; sprite_ptr == 0 → no sprite\n\
     LDX 1,X             ; X = path0 ptr (FDB at header+1)\n\
     LDA >DRAW_VEC_Y\n\
     LDB >DRAW_VEC_X\n\
@@ -2936,7 +2936,7 @@ DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
     LEAY 16,Y           ; next pool record\n\
     DECB\n\
-    BNE DRW_ENE_LOOP\n\
+    LBNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
     RTS\n\n"
         );
