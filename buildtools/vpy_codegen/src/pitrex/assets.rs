@@ -900,7 +900,10 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
 fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
     let mut s = String::new();
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
-    let (_center_x, _center_y) = res.calculate_center(); // kept for potential future use
+    // Subtract bounding-box center from all start/bezier coords so that
+    // pitrex_draw_vector_ex with ox=oy=0 renders at screen center — matching
+    // the m6809 and arm backends which also center assets.
+    let (center_x, center_y) = res.calculate_center();
 
     let paths = res.visible_paths();
 
@@ -937,8 +940,8 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
                 continue;
             }
             let intensity = path.intensity;
-            let x0 = pts[0].x.clamp(-127, 127) as i8;
-            let y0 = pts[0].y.clamp(-127, 127) as i8;
+            let x0 = (pts[0].x - center_x).clamp(-127, 127) as i8;
+            let y0 = (pts[0].y - center_y).clamp(-127, 127) as i8;
             s.push_str(&format!("    .byte   {}               @ intensity\n", intensity));
             s.push_str(&format!(
                 "    .byte   0x{:02X}, 0x{:02X}, 0x00, 0x00  @ y={y0}, x={x0}, hdr\n",
@@ -946,14 +949,16 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
             ));
             let mut i = 0;
             while i + 3 < pts.len() {
-                let ax  = pts[i  ].x.clamp(-127, 127) as i8;
-                let ay  = pts[i  ].y.clamp(-127, 127) as i8;
-                let c0x = pts[i+1].x.clamp(-127, 127) as i8;
-                let c0y = pts[i+1].y.clamp(-127, 127) as i8;
-                let c1x = pts[i+2].x.clamp(-127, 127) as i8;
-                let c1y = pts[i+2].y.clamp(-127, 127) as i8;
-                let bx  = pts[i+3].x.clamp(-127, 127) as i8;
-                let by  = pts[i+3].y.clamp(-127, 127) as i8;
+                // Bezier control points used as absolute coords by dvex_bezier_seg
+                // (adds ox directly), so they must be center-relative like the header.
+                let ax  = (pts[i  ].x - center_x).clamp(-127, 127) as i8;
+                let ay  = (pts[i  ].y - center_y).clamp(-127, 127) as i8;
+                let c0x = (pts[i+1].x - center_x).clamp(-127, 127) as i8;
+                let c0y = (pts[i+1].y - center_y).clamp(-127, 127) as i8;
+                let c1x = (pts[i+2].x - center_x).clamp(-127, 127) as i8;
+                let c1y = (pts[i+2].y - center_y).clamp(-127, 127) as i8;
+                let bx  = (pts[i+3].x - center_x).clamp(-127, 127) as i8;
+                let by  = (pts[i+3].y - center_y).clamp(-127, 127) as i8;
                 s.push_str(&format!(
                     "    .byte   0xFE, 0x{:02X},0x{:02X}, 0x{:02X},0x{:02X}, 0x{:02X},0x{:02X}, 0x{:02X},0x{:02X}  \
                      @ bezier a=({ax},{ay}) cp1=({c0x},{c0y}) cp2=({c1x},{c1y}) b=({bx},{by})\n",
@@ -975,10 +980,10 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
         }
 
         let intensity = path.intensity;
-        let (x0, y0) = baked[0];
-        // Path coords are relative to sprite origin (0,0), not the bounding-box centroid.
-        let y0 = y0.clamp(-127, 127) as i8;
-        let x0 = x0.clamp(-127, 127) as i8;
+        let (x0_raw, y0_raw) = baked[0];
+        // Center-relative coords (match m6809/arm backends: subtract bounding-box center).
+        let y0 = (y0_raw - center_y).clamp(-127, 127) as i8;
+        let x0 = (x0_raw - center_x).clamp(-127, 127) as i8;
 
         s.push_str(&format!(
             "    .byte   {}               @ intensity\n",
