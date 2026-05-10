@@ -227,7 +227,13 @@ fn emit_draw_vector_ex() -> String {
     // Reset beam to screen centre before each path — prevents accumulation of
     // beam drift from the previous path's final position.
     s.push_str("    bl      dv_reset\n");
-    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
+    // Set intensity: if passed arg (r8) == 0, fall back to per-path .vec intensity
+    // at [r3, #0] — same semantics as DRAW_VECTOR (plain) and 6809 DRAW_VEC_INTENSITY=0.
+    s.push_str("    ldrb    r0, [r3]            @ .vec per-path intensity\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    it      ne\n");
+    s.push_str("    movne   r0, r8             @ if intensity arg != 0, use it\n");
+    s.push_str("    bl      vpy_set_intensity\n");
     // compute absolute move: x_start + ox, y_start + oy
     s.push_str("    ldrsb   r0, [r3, #2]        @ x_start\n");
     s.push_str("    ldrsb   r1, [r3, #1]        @ y_start\n");

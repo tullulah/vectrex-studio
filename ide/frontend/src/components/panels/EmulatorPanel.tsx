@@ -1870,7 +1870,7 @@ export const EmulatorPanel: React.FC = () => {
     }
 
     const PITREX_MAX_X = 16500;
-    const PITREX_MAX_Y = 20500;
+    const PITREX_MAX_Y = 16500; // matched to PITREX_MAX_X so VPy coords scale identically on both axes (vs 6809)
     const TARGET_MS = 1000 / 50; // 50 Hz
     let lastFrameTs = 0;
 
