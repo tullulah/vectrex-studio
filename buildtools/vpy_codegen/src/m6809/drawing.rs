@@ -930,44 +930,32 @@ DCR_after_intensity:\n\
     if needed.contains("DRAW_VECTOR") || needed.contains("DRAW_VECTOR_EX") {
         out.push_str(
             "Draw_Sync_List_At_With_Mirrors:\n\
-        ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
+; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
             ; NOTE: Caller must ensure DP=$D0 for VIA access\n\
-            ; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)\n\
-            ; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.\n\
-            LDA ,X+                 ; Read per-path intensity from vector data\n\
+            LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set\n\
+            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
+            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
+            BRA DSWM_SET_INTENSITY\n\
+DSWM_USE_OVERRIDE:\n\
+            LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_SET_INTENSITY:\n\
-            TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value\n\
-            BEQ DSWM_USE_FCB_INT\n\
-            LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)\n\
-DSWM_USE_FCB_INT:\n\
-            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            PSHS A                  ; save brightness\n\
-            LDA #$05\n\
-            STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)\n\
-            LDA #$04\n\
-            STA >$D000              ; PB=$04: select Z-axis channel\n\
-            PULS A                  ; restore brightness\n\
-            STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H\n\
-            LDA #$00\n\
-            STA >$D000              ; PB=$00: deselect all channels\n\
-            LDA #$01\n\
-            STA >$D000              ; PB=$01: restore X-integrator channel\n\
+            JSR $F2AB               ; BIOS Intensity_a\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
-            TST >MIRROR_Y\n\
+            TST MIRROR_Y\n\
             BEQ DSWM_NO_NEGATE_Y\n\
             NEGB                    ; ← Negate Y if flag set\n\
 DSWM_NO_NEGATE_Y:\n\
-            ADDB >DRAW_VEC_Y        ; Add Y offset\n\
+            ADDB DRAW_VEC_Y         ; Add Y offset\n\
             LDA ,X+                 ; x_start from .vec (already relative to center)\n\
             ; Check if X mirroring is enabled\n\
-            TST >MIRROR_X\n\
+            TST MIRROR_X\n\
             BEQ DSWM_NO_NEGATE_X\n\
             NEGA                    ; ← Negate X if flag set\n\
 DSWM_NO_NEGATE_X:\n\
-            ADDA >DRAW_VEC_X        ; Add X offset\n\
-            STD >TEMP_YX            ; Save adjusted position\n\
+            ADDA DRAW_VEC_X         ; Add X offset\n\
+            STD TEMP_YX             ; Save adjusted position\n\
             ; Reset completo\n\
             CLR VIA_shift_reg\n\
             LDA #$CC\n\
@@ -982,7 +970,7 @@ DSWM_NO_NEGATE_X:\n\
             LDA #$01\n\
             STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
             ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)\n\
-            LDD >TEMP_YX\n\
+            LDD TEMP_YX\n\
             STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
             CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
             PSHS A                  ; ~4 cycle settling delay for Y\n\
@@ -992,8 +980,8 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 scale from DRAW_SCALE variable ($7F=normal)\n\
-            LDA >DRAW_SCALE\n\
+            ; Timing setup (match core: hardcoded $7F)\n\
+            LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X                ; Skip next_y, next_x\n\
@@ -1013,13 +1001,13 @@ DSWM_NO_NEGATE_X:\n\
             ; Draw line with conditional negations\n\
             LDB ,X+                 ; dy\n\
             ; Check if Y mirroring is enabled\n\
-            TST >MIRROR_Y\n\
+            TST MIRROR_Y\n\
             BEQ DSWM_NO_NEGATE_DY\n\
             NEGB                    ; ← Negate dy if flag set\n\
 DSWM_NO_NEGATE_DY:\n\
             LDA ,X+                 ; dx\n\
             ; Check if X mirroring is enabled\n\
-            TST >MIRROR_X\n\
+            TST MIRROR_X\n\
             BEQ DSWM_NO_NEGATE_DX\n\
             NEGA                    ; ← Negate dx if flag set\n\
 DSWM_NO_NEGATE_DX:\n\
@@ -1039,49 +1027,37 @@ DSWM_NO_NEGATE_DX:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
-            CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)\n\
-            CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)\n\
-            INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)\n\
-            CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)\n\
+            CLR VIA_port_a          ; stop X integrator drift between segments\n\
+            CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)\n\
-            LDA ,X+                 ; Read FCB intensity from vector data\n\
+            ; Check intensity override (same logic as start)\n\
+            LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set\n\
+            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
+            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
+            BRA DSWM_NEXT_SET_INTENSITY\n\
+DSWM_NEXT_USE_OVERRIDE:\n\
+            LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
-            TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB\n\
-            BEQ DSWM_NEXT_USE_FCB_INT\n\
-            LDA >DRAW_VEC_INTENSITY  ; non-zero override\n\
-DSWM_NEXT_USE_FCB_INT:\n\
-            PSHS A                  ; save intensity for later\n\
+            PSHS A\n\
             LDB ,X+                 ; y_start\n\
-            TST >MIRROR_Y\n\
+            TST MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
             NEGB\n\
 DSWM_NEXT_NO_NEGATE_Y:\n\
-            ADDB >DRAW_VEC_Y        ; Add Y offset\n\
+            ADDB DRAW_VEC_Y         ; Add Y offset\n\
             LDA ,X+                 ; x_start\n\
-            TST >MIRROR_X\n\
+            TST MIRROR_X\n\
             BEQ DSWM_NEXT_NO_NEGATE_X\n\
             NEGA\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
-            ADDA >DRAW_VEC_X        ; Add X offset\n\
-            STD >TEMP_YX\n\
-            PULS A                  ; restore intensity\n\
-            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            PSHS A                  ; save brightness for Z-axis write\n\
-            LDA #$05\n\
-            STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)\n\
-            LDA #$04\n\
-            STA >$D000              ; PB=$04: select Z-axis channel\n\
-            PULS A                  ; restore brightness\n\
-            STA >$D001              ; PA=brightness while Z-axis selected\n\
-            LDA #$00\n\
-            STA >$D000              ; PB=$00: deselect\n\
-            LDA #$01\n\
-            STA >$D000              ; PB=$01: restore X-integrator channel\n\
+            ADDA DRAW_VEC_X         ; Add X offset\n\
+            STD TEMP_YX\n\
+            PULS A                  ; Get intensity back\n\
+            JSR $F2AB\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1099,7 +1075,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             LDA #$01\n\
             STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)\n\
             ; Moveto new start position (BIOS Moveto_d order)\n\
-            LDD >TEMP_YX\n\
+            LDD TEMP_YX\n\
             STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)\n\
             CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n\
             PSHS A                  ; ~4 cycle settling delay for Y\n\
@@ -1109,8 +1085,8 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 scale from DRAW_SCALE variable ($7F=normal)\n\
-            LDA >DRAW_SCALE\n\
+            ; Timing setup (match core: hardcoded $7F)\n\
+            LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
             LEAX 2,X\n\

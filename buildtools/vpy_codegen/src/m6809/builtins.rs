@@ -1204,8 +1204,9 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                 out.push_str(&format!("    LDX #{}        ; Asset index for lookup\n", asset_index));
                 out.push_str("    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching\n");
             } else {
-                // SINGLE-BANK MODE: Direct access to asset labels
-                // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
+                // SINGLE-BANK MODE: Direct access to asset labels (match core compiler pattern)
+                // Clear intensity override BEFORE draw so DSWM uses .vec intensities
+                out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)\n");
                 out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
                 
                 // Loop through all paths
@@ -1214,12 +1215,10 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                     out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
                 }
                 
-                // Restore DP (CRITICAL PATTERN FROM CORE)
+                // Restore DP (match core compiler pattern - no ACR manipulation needed)
                 out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             }
             
-            // Clear intensity override so the next DRAW_VECTOR uses per-path values from .vec
-            out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
         }
         _ => {
@@ -1293,6 +1292,9 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             
             // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
             out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
+            // CRITICAL: Set ACR to shift-out mode for drawing
+            out.push_str("    LDA #$18\n");
+            out.push_str("    STA >$D00B       ; ACR=$18: SR shift-out mode for drawing\n");
             
             // Loop through all paths
             for i in 0..path_count {
@@ -1300,6 +1302,9 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                 out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
             }
             
+            // CRITICAL: Restore ACR to BIOS standard before returning
+            out.push_str("    LDA #$98\n");
+            out.push_str("    STA >$D00B       ; ACR=$98: Restore BIOS standard (T1PB7 output)\n");
             // Restore DP (CRITICAL PATTERN FROM CORE)
             out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             

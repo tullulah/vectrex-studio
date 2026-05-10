@@ -348,29 +348,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD ,X          ; D = enemy_instances_ptr\n");
         out.push_str("    STD >LEVEL_ENEMY_INSTANCES_PTR\n");
         out.push_str("    \n");
-        out.push_str("    ; === Copy GP objects from ROM to RAM buffer ===\n");
+        out.push_str("    ; === Setup GP pointer: point directly to ROM (matches core) ===\n");
+        out.push_str("    ; GP objects are read from ROM with stride=20, same as BG/FG\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    BEQ LLR_SKIP_GP  ; Skip if no GP objects\n");
-        out.push_str("    \n");
-        out.push_str("    ; Clear GP buffer with $FF marker (empty sentinel)\n");
-        out.push_str("    LDA #$FF\n");
-        out.push_str("    LDU #LEVEL_GP_BUFFER\n");
-        out.push_str("    LDB #32          ; Max 32 objects\n");
-        out.push_str("LLR_CLR_GP_LOOP:\n");
-        out.push_str("    STA ,U           ; Write $FF to first byte of object slot\n");
-        out.push_str("    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)\n");
-        out.push_str("    DECB\n");
-        out.push_str("    BNE LLR_CLR_GP_LOOP\n");
-        out.push_str("    \n");
-        out.push_str("    ; Copy GP objects: ROM (20 bytes each) → RAM buffer (14 bytes each)\n");
-        out.push_str("    LDB >LEVEL_GP_COUNT   ; Reload count after clear loop\n");
-        out.push_str("    LDX >LEVEL_GP_ROM_PTR ; X = source (ROM)\n");
-        out.push_str("    LDU #LEVEL_GP_BUFFER  ; U = destination (RAM)\n");
-        out.push_str("    PSHS U               ; Save buffer start\n");
-        out.push_str("    JSR LLR_COPY_OBJECTS  ; Copy B objects from X(ROM) to U(RAM)\n");
-        out.push_str("    PULS D               ; Restore buffer start into D\n");
-        out.push_str("    STD >LEVEL_GP_PTR    ; LEVEL_GP_PTR → RAM buffer\n");
-        out.push_str("    BRA LLR_GP_DONE\n");
+        out.push_str("    LDD >LEVEL_GP_ROM_PTR ; Just point to ROM\n");
+        out.push_str("    STD >LEVEL_GP_PTR    ; Store ROM pointer\n");
         out.push_str("    \n");
         out.push_str("LLR_GP_DONE:\n");
         out.push_str("LLR_SKIP_GP:\n");
@@ -473,8 +456,6 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SHOW_LEVEL_RUNTIME:\n");
         out.push_str("    PSHS D,X,Y,U     ; Preserve registers\n");
         out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
-        out.push_str("    LDA #$18\n");
-        out.push_str("    STA >$D00B       ; ACR=$18: SR shift-out PHI2, enable beam via SR\n");
         if crate::m6809::builtins::use_banked_assets() {
             out.push_str("    ; MULTIBANK: Switch to level bank so ROM pointers are valid\n");
             out.push_str("    LDA >CURRENT_ROM_BANK\n");
@@ -515,7 +496,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_FOREGROUND\n");
-        out.push_str("    LDA #15          ; RAM object stride (15 bytes)\n");
+        out.push_str("    LDA #20          ; GP objects read from ROM (20 bytes)\n");
         out.push_str("    LDX >LEVEL_GP_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
@@ -537,6 +518,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
             out.push_str("    STA >CURRENT_ROM_BANK\n");
             out.push_str("    STA $DF00           ; Restore bank\n");
         }
+        // CRITICAL: Match core compiler - JSR $F1AF BEFORE PULS to avoid corrupting D register
+        // $F1AF restores DP=$C8 without touching D,X,Y,U (safe for PULS)
         out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
         out.push_str("    PULS D,X,Y,U,PC  ; Restore and return\n");
         out.push_str("    \n");
@@ -698,9 +681,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X           ; Save object pointer\n");
         out.push_str("    TFR U,X          ; X = vector data pointer (header)\n");
         out.push_str("    \n");
-        out.push_str("    ; Read path_count from vector header (FDB = 2 bytes big-endian, high byte is always $00)\n");
-        out.push_str("    LDA ,X+          ; skip high byte of FDB path_count (always $00 for ≤255 paths)\n");
-        out.push_str("    LDB ,X+          ; B = path_count (low byte), X now at pointer table\n");
+        out.push_str("    ; Read path_count from vector header (FCB = 1 byte)\n");
+        out.push_str("    LDB ,X+          ; B = path_count, X now at pointer table\n");
         out.push_str("    \n");
         out.push_str("    ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)\n");
         out.push_str("SLR_PATH_LOOP:\n");
@@ -711,7 +693,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDU ,X++         ; U = path pointer, X advances to next entry\n");
         out.push_str("    PSHS X           ; Save pointer table position\n");
         out.push_str("    TFR U,X          ; X = actual path data\n");
-        out.push_str("    JSR SLR_DRAW_CLIPPED_PATH\n");
+        out.push_str("    JSR Draw_Sync_List_At_With_Mirrors  ; Draw this path\n");
         out.push_str("    PULS X           ; Restore pointer table position\n");
         out.push_str("    PULS B           ; Restore count\n");
         out.push_str("    BRA SLR_PATH_LOOP\n");

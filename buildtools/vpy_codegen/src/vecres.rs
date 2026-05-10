@@ -455,7 +455,7 @@ impl VecResource {
         let path_count = paths.len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
-        asm.push_str(&format!("    FDB {}               ; path_count (runtime metadata, 2 bytes)\n", path_count));
+        asm.push_str(&format!("    FCB {}               ; path_count (runtime metadata)\n", path_count));
         
         // Emit pointer table for all paths (allows runtime iteration)
         for path_idx in 0..path_count {
@@ -493,10 +493,10 @@ impl VecResource {
 
             let default_intensity = path.intensity;
             let (x0, y0) = baked[0];
-            // Path coords are relative to sprite origin (0,0), not the bounding-box centroid.
-            // DRAW_VEC_X/Y is the draw position; adding raw path coords gives correct screen pos.
-            let y0_relative = y0.clamp(-127, 127) as i8;
-            let x0_relative = x0.clamp(-127, 127) as i8;
+            // Path coords relative to sprite CENTER (match core compiler: y0 - center_y, x0 - center_x)
+            // This is what Draw_Sync_List_At_With_Mirrors expects: offset from beam position
+            let y0_relative = (y0 - center_y).clamp(-127, 127) as i8;
+            let x0_relative = (x0 - center_x).clamp(-127, 127) as i8;
 
             // Malban format header: intensity, y_start, x_start, next_y, next_x
             asm.push_str(&format!("    FCB {}              ; path{}: intensity\n", default_intensity, path_idx));

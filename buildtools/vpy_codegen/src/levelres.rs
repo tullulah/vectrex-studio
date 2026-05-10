@@ -734,10 +734,10 @@ impl VPlayLevel {
         // Scale stored as direct T1 value in the low byte of FDB (high byte = 0).
         // T1 = scale * M6809_DRAW_SCALE. At runtime, this byte is read and used
         // directly as VIA T1 latch without any multiplication.
-        // MUST match DRAW_SCALE default in functions.rs ($50=80).
-        // scale=1.0 → 80 ($50), scale=0.8 → 64 ($40), scale=1.25 → 100 ($64).
-        // $50 is the Width byte in the Vectrex ROM header — hardware-calibrated reference.
-        const M6809_DRAW_SCALE: f32 = 80.0;
+        // MUST match DRAW_SCALE default in functions.rs ($7F=127).
+        // scale=1.0 → 127 ($7F), scale=0.5 → 64 ($40), scale=2.0 → 254 ($FE).
+        // $7F is full BIOS scale — hardware-calibrated reference.
+        const M6809_DRAW_SCALE: f32 = 127.0;
         let scale_t1 = (obj.scale * M6809_DRAW_SCALE).round().clamp(1.0, 255.0) as u8;
         out.push_str(&format!("    FDB {}  ; scale (T1 direct; {:.2}x)\n", scale_t1, obj.scale));
         
