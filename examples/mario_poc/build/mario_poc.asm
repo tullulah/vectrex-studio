@@ -124,21 +124,21 @@ DRAW_ANIM_SPEED_MUL  EQU $C880+$254   ; DRAW_ANIM tick multiplier (1=normal) (1 
 DRAW_SCALE           EQU $C880+$255   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
 VAR_MARIO_HH         EQU $C880+$256   ; User variable: MARIO_HH (2 bytes)
 VAR_MARIO_HW         EQU $C880+$258   ; User variable: MARIO_HW (2 bytes)
-VAR_PLAYER_X         EQU $C880+$25A   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$25C   ; User variable: PLAYER_Y (2 bytes)
-VAR_VEL_Y            EQU $C880+$25E   ; User variable: VEL_Y (2 bytes)
-VAR_ON_GROUND        EQU $C880+$260   ; User variable: ON_GROUND (1 bytes)
-VAR_PREV_Y           EQU $C880+$261   ; User variable: PREV_Y (2 bytes)
-VAR_CAMERA_X         EQU $C880+$263   ; User variable: CAMERA_X (2 bytes)
-VAR_SCROLL_LEFT      EQU $C880+$265   ; User variable: SCROLL_LEFT (2 bytes)
-VAR_SCROLL_RIGHT     EQU $C880+$267   ; User variable: SCROLL_RIGHT (2 bytes)
-VAR_SCROLL_RIGHT_EDGE EQU $C880+$269   ; User variable: SCROLL_RIGHT_EDGE (2 bytes)
-VAR_SCREEN_X         EQU $C880+$26B   ; User variable: SCREEN_X (2 bytes)
-VAR_IS_WALKING       EQU $C880+$26D   ; User variable: IS_WALKING (1 bytes)
-VAR_FLOOR_Y          EQU $C880+$26E   ; User variable: FLOOR_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$270   ; User variable: JOY_X (2 bytes)
-VAR_BTN_JUMP         EQU $C880+$272   ; User variable: BTN_JUMP (2 bytes)
-VAR_DX_PUSH          EQU $C880+$274   ; User variable: DX_PUSH (2 bytes)
+VAR_PLAYER_X         EQU $C880+$25A   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$25C   ; User variable: player_y (2 bytes)
+VAR_VEL_Y            EQU $C880+$25E   ; User variable: vel_y (2 bytes)
+VAR_ON_GROUND        EQU $C880+$260   ; User variable: on_ground (1 bytes)
+VAR_PREV_Y           EQU $C880+$261   ; User variable: prev_y (2 bytes)
+VAR_CAMERA_X         EQU $C880+$263   ; User variable: camera_x (2 bytes)
+VAR_SCROLL_LEFT      EQU $C880+$265   ; User variable: scroll_left (2 bytes)
+VAR_SCROLL_RIGHT     EQU $C880+$267   ; User variable: scroll_right (2 bytes)
+VAR_SCROLL_RIGHT_EDGE EQU $C880+$269   ; User variable: scroll_right_edge (2 bytes)
+VAR_SCREEN_X         EQU $C880+$26B   ; User variable: screen_x (2 bytes)
+VAR_IS_WALKING       EQU $C880+$26D   ; User variable: is_walking (1 bytes)
+VAR_FLOOR_Y          EQU $C880+$26E   ; User variable: floor_y (2 bytes)
+VAR_JOY_X            EQU $C880+$270   ; User variable: joy_x (2 bytes)
+VAR_BTN_JUMP         EQU $C880+$272   ; User variable: btn_jump (2 bytes)
+VAR_DX_PUSH          EQU $C880+$274   ; User variable: dx_push (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -653,7 +653,7 @@ IF_NEXT_19:
     STD RESULT
 IF_END_18:
     LDD >VAR_FLOOR_Y
-    ; DEBUG_PRINT(FLOOR_Y)
+    ; DEBUG_PRINT(floor_y)
     STA $C002
     STB $C000
     LDA #$FE
@@ -662,13 +662,13 @@ IF_END_18:
     STX $C004
     BRA DEBUG_SKIP_0
 DEBUG_LABEL_FLOOR_Y:
-    FCC "FLOOR_Y"
+    FCC "floor_y"
     FCB $00
 DEBUG_SKIP_0:
     LDD #0
     STD RESULT
     LDD >VAR_PLAYER_Y
-    ; DEBUG_PRINT(PLAYER_Y)
+    ; DEBUG_PRINT(player_y)
     STA $C002
     STB $C000
     LDA #$FE
@@ -677,7 +677,7 @@ DEBUG_SKIP_0:
     STX $C004
     BRA DEBUG_SKIP_1
 DEBUG_LABEL_PLAYER_Y:
-    FCC "PLAYER_Y"
+    FCC "player_y"
     FCB $00
 DEBUG_SKIP_1:
     LDD #0
@@ -1801,8 +1801,8 @@ J1X_BUILTIN:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
 BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
 LDA ,X+                 ; Otherwise, read intensity from vector data
 BRA DSWM_SET_INTENSITY
@@ -1812,19 +1812,19 @@ DSWM_SET_INTENSITY:
 JSR $F2AB               ; BIOS Intensity_a
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_Y
 NEGB                    ; ← Negate Y if flag set
 DSWM_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start from .vec (already relative to center)
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_X
 NEGA                    ; ← Negate X if flag set
 DSWM_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX             ; Save adjusted position
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX            ; Save adjusted position
 ; Reset completo
 CLR VIA_shift_reg
 LDA #$CC
@@ -1839,7 +1839,7 @@ STA VIA_port_b          ; repeat
 LDA #$01
 STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
 ; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD TEMP_YX
+LDD >TEMP_YX
 STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
 CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
 PSHS A                  ; ~4 cycle settling delay for Y
@@ -1870,13 +1870,13 @@ LBEQ DSWM_NEXT_PATH
 ; Draw line with conditional negations
 LDB ,X+                 ; dy
 ; Check if Y mirroring is enabled
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NO_NEGATE_DY
 NEGB                    ; ← Negate dy if flag set
 DSWM_NO_NEGATE_DY:
 LDA ,X+                 ; dx
 ; Check if X mirroring is enabled
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NO_NEGATE_DX
 NEGA                    ; ← Negate dx if flag set
 DSWM_NO_NEGATE_DX:
@@ -1904,7 +1904,7 @@ DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
 ; Check intensity override (same logic as start)
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
 BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
 LDA ,X+                 ; Otherwise, read intensity from vector data
 BRA DSWM_NEXT_SET_INTENSITY
@@ -1913,18 +1913,18 @@ LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
-TST MIRROR_Y
+TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
 NEGB
 DSWM_NEXT_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
+ADDB >DRAW_VEC_Y        ; Add Y offset
 LDA ,X+                 ; x_start
-TST MIRROR_X
+TST >MIRROR_X
 BEQ DSWM_NEXT_NO_NEGATE_X
 NEGA
 DSWM_NEXT_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX
+ADDA >DRAW_VEC_X        ; Add X offset
+STD >TEMP_YX
 PULS A                  ; Get intensity back
 JSR $F2AB
 PULS D
@@ -1944,7 +1944,7 @@ STA VIA_port_b          ; repeat
 LDA #$01
 STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
 ; Moveto new start position (BIOS Moveto_d order)
-LDD TEMP_YX
+LDD >TEMP_YX
 STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
 CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
 PSHS A                  ; ~4 cycle settling delay for Y
