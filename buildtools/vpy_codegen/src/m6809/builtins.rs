@@ -1292,9 +1292,8 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             
             // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
             out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
-            // CRITICAL: Set ACR to shift-out mode for drawing
-            out.push_str("    LDA #$18\n");
-            out.push_str("    STA >$D00B       ; ACR=$18: SR shift-out mode for drawing\n");
+            // NOTE: do NOT set ACR here — DRAW_VECTOR works without it and
+            // setting ACR=$18 breaks T1 timing inside DSWM (same fix as DRAW_ANIM).
             
             // Loop through all paths
             for i in 0..path_count {
@@ -1302,9 +1301,6 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                 out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
             }
             
-            // CRITICAL: Restore ACR to BIOS standard before returning
-            out.push_str("    LDA #$98\n");
-            out.push_str("    STA >$D00B       ; ACR=$98: Restore BIOS standard (T1PB7 output)\n");
             // Restore DP (CRITICAL PATTERN FROM CORE)
             out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             
