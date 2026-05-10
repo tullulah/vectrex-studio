@@ -103,42 +103,42 @@ SLR_CUR_X            EQU $C880+$5C   ; SHOW_LEVEL: tracked beam X for per-segmen
 DRAW_T1_SCALED       EQU $C880+$5D   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
 LEVEL_GP_BUFFER      EQU $C880+$5E   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
 LCOL_PX              EQU $C880+$23E   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$240   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
-LCOL_PY              EQU $C880+$241   ; LEVEL_COLLISION player_y (lo byte) (1 bytes)
-LCOL_PHH             EQU $C880+$242   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$243   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$244   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$245   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$246   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$247   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$248   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$24A   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$24C   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$24D   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$24E   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$24F   ; GP-FG |dy| (1 bytes)
-ANIM_MARIO_WALK_STATE EQU $C880+$250   ; DRAW_ANIM state for MARIO_WALK (frame_idx, ticks_left) (2 bytes)
-DRAW_ANIM_MIRROR_X   EQU $C880+$252   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
-DRAW_ANIM_SCALE      EQU $C880+$253   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
-DRAW_ANIM_SPEED_MUL  EQU $C880+$254   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$255   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_MARIO_HH         EQU $C880+$256   ; User variable: MARIO_HH (2 bytes)
-VAR_MARIO_HW         EQU $C880+$258   ; User variable: MARIO_HW (2 bytes)
-VAR_PLAYER_X         EQU $C880+$25A   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$25C   ; User variable: player_y (2 bytes)
-VAR_VEL_Y            EQU $C880+$25E   ; User variable: vel_y (2 bytes)
-VAR_ON_GROUND        EQU $C880+$260   ; User variable: on_ground (1 bytes)
-VAR_PREV_Y           EQU $C880+$261   ; User variable: prev_y (2 bytes)
-VAR_CAMERA_X         EQU $C880+$263   ; User variable: camera_x (2 bytes)
-VAR_SCROLL_LEFT      EQU $C880+$265   ; User variable: scroll_left (2 bytes)
-VAR_SCROLL_RIGHT     EQU $C880+$267   ; User variable: scroll_right (2 bytes)
-VAR_SCROLL_RIGHT_EDGE EQU $C880+$269   ; User variable: scroll_right_edge (2 bytes)
-VAR_SCREEN_X         EQU $C880+$26B   ; User variable: screen_x (2 bytes)
-VAR_IS_WALKING       EQU $C880+$26D   ; User variable: is_walking (1 bytes)
-VAR_FLOOR_Y          EQU $C880+$26E   ; User variable: floor_y (2 bytes)
-VAR_JOY_X            EQU $C880+$270   ; User variable: joy_x (2 bytes)
-VAR_BTN_JUMP         EQU $C880+$272   ; User variable: btn_jump (2 bytes)
-VAR_DX_PUSH          EQU $C880+$274   ; User variable: dx_push (2 bytes)
+LCOL_BEST_Y          EQU $C880+$240   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$242   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$244   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$245   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$246   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$247   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$248   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$249   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$24A   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$24C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$24E   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$24F   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$250   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$251   ; GP-FG |dy| (1 bytes)
+ANIM_MARIO_WALK_STATE EQU $C880+$252   ; DRAW_ANIM state for MARIO_WALK (frame_idx, ticks_left) (2 bytes)
+DRAW_ANIM_MIRROR_X   EQU $C880+$254   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
+DRAW_ANIM_SCALE      EQU $C880+$255   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
+DRAW_ANIM_SPEED_MUL  EQU $C880+$256   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$257   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_MARIO_HH         EQU $C880+$258   ; User variable: MARIO_HH (2 bytes)
+VAR_MARIO_HW         EQU $C880+$25A   ; User variable: MARIO_HW (2 bytes)
+VAR_PLAYER_X         EQU $C880+$25C   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$25E   ; User variable: PLAYER_Y (2 bytes)
+VAR_VEL_Y            EQU $C880+$260   ; User variable: VEL_Y (2 bytes)
+VAR_ON_GROUND        EQU $C880+$262   ; User variable: ON_GROUND (1 bytes)
+VAR_PREV_Y           EQU $C880+$263   ; User variable: PREV_Y (2 bytes)
+VAR_CAMERA_X         EQU $C880+$265   ; User variable: CAMERA_X (2 bytes)
+VAR_SCROLL_LEFT      EQU $C880+$267   ; User variable: SCROLL_LEFT (2 bytes)
+VAR_SCROLL_RIGHT     EQU $C880+$269   ; User variable: SCROLL_RIGHT (2 bytes)
+VAR_SCROLL_RIGHT_EDGE EQU $C880+$26B   ; User variable: SCROLL_RIGHT_EDGE (2 bytes)
+VAR_SCREEN_X         EQU $C880+$26D   ; User variable: SCREEN_X (2 bytes)
+VAR_IS_WALKING       EQU $C880+$26F   ; User variable: IS_WALKING (1 bytes)
+VAR_FLOOR_Y          EQU $C880+$270   ; User variable: FLOOR_Y (2 bytes)
+VAR_JOY_X            EQU $C880+$272   ; User variable: JOY_X (2 bytes)
+VAR_BTN_JUMP         EQU $C880+$274   ; User variable: BTN_JUMP (2 bytes)
+VAR_DX_PUSH          EQU $C880+$276   ; User variable: DX_PUSH (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -168,6 +168,8 @@ MAIN:
     LDA #$7F
     STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)
     CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)
+    CLR ANIM_MARIO_WALK_STATE     ; frame_idx = 0
+    CLR ANIM_MARIO_WALK_STATE+1   ; ticks_left = 0 (forces DAR_INIT)
     LDD #0
     STD VAR_PLAYER_X
     LDD #-62
@@ -340,7 +342,7 @@ IF_END_2:
     LDD #13  ; const MARIO_HH
     STB >LCOL_PHH        ; store player half_height for Y-overlap check
     LDD >VAR_PLAYER_Y
-    STB >LCOL_PY         ; store player_y lo byte
+    STD >LCOL_PY         ; store player_y (16-bit)
     JSR LEVEL_COLLISION_X_RUNTIME
     STD VAR_DX_PUSH
     LDD >VAR_PLAYER_X
@@ -421,8 +423,10 @@ IF_END_6:
     LDD #13  ; const MARIO_HH
     STB >LCOL_PHH        ; store player half_height
     LDD >VAR_PREV_Y
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh = player_top
-    STB >LCOL_PY         ; store player top Y for surface filter
+    ; Compute player_top = player_y + player_hh (16-bit)
+    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
+    ADCA #0              ; propagate carry to high byte
+    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
     JSR LEVEL_COLLISION_Y_RUNTIME
     STD VAR_FLOOR_Y
     ; MAX: Return maximum of two values
@@ -481,8 +485,10 @@ IF_END_10:
     LDD #13  ; const MARIO_HH
     STB >LCOL_PHH        ; store player half_height
     LDD >VAR_PLAYER_Y
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh = player_top
-    STB >LCOL_PY         ; store player top Y for surface filter
+    ; Compute player_top = player_y + player_hh (16-bit)
+    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
+    ADCA #0              ; propagate carry to high byte
+    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
     JSR LEVEL_COLLISION_Y_RUNTIME
     STD VAR_FLOOR_Y
     ; MAX: Return maximum of two values
@@ -653,7 +659,7 @@ IF_NEXT_19:
     STD RESULT
 IF_END_18:
     LDD >VAR_FLOOR_Y
-    ; DEBUG_PRINT(floor_y)
+    ; DEBUG_PRINT(FLOOR_Y)
     STA $C002
     STB $C000
     LDA #$FE
@@ -662,13 +668,13 @@ IF_END_18:
     STX $C004
     BRA DEBUG_SKIP_0
 DEBUG_LABEL_FLOOR_Y:
-    FCC "floor_y"
+    FCC "FLOOR_Y"
     FCB $00
 DEBUG_SKIP_0:
     LDD #0
     STD RESULT
     LDD >VAR_PLAYER_Y
-    ; DEBUG_PRINT(player_y)
+    ; DEBUG_PRINT(PLAYER_Y)
     STA $C002
     STB $C000
     LDA #$FE
@@ -677,7 +683,7 @@ DEBUG_SKIP_0:
     STX $C004
     BRA DEBUG_SKIP_1
 DEBUG_LABEL_PLAYER_Y:
-    FCC "player_y"
+    FCC "PLAYER_Y"
     FCB $00
 DEBUG_SKIP_1:
     LDD #0
@@ -1210,7 +1216,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_7 (tile)
     FCB 255  ; type
     FDB 300  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1226,8 +1232,8 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 
 ; Object: obj_bg_1 (tile)
     FCB 255  ; type
-    FDB -66  ; x
-    FDB -153  ; y
+    FDB -65  ; x
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1243,8 +1249,8 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 
 ; Object: obj_bg_2 (tile)
     FCB 255  ; type
-    FDB -5  ; x
-    FDB -153  ; y
+    FDB -4  ; x
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1261,7 +1267,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_3 (tile)
     FCB 255  ; type
     FDB 56  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1278,7 +1284,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_4 (tile)
     FCB 255  ; type
     FDB 117  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1295,7 +1301,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_5 (tile)
     FCB 255  ; type
     FDB 178  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1312,7 +1318,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_6 (tile)
     FCB 255  ; type
     FDB 239  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1329,7 +1335,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_8 (tile)
     FCB 255  ; type
     FDB 361  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1346,7 +1352,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_9 (tile)
     FCB 255  ; type
     FDB 422  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1363,7 +1369,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_10 (tile)
     FCB 255  ; type
     FDB 483  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1380,7 +1386,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_11 (tile)
     FCB 255  ; type
     FDB 544  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1397,7 +1403,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_12 (tile)
     FCB 255  ; type
     FDB 605  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1414,7 +1420,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_13 (tile)
     FCB 255  ; type
     FDB 666  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1431,7 +1437,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_14 (tile)
     FCB 255  ; type
     FDB 727  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1448,7 +1454,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_15 (tile)
     FCB 255  ; type
     FDB 788  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1465,7 +1471,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_16 (tile)
     FCB 255  ; type
     FDB 849  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1482,7 +1488,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_17 (tile)
     FCB 255  ; type
     FDB 910  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1499,7 +1505,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_18 (tile)
     FCB 255  ; type
     FDB 971  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1516,7 +1522,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_bg_19 (tile)
     FCB 255  ; type
     FDB 1032  ; x
-    FDB -153  ; y
+    FDB -120  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1532,8 +1538,8 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 
 ; Object: obj_gp_pipe_1 (obstacle)
     FCB 2  ; type
-    FDB 218  ; x
-    FDB -119  ; y
+    FDB 217  ; x
+    FDB -85  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1550,7 +1556,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_gp_pipe_2 (obstacle)
     FCB 2  ; type
     FDB 420  ; x
-    FDB -119  ; y
+    FDB -85  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1567,7 +1573,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_gp_pipe_3 (obstacle)
     FCB 2  ; type
     FDB 682  ; x
-    FDB -119  ; y
+    FDB -85  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1584,7 +1590,7 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
 ; Object: obj_gp_pipe_4 (obstacle)
     FCB 2  ; type
     FDB 850  ; x
-    FDB -119  ; y
+    FDB -85  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -1809,7 +1815,7 @@ BRA DSWM_SET_INTENSITY
 DSWM_USE_OVERRIDE:
 LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-JSR $F2AB               ; BIOS Intensity_a
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -1926,7 +1932,7 @@ DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
 PULS A                  ; Get intensity back
-JSR $F2AB
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -2501,19 +2507,19 @@ SDCP_DONE:
 ; === LEVEL_COLLISION_Y_RUNTIME ===
 ; Find the highest collidable floor Y at player_x in the GP layer.
 ; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (i8) = player_y lo-byte (used for above-head filter)
-; Output: RESULT = highest floor landing Y (i16, sign-extended from i8)
+;         LCOL_PY (16-bit) = player_top (player_y + player_hh)
+; Output: RESULT = highest floor landing Y (i16)
 ;         Returns $FF80 (-128) if no collidable surface found at that X.
 ; Algorithm: for each collidable GP object, check X AABB overlap,
-;   compute surface_top = obj_y_lo + half_height (i8), track max.
+;   compute surface_top = obj_y(16) + half_height, track max (16-bit).
 ; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,
 ;   +18=half_width, +19=half_height. Stride=20.
 LEVEL_COLLISION_Y_RUNTIME:
     PSHS X,Y,U       ; Save regs (NOT D - result returns in D)
     
-    ; Initialize best_floor = -128 (no floor found)
-    LDA #$80         ; -128 as unsigned byte
-    STA >LCOL_BEST_Y
+    ; Initialize best_floor = -32768 ($8000, no floor found)
+    LDD #$8000
+    STD >LCOL_BEST_Y
     
     ; Check level loaded
     TST >LEVEL_LOADED
@@ -2556,18 +2562,22 @@ LCOL_Y_LOOP:
     CMPD >TMPVAL
     LBGT LCOL_Y_NEXT ; player_x > right_edge → no overlap
     
-    ; --- X overlaps — compute surface_top = obj_y_lo + tile_half_height ---
-    LDA 4,X          ; A = world_y low byte (ROM+4, i8 approx)
-    ADDA 19,X        ; A = surface_top = obj_y_lo + tile_half_height (ROM+19)
+    ; --- X overlaps — compute surface_top = obj_y(16-bit) + half_height ---
+    LDD 3,X          ; D = world_y FDB (ROM+3-4, full 16-bit signed)
+    ADDB 19,X        ; B = world_y_lo + half_height
+    ADCA #0          ; propagate carry to high byte
+    STD >TMPVAL      ; TMPVAL = surface_top (16-bit)
     ; Filter: skip surfaces above the player's head (surface_top > player_top)
-    CMPA >LCOL_PY    ; signed compare surface_top to player_top
+    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_top
     BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip
-    ; Compute landing Y = surface_top + player_half_height
-    ADDA >LCOL_PHH   ; A = surface_top + player_hh = where player center lands
-    ; Update best_floor if this landing Y > current best
-    CMPA >LCOL_BEST_Y
+    ; Compute landing Y = surface_top + player_half_height (16-bit)
+    LDD >TMPVAL      ; reload surface_top
+    ADDB >LCOL_PHH   ; add player_hh to low byte
+    ADCA #0          ; propagate carry
+    ; Update best_floor if this landing Y > current best (16-bit signed)
+    CMPD >LCOL_BEST_Y
     BLE LCOL_Y_NEXT  ; not better
-    STA >LCOL_BEST_Y ; new best landing Y
+    STD >LCOL_BEST_Y ; new best landing Y (16-bit)
     
 LCOL_Y_NEXT:
     LEAX 20,X        ; next ROM object (stride 20)
@@ -2576,9 +2586,13 @@ LCOL_Y_NEXT:
     BRA LCOL_Y_LOOP
     
 LCOL_Y_DONE:
-    ; Sign-extend best_floor (i8) → RESULT (i16)
-    LDB >LCOL_BEST_Y
-    SEX              ; D = sign_extend(B)
+    ; Return best_floor as RESULT (16-bit)
+    LDD >LCOL_BEST_Y
+    ; If no floor found ($8000), return -128 for backward compat
+    CMPD #$8000
+    BNE LCOL_Y_RET
+    LDD #$FF80       ; -128
+LCOL_Y_RET:
     STD RESULT
     
     PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)
@@ -2586,7 +2600,7 @@ LCOL_Y_DONE:
 ; === LEVEL_COLLISION_X_RUNTIME ===
 ; Find first collidable GP object overlapping player horizontally.
 ; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (i8) = player world_y lo byte
+;         LCOL_PY (16-bit) = player world_y
 ;         LCOL_PHW (u8) = player half_width
 ; Output: RESULT = signed push-out dx (16-bit). Positive=right, negative=left.
 ; Returns 0 if no overlap found.
@@ -2609,16 +2623,22 @@ LCOL_X_LOOP:
     LDA 12,X
     BITA #$01
     LBEQ LCOL_X_NEXT
-    LDA >LCOL_PY
-    SUBA 4,X
-    BPL LCOL_X_YABS
-    NEGA
-LCOL_X_YABS:
-    LDB 19,X
-    ADDB >LCOL_PHH
-    STB >TMPVAL
-    CMPA >TMPVAL
-    LBGE LCOL_X_NEXT
+    LDD >LCOL_PY     ; D = player_y (16-bit)
+    SUBD 3,X         ; D = player_y - obj_y (16-bit, ROM+3-4)
+    BPL LCOL_X_DYPOS
+    COMA
+    COMB
+    ADDD #1
+LCOL_X_DYPOS:
+    TSTA             ; if |dy| > 255, definitely no overlap
+    LBNE LCOL_X_NEXT
+    LDA 19,X         ; A = obj_half_height (ROM+19)
+    ADDA >LCOL_PHH   ; A = threshold = obj_hh + player_hh
+    STB >TMPVAL      ; save |dy| lo byte
+    LDB >TMPVAL      ; B = |dy| lo byte
+    STA >TMPVAL+1    ; save threshold
+    CMPB >TMPVAL+1   ; |dy| vs threshold
+    LBGE LCOL_X_NEXT ; |dy| >= threshold → no Y overlap
     LDA >LCOL_PHW
     ADDA 18,X
     STA >LCOL_THW
@@ -3065,8 +3085,8 @@ RTS
 ;   at frame_table_offset: FDB ptrs to per-frame data
 ; ============================================================================
 DRAW_ANIM_RUNTIME:
-LDA #$18
-STA >$D00B          ; ACR=$18: SR shift-out PHI2, enable beam via SR
+; NOTE: do NOT set ACR here. DRAW_VECTOR works without touching ACR;
+; setting ACR=$18 (T1 no PB7) breaks T1 timing inside DSWM and hangs.
 PSHS D,X,Y,U
 ; --- Refresh MIRROR_X from saved arg (re-assert before any BIOS call can corrupt A) ---
 LDA >DRAW_ANIM_MIRROR_X
@@ -3083,9 +3103,10 @@ PSHS B,X,Y
 LDX ,Y              ; X = _VECNAME_VECTORS header
 CLR >MIRROR_Y
 JSR $F1AA           ; DP_to_D0
-LDD ,X              ; D = path_count
+CLRA                ; path_count is 1 byte (FCB), high byte = 0
+LDB ,X              ; B = path_count (8-bit FCB)
 BEQ DAR_BASE_SKIP
-LEAY 2,X            ; Y = first path FDB in vec table
+LEAY 1,X            ; Y = first path FDB in vec table (skip 1-byte count)
 DAR_BASE_PATH_LOOP:
 PSHS D,Y
 LDX ,Y
@@ -3188,9 +3209,10 @@ DAR_VEC_LOOP:
 PSHS B,Y
 LDX ,Y
 JSR $F1AA           ; DP_to_D0
-LDD ,X              ; D = path_count
+CLRA                ; path_count is 1 byte (FCB), high byte = 0
+LDB ,X              ; B = path_count (8-bit FCB)
 BEQ DAR_VEC_DONE
-LEAY 2,X
+LEAY 1,X            ; Y = first path FDB (skip 1-byte count)
 DAR_VEC_PATH_LOOP:
 PSHS D,Y
 LDX ,Y

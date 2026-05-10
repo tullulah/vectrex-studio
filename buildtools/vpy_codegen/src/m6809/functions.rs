@@ -161,6 +161,42 @@ pub fn has_draw_anim_calls(module: &Module) -> bool {
     })
 }
 
+/// Collect every animation name passed to DRAW_ANIM("name", ...) in the module.
+/// Used to emit per-anim state RAM zeroing at MAIN startup.
+pub fn collect_draw_anim_names(module: &Module) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+    fn collect_expr(expr: &Expr, out: &mut BTreeSet<String>) {
+        if let Expr::Call(c) = expr {
+            if c.name == "DRAW_ANIM" {
+                if let Some(Expr::StringLit(name)) = c.args.first() {
+                    out.insert(name.to_uppercase().replace('-', "_").replace(' ', "_"));
+                }
+            }
+        }
+    }
+    fn collect_stmt(stmt: &Stmt, out: &mut BTreeSet<String>) {
+        match stmt {
+            Stmt::Expr(expr, _) => collect_expr(expr, out),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                collect_expr(cond, out);
+                body.iter().for_each(|s| collect_stmt(s, out));
+                elifs.iter().for_each(|(e, b)| { collect_expr(e, out); b.iter().for_each(|s| collect_stmt(s, out)); });
+                if let Some(eb) = else_body { eb.iter().for_each(|s| collect_stmt(s, out)); }
+            },
+            Stmt::While { cond, body, .. } => { collect_expr(cond, out); body.iter().for_each(|s| collect_stmt(s, out)); },
+            Stmt::For { body, .. } => body.iter().for_each(|s| collect_stmt(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    for item in &module.items {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().for_each(|s| collect_stmt(s, &mut out));
+        }
+    }
+    out
+}
+
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
@@ -256,6 +292,13 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         asm.push_str("    LDA #$7F\n");
         asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)\n");
         asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
+        // Zero per-animation state RAM (frame_idx, ticks_left). Without this, the
+        // first DRAW_ANIM call sees garbage and computes a frame_ptr way out of bounds,
+        // making DSWM draw random vectors. ticks_left=0 forces DAR_INIT path.
+        for anim_name in collect_draw_anim_names(module) {
+            asm.push_str(&format!("    CLR ANIM_{}_STATE     ; frame_idx = 0\n", anim_name));
+            asm.push_str(&format!("    CLR ANIM_{}_STATE+1   ; ticks_left = 0 (forces DAR_INIT)\n", anim_name));
+        }
     }
     if has_note_calls(module) {
         // Pre-initialize channel_id bytes so each channel slot knows which channel it owns
@@ -784,6 +827,11 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    LDA #$7F\n");
         bank0_asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)\n");
         bank0_asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
+        // Zero per-animation state RAM (frame_idx, ticks_left) — see single-bank branch above.
+        for anim_name in collect_draw_anim_names(module) {
+            bank0_asm.push_str(&format!("    CLR ANIM_{}_STATE     ; frame_idx = 0\n", anim_name));
+            bank0_asm.push_str(&format!("    CLR ANIM_{}_STATE+1   ; ticks_left = 0 (forces DAR_INIT)\n", anim_name));
+        }
     }
     if has_note_calls(module) {
         bank0_asm.push_str("    ; Initialize NOTE_STATE channel IDs (pre-clear active flags)\n");

@@ -184,8 +184,8 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
         // LEVEL_COLLISION_Y input/scratch variables
         ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION player world_x input (16-bit)");
-        ram.allocate("LCOL_BEST_Y", 1, "LEVEL_COLLISION_Y best floor y found (signed byte)");
-        ram.allocate("LCOL_PY", 1, "LEVEL_COLLISION player_y (lo byte)");
+        ram.allocate("LCOL_BEST_Y", 2, "LEVEL_COLLISION_Y best floor y found (16-bit signed)");
+        ram.allocate("LCOL_PY", 2, "LEVEL_COLLISION player_top (16-bit signed)");
         ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION player half_height");
         ram.allocate("LCOL_PHW", 1, "LEVEL_COLLISION_X player half_width");
         ram.allocate("LCOL_THW", 1, "LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch)");
@@ -2232,8 +2232,8 @@ fn emit_draw_anim_runtime(asm: &mut String) {
 ;   at frame_table_offset: FDB ptrs to per-frame data\n\
 ; ============================================================================\n\
 DRAW_ANIM_RUNTIME:\n\
-    LDA #$18\n\
-    STA >$D00B          ; ACR=$18: SR shift-out PHI2, enable beam via SR\n\
+    ; NOTE: do NOT set ACR here. DRAW_VECTOR works without touching ACR;\n\
+    ; setting ACR=$18 (T1 no PB7) breaks T1 timing inside DSWM and hangs.\n\
     PSHS D,X,Y,U\n\
     ; --- Refresh MIRROR_X from saved arg (re-assert before any BIOS call can corrupt A) ---\n\
     LDA >DRAW_ANIM_MIRROR_X\n\
@@ -2250,9 +2250,10 @@ DAR_BASE_LOOP:\n\
     LDX ,Y              ; X = _VECNAME_VECTORS header\n\
     CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
-    LDD ,X              ; D = path_count\n\
+    CLRA                ; path_count is 1 byte (FCB), high byte = 0\n\
+    LDB ,X              ; B = path_count (8-bit FCB)\n\
     BEQ DAR_BASE_SKIP\n\
-    LEAY 2,X            ; Y = first path FDB in vec table\n\
+    LEAY 1,X            ; Y = first path FDB in vec table (skip 1-byte count)\n\
 DAR_BASE_PATH_LOOP:\n\
     PSHS D,Y\n\
     LDX ,Y\n\
@@ -2355,9 +2356,10 @@ DAR_VEC_LOOP:\n\
     PSHS B,Y\n\
     LDX ,Y\n\
     JSR $F1AA           ; DP_to_D0\n\
-    LDD ,X              ; D = path_count\n\
+    CLRA                ; path_count is 1 byte (FCB), high byte = 0\n\
+    LDB ,X              ; B = path_count (8-bit FCB)\n\
     BEQ DAR_VEC_DONE\n\
-    LEAY 2,X\n\
+    LEAY 1,X            ; Y = first path FDB (skip 1-byte count)\n\
 DAR_VEC_PATH_LOOP:\n\
     PSHS D,Y\n\
     LDX ,Y\n\

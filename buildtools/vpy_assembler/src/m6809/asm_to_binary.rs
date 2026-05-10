@@ -1672,9 +1672,6 @@ fn emit_adda(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
         if let Some(off) = offset {
             emitter.emit(off as u8);
         }
-        if let Some(off) = offset {
-            emitter.emit(off as u8);
-        }
         Ok(())
     } else {
         match evaluate_expression(operand, equates) {
@@ -2382,9 +2379,6 @@ fn emit_cmpd(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
         emitter.emit(0x10);  // CMPD prefix
         emitter.emit(0xA3);  // CMPD indexed opcode
         emitter.emit(postbyte);
-        if let Some(off) = offset {
-            emitter.emit(off as u8);
-        }
         if let Some(off) = offset {
             emitter.emit(off as u8);
         }

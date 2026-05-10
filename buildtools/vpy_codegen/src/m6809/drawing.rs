@@ -940,7 +940,7 @@ DCR_after_intensity:\n\
 DSWM_USE_OVERRIDE:\n\
             LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_SET_INTENSITY:\n\
-            JSR $F2AB               ; BIOS Intensity_a\n\
+            STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -1057,7 +1057,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            JSR $F2AB\n\
+            STA >$C832              ; Vec_Misc_Count (direct, DP-safe)\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
