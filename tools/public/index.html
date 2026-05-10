@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPy Test Viewer - Visual Test Suite</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #252526;
+            border-right: 1px solid #3e3e42;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid #3e3e42;
+            background: #1e1e1e;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .test-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .test-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #3e3e42;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 13px;
+        }
+        
+        .test-item:hover {
+            background: #2d2d30;
+        }
+        
+        .test-item.active {
+            background: #0e639c;
+            border-left: 3px solid #007acc;
+            padding-left: 13px;
+        }
+        
+        .test-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: #999;
+        }
+        
+        .test-status.pass {
+            background: #4ec9b0;
+        }
+        
+        .test-status.fail {
+            background: #f48771;
+        }
+        
+        .test-status.skip {
+            background: #dcdcaa;
+        }
+        
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            padding: 16px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        button {
+            padding: 6px 16px;
+            background: #0e639c;
+            border: 1px solid #0e639c;
+            color: #fff;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #1177bb;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            gap: 16px;
+            padding: 16px;
+            overflow: hidden;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            background: #1a1a1a;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            image-rendering: pixelated;
+        }
+        
+        .info-panel {
+            width: 300px;
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .info-header {
+            padding: 12px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .info-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        
+        .info-row {
+            margin-bottom: 12px;
+            font-size: 12px;
+        }
+        
+        .info-label {
+            color: #999;
+            margin-bottom: 4px;
+        }
+        
+        .info-value {
+            color: #ce9178;
+            word-break: break-all;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 32px;
+            color: #999;
+        }
+        
+        .error {
+            color: #f48771;
+            padding: 16px;
+            background: #3d2626;
+            border-radius: 4px;
+            margin: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-header">Tests (16)</div>
+            <div class="test-list" id="testList"></div>
+        </div>
+        
+        <div class="main">
+            <div class="header">
+                <h1 id="testTitle">VPy Test Viewer</h1>
+                <div class="controls">
+                    <button onclick="runCurrentTest()">▶ Run</button>
+                    <button onclick="runAllTests()">▶▶ Run All</button>
+                </div>
+            </div>
+            
+            <div class="content">
+                <div class="canvas-container">
+                    <canvas id="canvas" width="600" height="600"></canvas>
+                </div>
+                
+                <div class="info-panel">
+                    <div class="info-header">Test Info</div>
+                    <div class="info-content" id="infoContent">
+                        <div class="loading">Select a test to view</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CANVAS_WIDTH = 600;
+        const CANVAS_HEIGHT = 600;
+        
+        let tests = [];
+        let currentTest = null;
+        let currentData = null;
+        
+        // Auto-scaling coordinate mapper - detects min/max from data
+        function getScaleBounds(vectors) {
+            if (vectors.length === 0) {
+                return { xMin: 0, xMax: 600, yMin: 0, yMax: 600 };
+            }
+            
+            const xs = vectors.flatMap(v => [v.x0, v.x1]);
+            const ys = vectors.flatMap(v => [v.y0, v.y1]);
+            
+            const xMin = Math.min(...xs);
+            const xMax = Math.max(...xs);
+            const yMin = Math.min(...ys);
+            const yMax = Math.max(...ys);
+            
+            return { xMin, xMax, yMin, yMax };
+        }
+        
+        function screenToCanvas(x, y, bounds) {
+            // Scale from jsvecx coordinate space to canvas
+            // jsvecx uses internal fixed-point or scaled coordinates
+            // Auto-detect bounds and scale to fill canvas with 10% margin
+            
+            const margin = 0.05;
+            const xSpan = bounds.xMax - bounds.xMin || 1;
+            const ySpan = bounds.yMax - bounds.yMin || 1;
+            
+            const canvasX = ((x - bounds.xMin) / xSpan) * CANVAS_WIDTH * (1 - 2*margin) + CANVAS_WIDTH * margin;
+            const canvasY = ((y - bounds.yMin) / ySpan) * CANVAS_HEIGHT * (1 - 2*margin) + CANVAS_HEIGHT * margin;
+            
+            return { x: canvasX, y: canvasY };
+        }
+        
+        function colorToRGB(intensity) {
+            // Vectrex color: green (monochrome) scaled by intensity
+            const v = Math.round((intensity / 255) * 255);
+            return `rgb(0, ${v}, 0)`;
+        }
+        
+        function drawVectors(vectors) {
+            const canvas = document.getElementById('canvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            
+            // Clear canvas to black
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (!vectors || vectors.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.font = '14px monospace';
+                ctx.fillText('No vectors', 20, 30);
+                return;
+            }
+            
+            // Calculate bounds from vector data
+            const xs = vectors.flatMap(v => [v.x0, v.x1]);
+            const ys = vectors.flatMap(v => [v.y0, v.y1]);
+            const xMin = Math.min(...xs);
+            const xMax = Math.max(...xs);
+            const yMin = Math.min(...ys);
+            const yMax = Math.max(...ys);
+            const xSpan = xMax - xMin || 1;
+            const ySpan = yMax - yMin || 1;
+            
+            // Draw grid
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < canvas.width; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+            }
+            for (let i = 0; i < canvas.height; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+            
+            // Draw vectors
+            const margin = 0.05;
+            vectors.forEach(v => {
+                // Scale coordinates from jsvecx space to canvas
+                const x0 = ((v.x0 - xMin) / xSpan) * canvas.width * (1 - 2*margin) + canvas.width * margin;
+                const y0 = ((v.y0 - yMin) / ySpan) * canvas.height * (1 - 2*margin) + canvas.height * margin;
+                const x1 = ((v.x1 - xMin) / xSpan) * canvas.width * (1 - 2*margin) + canvas.width * margin;
+                const y1 = ((v.y1 - yMin) / ySpan) * canvas.height * (1 - 2*margin) + canvas.height * margin;
+                
+                // Map intensity (0-255) to green channel brightness
+                const intensity = Math.round((v.color / 255) * 255);
+                ctx.strokeStyle = `rgb(0, ${intensity}, 0)`;
+                ctx.lineWidth = 1.5;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                ctx.beginPath();
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y1);
+                ctx.stroke();
+            });
+        }
+        
+        function showInfo(data) {
+            const info = document.getElementById('infoContent');
+            const vectors = data || [];
+            
+            let html = `
+                <div class="info-row">
+                    <div class="info-label">Vectors</div>
+                    <div class="info-value">${vectors.length}</div>
+                </div>
+            `;
+            
+            if (vectors.length > 0) {
+                const bounds = getScaleBounds(vectors);
+                const colors = new Set(vectors.map(v => v.color));
+                html += `
+                    <div class="info-row">
+                        <div class="info-label">Unique Colors</div>
+                        <div class="info-value">${colors.size}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">X Range</div>
+                        <div class="info-value">${bounds.xMin.toLocaleString()} to ${bounds.xMax.toLocaleString()}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Y Range</div>
+                        <div class="info-value">${bounds.yMin.toLocaleString()} to ${bounds.yMax.toLocaleString()}</div>
+                    </div>
+                `;
+            }
+            
+            info.innerHTML = html;
+        }
+        
+        async function loadTests() {
+            try {
+                const response = await fetch('/api/tests');
+                tests = await response.json();
+                
+                const testList = document.getElementById('testList');
+                testList.innerHTML = tests.map((t, i) => `
+                    <div class="test-item ${i === 0 ? 'active' : ''}" onclick="selectTest(${i})">
+                        <span class="test-status ${t.status}"></span>
+                        ${t.name}
+                    </div>
+                `).join('');
+                
+                if (tests.length > 0) {
+                    selectTest(0);
+                }
+            } catch (e) {
+                console.error('Failed to load tests:', e);
+            }
+        }
+        
+        function selectTest(index) {
+            if (index < 0 || index >= tests.length) return;
+            
+            currentTest = tests[index];
+            document.querySelectorAll('.test-item').forEach((el, i) => {
+                el.classList.toggle('active', i === index);
+            });
+            
+            document.getElementById('testTitle').textContent = `📊 ${currentTest.name}`;
+            showInfo([]);
+            
+            // Load golden snapshot
+            fetch(`/api/golden/${index}`)
+                .then(r => r.json())
+                .then(data => {
+                    console.log(`[FETCH] Got ${data?.length || 0} vectors from API`);
+                    currentData = data;
+                    try {
+                        drawVectors(data);
+                    } catch (e) {
+                        console.error('[DRAW] Exception in drawVectors:', e);
+                    }
+                    showInfo(data);
+                })
+                .catch(e => console.error('Failed to load golden:', e));
+        }
+        
+        async function runCurrentTest() {
+            if (!currentTest) return;
+            
+            document.getElementById('infoContent').innerHTML = '<div class="loading">⏳ Executing 500 frames...</div>';
+            
+            try {
+                const response = await fetch(`/api/run/${tests.indexOf(currentTest)}`);
+                const data = await response.json();
+                
+                currentData = data.vectors;
+                drawVectors(data.vectors);
+                
+                // Show diagnostic info
+                let infoHtml = '<div style="font-size: 13px; line-height: 1.6;">';
+                if (data.diagnostic) {
+                    infoHtml += `<strong>Test:</strong> ${data.diagnostic.testName}<br>`;
+                    infoHtml += `<strong>Vectors:</strong> ${data.diagnostic.vectorCount}<br>`;
+                    infoHtml += `<strong>Status:</strong> Executed ✓<br>`;
+                }
+                infoHtml += '</div>';
+                document.getElementById('infoContent').innerHTML = infoHtml;
+                
+                showInfo(data.vectors);
+            } catch (e) {
+                document.getElementById('infoContent').innerHTML = `<div class="error">Error: ${e.message}</div>`;
+            }
+        }
+        
+        async function runAllTests() {
+            for (let i = 0; i < tests.length; i++) {
+                selectTest(i);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await runCurrentTest();
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[INIT] DOMContentLoaded fired');
+            loadTests();
+        });
+        
+        // Also try immediate load in case DOM is already ready
+        if (document.readyState === 'loading') {
+            console.log('[INIT] Document still loading, waiting for DOMContentLoaded');
+            document.addEventListener('DOMContentLoaded', loadTests);
+        } else {
+            console.log('[INIT] Document already loaded, calling loadTests immediately');
+            setTimeout(() => {
+                try {
+                    loadTests();
+                } catch (e) {
+                    console.error('[INIT] Error in loadTests:', e);
+                    alert('Error loading tests: ' + e.message);
+                }
+            }, 100);
+        }
+        
+        // Global error handler
+        window.addEventListener('error', (e) => {
+            console.error('[ERROR]', e);
+        });
+    </script>
+</body>
+</html>

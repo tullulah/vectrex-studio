@@ -59,11 +59,11 @@ VLINE_DY_REMAINING   EQU $C880+$1F   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$21   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$23   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$24   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_INDEX            EQU $C880+$25   ; User variable: INDEX (1 bytes)
-VAR_POSITIONS        EQU $C880+$26   ; User variable: POSITIONS (2 bytes)
-VAR_COUNTERS         EQU $C880+$28   ; User variable: COUNTERS (2 bytes)
-VAR_COUNTERS_DATA    EQU $C880+$2A   ; Mutable array 'COUNTERS' data (8 elements x 1 bytes) (8 bytes)
-VAR_POSITIONS_DATA   EQU $C880+$32   ; Mutable array 'POSITIONS' data (4 elements x 2 bytes) (8 bytes)
+VAR_INDEX            EQU $C880+$25   ; User variable: index (1 bytes)
+VAR_POSITIONS        EQU $C880+$26   ; User variable: positions (2 bytes)
+VAR_COUNTERS         EQU $C880+$28   ; User variable: counters (2 bytes)
+VAR_COUNTERS_DATA    EQU $C880+$2A   ; Mutable array 'counters' data (8 elements x 1 bytes) (8 bytes)
+VAR_POSITIONS_DATA   EQU $C880+$32   ; Mutable array 'positions' data (4 elements x 2 bytes) (8 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -80,7 +80,7 @@ ARRAY_POSITIONS_LEN         EQU 4   ; 4 elements
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'COUNTERS' (8 elements, 1 bytes each)
+; Array literal for variable 'counters' (8 elements, 1 bytes each)
 ARRAY_COUNTERS_DATA:
     FCB $0A   ; Element 0
     FCB $14   ; Element 1
@@ -91,7 +91,7 @@ ARRAY_COUNTERS_DATA:
     FCB $46   ; Element 6
     FCB $50   ; Element 7
 
-; Array literal for variable 'POSITIONS' (4 elements, 2 bytes each)
+; Array literal for variable 'positions' (4 elements, 2 bytes each)
 ARRAY_POSITIONS_DATA:
     FDB 0   ; Element 0
     FDB 100   ; Element 1
@@ -111,7 +111,7 @@ MAIN:
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    ; Copy array 'COUNTERS' from ROM to RAM (8 elements)
+    ; Copy array 'counters' from ROM to RAM (8 elements)
     LDX #ARRAY_COUNTERS_DATA       ; Source: ROM array data
     LDU #VAR_COUNTERS_DATA       ; Dest: RAM array space
     LDD #8        ; Number of elements
@@ -122,7 +122,7 @@ MAIN:
     LBNE .COPY_LOOP_0 ; Loop until done (LBNE for long branch)
     LDX #VAR_COUNTERS_DATA    ; Array now in RAM
     STX VAR_COUNTERS
-    ; Copy array 'POSITIONS' from ROM to RAM (4 elements)
+    ; Copy array 'positions' from ROM to RAM (4 elements)
     LDX #ARRAY_POSITIONS_DATA       ; Source: ROM array data
     LDU #VAR_POSITIONS_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -157,8 +157,7 @@ MAIN:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame

@@ -25,7 +25,7 @@
 
 ; === RAM VARIABLE DEFINITIONS (EQU) ===
 ; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 303 bytes
+; Total RAM used: 381 bytes
 RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
 TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
 TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
@@ -45,101 +45,138 @@ DIV_R                EQU $C880+$1E   ; Remainder (2 bytes)
 TEMP_YX              EQU $C880+$20   ; Temporary y,x storage (2 bytes)
 TEMP_X               EQU $C880+$22   ; Temporary x storage (1 bytes)
 TEMP_Y               EQU $C880+$23   ; Temporary y storage (1 bytes)
-PSG_MUSIC_PTR        EQU $C880+$24   ; Current music position pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$26   ; Music start pointer (for loops) (2 bytes)
-PSG_IS_PLAYING       EQU $C880+$28   ; Playing flag ($00=stopped, $01=playing) (1 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$29   ; Set during UPDATE_MUSIC_PSG (1 bytes)
-PSG_FRAME_COUNT      EQU $C880+$2A   ; Frame register write count (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$2B   ; Frames to wait before next read (1 bytes)
-SFX_PTR              EQU $C880+$2C   ; Current SFX data pointer (2 bytes)
-SFX_TICK             EQU $C880+$2E   ; Current frame counter (2 bytes)
-SFX_ACTIVE           EQU $C880+$30   ; Playback state ($00=stopped, $01=playing) (1 bytes)
-SFX_PHASE            EQU $C880+$31   ; Envelope phase (0=A,1=D,2=S,3=R) (1 bytes)
-SFX_VOL              EQU $C880+$32   ; Current volume level (0-15) (1 bytes)
-NUM_STR              EQU $C880+$33   ; String buffer for PRINT_NUMBER (2 bytes)
-DRAW_VEC_X           EQU $C880+$35   ; X position offset for vector drawing (1 bytes)
-DRAW_VEC_Y           EQU $C880+$36   ; Y position offset for vector drawing (1 bytes)
-MIRROR_X             EQU $C880+$37   ; X-axis mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$38   ; Y-axis mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$39   ; Intensity override (0=use vector's, >0=override) (1 bytes)
-LEVEL_PTR            EQU $C880+$3A   ; Pointer to currently loaded level data (2 bytes)
-LEVEL_BG_COUNT       EQU $C880+$3C   ; SHOW_LEVEL: background object count (1 bytes)
-LEVEL_GP_COUNT       EQU $C880+$3D   ; SHOW_LEVEL: gameplay object count (1 bytes)
-LEVEL_FG_COUNT       EQU $C880+$3E   ; SHOW_LEVEL: foreground object count (1 bytes)
-LEVEL_BG_PTR         EQU $C880+$3F   ; SHOW_LEVEL: background objects pointer (RAM buffer) (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$41   ; SHOW_LEVEL: gameplay objects pointer (RAM buffer) (2 bytes)
-LEVEL_FG_PTR         EQU $C880+$43   ; SHOW_LEVEL: foreground objects pointer (RAM buffer) (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$45   ; LOAD_LEVEL: background objects pointer (ROM) (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$47   ; LOAD_LEVEL: gameplay objects pointer (ROM) (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$49   ; LOAD_LEVEL: foreground objects pointer (ROM) (2 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$4B   ; Gameplay objects buffer (max 2 objects × 14 bytes, auto-sized) (28 bytes)
-UGPC_OUTER_IDX       EQU $C880+$67   ; Outer loop index for collision detection (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$68   ; Outer loop max value (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$69   ; Inner loop index for collision detection (1 bytes)
-UGPC_DX              EQU $C880+$6A   ; Distance X temporary (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$6C   ; Manhattan distance temporary (16-bit) (2 bytes)
-VLINE_DX_16          EQU $C880+$6E   ; x1-x0 (16-bit) for line drawing (2 bytes)
-VLINE_DY_16          EQU $C880+$70   ; y1-y0 (16-bit) for line drawing (2 bytes)
-VLINE_DX             EQU $C880+$72   ; Clamped dx (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$73   ; Clamped dy (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$74   ; Remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$76   ; Remaining dx for segment 2 (16-bit) (2 bytes)
-VLINE_STEPS          EQU $C880+$78   ; Line drawing step counter (1 bytes)
-VLINE_LIST           EQU $C880+$79   ; 2-byte vector list (Y|endbit, X) (2 bytes)
-VAR_SCREEN           EQU $C880+$7B   ; User variable (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$7D   ; User variable (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$7F   ; User variable (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$81   ; User variable (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$83   ; Array data (6 elements) (12 bytes)
-VAR_PREV_BTN1        EQU $C880+$8F   ; User variable (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$91   ; User variable (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$93   ; User variable (2 bytes)
-VAR_PREV_BTN4        EQU $C880+$95   ; User variable (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$97   ; User variable (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$99   ; User variable (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$9B   ; User variable (2 bytes)
-VAR_JOY_X            EQU $C880+$9D   ; User variable (2 bytes)
-VAR_JOY_Y            EQU $C880+$9F   ; User variable (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$A1   ; User variable (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$A3   ; User variable (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$A5   ; User variable (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$A7   ; User variable (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$A9   ; User variable (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$AB   ; User variable (2 bytes)
-VAR_HOOK_X           EQU $C880+$AD   ; User variable (2 bytes)
-VAR_HOOK_Y           EQU $C880+$AF   ; User variable (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$B1   ; User variable (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$B3   ; User variable (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$B5   ; User variable (2 bytes)
-VAR_PLAYER_X         EQU $C880+$B7   ; User variable (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$B9   ; User variable (2 bytes)
-VAR_ABS_JOY          EQU $C880+$BB   ; User variable (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$BD   ; User variable (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$BF   ; User variable (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$C1   ; User variable (2 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$C3   ; Array data (8 elements) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$D3   ; Array data (8 elements) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$E3   ; Array data (8 elements) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$F3   ; Array data (8 elements) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$103   ; Array data (8 elements) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$113   ; Array data (8 elements) (16 bytes)
-VAR_ARG0             EQU $C880+$123   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$125   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$127   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$129   ; Function argument 3 (2 bytes)
-VAR_ARG4             EQU $C880+$12B   ; Function argument 4 (2 bytes)
-VAR_ARG5             EQU $C880+$12D   ; Function argument 5 (2 bytes)
-PSG_MUSIC_PTR_DP   EQU $24  ; DP-relative
-PSG_MUSIC_START_DP EQU $26  ; DP-relative
-PSG_IS_PLAYING_DP  EQU $28  ; DP-relative
-PSG_MUSIC_ACTIVE_DP EQU $29  ; DP-relative
-PSG_FRAME_COUNT_DP EQU $2A  ; DP-relative
-PSG_DELAY_FRAMES_DP EQU $2B  ; DP-relative
-SFX_PTR_DP         EQU $2C  ; DP-relative
-SFX_TICK_DP        EQU $2E  ; DP-relative
-SFX_ACTIVE_DP      EQU $30  ; DP-relative
-SFX_PHASE_DP       EQU $31  ; DP-relative
-SFX_VOL_DP         EQU $32  ; DP-relative
+VPY_MOVE_X           EQU $C880+$24   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
+VPY_MOVE_Y           EQU $C880+$25   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$26   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity as i16x5) (10 bytes)
+PSG_MUSIC_PTR        EQU $C880+$30   ; Current music position pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$32   ; Music start pointer (for loops) (2 bytes)
+PSG_IS_PLAYING       EQU $C880+$34   ; Playing flag ($00=stopped, $01=playing) (1 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$35   ; Set during UPDATE_MUSIC_PSG (1 bytes)
+PSG_FRAME_COUNT      EQU $C880+$36   ; Frame register write count (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$37   ; Frames to wait before next read (1 bytes)
+SFX_PTR              EQU $C880+$38   ; Current SFX data pointer (2 bytes)
+SFX_TICK             EQU $C880+$3A   ; Current frame counter (2 bytes)
+SFX_ACTIVE           EQU $C880+$3C   ; Playback state ($00=stopped, $01=playing) (1 bytes)
+SFX_PHASE            EQU $C880+$3D   ; Envelope phase (0=A,1=D,2=S,3=R) (1 bytes)
+SFX_VOL              EQU $C880+$3E   ; Current volume level (0-15) (1 bytes)
+NUM_STR              EQU $C880+$3F   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
+TEXT_SCALE_H         EQU $C880+$45   ; Character height for Print_Str_d (default $F8=-8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$46   ; Character width for Print_Str_d (default $48=72, normal) (1 bytes)
+DRAW_VEC_X           EQU $C880+$47   ; X position offset for vector drawing (1 bytes)
+DRAW_VEC_Y           EQU $C880+$48   ; Y position offset for vector drawing (1 bytes)
+MIRROR_X             EQU $C880+$49   ; X-axis mirror flag (0=normal, 1=flip) (1 bytes)
+MIRROR_Y             EQU $C880+$4A   ; Y-axis mirror flag (0=normal, 1=flip) (1 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$4B   ; Intensity override (0=use vector's, >0=override) (1 bytes)
+LEVEL_PTR            EQU $C880+$4C   ; Pointer to currently loaded level data (2 bytes)
+LEVEL_BG_COUNT       EQU $C880+$4E   ; SHOW_LEVEL: background object count (1 bytes)
+LEVEL_GP_COUNT       EQU $C880+$4F   ; SHOW_LEVEL: gameplay object count (1 bytes)
+LEVEL_FG_COUNT       EQU $C880+$50   ; SHOW_LEVEL: foreground object count (1 bytes)
+LEVEL_BG_PTR         EQU $C880+$51   ; SHOW_LEVEL: background objects pointer (RAM buffer) (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$53   ; SHOW_LEVEL: gameplay objects pointer (RAM buffer) (2 bytes)
+LEVEL_FG_PTR         EQU $C880+$55   ; SHOW_LEVEL: foreground objects pointer (RAM buffer) (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$57   ; LOAD_LEVEL: background objects pointer (ROM) (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$59   ; LOAD_LEVEL: gameplay objects pointer (ROM) (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$5B   ; LOAD_LEVEL: foreground objects pointer (ROM) (2 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$5D   ; Gameplay objects buffer (max 2 objects × 14 bytes, auto-sized) (28 bytes)
+UGPC_OUTER_IDX       EQU $C880+$79   ; Outer loop index for collision detection (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$7A   ; Outer loop max value (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$7B   ; Inner loop index for collision detection (1 bytes)
+UGPC_DX              EQU $C880+$7C   ; Distance X temporary (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$7E   ; Manhattan distance temporary (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$80   ; GP-FG outer loop: GP object index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$81   ; GP-FG inner loop: FG count copy (1 bytes)
+UGFC_DX              EQU $C880+$82   ; GP-FG collision: |dx| (1 bytes)
+UGFC_DY              EQU $C880+$83   ; GP-FG collision: |dy| (1 bytes)
+VLINE_DX_16          EQU $C880+$84   ; x1-x0 (16-bit) for line drawing (2 bytes)
+VLINE_DY_16          EQU $C880+$86   ; y1-y0 (16-bit) for line drawing (2 bytes)
+VLINE_DX             EQU $C880+$88   ; Clamped dx (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$89   ; Clamped dy (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$8A   ; Remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$8C   ; Remaining dx for segment 2 (16-bit) (2 bytes)
+VLINE_STEPS          EQU $C880+$8E   ; Line drawing step counter (1 bytes)
+VLINE_LIST           EQU $C880+$8F   ; 2-byte vector list (Y|endbit, X) (2 bytes)
+VAR_SCREEN           EQU $C880+$91   ; User variable (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$93   ; User variable (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$95   ; User variable (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$97   ; User variable (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$99   ; Array data (6 elements) (12 bytes)
+VAR_PREV_BTN1        EQU $C880+$A5   ; User variable (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$A7   ; User variable (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$A9   ; User variable (2 bytes)
+VAR_PREV_BTN4        EQU $C880+$AB   ; User variable (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$AD   ; User variable (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$AF   ; User variable (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$B1   ; User variable (2 bytes)
+VAR_JOY_X            EQU $C880+$B3   ; User variable (2 bytes)
+VAR_JOY_Y            EQU $C880+$B5   ; User variable (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$B7   ; User variable (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$B9   ; User variable (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$BB   ; User variable (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$BD   ; User variable (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$BF   ; User variable (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$C1   ; User variable (2 bytes)
+VAR_HOOK_X           EQU $C880+$C3   ; User variable (2 bytes)
+VAR_HOOK_Y           EQU $C880+$C5   ; User variable (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$C7   ; User variable (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$C9   ; User variable (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$CB   ; User variable (2 bytes)
+VAR_PLAYER_X         EQU $C880+$CD   ; User variable (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$CF   ; User variable (2 bytes)
+VAR_ABS_JOY          EQU $C880+$D1   ; User variable (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$D3   ; User variable (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$D5   ; User variable (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$D7   ; User variable (2 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$D9   ; Array data (8 elements) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$E9   ; Array data (8 elements) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$F9   ; Array data (8 elements) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$109   ; Array data (8 elements) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$119   ; Array data (8 elements) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$129   ; Array data (8 elements) (16 bytes)
+VAR_BOUNCE_DAMPING   EQU $C880+$139   ; User variable (2 bytes)
+VAR_GRAVITY          EQU $C880+$13B   ; User variable (2 bytes)
+VAR_GROUND_Y         EQU $C880+$13D   ; User variable (2 bytes)
+VAR_MAX_ENEMIES      EQU $C880+$13F   ; User variable (2 bytes)
+VAR_MIN_BOUNCE_VY    EQU $C880+$141   ; User variable (2 bytes)
+VAR_STATE_GAME       EQU $C880+$143   ; User variable (2 bytes)
+VAR_STATE_MAP        EQU $C880+$145   ; User variable (2 bytes)
+VAR_STATE_TITLE      EQU $C880+$147   ; User variable (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$149   ; User variable (2 bytes)
+VAR_COUNT            EQU $C880+$14B   ; User variable (2 bytes)
+VAR_END_X            EQU $C880+$14D   ; User variable (2 bytes)
+VAR_END_Y            EQU $C880+$14F   ; User variable (2 bytes)
+VAR_HOOK_MAX_Y       EQU $C880+$151   ; User variable (2 bytes)
+VAR_I                EQU $C880+$153   ; User variable (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$155   ; User variable (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$157   ; User variable (2 bytes)
+VAR_LOC_X            EQU $C880+$159   ; User variable (2 bytes)
+VAR_LOC_Y            EQU $C880+$15B   ; User variable (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$15D   ; User variable (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$15F   ; User variable (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$161   ; User variable (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$163   ; User variable (2 bytes)
+VAR_NUM_LOCATIONS    EQU $C880+$165   ; User variable (2 bytes)
+VAR_PLAYER_ANIM_SPEED EQU $C880+$167   ; User variable (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$169   ; User variable (2 bytes)
+VAR_SPEED            EQU $C880+$16B   ; User variable (2 bytes)
+VAR_START_X          EQU $C880+$16D   ; User variable (2 bytes)
+VAR_START_Y          EQU $C880+$16F   ; User variable (2 bytes)
+VAR_ARG0             EQU $C880+$171   ; Function argument 0 (2 bytes)
+VAR_ARG1             EQU $C880+$173   ; Function argument 1 (2 bytes)
+VAR_ARG2             EQU $C880+$175   ; Function argument 2 (2 bytes)
+VAR_ARG3             EQU $C880+$177   ; Function argument 3 (2 bytes)
+VAR_ARG4             EQU $C880+$179   ; Function argument 4 (2 bytes)
+VAR_ARG5             EQU $C880+$17B   ; Function argument 5 (2 bytes)
+PSG_MUSIC_PTR_DP   EQU $30  ; DP-relative
+PSG_MUSIC_START_DP EQU $32  ; DP-relative
+PSG_IS_PLAYING_DP  EQU $34  ; DP-relative
+PSG_MUSIC_ACTIVE_DP EQU $35  ; DP-relative
+PSG_FRAME_COUNT_DP EQU $36  ; DP-relative
+PSG_DELAY_FRAMES_DP EQU $37  ; DP-relative
+SFX_PTR_DP         EQU $38  ; DP-relative
+SFX_TICK_DP        EQU $3A  ; DP-relative
+SFX_ACTIVE_DP      EQU $3C  ; DP-relative
+SFX_PHASE_DP       EQU $3D  ; DP-relative
+SFX_VOL_DP         EQU $3E  ; DP-relative
 
     JMP START
 
@@ -176,6 +213,7 @@ J1X_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
     LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -189,6 +227,7 @@ J1Y_BUILTIN:
     PSHS X       ; Save X (Joy_Analog uses it)
     JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
     JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
+    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
     JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
     LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
     SEX          ; Sign-extend B to D
@@ -243,46 +282,55 @@ J1B4_BUILTIN:
     RTS
 
 VECTREX_PRINT_TEXT:
-    ; CRITICAL: Print_Str_d requires DP=$D0 and signature is (Y, X, string)
+    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)
     ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for text rendering)
-    STA >$D00C     ; VIA_cntl
     LDA #$D0
     TFR A,DP       ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
+    JSR Reset0Ref  ; Reset beam to center for absolute text positioning
     LDU VAR_ARG2   ; string pointer (ARG2 = third param)
+    LDA >TEXT_SCALE_H ; height (signed byte, -n)
+    STA >$C82A     ; Vec_Text_Height: character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, n*9)
+    STA >$C82B     ; Vec_Text_Width: character X spacing
     LDA VAR_ARG1+1 ; Y (ARG1 = second param)
     LDB VAR_ARG0+1 ; X (ARG0 = first param)
     JSR Print_Str_d
-    JSR $F1AF      ; DP_to_C8 (restore before return - CRITICAL for TMPPTR access)
+    LDA #$F8
+    STA >$C82A     ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B     ; Restore Vec_Text_Width to normal (72)
+    JSR $F1AF      ; DP_to_C8 (restore before return)
     RTS
 ; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
-; Args: (x0,y0,x1,y1,intensity) as 16-bit words
-; ALWAYS sets intensity. Does NOT reset origin (allows connected lines).
+; Args in DRAW_LINE_ARGS[0..9]: x0,y0,x1,y1,intensity (5x i16, low byte used for coords)
+; Resets beam to center, moves to (x0,y0), draws to (x1,y1)
 DRAW_LINE_WRAPPER:
-    ; CRITICAL: Set VIA to DAC mode BEFORE calling BIOS (don't assume state)
-    LDA #$98       ; VIA_cntl = $98 (DAC mode for vector drawing)
-    STA >$D00C     ; VIA_cntl
     ; Set DP to hardware registers
     LDA #$D0
     TFR A,DP
-    ; ALWAYS set intensity (no optimization)
-    LDA RESULT+8+1  ; intensity (low byte of 16-bit value)
+    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning
+    LDA #$80
+    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)
+    ; Set intensity
+    LDA >DRAW_LINE_ARGS+9  ; intensity (low byte)
     JSR Intensity_a
-    ; Move to start ONCE (y in A, x in B) - use low bytes (8-bit signed -127..+127)
-    LDA RESULT+2+1  ; Y start (low byte of 16-bit value)
-    LDB RESULT+0+1  ; X start (low byte of 16-bit value)
+    ; Move to start position (y in A, x in B)
+    LDA >DRAW_LINE_ARGS+3  ; Y start (low byte)
+    ADDA >VPY_MOVE_Y       ; Add MOVE Y offset
+    LDB >DRAW_LINE_ARGS+1  ; X start (low byte)
+    ADDB >VPY_MOVE_X       ; Add MOVE X offset
     JSR Moveto_d
     ; Compute deltas using 16-bit arithmetic
     ; dx = x1 - x0 (treating as signed 16-bit)
-    LDD RESULT+4    ; x1 (RESULT+4, 16-bit)
-    SUBD RESULT+0   ; subtract x0 (RESULT+0, 16-bit)
-    STD VLINE_DX_16 ; Store full 16-bit dx
+    LDD >DRAW_LINE_ARGS+4  ; x1 (16-bit)
+    SUBD >DRAW_LINE_ARGS+0 ; subtract x0 (16-bit)
+    STD VLINE_DX_16        ; Store full 16-bit dx
     ; dy = y1 - y0 (treating as signed 16-bit)
-    LDD RESULT+6    ; y1 (RESULT+6, 16-bit)
-    SUBD RESULT+2   ; subtract y0 (RESULT+2, 16-bit)
-    STD VLINE_DY_16 ; Store full 16-bit dy
+    LDD >DRAW_LINE_ARGS+6  ; y1 (16-bit)
+    SUBD >DRAW_LINE_ARGS+2 ; subtract y0 (16-bit)
+    STD VLINE_DY_16        ; Store full 16-bit dy
     ; SEGMENT 1: Clamp dy to ±127 and draw
     LDD VLINE_DY_16 ; Load full dy
     CMPD #127
@@ -318,22 +366,32 @@ DLW_SEG1_DX_READY:
     LDA VLINE_DY
     LDB VLINE_DX
     JSR Draw_Line_d ; Beam moves automatically
-    ; Check if we need SEGMENT 2 (dy outside ±127 range)
+    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)
     LDD VLINE_DY_16 ; Reload original dy
     CMPD #127
     BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
     CMPD #-128
     BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
-    BRA DLW_DONE       ; dy in range ±127: no segment 2
+    LDD VLINE_DX_16 ; Also check dx
+    CMPD #127
+    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2
+    CMPD #-128
+    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2
+    BRA DLW_DONE       ; both dy and dx in range: no segment 2
 DLW_NEED_SEG2:
     ; SEGMENT 2: Draw remaining dy and dx
     ; Calculate remaining dy
     LDD VLINE_DY_16 ; Load original full dy
     CMPD #127
-    BGT DLW_SEG2_DY_POS  ; dy > 127
+    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127
+    CMPD #-128
+    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy
     ; dy < -128, so we drew -128 in segment 1
     ; remaining = dy - (-128) = dy + 128
     ADDD #128       ; Add back the -128 we already drew
+    BRA DLW_SEG2_DY_DONE
+DLW_SEG2_DY_NO_REMAIN:
+    LDD #0          ; dy in range: no remaining
     BRA DLW_SEG2_DY_DONE
 DLW_SEG2_DY_POS:
     ; dy > 127, so we drew 127 in segment 1
@@ -494,10 +552,23 @@ RTS
 ; STOP_MUSIC_RUNTIME - Stop music playback
 ; ============================================================================
 STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING ; Clear playing flag (extended - var at 0xC8A0)
-CLR >PSG_MUSIC_PTR     ; Clear pointer high byte (force extended)
-CLR >PSG_MUSIC_PTR+1   ; Clear pointer low byte (force extended)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
+CLR >PSG_IS_PLAYING     ; Clear playing flag
+CLR >PSG_MUSIC_PTR      ; Clear pointer high byte
+CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte
+; Mute all PSG channels so the last note doesn't keep sounding
+PSHS DP
+LDA #$D0
+TFR A,DP                ; Set DP=$D0 for Sound_Byte
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
+PULS DP
 RTS
 
 ; ============================================================================
@@ -636,24 +707,23 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
 LDD TEMP_YX             ; Recuperar y,x
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore x
 STA VIA_port_a          ; x to DAC
 ; Timing setup
@@ -661,11 +731,12 @@ LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
+; Wait for move to complete (PB=1 on exit)
 DSL_W1:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSL_W1
+; PB stays 1 — draw loop begins with PB=1
 ; Loop de dibujo
 DSL_LOOP:
 LDA ,X+                 ; Read flag
@@ -677,22 +748,23 @@ LBEQ DSL_NEXT_PATH      ; Process next path (long branch)
 CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)
 LDB ,X+                 ; dy
 LDA ,X+                 ; dx
-PSHS A                  ; Save dx
-STB VIA_port_a          ; dy to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore dx
-STA VIA_port_a          ; dx to DAC
-CLR VIA_t1_cnt_hi
+; B=DY, A=DX, PB=1 on entry (from moveto or previous segment)
+STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
+NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
+NOP                     ; settling 2
+NOP                     ; settling 3
+INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
+STA VIA_port_a          ; DX to DAC
 LDA #$FF
-STA VIA_shift_reg
+STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
+CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
 ; Wait for line draw
 DSL_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSL_W2
-CLR VIA_shift_reg
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSL_LOOP            ; Long branch back to loop start
 ; Next path: read new intensity and header, then continue drawing
 DSL_NEXT_PATH:
@@ -719,36 +791,35 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto new start position (BIOS Moveto_d order)
 LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; x to DAC
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
-; Wait for move
+; Wait for move (PB=1 on exit)
 DSL_W3:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSL_W3
-CLR VIA_shift_reg       ; Clear before continuing
+; PB stays 1 — draw loop continues with PB=1
 LBRA DSL_LOOP            ; Continue drawing - LONG BRANCH
 DSL_DONE:
 RTS
@@ -774,24 +845,23 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
 LDD TEMP_YX             ; Recuperar y,x ajustado
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore x
 STA VIA_port_a          ; x to DAC
 ; Timing setup
@@ -799,11 +869,12 @@ LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
+; Wait for move to complete (PB=1 on exit)
 DSLA_W1:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSLA_W1
+; PB stays 1 — draw loop begins with PB=1
 ; Loop de dibujo (same as Draw_Sync_List)
 DSLA_LOOP:
 LDA ,X+                 ; Read flag
@@ -815,22 +886,23 @@ LBEQ DSLA_NEXT_PATH
 CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)
 LDB ,X+                 ; dy
 LDA ,X+                 ; dx
-PSHS A                  ; Save dx
-STB VIA_port_a          ; dy to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore dx
-STA VIA_port_a          ; dx to DAC
-CLR VIA_t1_cnt_hi
+; B=DY, A=DX, PB=1 on entry (from moveto or previous segment)
+STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
+NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
+NOP                     ; settling 2
+NOP                     ; settling 3
+INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
+STA VIA_port_a          ; DX to DAC
 LDA #$FF
-STA VIA_shift_reg
+STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
+CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
 ; Wait for line draw
 DSLA_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSLA_W2
-CLR VIA_shift_reg
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSLA_LOOP           ; Long branch
 ; Next path: add offset to new coordinates too
 DSLA_NEXT_PATH:
@@ -853,36 +925,35 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position (already offset-adjusted)
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto new start position (Moveto_d order, offset-adjusted)
 LDD TEMP_YX
-STB VIA_port_a
-PSHS A
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
-STA VIA_port_a
+STA VIA_port_a          ; X to DAC
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X
-; Wait for move
+; Wait for move (PB=1 on exit)
 DSLA_W3:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSLA_W3
-CLR VIA_shift_reg
+; PB stays 1 — draw loop continues with PB=1
 LBRA DSLA_LOOP           ; Long branch
 DSLA_DONE:
 RTS
@@ -918,24 +989,23 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
 LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore x
 STA VIA_port_a          ; x to DAC
 ; Timing setup
@@ -943,11 +1013,12 @@ LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
+; Wait for move to complete (PB=1 on exit)
 DSWM_W1:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W1
+; PB stays 1 — draw loop begins with PB=1
 ; Loop de dibujo (conditional mirrors)
 DSWM_LOOP:
 LDA ,X+                 ; Read flag
@@ -968,22 +1039,24 @@ TST MIRROR_X
 BEQ DSWM_NO_NEGATE_DX
 NEGA                    ; ← Negate dx if flag set
 DSWM_NO_NEGATE_DX:
-PSHS A                  ; Save final dx
-STB VIA_port_a          ; dy (possibly negated) to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore final dx
-STA VIA_port_a          ; dx (possibly negated) to DAC
-CLR VIA_t1_cnt_hi
+; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)
+STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
+NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
+NOP                     ; settling 2
+NOP                     ; settling 3
+INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
+STA VIA_port_a          ; DX to DAC
 LDA #$FF
-STA VIA_shift_reg
+STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
+CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
 ; Wait for line draw
 DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_shift_reg
+CLR VIA_port_a          ; stop X integrator drift between segments
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
@@ -1021,36 +1094,35 @@ CLR VIA_shift_reg
 LDA #$CC
 STA VIA_cntl
 CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
+LDA #$03
+STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
+LDA #$02
+STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
+LDA #$02
+STA VIA_port_b          ; repeat
+LDA #$01
+STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
+; Moveto new start position (BIOS Moveto_d order)
 LDD TEMP_YX
-STB VIA_port_a
-PSHS A
+STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
+CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+PSHS A                  ; ~4 cycle settling delay for Y
 LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
+STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
+CLR VIA_shift_reg       ; SR=0: no draw during moveto
+INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
-STA VIA_port_a
+STA VIA_port_a          ; X to DAC
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X
-; Wait for move
+; Wait for move (PB=1 on exit)
 DSWM_W3:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W3
-CLR VIA_shift_reg
+; PB stays 1 — draw loop continues with PB=1
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
@@ -1470,6 +1542,12 @@ MAIN:
     ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
     LDA #$80
     STA VIA_t1_cnt_lo
+    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
+    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H  ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W  ; Default width = 72 (normal size)
     ; *** Call loop() as subroutine (executed every frame)
     JSR LOOP_BODY
     BRA MAIN
@@ -3414,13 +3492,18 @@ IF_END_0:
     LDU #VAR_PREV_BTN4
     STU TMPPTR
     STX ,U
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
+    ; META MUSIC_TIMER: catch up if game frame was slow
+    LDA >$D00D              ; VIA_int_flags (extended addr, DP=$C8)
+    BITA #$20               ; Bit 5 = T2 elapsed (>1 frame of user code)
+    BEQ MUSIC_CATCHUP_SKIP  ; On time — skip extra tick
+    JSR AUDIO_UPDATE        ; Catch-up tick: game was slow
+MUSIC_CATCHUP_SKIP:
+    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
     RTS
 
     ; VPy_LINE:256
 DRAW_MAP_SCREEN: ; function
 ; --- function draw_map_screen ---
-    LEAS -4,S ; allocate locals
     ; VPy_LINE:258
     LDD #80
     STD RESULT
@@ -3671,7 +3754,9 @@ IF_END_164:
     LDD ,X
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_LOC_X
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:275
     ; ===== Const array indexing: location_y_coords =====
     LDD VAR_CURRENT_LOCATION
@@ -3686,14 +3771,16 @@ IF_END_164:
     LDD ,X
     STD RESULT
     LDX RESULT
-    STX 2 ,S
+    LDU #VAR_LOC_Y
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:277
 ; DRAW_VECTOR_EX("location_marker", x, y, mirror) - 1 path(s), width=22, center_x=0
-    LDD 2 ,S
+    LDD VAR_LOC_Y
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA DRAW_VEC_X
-    LDD 0 ,S
+    LDD VAR_LOC_X
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
@@ -3731,7 +3818,6 @@ DSVEX_CALL_178:
     CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw
     LDD #0
     STD RESULT
-    LEAS 4,S ; free locals
     RTS
 
     ; VPy_LINE:280
@@ -5479,7 +5565,6 @@ IF_END_195:
     ; VPy_LINE:341
 DRAW_GAME_LEVEL: ; function
 ; --- function draw_game_level ---
-    LEAS -4,S ; allocate locals
     ; VPy_LINE:343
     JSR DRAW_LEVEL_BACKGROUND
     ; VPy_LINE:346
@@ -5881,7 +5966,9 @@ IF_END_278:
     LDD #5
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_ANIM_THRESHOLD
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:391
     LDD VAR_JOY_X
     STD RESULT
@@ -5940,7 +6027,9 @@ OR_END_285:
     RORB
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_ANIM_THRESHOLD
+    STU TMPPTR
+    STX ,U
     LBRA IF_END_282
 IF_NEXT_283:
 IF_END_282:
@@ -5949,7 +6038,7 @@ IF_END_282:
     STD RESULT
     LDD RESULT
     STD TMPLEFT
-    LDD 0 ,S
+    LDD VAR_ANIM_THRESHOLD
     STD RESULT
     LDD RESULT
     STD TMPRIGHT
@@ -6046,7 +6135,9 @@ IF_END_244:
     LDD #0
     STD RESULT
     LDX RESULT
-    STX 2 ,S
+    LDU #VAR_MIRROR_MODE
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:406
     LDD VAR_PLAYER_FACING
     STD RESULT
@@ -6072,7 +6163,9 @@ CE_301:
     LDD #1
     STD RESULT
     LDX RESULT
-    STX 2 ,S
+    LDU #VAR_MIRROR_MODE
+    STU TMPPTR
+    STX ,U
     LBRA IF_END_298
 IF_NEXT_299:
 IF_END_298:
@@ -6107,7 +6200,7 @@ CE_305:
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
-    LDD 2 ,S
+    LDD VAR_MIRROR_MODE
     STD RESULT
     LDB RESULT+1  ; Mirror mode (0=normal, 1=X, 2=Y, 3=both)
     ; Decode mirror mode into separate flags:
@@ -6205,7 +6298,7 @@ CE_311:
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
-    LDD 2 ,S
+    LDD VAR_MIRROR_MODE
     STD RESULT
     LDB RESULT+1  ; Mirror mode (0=normal, 1=X, 2=Y, 3=both)
     ; Decode mirror mode into separate flags:
@@ -6303,7 +6396,7 @@ CE_317:
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
-    LDD 2 ,S
+    LDD VAR_MIRROR_MODE
     STD RESULT
     LDB RESULT+1  ; Mirror mode (0=normal, 1=X, 2=Y, 3=both)
     ; Decode mirror mode into separate flags:
@@ -6401,7 +6494,7 @@ CE_323:
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
-    LDD 2 ,S
+    LDD VAR_MIRROR_MODE
     STD RESULT
     LDB RESULT+1  ; Mirror mode (0=normal, 1=X, 2=Y, 3=both)
     ; Decode mirror mode into separate flags:
@@ -6479,7 +6572,7 @@ IF_NEXT_321:
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA DRAW_VEC_Y
-    LDD 2 ,S
+    LDD VAR_MIRROR_MODE
     STD RESULT
     LDB RESULT+1  ; Mirror mode (0=normal, 1=X, 2=Y, 3=both)
     ; Decode mirror mode into separate flags:
@@ -6646,13 +6739,11 @@ DSVEX_CALL_336:
     LBRA IF_END_330
 IF_NEXT_331:
 IF_END_330:
-    LEAS 4,S ; free locals
     RTS
 
     ; VPy_LINE:445
 SPAWN_ENEMIES: ; function
 ; --- function spawn_enemies ---
-    LEAS -6,S ; allocate locals
     ; VPy_LINE:447
     ; ===== Const array indexing: level_enemy_count =====
     LDD VAR_CURRENT_LOCATION
@@ -6667,7 +6758,9 @@ SPAWN_ENEMIES: ; function
     LDD ,X
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_COUNT
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:448
     ; ===== Const array indexing: level_enemy_speed =====
     LDD VAR_CURRENT_LOCATION
@@ -6682,9 +6775,11 @@ SPAWN_ENEMIES: ; function
     LDD ,X
     STD RESULT
     LDX RESULT
-    STX 4 ,S
+    LDU #VAR_SPEED
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:451
-    LDD 0 ,S
+    LDD VAR_COUNT
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -6708,12 +6803,14 @@ CE_340:
     LDD #1
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_COUNT
+    STU TMPPTR
+    STX ,U
     LBRA IF_END_337
 IF_NEXT_338:
 IF_END_337:
     ; VPy_LINE:453
-    LDD 0 ,S
+    LDD VAR_COUNT
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -6737,7 +6834,9 @@ CE_344:
     LDD #8
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_COUNT
+    STU TMPPTR
+    STX ,U
     LBRA IF_END_341
 IF_NEXT_342:
 IF_END_341:
@@ -6745,14 +6844,16 @@ IF_END_341:
     LDD #0
     STD RESULT
     LDX RESULT
-    STX 2 ,S
+    LDU #VAR_I
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:457
 WH_345: ; while start
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
-    LDD 0 ,S
+    LDD VAR_COUNT
     STD RESULT
     LDD RESULT
     STD TMPRIGHT
@@ -6768,7 +6869,7 @@ CT_347:
 CE_348:
     LDD RESULT
     BEQ AND_FALSE_349
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -6798,7 +6899,7 @@ AND_END_350:
     LDD RESULT
     LBEQ WH_END_346
     ; VPy_LINE:458
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -6815,7 +6916,7 @@ AND_END_350:
     LDD RESULT
     STD ,X
     ; VPy_LINE:459
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -6832,7 +6933,7 @@ AND_END_350:
     LDD RESULT
     STD ,X
     ; VPy_LINE:460
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -6848,7 +6949,7 @@ AND_END_350:
     LDD RESULT
     STD TMPLEFT
     PSHS D
-    LDD 4 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -6875,7 +6976,7 @@ AND_END_350:
     LDD RESULT
     STD ,X
     ; VPy_LINE:461
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -6892,7 +6993,7 @@ AND_END_350:
     LDD RESULT
     STD ,X
     ; VPy_LINE:462
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -6903,13 +7004,13 @@ AND_END_350:
     LDD TMPPTR
     LEAX D,X
     STX TMPPTR2
-    LDD 4 ,S
+    LDD VAR_SPEED
     STD RESULT
     LDX TMPPTR2
     LDD RESULT
     STD ,X
     ; VPy_LINE:463
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -6956,7 +7057,7 @@ CE_356:
     LDD RESULT
     LBEQ IF_NEXT_354
     ; VPy_LINE:464
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -6972,7 +7073,7 @@ CE_356:
     LDD RESULT
     STD TMPLEFT
     PSHS D
-    LDD 6 ,S
+    LDD VAR_SPEED
     STD RESULT
     LDD RESULT
     STD TMPRIGHT
@@ -6988,7 +7089,7 @@ CE_356:
 IF_NEXT_354:
 IF_END_353:
     ; VPy_LINE:465
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7005,7 +7106,7 @@ IF_END_353:
     LDD RESULT
     STD ,X
     ; VPy_LINE:466
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -7020,24 +7121,26 @@ IF_END_353:
     ADDD TMPRIGHT
     STD RESULT
     LDX RESULT
-    STX 2 ,S
+    LDU #VAR_I
+    STU TMPPTR
+    STX ,U
     LBRA WH_345
 WH_END_346: ; while end
-    LEAS 6,S ; free locals
     RTS
 
     ; VPy_LINE:468
 UPDATE_ENEMIES: ; function
 ; --- function update_enemies ---
-    LEAS -2,S ; allocate locals
     ; VPy_LINE:470
     LDD #0
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_I
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:471
 WH_357: ; while start
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -7062,7 +7165,7 @@ CE_360:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7090,7 +7193,7 @@ CE_364:
     LDD RESULT
     LBEQ IF_NEXT_362
     ; VPy_LINE:474
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7105,7 +7208,7 @@ CE_364:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7130,7 +7233,7 @@ CE_364:
     LDD RESULT
     STD ,X
     ; VPy_LINE:477
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7145,7 +7248,7 @@ CE_364:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7161,7 +7264,7 @@ CE_364:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7181,7 +7284,7 @@ CE_364:
     LDD RESULT
     STD ,X
     ; VPy_LINE:478
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7196,7 +7299,7 @@ CE_364:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7212,7 +7315,7 @@ CE_364:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7236,7 +7339,7 @@ CE_364:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7264,7 +7367,7 @@ CE_368:
     LDD RESULT
     LBEQ IF_NEXT_366
     ; VPy_LINE:482
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7281,7 +7384,7 @@ CE_368:
     LDD RESULT
     STD ,X
     ; VPy_LINE:483
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7301,7 +7404,7 @@ CE_368:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7321,7 +7424,7 @@ CE_368:
     LDD RESULT
     STD ,X
     ; VPy_LINE:484
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7336,7 +7439,7 @@ CE_368:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7381,7 +7484,7 @@ CE_368:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7409,7 +7512,7 @@ CE_372:
     LDD RESULT
     LBEQ IF_NEXT_370
     ; VPy_LINE:487
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7436,7 +7539,7 @@ IF_END_365:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7464,7 +7567,7 @@ CE_376:
     LDD RESULT
     LBEQ IF_NEXT_374
     ; VPy_LINE:491
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7481,7 +7584,7 @@ CE_376:
     LDD RESULT
     STD ,X
     ; VPy_LINE:492
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7501,7 +7604,7 @@ CE_376:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7528,7 +7631,7 @@ IF_END_373:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7556,7 +7659,7 @@ CE_380:
     LDD RESULT
     LBEQ IF_NEXT_378
     ; VPy_LINE:494
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7573,7 +7676,7 @@ CE_380:
     LDD RESULT
     STD ,X
     ; VPy_LINE:495
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7593,7 +7696,7 @@ CE_380:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 2 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7619,7 +7722,7 @@ IF_END_377:
 IF_NEXT_362:
 IF_END_361:
     ; VPy_LINE:497
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -7634,24 +7737,26 @@ IF_END_361:
     ADDD TMPRIGHT
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_I
+    STU TMPPTR
+    STX ,U
     LBRA WH_357
 WH_END_358: ; while end
-    LEAS 2,S ; free locals
     RTS
 
     ; VPy_LINE:501
 DRAW_ENEMIES: ; function
 ; --- function draw_enemies ---
-    LEAS -2,S ; allocate locals
     ; VPy_LINE:503
     LDD #0
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_I
+    STU TMPPTR
+    STX ,U
     ; VPy_LINE:504
 WH_381: ; while start
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -7676,7 +7781,7 @@ CE_384:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7718,7 +7823,7 @@ CE_388:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7751,7 +7856,7 @@ CE_392:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7766,7 +7871,7 @@ CE_392:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7796,7 +7901,7 @@ IF_NEXT_390:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7829,7 +7934,7 @@ CE_395:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7844,7 +7949,7 @@ CE_395:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7874,7 +7979,7 @@ IF_NEXT_393:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7907,7 +8012,7 @@ CE_398:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7922,7 +8027,7 @@ CE_398:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7954,7 +8059,7 @@ IF_NEXT_396:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7969,7 +8074,7 @@ IF_NEXT_396:
     STD RESULT
     LDD RESULT
     STD TMPPTR
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     ASLB
@@ -7998,7 +8103,7 @@ IF_END_389:
 IF_NEXT_386:
 IF_END_385:
     ; VPy_LINE:515
-    LDD 0 ,S
+    LDD VAR_I
     STD RESULT
     LDD RESULT
     STD TMPLEFT
@@ -8013,10 +8118,11 @@ IF_END_385:
     ADDD TMPRIGHT
     STD RESULT
     LDX RESULT
-    STX 0 ,S
+    LDU #VAR_I
+    STU TMPPTR
+    STX ,U
     LBRA WH_381
 WH_END_382: ; while end
-    LEAS 2,S ; free locals
     RTS
 
     ; VPy_LINE:519
@@ -8034,28 +8140,18 @@ DRAW_HOOK_ROPE: ; function
     ; VPy_LINE:521
     LDD 0 ,S
     STD RESULT
-    STD TMPPTR+0
+    STD >DRAW_LINE_ARGS+0
     LDD 2 ,S
     STD RESULT
-    STD TMPPTR+2
+    STD >DRAW_LINE_ARGS+2
     LDD 4 ,S
     STD RESULT
-    STD TMPPTR+4
+    STD >DRAW_LINE_ARGS+4
     LDD 6 ,S
     STD RESULT
-    STD TMPPTR+6
+    STD >DRAW_LINE_ARGS+6
     LDD #127
-    STD TMPPTR+8
-    LDD TMPPTR+0
-    STD RESULT+0
-    LDD TMPPTR+2
-    STD RESULT+2
-    LDD TMPPTR+4
-    STD RESULT+4
-    LDD TMPPTR+6
-    STD RESULT+6
-    LDD TMPPTR+8
-    STD RESULT+8
+    STD >DRAW_LINE_ARGS+8
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
@@ -8177,6 +8273,29 @@ READ_JOYSTICK1_STATE: ; function
 
 MUL16:
     LDD MUL_A
+    BPL MUL16_APOS
+    COMA
+    COMB
+    ADDD #1
+    STD MUL_A
+    LDA #1
+    STA TMPPTR2+1
+    BRA MUL16_BCHECK
+MUL16_APOS:
+    LDA #0
+    STA TMPPTR2+1
+MUL16_BCHECK:
+    LDD MUL_B
+    BPL MUL16_BPOS
+    COMA
+    COMB
+    ADDD #1
+    STD MUL_B
+    LDA TMPPTR2+1
+    EORA #1
+    STA TMPPTR2+1
+MUL16_BPOS:
+    LDD MUL_A
     STD MUL_RES
     LDD #0
     STD MUL_TMP
@@ -8186,7 +8305,7 @@ MUL16_LOOP:
     LDD MUL_CNT
     BEQ MUL16_DONE
     LDD MUL_CNT
-    ANDA #1
+    ANDB #1
     BEQ MUL16_SKIP
     LDD MUL_RES
     ADDD MUL_TMP
@@ -8203,6 +8322,12 @@ MUL16_SKIP:
     BRA MUL16_LOOP
 MUL16_DONE:
     LDD MUL_TMP
+    LDA TMPPTR2+1
+    BEQ MUL16_STORE
+    COMA
+    COMB
+    ADDD #1
+MUL16_STORE:
     STD RESULT
     RTS
 
@@ -8210,12 +8335,35 @@ DIV16:
     LDD #0
     STD DIV_Q
     LDD DIV_A
+    BPL DIV16_DPOS
+    COMA
+    COMB
+    ADDD #1
     STD DIV_R
+    LDA #1
+    STA TMPPTR2+1
+    BRA DIV16_RCHECK
+DIV16_DPOS:
+    STD DIV_R
+    LDA #0
+    STA TMPPTR2+1
+DIV16_RCHECK:
     LDD DIV_B
     BEQ DIV16_DONE
+    BPL DIV16_RPOS
+    COMA
+    COMB
+    ADDD #1
+    STD TMPPTR
+    LDA TMPPTR2+1
+    EORA #1
+    STA TMPPTR2+1
+    BRA DIV16_LOOP
+DIV16_RPOS:
+    STD TMPPTR
 DIV16_LOOP:
     LDD DIV_R
-    SUBD DIV_B
+    SUBD TMPPTR
     BLO DIV16_DONE
     STD DIV_R
     LDD DIV_Q
@@ -8224,6 +8372,12 @@ DIV16_LOOP:
     BRA DIV16_LOOP
 DIV16_DONE:
     LDD DIV_Q
+    LDA TMPPTR2+1
+    BEQ DIV16_STORE
+    COMA
+    COMB
+    ADDD #1
+DIV16_STORE:
     STD RESULT
     RTS
 
@@ -8269,145 +8423,145 @@ _PLAYER_WALK_1_VECTORS:  ; Main entry (header + 17 path(s))
 _PLAYER_WALK_1_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $0C,$FB,0,0        ; path0: header (y=12, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $0C,$F9,0,0        ; path1: header (y=12, x=-7, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $0C,$FB,0,0        ; path2: header (y=12, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$02,$00          ; line 1: flag=-1, dy=2, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$FE,$00          ; closing line: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $08,$FA,0,0        ; path3: header (y=8, x=-6, relative to center)
-    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
-    FCB $FF,$F6,$00          ; line 1: flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; line 2: flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; closing line: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $07,$FA,0,0        ; path4: header (y=7, x=-6, relative to center)
-    FCB $FF,$FF,$FF          ; line 0: flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $06,$F9,0,0        ; path5: header (y=6, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $00,$F9,0,0        ; path6: header (y=0, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $07,$04,0,0        ; path7: header (y=7, x=4, relative to center)
-    FCB $FF,$FF,$02          ; line 0: flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $06,$06,0,0        ; path8: header (y=6, x=6, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $04,$06,0,0        ; path9: header (y=4, x=6, relative to center)
-    FCB $FF,$00,$04          ; line 0: flag=-1, dy=0, dx=4
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FC          ; line 2: flag=-1, dy=0, dx=-4
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $03,$07,0,0        ; path10: header (y=3, x=7, relative to center)
-    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$FF          ; line 2: flag=-1, dy=0, dx=-1
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $FE,$FB,0,0        ; path11: header (y=-2, x=-5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $F8,$FB,0,0        ; path12: header (y=-8, x=-5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $F2,$FB,0,0        ; path13: header (y=-14, x=-5, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $FE,$01,0,0        ; path14: header (y=-2, x=1, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $F8,$01,0,0        ; path15: header (y=-8, x=1, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_1_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $F2,$01,0,0        ; path16: header (y=-14, x=1, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: player_walk_2
@@ -8443,145 +8597,145 @@ _PLAYER_WALK_2_VECTORS:  ; Main entry (header + 17 path(s))
 _PLAYER_WALK_2_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $0D,$FC,0,0        ; path0: header (y=13, x=-4, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $0D,$FA,0,0        ; path1: header (y=13, x=-6, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $0D,$FC,0,0        ; path2: header (y=13, x=-4, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$02,$00          ; line 1: flag=-1, dy=2, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$FE,$00          ; closing line: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $09,$FB,0,0        ; path3: header (y=9, x=-5, relative to center)
-    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
-    FCB $FF,$F6,$00          ; line 1: flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; line 2: flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; closing line: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $08,$FB,0,0        ; path4: header (y=8, x=-5, relative to center)
-    FCB $FF,$FF,$FE          ; line 0: flag=-1, dy=-1, dx=-2
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $07,$F9,0,0        ; path5: header (y=7, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FC,$FF          ; line 1: flag=-1, dy=-4, dx=-1
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$04,$01          ; closing line: flag=-1, dy=4, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FC,$FF          ; flag=-1, dy=-4, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $03,$F8,0,0        ; path6: header (y=3, x=-8, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $08,$05,0,0        ; path7: header (y=8, x=5, relative to center)
-    FCB $FF,$FF,$02          ; line 0: flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $07,$07,0,0        ; path8: header (y=7, x=7, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $05,$07,0,0        ; path9: header (y=5, x=7, relative to center)
-    FCB $FF,$00,$04          ; line 0: flag=-1, dy=0, dx=4
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FC          ; line 2: flag=-1, dy=0, dx=-4
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $04,$08,0,0        ; path10: header (y=4, x=8, relative to center)
-    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$FF          ; line 2: flag=-1, dy=0, dx=-1
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $FF,$FB,0,0        ; path11: header (y=-1, x=-5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$01          ; line 1: flag=-1, dy=-6, dx=1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$FF          ; closing line: flag=-1, dy=6, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$01          ; flag=-1, dy=-6, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$FF          ; flag=-1, dy=6, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $F9,$FE,0,0        ; path12: header (y=-7, x=-2, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $F3,$00,0,0        ; path13: header (y=-13, x=0, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $FF,$02,0,0        ; path14: header (y=-1, x=2, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$F9,$01          ; line 1: flag=-1, dy=-7, dx=1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$07,$FF          ; closing line: flag=-1, dy=7, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F9,$01          ; flag=-1, dy=-7, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$07,$FF          ; flag=-1, dy=7, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $F8,$03,0,0        ; path15: header (y=-8, x=3, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$F9,$01          ; line 1: flag=-1, dy=-7, dx=1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$07,$FF          ; closing line: flag=-1, dy=7, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F9,$01          ; flag=-1, dy=-7, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$07,$FF          ; flag=-1, dy=7, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_2_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $F1,$04,0,0        ; path16: header (y=-15, x=4, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: bubble_huge
@@ -8601,14 +8755,14 @@ _BUBBLE_HUGE_VECTORS:  ; Main entry (header + 1 path(s))
 _BUBBLE_HUGE_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $00,$1A,0,0        ; path0: header (y=0, x=26, relative to center)
-    FCB $FF,$12,$F8          ; line 0: flag=-1, dy=18, dx=-8
-    FCB $FF,$08,$EE          ; line 1: flag=-1, dy=8, dx=-18
-    FCB $FF,$F8,$EE          ; line 2: flag=-1, dy=-8, dx=-18
-    FCB $FF,$EE,$F8          ; line 3: flag=-1, dy=-18, dx=-8
-    FCB $FF,$EE,$08          ; line 4: flag=-1, dy=-18, dx=8
-    FCB $FF,$F8,$12          ; line 5: flag=-1, dy=-8, dx=18
-    FCB $FF,$08,$12          ; line 6: flag=-1, dy=8, dx=18
-    FCB $FF,$12,$08          ; closing line: flag=-1, dy=18, dx=8
+    FCB $FF,$12,$F8          ; flag=-1, dy=18, dx=-8
+    FCB $FF,$08,$EE          ; flag=-1, dy=8, dx=-18
+    FCB $FF,$F8,$EE          ; flag=-1, dy=-8, dx=-18
+    FCB $FF,$EE,$F8          ; flag=-1, dy=-18, dx=-8
+    FCB $FF,$EE,$08          ; flag=-1, dy=-18, dx=8
+    FCB $FF,$F8,$12          ; flag=-1, dy=-8, dx=18
+    FCB $FF,$08,$12          ; flag=-1, dy=8, dx=18
+    FCB $FF,$12,$08          ; flag=-1, dy=18, dx=8
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: player_walk_3
@@ -8644,145 +8798,145 @@ _PLAYER_WALK_3_VECTORS:  ; Main entry (header + 17 path(s))
 _PLAYER_WALK_3_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $0D,$FB,0,0        ; path0: header (y=13, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $0D,$F9,0,0        ; path1: header (y=13, x=-7, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $0D,$FB,0,0        ; path2: header (y=13, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$02,$00          ; line 1: flag=-1, dy=2, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$FE,$00          ; closing line: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $09,$FA,0,0        ; path3: header (y=9, x=-6, relative to center)
-    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
-    FCB $FF,$F6,$00          ; line 1: flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; line 2: flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; closing line: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $08,$FA,0,0        ; path4: header (y=8, x=-6, relative to center)
-    FCB $FF,$FF,$FF          ; line 0: flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $07,$F9,0,0        ; path5: header (y=7, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$F9,$FF          ; line 1: flag=-1, dy=-7, dx=-1
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$07,$01          ; closing line: flag=-1, dy=7, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$F9,$FF          ; flag=-1, dy=-7, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$07,$01          ; flag=-1, dy=7, dx=1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $00,$F8,0,0        ; path6: header (y=0, x=-8, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $08,$04,0,0        ; path7: header (y=8, x=4, relative to center)
-    FCB $FF,$FF,$02          ; line 0: flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $07,$06,0,0        ; path8: header (y=7, x=6, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $05,$06,0,0        ; path9: header (y=5, x=6, relative to center)
-    FCB $FF,$00,$04          ; line 0: flag=-1, dy=0, dx=4
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FC          ; line 2: flag=-1, dy=0, dx=-4
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $04,$07,0,0        ; path10: header (y=4, x=7, relative to center)
-    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$FF          ; line 2: flag=-1, dy=0, dx=-1
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $FF,$FA,0,0        ; path11: header (y=-1, x=-6, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$F9,$FF          ; line 1: flag=-1, dy=-7, dx=-1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$07,$01          ; closing line: flag=-1, dy=7, dx=1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F9,$FF          ; flag=-1, dy=-7, dx=-1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$07,$01          ; flag=-1, dy=7, dx=1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $F8,$FB,0,0        ; path12: header (y=-8, x=-5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $F2,$FB,0,0        ; path13: header (y=-14, x=-5, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $FF,$02,0,0        ; path14: header (y=-1, x=2, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$F9,$01          ; line 1: flag=-1, dy=-7, dx=1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$07,$FF          ; closing line: flag=-1, dy=7, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F9,$01          ; flag=-1, dy=-7, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$07,$FF          ; flag=-1, dy=7, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $F8,$03,0,0        ; path15: header (y=-8, x=3, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_3_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $F2,$03,0,0        ; path16: header (y=-14, x=3, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: player_walk_4
@@ -8818,145 +8972,145 @@ _PLAYER_WALK_4_VECTORS:  ; Main entry (header + 17 path(s))
 _PLAYER_WALK_4_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $0D,$FB,0,0        ; path0: header (y=13, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $0D,$F9,0,0        ; path1: header (y=13, x=-7, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $0D,$FB,0,0        ; path2: header (y=13, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$02,$00          ; line 1: flag=-1, dy=2, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$FE,$00          ; closing line: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $09,$FA,0,0        ; path3: header (y=9, x=-6, relative to center)
-    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
-    FCB $FF,$F6,$00          ; line 1: flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; line 2: flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; closing line: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $08,$FA,0,0        ; path4: header (y=8, x=-6, relative to center)
-    FCB $FF,$FF,$FF          ; line 0: flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $07,$F9,0,0        ; path5: header (y=7, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $01,$F9,0,0        ; path6: header (y=1, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $08,$04,0,0        ; path7: header (y=8, x=4, relative to center)
-    FCB $FF,$FF,$02          ; line 0: flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $07,$06,0,0        ; path8: header (y=7, x=6, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $05,$06,0,0        ; path9: header (y=5, x=6, relative to center)
-    FCB $FF,$00,$04          ; line 0: flag=-1, dy=0, dx=4
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FC          ; line 2: flag=-1, dy=0, dx=-4
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $04,$07,0,0        ; path10: header (y=4, x=7, relative to center)
-    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$FF          ; line 2: flag=-1, dy=0, dx=-1
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $FF,$FA,0,0        ; path11: header (y=-1, x=-6, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$F9,$01          ; line 1: flag=-1, dy=-7, dx=1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$07,$FF          ; closing line: flag=-1, dy=7, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F9,$01          ; flag=-1, dy=-7, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$07,$FF          ; flag=-1, dy=7, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $F8,$FD,0,0        ; path12: header (y=-8, x=-3, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$F9,$00          ; line 1: flag=-1, dy=-7, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$07,$00          ; closing line: flag=-1, dy=7, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $F1,$FF,0,0        ; path13: header (y=-15, x=-1, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $FF,$01,0,0        ; path14: header (y=-1, x=1, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $F9,$01,0,0        ; path15: header (y=-7, x=1, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$FF          ; line 1: flag=-1, dy=-6, dx=-1
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$01          ; closing line: flag=-1, dy=6, dx=1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$FF          ; flag=-1, dy=-6, dx=-1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$01          ; flag=-1, dy=6, dx=1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_4_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $F3,$00,0,0        ; path16: header (y=-13, x=0, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: player_walk_5
@@ -8992,145 +9146,145 @@ _PLAYER_WALK_5_VECTORS:  ; Main entry (header + 17 path(s))
 _PLAYER_WALK_5_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $0C,$FB,0,0        ; path0: header (y=12, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $0C,$F9,0,0        ; path1: header (y=12, x=-7, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $0C,$FB,0,0        ; path2: header (y=12, x=-5, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$02,$00          ; line 1: flag=-1, dy=2, dx=0
-    FCB $FF,$00,$F8          ; line 2: flag=-1, dy=0, dx=-8
-    FCB $FF,$FE,$00          ; closing line: flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $08,$FA,0,0        ; path3: header (y=8, x=-6, relative to center)
-    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
-    FCB $FF,$F6,$00          ; line 1: flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; line 2: flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; closing line: flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $07,$FA,0,0        ; path4: header (y=7, x=-6, relative to center)
-    FCB $FF,$FF,$FF          ; line 0: flag=-1, dy=-1, dx=-1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $06,$F9,0,0        ; path5: header (y=6, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FB,$00          ; line 1: flag=-1, dy=-5, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$05,$00          ; closing line: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $01,$F9,0,0        ; path6: header (y=1, x=-7, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$02          ; line 2: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $07,$04,0,0        ; path7: header (y=7, x=4, relative to center)
-    FCB $FF,$FF,$02          ; line 0: flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $06,$06,0,0        ; path8: header (y=6, x=6, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FC,$00          ; line 1: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$04,$00          ; closing line: flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $04,$06,0,0        ; path9: header (y=4, x=6, relative to center)
-    FCB $FF,$00,$04          ; line 0: flag=-1, dy=0, dx=4
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FC          ; line 2: flag=-1, dy=0, dx=-4
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $03,$07,0,0        ; path10: header (y=3, x=7, relative to center)
-    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$FF          ; line 2: flag=-1, dy=0, dx=-1
-    FCB $FF,$02,$00          ; closing line: flag=-1, dy=2, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $FE,$FB,0,0        ; path11: header (y=-2, x=-5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $F8,$FB,0,0        ; path12: header (y=-8, x=-5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $F2,$FB,0,0        ; path13: header (y=-14, x=-5, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $FE,$01,0,0        ; path14: header (y=-2, x=1, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $F8,$01,0,0        ; path15: header (y=-8, x=1, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FA,$00          ; line 1: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FE          ; line 2: flag=-1, dy=0, dx=-2
-    FCB $FF,$06,$00          ; closing line: flag=-1, dy=6, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_WALK_5_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $F2,$01,0,0        ; path16: header (y=-14, x=1, relative to center)
-    FCB $FF,$00,$03          ; line 0: flag=-1, dy=0, dx=3
-    FCB $FF,$FF,$00          ; line 1: flag=-1, dy=-1, dx=0
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$01,$00          ; closing line: flag=-1, dy=1, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: bubble_large
@@ -9150,30 +9304,30 @@ _BUBBLE_LARGE_VECTORS:  ; Main entry (header + 1 path(s))
 _BUBBLE_LARGE_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $00,$14,0,0        ; path0: header (y=0, x=20, relative to center)
-    FCB $FF,$05,$FF          ; line 0: flag=-1, dy=5, dx=-1
-    FCB $FF,$05,$FE          ; line 1: flag=-1, dy=5, dx=-2
-    FCB $FF,$04,$FD          ; line 2: flag=-1, dy=4, dx=-3
-    FCB $FF,$03,$FC          ; line 3: flag=-1, dy=3, dx=-4
-    FCB $FF,$02,$FB          ; line 4: flag=-1, dy=2, dx=-5
-    FCB $FF,$01,$FB          ; line 5: flag=-1, dy=1, dx=-5
-    FCB $FF,$FF,$FB          ; line 6: flag=-1, dy=-1, dx=-5
-    FCB $FF,$FE,$FB          ; line 7: flag=-1, dy=-2, dx=-5
-    FCB $FF,$FD,$FC          ; line 8: flag=-1, dy=-3, dx=-4
-    FCB $FF,$FC,$FD          ; line 9: flag=-1, dy=-4, dx=-3
-    FCB $FF,$FB,$FE          ; line 10: flag=-1, dy=-5, dx=-2
-    FCB $FF,$FB,$FF          ; line 11: flag=-1, dy=-5, dx=-1
-    FCB $FF,$FB,$01          ; line 12: flag=-1, dy=-5, dx=1
-    FCB $FF,$FB,$02          ; line 13: flag=-1, dy=-5, dx=2
-    FCB $FF,$FC,$03          ; line 14: flag=-1, dy=-4, dx=3
-    FCB $FF,$FD,$04          ; line 15: flag=-1, dy=-3, dx=4
-    FCB $FF,$FE,$05          ; line 16: flag=-1, dy=-2, dx=5
-    FCB $FF,$FF,$05          ; line 17: flag=-1, dy=-1, dx=5
-    FCB $FF,$01,$05          ; line 18: flag=-1, dy=1, dx=5
-    FCB $FF,$02,$05          ; line 19: flag=-1, dy=2, dx=5
-    FCB $FF,$03,$04          ; line 20: flag=-1, dy=3, dx=4
-    FCB $FF,$04,$03          ; line 21: flag=-1, dy=4, dx=3
-    FCB $FF,$05,$02          ; line 22: flag=-1, dy=5, dx=2
-    FCB $FF,$05,$01          ; closing line: flag=-1, dy=5, dx=1
+    FCB $FF,$05,$FF          ; flag=-1, dy=5, dx=-1
+    FCB $FF,$05,$FE          ; flag=-1, dy=5, dx=-2
+    FCB $FF,$04,$FD          ; flag=-1, dy=4, dx=-3
+    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $FF,$02,$FB          ; flag=-1, dy=2, dx=-5
+    FCB $FF,$01,$FB          ; flag=-1, dy=1, dx=-5
+    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
+    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
+    FCB $FF,$FB,$FF          ; flag=-1, dy=-5, dx=-1
+    FCB $FF,$FB,$01          ; flag=-1, dy=-5, dx=1
+    FCB $FF,$FB,$02          ; flag=-1, dy=-5, dx=2
+    FCB $FF,$FC,$03          ; flag=-1, dy=-4, dx=3
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB $FF,$FF,$05          ; flag=-1, dy=-1, dx=5
+    FCB $FF,$01,$05          ; flag=-1, dy=1, dx=5
+    FCB $FF,$02,$05          ; flag=-1, dy=2, dx=5
+    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
+    FCB $FF,$04,$03          ; flag=-1, dy=4, dx=3
+    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
+    FCB $FF,$05,$01          ; flag=-1, dy=5, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: newyork_bg
@@ -9197,43 +9351,43 @@ _NEWYORK_BG_VECTORS:  ; Main entry (header + 5 path(s))
 _NEWYORK_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $21,$FB,0,0        ; path0: header (y=33, x=-5, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
     FCB 2                ; End marker (path complete)
 
 _NEWYORK_BG_PATH1:    ; Path 1
     FCB 110              ; path1: intensity
     FCB $0D,$00,0,0        ; path1: header (y=13, x=0, relative to center)
-    FCB $FF,$0F,$0A          ; line 0: flag=-1, dy=15, dx=10
-    FCB $FF,$05,$F6          ; line 1: flag=-1, dy=5, dx=-10
+    FCB $FF,$0F,$0A          ; flag=-1, dy=15, dx=10
+    FCB $FF,$05,$F6          ; flag=-1, dy=5, dx=-10
     FCB 2                ; End marker (path complete)
 
 _NEWYORK_BG_PATH2:    ; Path 2
     FCB 110              ; path2: intensity
     FCB $0D,$F1,0,0        ; path2: header (y=13, x=-15, relative to center)
-    FCB $FF,$CE,$00          ; line 0: flag=-1, dy=-50, dx=0
-    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
-    FCB $FF,$32,$00          ; line 2: flag=-1, dy=50, dx=0
+    FCB $FF,$CE,$00          ; flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$1E          ; flag=-1, dy=0, dx=30
+    FCB $FF,$32,$00          ; flag=-1, dy=50, dx=0
     FCB 2                ; End marker (path complete)
 
 _NEWYORK_BG_PATH3:    ; Path 3
     FCB 120              ; path3: intensity
     FCB $0D,$EC,0,0        ; path3: header (y=13, x=-20, relative to center)
-    FCB $FF,$0A,$05          ; line 0: flag=-1, dy=10, dx=5
-    FCB $FF,$FB,$05          ; line 1: flag=-1, dy=-5, dx=5
-    FCB $FF,$07,$05          ; line 2: flag=-1, dy=7, dx=5
-    FCB $FF,$F9,$05          ; line 3: flag=-1, dy=-7, dx=5
-    FCB $FF,$07,$05          ; line 4: flag=-1, dy=7, dx=5
-    FCB $FF,$F9,$05          ; line 5: flag=-1, dy=-7, dx=5
-    FCB $FF,$05,$05          ; line 6: flag=-1, dy=5, dx=5
-    FCB $FF,$F6,$05          ; line 7: flag=-1, dy=-10, dx=5
+    FCB $FF,$0A,$05          ; flag=-1, dy=10, dx=5
+    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
+    FCB $FF,$07,$05          ; flag=-1, dy=7, dx=5
+    FCB $FF,$F9,$05          ; flag=-1, dy=-7, dx=5
+    FCB $FF,$07,$05          ; flag=-1, dy=7, dx=5
+    FCB $FF,$F9,$05          ; flag=-1, dy=-7, dx=5
+    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
+    FCB $FF,$F6,$05          ; flag=-1, dy=-10, dx=5
     FCB 2                ; End marker (path complete)
 
 _NEWYORK_BG_PATH4:    ; Path 4
     FCB 100              ; path4: intensity
     FCB $DB,$E7,0,0        ; path4: header (y=-37, x=-25, relative to center)
-    FCB $FF,$00,$32          ; line 0: flag=-1, dy=0, dx=50
+    FCB $FF,$00,$32          ; flag=-1, dy=0, dx=50
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: pyramids_bg
@@ -9256,27 +9410,27 @@ _PYRAMIDS_BG_VECTORS:  ; Main entry (header + 4 path(s))
 _PYRAMIDS_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $D3,$A6,0,0        ; path0: header (y=-45, x=-90, relative to center)
-    FCB $FF,$5A,$50          ; line 0: flag=-1, dy=90, dx=80
-    FCB $FF,$A6,$50          ; line 1: flag=-1, dy=-90, dx=80
+    FCB $FF,$5A,$50          ; flag=-1, dy=90, dx=80
+    FCB $FF,$A6,$50          ; flag=-1, dy=-90, dx=80
     FCB 2                ; End marker (path complete)
 
 _PYRAMIDS_BG_PATH1:    ; Path 1
     FCB 100              ; path1: intensity
     FCB $D3,$A6,0,0        ; path1: header (y=-45, x=-90, relative to center)
-    FCB $FF,$5A,$50          ; line 0: flag=-1, dy=90, dx=80
+    FCB $FF,$5A,$50          ; flag=-1, dy=90, dx=80
     FCB 2                ; End marker (path complete)
 
 _PYRAMIDS_BG_PATH2:    ; Path 2
     FCB 80              ; path2: intensity
     FCB $2D,$F6,0,0        ; path2: header (y=45, x=-10, relative to center)
-    FCB $FF,$A6,$50          ; line 0: flag=-1, dy=-90, dx=80
+    FCB $FF,$A6,$50          ; flag=-1, dy=-90, dx=80
     FCB 2                ; End marker (path complete)
 
 _PYRAMIDS_BG_PATH3:    ; Path 3
     FCB 90              ; path3: intensity
     FCB $D3,$1E,0,0        ; path3: header (y=-45, x=30, relative to center)
-    FCB $FF,$2D,$1E          ; line 0: flag=-1, dy=45, dx=30
-    FCB $FF,$D3,$1E          ; line 1: flag=-1, dy=-45, dx=30
+    FCB $FF,$2D,$1E          ; flag=-1, dy=45, dx=30
+    FCB $FF,$D3,$1E          ; flag=-1, dy=-45, dx=30
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: easter_bg
@@ -9300,40 +9454,40 @@ _EASTER_BG_VECTORS:  ; Main entry (header + 5 path(s))
 _EASTER_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $05,$E7,0,0        ; path0: header (y=5, x=-25, relative to center)
-    FCB $FF,$1E,$00          ; line 0: flag=-1, dy=30, dx=0
-    FCB $FF,$0A,$05          ; line 1: flag=-1, dy=10, dx=5
-    FCB $FF,$00,$28          ; line 2: flag=-1, dy=0, dx=40
-    FCB $FF,$F6,$05          ; line 3: flag=-1, dy=-10, dx=5
-    FCB $FF,$E2,$00          ; line 4: flag=-1, dy=-30, dx=0
+    FCB $FF,$1E,$00          ; flag=-1, dy=30, dx=0
+    FCB $FF,$0A,$05          ; flag=-1, dy=10, dx=5
+    FCB $FF,$00,$28          ; flag=-1, dy=0, dx=40
+    FCB $FF,$F6,$05          ; flag=-1, dy=-10, dx=5
+    FCB $FF,$E2,$00          ; flag=-1, dy=-30, dx=0
     FCB 2                ; End marker (path complete)
 
 _EASTER_BG_PATH1:    ; Path 1
     FCB 110              ; path1: intensity
     FCB $19,$00,0,0        ; path1: header (y=25, x=0, relative to center)
-    FCB $FF,$FB,$0A          ; line 0: flag=-1, dy=-5, dx=10
+    FCB $FF,$FB,$0A          ; flag=-1, dy=-5, dx=10
     FCB 2                ; End marker (path complete)
 
 _EASTER_BG_PATH2:    ; Path 2
     FCB 100              ; path2: intensity
     FCB $1E,$F8,0,0        ; path2: header (y=30, x=-8, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
-    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
-    FCB $FF,$00,$FB          ; line 3: flag=-1, dy=0, dx=-5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB 2                ; End marker (path complete)
 
 _EASTER_BG_PATH3:    ; Path 3
     FCB 110              ; path3: intensity
     FCB $05,$E2,0,0        ; path3: header (y=5, x=-30, relative to center)
-    FCB $FF,$CE,$00          ; line 0: flag=-1, dy=-50, dx=0
-    FCB $FF,$00,$3C          ; line 1: flag=-1, dy=0, dx=60
-    FCB $FF,$32,$00          ; line 2: flag=-1, dy=50, dx=0
+    FCB $FF,$CE,$00          ; flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
+    FCB $FF,$32,$00          ; flag=-1, dy=50, dx=0
     FCB 2                ; End marker (path complete)
 
 _EASTER_BG_PATH4:    ; Path 4
     FCB 90              ; path4: intensity
     FCB $D3,$DD,0,0        ; path4: header (y=-45, x=-35, relative to center)
-    FCB $FF,$00,$46          ; line 0: flag=-1, dy=0, dx=70
+    FCB $FF,$00,$46          ; flag=-1, dy=0, dx=70
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: keirin_bg
@@ -9355,24 +9509,24 @@ _KEIRIN_BG_VECTORS:  ; Main entry (header + 3 path(s))
 _KEIRIN_BG_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
     FCB $D8,$9C,0,0        ; path0: header (y=-40, x=-100, relative to center)
-    FCB $FF,$46,$32          ; line 0: flag=-1, dy=70, dx=50
-    FCB $FF,$0A,$32          ; line 1: flag=-1, dy=10, dx=50
-    FCB $FF,$F6,$32          ; line 2: flag=-1, dy=-10, dx=50
-    FCB $FF,$BA,$32          ; line 3: flag=-1, dy=-70, dx=50
+    FCB $FF,$46,$32          ; flag=-1, dy=70, dx=50
+    FCB $FF,$0A,$32          ; flag=-1, dy=10, dx=50
+    FCB $FF,$F6,$32          ; flag=-1, dy=-10, dx=50
+    FCB $FF,$BA,$32          ; flag=-1, dy=-70, dx=50
     FCB 2                ; End marker (path complete)
 
 _KEIRIN_BG_PATH1:    ; Path 1
     FCB 80              ; path1: intensity
     FCB $EC,$BA,0,0        ; path1: header (y=-20, x=-70, relative to center)
-    FCB $FF,$1E,$1E          ; line 0: flag=-1, dy=30, dx=30
-    FCB $FF,$0A,$1E          ; line 1: flag=-1, dy=10, dx=30
+    FCB $FF,$1E,$1E          ; flag=-1, dy=30, dx=30
+    FCB $FF,$0A,$1E          ; flag=-1, dy=10, dx=30
     FCB 2                ; End marker (path complete)
 
 _KEIRIN_BG_PATH2:    ; Path 2
     FCB 80              ; path2: intensity
     FCB $14,$0A,0,0        ; path2: header (y=20, x=10, relative to center)
-    FCB $FF,$F6,$1E          ; line 0: flag=-1, dy=-10, dx=30
-    FCB $FF,$E2,$1E          ; line 1: flag=-1, dy=-30, dx=30
+    FCB $FF,$F6,$1E          ; flag=-1, dy=-10, dx=30
+    FCB $FF,$E2,$1E          ; flag=-1, dy=-30, dx=30
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: barcelona_bg
@@ -9451,65 +9605,65 @@ _BARCELONA_BG_VECTORS:  ; Main entry (header + 60 path(s))
 _BARCELONA_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $C0,$C6,0,0        ; path0: header (y=-64, x=-58, relative to center)
-    FCB $FF,$0D,$05          ; line 0: flag=-1, dy=13, dx=5
-    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
-    FCB $FF,$14,$2A          ; line 2: flag=-1, dy=20, dx=42
-    FCB $FF,$EB,$2B          ; line 3: flag=-1, dy=-21, dx=43
-    FCB $FF,$FD,$FD          ; line 4: flag=-1, dy=-3, dx=-3
-    FCB $FF,$F3,$06          ; line 5: flag=-1, dy=-13, dx=6
-    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB $FF,$0D,$05          ; flag=-1, dy=13, dx=5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$14,$2A          ; flag=-1, dy=20, dx=42
+    FCB $FF,$EB,$2B          ; flag=-1, dy=-21, dx=43
+    FCB $FF,$FD,$FD          ; flag=-1, dy=-3, dx=-3
+    FCB $FF,$F3,$06          ; flag=-1, dy=-13, dx=6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $C0,$CA,0,0        ; path1: header (y=-64, x=-54, relative to center)
-    FCB $FF,$14,$07          ; line 0: flag=-1, dy=20, dx=7
-    FCB $FF,$00,$06          ; line 1: flag=-1, dy=0, dx=6
-    FCB $FF,$EC,$FA          ; line 2: flag=-1, dy=-20, dx=-6
+    FCB $FF,$14,$07          ; flag=-1, dy=20, dx=7
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$EC,$FA          ; flag=-1, dy=-20, dx=-6
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $C0,$D4,0,0        ; path2: header (y=-64, x=-44, relative to center)
-    FCB $FF,$18,$08          ; line 0: flag=-1, dy=24, dx=8
-    FCB $FF,$01,$09          ; line 1: flag=-1, dy=1, dx=9
+    FCB $FF,$18,$08          ; flag=-1, dy=24, dx=8
+    FCB $FF,$01,$09          ; flag=-1, dy=1, dx=9
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $C1,$05,0,0        ; path3: header (y=-63, x=5, relative to center)
-    FCB $FF,$18,$F9          ; line 0: flag=-1, dy=24, dx=-7
-    FCB $FF,$0A,$F7          ; line 1: flag=-1, dy=10, dx=-9
-    FCB $FF,$F6,$F5          ; line 2: flag=-1, dy=-10, dx=-11
+    FCB $FF,$18,$F9          ; flag=-1, dy=24, dx=-7
+    FCB $FF,$0A,$F7          ; flag=-1, dy=10, dx=-9
+    FCB $FF,$F6,$F5          ; flag=-1, dy=-10, dx=-11
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $C0,$F0,0,0        ; path4: header (y=-64, x=-16, relative to center)
-    FCB $FF,$0C,$01          ; line 0: flag=-1, dy=12, dx=1
-    FCB $FF,$01,$04          ; line 1: flag=-1, dy=1, dx=4
-    FCB $FF,$FF,$04          ; line 2: flag=-1, dy=-1, dx=4
+    FCB $FF,$0C,$01          ; flag=-1, dy=12, dx=1
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
+    FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $CC,$F9,0,0        ; path5: header (y=-52, x=-7, relative to center)
-    FCB $FF,$F5,$01          ; line 0: flag=-1, dy=-11, dx=1
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F5,$01          ; flag=-1, dy=-11, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $D9,$EA,0,0        ; path6: header (y=-39, x=-22, relative to center)
-    FCB $FF,$E7,$F9          ; line 0: flag=-1, dy=-25, dx=-7
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$E7,$F9          ; flag=-1, dy=-25, dx=-7
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $D9,$E5,0,0        ; path7: header (y=-39, x=-27, relative to center)
-    FCB $FF,$E7,$FC          ; line 0: flag=-1, dy=-25, dx=-4
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$E7,$FC          ; flag=-1, dy=-25, dx=-4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH8:    ; Path 8
@@ -9520,214 +9674,214 @@ _BARCELONA_BG_PATH8:    ; Path 8
 _BARCELONA_BG_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $C1,$09,0,0        ; path9: header (y=-63, x=9, relative to center)
-    FCB $FF,$11,$FC          ; line 0: flag=-1, dy=17, dx=-4
-    FCB $FF,$08,$FF          ; line 1: flag=-1, dy=8, dx=-1
-    FCB $FF,$FF,$09          ; line 2: flag=-1, dy=-1, dx=9
-    FCB $FF,$E8,$07          ; line 3: flag=-1, dy=-24, dx=7
+    FCB $FF,$11,$FC          ; flag=-1, dy=17, dx=-4
+    FCB $FF,$08,$FF          ; flag=-1, dy=8, dx=-1
+    FCB $FF,$FF,$09          ; flag=-1, dy=-1, dx=9
+    FCB $FF,$E8,$07          ; flag=-1, dy=-24, dx=7
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $C1,$16,0,0        ; path10: header (y=-63, x=22, relative to center)
-    FCB $FF,$13,$FD          ; line 0: flag=-1, dy=19, dx=-3
-    FCB $FF,$00,$04          ; line 1: flag=-1, dy=0, dx=4
-    FCB $FF,$ED,$0A          ; line 2: flag=-1, dy=-19, dx=10
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$13,$FD          ; flag=-1, dy=19, dx=-3
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$ED,$0A          ; flag=-1, dy=-19, dx=10
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $D5,$CD,0,0        ; path11: header (y=-43, x=-51, relative to center)
-    FCB $FF,$16,$28          ; line 0: flag=-1, dy=22, dx=40
-    FCB $FF,$EA,$27          ; line 1: flag=-1, dy=-22, dx=39
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$16,$28          ; flag=-1, dy=22, dx=40
+    FCB $FF,$EA,$27          ; flag=-1, dy=-22, dx=39
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $EB,$F5,0,0        ; path12: header (y=-21, x=-11, relative to center)
-    FCB $FF,$FB,$00          ; line 0: flag=-1, dy=-5, dx=0
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $D8,$CF,0,0        ; path13: header (y=-40, x=-49, relative to center)
-    FCB $FF,$0B,$02          ; line 0: flag=-1, dy=11, dx=2
-    FCB $FF,$12,$24          ; line 1: flag=-1, dy=18, dx=36
-    FCB $FF,$EE,$24          ; line 2: flag=-1, dy=-18, dx=36
-    FCB $FF,$F4,$01          ; line 3: flag=-1, dy=-12, dx=1
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$0B,$02          ; flag=-1, dy=11, dx=2
+    FCB $FF,$12,$24          ; flag=-1, dy=18, dx=36
+    FCB $FF,$EE,$24          ; flag=-1, dy=-18, dx=36
+    FCB $FF,$F4,$01          ; flag=-1, dy=-12, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $E4,$D3,0,0        ; path14: header (y=-28, x=-45, relative to center)
-    FCB $FF,$3A,$08          ; line 0: flag=-1, dy=58, dx=8
-    FCB $FF,$00,$FF          ; line 1: flag=-1, dy=0, dx=-1
-    FCB $FF,$0F,$03          ; line 2: flag=-1, dy=15, dx=3
-    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
-    FCB $FF,$F2,$02          ; line 4: flag=-1, dy=-14, dx=2
-    FCB $FF,$00,$FF          ; line 5: flag=-1, dy=0, dx=-1
-    FCB $FF,$CB,$00          ; line 6: flag=-1, dy=-53, dx=0
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$3A,$08          ; flag=-1, dy=58, dx=8
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$0F,$03          ; flag=-1, dy=15, dx=3
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F2,$02          ; flag=-1, dy=-14, dx=2
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$CB,$00          ; flag=-1, dy=-53, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $EA,$E0,0,0        ; path15: header (y=-22, x=-32, relative to center)
-    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
-    FCB $FF,$40,$06          ; line 1: flag=-1, dy=64, dx=6
-    FCB $FF,$01,$FF          ; line 2: flag=-1, dy=1, dx=-1
-    FCB $FF,$0F,$03          ; line 3: flag=-1, dy=15, dx=3
-    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
-    FCB $FF,$F3,$03          ; line 5: flag=-1, dy=-13, dx=3
-    FCB $FF,$FF,$FF          ; line 6: flag=-1, dy=-1, dx=-1
-    FCB $FF,$C5,$01          ; line 7: flag=-1, dy=-59, dx=1
-    FCB $FF,$00,$00          ; line 8: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$40,$06          ; flag=-1, dy=64, dx=6
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$0F,$03          ; flag=-1, dy=15, dx=3
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F3,$03          ; flag=-1, dy=-13, dx=3
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$C5,$01          ; flag=-1, dy=-59, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $F2,$FC,0,0        ; path16: header (y=-14, x=-4, relative to center)
-    FCB $FF,$39,$01          ; line 0: flag=-1, dy=57, dx=1
-    FCB $FF,$01,$FF          ; line 1: flag=-1, dy=1, dx=-1
-    FCB $FF,$0D,$03          ; line 2: flag=-1, dy=13, dx=3
-    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
-    FCB $FF,$F1,$02          ; line 4: flag=-1, dy=-15, dx=2
-    FCB $FF,$00,$FF          ; line 5: flag=-1, dy=0, dx=-1
+    FCB $FF,$39,$01          ; flag=-1, dy=57, dx=1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$0D,$03          ; flag=-1, dy=13, dx=3
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F1,$02          ; flag=-1, dy=-15, dx=2
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH17:    ; Path 17
     FCB 127              ; path17: intensity
     FCB $EA,$0B,0,0        ; path17: header (y=-22, x=11, relative to center)
-    FCB $FF,$34,$FE          ; line 0: flag=-1, dy=52, dx=-2
-    FCB $FF,$00,$FF          ; line 1: flag=-1, dy=0, dx=-1
-    FCB $FF,$0E,$02          ; line 2: flag=-1, dy=14, dx=2
-    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
-    FCB $FF,$F1,$04          ; line 4: flag=-1, dy=-15, dx=4
-    FCB $FF,$00,$FF          ; line 5: flag=-1, dy=0, dx=-1
-    FCB $FF,$C7,$08          ; line 6: flag=-1, dy=-57, dx=8
+    FCB $FF,$34,$FE          ; flag=-1, dy=52, dx=-2
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$0E,$02          ; flag=-1, dy=14, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$F1,$04          ; flag=-1, dy=-15, dx=4
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$C7,$08          ; flag=-1, dy=-57, dx=8
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH18:    ; Path 18
     FCB 127              ; path18: intensity
     FCB $12,$ED,0,0        ; path18: header (y=18, x=-19, relative to center)
-    FCB $FF,$03,$07          ; line 0: flag=-1, dy=3, dx=7
-    FCB $FF,$FE,$08          ; line 1: flag=-1, dy=-2, dx=8
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$07          ; flag=-1, dy=3, dx=7
+    FCB $FF,$FE,$08          ; flag=-1, dy=-2, dx=8
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH19:    ; Path 19
     FCB 127              ; path19: intensity
     FCB $0B,$ED,0,0        ; path19: header (y=11, x=-19, relative to center)
-    FCB $FF,$05,$07          ; line 0: flag=-1, dy=5, dx=7
-    FCB $FF,$FC,$08          ; line 1: flag=-1, dy=-4, dx=8
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$05,$07          ; flag=-1, dy=5, dx=7
+    FCB $FF,$FC,$08          ; flag=-1, dy=-4, dx=8
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH20:    ; Path 20
     FCB 127              ; path20: intensity
     FCB $F3,$F1,0,0        ; path20: header (y=-13, x=-15, relative to center)
-    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
-    FCB $FF,$08,$03          ; line 1: flag=-1, dy=8, dx=3
-    FCB $FF,$F7,$04          ; line 2: flag=-1, dy=-9, dx=4
-    FCB $FF,$F2,$01          ; line 3: flag=-1, dy=-14, dx=1
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB $FF,$08,$03          ; flag=-1, dy=8, dx=3
+    FCB $FF,$F7,$04          ; flag=-1, dy=-9, dx=4
+    FCB $FF,$F2,$01          ; flag=-1, dy=-14, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH21:    ; Path 21
     FCB 127              ; path21: intensity
     FCB $2A,$02,0,0        ; path21: header (y=42, x=2, relative to center)
-    FCB $FF,$C0,$09          ; line 0: flag=-1, dy=-64, dx=9
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$C0,$09          ; flag=-1, dy=-64, dx=9
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH22:    ; Path 22
     FCB 127              ; path22: intensity
     FCB $2A,$E6,0,0        ; path22: header (y=42, x=-26, relative to center)
-    FCB $FF,$01,$06          ; line 0: flag=-1, dy=1, dx=6
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$01,$06          ; flag=-1, dy=1, dx=6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH23:    ; Path 23
     FCB 127              ; path23: intensity
     FCB $1D,$DB,0,0        ; path23: header (y=29, x=-37, relative to center)
-    FCB $FF,$01,$05          ; line 0: flag=-1, dy=1, dx=5
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$01,$05          ; flag=-1, dy=1, dx=5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH24:    ; Path 24
     FCB 127              ; path24: intensity
     FCB $2A,$FD,0,0        ; path24: header (y=42, x=-3, relative to center)
-    FCB $FF,$FF,$05          ; line 0: flag=-1, dy=-1, dx=5
+    FCB $FF,$FF,$05          ; flag=-1, dy=-1, dx=5
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH25:    ; Path 25
     FCB 127              ; path25: intensity
     FCB $1D,$09,0,0        ; path25: header (y=29, x=9, relative to center)
-    FCB $FF,$FF,$06          ; line 0: flag=-1, dy=-1, dx=6
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH26:    ; Path 26
     FCB 127              ; path26: intensity
     FCB $28,$FE,0,0        ; path26: header (y=40, x=-2, relative to center)
-    FCB $FF,$E6,$00          ; line 0: flag=-1, dy=-26, dx=0
+    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH27:    ; Path 27
     FCB 127              ; path27: intensity
     FCB $1A,$0B,0,0        ; path27: header (y=26, x=11, relative to center)
-    FCB $FF,$E9,$01          ; line 0: flag=-1, dy=-23, dx=1
+    FCB $FF,$E9,$01          ; flag=-1, dy=-23, dx=1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH28:    ; Path 28
     FCB 127              ; path28: intensity
     FCB $28,$E8,0,0        ; path28: header (y=40, x=-24, relative to center)
-    FCB $FF,$E5,$FD          ; line 0: flag=-1, dy=-27, dx=-3
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$E5,$FD          ; flag=-1, dy=-27, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH29:    ; Path 29
     FCB 127              ; path29: intensity
     FCB $28,$EB,0,0        ; path29: header (y=40, x=-21, relative to center)
-    FCB $FF,$E6,$00          ; line 0: flag=-1, dy=-26, dx=0
+    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH30:    ; Path 30
     FCB 127              ; path30: intensity
     FCB $0E,$E9,0,0        ; path30: header (y=14, x=-23, relative to center)
-    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH31:    ; Path 31
     FCB 127              ; path31: intensity
     FCB $28,$01,0,0        ; path31: header (y=40, x=1, relative to center)
-    FCB $FF,$E5,$03          ; line 0: flag=-1, dy=-27, dx=3
+    FCB $FF,$E5,$03          ; flag=-1, dy=-27, dx=3
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH32:    ; Path 32
     FCB 127              ; path32: intensity
     FCB $19,$0E,0,0        ; path32: header (y=25, x=14, relative to center)
-    FCB $FF,$E9,$03          ; line 0: flag=-1, dy=-23, dx=3
+    FCB $FF,$E9,$03          ; flag=-1, dy=-23, dx=3
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH33:    ; Path 33
     FCB 127              ; path33: intensity
     FCB $07,$E5,0,0        ; path33: header (y=7, x=-27, relative to center)
-    FCB $FF,$F0,$FF          ; line 0: flag=-1, dy=-16, dx=-1
+    FCB $FF,$F0,$FF          ; flag=-1, dy=-16, dx=-1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH34:    ; Path 34
     FCB 127              ; path34: intensity
     FCB $07,$E8,0,0        ; path34: header (y=7, x=-24, relative to center)
-    FCB $FF,$F2,$FF          ; line 0: flag=-1, dy=-14, dx=-1
+    FCB $FF,$F2,$FF          ; flag=-1, dy=-14, dx=-1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH35:    ; Path 35
     FCB 127              ; path35: intensity
     FCB $07,$EB,0,0        ; path35: header (y=7, x=-21, relative to center)
-    FCB $FF,$F4,$FF          ; line 0: flag=-1, dy=-12, dx=-1
+    FCB $FF,$F4,$FF          ; flag=-1, dy=-12, dx=-1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH36:    ; Path 36
@@ -9748,75 +9902,75 @@ _BARCELONA_BG_PATH38:    ; Path 38
 _BARCELONA_BG_PATH39:    ; Path 39
     FCB 127              ; path39: intensity
     FCB $1B,$DC,0,0        ; path39: header (y=27, x=-36, relative to center)
-    FCB $FF,$EB,$FE          ; line 0: flag=-1, dy=-21, dx=-2
+    FCB $FF,$EB,$FE          ; flag=-1, dy=-21, dx=-2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH40:    ; Path 40
     FCB 127              ; path40: intensity
     FCB $1B,$DE,0,0        ; path40: header (y=27, x=-34, relative to center)
-    FCB $FF,$EB,$00          ; line 0: flag=-1, dy=-21, dx=0
+    FCB $FF,$EB,$00          ; flag=-1, dy=-21, dx=0
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH41:    ; Path 41
     FCB 127              ; path41: intensity
     FCB $00,$D9,0,0        ; path41: header (y=0, x=-39, relative to center)
-    FCB $FF,$F0,$FE          ; line 0: flag=-1, dy=-16, dx=-2
+    FCB $FF,$F0,$FE          ; flag=-1, dy=-16, dx=-2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH42:    ; Path 42
     FCB 127              ; path42: intensity
     FCB $00,$DB,0,0        ; path42: header (y=0, x=-37, relative to center)
-    FCB $FF,$F1,$FF          ; line 0: flag=-1, dy=-15, dx=-1
+    FCB $FF,$F1,$FF          ; flag=-1, dy=-15, dx=-1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH43:    ; Path 43
     FCB 127              ; path43: intensity
     FCB $00,$DE,0,0        ; path43: header (y=0, x=-34, relative to center)
-    FCB $FF,$F3,$FF          ; line 0: flag=-1, dy=-13, dx=-1
+    FCB $FF,$F3,$FF          ; flag=-1, dy=-13, dx=-1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH44:    ; Path 44
     FCB 127              ; path44: intensity
     FCB $3D,$EC,0,0        ; path44: header (y=61, x=-20, relative to center)
-    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
-    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
-    FCB $FF,$FD,$FF          ; line 2: flag=-1, dy=-3, dx=-1
-    FCB $FF,$FD,$01          ; line 3: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
-    FCB $FF,$03,$02          ; closing line: flag=-1, dy=3, dx=2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH45:    ; Path 45
     FCB 127              ; path45: intensity
     FCB $30,$E1,0,0        ; path45: header (y=48, x=-31, relative to center)
-    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
-    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
-    FCB $FF,$FD,$FE          ; line 2: flag=-1, dy=-3, dx=-2
-    FCB $FF,$FD,$02          ; line 3: flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
-    FCB $FF,$03,$02          ; closing line: flag=-1, dy=3, dx=2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$FD,$FE          ; flag=-1, dy=-3, dx=-2
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH46:    ; Path 46
     FCB 127              ; path46: intensity
     FCB $3C,$03,0,0        ; path46: header (y=60, x=3, relative to center)
-    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
-    FCB $FF,$00,$FC          ; line 1: flag=-1, dy=0, dx=-4
-    FCB $FF,$FD,$FF          ; line 2: flag=-1, dy=-3, dx=-1
-    FCB $FF,$FD,$02          ; line 3: flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
-    FCB $FF,$03,$02          ; closing line: flag=-1, dy=3, dx=2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH47:    ; Path 47
     FCB 127              ; path47: intensity
     FCB $2E,$0E,0,0        ; path47: header (y=46, x=14, relative to center)
-    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
-    FCB $FF,$00,$FC          ; line 1: flag=-1, dy=0, dx=-4
-    FCB $FF,$FD,$FF          ; line 2: flag=-1, dy=-3, dx=-1
-    FCB $FF,$FE,$02          ; line 3: flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$02          ; line 4: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$02          ; closing line: flag=-1, dy=2, dx=2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH48:    ; Path 48
@@ -9852,37 +10006,37 @@ _BARCELONA_BG_PATH53:    ; Path 53
 _BARCELONA_BG_PATH54:    ; Path 54
     FCB 127              ; path54: intensity
     FCB $07,$05,0,0        ; path54: header (y=7, x=5, relative to center)
-    FCB $FF,$F0,$01          ; line 0: flag=-1, dy=-16, dx=1
+    FCB $FF,$F0,$01          ; flag=-1, dy=-16, dx=1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH55:    ; Path 55
     FCB 127              ; path55: intensity
     FCB $07,$02,0,0        ; path55: header (y=7, x=2, relative to center)
-    FCB $FF,$F2,$01          ; line 0: flag=-1, dy=-14, dx=1
+    FCB $FF,$F2,$01          ; flag=-1, dy=-14, dx=1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH56:    ; Path 56
     FCB 127              ; path56: intensity
     FCB $07,$FF,0,0        ; path56: header (y=7, x=-1, relative to center)
-    FCB $FF,$F4,$01          ; line 0: flag=-1, dy=-12, dx=1
+    FCB $FF,$F4,$01          ; flag=-1, dy=-12, dx=1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH57:    ; Path 57
     FCB 127              ; path57: intensity
     FCB $00,$11,0,0        ; path57: header (y=0, x=17, relative to center)
-    FCB $FF,$F0,$02          ; line 0: flag=-1, dy=-16, dx=2
+    FCB $FF,$F0,$02          ; flag=-1, dy=-16, dx=2
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH58:    ; Path 58
     FCB 127              ; path58: intensity
     FCB $00,$0F,0,0        ; path58: header (y=0, x=15, relative to center)
-    FCB $FF,$F1,$01          ; line 0: flag=-1, dy=-15, dx=1
+    FCB $FF,$F1,$01          ; flag=-1, dy=-15, dx=1
     FCB 2                ; End marker (path complete)
 
 _BARCELONA_BG_PATH59:    ; Path 59
     FCB 127              ; path59: intensity
     FCB $00,$0C,0,0        ; path59: header (y=0, x=12, relative to center)
-    FCB $FF,$F3,$01          ; line 0: flag=-1, dy=-13, dx=1
+    FCB $FF,$F3,$01          ; flag=-1, dy=-13, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: bubble_small
@@ -9902,30 +10056,30 @@ _BUBBLE_SMALL_VECTORS:  ; Main entry (header + 1 path(s))
 _BUBBLE_SMALL_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $00,$0A,0,0        ; path0: header (y=0, x=10, relative to center)
-    FCB $FF,$03,$FF          ; line 0: flag=-1, dy=3, dx=-1
-    FCB $FF,$02,$00          ; line 1: flag=-1, dy=2, dx=0
-    FCB $FF,$02,$FE          ; line 2: flag=-1, dy=2, dx=-2
-    FCB $FF,$02,$FE          ; line 3: flag=-1, dy=2, dx=-2
-    FCB $FF,$00,$FE          ; line 4: flag=-1, dy=0, dx=-2
-    FCB $FF,$01,$FD          ; line 5: flag=-1, dy=1, dx=-3
-    FCB $FF,$FF,$FD          ; line 6: flag=-1, dy=-1, dx=-3
-    FCB $FF,$00,$FE          ; line 7: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$FE          ; line 8: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FE,$FE          ; line 9: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FE,$00          ; line 10: flag=-1, dy=-2, dx=0
-    FCB $FF,$FD,$FF          ; line 11: flag=-1, dy=-3, dx=-1
-    FCB $FF,$FD,$01          ; line 12: flag=-1, dy=-3, dx=1
-    FCB $FF,$FE,$00          ; line 13: flag=-1, dy=-2, dx=0
-    FCB $FF,$FE,$02          ; line 14: flag=-1, dy=-2, dx=2
-    FCB $FF,$FE,$02          ; line 15: flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$02          ; line 16: flag=-1, dy=0, dx=2
-    FCB $FF,$FF,$03          ; line 17: flag=-1, dy=-1, dx=3
-    FCB $FF,$01,$03          ; line 18: flag=-1, dy=1, dx=3
-    FCB $FF,$00,$02          ; line 19: flag=-1, dy=0, dx=2
-    FCB $FF,$02,$02          ; line 20: flag=-1, dy=2, dx=2
-    FCB $FF,$02,$02          ; line 21: flag=-1, dy=2, dx=2
-    FCB $FF,$02,$00          ; line 22: flag=-1, dy=2, dx=0
-    FCB $FF,$03,$01          ; closing line: flag=-1, dy=3, dx=1
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: logo
@@ -9951,94 +10105,94 @@ _LOGO_VECTORS:  ; Main entry (header + 7 path(s))
 _LOGO_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $13,$AE,0,0        ; path0: header (y=19, x=-82, relative to center)
-    FCB $FF,$EF,$06          ; line 0: flag=-1, dy=-17, dx=6
-    FCB $FF,$02,$07          ; line 1: flag=-1, dy=2, dx=7
-    FCB $FF,$D6,$09          ; line 2: flag=-1, dy=-42, dx=9
-    FCB $FF,$0B,$11          ; line 3: flag=-1, dy=11, dx=17
-    FCB $FF,$0C,$FC          ; line 4: flag=-1, dy=12, dx=-4
-    FCB $FF,$0D,$10          ; line 5: flag=-1, dy=13, dx=16
-    FCB $FF,$0B,$09          ; line 6: flag=-1, dy=11, dx=9
-    FCB $FF,$0C,$01          ; line 7: flag=-1, dy=12, dx=1
-    FCB $FF,$08,$F8          ; line 8: flag=-1, dy=8, dx=-8
-    FCB $FF,$02,$F0          ; line 9: flag=-1, dy=2, dx=-16
-    FCB $FF,$FC,$F1          ; line 10: flag=-1, dy=-4, dx=-15
-    FCB $FF,$F8,$EA          ; line 11: flag=-1, dy=-8, dx=-22
-    FCB $FF,$00,$00          ; line 12: flag=-1, dy=0, dx=0
+    FCB $FF,$EF,$06          ; flag=-1, dy=-17, dx=6
+    FCB $FF,$02,$07          ; flag=-1, dy=2, dx=7
+    FCB $FF,$D6,$09          ; flag=-1, dy=-42, dx=9
+    FCB $FF,$0B,$11          ; flag=-1, dy=11, dx=17
+    FCB $FF,$0C,$FC          ; flag=-1, dy=12, dx=-4
+    FCB $FF,$0D,$10          ; flag=-1, dy=13, dx=16
+    FCB $FF,$0B,$09          ; flag=-1, dy=11, dx=9
+    FCB $FF,$0C,$01          ; flag=-1, dy=12, dx=1
+    FCB $FF,$08,$F8          ; flag=-1, dy=8, dx=-8
+    FCB $FF,$02,$F0          ; flag=-1, dy=2, dx=-16
+    FCB $FF,$FC,$F1          ; flag=-1, dy=-4, dx=-15
+    FCB $FF,$F8,$EA          ; flag=-1, dy=-8, dx=-22
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $FB,$E3,0,0        ; path1: header (y=-5, x=-29, relative to center)
-    FCB $FF,$E7,$F8          ; line 0: flag=-1, dy=-25, dx=-8
-    FCB $FF,$04,$10          ; line 1: flag=-1, dy=4, dx=16
-    FCB $FF,$0C,$02          ; line 2: flag=-1, dy=12, dx=2
-    FCB $FF,$03,$0B          ; line 3: flag=-1, dy=3, dx=11
-    FCB $FF,$FA,$00          ; line 4: flag=-1, dy=-6, dx=0
-    FCB $FF,$03,$0D          ; line 5: flag=-1, dy=3, dx=13
-    FCB $FF,$22,$F7          ; line 6: flag=-1, dy=34, dx=-9
-    FCB $FF,$FD,$F1          ; line 7: flag=-1, dy=-3, dx=-15
-    FCB $FF,$F5,$FF          ; line 8: flag=-1, dy=-11, dx=-1
-    FCB $FF,$F5,$F7          ; line 9: flag=-1, dy=-11, dx=-9
-    FCB $FF,$00,$00          ; line 10: flag=-1, dy=0, dx=0
+    FCB $FF,$E7,$F8          ; flag=-1, dy=-25, dx=-8
+    FCB $FF,$04,$10          ; flag=-1, dy=4, dx=16
+    FCB $FF,$0C,$02          ; flag=-1, dy=12, dx=2
+    FCB $FF,$03,$0B          ; flag=-1, dy=3, dx=11
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$03,$0D          ; flag=-1, dy=3, dx=13
+    FCB $FF,$22,$F7          ; flag=-1, dy=34, dx=-9
+    FCB $FF,$FD,$F1          ; flag=-1, dy=-3, dx=-15
+    FCB $FF,$F5,$FF          ; flag=-1, dy=-11, dx=-1
+    FCB $FF,$F5,$F7          ; flag=-1, dy=-11, dx=-9
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $07,$CE,0,0        ; path2: header (y=7, x=-50, relative to center)
-    FCB $FF,$F8,$02          ; line 0: flag=-1, dy=-8, dx=2
-    FCB $FF,$07,$08          ; line 1: flag=-1, dy=7, dx=8
-    FCB $FF,$01,$F6          ; line 2: flag=-1, dy=1, dx=-10
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$F8,$02          ; flag=-1, dy=-8, dx=2
+    FCB $FF,$07,$08          ; flag=-1, dy=7, dx=8
+    FCB $FF,$01,$F6          ; flag=-1, dy=1, dx=-10
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $06,$F4,0,0        ; path3: header (y=6, x=-12, relative to center)
-    FCB $FF,$F6,$FD          ; line 0: flag=-1, dy=-10, dx=-3
-    FCB $FF,$02,$07          ; line 1: flag=-1, dy=2, dx=7
-    FCB $FF,$08,$FC          ; line 2: flag=-1, dy=8, dx=-4
-    FCB $FF,$FE,$01          ; line 3: flag=-1, dy=-2, dx=1
+    FCB $FF,$F6,$FD          ; flag=-1, dy=-10, dx=-3
+    FCB $FF,$02,$07          ; flag=-1, dy=2, dx=7
+    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $F3,$0A,0,0        ; path4: header (y=-13, x=10, relative to center)
-    FCB $FF,$29,$02          ; line 0: flag=-1, dy=41, dx=2
-    FCB $FF,$02,$0D          ; line 1: flag=-1, dy=2, dx=13
-    FCB $FF,$EB,$0A          ; line 2: flag=-1, dy=-21, dx=10
-    FCB $FF,$1A,$07          ; line 3: flag=-1, dy=26, dx=7
-    FCB $FF,$03,$14          ; line 4: flag=-1, dy=3, dx=20
-    FCB $FF,$D8,$EF          ; line 5: flag=-1, dy=-40, dx=-17
-    FCB $FF,$FE,$F3          ; line 6: flag=-1, dy=-2, dx=-13
-    FCB $FF,$0D,$F8          ; line 7: flag=-1, dy=13, dx=-8
-    FCB $FF,$EE,$FC          ; line 8: flag=-1, dy=-18, dx=-4
-    FCB $FF,$FC,$F6          ; line 9: flag=-1, dy=-4, dx=-10
-    FCB $FF,$00,$00          ; line 10: flag=-1, dy=0, dx=0
+    FCB $FF,$29,$02          ; flag=-1, dy=41, dx=2
+    FCB $FF,$02,$0D          ; flag=-1, dy=2, dx=13
+    FCB $FF,$EB,$0A          ; flag=-1, dy=-21, dx=10
+    FCB $FF,$1A,$07          ; flag=-1, dy=26, dx=7
+    FCB $FF,$03,$14          ; flag=-1, dy=3, dx=20
+    FCB $FF,$D8,$EF          ; flag=-1, dy=-40, dx=-17
+    FCB $FF,$FE,$F3          ; flag=-1, dy=-2, dx=-13
+    FCB $FF,$0D,$F8          ; flag=-1, dy=13, dx=-8
+    FCB $FF,$EE,$FC          ; flag=-1, dy=-18, dx=-4
+    FCB $FF,$FC,$F6          ; flag=-1, dy=-4, dx=-10
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $06,$45,0,0        ; path5: header (y=6, x=69, relative to center)
-    FCB $FF,$08,$F5          ; line 0: flag=-1, dy=8, dx=-11
-    FCB $FF,$F4,$F7          ; line 1: flag=-1, dy=-12, dx=-9
-    FCB $FF,$F7,$01          ; line 2: flag=-1, dy=-9, dx=1
-    FCB $FF,$FE,$0C          ; line 3: flag=-1, dy=-2, dx=12
-    FCB $FF,$03,$FA          ; line 4: flag=-1, dy=3, dx=-6
-    FCB $FF,$05,$01          ; line 5: flag=-1, dy=5, dx=1
-    FCB $FF,$02,$17          ; line 6: flag=-1, dy=2, dx=23
-    FCB $FF,$F3,$FD          ; line 7: flag=-1, dy=-13, dx=-3
-    FCB $FF,$F9,$EE          ; line 8: flag=-1, dy=-7, dx=-18
-    FCB $FF,$04,$F0          ; line 9: flag=-1, dy=4, dx=-16
-    FCB $FF,$0B,$F8          ; line 10: flag=-1, dy=11, dx=-8
+    FCB $FF,$08,$F5          ; flag=-1, dy=8, dx=-11
+    FCB $FF,$F4,$F7          ; flag=-1, dy=-12, dx=-9
+    FCB $FF,$F7,$01          ; flag=-1, dy=-9, dx=1
+    FCB $FF,$FE,$0C          ; flag=-1, dy=-2, dx=12
+    FCB $FF,$03,$FA          ; flag=-1, dy=3, dx=-6
+    FCB $FF,$05,$01          ; flag=-1, dy=5, dx=1
+    FCB $FF,$02,$17          ; flag=-1, dy=2, dx=23
+    FCB $FF,$F3,$FD          ; flag=-1, dy=-13, dx=-3
+    FCB $FF,$F9,$EE          ; flag=-1, dy=-7, dx=-18
+    FCB $FF,$04,$F0          ; flag=-1, dy=4, dx=-16
+    FCB $FF,$0B,$F8          ; flag=-1, dy=11, dx=-8
     FCB 2                ; End marker (path complete)
 
 _LOGO_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $06,$45,0,0        ; path6: header (y=6, x=69, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
-    FCB $FF,$0C,$F8          ; line 1: flag=-1, dy=12, dx=-8
-    FCB $FF,$03,$F0          ; line 2: flag=-1, dy=3, dx=-16
-    FCB $FF,$FB,$FC          ; line 3: flag=-1, dy=-5, dx=-4
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB $FF,$0C,$F8          ; flag=-1, dy=12, dx=-8
+    FCB $FF,$03,$F0          ; flag=-1, dy=3, dx=-16
+    FCB $FF,$FB,$FC          ; flag=-1, dy=-5, dx=-4
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: angkor_bg
@@ -10249,124 +10403,124 @@ _ANGKOR_BG_VECTORS:  ; Main entry (header + 192 path(s))
 _ANGKOR_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $CA,$A0,0,0        ; path0: header (y=-54, x=-96, relative to center)
-    FCB $FF,$0D,$00          ; line 0: flag=-1, dy=13, dx=0
-    FCB $FF,$00,$4C          ; line 1: flag=-1, dy=0, dx=76
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$0D,$00          ; flag=-1, dy=13, dx=0
+    FCB $FF,$00,$4C          ; flag=-1, dy=0, dx=76
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $D2,$A0,0,0        ; path1: header (y=-46, x=-96, relative to center)
-    FCB $FF,$00,$4C          ; line 0: flag=-1, dy=0, dx=76
+    FCB $FF,$00,$4C          ; flag=-1, dy=0, dx=76
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $D8,$EC,0,0        ; path2: header (y=-40, x=-20, relative to center)
-    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$07          ; line 1: flag=-1, dy=0, dx=7
-    FCB $FF,$FF,$02          ; line 2: flag=-1, dy=-1, dx=2
-    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$F7          ; line 4: flag=-1, dy=0, dx=-9
-    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $D8,$EE,0,0        ; path3: header (y=-40, x=-18, relative to center)
-    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $E3,$EE,0,0        ; path4: header (y=-29, x=-18, relative to center)
-    FCB $FF,$00,$B6          ; line 0: flag=-1, dy=0, dx=-74
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$B6          ; flag=-1, dy=0, dx=-74
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $E3,$A4,0,0        ; path5: header (y=-29, x=-92, relative to center)
-    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $E9,$A4,0,0        ; path6: header (y=-23, x=-92, relative to center)
-    FCB $FF,$00,$49          ; line 0: flag=-1, dy=0, dx=73
+    FCB $FF,$00,$49          ; flag=-1, dy=0, dx=73
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $E7,$F5,0,0        ; path7: header (y=-25, x=-11, relative to center)
-    FCB $FF,$00,$F8          ; line 0: flag=-1, dy=0, dx=-8
-    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
-    FCB $FF,$01,$02          ; line 2: flag=-1, dy=1, dx=2
-    FCB $FF,$01,$03          ; line 3: flag=-1, dy=1, dx=3
-    FCB $FF,$02,$FF          ; line 4: flag=-1, dy=2, dx=-1
-    FCB $FF,$02,$01          ; line 5: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$03          ; line 6: flag=-1, dy=0, dx=3
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 8: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $FC,$00,0,0        ; path8: header (y=-4, x=0, relative to center)
-    FCB $FF,$F5,$F5          ; line 0: flag=-1, dy=-11, dx=-11
+    FCB $FF,$F5,$F5          ; flag=-1, dy=-11, dx=-11
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $E3,$A5,0,0        ; path9: header (y=-29, x=-91, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $E3,$B1,0,0        ; path10: header (y=-29, x=-79, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $E3,$BE,0,0        ; path11: header (y=-29, x=-66, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $E3,$CA,0,0        ; path12: header (y=-29, x=-54, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $E3,$D8,0,0        ; path13: header (y=-29, x=-40, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $E9,$A9,0,0        ; path14: header (y=-23, x=-87, relative to center)
-    FCB $FF,$0E,$00          ; line 0: flag=-1, dy=14, dx=0
-    FCB $FF,$00,$31          ; line 1: flag=-1, dy=0, dx=49
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB $FF,$00,$31          ; flag=-1, dy=0, dx=49
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $F7,$BB,0,0        ; path15: header (y=-9, x=-69, relative to center)
-    FCB $FF,$F2,$00          ; line 0: flag=-1, dy=-14, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH16:    ; Path 16
@@ -10382,197 +10536,197 @@ _ANGKOR_BG_PATH17:    ; Path 17
 _ANGKOR_BG_PATH18:    ; Path 18
     FCB 127              ; path18: intensity
     FCB $FD,$DA,0,0        ; path18: header (y=-3, x=-38, relative to center)
-    FCB $FF,$EC,$00          ; line 0: flag=-1, dy=-20, dx=0
+    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH19:    ; Path 19
     FCB 127              ; path19: intensity
     FCB $F7,$B3,0,0        ; path19: header (y=-9, x=-77, relative to center)
-    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
-    FCB $FF,$00,$1B          ; line 1: flag=-1, dy=0, dx=27
-    FCB $FF,$F0,$00          ; line 2: flag=-1, dy=-16, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
+    FCB $FF,$00,$1B          ; flag=-1, dy=0, dx=27
+    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH20:    ; Path 20
     FCB 127              ; path20: intensity
     FCB $07,$B4,0,0        ; path20: header (y=7, x=-76, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$02,$FD          ; line 1: flag=-1, dy=2, dx=-3
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH21:    ; Path 21
     FCB 127              ; path21: intensity
     FCB $07,$B8,0,0        ; path21: header (y=7, x=-72, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH22:    ; Path 22
     FCB 127              ; path22: intensity
     FCB $07,$C7,0,0        ; path22: header (y=7, x=-57, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH23:    ; Path 23
     FCB 127              ; path23: intensity
     FCB $07,$CB,0,0        ; path23: header (y=7, x=-53, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$02,$03          ; line 1: flag=-1, dy=2, dx=3
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH24:    ; Path 24
     FCB 127              ; path24: intensity
     FCB $0C,$B1,0,0        ; path24: header (y=12, x=-79, relative to center)
-    FCB $FF,$02,$05          ; line 0: flag=-1, dy=2, dx=5
-    FCB $FF,$00,$10          ; line 1: flag=-1, dy=0, dx=16
-    FCB $FF,$00,$03          ; line 2: flag=-1, dy=0, dx=3
-    FCB $FF,$FE,$05          ; line 3: flag=-1, dy=-2, dx=5
+    FCB $FF,$02,$05          ; flag=-1, dy=2, dx=5
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH25:    ; Path 25
     FCB 127              ; path25: intensity
     FCB $0E,$B9,0,0        ; path25: header (y=14, x=-71, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$0E          ; line 2: flag=-1, dy=0, dx=14
-    FCB $FF,$FE,$05          ; line 3: flag=-1, dy=-2, dx=5
-    FCB $FF,$05,$00          ; line 4: flag=-1, dy=5, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH26:    ; Path 26
     FCB 127              ; path26: intensity
     FCB $16,$C6,0,0        ; path26: header (y=22, x=-58, relative to center)
-    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH27:    ; Path 27
     FCB 127              ; path27: intensity
     FCB $16,$B9,0,0        ; path27: header (y=22, x=-71, relative to center)
-    FCB $FF,$00,$FF          ; line 0: flag=-1, dy=0, dx=-1
-    FCB $FF,$FE,$FB          ; line 1: flag=-1, dy=-2, dx=-5
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH28:    ; Path 28
     FCB 127              ; path28: intensity
     FCB $14,$CC,0,0        ; path28: header (y=20, x=-52, relative to center)
-    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH29:    ; Path 29
     FCB 127              ; path29: intensity
     FCB $14,$B3,0,0        ; path29: header (y=20, x=-77, relative to center)
-    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH30:    ; Path 30
     FCB 127              ; path30: intensity
     FCB $16,$BA,0,0        ; path30: header (y=22, x=-70, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$0B          ; line 1: flag=-1, dy=0, dx=11
-    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$0B          ; flag=-1, dy=0, dx=11
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH31:    ; Path 31
     FCB 127              ; path31: intensity
     FCB $1E,$BA,0,0        ; path31: header (y=30, x=-70, relative to center)
-    FCB $FF,$FE,$FA          ; line 0: flag=-1, dy=-2, dx=-6
-    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB $FF,$FE,$FA          ; flag=-1, dy=-2, dx=-6
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH32:    ; Path 32
     FCB 127              ; path32: intensity
     FCB $1C,$B4,0,0        ; path32: header (y=28, x=-76, relative to center)
-    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH33:    ; Path 33
     FCB 127              ; path33: intensity
     FCB $1E,$C5,0,0        ; path33: header (y=30, x=-59, relative to center)
-    FCB $FF,$FE,$06          ; line 0: flag=-1, dy=-2, dx=6
-    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$06          ; flag=-1, dy=-2, dx=6
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH34:    ; Path 34
     FCB 127              ; path34: intensity
     FCB $1C,$CB,0,0        ; path34: header (y=28, x=-53, relative to center)
-    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH35:    ; Path 35
     FCB 127              ; path35: intensity
     FCB $1E,$B9,0,0        ; path35: header (y=30, x=-71, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$01,$FE          ; line 1: flag=-1, dy=1, dx=-2
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH36:    ; Path 36
     FCB 127              ; path36: intensity
     FCB $23,$B7,0,0        ; path36: header (y=35, x=-73, relative to center)
-    FCB $FF,$01,$04          ; line 0: flag=-1, dy=1, dx=4
-    FCB $FF,$00,$09          ; line 1: flag=-1, dy=0, dx=9
-    FCB $FF,$FF,$04          ; line 2: flag=-1, dy=-1, dx=4
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
+    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
+    FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH37:    ; Path 37
     FCB 127              ; path37: intensity
     FCB $1E,$C6,0,0        ; path37: header (y=30, x=-58, relative to center)
-    FCB $FF,$02,$00          ; line 0: flag=-1, dy=2, dx=0
-    FCB $FF,$03,$02          ; line 1: flag=-1, dy=3, dx=2
-    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH38:    ; Path 38
     FCB 127              ; path38: intensity
     FCB $24,$BC,0,0        ; path38: header (y=36, x=-68, relative to center)
-    FCB $FF,$FA,$00          ; line 0: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH39:    ; Path 39
     FCB 127              ; path39: intensity
     FCB $1E,$C3,0,0        ; path39: header (y=30, x=-61, relative to center)
-    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH40:    ; Path 40
     FCB 127              ; path40: intensity
     FCB $24,$B9,0,0        ; path40: header (y=36, x=-71, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$0D          ; line 1: flag=-1, dy=0, dx=13
-    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$0D          ; flag=-1, dy=0, dx=13
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH41:    ; Path 41
     FCB 127              ; path41: intensity
     FCB $29,$BA,0,0        ; path41: header (y=41, x=-70, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$0B          ; line 1: flag=-1, dy=0, dx=11
-    FCB $FF,$FC,$00          ; line 2: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$0B          ; flag=-1, dy=0, dx=11
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH42:    ; Path 42
     FCB 127              ; path42: intensity
     FCB $2D,$BC,0,0        ; path42: header (y=45, x=-68, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$07          ; line 1: flag=-1, dy=0, dx=7
-    FCB $FF,$FD,$00          ; line 2: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH43:    ; Path 43
@@ -10598,152 +10752,152 @@ _ANGKOR_BG_PATH46:    ; Path 46
 _ANGKOR_BG_PATH47:    ; Path 47
     FCB 127              ; path47: intensity
     FCB $30,$BD,0,0        ; path47: header (y=48, x=-67, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH48:    ; Path 48
     FCB 127              ; path48: intensity
     FCB $30,$C2,0,0        ; path48: header (y=48, x=-62, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH49:    ; Path 49
     FCB 127              ; path49: intensity
     FCB $07,$B9,0,0        ; path49: header (y=7, x=-71, relative to center)
-    FCB $FF,$F0,$00          ; line 0: flag=-1, dy=-16, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH50:    ; Path 50
     FCB 127              ; path50: intensity
     FCB $F7,$C6,0,0        ; path50: header (y=-9, x=-58, relative to center)
-    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
+    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH51:    ; Path 51
     FCB 127              ; path51: intensity
     FCB $04,$BC,0,0        ; path51: header (y=4, x=-68, relative to center)
-    FCB $FF,$00,$07          ; line 0: flag=-1, dy=0, dx=7
-    FCB $FF,$F7,$00          ; line 1: flag=-1, dy=-9, dx=0
-    FCB $FF,$00,$F9          ; line 2: flag=-1, dy=0, dx=-7
-    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH52:    ; Path 52
     FCB 127              ; path52: intensity
     FCB $07,$BC,0,0        ; path52: header (y=7, x=-68, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$02,$03          ; line 1: flag=-1, dy=2, dx=3
-    FCB $FF,$FE,$03          ; line 2: flag=-1, dy=-2, dx=3
-    FCB $FF,$FC,$00          ; line 3: flag=-1, dy=-4, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH53:    ; Path 53
     FCB 127              ; path53: intensity
     FCB $E3,$E5,0,0        ; path53: header (y=-29, x=-27, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH54:    ; Path 54
     FCB 127              ; path54: intensity
     FCB $EC,$F5,0,0        ; path54: header (y=-20, x=-11, relative to center)
-    FCB $FF,$EE,$00          ; line 0: flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
-    FCB $FF,$09,$00          ; line 2: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$05          ; line 3: flag=-1, dy=0, dx=5
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH55:    ; Path 55
     FCB 127              ; path55: intensity
     FCB $F3,$FC,0,0        ; path55: header (y=-13, x=-4, relative to center)
-    FCB $FF,$FC,$FD          ; line 0: flag=-1, dy=-4, dx=-3
-    FCB $FF,$E9,$00          ; line 1: flag=-1, dy=-23, dx=0
-    FCB $FF,$00,$07          ; line 2: flag=-1, dy=0, dx=7
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$E9,$00          ; flag=-1, dy=-23, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH56:    ; Path 56
     FCB 127              ; path56: intensity
     FCB $F3,$FC,0,0        ; path56: header (y=-13, x=-4, relative to center)
-    FCB $FF,$01,$04          ; line 0: flag=-1, dy=1, dx=4
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH57:    ; Path 57
     FCB 127              ; path57: intensity
     FCB $F2,$A9,0,0        ; path57: header (y=-14, x=-87, relative to center)
-    FCB $FF,$00,$4A          ; line 0: flag=-1, dy=0, dx=74
+    FCB $FF,$00,$4A          ; flag=-1, dy=0, dx=74
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH58:    ; Path 58
     FCB 127              ; path58: intensity
     FCB $D0,$EC,0,0        ; path58: header (y=-48, x=-20, relative to center)
-    FCB $FF,$00,$FA          ; line 0: flag=-1, dy=0, dx=-6
-    FCB $FF,$F2,$00          ; line 1: flag=-1, dy=-14, dx=0
-    FCB $FF,$00,$0B          ; line 2: flag=-1, dy=0, dx=11
-    FCB $FF,$0E,$00          ; line 3: flag=-1, dy=14, dx=0
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$0B          ; flag=-1, dy=0, dx=11
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH59:    ; Path 59
     FCB 127              ; path59: intensity
     FCB $D4,$F7,0,0        ; path59: header (y=-44, x=-9, relative to center)
-    FCB $FF,$00,$09          ; line 0: flag=-1, dy=0, dx=9
+    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH60:    ; Path 60
     FCB 127              ; path60: intensity
     FCB $D1,$00,0,0        ; path60: header (y=-47, x=0, relative to center)
-    FCB $FF,$00,$F6          ; line 0: flag=-1, dy=0, dx=-10
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH61:    ; Path 61
     FCB 127              ; path61: intensity
     FCB $CC,$F4,0,0        ; path61: header (y=-52, x=-12, relative to center)
-    FCB $FF,$00,$0C          ; line 0: flag=-1, dy=0, dx=12
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH62:    ; Path 62
     FCB 127              ; path62: intensity
     FCB $C7,$00,0,0        ; path62: header (y=-57, x=0, relative to center)
-    FCB $FF,$00,$F3          ; line 0: flag=-1, dy=0, dx=-13
+    FCB $FF,$00,$F3          ; flag=-1, dy=0, dx=-13
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH63:    ; Path 63
     FCB 127              ; path63: intensity
     FCB $C0,$F2,0,0        ; path63: header (y=-64, x=-14, relative to center)
-    FCB $FF,$00,$0E          ; line 0: flag=-1, dy=0, dx=14
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH64:    ; Path 64
     FCB 127              ; path64: intensity
     FCB $FD,$F5,0,0        ; path64: header (y=-3, x=-11, relative to center)
-    FCB $FF,$00,$E3          ; line 0: flag=-1, dy=0, dx=-29
-    FCB $FF,$09,$00          ; line 1: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$1D          ; line 2: flag=-1, dy=0, dx=29
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$E3          ; flag=-1, dy=0, dx=-29
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$1D          ; flag=-1, dy=0, dx=29
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH65:    ; Path 65
     FCB 127              ; path65: intensity
     FCB $FD,$F5,0,0        ; path65: header (y=-3, x=-11, relative to center)
-    FCB $FF,$09,$00          ; line 0: flag=-1, dy=9, dx=0
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH66:    ; Path 66
     FCB 127              ; path66: intensity
     FCB $07,$CE,0,0        ; path66: header (y=7, x=-50, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$2D          ; line 1: flag=-1, dy=0, dx=45
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$2D          ; flag=-1, dy=0, dx=45
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH67:    ; Path 67
     FCB 127              ; path67: intensity
     FCB $F4,$00,0,0        ; path67: header (y=-12, x=0, relative to center)
-    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH68:    ; Path 68
@@ -10769,14 +10923,14 @@ _ANGKOR_BG_PATH71:    ; Path 71
 _ANGKOR_BG_PATH72:    ; Path 72
     FCB 127              ; path72: intensity
     FCB $06,$F0,0,0        ; path72: header (y=6, x=-16, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH73:    ; Path 73
     FCB 127              ; path73: intensity
     FCB $0C,$FA,0,0        ; path73: header (y=12, x=-6, relative to center)
-    FCB $FF,$00,$06          ; line 0: flag=-1, dy=0, dx=6
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH74:    ; Path 74
@@ -10787,294 +10941,294 @@ _ANGKOR_BG_PATH74:    ; Path 74
 _ANGKOR_BG_PATH75:    ; Path 75
     FCB 127              ; path75: intensity
     FCB $0C,$FA,0,0        ; path75: header (y=12, x=-6, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$02          ; line 1: flag=-1, dy=0, dx=2
-    FCB $FF,$FF,$01          ; line 2: flag=-1, dy=-1, dx=1
-    FCB $FF,$00,$03          ; line 3: flag=-1, dy=0, dx=3
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH76:    ; Path 76
     FCB 127              ; path76: intensity
     FCB $10,$F5,0,0        ; path76: header (y=16, x=-11, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$03,$FD          ; line 1: flag=-1, dy=3, dx=-3
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH77:    ; Path 77
     FCB 127              ; path77: intensity
     FCB $10,$F8,0,0        ; path77: header (y=16, x=-8, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH78:    ; Path 78
     FCB 127              ; path78: intensity
     FCB $18,$F2,0,0        ; path78: header (y=24, x=-14, relative to center)
-    FCB $FF,$02,$05          ; line 0: flag=-1, dy=2, dx=5
-    FCB $FF,$00,$09          ; line 1: flag=-1, dy=0, dx=9
+    FCB $FF,$02,$05          ; flag=-1, dy=2, dx=5
+    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH79:    ; Path 79
     FCB 127              ; path79: intensity
     FCB $1A,$F9,0,0        ; path79: header (y=26, x=-7, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$FF,$FA          ; line 1: flag=-1, dy=-1, dx=-6
-    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH80:    ; Path 80
     FCB 127              ; path80: intensity
     FCB $21,$F3,0,0        ; path80: header (y=33, x=-13, relative to center)
-    FCB $FF,$FC,$03          ; line 0: flag=-1, dy=-4, dx=3
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FC,$03          ; flag=-1, dy=-4, dx=3
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH81:    ; Path 81
     FCB 127              ; path81: intensity
     FCB $22,$F9,0,0        ; path81: header (y=34, x=-7, relative to center)
-    FCB $FF,$00,$07          ; line 0: flag=-1, dy=0, dx=7
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH82:    ; Path 82
     FCB 127              ; path82: intensity
     FCB $22,$FB,0,0        ; path82: header (y=34, x=-5, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH83:    ; Path 83
     FCB 127              ; path83: intensity
     FCB $2A,$FC,0,0        ; path83: header (y=42, x=-4, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
-    FCB $FF,$00,$04          ; line 1: flag=-1, dy=0, dx=4
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH84:    ; Path 84
     FCB 127              ; path84: intensity
     FCB $31,$FC,0,0        ; path84: header (y=49, x=-4, relative to center)
-    FCB $FF,$FF,$FC          ; line 0: flag=-1, dy=-1, dx=-4
-    FCB $FF,$03,$00          ; line 1: flag=-1, dy=3, dx=0
+    FCB $FF,$FF,$FC          ; flag=-1, dy=-1, dx=-4
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH85:    ; Path 85
     FCB 127              ; path85: intensity
     FCB $30,$F8,0,0        ; path85: header (y=48, x=-8, relative to center)
-    FCB $FF,$FD,$02          ; line 0: flag=-1, dy=-3, dx=2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH86:    ; Path 86
     FCB 127              ; path86: intensity
     FCB $2A,$FB,0,0        ; path86: header (y=42, x=-5, relative to center)
-    FCB $FF,$00,$FE          ; line 0: flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$FC          ; line 1: flag=-1, dy=-2, dx=-4
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH87:    ; Path 87
     FCB 127              ; path87: intensity
     FCB $28,$F5,0,0        ; path87: header (y=40, x=-11, relative to center)
-    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH88:    ; Path 88
     FCB 127              ; path88: intensity
     FCB $31,$FA,0,0        ; path88: header (y=49, x=-6, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$06          ; line 1: flag=-1, dy=0, dx=6
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH89:    ; Path 89
     FCB 127              ; path89: intensity
     FCB $36,$FB,0,0        ; path89: header (y=54, x=-5, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH90:    ; Path 90
     FCB 127              ; path90: intensity
     FCB $3A,$FD,0,0        ; path90: header (y=58, x=-3, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$03          ; line 1: flag=-1, dy=0, dx=3
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH91:    ; Path 91
     FCB 127              ; path91: intensity
     FCB $3D,$FE,0,0        ; path91: header (y=61, x=-2, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$02          ; line 1: flag=-1, dy=0, dx=2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH92:    ; Path 92
     FCB 127              ; path92: intensity
     FCB $11,$FD,0,0        ; path92: header (y=17, x=-3, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$03          ; line 1: flag=-1, dy=0, dx=3
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH93:    ; Path 93
     FCB 127              ; path93: intensity
     FCB $06,$F5,0,0        ; path93: header (y=6, x=-11, relative to center)
-    FCB $FF,$01,$01          ; line 0: flag=-1, dy=1, dx=1
-    FCB $FF,$00,$03          ; line 1: flag=-1, dy=0, dx=3
-    FCB $FF,$02,$02          ; line 2: flag=-1, dy=2, dx=2
-    FCB $FF,$03,$01          ; line 3: flag=-1, dy=3, dx=1
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH94:    ; Path 94
     FCB 127              ; path94: intensity
     FCB $01,$F5,0,0        ; path94: header (y=1, x=-11, relative to center)
-    FCB $FF,$00,$0B          ; line 0: flag=-1, dy=0, dx=11
+    FCB $FF,$00,$0B          ; flag=-1, dy=0, dx=11
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH95:    ; Path 95
     FCB 127              ; path95: intensity
     FCB $F2,$F6,0,0        ; path95: header (y=-14, x=-10, relative to center)
-    FCB $FF,$02,$FD          ; line 0: flag=-1, dy=2, dx=-3
-    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
-    FCB $FF,$02,$02          ; line 2: flag=-1, dy=2, dx=2
-    FCB $FF,$00,$02          ; line 3: flag=-1, dy=0, dx=2
-    FCB $FF,$03,$01          ; line 4: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$04          ; line 5: flag=-1, dy=0, dx=4
-    FCB $FF,$03,$04          ; line 6: flag=-1, dy=3, dx=4
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH96:    ; Path 96
     FCB 127              ; path96: intensity
     FCB $CA,$60,0,0        ; path96: header (y=-54, x=96, relative to center)
-    FCB $FF,$0D,$00          ; line 0: flag=-1, dy=13, dx=0
-    FCB $FF,$00,$B4          ; line 1: flag=-1, dy=0, dx=-76
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$0D,$00          ; flag=-1, dy=13, dx=0
+    FCB $FF,$00,$B4          ; flag=-1, dy=0, dx=-76
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH97:    ; Path 97
     FCB 127              ; path97: intensity
     FCB $D2,$60,0,0        ; path97: header (y=-46, x=96, relative to center)
-    FCB $FF,$00,$B4          ; line 0: flag=-1, dy=0, dx=-76
+    FCB $FF,$00,$B4          ; flag=-1, dy=0, dx=-76
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH98:    ; Path 98
     FCB 127              ; path98: intensity
     FCB $D8,$14,0,0        ; path98: header (y=-40, x=20, relative to center)
-    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$F9          ; line 1: flag=-1, dy=0, dx=-7
-    FCB $FF,$FF,$FE          ; line 2: flag=-1, dy=-1, dx=-2
-    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$09          ; line 4: flag=-1, dy=0, dx=9
-    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH99:    ; Path 99
     FCB 127              ; path99: intensity
     FCB $D8,$12,0,0        ; path99: header (y=-40, x=18, relative to center)
-    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH100:    ; Path 100
     FCB 127              ; path100: intensity
     FCB $E3,$12,0,0        ; path100: header (y=-29, x=18, relative to center)
-    FCB $FF,$00,$4A          ; line 0: flag=-1, dy=0, dx=74
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$4A          ; flag=-1, dy=0, dx=74
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH101:    ; Path 101
     FCB 127              ; path101: intensity
     FCB $E3,$5C,0,0        ; path101: header (y=-29, x=92, relative to center)
-    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH102:    ; Path 102
     FCB 127              ; path102: intensity
     FCB $E9,$5C,0,0        ; path102: header (y=-23, x=92, relative to center)
-    FCB $FF,$00,$B7          ; line 0: flag=-1, dy=0, dx=-73
+    FCB $FF,$00,$B7          ; flag=-1, dy=0, dx=-73
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH103:    ; Path 103
     FCB 127              ; path103: intensity
     FCB $E7,$0B,0,0        ; path103: header (y=-25, x=11, relative to center)
-    FCB $FF,$00,$08          ; line 0: flag=-1, dy=0, dx=8
-    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
-    FCB $FF,$01,$FE          ; line 2: flag=-1, dy=1, dx=-2
-    FCB $FF,$01,$FD          ; line 3: flag=-1, dy=1, dx=-3
-    FCB $FF,$02,$01          ; line 4: flag=-1, dy=2, dx=1
-    FCB $FF,$02,$FF          ; line 5: flag=-1, dy=2, dx=-1
-    FCB $FF,$00,$FD          ; line 6: flag=-1, dy=0, dx=-3
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 8: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH104:    ; Path 104
     FCB 127              ; path104: intensity
     FCB $FC,$00,0,0        ; path104: header (y=-4, x=0, relative to center)
-    FCB $FF,$F5,$0B          ; line 0: flag=-1, dy=-11, dx=11
+    FCB $FF,$F5,$0B          ; flag=-1, dy=-11, dx=11
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH105:    ; Path 105
     FCB 127              ; path105: intensity
     FCB $E3,$5B,0,0        ; path105: header (y=-29, x=91, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH106:    ; Path 106
     FCB 127              ; path106: intensity
     FCB $E3,$4F,0,0        ; path106: header (y=-29, x=79, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH107:    ; Path 107
     FCB 127              ; path107: intensity
     FCB $E3,$42,0,0        ; path107: header (y=-29, x=66, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH108:    ; Path 108
     FCB 127              ; path108: intensity
     FCB $E3,$36,0,0        ; path108: header (y=-29, x=54, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH109:    ; Path 109
     FCB 127              ; path109: intensity
     FCB $E3,$28,0,0        ; path109: header (y=-29, x=40, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH110:    ; Path 110
     FCB 127              ; path110: intensity
     FCB $E9,$57,0,0        ; path110: header (y=-23, x=87, relative to center)
-    FCB $FF,$0E,$00          ; line 0: flag=-1, dy=14, dx=0
-    FCB $FF,$00,$CF          ; line 1: flag=-1, dy=0, dx=-49
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB $FF,$00,$CF          ; flag=-1, dy=0, dx=-49
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH111:    ; Path 111
     FCB 127              ; path111: intensity
     FCB $F7,$45,0,0        ; path111: header (y=-9, x=69, relative to center)
-    FCB $FF,$F2,$00          ; line 0: flag=-1, dy=-14, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH112:    ; Path 112
@@ -11090,197 +11244,197 @@ _ANGKOR_BG_PATH113:    ; Path 113
 _ANGKOR_BG_PATH114:    ; Path 114
     FCB 127              ; path114: intensity
     FCB $FD,$26,0,0        ; path114: header (y=-3, x=38, relative to center)
-    FCB $FF,$EC,$00          ; line 0: flag=-1, dy=-20, dx=0
+    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH115:    ; Path 115
     FCB 127              ; path115: intensity
     FCB $F7,$4D,0,0        ; path115: header (y=-9, x=77, relative to center)
-    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
-    FCB $FF,$00,$E5          ; line 1: flag=-1, dy=0, dx=-27
-    FCB $FF,$F0,$00          ; line 2: flag=-1, dy=-16, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
+    FCB $FF,$00,$E5          ; flag=-1, dy=0, dx=-27
+    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH116:    ; Path 116
     FCB 127              ; path116: intensity
     FCB $07,$4C,0,0        ; path116: header (y=7, x=76, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$02,$03          ; line 1: flag=-1, dy=2, dx=3
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH117:    ; Path 117
     FCB 127              ; path117: intensity
     FCB $07,$48,0,0        ; path117: header (y=7, x=72, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH118:    ; Path 118
     FCB 127              ; path118: intensity
     FCB $07,$39,0,0        ; path118: header (y=7, x=57, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH119:    ; Path 119
     FCB 127              ; path119: intensity
     FCB $07,$35,0,0        ; path119: header (y=7, x=53, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$02,$FD          ; line 1: flag=-1, dy=2, dx=-3
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH120:    ; Path 120
     FCB 127              ; path120: intensity
     FCB $0C,$4F,0,0        ; path120: header (y=12, x=79, relative to center)
-    FCB $FF,$02,$FB          ; line 0: flag=-1, dy=2, dx=-5
-    FCB $FF,$00,$F0          ; line 1: flag=-1, dy=0, dx=-16
-    FCB $FF,$00,$FD          ; line 2: flag=-1, dy=0, dx=-3
-    FCB $FF,$FE,$FB          ; line 3: flag=-1, dy=-2, dx=-5
+    FCB $FF,$02,$FB          ; flag=-1, dy=2, dx=-5
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH121:    ; Path 121
     FCB 127              ; path121: intensity
     FCB $0E,$47,0,0        ; path121: header (y=14, x=71, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$F2          ; line 2: flag=-1, dy=0, dx=-14
-    FCB $FF,$FE,$FB          ; line 3: flag=-1, dy=-2, dx=-5
-    FCB $FF,$05,$00          ; line 4: flag=-1, dy=5, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
+    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH122:    ; Path 122
     FCB 127              ; path122: intensity
     FCB $16,$3A,0,0        ; path122: header (y=22, x=58, relative to center)
-    FCB $FF,$F8,$00          ; line 0: flag=-1, dy=-8, dx=0
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH123:    ; Path 123
     FCB 127              ; path123: intensity
     FCB $16,$47,0,0        ; path123: header (y=22, x=71, relative to center)
-    FCB $FF,$00,$01          ; line 0: flag=-1, dy=0, dx=1
-    FCB $FF,$FE,$05          ; line 1: flag=-1, dy=-2, dx=5
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH124:    ; Path 124
     FCB 127              ; path124: intensity
     FCB $14,$34,0,0        ; path124: header (y=20, x=52, relative to center)
-    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH125:    ; Path 125
     FCB 127              ; path125: intensity
     FCB $14,$4D,0,0        ; path125: header (y=20, x=77, relative to center)
-    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH126:    ; Path 126
     FCB 127              ; path126: intensity
     FCB $16,$46,0,0        ; path126: header (y=22, x=70, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$F5          ; line 1: flag=-1, dy=0, dx=-11
-    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$F5          ; flag=-1, dy=0, dx=-11
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH127:    ; Path 127
     FCB 127              ; path127: intensity
     FCB $1E,$46,0,0        ; path127: header (y=30, x=70, relative to center)
-    FCB $FF,$FE,$06          ; line 0: flag=-1, dy=-2, dx=6
-    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
+    FCB $FF,$FE,$06          ; flag=-1, dy=-2, dx=6
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH128:    ; Path 128
     FCB 127              ; path128: intensity
     FCB $1C,$4C,0,0        ; path128: header (y=28, x=76, relative to center)
-    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH129:    ; Path 129
     FCB 127              ; path129: intensity
     FCB $1E,$3B,0,0        ; path129: header (y=30, x=59, relative to center)
-    FCB $FF,$FE,$FA          ; line 0: flag=-1, dy=-2, dx=-6
-    FCB $FF,$04,$00          ; line 1: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$FA          ; flag=-1, dy=-2, dx=-6
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH130:    ; Path 130
     FCB 127              ; path130: intensity
     FCB $1C,$35,0,0        ; path130: header (y=28, x=53, relative to center)
-    FCB $FF,$FE,$02          ; line 0: flag=-1, dy=-2, dx=2
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH131:    ; Path 131
     FCB 127              ; path131: intensity
     FCB $1E,$47,0,0        ; path131: header (y=30, x=71, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$01,$02          ; line 1: flag=-1, dy=1, dx=2
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH132:    ; Path 132
     FCB 127              ; path132: intensity
     FCB $23,$49,0,0        ; path132: header (y=35, x=73, relative to center)
-    FCB $FF,$01,$FC          ; line 0: flag=-1, dy=1, dx=-4
-    FCB $FF,$00,$F7          ; line 1: flag=-1, dy=0, dx=-9
-    FCB $FF,$FF,$FC          ; line 2: flag=-1, dy=-1, dx=-4
+    FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
+    FCB $FF,$FF,$FC          ; flag=-1, dy=-1, dx=-4
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH133:    ; Path 133
     FCB 127              ; path133: intensity
     FCB $1E,$3A,0,0        ; path133: header (y=30, x=58, relative to center)
-    FCB $FF,$02,$00          ; line 0: flag=-1, dy=2, dx=0
-    FCB $FF,$03,$FE          ; line 1: flag=-1, dy=3, dx=-2
-    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$03,$FE          ; flag=-1, dy=3, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH134:    ; Path 134
     FCB 127              ; path134: intensity
     FCB $24,$44,0,0        ; path134: header (y=36, x=68, relative to center)
-    FCB $FF,$FA,$00          ; line 0: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH135:    ; Path 135
     FCB 127              ; path135: intensity
     FCB $1E,$3D,0,0        ; path135: header (y=30, x=61, relative to center)
-    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH136:    ; Path 136
     FCB 127              ; path136: intensity
     FCB $24,$47,0,0        ; path136: header (y=36, x=71, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$F3          ; line 1: flag=-1, dy=0, dx=-13
-    FCB $FF,$FB,$00          ; line 2: flag=-1, dy=-5, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$F3          ; flag=-1, dy=0, dx=-13
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH137:    ; Path 137
     FCB 127              ; path137: intensity
     FCB $29,$46,0,0        ; path137: header (y=41, x=70, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$F5          ; line 1: flag=-1, dy=0, dx=-11
-    FCB $FF,$FC,$00          ; line 2: flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$F5          ; flag=-1, dy=0, dx=-11
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH138:    ; Path 138
     FCB 127              ; path138: intensity
     FCB $2D,$44,0,0        ; path138: header (y=45, x=68, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$F9          ; line 1: flag=-1, dy=0, dx=-7
-    FCB $FF,$FD,$00          ; line 2: flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH139:    ; Path 139
@@ -11306,152 +11460,152 @@ _ANGKOR_BG_PATH142:    ; Path 142
 _ANGKOR_BG_PATH143:    ; Path 143
     FCB 127              ; path143: intensity
     FCB $30,$43,0,0        ; path143: header (y=48, x=67, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH144:    ; Path 144
     FCB 127              ; path144: intensity
     FCB $30,$3E,0,0        ; path144: header (y=48, x=62, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH145:    ; Path 145
     FCB 127              ; path145: intensity
     FCB $07,$47,0,0        ; path145: header (y=7, x=71, relative to center)
-    FCB $FF,$F0,$00          ; line 0: flag=-1, dy=-16, dx=0
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH146:    ; Path 146
     FCB 127              ; path146: intensity
     FCB $F7,$3A,0,0        ; path146: header (y=-9, x=58, relative to center)
-    FCB $FF,$10,$00          ; line 0: flag=-1, dy=16, dx=0
+    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH147:    ; Path 147
     FCB 127              ; path147: intensity
     FCB $04,$44,0,0        ; path147: header (y=4, x=68, relative to center)
-    FCB $FF,$00,$F9          ; line 0: flag=-1, dy=0, dx=-7
-    FCB $FF,$F7,$00          ; line 1: flag=-1, dy=-9, dx=0
-    FCB $FF,$00,$07          ; line 2: flag=-1, dy=0, dx=7
-    FCB $FF,$09,$00          ; line 3: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH148:    ; Path 148
     FCB 127              ; path148: intensity
     FCB $07,$44,0,0        ; path148: header (y=7, x=68, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$02,$FD          ; line 1: flag=-1, dy=2, dx=-3
-    FCB $FF,$FE,$FD          ; line 2: flag=-1, dy=-2, dx=-3
-    FCB $FF,$FC,$00          ; line 3: flag=-1, dy=-4, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH149:    ; Path 149
     FCB 127              ; path149: intensity
     FCB $E3,$1B,0,0        ; path149: header (y=-29, x=27, relative to center)
-    FCB $FF,$F4,$00          ; line 0: flag=-1, dy=-12, dx=0
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH150:    ; Path 150
     FCB 127              ; path150: intensity
     FCB $EC,$0B,0,0        ; path150: header (y=-20, x=11, relative to center)
-    FCB $FF,$EE,$00          ; line 0: flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$05          ; line 1: flag=-1, dy=0, dx=5
-    FCB $FF,$09,$00          ; line 2: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$FB          ; line 3: flag=-1, dy=0, dx=-5
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH151:    ; Path 151
     FCB 127              ; path151: intensity
     FCB $F3,$04,0,0        ; path151: header (y=-13, x=4, relative to center)
-    FCB $FF,$FC,$03          ; line 0: flag=-1, dy=-4, dx=3
-    FCB $FF,$E9,$00          ; line 1: flag=-1, dy=-23, dx=0
-    FCB $FF,$00,$F9          ; line 2: flag=-1, dy=0, dx=-7
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FC,$03          ; flag=-1, dy=-4, dx=3
+    FCB $FF,$E9,$00          ; flag=-1, dy=-23, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH152:    ; Path 152
     FCB 127              ; path152: intensity
     FCB $F3,$04,0,0        ; path152: header (y=-13, x=4, relative to center)
-    FCB $FF,$01,$FC          ; line 0: flag=-1, dy=1, dx=-4
+    FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH153:    ; Path 153
     FCB 127              ; path153: intensity
     FCB $F2,$57,0,0        ; path153: header (y=-14, x=87, relative to center)
-    FCB $FF,$00,$B6          ; line 0: flag=-1, dy=0, dx=-74
+    FCB $FF,$00,$B6          ; flag=-1, dy=0, dx=-74
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH154:    ; Path 154
     FCB 127              ; path154: intensity
     FCB $D0,$14,0,0        ; path154: header (y=-48, x=20, relative to center)
-    FCB $FF,$00,$06          ; line 0: flag=-1, dy=0, dx=6
-    FCB $FF,$F2,$00          ; line 1: flag=-1, dy=-14, dx=0
-    FCB $FF,$00,$F5          ; line 2: flag=-1, dy=0, dx=-11
-    FCB $FF,$0E,$00          ; line 3: flag=-1, dy=14, dx=0
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$F5          ; flag=-1, dy=0, dx=-11
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH155:    ; Path 155
     FCB 127              ; path155: intensity
     FCB $D4,$09,0,0        ; path155: header (y=-44, x=9, relative to center)
-    FCB $FF,$00,$F7          ; line 0: flag=-1, dy=0, dx=-9
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH156:    ; Path 156
     FCB 127              ; path156: intensity
     FCB $D1,$00,0,0        ; path156: header (y=-47, x=0, relative to center)
-    FCB $FF,$00,$0A          ; line 0: flag=-1, dy=0, dx=10
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH157:    ; Path 157
     FCB 127              ; path157: intensity
     FCB $CC,$0C,0,0        ; path157: header (y=-52, x=12, relative to center)
-    FCB $FF,$00,$F4          ; line 0: flag=-1, dy=0, dx=-12
+    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH158:    ; Path 158
     FCB 127              ; path158: intensity
     FCB $C7,$00,0,0        ; path158: header (y=-57, x=0, relative to center)
-    FCB $FF,$00,$0D          ; line 0: flag=-1, dy=0, dx=13
+    FCB $FF,$00,$0D          ; flag=-1, dy=0, dx=13
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH159:    ; Path 159
     FCB 127              ; path159: intensity
     FCB $C0,$0E,0,0        ; path159: header (y=-64, x=14, relative to center)
-    FCB $FF,$00,$F2          ; line 0: flag=-1, dy=0, dx=-14
+    FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH160:    ; Path 160
     FCB 127              ; path160: intensity
     FCB $FD,$0B,0,0        ; path160: header (y=-3, x=11, relative to center)
-    FCB $FF,$00,$1D          ; line 0: flag=-1, dy=0, dx=29
-    FCB $FF,$09,$00          ; line 1: flag=-1, dy=9, dx=0
-    FCB $FF,$00,$E3          ; line 2: flag=-1, dy=0, dx=-29
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$1D          ; flag=-1, dy=0, dx=29
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$E3          ; flag=-1, dy=0, dx=-29
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH161:    ; Path 161
     FCB 127              ; path161: intensity
     FCB $FD,$0B,0,0        ; path161: header (y=-3, x=11, relative to center)
-    FCB $FF,$09,$00          ; line 0: flag=-1, dy=9, dx=0
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH162:    ; Path 162
     FCB 127              ; path162: intensity
     FCB $07,$32,0,0        ; path162: header (y=7, x=50, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$D3          ; line 1: flag=-1, dy=0, dx=-45
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$D3          ; flag=-1, dy=0, dx=-45
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH163:    ; Path 163
     FCB 127              ; path163: intensity
     FCB $F4,$00,0,0        ; path163: header (y=-12, x=0, relative to center)
-    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH164:    ; Path 164
@@ -11477,14 +11631,14 @@ _ANGKOR_BG_PATH167:    ; Path 167
 _ANGKOR_BG_PATH168:    ; Path 168
     FCB 127              ; path168: intensity
     FCB $06,$10,0,0        ; path168: header (y=6, x=16, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$F6          ; line 1: flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH169:    ; Path 169
     FCB 127              ; path169: intensity
     FCB $0C,$06,0,0        ; path169: header (y=12, x=6, relative to center)
-    FCB $FF,$00,$FA          ; line 0: flag=-1, dy=0, dx=-6
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH170:    ; Path 170
@@ -11495,171 +11649,171 @@ _ANGKOR_BG_PATH170:    ; Path 170
 _ANGKOR_BG_PATH171:    ; Path 171
     FCB 127              ; path171: intensity
     FCB $0C,$06,0,0        ; path171: header (y=12, x=6, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$FE          ; line 1: flag=-1, dy=0, dx=-2
-    FCB $FF,$FF,$FF          ; line 2: flag=-1, dy=-1, dx=-1
-    FCB $FF,$00,$FD          ; line 3: flag=-1, dy=0, dx=-3
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH172:    ; Path 172
     FCB 127              ; path172: intensity
     FCB $10,$0B,0,0        ; path172: header (y=16, x=11, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$03,$03          ; line 1: flag=-1, dy=3, dx=3
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH173:    ; Path 173
     FCB 127              ; path173: intensity
     FCB $10,$08,0,0        ; path173: header (y=16, x=8, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH174:    ; Path 174
     FCB 127              ; path174: intensity
     FCB $18,$0E,0,0        ; path174: header (y=24, x=14, relative to center)
-    FCB $FF,$02,$FB          ; line 0: flag=-1, dy=2, dx=-5
-    FCB $FF,$00,$F7          ; line 1: flag=-1, dy=0, dx=-9
+    FCB $FF,$02,$FB          ; flag=-1, dy=2, dx=-5
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH175:    ; Path 175
     FCB 127              ; path175: intensity
     FCB $1A,$07,0,0        ; path175: header (y=26, x=7, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$FF,$06          ; line 1: flag=-1, dy=-1, dx=6
-    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH176:    ; Path 176
     FCB 127              ; path176: intensity
     FCB $21,$0D,0,0        ; path176: header (y=33, x=13, relative to center)
-    FCB $FF,$FC,$FD          ; line 0: flag=-1, dy=-4, dx=-3
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH177:    ; Path 177
     FCB 127              ; path177: intensity
     FCB $22,$07,0,0        ; path177: header (y=34, x=7, relative to center)
-    FCB $FF,$00,$F9          ; line 0: flag=-1, dy=0, dx=-7
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH178:    ; Path 178
     FCB 127              ; path178: intensity
     FCB $22,$05,0,0        ; path178: header (y=34, x=5, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH179:    ; Path 179
     FCB 127              ; path179: intensity
     FCB $2A,$04,0,0        ; path179: header (y=42, x=4, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
-    FCB $FF,$00,$FC          ; line 1: flag=-1, dy=0, dx=-4
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH180:    ; Path 180
     FCB 127              ; path180: intensity
     FCB $31,$04,0,0        ; path180: header (y=49, x=4, relative to center)
-    FCB $FF,$FF,$04          ; line 0: flag=-1, dy=-1, dx=4
-    FCB $FF,$03,$00          ; line 1: flag=-1, dy=3, dx=0
+    FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH181:    ; Path 181
     FCB 127              ; path181: intensity
     FCB $30,$08,0,0        ; path181: header (y=48, x=8, relative to center)
-    FCB $FF,$FD,$FE          ; line 0: flag=-1, dy=-3, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$FE          ; flag=-1, dy=-3, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH182:    ; Path 182
     FCB 127              ; path182: intensity
     FCB $2A,$05,0,0        ; path182: header (y=42, x=5, relative to center)
-    FCB $FF,$00,$02          ; line 0: flag=-1, dy=0, dx=2
-    FCB $FF,$FE,$04          ; line 1: flag=-1, dy=-2, dx=4
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH183:    ; Path 183
     FCB 127              ; path183: intensity
     FCB $28,$0B,0,0        ; path183: header (y=40, x=11, relative to center)
-    FCB $FF,$FE,$FE          ; line 0: flag=-1, dy=-2, dx=-2
-    FCB $FF,$FE,$00          ; line 1: flag=-1, dy=-2, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH184:    ; Path 184
     FCB 127              ; path184: intensity
     FCB $31,$06,0,0        ; path184: header (y=49, x=6, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$FA          ; line 1: flag=-1, dy=0, dx=-6
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH185:    ; Path 185
     FCB 127              ; path185: intensity
     FCB $36,$05,0,0        ; path185: header (y=54, x=5, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$FB          ; line 1: flag=-1, dy=0, dx=-5
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH186:    ; Path 186
     FCB 127              ; path186: intensity
     FCB $3A,$03,0,0        ; path186: header (y=58, x=3, relative to center)
-    FCB $FF,$03,$00          ; line 0: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH187:    ; Path 187
     FCB 127              ; path187: intensity
     FCB $3D,$02,0,0        ; path187: header (y=61, x=2, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$FE          ; line 1: flag=-1, dy=0, dx=-2
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH188:    ; Path 188
     FCB 127              ; path188: intensity
     FCB $11,$03,0,0        ; path188: header (y=17, x=3, relative to center)
-    FCB $FF,$04,$00          ; line 0: flag=-1, dy=4, dx=0
-    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH189:    ; Path 189
     FCB 127              ; path189: intensity
     FCB $06,$0B,0,0        ; path189: header (y=6, x=11, relative to center)
-    FCB $FF,$01,$FF          ; line 0: flag=-1, dy=1, dx=-1
-    FCB $FF,$00,$FD          ; line 1: flag=-1, dy=0, dx=-3
-    FCB $FF,$02,$FE          ; line 2: flag=-1, dy=2, dx=-2
-    FCB $FF,$03,$FF          ; line 3: flag=-1, dy=3, dx=-1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH190:    ; Path 190
     FCB 127              ; path190: intensity
     FCB $01,$0B,0,0        ; path190: header (y=1, x=11, relative to center)
-    FCB $FF,$00,$F5          ; line 0: flag=-1, dy=0, dx=-11
+    FCB $FF,$00,$F5          ; flag=-1, dy=0, dx=-11
     FCB 2                ; End marker (path complete)
 
 _ANGKOR_BG_PATH191:    ; Path 191
     FCB 127              ; path191: intensity
     FCB $F2,$0A,0,0        ; path191: header (y=-14, x=10, relative to center)
-    FCB $FF,$02,$03          ; line 0: flag=-1, dy=2, dx=3
-    FCB $FF,$05,$00          ; line 1: flag=-1, dy=5, dx=0
-    FCB $FF,$02,$FE          ; line 2: flag=-1, dy=2, dx=-2
-    FCB $FF,$00,$FE          ; line 3: flag=-1, dy=0, dx=-2
-    FCB $FF,$03,$FF          ; line 4: flag=-1, dy=3, dx=-1
-    FCB $FF,$00,$FC          ; line 5: flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$FC          ; line 6: flag=-1, dy=3, dx=-4
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: paris_bg
@@ -11683,36 +11837,36 @@ _PARIS_BG_VECTORS:  ; Main entry (header + 5 path(s))
 _PARIS_BG_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
     FCB $D1,$CE,0,0        ; path0: header (y=-47, x=-50, relative to center)
-    FCB $FF,$1E,$1E          ; line 0: flag=-1, dy=30, dx=30
-    FCB $FF,$1E,$0A          ; line 1: flag=-1, dy=30, dx=10
+    FCB $FF,$1E,$1E          ; flag=-1, dy=30, dx=30
+    FCB $FF,$1E,$0A          ; flag=-1, dy=30, dx=10
     FCB 2                ; End marker (path complete)
 
 _PARIS_BG_PATH1:    ; Path 1
     FCB 100              ; path1: intensity
     FCB $D1,$32,0,0        ; path1: header (y=-47, x=50, relative to center)
-    FCB $FF,$1E,$E2          ; line 0: flag=-1, dy=30, dx=-30
-    FCB $FF,$1E,$F6          ; line 1: flag=-1, dy=30, dx=-10
+    FCB $FF,$1E,$E2          ; flag=-1, dy=30, dx=-30
+    FCB $FF,$1E,$F6          ; flag=-1, dy=30, dx=-10
     FCB 2                ; End marker (path complete)
 
 _PARIS_BG_PATH2:    ; Path 2
     FCB 110              ; path2: intensity
     FCB $0D,$F6,0,0        ; path2: header (y=13, x=-10, relative to center)
-    FCB $FF,$14,$05          ; line 0: flag=-1, dy=20, dx=5
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$EC,$05          ; line 2: flag=-1, dy=-20, dx=5
+    FCB $FF,$14,$05          ; flag=-1, dy=20, dx=5
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$EC,$05          ; flag=-1, dy=-20, dx=5
     FCB 2                ; End marker (path complete)
 
 _PARIS_BG_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $21,$FB,0,0        ; path3: header (y=33, x=-5, relative to center)
-    FCB $FF,$0F,$05          ; line 0: flag=-1, dy=15, dx=5
-    FCB $FF,$F1,$05          ; line 1: flag=-1, dy=-15, dx=5
+    FCB $FF,$0F,$05          ; flag=-1, dy=15, dx=5
+    FCB $FF,$F1,$05          ; flag=-1, dy=-15, dx=5
     FCB 2                ; End marker (path complete)
 
 _PARIS_BG_PATH4:    ; Path 4
     FCB 90              ; path4: intensity
     FCB $EF,$EC,0,0        ; path4: header (y=-17, x=-20, relative to center)
-    FCB $FF,$00,$28          ; line 0: flag=-1, dy=0, dx=40
+    FCB $FF,$00,$28          ; flag=-1, dy=0, dx=40
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: buddha_bg
@@ -11735,27 +11889,28 @@ _BUDDHA_BG_VECTORS:  ; Main entry (header + 4 path(s))
 _BUDDHA_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $14,$B0,0,0        ; path0: header (y=20, x=-80, relative to center)
-    FCB $FF,$14,$14          ; line 0: flag=-1, dy=20, dx=20
-    FCB $FF,$00,$78          ; line 1: flag=-1, dy=0, dx=120
-    FCB $FF,$EC,$14          ; line 2: flag=-1, dy=-20, dx=20
+    FCB $FF,$14,$14          ; flag=-1, dy=20, dx=20
+    FCB $FF,$00,$78          ; flag=-1, dy=0, dx=120
+    FCB $FF,$EC,$14          ; flag=-1, dy=-20, dx=20
     FCB 2                ; End marker (path complete)
 
 _BUDDHA_BG_PATH1:    ; Path 1
     FCB 100              ; path1: intensity
     FCB $14,$CE,0,0        ; path1: header (y=20, x=-50, relative to center)
-    FCB $FF,$C4,$00          ; line 0: flag=-1, dy=-60, dx=0
+    FCB $FF,$C4,$00          ; flag=-1, dy=-60, dx=0
     FCB 2                ; End marker (path complete)
 
 _BUDDHA_BG_PATH2:    ; Path 2
     FCB 100              ; path2: intensity
     FCB $14,$32,0,0        ; path2: header (y=20, x=50, relative to center)
-    FCB $FF,$C4,$00          ; line 0: flag=-1, dy=-60, dx=0
+    FCB $FF,$C4,$00          ; flag=-1, dy=-60, dx=0
     FCB 2                ; End marker (path complete)
 
 _BUDDHA_BG_PATH3:    ; Path 3
     FCB 100              ; path3: intensity
     FCB $D8,$BA,0,0        ; path3: header (y=-40, x=-70, relative to center)
-    FCB $FF,$00,$7F          ; line 0: flag=-1, dy=0, dx=127
+    FCB $FF,$00,$46          ; sub-seg 1/2 of line 0: dy=0, dx=70
+    FCB $FF,$00,$46          ; sub-seg 2/2 of line 0: dy=0, dx=70
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: taj_bg
@@ -11778,30 +11933,30 @@ _TAJ_BG_VECTORS:  ; Main entry (header + 4 path(s))
 _TAJ_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $12,$E2,0,0        ; path0: header (y=18, x=-30, relative to center)
-    FCB $FF,$14,$0A          ; line 0: flag=-1, dy=20, dx=10
-    FCB $FF,$05,$14          ; line 1: flag=-1, dy=5, dx=20
-    FCB $FF,$FB,$14          ; line 2: flag=-1, dy=-5, dx=20
-    FCB $FF,$EC,$0A          ; line 3: flag=-1, dy=-20, dx=10
+    FCB $FF,$14,$0A          ; flag=-1, dy=20, dx=10
+    FCB $FF,$05,$14          ; flag=-1, dy=5, dx=20
+    FCB $FF,$FB,$14          ; flag=-1, dy=-5, dx=20
+    FCB $FF,$EC,$0A          ; flag=-1, dy=-20, dx=10
     FCB 2                ; End marker (path complete)
 
 _TAJ_BG_PATH1:    ; Path 1
     FCB 110              ; path1: intensity
     FCB $12,$D8,0,0        ; path1: header (y=18, x=-40, relative to center)
-    FCB $FF,$CE,$00          ; line 0: flag=-1, dy=-50, dx=0
-    FCB $FF,$00,$50          ; line 1: flag=-1, dy=0, dx=80
-    FCB $FF,$32,$00          ; line 2: flag=-1, dy=50, dx=0
+    FCB $FF,$CE,$00          ; flag=-1, dy=-50, dx=0
+    FCB $FF,$00,$50          ; flag=-1, dy=0, dx=80
+    FCB $FF,$32,$00          ; flag=-1, dy=50, dx=0
     FCB 2                ; End marker (path complete)
 
 _TAJ_BG_PATH2:    ; Path 2
     FCB 100              ; path2: intensity
     FCB $D6,$BA,0,0        ; path2: header (y=-42, x=-70, relative to center)
-    FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
+    FCB $FF,$46,$00          ; flag=-1, dy=70, dx=0
     FCB 2                ; End marker (path complete)
 
 _TAJ_BG_PATH3:    ; Path 3
     FCB 100              ; path3: intensity
     FCB $D6,$46,0,0        ; path3: header (y=-42, x=70, relative to center)
-    FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
+    FCB $FF,$46,$00          ; flag=-1, dy=70, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: mayan_bg
@@ -11825,41 +11980,43 @@ _MAYAN_BG_VECTORS:  ; Main entry (header + 5 path(s))
 _MAYAN_BG_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
     FCB $D8,$B0,0,0        ; path0: header (y=-40, x=-80, relative to center)
-    FCB $FF,$00,$7F          ; line 0: flag=-1, dy=0, dx=127
+    FCB $FF,$00,$50          ; sub-seg 1/2 of line 0: dy=0, dx=80
+    FCB $FF,$00,$50          ; sub-seg 2/2 of line 0: dy=0, dx=80
     FCB 2                ; End marker (path complete)
 
 _MAYAN_BG_PATH1:    ; Path 1
     FCB 110              ; path1: intensity
     FCB $D8,$BA,0,0        ; path1: header (y=-40, x=-70, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$7F          ; line 1: flag=-1, dy=0, dx=127
-    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$46          ; sub-seg 1/2 of line 1: dy=0, dx=70
+    FCB $FF,$00,$46          ; sub-seg 2/2 of line 1: dy=0, dx=70
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAYAN_BG_PATH2:    ; Path 2
     FCB 110              ; path2: intensity
     FCB $E2,$C4,0,0        ; path2: header (y=-30, x=-60, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$78          ; line 1: flag=-1, dy=0, dx=120
-    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$78          ; flag=-1, dy=0, dx=120
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAYAN_BG_PATH3:    ; Path 3
     FCB 120              ; path3: intensity
     FCB $EC,$CE,0,0        ; path3: header (y=-20, x=-50, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$64          ; line 1: flag=-1, dy=0, dx=100
-    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$64          ; flag=-1, dy=0, dx=100
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAYAN_BG_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $F6,$D8,0,0        ; path4: header (y=-10, x=-40, relative to center)
-    FCB $FF,$28,$00          ; line 0: flag=-1, dy=40, dx=0
-    FCB $FF,$0A,$0A          ; line 1: flag=-1, dy=10, dx=10
-    FCB $FF,$00,$3C          ; line 2: flag=-1, dy=0, dx=60
-    FCB $FF,$F6,$0A          ; line 3: flag=-1, dy=-10, dx=10
-    FCB $FF,$D8,$00          ; line 4: flag=-1, dy=-40, dx=0
+    FCB $FF,$28,$00          ; flag=-1, dy=40, dx=0
+    FCB $FF,$0A,$0A          ; flag=-1, dy=10, dx=10
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
+    FCB $FF,$F6,$0A          ; flag=-1, dy=-10, dx=10
+    FCB $FF,$D8,$00          ; flag=-1, dy=-40, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: hook
@@ -11879,15 +12036,15 @@ _HOOK_VECTORS:  ; Main entry (header + 1 path(s))
 _HOOK_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $FC,$FA,0,0        ; path0: header (y=-4, x=-6, relative to center)
-    FCB $FF,$0B,$06          ; line 0: flag=-1, dy=11, dx=6
-    FCB $FF,$F5,$06          ; line 1: flag=-1, dy=-11, dx=6
-    FCB $FF,$00,$FF          ; line 2: flag=-1, dy=0, dx=-1
-    FCB $FF,$04,$FC          ; line 3: flag=-1, dy=4, dx=-4
-    FCB $FF,$F8,$00          ; line 4: flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$FE          ; line 5: flag=-1, dy=0, dx=-2
-    FCB $FF,$08,$00          ; line 6: flag=-1, dy=8, dx=0
-    FCB $FF,$FC,$FC          ; line 7: flag=-1, dy=-4, dx=-4
-    FCB $FF,$00,$FF          ; line 8: flag=-1, dy=0, dx=-1
+    FCB $FF,$0B,$06          ; flag=-1, dy=11, dx=6
+    FCB $FF,$F5,$06          ; flag=-1, dy=-11, dx=6
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
+    FCB $FF,$04,$FC          ; flag=-1, dy=4, dx=-4
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$FC,$FC          ; flag=-1, dy=-4, dx=-4
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: map
@@ -11921,226 +12078,226 @@ _MAP_VECTORS:  ; Main entry (header + 15 path(s))
 _MAP_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $22,$D7,0,0        ; path0: header (y=34, x=-41, relative to center)
-    FCB $FF,$0E,$1A          ; line 0: flag=-1, dy=14, dx=26
-    FCB $FF,$07,$0C          ; line 1: flag=-1, dy=7, dx=12
-    FCB $FF,$06,$00          ; line 2: flag=-1, dy=6, dx=0
-    FCB $FF,$09,$0C          ; line 3: flag=-1, dy=9, dx=12
-    FCB $FF,$00,$0E          ; line 4: flag=-1, dy=0, dx=14
-    FCB $FF,$08,$0A          ; line 5: flag=-1, dy=8, dx=10
-    FCB $FF,$00,$21          ; line 6: flag=-1, dy=0, dx=33
-    FCB $FF,$FC,$03          ; line 7: flag=-1, dy=-4, dx=3
-    FCB $FF,$FF,$14          ; line 8: flag=-1, dy=-1, dx=20
-    FCB $FF,$EE,$20          ; line 9: flag=-1, dy=-18, dx=32
-    FCB $FF,$FB,$FC          ; line 10: flag=-1, dy=-5, dx=-4
-    FCB $FF,$F9,$FE          ; line 11: flag=-1, dy=-7, dx=-2
-    FCB $FF,$06,$FA          ; line 12: flag=-1, dy=6, dx=-6
-    FCB $FF,$02,$F0          ; line 13: flag=-1, dy=2, dx=-16
-    FCB $FF,$F4,$06          ; line 14: flag=-1, dy=-12, dx=6
-    FCB $FF,$E2,$FE          ; line 15: flag=-1, dy=-30, dx=-2
-    FCB $FF,$FB,$FB          ; line 16: flag=-1, dy=-5, dx=-5
-    FCB $FF,$F8,$FE          ; line 17: flag=-1, dy=-8, dx=-2
-    FCB $FF,$FF,$F6          ; line 18: flag=-1, dy=-1, dx=-10
-    FCB $FF,$F7,$05          ; line 19: flag=-1, dy=-9, dx=5
-    FCB $FF,$FC,$FD          ; line 20: flag=-1, dy=-4, dx=-3
-    FCB $FF,$0E,$F6          ; line 21: flag=-1, dy=14, dx=-10
-    FCB $FF,$05,$01          ; line 22: flag=-1, dy=5, dx=1
-    FCB $FF,$06,$FD          ; line 23: flag=-1, dy=6, dx=-3
-    FCB $FF,$EA,$F7          ; line 24: flag=-1, dy=-22, dx=-9
-    FCB $FF,$20,$F0          ; line 25: flag=-1, dy=32, dx=-16
-    FCB $FF,$05,$F9          ; line 26: flag=-1, dy=5, dx=-7
-    FCB $FF,$F9,$03          ; line 27: flag=-1, dy=-7, dx=3
-    FCB $FF,$F5,$F9          ; line 28: flag=-1, dy=-11, dx=-7
-    FCB $FF,$0E,$F3          ; line 29: flag=-1, dy=14, dx=-13
-    FCB $FF,$FD,$FD          ; line 30: flag=-1, dy=-3, dx=-3
-    FCB $FF,$F2,$0C          ; line 31: flag=-1, dy=-14, dx=12
-    FCB $FF,$00,$03          ; line 32: flag=-1, dy=0, dx=3
-    FCB $FF,$F2,$F7          ; line 33: flag=-1, dy=-14, dx=-9
-    FCB $FF,$F3,$FE          ; line 34: flag=-1, dy=-13, dx=-2
-    FCB $FF,$EC,$ED          ; line 35: flag=-1, dy=-20, dx=-19
-    FCB $FF,$0D,$F3          ; line 36: flag=-1, dy=13, dx=-13
-    FCB $FF,$0E,$00          ; line 37: flag=-1, dy=14, dx=0
-    FCB $FF,$09,$F8          ; line 38: flag=-1, dy=9, dx=-8
-    FCB $FF,$00,$F0          ; line 39: flag=-1, dy=0, dx=-16
-    FCB $FF,$08,$F8          ; line 40: flag=-1, dy=8, dx=-8
-    FCB $FF,$0B,$00          ; line 41: flag=-1, dy=11, dx=0
-    FCB $FF,$0B,$0A          ; line 42: flag=-1, dy=11, dx=10
-    FCB $FF,$01,$22          ; line 43: flag=-1, dy=1, dx=34
-    FCB $FF,$09,$F4          ; line 44: flag=-1, dy=9, dx=-12
-    FCB $FF,$FA,$EE          ; line 45: flag=-1, dy=-6, dx=-18
-    FCB $FF,$FF,$F3          ; line 46: flag=-1, dy=-1, dx=-13
-    FCB $FF,$0A,$00          ; line 47: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$00          ; line 48: flag=-1, dy=0, dx=0
+    FCB $FF,$0E,$1A          ; flag=-1, dy=14, dx=26
+    FCB $FF,$07,$0C          ; flag=-1, dy=7, dx=12
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$09,$0C          ; flag=-1, dy=9, dx=12
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$08,$0A          ; flag=-1, dy=8, dx=10
+    FCB $FF,$00,$21          ; flag=-1, dy=0, dx=33
+    FCB $FF,$FC,$03          ; flag=-1, dy=-4, dx=3
+    FCB $FF,$FF,$14          ; flag=-1, dy=-1, dx=20
+    FCB $FF,$EE,$20          ; flag=-1, dy=-18, dx=32
+    FCB $FF,$FB,$FC          ; flag=-1, dy=-5, dx=-4
+    FCB $FF,$F9,$FE          ; flag=-1, dy=-7, dx=-2
+    FCB $FF,$06,$FA          ; flag=-1, dy=6, dx=-6
+    FCB $FF,$02,$F0          ; flag=-1, dy=2, dx=-16
+    FCB $FF,$F4,$06          ; flag=-1, dy=-12, dx=6
+    FCB $FF,$E2,$FE          ; flag=-1, dy=-30, dx=-2
+    FCB $FF,$FB,$FB          ; flag=-1, dy=-5, dx=-5
+    FCB $FF,$F8,$FE          ; flag=-1, dy=-8, dx=-2
+    FCB $FF,$FF,$F6          ; flag=-1, dy=-1, dx=-10
+    FCB $FF,$F7,$05          ; flag=-1, dy=-9, dx=5
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$0E,$F6          ; flag=-1, dy=14, dx=-10
+    FCB $FF,$05,$01          ; flag=-1, dy=5, dx=1
+    FCB $FF,$06,$FD          ; flag=-1, dy=6, dx=-3
+    FCB $FF,$EA,$F7          ; flag=-1, dy=-22, dx=-9
+    FCB $FF,$20,$F0          ; flag=-1, dy=32, dx=-16
+    FCB $FF,$05,$F9          ; flag=-1, dy=5, dx=-7
+    FCB $FF,$F9,$03          ; flag=-1, dy=-7, dx=3
+    FCB $FF,$F5,$F9          ; flag=-1, dy=-11, dx=-7
+    FCB $FF,$0E,$F3          ; flag=-1, dy=14, dx=-13
+    FCB $FF,$FD,$FD          ; flag=-1, dy=-3, dx=-3
+    FCB $FF,$F2,$0C          ; flag=-1, dy=-14, dx=12
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$F2,$F7          ; flag=-1, dy=-14, dx=-9
+    FCB $FF,$F3,$FE          ; flag=-1, dy=-13, dx=-2
+    FCB $FF,$EC,$ED          ; flag=-1, dy=-20, dx=-19
+    FCB $FF,$0D,$F3          ; flag=-1, dy=13, dx=-13
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB $FF,$09,$F8          ; flag=-1, dy=9, dx=-8
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB $FF,$08,$F8          ; flag=-1, dy=8, dx=-8
+    FCB $FF,$0B,$00          ; flag=-1, dy=11, dx=0
+    FCB $FF,$0B,$0A          ; flag=-1, dy=11, dx=10
+    FCB $FF,$01,$22          ; flag=-1, dy=1, dx=34
+    FCB $FF,$09,$F4          ; flag=-1, dy=9, dx=-12
+    FCB $FF,$FA,$EE          ; flag=-1, dy=-6, dx=-18
+    FCB $FF,$FF,$F3          ; flag=-1, dy=-1, dx=-13
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $38,$DE,0,0        ; path1: header (y=56, x=-34, relative to center)
-    FCB $FF,$04,$06          ; line 0: flag=-1, dy=4, dx=6
-    FCB $FF,$FC,$01          ; line 1: flag=-1, dy=-4, dx=1
-    FCB $FF,$FD,$FC          ; line 2: flag=-1, dy=-3, dx=-4
-    FCB $FF,$00,$FD          ; line 3: flag=-1, dy=0, dx=-3
-    FCB $FF,$03,$00          ; line 4: flag=-1, dy=3, dx=0
-    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$06          ; flag=-1, dy=4, dx=6
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $34,$E5,0,0        ; path2: header (y=52, x=-27, relative to center)
-    FCB $FF,$06,$0A          ; line 0: flag=-1, dy=6, dx=10
-    FCB $FF,$06,$FE          ; line 1: flag=-1, dy=6, dx=-2
-    FCB $FF,$02,$05          ; line 2: flag=-1, dy=2, dx=5
-    FCB $FF,$FB,$FE          ; line 3: flag=-1, dy=-5, dx=-2
-    FCB $FF,$F6,$02          ; line 4: flag=-1, dy=-10, dx=2
-    FCB $FF,$FF,$F4          ; line 5: flag=-1, dy=-1, dx=-12
-    FCB $FF,$02,$FF          ; line 6: flag=-1, dy=2, dx=-1
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$06,$0A          ; flag=-1, dy=6, dx=10
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$02,$05          ; flag=-1, dy=2, dx=5
+    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
+    FCB $FF,$F6,$02          ; flag=-1, dy=-10, dx=2
+    FCB $FF,$FF,$F4          ; flag=-1, dy=-1, dx=-12
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $BD,$70,0,0        ; path3: header (y=-67, x=112, relative to center)
-    FCB $FF,$08,$05          ; line 0: flag=-1, dy=8, dx=5
-    FCB $FF,$14,$00          ; line 1: flag=-1, dy=20, dx=0
-    FCB $FF,$06,$FB          ; line 2: flag=-1, dy=6, dx=-5
-    FCB $FF,$F8,$FE          ; line 3: flag=-1, dy=-8, dx=-2
-    FCB $FF,$06,$EE          ; line 4: flag=-1, dy=6, dx=-18
-    FCB $FF,$F3,$F1          ; line 5: flag=-1, dy=-13, dx=-15
-    FCB $FF,$F5,$07          ; line 6: flag=-1, dy=-11, dx=7
-    FCB $FF,$03,$0C          ; line 7: flag=-1, dy=3, dx=12
-    FCB $FF,$F4,$10          ; line 8: flag=-1, dy=-12, dx=16
-    FCB $FF,$00,$00          ; line 9: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$05          ; flag=-1, dy=8, dx=5
+    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
+    FCB $FF,$06,$FB          ; flag=-1, dy=6, dx=-5
+    FCB $FF,$F8,$FE          ; flag=-1, dy=-8, dx=-2
+    FCB $FF,$06,$EE          ; flag=-1, dy=6, dx=-18
+    FCB $FF,$F3,$F1          ; flag=-1, dy=-13, dx=-15
+    FCB $FF,$F5,$07          ; flag=-1, dy=-11, dx=7
+    FCB $FF,$03,$0C          ; flag=-1, dy=3, dx=12
+    FCB $FF,$F4,$10          ; flag=-1, dy=-12, dx=16
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $ED,$66,0,0        ; path4: header (y=-19, x=102, relative to center)
-    FCB $FF,$F1,$00          ; line 0: flag=-1, dy=-15, dx=0
-    FCB $FF,$04,$F8          ; line 1: flag=-1, dy=4, dx=-8
-    FCB $FF,$05,$00          ; line 2: flag=-1, dy=5, dx=0
-    FCB $FF,$06,$09          ; line 3: flag=-1, dy=6, dx=9
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
+    FCB $FF,$04,$F8          ; flag=-1, dy=4, dx=-8
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$06,$09          ; flag=-1, dy=6, dx=9
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $EE,$57,0,0        ; path5: header (y=-18, x=87, relative to center)
-    FCB $FF,$F8,$05          ; line 0: flag=-1, dy=-8, dx=5
-    FCB $FF,$F9,$FF          ; line 1: flag=-1, dy=-7, dx=-1
-    FCB $FF,$05,$FA          ; line 2: flag=-1, dy=5, dx=-6
-    FCB $FF,$0A,$02          ; line 3: flag=-1, dy=10, dx=2
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
+    FCB $FF,$F9,$FF          ; flag=-1, dy=-7, dx=-1
+    FCB $FF,$05,$FA          ; flag=-1, dy=5, dx=-6
+    FCB $FF,$0A,$02          ; flag=-1, dy=10, dx=2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $E6,$72,0,0        ; path6: header (y=-26, x=114, relative to center)
-    FCB $FF,$FD,$FB          ; line 0: flag=-1, dy=-3, dx=-5
-    FCB $FF,$FB,$08          ; line 1: flag=-1, dy=-5, dx=8
-    FCB $FF,$04,$00          ; line 2: flag=-1, dy=4, dx=0
-    FCB $FF,$04,$FD          ; line 3: flag=-1, dy=4, dx=-3
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$FB          ; flag=-1, dy=-3, dx=-5
+    FCB $FF,$FB,$08          ; flag=-1, dy=-5, dx=8
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$04,$FD          ; flag=-1, dy=4, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $DD,$1A,0,0        ; path7: header (y=-35, x=26, relative to center)
-    FCB $FF,$09,$08          ; line 0: flag=-1, dy=9, dx=8
-    FCB $FF,$01,$FA          ; line 1: flag=-1, dy=1, dx=-6
-    FCB $FF,$F7,$FA          ; line 2: flag=-1, dy=-9, dx=-6
-    FCB $FF,$FE,$05          ; line 3: flag=-1, dy=-2, dx=5
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$09,$08          ; flag=-1, dy=9, dx=8
+    FCB $FF,$01,$FA          ; flag=-1, dy=1, dx=-6
+    FCB $FF,$F7,$FA          ; flag=-1, dy=-9, dx=-6
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $4C,$B0,0,0        ; path8: header (y=76, x=-80, relative to center)
-    FCB $FF,$FC,$0D          ; line 0: flag=-1, dy=-4, dx=13
-    FCB $FF,$FD,$00          ; line 1: flag=-1, dy=-3, dx=0
-    FCB $FF,$FA,$08          ; line 2: flag=-1, dy=-6, dx=8
-    FCB $FF,$09,$06          ; line 3: flag=-1, dy=9, dx=6
-    FCB $FF,$09,$F2          ; line 4: flag=-1, dy=9, dx=-14
-    FCB $FF,$FF,$F6          ; line 5: flag=-1, dy=-1, dx=-10
-    FCB $FF,$FC,$FD          ; line 6: flag=-1, dy=-4, dx=-3
-    FCB $FF,$00,$00          ; line 7: flag=-1, dy=0, dx=0
+    FCB $FF,$FC,$0D          ; flag=-1, dy=-4, dx=13
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FA,$08          ; flag=-1, dy=-6, dx=8
+    FCB $FF,$09,$06          ; flag=-1, dy=9, dx=6
+    FCB $FF,$09,$F2          ; flag=-1, dy=9, dx=-14
+    FCB $FF,$FF,$F6          ; flag=-1, dy=-1, dx=-10
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $2D,$87,0,0        ; path9: header (y=45, x=-121, relative to center)
-    FCB $FF,$F7,$08          ; line 0: flag=-1, dy=-9, dx=8
-    FCB $FF,$F7,$F9          ; line 1: flag=-1, dy=-9, dx=-7
-    FCB $FF,$E4,$17          ; line 2: flag=-1, dy=-28, dx=23
-    FCB $FF,$FE,$16          ; line 3: flag=-1, dy=-2, dx=22
-    FCB $FF,$09,$F6          ; line 4: flag=-1, dy=9, dx=-10
-    FCB $FF,$00,$FA          ; line 5: flag=-1, dy=0, dx=-6
-    FCB $FF,$0D,$FE          ; line 6: flag=-1, dy=13, dx=-2
-    FCB $FF,$09,$0E          ; line 7: flag=-1, dy=9, dx=14
-    FCB $FF,$F9,$06          ; line 8: flag=-1, dy=-7, dx=6
-    FCB $FF,$18,$13          ; line 9: flag=-1, dy=24, dx=19
-    FCB $FF,$10,$F5          ; line 10: flag=-1, dy=16, dx=-11
-    FCB $FF,$F4,$FD          ; line 11: flag=-1, dy=-12, dx=-3
-    FCB $FF,$04,$F5          ; line 12: flag=-1, dy=4, dx=-11
-    FCB $FF,$08,$01          ; line 13: flag=-1, dy=8, dx=1
-    FCB $FF,$0A,$EE          ; line 14: flag=-1, dy=10, dx=-18
-    FCB $FF,$06,$E7          ; line 15: flag=-1, dy=6, dx=-25
-    FCB $FF,$DF,$01          ; line 16: flag=-1, dy=-33, dx=1
-    FCB $FF,$00,$00          ; line 17: flag=-1, dy=0, dx=0
+    FCB $FF,$F7,$08          ; flag=-1, dy=-9, dx=8
+    FCB $FF,$F7,$F9          ; flag=-1, dy=-9, dx=-7
+    FCB $FF,$E4,$17          ; flag=-1, dy=-28, dx=23
+    FCB $FF,$FE,$16          ; flag=-1, dy=-2, dx=22
+    FCB $FF,$09,$F6          ; flag=-1, dy=9, dx=-10
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$0D,$FE          ; flag=-1, dy=13, dx=-2
+    FCB $FF,$09,$0E          ; flag=-1, dy=9, dx=14
+    FCB $FF,$F9,$06          ; flag=-1, dy=-7, dx=6
+    FCB $FF,$18,$13          ; flag=-1, dy=24, dx=19
+    FCB $FF,$10,$F5          ; flag=-1, dy=16, dx=-11
+    FCB $FF,$F4,$FD          ; flag=-1, dy=-12, dx=-3
+    FCB $FF,$04,$F5          ; flag=-1, dy=4, dx=-11
+    FCB $FF,$08,$01          ; flag=-1, dy=8, dx=1
+    FCB $FF,$0A,$EE          ; flag=-1, dy=10, dx=-18
+    FCB $FF,$06,$E7          ; flag=-1, dy=6, dx=-25
+    FCB $FF,$DF,$01          ; flag=-1, dy=-33, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $04,$BE,0,0        ; path10: header (y=4, x=-66, relative to center)
-    FCB $FF,$ED,$F8          ; line 0: flag=-1, dy=-19, dx=-8
-    FCB $FF,$F9,$06          ; line 1: flag=-1, dy=-7, dx=6
-    FCB $FF,$E0,$05          ; line 2: flag=-1, dy=-32, dx=5
-    FCB $FF,$19,$14          ; line 3: flag=-1, dy=25, dx=20
-    FCB $FF,$FF,$08          ; line 4: flag=-1, dy=-1, dx=8
-    FCB $FF,$10,$00          ; line 5: flag=-1, dy=16, dx=0
-    FCB $FF,$03,$F7          ; line 6: flag=-1, dy=3, dx=-9
-    FCB $FF,$09,$F8          ; line 7: flag=-1, dy=9, dx=-8
-    FCB $FF,$06,$F3          ; line 8: flag=-1, dy=6, dx=-13
-    FCB $FF,$01,$00          ; line 9: flag=-1, dy=1, dx=0
+    FCB $FF,$ED,$F8          ; flag=-1, dy=-19, dx=-8
+    FCB $FF,$F9,$06          ; flag=-1, dy=-7, dx=6
+    FCB $FF,$E0,$05          ; flag=-1, dy=-32, dx=5
+    FCB $FF,$19,$14          ; flag=-1, dy=25, dx=20
+    FCB $FF,$FF,$08          ; flag=-1, dy=-1, dx=8
+    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
+    FCB $FF,$03,$F7          ; flag=-1, dy=3, dx=-9
+    FCB $FF,$09,$F8          ; flag=-1, dy=9, dx=-8
+    FCB $FF,$06,$F3          ; flag=-1, dy=6, dx=-13
+    FCB $FF,$01,$00          ; flag=-1, dy=1, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $B0,$AE,0,0        ; path11: header (y=-80, x=-82, relative to center)
-    FCB $FF,$0D,$0C          ; line 0: flag=-1, dy=13, dx=12
-    FCB $FF,$FB,$0D          ; line 1: flag=-1, dy=-5, dx=13
-    FCB $FF,$F9,$08          ; line 2: flag=-1, dy=-7, dx=8
-    FCB $FF,$FE,$DF          ; line 3: flag=-1, dy=-2, dx=-33
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$0D,$0C          ; flag=-1, dy=13, dx=12
+    FCB $FF,$FB,$0D          ; flag=-1, dy=-5, dx=13
+    FCB $FF,$F9,$08          ; flag=-1, dy=-7, dx=8
+    FCB $FF,$FE,$DF          ; flag=-1, dy=-2, dx=-33
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $0E,$69,0,0        ; path12: header (y=14, x=105, relative to center)
-    FCB $FF,$08,$FC          ; line 0: flag=-1, dy=8, dx=-4
-    FCB $FF,$01,$01          ; line 1: flag=-1, dy=1, dx=1
-    FCB $FF,$02,$03          ; line 2: flag=-1, dy=2, dx=3
-    FCB $FF,$F5,$00          ; line 3: flag=-1, dy=-11, dx=0
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$F5,$00          ; flag=-1, dy=-11, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $24,$69,0,0        ; path13: header (y=36, x=105, relative to center)
-    FCB $FF,$04,$07          ; line 0: flag=-1, dy=4, dx=7
-    FCB $FF,$04,$F9          ; line 1: flag=-1, dy=4, dx=-7
-    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$04,$07          ; flag=-1, dy=4, dx=7
+    FCB $FF,$04,$F9          ; flag=-1, dy=4, dx=-7
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _MAP_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $21,$6D,0,0        ; path14: header (y=33, x=109, relative to center)
-    FCB $FF,$F9,$FD          ; line 0: flag=-1, dy=-7, dx=-3
-    FCB $FF,$FB,$02          ; line 1: flag=-1, dy=-5, dx=2
-    FCB $FF,$FF,$03          ; line 2: flag=-1, dy=-1, dx=3
-    FCB $FF,$05,$04          ; line 3: flag=-1, dy=5, dx=4
-    FCB $FF,$08,$FC          ; line 4: flag=-1, dy=8, dx=-4
-    FCB $FF,$00,$FE          ; line 5: flag=-1, dy=0, dx=-2
-    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB $FF,$F9,$FD          ; flag=-1, dy=-7, dx=-3
+    FCB $FF,$FB,$02          ; flag=-1, dy=-5, dx=2
+    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
+    FCB $FF,$05,$04          ; flag=-1, dy=5, dx=4
+    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: london_bg
@@ -12163,33 +12320,33 @@ _LONDON_BG_VECTORS:  ; Main entry (header + 4 path(s))
 _LONDON_BG_PATH0:    ; Path 0
     FCB 110              ; path0: intensity
     FCB $D3,$EC,0,0        ; path0: header (y=-45, x=-20, relative to center)
-    FCB $FF,$46,$00          ; line 0: flag=-1, dy=70, dx=0
-    FCB $FF,$00,$28          ; line 1: flag=-1, dy=0, dx=40
-    FCB $FF,$BA,$00          ; line 2: flag=-1, dy=-70, dx=0
+    FCB $FF,$46,$00          ; flag=-1, dy=70, dx=0
+    FCB $FF,$00,$28          ; flag=-1, dy=0, dx=40
+    FCB $FF,$BA,$00          ; flag=-1, dy=-70, dx=0
     FCB 2                ; End marker (path complete)
 
 _LONDON_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $23,$F1,0,0        ; path1: header (y=35, x=-15, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
-    FCB $FF,$F6,$00          ; line 2: flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$E2          ; line 3: flag=-1, dy=0, dx=-30
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$1E          ; flag=-1, dy=0, dx=30
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$E2          ; flag=-1, dy=0, dx=-30
     FCB 2                ; End marker (path complete)
 
 _LONDON_BG_PATH2:    ; Path 2
     FCB 100              ; path2: intensity
     FCB $28,$00,0,0        ; path2: header (y=40, x=0, relative to center)
-    FCB $FF,$05,$00          ; line 0: flag=-1, dy=5, dx=0
-    FCB $FF,$FB,$08          ; line 1: flag=-1, dy=-5, dx=8
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$FB,$08          ; flag=-1, dy=-5, dx=8
     FCB 2                ; End marker (path complete)
 
 _LONDON_BG_PATH3:    ; Path 3
     FCB 120              ; path3: intensity
     FCB $19,$EC,0,0        ; path3: header (y=25, x=-20, relative to center)
-    FCB $FF,$0A,$05          ; line 0: flag=-1, dy=10, dx=5
-    FCB $FF,$00,$1E          ; line 1: flag=-1, dy=0, dx=30
-    FCB $FF,$F6,$05          ; line 2: flag=-1, dy=-10, dx=5
+    FCB $FF,$0A,$05          ; flag=-1, dy=10, dx=5
+    FCB $FF,$00,$1E          ; flag=-1, dy=0, dx=30
+    FCB $FF,$F6,$05          ; flag=-1, dy=-10, dx=5
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: leningrad_bg
@@ -12213,42 +12370,42 @@ _LENINGRAD_BG_VECTORS:  ; Main entry (header + 5 path(s))
 _LENINGRAD_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $05,$E7,0,0        ; path0: header (y=5, x=-25, relative to center)
-    FCB $FF,$14,$0A          ; line 0: flag=-1, dy=20, dx=10
-    FCB $FF,$05,$0F          ; line 1: flag=-1, dy=5, dx=15
-    FCB $FF,$FB,$0F          ; line 2: flag=-1, dy=-5, dx=15
-    FCB $FF,$EC,$0A          ; line 3: flag=-1, dy=-20, dx=10
+    FCB $FF,$14,$0A          ; flag=-1, dy=20, dx=10
+    FCB $FF,$05,$0F          ; flag=-1, dy=5, dx=15
+    FCB $FF,$FB,$0F          ; flag=-1, dy=-5, dx=15
+    FCB $FF,$EC,$0A          ; flag=-1, dy=-20, dx=10
     FCB 2                ; End marker (path complete)
 
 _LENINGRAD_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $1E,$00,0,0        ; path1: header (y=30, x=0, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB 2                ; End marker (path complete)
 
 _LENINGRAD_BG_PATH2:    ; Path 2
     FCB 110              ; path2: intensity
     FCB $05,$E2,0,0        ; path2: header (y=5, x=-30, relative to center)
-    FCB $FF,$D3,$00          ; line 0: flag=-1, dy=-45, dx=0
-    FCB $FF,$00,$3C          ; line 1: flag=-1, dy=0, dx=60
-    FCB $FF,$2D,$00          ; line 2: flag=-1, dy=45, dx=0
+    FCB $FF,$D3,$00          ; flag=-1, dy=-45, dx=0
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
+    FCB $FF,$2D,$00          ; flag=-1, dy=45, dx=0
     FCB 2                ; End marker (path complete)
 
 _LENINGRAD_BG_PATH3:    ; Path 3
     FCB 90              ; path3: intensity
     FCB $EC,$EC,0,0        ; path3: header (y=-20, x=-20, relative to center)
-    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$F1,$00          ; line 2: flag=-1, dy=-15, dx=0
-    FCB $FF,$00,$F6          ; line 3: flag=-1, dy=0, dx=-10
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
     FCB 2                ; End marker (path complete)
 
 _LENINGRAD_BG_PATH4:    ; Path 4
     FCB 90              ; path4: intensity
     FCB $EC,$0A,0,0        ; path4: header (y=-20, x=10, relative to center)
-    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$F1,$00          ; line 2: flag=-1, dy=-15, dx=0
-    FCB $FF,$00,$F6          ; line 3: flag=-1, dy=0, dx=-10
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: location_marker
@@ -12268,16 +12425,16 @@ _LOCATION_MARKER_VECTORS:  ; Main entry (header + 1 path(s))
 _LOCATION_MARKER_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $0B,$00,0,0        ; path0: header (y=11, x=0, relative to center)
-    FCB $FF,$F8,$04          ; line 0: flag=-1, dy=-8, dx=4
-    FCB $FF,$00,$07          ; line 1: flag=-1, dy=0, dx=7
-    FCB $FF,$F9,$FC          ; line 2: flag=-1, dy=-7, dx=-4
-    FCB $FF,$F9,$00          ; line 3: flag=-1, dy=-7, dx=0
-    FCB $FF,$05,$F9          ; line 4: flag=-1, dy=5, dx=-7
-    FCB $FF,$FB,$F9          ; line 5: flag=-1, dy=-5, dx=-7
-    FCB $FF,$07,$00          ; line 6: flag=-1, dy=7, dx=0
-    FCB $FF,$07,$FC          ; line 7: flag=-1, dy=7, dx=-4
-    FCB $FF,$00,$07          ; line 8: flag=-1, dy=0, dx=7
-    FCB $FF,$08,$04          ; closing line: flag=-1, dy=8, dx=4
+    FCB $FF,$F8,$04          ; flag=-1, dy=-8, dx=4
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$F9,$FC          ; flag=-1, dy=-7, dx=-4
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $FF,$05,$F9          ; flag=-1, dy=5, dx=-7
+    FCB $FF,$FB,$F9          ; flag=-1, dy=-5, dx=-7
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
+    FCB $FF,$07,$FC          ; flag=-1, dy=7, dx=-4
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$08,$04          ; flag=-1, dy=8, dx=4
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: ayers_bg
@@ -12314,179 +12471,180 @@ _AYERS_BG_VECTORS:  ; Main entry (header + 18 path(s))
 _AYERS_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $E2,$9D,0,0        ; path0: header (y=-30, x=-99, relative to center)
-    FCB $FF,$2A,$0C          ; line 0: flag=-1, dy=42, dx=12
-    FCB $FF,$05,$0D          ; line 1: flag=-1, dy=5, dx=13
-    FCB $FF,$04,$0F          ; line 2: flag=-1, dy=4, dx=15
-    FCB $FF,$03,$0F          ; line 3: flag=-1, dy=3, dx=15
-    FCB $FF,$05,$09          ; line 4: flag=-1, dy=5, dx=9
-    FCB $FF,$FC,$0C          ; line 5: flag=-1, dy=-4, dx=12
-    FCB $FF,$02,$0E          ; line 6: flag=-1, dy=2, dx=14
-    FCB $FF,$05,$0C          ; line 7: flag=-1, dy=5, dx=12
-    FCB $FF,$FF,$0C          ; line 8: flag=-1, dy=-1, dx=12
-    FCB $FF,$FA,$0D          ; line 9: flag=-1, dy=-6, dx=13
-    FCB $FF,$01,$10          ; line 10: flag=-1, dy=1, dx=16
-    FCB $FF,$FB,$0E          ; line 11: flag=-1, dy=-5, dx=14
-    FCB $FF,$F5,$10          ; line 12: flag=-1, dy=-11, dx=16
-    FCB $FF,$F2,$0B          ; line 13: flag=-1, dy=-14, dx=11
-    FCB $FF,$EE,$0B          ; line 14: flag=-1, dy=-18, dx=11
-    FCB $FF,$F7,$03          ; line 15: flag=-1, dy=-9, dx=3
-    FCB $FF,$01,$81          ; line 16: flag=-1, dy=1, dx=-127
+    FCB $FF,$2A,$0C          ; flag=-1, dy=42, dx=12
+    FCB $FF,$05,$0D          ; flag=-1, dy=5, dx=13
+    FCB $FF,$04,$0F          ; flag=-1, dy=4, dx=15
+    FCB $FF,$03,$0F          ; flag=-1, dy=3, dx=15
+    FCB $FF,$05,$09          ; flag=-1, dy=5, dx=9
+    FCB $FF,$FC,$0C          ; flag=-1, dy=-4, dx=12
+    FCB $FF,$02,$0E          ; flag=-1, dy=2, dx=14
+    FCB $FF,$05,$0C          ; flag=-1, dy=5, dx=12
+    FCB $FF,$FF,$0C          ; flag=-1, dy=-1, dx=12
+    FCB $FF,$FA,$0D          ; flag=-1, dy=-6, dx=13
+    FCB $FF,$01,$10          ; flag=-1, dy=1, dx=16
+    FCB $FF,$FB,$0E          ; flag=-1, dy=-5, dx=14
+    FCB $FF,$F5,$10          ; flag=-1, dy=-11, dx=16
+    FCB $FF,$F2,$0B          ; flag=-1, dy=-14, dx=11
+    FCB $FF,$EE,$0B          ; flag=-1, dy=-18, dx=11
+    FCB $FF,$F7,$03          ; flag=-1, dy=-9, dx=3
+    FCB $FF,$00,$9D          ; sub-seg 1/2 of line 16: dy=0, dx=-99
+    FCB $FF,$01,$9D          ; sub-seg 2/2 of line 16: dy=1, dx=-99
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $11,$B6,0,0        ; path1: header (y=17, x=-74, relative to center)
-    FCB $FF,$EA,$F9          ; line 0: flag=-1, dy=-22, dx=-7
-    FCB $FF,$E7,$F8          ; line 1: flag=-1, dy=-25, dx=-8
+    FCB $FF,$EA,$F9          ; flag=-1, dy=-22, dx=-7
+    FCB $FF,$E7,$F8          ; flag=-1, dy=-25, dx=-8
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $E2,$BB,0,0        ; path2: header (y=-30, x=-69, relative to center)
-    FCB $FF,$1C,$02          ; line 0: flag=-1, dy=28, dx=2
-    FCB $FF,$08,$06          ; line 1: flag=-1, dy=8, dx=6
-    FCB $FF,$F5,$FF          ; line 2: flag=-1, dy=-11, dx=-1
-    FCB $FF,$E7,$FC          ; line 3: flag=-1, dy=-25, dx=-4
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$1C,$02          ; flag=-1, dy=28, dx=2
+    FCB $FF,$08,$06          ; flag=-1, dy=8, dx=6
+    FCB $FF,$F5,$FF          ; flag=-1, dy=-11, dx=-1
+    FCB $FF,$E7,$FC          ; flag=-1, dy=-25, dx=-4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $19,$E9,0,0        ; path3: header (y=25, x=-23, relative to center)
-    FCB $FF,$EF,$FD          ; line 0: flag=-1, dy=-17, dx=-3
-    FCB $FF,$F2,$03          ; line 1: flag=-1, dy=-14, dx=3
-    FCB $FF,$F5,$00          ; line 2: flag=-1, dy=-11, dx=0
-    FCB $FF,$09,$05          ; line 3: flag=-1, dy=9, dx=5
-    FCB $FF,$0C,$06          ; line 4: flag=-1, dy=12, dx=6
-    FCB $FF,$18,$06          ; line 5: flag=-1, dy=24, dx=6
+    FCB $FF,$EF,$FD          ; flag=-1, dy=-17, dx=-3
+    FCB $FF,$F2,$03          ; flag=-1, dy=-14, dx=3
+    FCB $FF,$F5,$00          ; flag=-1, dy=-11, dx=0
+    FCB $FF,$09,$05          ; flag=-1, dy=9, dx=5
+    FCB $FF,$0C,$06          ; flag=-1, dy=12, dx=6
+    FCB $FF,$18,$06          ; flag=-1, dy=24, dx=6
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $1A,$F0,0,0        ; path4: header (y=26, x=-16, relative to center)
-    FCB $FF,$EF,$FA          ; line 0: flag=-1, dy=-17, dx=-6
-    FCB $FF,$F6,$03          ; line 1: flag=-1, dy=-10, dx=3
-    FCB $FF,$09,$04          ; line 2: flag=-1, dy=9, dx=4
-    FCB $FF,$13,$06          ; line 3: flag=-1, dy=19, dx=6
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$EF,$FA          ; flag=-1, dy=-17, dx=-6
+    FCB $FF,$F6,$03          ; flag=-1, dy=-10, dx=3
+    FCB $FF,$09,$04          ; flag=-1, dy=9, dx=4
+    FCB $FF,$13,$06          ; flag=-1, dy=19, dx=6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $E2,$C4,0,0        ; path5: header (y=-30, x=-60, relative to center)
-    FCB $FF,$16,$08          ; line 0: flag=-1, dy=22, dx=8
-    FCB $FF,$20,$07          ; line 1: flag=-1, dy=32, dx=7
+    FCB $FF,$16,$08          ; flag=-1, dy=22, dx=8
+    FCB $FF,$20,$07          ; flag=-1, dy=32, dx=7
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $19,$D6,0,0        ; path6: header (y=25, x=-42, relative to center)
-    FCB $FF,$E9,$FB          ; line 0: flag=-1, dy=-23, dx=-5
-    FCB $FF,$EE,$FD          ; line 1: flag=-1, dy=-18, dx=-3
-    FCB $FF,$F2,$01          ; line 2: flag=-1, dy=-14, dx=1
+    FCB $FF,$E9,$FB          ; flag=-1, dy=-23, dx=-5
+    FCB $FF,$EE,$FD          ; flag=-1, dy=-18, dx=-3
+    FCB $FF,$F2,$01          ; flag=-1, dy=-14, dx=1
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $20,$07,0,0        ; path7: header (y=32, x=7, relative to center)
-    FCB $FF,$F0,$02          ; line 0: flag=-1, dy=-16, dx=2
-    FCB $FF,$F2,$FA          ; line 1: flag=-1, dy=-14, dx=-6
-    FCB $FF,$EF,$01          ; line 2: flag=-1, dy=-17, dx=1
-    FCB $FF,$0B,$03          ; line 3: flag=-1, dy=11, dx=3
-    FCB $FF,$0E,$04          ; line 4: flag=-1, dy=14, dx=4
-    FCB $FF,$13,$07          ; line 5: flag=-1, dy=19, dx=7
-    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB $FF,$F0,$02          ; flag=-1, dy=-16, dx=2
+    FCB $FF,$F2,$FA          ; flag=-1, dy=-14, dx=-6
+    FCB $FF,$EF,$01          ; flag=-1, dy=-17, dx=1
+    FCB $FF,$0B,$03          ; flag=-1, dy=11, dx=3
+    FCB $FF,$0E,$04          ; flag=-1, dy=14, dx=4
+    FCB $FF,$13,$07          ; flag=-1, dy=19, dx=7
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $19,$1F,0,0        ; path8: header (y=25, x=31, relative to center)
-    FCB $FF,$EB,$0A          ; line 0: flag=-1, dy=-21, dx=10
-    FCB $FF,$E6,$01          ; line 1: flag=-1, dy=-26, dx=1
-    FCB $FF,$F7,$FF          ; line 2: flag=-1, dy=-9, dx=-1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$EB,$0A          ; flag=-1, dy=-21, dx=10
+    FCB $FF,$E6,$01          ; flag=-1, dy=-26, dx=1
+    FCB $FF,$F7,$FF          ; flag=-1, dy=-9, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $E1,$25,0,0        ; path9: header (y=-31, x=37, relative to center)
-    FCB $FF,$08,$F9          ; line 0: flag=-1, dy=8, dx=-7
-    FCB $FF,$1A,$FC          ; line 1: flag=-1, dy=26, dx=-4
-    FCB $FF,$E6,$FE          ; line 2: flag=-1, dy=-26, dx=-2
-    FCB $FF,$F9,$F9          ; line 3: flag=-1, dy=-7, dx=-7
+    FCB $FF,$08,$F9          ; flag=-1, dy=8, dx=-7
+    FCB $FF,$1A,$FC          ; flag=-1, dy=26, dx=-4
+    FCB $FF,$E6,$FE          ; flag=-1, dy=-26, dx=-2
+    FCB $FF,$F9,$F9          ; flag=-1, dy=-7, dx=-7
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $E2,$0A,0,0        ; path10: header (y=-30, x=10, relative to center)
-    FCB $FF,$12,$01          ; line 0: flag=-1, dy=18, dx=1
-    FCB $FF,$13,$06          ; line 1: flag=-1, dy=19, dx=6
-    FCB $FF,$F1,$FF          ; line 2: flag=-1, dy=-15, dx=-1
-    FCB $FF,$EA,$00          ; line 3: flag=-1, dy=-22, dx=0
+    FCB $FF,$12,$01          ; flag=-1, dy=18, dx=1
+    FCB $FF,$13,$06          ; flag=-1, dy=19, dx=6
+    FCB $FF,$F1,$FF          ; flag=-1, dy=-15, dx=-1
+    FCB $FF,$EA,$00          ; flag=-1, dy=-22, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $E1,$07,0,0        ; path11: header (y=-31, x=7, relative to center)
-    FCB $FF,$06,$F8          ; line 0: flag=-1, dy=6, dx=-8
-    FCB $FF,$01,$FD          ; line 1: flag=-1, dy=1, dx=-3
-    FCB $FF,$13,$FC          ; line 2: flag=-1, dy=19, dx=-4
-    FCB $FF,$F6,$FE          ; line 3: flag=-1, dy=-10, dx=-2
-    FCB $FF,$F6,$01          ; line 4: flag=-1, dy=-10, dx=1
-    FCB $FF,$00,$F3          ; line 5: flag=-1, dy=0, dx=-13
-    FCB $FF,$03,$FD          ; line 6: flag=-1, dy=3, dx=-3
-    FCB $FF,$FA,$FC          ; line 7: flag=-1, dy=-6, dx=-4
+    FCB $FF,$06,$F8          ; flag=-1, dy=6, dx=-8
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB $FF,$13,$FC          ; flag=-1, dy=19, dx=-4
+    FCB $FF,$F6,$FE          ; flag=-1, dy=-10, dx=-2
+    FCB $FF,$F6,$01          ; flag=-1, dy=-10, dx=1
+    FCB $FF,$00,$F3          ; flag=-1, dy=0, dx=-13
+    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
+    FCB $FF,$FA,$FC          ; flag=-1, dy=-6, dx=-4
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $E4,$E3,0,0        ; path12: header (y=-28, x=-29, relative to center)
-    FCB $FF,$04,$F5          ; line 0: flag=-1, dy=4, dx=-11
-    FCB $FF,$20,$05          ; line 1: flag=-1, dy=32, dx=5
-    FCB $FF,$F9,$FA          ; line 2: flag=-1, dy=-7, dx=-6
-    FCB $FF,$EF,$FE          ; line 3: flag=-1, dy=-17, dx=-2
-    FCB $FF,$F8,$00          ; line 4: flag=-1, dy=-8, dx=0
-    FCB $FF,$FD,$FA          ; line 5: flag=-1, dy=-3, dx=-6
+    FCB $FF,$04,$F5          ; flag=-1, dy=4, dx=-11
+    FCB $FF,$20,$05          ; flag=-1, dy=32, dx=5
+    FCB $FF,$F9,$FA          ; flag=-1, dy=-7, dx=-6
+    FCB $FF,$EF,$FE          ; flag=-1, dy=-17, dx=-2
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$FD,$FA          ; flag=-1, dy=-3, dx=-6
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $07,$2C,0,0        ; path13: header (y=7, x=44, relative to center)
-    FCB $FF,$DB,$03          ; line 0: flag=-1, dy=-37, dx=3
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$DB,$03          ; flag=-1, dy=-37, dx=3
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $E1,$3C,0,0        ; path14: header (y=-31, x=60, relative to center)
-    FCB $FF,$1A,$FE          ; line 0: flag=-1, dy=26, dx=-2
-    FCB $FF,$1B,$FE          ; line 1: flag=-1, dy=27, dx=-2
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$1A,$FE          ; flag=-1, dy=26, dx=-2
+    FCB $FF,$1B,$FE          ; flag=-1, dy=27, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $E1,$4C,0,0        ; path15: header (y=-31, x=76, relative to center)
-    FCB $FF,$15,$FC          ; line 0: flag=-1, dy=21, dx=-4
-    FCB $FF,$03,$FD          ; line 1: flag=-1, dy=3, dx=-3
-    FCB $FF,$10,$FE          ; line 2: flag=-1, dy=16, dx=-2
-    FCB $FF,$EE,$FE          ; line 3: flag=-1, dy=-18, dx=-2
-    FCB $FF,$1F,$F7          ; line 4: flag=-1, dy=31, dx=-9
-    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB $FF,$15,$FC          ; flag=-1, dy=21, dx=-4
+    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
+    FCB $FF,$10,$FE          ; flag=-1, dy=16, dx=-2
+    FCB $FF,$EE,$FE          ; flag=-1, dy=-18, dx=-2
+    FCB $FF,$1F,$F7          ; flag=-1, dy=31, dx=-9
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $E1,$53,0,0        ; path16: header (y=-31, x=83, relative to center)
-    FCB $FF,$23,$F7          ; line 0: flag=-1, dy=35, dx=-9
-    FCB $FF,$E2,$0D          ; line 1: flag=-1, dy=-30, dx=13
-    FCB $FF,$1A,$FB          ; line 2: flag=-1, dy=26, dx=-5
+    FCB $FF,$23,$F7          ; flag=-1, dy=35, dx=-9
+    FCB $FF,$E2,$0D          ; flag=-1, dy=-30, dx=13
+    FCB $FF,$1A,$FB          ; flag=-1, dy=26, dx=-5
     FCB 2                ; End marker (path complete)
 
 _AYERS_BG_PATH17:    ; Path 17
     FCB 127              ; path17: intensity
     FCB $06,$2C,0,0        ; path17: header (y=6, x=44, relative to center)
-    FCB $FF,$13,$F7          ; line 0: flag=-1, dy=19, dx=-9
+    FCB $FF,$13,$F7          ; flag=-1, dy=19, dx=-9
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: fuji_bg
@@ -12516,85 +12674,85 @@ _FUJI_BG_PATH0:    ; Path 0
 _FUJI_BG_PATH1:    ; Path 1
     FCB 80              ; path1: intensity
     FCB $E8,$84,0,0        ; path1: header (y=-24, x=-124, relative to center)
-    FCB $FF,$0A,$1E          ; line 0: flag=-1, dy=10, dx=30
-    FCB $FF,$0E,$1E          ; line 1: flag=-1, dy=14, dx=30
-    FCB $FF,$0F,$15          ; line 2: flag=-1, dy=15, dx=21
-    FCB $FF,$11,$17          ; line 3: flag=-1, dy=17, dx=23
-    FCB $FF,$0E,$0E          ; line 4: flag=-1, dy=14, dx=14
-    FCB $FF,$FE,$03          ; line 5: flag=-1, dy=-2, dx=3
-    FCB $FF,$03,$04          ; line 6: flag=-1, dy=3, dx=4
-    FCB $FF,$FE,$04          ; line 7: flag=-1, dy=-2, dx=4
-    FCB $FF,$01,$07          ; line 8: flag=-1, dy=1, dx=7
-    FCB $FF,$02,$04          ; line 9: flag=-1, dy=2, dx=4
-    FCB $FF,$FD,$06          ; line 10: flag=-1, dy=-3, dx=6
-    FCB $FF,$03,$03          ; line 11: flag=-1, dy=3, dx=3
-    FCB $FF,$EB,$11          ; line 12: flag=-1, dy=-21, dx=17
-    FCB $FF,$F4,$11          ; line 13: flag=-1, dy=-12, dx=17
-    FCB $FF,$F0,$16          ; line 14: flag=-1, dy=-16, dx=22
-    FCB $FF,$F6,$14          ; line 15: flag=-1, dy=-10, dx=20
-    FCB $FF,$F6,$18          ; line 16: flag=-1, dy=-10, dx=24
-    FCB $FF,$00,$00          ; line 17: flag=-1, dy=0, dx=0
+    FCB $FF,$0A,$1E          ; flag=-1, dy=10, dx=30
+    FCB $FF,$0E,$1E          ; flag=-1, dy=14, dx=30
+    FCB $FF,$0F,$15          ; flag=-1, dy=15, dx=21
+    FCB $FF,$11,$17          ; flag=-1, dy=17, dx=23
+    FCB $FF,$0E,$0E          ; flag=-1, dy=14, dx=14
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB $FF,$01,$07          ; flag=-1, dy=1, dx=7
+    FCB $FF,$02,$04          ; flag=-1, dy=2, dx=4
+    FCB $FF,$FD,$06          ; flag=-1, dy=-3, dx=6
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB $FF,$EB,$11          ; flag=-1, dy=-21, dx=17
+    FCB $FF,$F4,$11          ; flag=-1, dy=-12, dx=17
+    FCB $FF,$F0,$16          ; flag=-1, dy=-16, dx=22
+    FCB $FF,$F6,$14          ; flag=-1, dy=-10, dx=20
+    FCB $FF,$F6,$18          ; flag=-1, dy=-10, dx=24
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _FUJI_BG_PATH2:    ; Path 2
     FCB 95              ; path2: intensity
     FCB $1A,$F1,0,0        ; path2: header (y=26, x=-15, relative to center)
-    FCB $FF,$06,$03          ; line 0: flag=-1, dy=6, dx=3
-    FCB $FF,$04,$03          ; line 1: flag=-1, dy=4, dx=3
-    FCB $FF,$FD,$04          ; line 2: flag=-1, dy=-3, dx=4
-    FCB $FF,$FC,$FC          ; line 3: flag=-1, dy=-4, dx=-4
-    FCB $FF,$FD,$FA          ; line 4: flag=-1, dy=-3, dx=-6
-    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB $FF,$06,$03          ; flag=-1, dy=6, dx=3
+    FCB $FF,$04,$03          ; flag=-1, dy=4, dx=3
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FC,$FC          ; flag=-1, dy=-4, dx=-4
+    FCB $FF,$FD,$FA          ; flag=-1, dy=-3, dx=-6
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _FUJI_BG_PATH3:    ; Path 3
     FCB 95              ; path3: intensity
     FCB $1F,$07,0,0        ; path3: header (y=31, x=7, relative to center)
-    FCB $FF,$F9,$FD          ; line 0: flag=-1, dy=-7, dx=-3
-    FCB $FF,$FA,$02          ; line 1: flag=-1, dy=-6, dx=2
-    FCB $FF,$F9,$FD          ; line 2: flag=-1, dy=-7, dx=-3
-    FCB $FF,$FD,$04          ; line 3: flag=-1, dy=-3, dx=4
-    FCB $FF,$08,$03          ; line 4: flag=-1, dy=8, dx=3
-    FCB $FF,$07,$FE          ; line 5: flag=-1, dy=7, dx=-2
-    FCB $FF,$06,$01          ; line 6: flag=-1, dy=6, dx=1
-    FCB $FF,$02,$FE          ; line 7: flag=-1, dy=2, dx=-2
+    FCB $FF,$F9,$FD          ; flag=-1, dy=-7, dx=-3
+    FCB $FF,$FA,$02          ; flag=-1, dy=-6, dx=2
+    FCB $FF,$F9,$FD          ; flag=-1, dy=-7, dx=-3
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$08,$03          ; flag=-1, dy=8, dx=3
+    FCB $FF,$07,$FE          ; flag=-1, dy=7, dx=-2
+    FCB $FF,$06,$01          ; flag=-1, dy=6, dx=1
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
     FCB 2                ; End marker (path complete)
 
 _FUJI_BG_PATH4:    ; Path 4
     FCB 95              ; path4: intensity
     FCB $21,$18,0,0        ; path4: header (y=33, x=24, relative to center)
-    FCB $FF,$F7,$05          ; line 0: flag=-1, dy=-9, dx=5
-    FCB $FF,$F7,$0C          ; line 1: flag=-1, dy=-9, dx=12
-    FCB $FF,$0B,$FA          ; line 2: flag=-1, dy=11, dx=-6
-    FCB $FF,$07,$F5          ; line 3: flag=-1, dy=7, dx=-11
+    FCB $FF,$F7,$05          ; flag=-1, dy=-9, dx=5
+    FCB $FF,$F7,$0C          ; flag=-1, dy=-9, dx=12
+    FCB $FF,$0B,$FA          ; flag=-1, dy=11, dx=-6
+    FCB $FF,$07,$F5          ; flag=-1, dy=7, dx=-11
     FCB 2                ; End marker (path complete)
 
 _FUJI_BG_PATH5:    ; Path 5
     FCB 100              ; path5: intensity
     FCB $05,$C7,0,0        ; path5: header (y=5, x=-57, relative to center)
-    FCB $FF,$09,$1A          ; line 0: flag=-1, dy=9, dx=26
-    FCB $FF,$EF,$F2          ; line 1: flag=-1, dy=-17, dx=-14
-    FCB $FF,$1B,$22          ; line 2: flag=-1, dy=27, dx=34
-    FCB $FF,$F2,$FB          ; line 3: flag=-1, dy=-14, dx=-5
-    FCB $FF,$00,$03          ; line 4: flag=-1, dy=0, dx=3
-    FCB $FF,$F7,$FB          ; line 5: flag=-1, dy=-9, dx=-5
-    FCB $FF,$FA,$01          ; line 6: flag=-1, dy=-6, dx=1
-    FCB $FF,$0E,$0E          ; line 7: flag=-1, dy=14, dx=14
-    FCB $FF,$F1,$00          ; line 8: flag=-1, dy=-15, dx=0
-    FCB $FF,$0A,$05          ; line 9: flag=-1, dy=10, dx=5
-    FCB $FF,$EA,$06          ; line 10: flag=-1, dy=-22, dx=6
-    FCB $FF,$1C,$05          ; line 11: flag=-1, dy=28, dx=5
-    FCB $FF,$EF,$06          ; line 12: flag=-1, dy=-17, dx=6
-    FCB $FF,$03,$01          ; line 13: flag=-1, dy=3, dx=1
-    FCB $FF,$FD,$04          ; line 14: flag=-1, dy=-3, dx=4
-    FCB $FF,$0B,$03          ; line 15: flag=-1, dy=11, dx=3
-    FCB $FF,$F5,$05          ; line 16: flag=-1, dy=-11, dx=5
-    FCB $FF,$10,$FF          ; line 17: flag=-1, dy=16, dx=-1
-    FCB $FF,$EE,$13          ; line 18: flag=-1, dy=-18, dx=19
-    FCB $FF,$12,$F7          ; line 19: flag=-1, dy=18, dx=-9
-    FCB $FF,$F9,$0E          ; line 20: flag=-1, dy=-7, dx=14
-    FCB $FF,$04,$02          ; line 21: flag=-1, dy=4, dx=2
-    FCB $FF,$FC,$14          ; line 22: flag=-1, dy=-4, dx=20
+    FCB $FF,$09,$1A          ; flag=-1, dy=9, dx=26
+    FCB $FF,$EF,$F2          ; flag=-1, dy=-17, dx=-14
+    FCB $FF,$1B,$22          ; flag=-1, dy=27, dx=34
+    FCB $FF,$F2,$FB          ; flag=-1, dy=-14, dx=-5
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$F7,$FB          ; flag=-1, dy=-9, dx=-5
+    FCB $FF,$FA,$01          ; flag=-1, dy=-6, dx=1
+    FCB $FF,$0E,$0E          ; flag=-1, dy=14, dx=14
+    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
+    FCB $FF,$0A,$05          ; flag=-1, dy=10, dx=5
+    FCB $FF,$EA,$06          ; flag=-1, dy=-22, dx=6
+    FCB $FF,$1C,$05          ; flag=-1, dy=28, dx=5
+    FCB $FF,$EF,$06          ; flag=-1, dy=-17, dx=6
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$0B,$03          ; flag=-1, dy=11, dx=3
+    FCB $FF,$F5,$05          ; flag=-1, dy=-11, dx=5
+    FCB $FF,$10,$FF          ; flag=-1, dy=16, dx=-1
+    FCB $FF,$EE,$13          ; flag=-1, dy=-18, dx=19
+    FCB $FF,$12,$F7          ; flag=-1, dy=18, dx=-9
+    FCB $FF,$F9,$0E          ; flag=-1, dy=-7, dx=14
+    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
+    FCB $FF,$FC,$14          ; flag=-1, dy=-4, dx=20
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: kilimanjaro_bg
@@ -12617,30 +12775,30 @@ _KILIMANJARO_BG_VECTORS:  ; Main entry (header + 4 path(s))
 _KILIMANJARO_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $D6,$9C,0,0        ; path0: header (y=-42, x=-100, relative to center)
-    FCB $FF,$3C,$32          ; line 0: flag=-1, dy=60, dx=50
-    FCB $FF,$19,$32          ; line 1: flag=-1, dy=25, dx=50
-    FCB $FF,$E7,$32          ; line 2: flag=-1, dy=-25, dx=50
-    FCB $FF,$C4,$32          ; line 3: flag=-1, dy=-60, dx=50
+    FCB $FF,$3C,$32          ; flag=-1, dy=60, dx=50
+    FCB $FF,$19,$32          ; flag=-1, dy=25, dx=50
+    FCB $FF,$E7,$32          ; flag=-1, dy=-25, dx=50
+    FCB $FF,$C4,$32          ; flag=-1, dy=-60, dx=50
     FCB 2                ; End marker (path complete)
 
 _KILIMANJARO_BG_PATH1:    ; Path 1
     FCB 110              ; path1: intensity
     FCB $1C,$E2,0,0        ; path1: header (y=28, x=-30, relative to center)
-    FCB $FF,$0F,$1E          ; line 0: flag=-1, dy=15, dx=30
-    FCB $FF,$F1,$00          ; line 1: flag=-1, dy=-15, dx=0
+    FCB $FF,$0F,$1E          ; flag=-1, dy=15, dx=30
+    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
     FCB 2                ; End marker (path complete)
 
 _KILIMANJARO_BG_PATH2:    ; Path 2
     FCB 110              ; path2: intensity
     FCB $1C,$00,0,0        ; path2: header (y=28, x=0, relative to center)
-    FCB $FF,$0F,$00          ; line 0: flag=-1, dy=15, dx=0
-    FCB $FF,$F1,$1E          ; line 1: flag=-1, dy=-15, dx=30
+    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB $FF,$F1,$1E          ; flag=-1, dy=-15, dx=30
     FCB 2                ; End marker (path complete)
 
 _KILIMANJARO_BG_PATH3:    ; Path 3
     FCB 90              ; path3: intensity
     FCB $F4,$BA,0,0        ; path3: header (y=-12, x=-70, relative to center)
-    FCB $FF,$14,$1E          ; line 0: flag=-1, dy=20, dx=30
+    FCB $FF,$14,$1E          ; flag=-1, dy=20, dx=30
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: athens_bg
@@ -12700,101 +12858,101 @@ _ATHENS_BG_VECTORS:  ; Main entry (header + 41 path(s))
 _ATHENS_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $26,$C1,0,0        ; path0: header (y=38, x=-63, relative to center)
-    FCB $FF,$25,$3E          ; line 0: flag=-1, dy=37, dx=62
-    FCB $FF,$DB,$3F          ; line 1: flag=-1, dy=-37, dx=63
-    FCB $FF,$00,$83          ; line 2: flag=-1, dy=0, dx=-125
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$25,$3E          ; flag=-1, dy=37, dx=62
+    FCB $FF,$DB,$3F          ; flag=-1, dy=-37, dx=63
+    FCB $FF,$00,$83          ; flag=-1, dy=0, dx=-125
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $29,$D2,0,0        ; path1: header (y=41, x=-46, relative to center)
-    FCB $FF,$1C,$2D          ; line 0: flag=-1, dy=28, dx=45
-    FCB $FF,$E4,$2F          ; line 1: flag=-1, dy=-28, dx=47
-    FCB $FF,$00,$A4          ; line 2: flag=-1, dy=0, dx=-92
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$1C,$2D          ; flag=-1, dy=28, dx=45
+    FCB $FF,$E4,$2F          ; flag=-1, dy=-28, dx=47
+    FCB $FF,$00,$A4          ; flag=-1, dy=0, dx=-92
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $26,$38,0,0        ; path2: header (y=38, x=56, relative to center)
-    FCB $FF,$00,$00          ; line 0: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $26,$3B,0,0        ; path3: header (y=38, x=59, relative to center)
-    FCB $FF,$F9,$00          ; line 0: flag=-1, dy=-7, dx=0
-    FCB $FF,$00,$88          ; line 1: flag=-1, dy=0, dx=-120
-    FCB $FF,$07,$00          ; line 2: flag=-1, dy=7, dx=0
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$88          ; flag=-1, dy=0, dx=-120
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $1F,$C6,0,0        ; path4: header (y=31, x=-58, relative to center)
-    FCB $FF,$F5,$00          ; line 0: flag=-1, dy=-11, dx=0
-    FCB $FF,$00,$72          ; line 1: flag=-1, dy=0, dx=114
-    FCB $FF,$0B,$00          ; line 2: flag=-1, dy=11, dx=0
-    FCB $FF,$00,$01          ; line 3: flag=-1, dy=0, dx=1
+    FCB $FF,$F5,$00          ; flag=-1, dy=-11, dx=0
+    FCB $FF,$00,$72          ; flag=-1, dy=0, dx=114
+    FCB $FF,$0B,$00          ; flag=-1, dy=11, dx=0
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $14,$C6,0,0        ; path5: header (y=20, x=-58, relative to center)
-    FCB $FF,$00,$FC          ; line 0: flag=-1, dy=0, dx=-4
-    FCB $FF,$FB,$00          ; line 1: flag=-1, dy=-5, dx=0
-    FCB $FF,$00,$7A          ; line 2: flag=-1, dy=0, dx=122
-    FCB $FF,$05,$00          ; line 3: flag=-1, dy=5, dx=0
-    FCB $FF,$00,$FC          ; line 4: flag=-1, dy=0, dx=-4
-    FCB $FF,$00,$00          ; line 5: flag=-1, dy=0, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
+    FCB $FF,$00,$7A          ; flag=-1, dy=0, dx=122
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $0F,$C8,0,0        ; path6: header (y=15, x=-56, relative to center)
-    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $0C,$CA,0,0        ; path7: header (y=12, x=-54, relative to center)
-    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $0A,$CB,0,0        ; path8: header (y=10, x=-53, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $0A,$D5,0,0        ; path9: header (y=10, x=-43, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $CA,$C8,0,0        ; path10: header (y=-54, x=-56, relative to center)
-    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $CD,$CA,0,0        ; path11: header (y=-51, x=-54, relative to center)
-    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH12:    ; Path 12
@@ -12810,49 +12968,49 @@ _ATHENS_BG_PATH13:    ; Path 13
 _ATHENS_BG_PATH14:    ; Path 14
     FCB 127              ; path14: intensity
     FCB $0F,$E0,0,0        ; path14: header (y=15, x=-32, relative to center)
-    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $0C,$E2,0,0        ; path15: header (y=12, x=-30, relative to center)
-    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $0A,$E3,0,0        ; path16: header (y=10, x=-29, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH17:    ; Path 17
     FCB 127              ; path17: intensity
     FCB $0A,$ED,0,0        ; path17: header (y=10, x=-19, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH18:    ; Path 18
     FCB 127              ; path18: intensity
     FCB $CA,$E0,0,0        ; path18: header (y=-54, x=-32, relative to center)
-    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH19:    ; Path 19
     FCB 127              ; path19: intensity
     FCB $CD,$E2,0,0        ; path19: header (y=-51, x=-30, relative to center)
-    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH20:    ; Path 20
@@ -12868,49 +13026,49 @@ _ATHENS_BG_PATH21:    ; Path 21
 _ATHENS_BG_PATH22:    ; Path 22
     FCB 127              ; path22: intensity
     FCB $0F,$12,0,0        ; path22: header (y=15, x=18, relative to center)
-    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH23:    ; Path 23
     FCB 127              ; path23: intensity
     FCB $0C,$14,0,0        ; path23: header (y=12, x=20, relative to center)
-    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH24:    ; Path 24
     FCB 127              ; path24: intensity
     FCB $0A,$15,0,0        ; path24: header (y=10, x=21, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH25:    ; Path 25
     FCB 127              ; path25: intensity
     FCB $0A,$1F,0,0        ; path25: header (y=10, x=31, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH26:    ; Path 26
     FCB 127              ; path26: intensity
     FCB $CA,$12,0,0        ; path26: header (y=-54, x=18, relative to center)
-    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH27:    ; Path 27
     FCB 127              ; path27: intensity
     FCB $CD,$14,0,0        ; path27: header (y=-51, x=20, relative to center)
-    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH28:    ; Path 28
@@ -12926,49 +13084,49 @@ _ATHENS_BG_PATH29:    ; Path 29
 _ATHENS_BG_PATH30:    ; Path 30
     FCB 127              ; path30: intensity
     FCB $0F,$26,0,0        ; path30: header (y=15, x=38, relative to center)
-    FCB $FF,$FD,$01          ; line 0: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$03,$01          ; line 2: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH31:    ; Path 31
     FCB 127              ; path31: intensity
     FCB $0C,$28,0,0        ; path31: header (y=12, x=40, relative to center)
-    FCB $FF,$FE,$01          ; line 0: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$02,$01          ; line 2: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH32:    ; Path 32
     FCB 127              ; path32: intensity
     FCB $0A,$29,0,0        ; path32: header (y=10, x=41, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH33:    ; Path 33
     FCB 127              ; path33: intensity
     FCB $0A,$33,0,0        ; path33: header (y=10, x=51, relative to center)
-    FCB $FF,$C5,$00          ; line 0: flag=-1, dy=-59, dx=0
+    FCB $FF,$C5,$00          ; flag=-1, dy=-59, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH34:    ; Path 34
     FCB 127              ; path34: intensity
     FCB $CA,$26,0,0        ; path34: header (y=-54, x=38, relative to center)
-    FCB $FF,$03,$01          ; line 0: flag=-1, dy=3, dx=1
-    FCB $FF,$00,$0E          ; line 1: flag=-1, dy=0, dx=14
-    FCB $FF,$FD,$01          ; line 2: flag=-1, dy=-3, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH35:    ; Path 35
     FCB 127              ; path35: intensity
     FCB $CD,$28,0,0        ; path35: header (y=-51, x=40, relative to center)
-    FCB $FF,$02,$01          ; line 0: flag=-1, dy=2, dx=1
-    FCB $FF,$00,$0A          ; line 1: flag=-1, dy=0, dx=10
-    FCB $FF,$FE,$01          ; line 2: flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH36:    ; Path 36
@@ -12984,28 +13142,32 @@ _ATHENS_BG_PATH37:    ; Path 37
 _ATHENS_BG_PATH38:    ; Path 38
     FCB 127              ; path38: intensity
     FCB $B5,$B0,0,0        ; path38: header (y=-75, x=-80, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
-    FCB $FF,$00,$7F          ; line 1: flag=-1, dy=0, dx=127
-    FCB $FF,$F9,$00          ; line 2: flag=-1, dy=-7, dx=0
-    FCB $FF,$00,$81          ; line 3: flag=-1, dy=0, dx=-127
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
+    FCB $FF,$00,$50          ; sub-seg 1/2 of line 1: dy=0, dx=80
+    FCB $FF,$00,$50          ; sub-seg 2/2 of line 1: dy=0, dx=80
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB $FF,$00,$B0          ; sub-seg 1/2 of line 3: dy=0, dx=-80
+    FCB $FF,$00,$B0          ; sub-seg 2/2 of line 3: dy=0, dx=-80
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH39:    ; Path 39
     FCB 127              ; path39: intensity
     FCB $BC,$B7,0,0        ; path39: header (y=-68, x=-73, relative to center)
-    FCB $FF,$08,$00          ; line 0: flag=-1, dy=8, dx=0
-    FCB $FF,$00,$7F          ; line 1: flag=-1, dy=0, dx=127
-    FCB $FF,$F8,$00          ; line 2: flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$49          ; sub-seg 1/2 of line 1: dy=0, dx=73
+    FCB $FF,$00,$49          ; sub-seg 2/2 of line 1: dy=0, dx=73
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ATHENS_BG_PATH40:    ; Path 40
     FCB 127              ; path40: intensity
     FCB $C4,$44,0,0        ; path40: header (y=-60, x=68, relative to center)
-    FCB $FF,$06,$00          ; line 0: flag=-1, dy=6, dx=0
-    FCB $FF,$00,$81          ; line 1: flag=-1, dy=0, dx=-127
-    FCB $FF,$FA,$00          ; line 2: flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$00          ; line 3: flag=-1, dy=0, dx=0
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$BD          ; sub-seg 1/2 of line 1: dy=0, dx=-67
+    FCB $FF,$00,$BC          ; sub-seg 2/2 of line 1: dy=0, dx=-68
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: antarctica_bg
@@ -13044,133 +13206,134 @@ _ANTARCTICA_BG_VECTORS:  ; Main entry (header + 20 path(s))
 _ANTARCTICA_BG_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $D3,$90,0,0        ; path0: header (y=-45, x=-112, relative to center)
-    FCB $FF,$00,$7F          ; line 0: flag=-1, dy=0, dx=127
+    FCB $FF,$00,$4C          ; sub-seg 1/2 of line 0: dy=0, dx=76
+    FCB $FF,$00,$4D          ; sub-seg 2/2 of line 0: dy=0, dx=77
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
     FCB $D3,$29,0,0        ; path1: header (y=-45, x=41, relative to center)
-    FCB $FF,$41,$D5          ; line 0: flag=-1, dy=65, dx=-43
-    FCB $FF,$FA,$F9          ; line 1: flag=-1, dy=-6, dx=-7
-    FCB $FF,$21,$E4          ; line 2: flag=-1, dy=33, dx=-28
-    FCB $FF,$DF,$E7          ; line 3: flag=-1, dy=-33, dx=-25
-    FCB $FF,$07,$F7          ; line 4: flag=-1, dy=7, dx=-9
-    FCB $FF,$BE,$D7          ; line 5: flag=-1, dy=-66, dx=-41
+    FCB $FF,$41,$D5          ; flag=-1, dy=65, dx=-43
+    FCB $FF,$FA,$F9          ; flag=-1, dy=-6, dx=-7
+    FCB $FF,$21,$E4          ; flag=-1, dy=33, dx=-28
+    FCB $FF,$DF,$E7          ; flag=-1, dy=-33, dx=-25
+    FCB $FF,$07,$F7          ; flag=-1, dy=7, dx=-9
+    FCB $FF,$BE,$D7          ; flag=-1, dy=-66, dx=-41
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
     FCB $E6,$9C,0,0        ; path2: header (y=-26, x=-100, relative to center)
-    FCB $FF,$03,$21          ; line 0: flag=-1, dy=3, dx=33
-    FCB $FF,$17,$22          ; line 1: flag=-1, dy=23, dx=34
-    FCB $FF,$F6,$16          ; line 2: flag=-1, dy=-10, dx=22
-    FCB $FF,$F9,$08          ; line 3: flag=-1, dy=-7, dx=8
+    FCB $FF,$03,$21          ; flag=-1, dy=3, dx=33
+    FCB $FF,$17,$22          ; flag=-1, dy=23, dx=34
+    FCB $FF,$F6,$16          ; flag=-1, dy=-10, dx=22
+    FCB $FF,$F9,$08          ; flag=-1, dy=-7, dx=8
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
     FCB $D3,$D6,0,0        ; path3: header (y=-45, x=-42, relative to center)
-    FCB $FF,$0F,$05          ; line 0: flag=-1, dy=15, dx=5
-    FCB $FF,$10,$2A          ; line 1: flag=-1, dy=16, dx=42
-    FCB $FF,$F7,$15          ; line 2: flag=-1, dy=-9, dx=21
+    FCB $FF,$0F,$05          ; flag=-1, dy=15, dx=5
+    FCB $FF,$10,$2A          ; flag=-1, dy=16, dx=42
+    FCB $FF,$F7,$15          ; flag=-1, dy=-9, dx=21
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
     FCB $F7,$F3,0,0        ; path4: header (y=-9, x=-13, relative to center)
-    FCB $FF,$13,$FB          ; line 0: flag=-1, dy=19, dx=-5
-    FCB $FF,$00,$F7          ; line 1: flag=-1, dy=0, dx=-9
-    FCB $FF,$0F,$F8          ; line 2: flag=-1, dy=15, dx=-8
-    FCB $FF,$02,$EF          ; line 3: flag=-1, dy=2, dx=-17
+    FCB $FF,$13,$FB          ; flag=-1, dy=19, dx=-5
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
+    FCB $FF,$0F,$F8          ; flag=-1, dy=15, dx=-8
+    FCB $FF,$02,$EF          ; flag=-1, dy=2, dx=-17
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
     FCB $D9,$33,0,0        ; path5: header (y=-39, x=51, relative to center)
-    FCB $FF,$09,$06          ; line 0: flag=-1, dy=9, dx=6
-    FCB $FF,$02,$05          ; line 1: flag=-1, dy=2, dx=5
-    FCB $FF,$FA,$06          ; line 2: flag=-1, dy=-6, dx=6
-    FCB $FF,$F4,$01          ; line 3: flag=-1, dy=-12, dx=1
-    FCB $FF,$02,$FD          ; line 4: flag=-1, dy=2, dx=-3
-    FCB $FF,$06,$FF          ; line 5: flag=-1, dy=6, dx=-1
-    FCB $FF,$06,$FD          ; line 6: flag=-1, dy=6, dx=-3
-    FCB $FF,$FE,$FB          ; line 7: flag=-1, dy=-2, dx=-5
-    FCB $FF,$FA,$FC          ; line 8: flag=-1, dy=-6, dx=-4
+    FCB $FF,$09,$06          ; flag=-1, dy=9, dx=6
+    FCB $FF,$02,$05          ; flag=-1, dy=2, dx=5
+    FCB $FF,$FA,$06          ; flag=-1, dy=-6, dx=6
+    FCB $FF,$F4,$01          ; flag=-1, dy=-12, dx=1
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$FF          ; flag=-1, dy=6, dx=-1
+    FCB $FF,$06,$FD          ; flag=-1, dy=6, dx=-3
+    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
+    FCB $FF,$FA,$FC          ; flag=-1, dy=-6, dx=-4
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
     FCB $D9,$33,0,0        ; path6: header (y=-39, x=51, relative to center)
-    FCB $FF,$F9,$12          ; line 0: flag=-1, dy=-7, dx=18
-    FCB $FF,$04,$07          ; line 1: flag=-1, dy=4, dx=7
-    FCB $FF,$00,$04          ; line 2: flag=-1, dy=0, dx=4
-    FCB $FF,$00,$0D          ; line 3: flag=-1, dy=0, dx=13
-    FCB $FF,$01,$0A          ; line 4: flag=-1, dy=1, dx=10
-    FCB $FF,$03,$08          ; line 5: flag=-1, dy=3, dx=8
-    FCB $FF,$00,$00          ; line 6: flag=-1, dy=0, dx=0
+    FCB $FF,$F9,$12          ; flag=-1, dy=-7, dx=18
+    FCB $FF,$04,$07          ; flag=-1, dy=4, dx=7
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$00,$0D          ; flag=-1, dy=0, dx=13
+    FCB $FF,$01,$0A          ; flag=-1, dy=1, dx=10
+    FCB $FF,$03,$08          ; flag=-1, dy=3, dx=8
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
     FCB $DA,$6F,0,0        ; path7: header (y=-38, x=111, relative to center)
-    FCB $FF,$0A,$00          ; line 0: flag=-1, dy=10, dx=0
-    FCB $FF,$0A,$FB          ; line 1: flag=-1, dy=10, dx=-5
-    FCB $FF,$06,$FC          ; line 2: flag=-1, dy=6, dx=-4
-    FCB $FF,$04,$F8          ; line 3: flag=-1, dy=4, dx=-8
-    FCB $FF,$01,$F9          ; line 4: flag=-1, dy=1, dx=-7
-    FCB $FF,$FF,$F5          ; line 5: flag=-1, dy=-1, dx=-11
-    FCB $FF,$FB,$F9          ; line 6: flag=-1, dy=-5, dx=-7
-    FCB $FF,$FB,$FB          ; line 7: flag=-1, dy=-5, dx=-5
-    FCB $FF,$FA,$FC          ; line 8: flag=-1, dy=-6, dx=-4
-    FCB $FF,$FA,$FD          ; line 9: flag=-1, dy=-6, dx=-3
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$0A,$FB          ; flag=-1, dy=10, dx=-5
+    FCB $FF,$06,$FC          ; flag=-1, dy=6, dx=-4
+    FCB $FF,$04,$F8          ; flag=-1, dy=4, dx=-8
+    FCB $FF,$01,$F9          ; flag=-1, dy=1, dx=-7
+    FCB $FF,$FF,$F5          ; flag=-1, dy=-1, dx=-11
+    FCB $FF,$FB,$F9          ; flag=-1, dy=-5, dx=-7
+    FCB $FF,$FB,$FB          ; flag=-1, dy=-5, dx=-5
+    FCB $FF,$FA,$FC          ; flag=-1, dy=-6, dx=-4
+    FCB $FF,$FA,$FD          ; flag=-1, dy=-6, dx=-3
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
     FCB $D6,$4C,0,0        ; path8: header (y=-42, x=76, relative to center)
-    FCB $FF,$07,$00          ; line 0: flag=-1, dy=7, dx=0
-    FCB $FF,$06,$FE          ; line 1: flag=-1, dy=6, dx=-2
-    FCB $FF,$03,$FD          ; line 2: flag=-1, dy=3, dx=-3
-    FCB $FF,$FE,$F7          ; line 3: flag=-1, dy=-2, dx=-9
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
+    FCB $FF,$FE,$F7          ; flag=-1, dy=-2, dx=-9
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
     FCB $EC,$3F,0,0        ; path9: header (y=-20, x=63, relative to center)
-    FCB $FF,$FF,$08          ; line 0: flag=-1, dy=-1, dx=8
-    FCB $FF,$00,$0D          ; line 1: flag=-1, dy=0, dx=13
-    FCB $FF,$02,$0B          ; line 2: flag=-1, dy=2, dx=11
-    FCB $FF,$02,$0A          ; line 3: flag=-1, dy=2, dx=10
-    FCB $FF,$00,$00          ; line 4: flag=-1, dy=0, dx=0
+    FCB $FF,$FF,$08          ; flag=-1, dy=-1, dx=8
+    FCB $FF,$00,$0D          ; flag=-1, dy=0, dx=13
+    FCB $FF,$02,$0B          ; flag=-1, dy=2, dx=11
+    FCB $FF,$02,$0A          ; flag=-1, dy=2, dx=10
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
     FCB $F6,$49,0,0        ; path10: header (y=-10, x=73, relative to center)
-    FCB $FF,$FF,$09          ; line 0: flag=-1, dy=-1, dx=9
-    FCB $FF,$01,$08          ; line 1: flag=-1, dy=1, dx=8
-    FCB $FF,$01,$06          ; line 2: flag=-1, dy=1, dx=6
+    FCB $FF,$FF,$09          ; flag=-1, dy=-1, dx=9
+    FCB $FF,$01,$08          ; flag=-1, dy=1, dx=8
+    FCB $FF,$01,$06          ; flag=-1, dy=1, dx=6
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
     FCB $E0,$4B,0,0        ; path11: header (y=-32, x=75, relative to center)
-    FCB $FF,$01,$0B          ; line 0: flag=-1, dy=1, dx=11
-    FCB $FF,$02,$15          ; line 1: flag=-1, dy=2, dx=21
-    FCB $FF,$01,$04          ; line 2: flag=-1, dy=1, dx=4
+    FCB $FF,$01,$0B          ; flag=-1, dy=1, dx=11
+    FCB $FF,$02,$15          ; flag=-1, dy=2, dx=21
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH12:    ; Path 12
     FCB 127              ; path12: intensity
     FCB $F5,$52,0,0        ; path12: header (y=-11, x=82, relative to center)
-    FCB $FF,$F6,$FF          ; line 0: flag=-1, dy=-10, dx=-1
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F6,$FF          ; flag=-1, dy=-10, dx=-1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH13:    ; Path 13
     FCB 127              ; path13: intensity
     FCB $F6,$5B,0,0        ; path13: header (y=-10, x=91, relative to center)
-    FCB $FF,$F8,$07          ; line 0: flag=-1, dy=-8, dx=7
+    FCB $FF,$F8,$07          ; flag=-1, dy=-8, dx=7
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH14:    ; Path 14
@@ -13181,35 +13344,35 @@ _ANTARCTICA_BG_PATH14:    ; Path 14
 _ANTARCTICA_BG_PATH15:    ; Path 15
     FCB 127              ; path15: intensity
     FCB $E2,$60,0,0        ; path15: header (y=-30, x=96, relative to center)
-    FCB $FF,$F5,$05          ; line 0: flag=-1, dy=-11, dx=5
+    FCB $FF,$F5,$05          ; flag=-1, dy=-11, dx=5
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH16:    ; Path 16
     FCB 127              ; path16: intensity
     FCB $E1,$53,0,0        ; path16: header (y=-31, x=83, relative to center)
-    FCB $FF,$F5,$FE          ; line 0: flag=-1, dy=-11, dx=-2
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$F5,$FE          ; flag=-1, dy=-11, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH17:    ; Path 17
     FCB 127              ; path17: intensity
     FCB $EB,$49,0,0        ; path17: header (y=-21, x=73, relative to center)
-    FCB $FF,$FB,$FE          ; line 0: flag=-1, dy=-5, dx=-2
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
+    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH18:    ; Path 18
     FCB 127              ; path18: intensity
     FCB $EE,$65,0,0        ; path18: header (y=-18, x=101, relative to center)
-    FCB $FF,$F5,$06          ; line 0: flag=-1, dy=-11, dx=6
+    FCB $FF,$F5,$06          ; flag=-1, dy=-11, dx=6
     FCB 2                ; End marker (path complete)
 
 _ANTARCTICA_BG_PATH19:    ; Path 19
     FCB 127              ; path19: intensity
     FCB $E1,$58,0,0        ; path19: header (y=-31, x=88, relative to center)
-    FCB $FF,$0B,$01          ; line 0: flag=-1, dy=11, dx=1
-    FCB $FF,$00,$00          ; line 1: flag=-1, dy=0, dx=0
-    FCB $FF,$00,$00          ; line 2: flag=-1, dy=0, dx=0
+    FCB $FF,$0B,$01          ; flag=-1, dy=11, dx=1
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Vector asset: bubble_medium
@@ -13229,34 +13392,34 @@ _BUBBLE_MEDIUM_VECTORS:  ; Main entry (header + 1 path(s))
 _BUBBLE_MEDIUM_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
     FCB $00,$0F,0,0        ; path0: header (y=0, x=15, relative to center)
-    FCB $FF,$04,$FF          ; line 0: flag=-1, dy=4, dx=-1
-    FCB $FF,$04,$FF          ; line 1: flag=-1, dy=4, dx=-1
-    FCB $FF,$03,$FE          ; line 2: flag=-1, dy=3, dx=-2
-    FCB $FF,$02,$FD          ; line 3: flag=-1, dy=2, dx=-3
-    FCB $FF,$01,$FC          ; line 4: flag=-1, dy=1, dx=-4
-    FCB $FF,$01,$FC          ; line 5: flag=-1, dy=1, dx=-4
-    FCB $FF,$FF,$FC          ; line 6: flag=-1, dy=-1, dx=-4
-    FCB $FF,$FF,$FC          ; line 7: flag=-1, dy=-1, dx=-4
-    FCB $FF,$FE,$FD          ; line 8: flag=-1, dy=-2, dx=-3
-    FCB $FF,$FD,$FE          ; line 9: flag=-1, dy=-3, dx=-2
-    FCB $FF,$FC,$FF          ; line 10: flag=-1, dy=-4, dx=-1
-    FCB $FF,$FC,$FF          ; line 11: flag=-1, dy=-4, dx=-1
-    FCB $FF,$FC,$01          ; line 12: flag=-1, dy=-4, dx=1
-    FCB $FF,$FC,$01          ; line 13: flag=-1, dy=-4, dx=1
-    FCB $FF,$FD,$02          ; line 14: flag=-1, dy=-3, dx=2
-    FCB $FF,$FE,$03          ; line 15: flag=-1, dy=-2, dx=3
-    FCB $FF,$FF,$04          ; line 16: flag=-1, dy=-1, dx=4
-    FCB $FF,$FF,$04          ; line 17: flag=-1, dy=-1, dx=4
-    FCB $FF,$01,$04          ; line 18: flag=-1, dy=1, dx=4
-    FCB $FF,$01,$04          ; line 19: flag=-1, dy=1, dx=4
-    FCB $FF,$02,$03          ; line 20: flag=-1, dy=2, dx=3
-    FCB $FF,$03,$02          ; line 21: flag=-1, dy=3, dx=2
-    FCB $FF,$04,$01          ; line 22: flag=-1, dy=4, dx=1
-    FCB $FF,$04,$01          ; closing line: flag=-1, dy=4, dx=1
+    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
+    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
+    FCB $FF,$03,$FE          ; flag=-1, dy=3, dx=-2
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB $FF,$FF,$FC          ; flag=-1, dy=-1, dx=-4
+    FCB $FF,$FF,$FC          ; flag=-1, dy=-1, dx=-4
+    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $FF,$FD,$FE          ; flag=-1, dy=-3, dx=-2
+    FCB $FF,$FC,$FF          ; flag=-1, dy=-4, dx=-1
+    FCB $FF,$FC,$FF          ; flag=-1, dy=-4, dx=-1
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
+    FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Generated from pang_theme.vmus (internal name: pang_theme)
-; Tempo: 120 BPM, Total events: 34 (PSG Direct format)
+; Tempo: 150 BPM, Total events: 34 (PSG Direct format)
 ; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
 
 _PANG_THEME_MUSIC:
@@ -13264,19 +13427,19 @@ _PANG_THEME_MUSIC:
     FCB     0              ; Delay 0 frames (maintain previous state)
     FCB     11              ; Frame 0 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
+    FCB     $0B             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13285,66 +13448,66 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 12 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 10 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
+    FCB     $0B             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 25 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 20 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
+    FCB     $0B             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 50 - 11 register writes
+    FCB     20              ; Delay 20 frames (maintain previous state)
+    FCB     11              ; Frame 40 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $EF             ; Reg 2 value
+    FCB     $E1             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13353,66 +13516,66 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 62 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 50 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $EF             ; Reg 2 value
+    FCB     $E1             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 75 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 60 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $59             ; Reg 0 value
+    FCB     $54             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $EF             ; Reg 2 value
+    FCB     $E1             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 100 - 11 register writes
+    FCB     20              ; Delay 20 frames (maintain previous state)
+    FCB     11              ; Frame 80 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $B3             ; Reg 2 value
+    FCB     $A8             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13421,66 +13584,66 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 112 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 90 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $B3             ; Reg 2 value
+    FCB     $A8             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 124 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 100 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $B3             ; Reg 2 value
+    FCB     $A8             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     26              ; Delay 26 frames (maintain previous state)
-    FCB     11              ; Frame 150 - 11 register writes
+    FCB     20              ; Delay 20 frames (maintain previous state)
+    FCB     11              ; Frame 120 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
+    FCB     $0B             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13489,44 +13652,112 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 162 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 130 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $1C             ; Reg 2 value
+    FCB     $0B             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $99             ; Reg 4 value
+    FCB     $44             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     38              ; Delay 38 frames (maintain previous state)
+    FCB     30              ; Delay 30 frames (maintain previous state)
+    FCB     11              ; Frame 160 - 11 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $96             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0C             ; Reg 8 value
+    FCB     2               ; Reg 2 number
+    FCB     $FC             ; Reg 2 value
+    FCB     3               ; Reg 3 number
+    FCB     $00             ; Reg 3 value
+    FCB     9               ; Reg 9 number
+    FCB     $0A             ; Reg 9 value
+    FCB     4               ; Reg 4 number
+    FCB     $B1             ; Reg 4 value
+    FCB     5               ; Reg 5 number
+    FCB     $04             ; Reg 5 value
+    FCB     10               ; Reg 10 number
+    FCB     $08             ; Reg 10 value
+    FCB     6               ; Reg 6 number
+    FCB     $0F             ; Reg 6 value
+    FCB     7               ; Reg 7 number
+    FCB     $F0             ; Reg 7 value
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 170 - 10 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $96             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0C             ; Reg 8 value
+    FCB     2               ; Reg 2 number
+    FCB     $FC             ; Reg 2 value
+    FCB     3               ; Reg 3 number
+    FCB     $00             ; Reg 3 value
+    FCB     9               ; Reg 9 number
+    FCB     $0A             ; Reg 9 value
+    FCB     4               ; Reg 4 number
+    FCB     $B1             ; Reg 4 value
+    FCB     5               ; Reg 5 number
+    FCB     $04             ; Reg 5 value
+    FCB     10               ; Reg 10 number
+    FCB     $08             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $F8             ; Reg 7 value
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 180 - 10 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $7E             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0C             ; Reg 8 value
+    FCB     2               ; Reg 2 number
+    FCB     $FC             ; Reg 2 value
+    FCB     3               ; Reg 3 number
+    FCB     $00             ; Reg 3 value
+    FCB     9               ; Reg 9 number
+    FCB     $0A             ; Reg 9 value
+    FCB     4               ; Reg 4 number
+    FCB     $B1             ; Reg 4 value
+    FCB     5               ; Reg 5 number
+    FCB     $04             ; Reg 5 value
+    FCB     10               ; Reg 10 number
+    FCB     $08             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $F8             ; Reg 7 value
+    FCB     20              ; Delay 20 frames (maintain previous state)
     FCB     11              ; Frame 200 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
+    FCB     $64             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
+    FCB     $C8             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
+    FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
+    FCB     $B1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13535,66 +13766,66 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 212 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 210 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
+    FCB     $64             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 224 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $86             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 249 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $D5             ; Reg 2 value
+    FCB     $C8             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
+    FCB     $B1             ; Reg 4 value
+    FCB     5               ; Reg 5 number
+    FCB     $04             ; Reg 5 value
+    FCB     10               ; Reg 10 number
+    FCB     $08             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $F8             ; Reg 7 value
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 220 - 10 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $4B             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0C             ; Reg 8 value
+    FCB     2               ; Reg 2 number
+    FCB     $C8             ; Reg 2 value
+    FCB     3               ; Reg 3 number
+    FCB     $00             ; Reg 3 value
+    FCB     9               ; Reg 9 number
+    FCB     $0A             ; Reg 9 value
+    FCB     4               ; Reg 4 number
+    FCB     $B1             ; Reg 4 value
+    FCB     5               ; Reg 5 number
+    FCB     $04             ; Reg 5 value
+    FCB     10               ; Reg 10 number
+    FCB     $08             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $F8             ; Reg 7 value
+    FCB     20              ; Delay 20 frames (maintain previous state)
+    FCB     11              ; Frame 240 - 11 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $64             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0C             ; Reg 8 value
+    FCB     2               ; Reg 2 number
+    FCB     $96             ; Reg 2 value
+    FCB     3               ; Reg 3 number
+    FCB     $00             ; Reg 3 value
+    FCB     9               ; Reg 9 number
+    FCB     $0A             ; Reg 9 value
+    FCB     4               ; Reg 4 number
+    FCB     $B1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13603,66 +13834,66 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 262 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 250 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
+    FCB     $64             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $D5             ; Reg 2 value
+    FCB     $96             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
+    FCB     $B1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 275 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 260 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $4F             ; Reg 0 value
+    FCB     $7E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $D5             ; Reg 2 value
+    FCB     $96             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
+    FCB     $B1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 300 - 11 register writes
+    FCB     20              ; Delay 20 frames (maintain previous state)
+    FCB     11              ; Frame 280 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
+    FCB     $96             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $9F             ; Reg 2 value
+    FCB     $FC             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
+    FCB     $B1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13671,97 +13902,29 @@ _PANG_THEME_MUSIC:
     FCB     $0F             ; Reg 6 value
     FCB     7               ; Reg 7 number
     FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 312 - 10 register writes
+    FCB     10              ; Delay 10 frames (maintain previous state)
+    FCB     10              ; Frame 290 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $6A             ; Reg 0 value
+    FCB     $96             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $9F             ; Reg 2 value
+    FCB     $FC             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
+    FCB     $B1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 325 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $86             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $9F             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 350 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 362 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $FC             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     38              ; Delay 38 frames before loop
+    FCB     30              ; Delay 30 frames before loop
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _PANG_THEME_MUSIC       ; Jump to start (absolute address)
 
@@ -13775,19 +13938,19 @@ _MAP_THEME_MUSIC:
     FCB     0              ; Delay 0 frames (maintain previous state)
     FCB     11              ; Frame 0 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13799,19 +13962,19 @@ _MAP_THEME_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     10              ; Frame 5 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13821,19 +13984,19 @@ _MAP_THEME_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     11              ; Frame 10 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
+    FCB     $96             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13845,19 +14008,19 @@ _MAP_THEME_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     10              ; Frame 13 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
+    FCB     $96             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13867,7 +14030,7 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     9              ; Frame 21 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -13875,7 +14038,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13887,7 +14050,7 @@ _MAP_THEME_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 24 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -13895,7 +14058,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13905,7 +14068,7 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     9              ; Frame 32 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
+    FCB     $96             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -13913,7 +14076,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13925,7 +14088,7 @@ _MAP_THEME_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 34 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $9F             ; Reg 0 value
+    FCB     $96             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -13933,7 +14096,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $66             ; Reg 4 value
+    FCB     $51             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13943,19 +14106,19 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     11              ; Frame 42 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13967,19 +14130,19 @@ _MAP_THEME_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     10              ; Frame 48 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -13989,19 +14152,19 @@ _MAP_THEME_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     11              ; Frame 53 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14013,19 +14176,19 @@ _MAP_THEME_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     10              ; Frame 56 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $CC             ; Reg 2 value
+    FCB     $A2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $02             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14035,7 +14198,7 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     9              ; Frame 64 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $D5             ; Reg 0 value
+    FCB     $C8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14043,7 +14206,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14055,7 +14218,7 @@ _MAP_THEME_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 66 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $D5             ; Reg 0 value
+    FCB     $C8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14063,7 +14226,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14073,7 +14236,7 @@ _MAP_THEME_MUSIC:
     FCB     9              ; Delay 9 frames (maintain previous state)
     FCB     9              ; Frame 75 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $EF             ; Reg 0 value
+    FCB     $E1             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14081,7 +14244,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14093,7 +14256,7 @@ _MAP_THEME_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 77 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $EF             ; Reg 0 value
+    FCB     $E1             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14101,7 +14264,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14111,19 +14274,19 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     11              ; Frame 85 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14135,19 +14298,19 @@ _MAP_THEME_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     10              ; Frame 91 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14157,19 +14320,19 @@ _MAP_THEME_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     11              ; Frame 96 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14181,19 +14344,19 @@ _MAP_THEME_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     10              ; Frame 99 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0E             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14203,7 +14366,7 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     9              ; Frame 107 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14211,7 +14374,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14223,7 +14386,7 @@ _MAP_THEME_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 109 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14231,7 +14394,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14241,7 +14404,7 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     9              ; Frame 117 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14249,7 +14412,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14261,7 +14424,7 @@ _MAP_THEME_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 120 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
+    FCB     $70             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14269,7 +14432,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $EF             ; Reg 4 value
+    FCB     $E1             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $00             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14279,19 +14442,19 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     11              ; Frame 128 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14303,19 +14466,19 @@ _MAP_THEME_MUSIC:
     FCB     5              ; Delay 5 frames (maintain previous state)
     FCB     10              ; Frame 133 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14325,19 +14488,19 @@ _MAP_THEME_MUSIC:
     FCB     6              ; Delay 6 frames (maintain previous state)
     FCB     11              ; Frame 139 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14349,19 +14512,19 @@ _MAP_THEME_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     10              ; Frame 141 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $8E             ; Reg 0 value
+    FCB     $85             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0D             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $DE             ; Reg 2 value
+    FCB     $C2             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0B             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14371,7 +14534,7 @@ _MAP_THEME_MUSIC:
     FCB     9              ; Delay 9 frames (maintain previous state)
     FCB     9              ; Frame 150 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14379,7 +14542,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14391,7 +14554,7 @@ _MAP_THEME_MUSIC:
     FCB     2              ; Delay 2 frames (maintain previous state)
     FCB     8              ; Frame 152 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14399,7 +14562,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14409,7 +14572,7 @@ _MAP_THEME_MUSIC:
     FCB     8              ; Delay 8 frames (maintain previous state)
     FCB     9              ; Frame 160 - 9 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14417,7 +14580,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14429,7 +14592,7 @@ _MAP_THEME_MUSIC:
     FCB     3              ; Delay 3 frames (maintain previous state)
     FCB     8              ; Frame 163 - 8 register writes
     FCB     0               ; Reg 0 number
-    FCB     $B3             ; Reg 0 value
+    FCB     $A8             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
@@ -14437,7 +14600,7 @@ _MAP_THEME_MUSIC:
     FCB     9               ; Reg 9 number
     FCB     $00             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $1C             ; Reg 4 value
+    FCB     $0B             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $01             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -14479,7 +14642,7 @@ _FUJI_LEVEL1_V2_BG_OBJECTS:
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
+    FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _FUJI_BG_VECTORS  ; vector_ptr

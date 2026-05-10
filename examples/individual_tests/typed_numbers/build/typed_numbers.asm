@@ -66,24 +66,24 @@ VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_U8_VAL           EQU $C880+$38   ; User variable: U8_VAL (1 bytes)
-VAR_I8_VAL           EQU $C880+$39   ; User variable: I8_VAL (1 bytes)
-VAR_U16_VAL          EQU $C880+$3A   ; User variable: U16_VAL (2 bytes)
-VAR_I16_VAL          EQU $C880+$3C   ; User variable: I16_VAL (2 bytes)
+VAR_U8_VAL           EQU $C880+$38   ; User variable: u8_val (1 bytes)
+VAR_I8_VAL           EQU $C880+$39   ; User variable: i8_val (1 bytes)
+VAR_U16_VAL          EQU $C880+$3A   ; User variable: u16_val (2 bytes)
+VAR_I16_VAL          EQU $C880+$3C   ; User variable: i16_val (2 bytes)
 VAR_ROW_Y            EQU $C880+$3E   ; User variable: ROW_Y (2 bytes)
-VAR_SELECTED         EQU $C880+$40   ; User variable: SELECTED (1 bytes)
-VAR_COOLDOWN         EQU $C880+$41   ; User variable: COOLDOWN (1 bytes)
-VAR_ARR_IDX          EQU $C880+$42   ; User variable: ARR_IDX (1 bytes)
-VAR_ARR_TICK         EQU $C880+$43   ; User variable: ARR_TICK (1 bytes)
-VAR_JOY_Y            EQU $C880+$44   ; User variable: JOY_Y (2 bytes)
-VAR_U8_ARR           EQU $C880+$46   ; User variable: U8_ARR (2 bytes)
-VAR_I8_ARR           EQU $C880+$48   ; User variable: I8_ARR (2 bytes)
-VAR_U16_ARR          EQU $C880+$4A   ; User variable: U16_ARR (2 bytes)
-VAR_I16_ARR          EQU $C880+$4C   ; User variable: I16_ARR (2 bytes)
-VAR_U8_ARR_DATA      EQU $C880+$4E   ; Mutable array 'U8_ARR' data (4 elements x 1 bytes) (4 bytes)
-VAR_I8_ARR_DATA      EQU $C880+$52   ; Mutable array 'I8_ARR' data (4 elements x 1 bytes) (4 bytes)
-VAR_U16_ARR_DATA     EQU $C880+$56   ; Mutable array 'U16_ARR' data (4 elements x 2 bytes) (8 bytes)
-VAR_I16_ARR_DATA     EQU $C880+$5E   ; Mutable array 'I16_ARR' data (4 elements x 2 bytes) (8 bytes)
+VAR_SELECTED         EQU $C880+$40   ; User variable: selected (1 bytes)
+VAR_COOLDOWN         EQU $C880+$41   ; User variable: cooldown (1 bytes)
+VAR_ARR_IDX          EQU $C880+$42   ; User variable: arr_idx (1 bytes)
+VAR_ARR_TICK         EQU $C880+$43   ; User variable: arr_tick (1 bytes)
+VAR_JOY_Y            EQU $C880+$44   ; User variable: joy_y (2 bytes)
+VAR_U8_ARR           EQU $C880+$46   ; User variable: u8_arr (2 bytes)
+VAR_I8_ARR           EQU $C880+$48   ; User variable: i8_arr (2 bytes)
+VAR_U16_ARR          EQU $C880+$4A   ; User variable: u16_arr (2 bytes)
+VAR_I16_ARR          EQU $C880+$4C   ; User variable: i16_arr (2 bytes)
+VAR_U8_ARR_DATA      EQU $C880+$4E   ; Mutable array 'u8_arr' data (4 elements x 1 bytes) (4 bytes)
+VAR_I8_ARR_DATA      EQU $C880+$52   ; Mutable array 'i8_arr' data (4 elements x 1 bytes) (4 bytes)
+VAR_U16_ARR_DATA     EQU $C880+$56   ; Mutable array 'u16_arr' data (4 elements x 2 bytes) (8 bytes)
+VAR_I16_ARR_DATA     EQU $C880+$5E   ; Mutable array 'i16_arr' data (4 elements x 2 bytes) (8 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -103,28 +103,28 @@ ARRAY_ROW_Y_LEN         EQU 4   ; 4 elements
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'U8_ARR' (4 elements, 1 bytes each)
+; Array literal for variable 'u8_arr' (4 elements, 1 bytes each)
 ARRAY_U8_ARR_DATA:
     FCB $0A   ; Element 0
     FCB $32   ; Element 1
     FCB $96   ; Element 2
     FCB $FA   ; Element 3
 
-; Array literal for variable 'I8_ARR' (4 elements, 1 bytes each)
+; Array literal for variable 'i8_arr' (4 elements, 1 bytes each)
 ARRAY_I8_ARR_DATA:
     FCB $88   ; Element 0
     FCB $D8   ; Element 1
     FCB $28   ; Element 2
     FCB $78   ; Element 3
 
-; Array literal for variable 'U16_ARR' (4 elements, 2 bytes each)
+; Array literal for variable 'u16_arr' (4 elements, 2 bytes each)
 ARRAY_U16_ARR_DATA:
     FDB 0   ; Element 0
     FDB 1000   ; Element 1
     FDB 30000   ; Element 2
     FDB 65535   ; Element 3
 
-; Array literal for variable 'I16_ARR' (4 elements, 2 bytes each)
+; Array literal for variable 'i16_arr' (4 elements, 2 bytes each)
 ARRAY_I16_ARR_DATA:
     FDB -32000   ; Element 0
     FDB -500   ; Element 1
@@ -159,7 +159,7 @@ MAIN:
     STD VAR_U16_VAL
     LDD #-30000
     STD VAR_I16_VAL
-    ; Copy array 'U8_ARR' from ROM to RAM (4 elements)
+    ; Copy array 'u8_arr' from ROM to RAM (4 elements)
     LDX #ARRAY_U8_ARR_DATA       ; Source: ROM array data
     LDU #VAR_U8_ARR_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -170,7 +170,7 @@ MAIN:
     LBNE .COPY_LOOP_0 ; Loop until done (LBNE for long branch)
     LDX #VAR_U8_ARR_DATA    ; Array now in RAM
     STX VAR_U8_ARR
-    ; Copy array 'I8_ARR' from ROM to RAM (4 elements)
+    ; Copy array 'i8_arr' from ROM to RAM (4 elements)
     LDX #ARRAY_I8_ARR_DATA       ; Source: ROM array data
     LDU #VAR_I8_ARR_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -181,7 +181,7 @@ MAIN:
     LBNE .COPY_LOOP_1 ; Loop until done (LBNE for long branch)
     LDX #VAR_I8_ARR_DATA    ; Array now in RAM
     STX VAR_I8_ARR
-    ; Copy array 'U16_ARR' from ROM to RAM (4 elements)
+    ; Copy array 'u16_arr' from ROM to RAM (4 elements)
     LDX #ARRAY_U16_ARR_DATA       ; Source: ROM array data
     LDU #VAR_U16_ARR_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -192,7 +192,7 @@ MAIN:
     LBNE .COPY_LOOP_2 ; Loop until done (LBNE for long branch)
     LDX #VAR_U16_ARR_DATA    ; Array now in RAM
     STX VAR_U16_ARR
-    ; Copy array 'I16_ARR' from ROM to RAM (4 elements)
+    ; Copy array 'i16_arr' from ROM to RAM (4 elements)
     LDX #ARRAY_I16_ARR_DATA       ; Source: ROM array data
     LDU #VAR_I16_ARR_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -233,8 +233,7 @@ MAIN:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LDD #0

@@ -66,14 +66,14 @@ VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_COUNTER          EQU $C880+$38   ; User variable: COUNTER (1 bytes)
-VAR_STATE            EQU $C880+$39   ; User variable: STATE (1 bytes)
-VAR_SHAPE_TYPE       EQU $C880+$3A   ; User variable: SHAPE_TYPE (1 bytes)
-VAR_DIRECTION_X      EQU $C880+$3B   ; User variable: DIRECTION_X (1 bytes)
-VAR_DIRECTION_Y      EQU $C880+$3C   ; User variable: DIRECTION_Y (1 bytes)
-VAR_POS_X            EQU $C880+$3D   ; User variable: POS_X (2 bytes)
-VAR_POS_Y            EQU $C880+$3F   ; User variable: POS_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$41   ; User variable: JOY_X (2 bytes)
+VAR_COUNTER          EQU $C880+$38   ; User variable: counter (1 bytes)
+VAR_STATE            EQU $C880+$39   ; User variable: state (1 bytes)
+VAR_SHAPE_TYPE       EQU $C880+$3A   ; User variable: shape_type (1 bytes)
+VAR_DIRECTION_X      EQU $C880+$3B   ; User variable: direction_x (1 bytes)
+VAR_DIRECTION_Y      EQU $C880+$3C   ; User variable: direction_y (1 bytes)
+VAR_POS_X            EQU $C880+$3D   ; User variable: pos_x (2 bytes)
+VAR_POS_Y            EQU $C880+$3F   ; User variable: pos_y (2 bytes)
+VAR_JOY_X            EQU $C880+$41   ; User variable: joy_x (2 bytes)
 VAR_BASE_INTENSITY   EQU $C880+$43   ; User variable: BASE_INTENSITY (2 bytes)
 VAR_MAX_X            EQU $C880+$45   ; User variable: MAX_X (2 bytes)
 VAR_MIN_X            EQU $C880+$47   ; User variable: MIN_X (2 bytes)
@@ -148,8 +148,7 @@ MAIN:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100  ; const BASE_INTENSITY
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
@@ -405,8 +404,7 @@ IF_END_14:
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position

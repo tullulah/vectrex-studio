@@ -77,73 +77,74 @@ VLINE_DY_REMAINING   EQU $C880+$3A   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$3C   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$3E   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$3F   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_LEVEL_LEN        EQU $C880+$40   ; User variable: LEVEL_LEN (2 bytes)
-VAR_BLD_COUNT        EQU $C880+$42   ; User variable: BLD_COUNT (2 bytes)
-VAR_VIS_FAR          EQU $C880+$44   ; User variable: VIS_FAR (2 bytes)
-VAR_BLD_X            EQU $C880+$46   ; User variable: BLD_X (2 bytes)
-VAR_BLD_Z            EQU $C880+$48   ; User variable: BLD_Z (2 bytes)
-VAR_BLD_W            EQU $C880+$4A   ; User variable: BLD_W (2 bytes)
-VAR_BLD_H            EQU $C880+$4C   ; User variable: BLD_H (2 bytes)
-VAR_PLAYER_X         EQU $C880+$4E   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$50   ; User variable: PLAYER_Y (2 bytes)
-VAR_CAM_Z            EQU $C880+$52   ; User variable: CAM_Z (2 bytes)
-VAR_SCROLL_TICK      EQU $C880+$54   ; User variable: SCROLL_TICK (1 bytes)
-VAR_SCORE            EQU $C880+$55   ; User variable: SCORE (2 bytes)
-VAR_B0ALIVE          EQU $C880+$57   ; User variable: B0ALIVE (1 bytes)
-VAR_B1ALIVE          EQU $C880+$58   ; User variable: B1ALIVE (1 bytes)
-VAR_B2ALIVE          EQU $C880+$59   ; User variable: B2ALIVE (1 bytes)
-VAR_B3ALIVE          EQU $C880+$5A   ; User variable: B3ALIVE (1 bytes)
-VAR_B4ALIVE          EQU $C880+$5B   ; User variable: B4ALIVE (1 bytes)
-VAR_B5ALIVE          EQU $C880+$5C   ; User variable: B5ALIVE (1 bytes)
-VAR_BULLET_ALIVE     EQU $C880+$5D   ; User variable: BULLET_ALIVE (1 bytes)
-VAR_BULLET_ABS_Z     EQU $C880+$5E   ; User variable: BULLET_ABS_Z (2 bytes)
-VAR_BULLET_RX        EQU $C880+$60   ; User variable: BULLET_RX (2 bytes)
-VAR_BULLET_RY        EQU $C880+$62   ; User variable: BULLET_RY (2 bytes)
-VAR_BTN_PREV         EQU $C880+$64   ; User variable: BTN_PREV (1 bytes)
-VAR_EXPL_FRAMES      EQU $C880+$65   ; User variable: EXPL_FRAMES (1 bytes)
-VAR_EXPL_SX          EQU $C880+$66   ; User variable: EXPL_SX (2 bytes)
-VAR_EXPL_SY          EQU $C880+$68   ; User variable: EXPL_SY (2 bytes)
-VAR_P_RX             EQU $C880+$6A   ; User variable: P_RX (2 bytes)
-VAR_P_WY             EQU $C880+$6C   ; User variable: P_WY (2 bytes)
-VAR_P_RZ             EQU $C880+$6E   ; User variable: P_RZ (2 bytes)
-VAR_P_SX             EQU $C880+$70   ; User variable: P_SX (2 bytes)
-VAR_P_SY             EQU $C880+$72   ; User variable: P_SY (2 bytes)
-VAR_C0X              EQU $C880+$74   ; User variable: C0X (2 bytes)
-VAR_C0Y              EQU $C880+$76   ; User variable: C0Y (2 bytes)
-VAR_C1X              EQU $C880+$78   ; User variable: C1X (2 bytes)
-VAR_C1Y              EQU $C880+$7A   ; User variable: C1Y (2 bytes)
-VAR_C2X              EQU $C880+$7C   ; User variable: C2X (2 bytes)
-VAR_C2Y              EQU $C880+$7E   ; User variable: C2Y (2 bytes)
-VAR_C3X              EQU $C880+$80   ; User variable: C3X (2 bytes)
-VAR_C3Y              EQU $C880+$82   ; User variable: C3Y (2 bytes)
-VAR_C4X              EQU $C880+$84   ; User variable: C4X (2 bytes)
-VAR_C4Y              EQU $C880+$86   ; User variable: C4Y (2 bytes)
-VAR_C5X              EQU $C880+$88   ; User variable: C5X (2 bytes)
-VAR_C5Y              EQU $C880+$8A   ; User variable: C5Y (2 bytes)
-VAR_BI               EQU $C880+$8C   ; User variable: BI (2 bytes)
-VAR_BX               EQU $C880+$8E   ; User variable: BX (2 bytes)
-VAR_BZ               EQU $C880+$90   ; User variable: BZ (2 bytes)
-VAR_BW               EQU $C880+$92   ; User variable: BW (2 bytes)
-VAR_BH               EQU $C880+$94   ; User variable: BH (2 bytes)
-VAR_RZ               EQU $C880+$96   ; User variable: RZ (2 bytes)
-VAR_ALIVE            EQU $C880+$98   ; User variable: ALIVE (1 bytes)
-VAR_HIT_BI           EQU $C880+$99   ; User variable: HIT_BI (2 bytes)
-VAR_BULLET_RZ        EQU $C880+$9B   ; User variable: BULLET_RZ (2 bytes)
-VAR_BZ_CHECK         EQU $C880+$9D   ; User variable: BZ_CHECK (2 bytes)
-VAR_BX_CHECK         EQU $C880+$9F   ; User variable: BX_CHECK (2 bytes)
-VAR_BW_CHECK         EQU $C880+$A1   ; User variable: BW_CHECK (2 bytes)
-VAR_BH_CHECK         EQU $C880+$A3   ; User variable: BH_CHECK (2 bytes)
-VAR_PLAYER_SY        EQU $C880+$A5   ; User variable: PLAYER_SY (2 bytes)
-VAR_ALT_BAR          EQU $C880+$A7   ; User variable: ALT_BAR (2 bytes)
-VAR_GI               EQU $C880+$A9   ; User variable: GI (2 bytes)
-VAR_GRZ              EQU $C880+$AB   ; User variable: GRZ (2 bytes)
-VAR_GSX_L            EQU $C880+$AD   ; User variable: GSX_L (2 bytes)
-VAR_GSY_L            EQU $C880+$AF   ; User variable: GSY_L (2 bytes)
-VAR_GSX_R            EQU $C880+$B1   ; User variable: GSX_R (2 bytes)
-VAR_GSY_R            EQU $C880+$B3   ; User variable: GSY_R (2 bytes)
-VAR_JOY_X            EQU $C880+$B5   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$B7   ; User variable: JOY_Y (2 bytes)
-VAR_BTN1             EQU $C880+$B9   ; User variable: BTN1 (2 bytes)
+DRAW_SCALE           EQU $C880+$40   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_LEVEL_LEN        EQU $C880+$41   ; User variable: LEVEL_LEN (2 bytes)
+VAR_BLD_COUNT        EQU $C880+$43   ; User variable: BLD_COUNT (2 bytes)
+VAR_VIS_FAR          EQU $C880+$45   ; User variable: VIS_FAR (2 bytes)
+VAR_BLD_X            EQU $C880+$47   ; User variable: BLD_X (2 bytes)
+VAR_BLD_Z            EQU $C880+$49   ; User variable: BLD_Z (2 bytes)
+VAR_BLD_W            EQU $C880+$4B   ; User variable: BLD_W (2 bytes)
+VAR_BLD_H            EQU $C880+$4D   ; User variable: BLD_H (2 bytes)
+VAR_PLAYER_X         EQU $C880+$4F   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$51   ; User variable: player_y (2 bytes)
+VAR_CAM_Z            EQU $C880+$53   ; User variable: cam_z (2 bytes)
+VAR_SCROLL_TICK      EQU $C880+$55   ; User variable: scroll_tick (1 bytes)
+VAR_SCORE            EQU $C880+$56   ; User variable: score (2 bytes)
+VAR_B0ALIVE          EQU $C880+$58   ; User variable: b0alive (1 bytes)
+VAR_B1ALIVE          EQU $C880+$59   ; User variable: b1alive (1 bytes)
+VAR_B2ALIVE          EQU $C880+$5A   ; User variable: b2alive (1 bytes)
+VAR_B3ALIVE          EQU $C880+$5B   ; User variable: b3alive (1 bytes)
+VAR_B4ALIVE          EQU $C880+$5C   ; User variable: b4alive (1 bytes)
+VAR_B5ALIVE          EQU $C880+$5D   ; User variable: b5alive (1 bytes)
+VAR_BULLET_ALIVE     EQU $C880+$5E   ; User variable: bullet_alive (1 bytes)
+VAR_BULLET_ABS_Z     EQU $C880+$5F   ; User variable: bullet_abs_z (2 bytes)
+VAR_BULLET_RX        EQU $C880+$61   ; User variable: bullet_rx (2 bytes)
+VAR_BULLET_RY        EQU $C880+$63   ; User variable: bullet_ry (2 bytes)
+VAR_BTN_PREV         EQU $C880+$65   ; User variable: btn_prev (1 bytes)
+VAR_EXPL_FRAMES      EQU $C880+$66   ; User variable: expl_frames (1 bytes)
+VAR_EXPL_SX          EQU $C880+$67   ; User variable: expl_sx (2 bytes)
+VAR_EXPL_SY          EQU $C880+$69   ; User variable: expl_sy (2 bytes)
+VAR_P_RX             EQU $C880+$6B   ; User variable: p_rx (2 bytes)
+VAR_P_WY             EQU $C880+$6D   ; User variable: p_wy (2 bytes)
+VAR_P_RZ             EQU $C880+$6F   ; User variable: p_rz (2 bytes)
+VAR_P_SX             EQU $C880+$71   ; User variable: p_sx (2 bytes)
+VAR_P_SY             EQU $C880+$73   ; User variable: p_sy (2 bytes)
+VAR_C0X              EQU $C880+$75   ; User variable: c0x (2 bytes)
+VAR_C0Y              EQU $C880+$77   ; User variable: c0y (2 bytes)
+VAR_C1X              EQU $C880+$79   ; User variable: c1x (2 bytes)
+VAR_C1Y              EQU $C880+$7B   ; User variable: c1y (2 bytes)
+VAR_C2X              EQU $C880+$7D   ; User variable: c2x (2 bytes)
+VAR_C2Y              EQU $C880+$7F   ; User variable: c2y (2 bytes)
+VAR_C3X              EQU $C880+$81   ; User variable: c3x (2 bytes)
+VAR_C3Y              EQU $C880+$83   ; User variable: c3y (2 bytes)
+VAR_C4X              EQU $C880+$85   ; User variable: c4x (2 bytes)
+VAR_C4Y              EQU $C880+$87   ; User variable: c4y (2 bytes)
+VAR_C5X              EQU $C880+$89   ; User variable: c5x (2 bytes)
+VAR_C5Y              EQU $C880+$8B   ; User variable: c5y (2 bytes)
+VAR_BI               EQU $C880+$8D   ; User variable: bi (2 bytes)
+VAR_BX               EQU $C880+$8F   ; User variable: bx (2 bytes)
+VAR_BZ               EQU $C880+$91   ; User variable: bz (2 bytes)
+VAR_BW               EQU $C880+$93   ; User variable: bw (2 bytes)
+VAR_BH               EQU $C880+$95   ; User variable: bh (2 bytes)
+VAR_RZ               EQU $C880+$97   ; User variable: rz (2 bytes)
+VAR_ALIVE            EQU $C880+$99   ; User variable: alive (1 bytes)
+VAR_HIT_BI           EQU $C880+$9A   ; User variable: hit_bi (2 bytes)
+VAR_BULLET_RZ        EQU $C880+$9C   ; User variable: bullet_rz (2 bytes)
+VAR_BZ_CHECK         EQU $C880+$9E   ; User variable: bz_check (2 bytes)
+VAR_BX_CHECK         EQU $C880+$A0   ; User variable: bx_check (2 bytes)
+VAR_BW_CHECK         EQU $C880+$A2   ; User variable: bw_check (2 bytes)
+VAR_BH_CHECK         EQU $C880+$A4   ; User variable: bh_check (2 bytes)
+VAR_PLAYER_SY        EQU $C880+$A6   ; User variable: player_sy (2 bytes)
+VAR_ALT_BAR          EQU $C880+$A8   ; User variable: alt_bar (2 bytes)
+VAR_GI               EQU $C880+$AA   ; User variable: gi (2 bytes)
+VAR_GRZ              EQU $C880+$AC   ; User variable: grz (2 bytes)
+VAR_GSX_L            EQU $C880+$AE   ; User variable: gsx_l (2 bytes)
+VAR_GSY_L            EQU $C880+$B0   ; User variable: gsy_l (2 bytes)
+VAR_GSX_R            EQU $C880+$B2   ; User variable: gsx_r (2 bytes)
+VAR_GSY_R            EQU $C880+$B4   ; User variable: gsy_r (2 bytes)
+VAR_JOY_X            EQU $C880+$B6   ; User variable: joy_x (2 bytes)
+VAR_JOY_Y            EQU $C880+$B8   ; User variable: joy_y (2 bytes)
+VAR_BTN1             EQU $C880+$BA   ; User variable: btn1 (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -220,6 +221,8 @@ MAIN:
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     LDD #0
     STD VAR_PLAYER_X
     LDD #8
@@ -675,7 +678,7 @@ IF_NEXT_21:
     STD VAR_P_WY
     LDD >VAR_BULLET_RZ
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: bullet (index=0, 2 paths)
     LDD >VAR_P_SX
@@ -1026,14 +1029,14 @@ IF_END_48:
     STD VAR_P_WY
     LDD #-80
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_GSX_L
     LDD >VAR_P_SY
     STD VAR_GSY_L
     LDD #200
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_GSX_R
     LDD >VAR_P_SY
@@ -1063,14 +1066,14 @@ IF_END_48:
     STD VAR_P_WY
     LDD #-80
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_GSX_L
     LDD >VAR_P_SY
     STD VAR_GSY_L
     LDD #200
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_GSX_R
     LDD >VAR_P_SY
@@ -1125,7 +1128,7 @@ WH_50: ; while start
     STD VAR_P_WY
     LDD >VAR_GRZ
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_GSX_L
     LDD >VAR_P_SY
@@ -1137,7 +1140,7 @@ WH_50: ; while start
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_P_RX
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_GSX_R
     LDD >VAR_P_SY
@@ -1342,7 +1345,7 @@ IF_END_62:
     LDD #1
 .CMP_34_END:
     LBEQ IF_NEXT_69
-    JSR DRAW_BOX
+    JSR draw_box
     LBRA IF_END_68
 IF_NEXT_69:
 IF_END_68:
@@ -1401,7 +1404,7 @@ WH_END_53: ; while end
     STD VAR_P_WY
     LDD #0
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD >VAR_P_SX
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -1477,8 +1480,8 @@ WH_END_53: ; while end
     JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
     RTS
 
-; Function: PROJECT
-PROJECT:
+; Function: project
+project:
     LDD >VAR_P_RZ
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #2
@@ -1522,8 +1525,8 @@ PROJECT:
     STD VAR_P_SY
     RTS
 
-; Function: DRAW_BOX
-DRAW_BOX:
+; Function: draw_box
+draw_box:
     LDD >VAR_BX
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_X
@@ -1535,7 +1538,7 @@ DRAW_BOX:
     STD VAR_P_WY
     LDD >VAR_RZ
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_C0X
     LDD >VAR_P_SY
@@ -1554,7 +1557,7 @@ DRAW_BOX:
     STD VAR_P_WY
     LDD >VAR_RZ
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_C1X
     LDD >VAR_P_SY
@@ -1570,7 +1573,7 @@ DRAW_BOX:
     STD VAR_P_WY
     LDD >VAR_RZ
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_C2X
     LDD >VAR_P_SY
@@ -1589,7 +1592,7 @@ DRAW_BOX:
     STD VAR_P_WY
     LDD >VAR_RZ
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_C3X
     LDD >VAR_P_SY
@@ -1608,7 +1611,7 @@ DRAW_BOX:
     LDD #8
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_C4X
     LDD >VAR_P_SY
@@ -1630,7 +1633,7 @@ DRAW_BOX:
     LDD #8
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_P_RZ
-    JSR PROJECT
+    JSR project
     LDD >VAR_P_SX
     STD VAR_C5X
     LDD >VAR_P_SY
@@ -1758,14 +1761,14 @@ _BULLET_VECTORS:  ; Main entry (header + 2 path(s))
 
 _BULLET_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $00,$FB,0,0        ; path0: header (y=0, x=-5)
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FE,$00,0,0        ; path0: header (y=-2, x=0)
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
     FCB 2                ; End marker (path complete)
 
 _BULLET_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $FE,$00,0,0        ; path1: header (y=-2, x=0)
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $00,$FB,0,0        ; path1: header (y=0, x=-5)
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
     FCB 2                ; End marker (path complete)
 ; Generated from explosion.vec (Malban Draw_Sync_List format)
 ; Total paths: 4, points: 8
@@ -1787,27 +1790,27 @@ _EXPLOSION_VECTORS:  ; Main entry (header + 4 path(s))
     FDB _EXPLOSION_PATH3        ; pointer to path 3
 
 _EXPLOSION_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $00,$F6,0,0        ; path0: header (y=0, x=-10)
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
+    FCB 100              ; path0: intensity
+    FCB $F9,$F9,0,0        ; path0: header (y=-7, x=-7)
+    FCB $FF,$0E,$0E          ; flag=-1, dy=14, dx=14
     FCB 2                ; End marker (path complete)
 
 _EXPLOSION_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $F6,$00,0,0        ; path1: header (y=-10, x=0)
-    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
+    FCB $00,$0A,0,0        ; path1: header (y=0, x=10)
+    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
     FCB 2                ; End marker (path complete)
 
 _EXPLOSION_PATH2:    ; Path 2
     FCB 100              ; path2: intensity
-    FCB $F9,$F9,0,0        ; path2: header (y=-7, x=-7)
-    FCB $FF,$0E,$0E          ; flag=-1, dy=14, dx=14
+    FCB $07,$F9,0,0        ; path2: header (y=7, x=-7)
+    FCB $FF,$F2,$0E          ; flag=-1, dy=-14, dx=14
     FCB 2                ; End marker (path complete)
 
 _EXPLOSION_PATH3:    ; Path 3
-    FCB 100              ; path3: intensity
-    FCB $F9,$07,0,0        ; path3: header (y=-7, x=7)
-    FCB $FF,$0E,$F2          ; flag=-1, dy=14, dx=-14
+    FCB 127              ; path3: intensity
+    FCB $F6,$00,0,0        ; path3: header (y=-10, x=0)
+    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from ship.vec (Malban Draw_Sync_List format)
 ; Total paths: 5, points: 26
@@ -1830,40 +1833,8 @@ _SHIP_VECTORS:  ; Main entry (header + 5 path(s))
     FDB _SHIP_PATH4        ; pointer to path 4
 
 _SHIP_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $F8,$F4,0,0        ; path0: header (y=-8, x=-12)
-    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
-    FCB $FF,$08,$08          ; flag=-1, dy=8, dx=8
-    FCB $FF,$0D,$0B          ; flag=-1, dy=13, dx=11
-    FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
-    FCB $FF,$F8,$F8          ; flag=-1, dy=-8, dx=-8
-    FCB $FF,$F3,$F5          ; flag=-1, dy=-13, dx=-11
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_SHIP_PATH1:    ; Path 1
-    FCB 100              ; path1: intensity
-    FCB $FB,$02,0,0        ; path1: header (y=-5, x=2)
-    FCB $FF,$FD,$09          ; flag=-1, dy=-3, dx=9
-    FCB $FF,$F9,$FD          ; flag=-1, dy=-7, dx=-3
-    FCB $FF,$05,$F5          ; flag=-1, dy=5, dx=-11
-    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_SHIP_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $05,$FE,0,0        ; path2: header (y=5, x=-2)
-    FCB $FF,$03,$F7          ; flag=-1, dy=3, dx=-9
-    FCB $FF,$07,$03          ; flag=-1, dy=7, dx=3
-    FCB $FF,$FB,$0B          ; flag=-1, dy=-5, dx=11
-    FCB $FF,$FB,$FB          ; flag=-1, dy=-5, dx=-5
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_SHIP_PATH3:    ; Path 3
-    FCB 70              ; path3: intensity
-    FCB $02,$03,0,0        ; path3: header (y=2, x=3)
+    FCB 70              ; path0: intensity
+    FCB $02,$03,0,0        ; path0: header (y=2, x=3)
     FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
     FCB $FF,$03,$FE          ; flag=-1, dy=3, dx=-2
     FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
@@ -1871,12 +1842,44 @@ _SHIP_PATH3:    ; Path 3
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 
-_SHIP_PATH4:    ; Path 4
-    FCB 55              ; path4: intensity
-    FCB $F7,$F7,0,0        ; path4: header (y=-9, x=-9)
+_SHIP_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $05,$FE,0,0        ; path1: header (y=5, x=-2)
+    FCB $FF,$03,$F7          ; flag=-1, dy=3, dx=-9
+    FCB $FF,$07,$03          ; flag=-1, dy=7, dx=3
+    FCB $FF,$FB,$0B          ; flag=-1, dy=-5, dx=11
+    FCB $FF,$FB,$FB          ; flag=-1, dy=-5, dx=-5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_SHIP_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $FB,$02,0,0        ; path2: header (y=-5, x=2)
+    FCB $FF,$FD,$09          ; flag=-1, dy=-3, dx=9
+    FCB $FF,$F9,$FD          ; flag=-1, dy=-7, dx=-3
+    FCB $FF,$05,$F5          ; flag=-1, dy=5, dx=-11
+    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
+    FCB 2                ; End marker (path complete)
+
+_SHIP_PATH3:    ; Path 3
+    FCB 55              ; path3: intensity
+    FCB $F7,$F7,0,0        ; path3: header (y=-9, x=-9)
     FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
     FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
     FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
+    FCB 2                ; End marker (path complete)
+
+_SHIP_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $F8,$F4,0,0        ; path4: header (y=-8, x=-12)
+    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
+    FCB $FF,$08,$08          ; flag=-1, dy=8, dx=8
+    FCB $FF,$0D,$0B          ; flag=-1, dy=13, dx=11
+    FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
+    FCB $FF,$F8,$F8          ; flag=-1, dy=-8, dx=-8
+    FCB $FF,$F3,$F5          ; flag=-1, dy=-13, dx=-11
+    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB 2                ; End marker (path complete)
 _LASER_SFX:
     ; SFX: laser (laser)
@@ -2251,18 +2254,26 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
+; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
 LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
+BEQ DSWM_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
+DSWM_USE_FCB_INT:
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
+LDA #$00
+STA >$D000              ; PB=$00: deselect all channels
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -2302,8 +2313,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
-LDA #$7F
+; T1 scale from DRAW_SCALE variable ($7F=normal)
+LDA >DRAW_SCALE
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
@@ -2349,16 +2360,23 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
+CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)
+CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)
+INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)
+CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
+LDA ,X+                 ; Read FCB intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
-PSHS A
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
+BEQ DSWM_NEXT_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override
+DSWM_NEXT_USE_FCB_INT:
+PSHS A                  ; save intensity for later
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -2372,13 +2390,19 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; Get intensity back
+PULS A                  ; restore intensity
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness for Z-axis write
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected
+LDA #$00
+STA >$D000              ; PB=$00: deselect
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 PULS D
 ADDD #3
 TFR D,X
@@ -2406,8 +2430,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness set via $C832 above)
-LDA #$7F
+; T1 scale from DRAW_SCALE variable ($7F=normal)
+LDA >DRAW_SCALE
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X

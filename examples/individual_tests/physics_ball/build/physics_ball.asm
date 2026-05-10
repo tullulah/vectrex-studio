@@ -76,11 +76,12 @@ VLINE_DY_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$36   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$38   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$39   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_BX               EQU $C880+$3A   ; User variable: BX (2 bytes)
-VAR_BY               EQU $C880+$3C   ; User variable: BY (2 bytes)
-VAR_VX               EQU $C880+$3E   ; User variable: VX (2 bytes)
-VAR_VY               EQU $C880+$40   ; User variable: VY (2 bytes)
-VAR_JX               EQU $C880+$42   ; User variable: JX (2 bytes)
+DRAW_SCALE           EQU $C880+$3A   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_BX               EQU $C880+$3B   ; User variable: bx (2 bytes)
+VAR_BY               EQU $C880+$3D   ; User variable: by (2 bytes)
+VAR_VX               EQU $C880+$3F   ; User variable: vx (2 bytes)
+VAR_VY               EQU $C880+$41   ; User variable: vy (2 bytes)
+VAR_JX               EQU $C880+$43   ; User variable: jx (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -109,6 +110,8 @@ MAIN:
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     LDD #0
     STD VAR_BX
     LDD #60
@@ -473,7 +476,7 @@ _BUBBLE_MEDIUM_VECTORS:  ; Main entry (header + 1 path(s))
 
 _BUBBLE_MEDIUM_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $00,$0F,0,0        ; path0: header (y=0, x=15, relative to center)
+    FCB $00,$0F,0,0        ; path0: header (y=0, x=15)
     FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
     FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
     FCB $FF,$03,$FE          ; flag=-1, dy=3, dx=-2
@@ -1292,18 +1295,26 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
+; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
 LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
+BEQ DSWM_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
+DSWM_USE_FCB_INT:
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
+LDA #$00
+STA >$D000              ; PB=$00: deselect all channels
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -1343,8 +1354,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
-LDA #$7F
+; T1 scale from DRAW_SCALE variable ($7F=normal)
+LDA >DRAW_SCALE
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
@@ -1390,16 +1401,23 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
+CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)
+CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)
+INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)
+CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
+LDA ,X+                 ; Read FCB intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
-PSHS A
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
+BEQ DSWM_NEXT_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override
+DSWM_NEXT_USE_FCB_INT:
+PSHS A                  ; save intensity for later
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -1413,13 +1431,19 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; Get intensity back
+PULS A                  ; restore intensity
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness for Z-axis write
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected
+LDA #$00
+STA >$D000              ; PB=$00: deselect
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 PULS D
 ADDD #3
 TFR D,X
@@ -1447,8 +1471,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness set via $C832 above)
-LDA #$7F
+; T1 scale from DRAW_SCALE variable ($7F=normal)
+LDA >DRAW_SCALE
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X

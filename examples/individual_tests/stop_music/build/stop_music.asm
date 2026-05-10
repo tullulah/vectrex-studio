@@ -82,7 +82,7 @@ VLINE_DX_REMAINING   EQU $C880+$33   ; DRAW_LINE remaining dx for segment 2 (16-
 TEXT_SCALE_H         EQU $C880+$35   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$36   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
 BEEP_FRAMES_LEFT     EQU $C880+$37   ; Beep countdown timer (frames remaining) (1 bytes)
-VAR_PLAYING          EQU $C880+$38   ; User variable: PLAYING (2 bytes)
+VAR_PLAYING          EQU $C880+$38   ; User variable: playing (2 bytes)
 VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
 VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
@@ -141,7 +141,6 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer
     ; PRINT_TEXT: Print text at position
     LDD #-60
     STD VAR_ARG0

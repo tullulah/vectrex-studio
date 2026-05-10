@@ -3280,8 +3280,9 @@ pitrex_draw_enemies:
     mov     r11, #0             @ wrap to 0
 .Lpde_no_wrap:
     strb    r11, [r5, #28]      @ store frame_idx
-    lsl     r10, r11, #2        @ frame_idx * 4
-    add     r10, r10, #4        @ + 4 (header size)
+    ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)
+    lsl     r9, r11, #2         @ frame_idx * 4  (use r9; r10 = offset)
+    add     r10, r10, r9        @ frame_table_offset + frame_idx*4
     ldr     r10, [r6, r10]      @ frame_ptr
     ldrb    r12, [r10]          @ new duration_ticks
     strb    r12, [r5, #29]      @ store ticks_left
@@ -3289,8 +3290,9 @@ pitrex_draw_enemies:
     b       .Lpde_anim_draw
 .Lpde_anim_sf:
     strb    r12, [r5, #29]      @ store decremented ticks
-    lsl     r10, r11, #2        @ frame_idx * 4
-    add     r10, r10, #4        @ + 4 (header size)
+    ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)
+    lsl     r9, r11, #2         @ frame_idx * 4
+    add     r10, r10, r9        @ frame_table_offset + frame_idx*4
     ldr     r10, [r6, r10]      @ frame_ptr
     ldr     r0, [r10, #4]       @ vec_ref
 .Lpde_anim_draw:
@@ -3310,6 +3312,37 @@ pitrex_draw_enemies:
     bne     .Lpde_loop
 .Lpde_done:
     pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ pitrex_kill_enemy(r0=idx)
+.global pitrex_kill_enemy
+.type pitrex_kill_enemy, %function
+pitrex_kill_enemy:
+    push    {r1, r2, lr}
+    mov     r1, #32
+    mul     r0, r0, r1
+    ldr     r1, =PITREX_ENEMY_POOL
+    add     r1, r1, r0
+    mov     r2, #0
+    strb    r2, [r1, #12]   @ active = 0
+    pop     {r1, r2, pc}
+    .ltorg
+
+@ pitrex_enemy_fire_event(r0=idx, r1=event_hash) — bump SM state
+.global pitrex_enemy_fire_event
+.type pitrex_enemy_fire_event, %function
+pitrex_enemy_fire_event:
+    push    {r2, r3, lr}
+    mov     r2, #32
+    mul     r2, r0, r2
+    ldr     r3, =PITREX_ENEMY_POOL
+    add     r2, r3, r2
+    ldrb    r0, [r2, #28]   @ sm_state
+    add     r0, r0, #1
+    cmp     r0, #3
+    movgt   r0, #3
+    strb    r0, [r2, #28]   @ store new sm_state
+    pop     {r2, r3, pc}
     .ltorg
 
 @ --- main (PiTrex SDK entry point) ---
@@ -3397,6 +3430,16 @@ _str_0_after:
     bl      pitrex_print_text
     bl      pitrex_update_level
     bl      pitrex_show_level
+    ldr     r0, =_PLATFORM_VECTORS    @ asset 'platform'
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    mov     r0, #80
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      pitrex_draw_vector
     b       pitrex_game_loop
 
 @ vpy_uart_puts(r0=str_ptr) — write null-terminated string via UART
@@ -3502,118 +3545,6 @@ uart_trace_xy:
 @ Asset data
 @ ============================================================
 
-@ --- ball (1 path(s)) ---
-.global _BALL_VECTORS
-_BALL_VECTORS:
-    .word   1               @ path_count
-    .word   _BALL_PATH0      @ ptr path 0
-
-_BALL_PATH0:
-    .byte   127               @ intensity
-    .byte   0x00, 0x10, 0x00, 0x00  @ y=0, x=16, hdr
-    .byte   0xFF, 0x06, 0xFF  @ line dy=6, dx=-1
-    .byte   0xFF, 0x05, 0xFC  @ line dy=5, dx=-4
-    .byte   0xFF, 0x04, 0xFB  @ line dy=4, dx=-5
-    .byte   0xFF, 0x01, 0xFA  @ line dy=1, dx=-6
-    .byte   0xFF, 0xFF, 0xFA  @ line dy=-1, dx=-6
-    .byte   0xFF, 0xFC, 0xFB  @ line dy=-4, dx=-5
-    .byte   0xFF, 0xFB, 0xFC  @ line dy=-5, dx=-4
-    .byte   0xFF, 0xFA, 0xFF  @ line dy=-6, dx=-1
-    .byte   0xFF, 0xFA, 0x01  @ line dy=-6, dx=1
-    .byte   0xFF, 0xFB, 0x04  @ line dy=-5, dx=4
-    .byte   0xFF, 0xFC, 0x05  @ line dy=-4, dx=5
-    .byte   0xFF, 0xFF, 0x06  @ line dy=-1, dx=6
-    .byte   0xFF, 0x01, 0x06  @ line dy=1, dx=6
-    .byte   0xFF, 0x04, 0x05  @ line dy=4, dx=5
-    .byte   0xFF, 0x05, 0x04  @ line dy=5, dx=4
-    .byte   0xFF, 0x06, 0x01  @ line dy=6, dx=1
-    .byte   0x02            @ end marker
-
-@ --- BALL_3D_DATA (1 path(s)) ---
-.global _BALL_3D_DATA
-_BALL_3D_DATA:
-    .word   16               @ vertex_count
-    .byte   0x10, 0x00, 0x00  @ vert 0: x=16,y=0,z=0
-    .byte   0x0F, 0x06, 0x00  @ vert 1: x=15,y=6,z=0
-    .byte   0x0B, 0x0B, 0x00  @ vert 2: x=11,y=11,z=0
-    .byte   0x06, 0x0F, 0x00  @ vert 3: x=6,y=15,z=0
-    .byte   0x00, 0x10, 0x00  @ vert 4: x=0,y=16,z=0
-    .byte   0xFA, 0x0F, 0x00  @ vert 5: x=-6,y=15,z=0
-    .byte   0xF5, 0x0B, 0x00  @ vert 6: x=-11,y=11,z=0
-    .byte   0xF1, 0x06, 0x00  @ vert 7: x=-15,y=6,z=0
-    .byte   0xF0, 0x00, 0x00  @ vert 8: x=-16,y=0,z=0
-    .byte   0xF1, 0xFA, 0x00  @ vert 9: x=-15,y=-6,z=0
-    .byte   0xF5, 0xF5, 0x00  @ vert 10: x=-11,y=-11,z=0
-    .byte   0xFA, 0xF1, 0x00  @ vert 11: x=-6,y=-15,z=0
-    .byte   0x00, 0xF0, 0x00  @ vert 12: x=0,y=-16,z=0
-    .byte   0x06, 0xF1, 0x00  @ vert 13: x=6,y=-15,z=0
-    .byte   0x0B, 0xF5, 0x00  @ vert 14: x=11,y=-11,z=0
-    .byte   0x0F, 0xFA, 0x00  @ vert 15: x=15,y=-6,z=0
-    .word   1               @ path_count
-    .byte   16               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   8
-    .byte   9
-    .byte   10
-    .byte   11
-    .byte   12
-    .byte   13
-    .byte   14
-    .byte   15
-
-@ --- coin (2 path(s)) ---
-.global _COIN_VECTORS
-_COIN_VECTORS:
-    .word   2               @ path_count
-    .word   _COIN_PATH0      @ ptr path 0
-    .word   _COIN_PATH1      @ ptr path 1
-
-_COIN_PATH0:
-    .byte   127               @ intensity
-    .byte   0x07, 0x00, 0x00, 0x00  @ y=7, x=0, hdr
-    .byte   0xFF, 0xF9, 0x05  @ line dy=-7, dx=5
-    .byte   0xFF, 0xF9, 0xFB  @ line dy=-7, dx=-5
-    .byte   0xFF, 0x07, 0xFB  @ line dy=7, dx=-5
-    .byte   0xFF, 0x07, 0x05  @ line dy=7, dx=5
-    .byte   0x02            @ end marker
-
-_COIN_PATH1:
-    .byte   127               @ intensity
-    .byte   0xFD, 0xF4, 0x00, 0x00  @ y=-3, x=-12, hdr
-    .byte   0xFF, 0x10, 0x03  @ line dy=16, dx=3
-    .byte   0x02            @ end marker
-
-@ --- COIN_3D_DATA (2 path(s)) ---
-.global _COIN_3D_DATA
-_COIN_3D_DATA:
-    .word   6               @ vertex_count
-    .byte   0x00, 0x07, 0x00  @ vert 0: x=0,y=7,z=0
-    .byte   0x05, 0x00, 0x00  @ vert 1: x=5,y=0,z=0
-    .byte   0x00, 0xF9, 0x00  @ vert 2: x=0,y=-7,z=0
-    .byte   0xFB, 0x00, 0x00  @ vert 3: x=-5,y=0,z=0
-    .byte   0xF4, 0xFD, 0x00  @ vert 4: x=-12,y=-3,z=0
-    .byte   0xF7, 0x0D, 0x00  @ vert 5: x=-9,y=13,z=0
-    .word   2               @ path_count
-    .byte   4               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   3
-    .byte   3               @ path 1: pt_count
-    .byte   0               @ path 1: closed
-    .byte   4
-    .byte   5
-    .byte   5
-
 @ ==== ARM Level: DEMO_LEVEL ====
 .global _DEMO_LEVEL_LEVEL
 _DEMO_LEVEL_LEVEL:
@@ -3622,8 +3553,8 @@ _DEMO_LEVEL_LEVEL:
     .hword -128  @ yMin
     .hword 127  @ yMax
     .byte 0   @ bgCount
-    .byte 4   @ gpCount
-    .byte 3   @ fgCount
+    .byte 1   @ gpCount
+    .byte 0   @ fgCount
     .byte 0    @ pad
     .word _DEMO_LEVEL_BG_OBJECTS
     .word _DEMO_LEVEL_GP_OBJECTS
@@ -3636,106 +3567,22 @@ _DEMO_LEVEL_LEVEL:
 _DEMO_LEVEL_BG_OBJECTS:
 
 _DEMO_LEVEL_GP_OBJECTS:
-    @ obj_1772212957260 (enemy)
-    .hword -23  @ x
-    .hword -74  @ y
+    @ obj_1778358719583 (background)
+    .hword 0  @ x
+    .hword 0  @ y
     .byte 8   @ scale (x8)
     .byte 127   @ intensity
-    .byte 0x33  @ flags
-    .byte 1   @ type
-    .word _SPAWN_VECTORS  @ vector_ptr
-    .byte 11   @ half_w (vec:11)
-    .byte 34   @ half_h (vec:34)
-    .byte 255   @ vel_x_init
-    .byte 255   @ vel_y_init
-    .word 0  @ coll_mesh_ptr (AABB fallback)
-
-    @ obj_1772212984369 (enemy)
-    .hword -49  @ x
-    .hword 25  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x33  @ flags
-    .byte 1   @ type
-    .word _BALL_VECTORS  @ vector_ptr
-    .byte 16   @ half_w (vec:16)
-    .byte 16   @ half_h (vec:16)
-    .byte 1   @ vel_x_init
-    .byte 0   @ vel_y_init
-    .word 0  @ coll_mesh_ptr (AABB fallback)
-
-    @ obj_1772212988693 (enemy)
-    .hword 59  @ x
-    .hword 12  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x33  @ flags
-    .byte 1   @ type
-    .word _BALL_VECTORS  @ vector_ptr
-    .byte 16   @ half_w (vec:16)
-    .byte 16   @ half_h (vec:16)
+    .byte 0x10  @ flags
+    .byte 4   @ type
+    .word _PLATFORM_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 5   @ half_h (vec:5)
     .byte 0   @ vel_x_init
-    .byte 255   @ vel_y_init
-    .word 0  @ coll_mesh_ptr (AABB fallback)
-
-    @ obj_1772214807272 (enemy)
-    .hword -52  @ x
-    .hword 68  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x33  @ flags
-    .byte 1   @ type
-    .word _COIN_VECTORS  @ vector_ptr
-    .byte 8   @ half_w (vec:8)
-    .byte 13   @ half_h (vec:13)
-    .byte 255   @ vel_x_init
-    .byte 255   @ vel_y_init
+    .byte 0   @ vel_y_init
     .word 0  @ coll_mesh_ptr (AABB fallback)
 
 
 _DEMO_LEVEL_FG_OBJECTS:
-    @ obj_1772202959556 (enemy)
-    .hword -63  @ x
-    .hword -35  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x23  @ flags
-    .byte 1   @ type
-    .word _PLATFORM_VECTORS  @ vector_ptr
-    .byte 30   @ half_w (vec:30)
-    .byte 5   @ half_h (vec:5)
-    .byte 0   @ vel_x_init
-    .byte 0   @ vel_y_init
-    .word 0  @ coll_mesh_ptr (AABB fallback)
-
-    @ obj_1772202962079 (enemy)
-    .hword 53  @ x
-    .hword -69  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x23  @ flags
-    .byte 1   @ type
-    .word _PLATFORM_VECTORS  @ vector_ptr
-    .byte 30   @ half_w (vec:30)
-    .byte 5   @ half_h (vec:5)
-    .byte 0   @ vel_x_init
-    .byte 0   @ vel_y_init
-    .word 0  @ coll_mesh_ptr (AABB fallback)
-
-    @ obj_1772202964449 (enemy)
-    .hword 43  @ x
-    .hword 44  @ y
-    .byte 8   @ scale (x8)
-    .byte 127   @ intensity
-    .byte 0x23  @ flags
-    .byte 1   @ type
-    .word _PLATFORM_VECTORS  @ vector_ptr
-    .byte 30   @ half_w (vec:30)
-    .byte 5   @ half_h (vec:5)
-    .byte 0   @ vel_x_init
-    .byte 0   @ vel_y_init
-    .word 0  @ coll_mesh_ptr (AABB fallback)
-
 
 @ ARM enemy spawn table for DEMO_LEVEL
 .align 2
@@ -3775,156 +3622,4 @@ _PLATFORM_3D_DATA:
     .byte   1
     .byte   2
     .byte   3
-
-@ --- spawn (6 path(s)) ---
-.global _SPAWN_VECTORS
-_SPAWN_VECTORS:
-    .word   6               @ path_count
-    .word   _SPAWN_PATH0      @ ptr path 0
-    .word   _SPAWN_PATH1      @ ptr path 1
-    .word   _SPAWN_PATH2      @ ptr path 2
-    .word   _SPAWN_PATH3      @ ptr path 3
-    .word   _SPAWN_PATH4      @ ptr path 4
-    .word   _SPAWN_PATH5      @ ptr path 5
-
-_SPAWN_PATH0:
-    .byte   80               @ intensity
-    .byte   0x08, 0x00, 0x00, 0x00  @ y=8, x=0, hdr
-    .byte   0xFF, 0xF0, 0xFA  @ line dy=-16, dx=-6
-    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
-    .byte   0xFF, 0x10, 0xFA  @ line dy=16, dx=-6
-    .byte   0x02            @ end marker
-
-_SPAWN_PATH1:
-    .byte   127               @ intensity
-    .byte   0x17, 0x0C, 0x00, 0x00  @ y=23, x=12, hdr
-    .byte   0xFF, 0x04, 0xFF  @ line dy=4, dx=-1
-    .byte   0xFF, 0x04, 0xFE  @ line dy=4, dx=-2
-    .byte   0xFF, 0x02, 0xFC  @ line dy=2, dx=-4
-    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
-    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
-    .byte   0xFF, 0xFE, 0xFC  @ line dy=-2, dx=-4
-    .byte   0xFF, 0xFC, 0xFE  @ line dy=-4, dx=-2
-    .byte   0xFF, 0xFC, 0xFF  @ line dy=-4, dx=-1
-    .byte   0xFF, 0xFC, 0x01  @ line dy=-4, dx=1
-    .byte   0xFF, 0xFC, 0x02  @ line dy=-4, dx=2
-    .byte   0xFF, 0xFE, 0x04  @ line dy=-2, dx=4
-    .byte   0xFF, 0xFF, 0x04  @ line dy=-1, dx=4
-    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
-    .byte   0xFF, 0x02, 0x04  @ line dy=2, dx=4
-    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
-    .byte   0xFF, 0x04, 0x01  @ line dy=4, dx=1
-    .byte   0x02            @ end marker
-
-_SPAWN_PATH2:
-    .byte   127               @ intensity
-    .byte   0xF7, 0xFD, 0x00, 0x00  @ y=-9, x=-3, hdr
-    .byte   0xFF, 0xF9, 0xFC  @ line dy=-7, dx=-4
-    .byte   0xFF, 0xFF, 0x01  @ line dy=-1, dx=1
-    .byte   0x02            @ end marker
-
-_SPAWN_PATH3:
-    .byte   127               @ intensity
-    .byte   0xF7, 0x03, 0x00, 0x00  @ y=-9, x=3, hdr
-    .byte   0xFF, 0xF9, 0x03  @ line dy=-7, dx=3
-    .byte   0xFF, 0xFF, 0xFF  @ line dy=-1, dx=-1
-    .byte   0x02            @ end marker
-
-_SPAWN_PATH4:
-    .byte   127               @ intensity
-    .byte   0xFF, 0xFC, 0x00, 0x00  @ y=-1, x=-4, hdr
-    .byte   0xFF, 0x05, 0xFC  @ line dy=5, dx=-4
-    .byte   0xFF, 0xFE, 0xFD  @ line dy=-2, dx=-3
-    .byte   0x02            @ end marker
-
-_SPAWN_PATH5:
-    .byte   127               @ intensity
-    .byte   0x00, 0x04, 0x00, 0x00  @ y=0, x=4, hdr
-    .byte   0xFF, 0x04, 0x04  @ line dy=4, dx=4
-    .byte   0xFF, 0xFD, 0x03  @ line dy=-3, dx=3
-    .byte   0x02            @ end marker
-
-@ --- SPAWN_3D_DATA (6 path(s)) ---
-.global _SPAWN_3D_DATA
-_SPAWN_3D_DATA:
-    .word   31               @ vertex_count
-    .byte   0x00, 0x08, 0x00  @ vert 0: x=0,y=8,z=0
-    .byte   0xFA, 0xF8, 0x00  @ vert 1: x=-6,y=-8,z=0
-    .byte   0x06, 0xF8, 0x00  @ vert 2: x=6,y=-8,z=0
-    .byte   0x0C, 0x17, 0x00  @ vert 3: x=12,y=23,z=0
-    .byte   0x0B, 0x1B, 0x00  @ vert 4: x=11,y=27,z=0
-    .byte   0x09, 0x1F, 0x00  @ vert 5: x=9,y=31,z=0
-    .byte   0x05, 0x21, 0x00  @ vert 6: x=5,y=33,z=0
-    .byte   0x01, 0x22, 0x00  @ vert 7: x=1,y=34,z=0
-    .byte   0xFD, 0x21, 0x00  @ vert 8: x=-3,y=33,z=0
-    .byte   0xF9, 0x1F, 0x00  @ vert 9: x=-7,y=31,z=0
-    .byte   0xF7, 0x1B, 0x00  @ vert 10: x=-9,y=27,z=0
-    .byte   0xF6, 0x17, 0x00  @ vert 11: x=-10,y=23,z=0
-    .byte   0xF7, 0x13, 0x00  @ vert 12: x=-9,y=19,z=0
-    .byte   0xF9, 0x0F, 0x00  @ vert 13: x=-7,y=15,z=0
-    .byte   0xFD, 0x0D, 0x00  @ vert 14: x=-3,y=13,z=0
-    .byte   0x01, 0x0C, 0x00  @ vert 15: x=1,y=12,z=0
-    .byte   0x05, 0x0D, 0x00  @ vert 16: x=5,y=13,z=0
-    .byte   0x09, 0x0F, 0x00  @ vert 17: x=9,y=15,z=0
-    .byte   0x0B, 0x13, 0x00  @ vert 18: x=11,y=19,z=0
-    .byte   0xFD, 0xF7, 0x00  @ vert 19: x=-3,y=-9,z=0
-    .byte   0xF9, 0xF0, 0x00  @ vert 20: x=-7,y=-16,z=0
-    .byte   0xFA, 0xEF, 0x00  @ vert 21: x=-6,y=-17,z=0
-    .byte   0x03, 0xF7, 0x00  @ vert 22: x=3,y=-9,z=0
-    .byte   0x06, 0xF0, 0x00  @ vert 23: x=6,y=-16,z=0
-    .byte   0x05, 0xEF, 0x00  @ vert 24: x=5,y=-17,z=0
-    .byte   0xFC, 0xFF, 0x00  @ vert 25: x=-4,y=-1,z=0
-    .byte   0xF8, 0x04, 0x00  @ vert 26: x=-8,y=4,z=0
-    .byte   0xF5, 0x02, 0x00  @ vert 27: x=-11,y=2,z=0
-    .byte   0x04, 0x00, 0x00  @ vert 28: x=4,y=0,z=0
-    .byte   0x08, 0x04, 0x00  @ vert 29: x=8,y=4,z=0
-    .byte   0x0B, 0x01, 0x00  @ vert 30: x=11,y=1,z=0
-    .word   6               @ path_count
-    .byte   3               @ path 0: pt_count
-    .byte   1               @ path 0: closed
-    .byte   0
-    .byte   1
-    .byte   2
-    .byte   16               @ path 1: pt_count
-    .byte   1               @ path 1: closed
-    .byte   3
-    .byte   4
-    .byte   5
-    .byte   6
-    .byte   7
-    .byte   8
-    .byte   9
-    .byte   10
-    .byte   11
-    .byte   12
-    .byte   13
-    .byte   14
-    .byte   15
-    .byte   16
-    .byte   17
-    .byte   18
-    .byte   4               @ path 2: pt_count
-    .byte   0               @ path 2: closed
-    .byte   19
-    .byte   20
-    .byte   21
-    .byte   21
-    .byte   4               @ path 3: pt_count
-    .byte   0               @ path 3: closed
-    .byte   22
-    .byte   23
-    .byte   24
-    .byte   24
-    .byte   4               @ path 4: pt_count
-    .byte   0               @ path 4: closed
-    .byte   25
-    .byte   26
-    .byte   27
-    .byte   27
-    .byte   4               @ path 5: pt_count
-    .byte   0               @ path 5: closed
-    .byte   28
-    .byte   29
-    .byte   30
-    .byte   30
 

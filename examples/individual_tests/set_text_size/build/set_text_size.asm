@@ -98,8 +98,7 @@ MAIN:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
@@ -111,11 +110,11 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    JSR DRAW_SCALES
+    JSR draw_scales
     RTS
 
-; Function: DRAW_SCALES
-DRAW_SCALES:
+; Function: draw_scales
+draw_scales:
     LDD #8
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H

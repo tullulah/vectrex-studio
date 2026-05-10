@@ -1364,13 +1364,13 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; === LEVEL_COLLISION_Y_RUNTIME ===\n");
         out.push_str("; Find the highest collidable floor Y at player_x in the GP layer.\n");
         out.push_str("; Input:  LCOL_PX (16-bit) = player world_x\n");
-        out.push_str(";         LCOL_PY (i8) = player_y lo-byte + player_hh = player_top; surfaces above player_top are ignored\n");
-        out.push_str("; Output: RESULT = highest floor surface_top (i16, sign-extended from i8)\n");
+        out.push_str(";         LCOL_PY (i8) = player_y lo-byte (used for above-head filter)\n");
+        out.push_str("; Output: RESULT = highest floor landing Y (i16, sign-extended from i8)\n");
         out.push_str(";         Returns $FF80 (-128) if no collidable surface found at that X.\n");
         out.push_str("; Algorithm: for each collidable GP object, check X AABB overlap,\n");
-        out.push_str(";   compute surface_top = obj_y + half_height (both i8), track max.\n");
-        out.push_str("; RAM object offsets used: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,\n");
-        out.push_str(";   +13=half_width, +14=half_height\n");
+        out.push_str(";   compute surface_top = obj_y_lo + half_height (i8), track max.\n");
+        out.push_str("; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,\n");
+        out.push_str(";   +18=half_width, +19=half_height. Stride=20.\n");
         out.push_str("LEVEL_COLLISION_Y_RUNTIME:\n");
         out.push_str("    PSHS X,Y,U       ; Save regs (NOT D - result returns in D)\n");
         out.push_str("    \n");
@@ -1384,24 +1384,23 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    BEQ LCOL_Y_DONE\n");
-        out.push_str("    LDX >LEVEL_GP_PTR  ; X = GP buffer\n");
+        out.push_str("    LDX >LEVEL_GP_PTR  ; X = ROM GP objects\n");
         out.push_str("    \n");
         out.push_str("LCOL_Y_LOOP:\n");
         out.push_str("    TSTB\n");
         out.push_str("    BEQ LCOL_Y_DONE\n");
         out.push_str("    PSHS B           ; save count\n");
         out.push_str("    \n");
-        out.push_str("    ; --- Check collision flag (bit 0 at RAM+8) ---\n");
-        out.push_str("    LDA 8,X\n");
+        out.push_str("    ; --- Check collision flag (bit 0 at ROM+12) ---\n");
+        out.push_str("    LDA 12,X\n");
         out.push_str("    BITA #$01\n");
         out.push_str("    BEQ LCOL_Y_NEXT  ; not collidable\n");
         out.push_str("    \n");
         out.push_str("    ; --- X AABB overlap: obj_x - hw <= player_x <= obj_x + hw ---\n");
-        out.push_str("    ; Compute left_edge = obj_x - 0:hw (16-bit)\n");
-        out.push_str("    LDA 0,X          ; obj_x high byte\n");
-        out.push_str("    LDB 1,X          ; obj_x low byte\n");
-        out.push_str("    SUBB 13,X        ; B = obj_x_lo - half_width\n");
-        out.push_str("    SBCA #0          ; A = obj_x_hi - borrow\n");
+        out.push_str("    ; Compute left_edge = obj_x - hw (16-bit, ROM+1=x FDB, ROM+18=half_width)\n");
+        out.push_str("    LDD 1,X          ; D = world_x FDB (ROM+1-2)\n");
+        out.push_str("    SUBB 18,X        ; B = world_x_lo - half_width\n");
+        out.push_str("    SBCA #0          ; A = world_x_hi - borrow\n");
         out.push_str("    STD >TMPVAL      ; TMPVAL = left_edge\n");
         out.push_str("    \n");
         out.push_str("    ; Compare player_x >= left_edge (signed 16-bit)\n");
@@ -1409,11 +1408,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    CMPD >TMPVAL\n");
         out.push_str("    LBLT LCOL_Y_NEXT ; player_x < left_edge → no overlap\n");
         out.push_str("    \n");
-        out.push_str("    ; Compute right_edge = obj_x + 0:hw (16-bit)\n");
-        out.push_str("    LDA 0,X\n");
-        out.push_str("    LDB 1,X\n");
-        out.push_str("    ADDB 13,X        ; B = obj_x_lo + half_width\n");
-        out.push_str("    ADCA #0          ; A = obj_x_hi + carry\n");
+        out.push_str("    ; Compute right_edge = obj_x + hw (16-bit)\n");
+        out.push_str("    LDD 1,X          ; D = world_x FDB\n");
+        out.push_str("    ADDB 18,X        ; B = world_x_lo + half_width\n");
+        out.push_str("    ADCA #0          ; A = world_x_hi + carry\n");
         out.push_str("    STD >TMPVAL      ; TMPVAL = right_edge\n");
         out.push_str("    \n");
         out.push_str("    ; Compare player_x <= right_edge (signed 16-bit)\n");
@@ -1421,21 +1419,21 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    CMPD >TMPVAL\n");
         out.push_str("    LBGT LCOL_Y_NEXT ; player_x > right_edge → no overlap\n");
         out.push_str("    \n");
-        out.push_str("    ; --- X overlaps — compute surface_top = obj_y + tile_half_height ---\n");
-        out.push_str("    LDA 2,X          ; A = obj_y (signed byte)\n");
-        out.push_str("    ADDA 14,X        ; A = tile surface_top = obj_y + tile_half_height\n");
+        out.push_str("    ; --- X overlaps — compute surface_top = obj_y_lo + tile_half_height ---\n");
+        out.push_str("    LDA 4,X          ; A = world_y low byte (ROM+4, i8 approx)\n");
+        out.push_str("    ADDA 19,X        ; A = surface_top = obj_y_lo + tile_half_height (ROM+19)\n");
         out.push_str("    ; Filter: skip surfaces above the player's head (surface_top > player_top)\n");
         out.push_str("    CMPA >LCOL_PY    ; signed compare surface_top to player_top\n");
         out.push_str("    BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip\n");
         out.push_str("    ; Compute landing Y = surface_top + player_half_height\n");
-        out.push_str("    ADDA >LCOL_PHH   ; A = tile_top + player_hh = where player center lands\n");
+        out.push_str("    ADDA >LCOL_PHH   ; A = surface_top + player_hh = where player center lands\n");
         out.push_str("    ; Update best_floor if this landing Y > current best\n");
         out.push_str("    CMPA >LCOL_BEST_Y\n");
         out.push_str("    BLE LCOL_Y_NEXT  ; not better\n");
         out.push_str("    STA >LCOL_BEST_Y ; new best landing Y\n");
         out.push_str("    \n");
         out.push_str("LCOL_Y_NEXT:\n");
-        out.push_str("    LEAX 15,X        ; next object (stride 15)\n");
+        out.push_str("    LEAX 20,X        ; next ROM object (stride 20)\n");
         out.push_str("    PULS B\n");
         out.push_str("    DECB\n");
         out.push_str("    BRA LCOL_Y_LOOP\n");
@@ -1462,8 +1460,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; Output: RESULT = signed push-out dx (16-bit). Positive=right, negative=left.\n");
         out.push_str("; Returns 0 if no overlap found.\n");
         out.push_str("; Scratch: uses LCOL_THW for total_hw (preserves LCOL_PHH=player_hh across iterations).\n");
-        out.push_str("; RAM object offsets: +0-1=world_x(i16), +2=y(i8), +8=collision_flags,\n");
-        out.push_str(";   +13=half_width, +14=half_height\n");
+        out.push_str("; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,\n");
+        out.push_str(";   +18=half_width, +19=half_height. Stride=20.\n");
         out.push_str("LEVEL_COLLISION_X_RUNTIME:\n");
         out.push_str("    PSHS X,Y,U\n");
         out.push_str("    LDD #0\n");
@@ -1477,47 +1475,45 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    TSTB\n");
         out.push_str("    LBEQ LCOL_X_DONE\n");
         out.push_str("    PSHS B\n");
-        // Collidable check: collision_flags at +8, bit0 = collidable
-        out.push_str("    LDA 8,X\n");
+        // Collidable check: collision_flags at ROM+12, bit0 = collidable
+        out.push_str("    LDA 12,X\n");
         out.push_str("    BITA #$01\n");
         out.push_str("    LBEQ LCOL_X_NEXT\n");
-        // Y overlap: |player_y - obj_y| < player_hh + obj_half_h
+        // Y overlap: |player_y - obj_y_lo| < player_hh + obj_half_h
         // LCOL_PHH = player_half_height (4th arg); prevents lateral push when hitting block from below
         out.push_str("    LDA >LCOL_PY\n");
-        out.push_str("    SUBA 2,X\n");
+        out.push_str("    SUBA 4,X\n");   // obj_y low byte at ROM+4
         out.push_str("    BPL LCOL_X_YABS\n");
         out.push_str("    NEGA\n");
         out.push_str("LCOL_X_YABS:\n");
-        out.push_str("    LDB 14,X\n");       // B = obj_half_h
+        out.push_str("    LDB 19,X\n");      // B = obj_half_height at ROM+19
         out.push_str("    ADDB >LCOL_PHH\n"); // B = obj_half_h + player_hh (real threshold)
         out.push_str("    STB >TMPVAL\n");    // save threshold
         out.push_str("    CMPA >TMPVAL\n");   // A (|dy|) vs threshold
         out.push_str("    LBGE LCOL_X_NEXT\n"); // |dy| >= threshold → no Y overlap
-        // total_hw = player_hw + obj_half_w → store in LCOL_THW (not LCOL_PHH, to preserve player_hh for next iteration)
+        // total_hw = player_hw + obj_half_w (ROM+18) → store in LCOL_THW
         out.push_str("    LDA >LCOL_PHW\n");
-        out.push_str("    ADDA 13,X\n");
+        out.push_str("    ADDA 18,X\n");      // obj_half_width at ROM+18
         out.push_str("    STA >LCOL_THW\n");
-        // left_edge = obj_x - total_hw (16-bit); skip if player_x < left_edge
-        out.push_str("    LDA 0,X\n");
-        out.push_str("    LDB 1,X\n");
+        // left_edge = obj_x - total_hw (16-bit, ROM+1=x FDB)
+        out.push_str("    LDD 1,X\n");        // D = world_x FDB (ROM+1-2)
         out.push_str("    SUBB >LCOL_THW\n");
         out.push_str("    SBCA #0\n");
         out.push_str("    STD >TMPVAL\n");
         out.push_str("    LDD >LCOL_PX\n");
         out.push_str("    CMPD >TMPVAL\n");
         out.push_str("    LBLT LCOL_X_NEXT\n");
-        // right_edge = obj_x + total_hw (16-bit); skip if player_x > right_edge
-        out.push_str("    LDA 0,X\n");
-        out.push_str("    LDB 1,X\n");
+        // right_edge = obj_x + total_hw (16-bit)
+        out.push_str("    LDD 1,X\n");        // D = world_x FDB (ROM+1-2)
         out.push_str("    ADDB >LCOL_THW\n");
         out.push_str("    ADCA #0\n");
         out.push_str("    STD >TMPVAL\n");
         out.push_str("    LDD >LCOL_PX\n");
         out.push_str("    CMPD >TMPVAL\n");
         out.push_str("    LBGT LCOL_X_NEXT\n");
-        // Push-out: dx = player_x_lo - obj_x_lo (8-bit signed approximation)
+        // Push-out: dx = player_x_lo - obj_x_lo (ROM+2 = x low byte)
         out.push_str("    LDD >LCOL_PX\n");   // D = player_x
-        out.push_str("    SUBB 1,X\n");       // B = player_x_lo - obj_x_lo = dx (signed)
+        out.push_str("    SUBB 2,X\n");       // B = player_x_lo - obj_x_lo (ROM+2) = dx (signed)
         out.push_str("    STB >TMPVAL\n");    // save signed dx for direction
         out.push_str("    TSTB\n");
         out.push_str("    BPL LCOL_X_DXABS\n");
@@ -1546,7 +1542,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PULS B\n");
         out.push_str("    LBRA LCOL_X_DONE\n");
         out.push_str("LCOL_X_NEXT:\n");
-        out.push_str("    LEAX 15,X\n");
+        out.push_str("    LEAX 20,X\n");   // next ROM object (stride 20)
         out.push_str("    PULS B\n");
         out.push_str("    DECB\n");
         out.push_str("    LBRA LCOL_X_LOOP\n");

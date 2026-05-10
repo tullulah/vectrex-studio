@@ -540,7 +540,7 @@ MAIN:
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDA #$7F
-    STA DRAW_SCALE        ; Default T1 scale = normal ($7F)
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     LDD #0  ; const STATE_TITLE
     STD VAR_SCREEN
     LDD #0
@@ -1033,8 +1033,7 @@ draw_title:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; DRAW_VECTOR: Draw vector asset at position
@@ -1147,6 +1146,220 @@ IF_END_29:
     LBRA IF_END_31
 IF_NEXT_32:
 IF_END_31:
+    RTS
+
+; Function: draw_intro (Bank #0)
+draw_intro:
+    LDD #7
+    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
+    NEGB            ; B = -n -> TEXT_SCALE_H
+    STB >TEXT_SCALE_H
+    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
+    ASLB            ; n*2
+    ASLB            ; n*4
+    ASLB            ; n*8
+    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
+    STB >TEXT_SCALE_W
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_INTRO_PAGE
+    CMPD TMPVAL
+    LBEQ .CMP_25_TRUE
+    LDD #0
+    LBRA .CMP_25_END
+.CMP_25_TRUE:
+    LDD #1
+.CMP_25_END:
+    LBEQ IF_NEXT_34
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #40
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_17850884399050856369      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #80
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #20
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_4088011977317884966      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #0
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_17028423667663067371      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #-20
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_4810967809196323313      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #60
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-70
+    STD VAR_ARG0
+    LDD #-80
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_9120385760502433312      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LBRA IF_END_33
+IF_NEXT_34:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_INTRO_PAGE
+    CMPD TMPVAL
+    LBEQ .CMP_26_TRUE
+    LDD #0
+    LBRA .CMP_26_END
+.CMP_26_TRUE:
+    LDD #1
+.CMP_26_END:
+    LBEQ IF_END_33
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #40
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2725988333465993402      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #25
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_5995724771220415910      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #70
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #-5
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_1961155566409942910      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD #-20
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_1423984413427534561      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #60
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-70
+    STD VAR_ARG0
+    LDD #-80
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_9120385760502433312      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LBRA IF_END_33
+IF_END_33:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BTN1_FIRED
+    CMPD TMPVAL
+    LBEQ .CMP_27_TRUE
+    LDD #0
+    LBRA .CMP_27_END
+.CMP_27_TRUE:
+    LDD #1
+.CMP_27_END:
+    LBEQ IF_NEXT_36
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_INTRO_PAGE
+    CMPD TMPVAL
+    LBLT .CMP_28_TRUE
+    LDD #0
+    LBRA .CMP_28_END
+.CMP_28_TRUE:
+    LDD #1
+.CMP_28_END:
+    LBEQ IF_NEXT_38
+    LDD >VAR_INTRO_PAGE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_INTRO_PAGE
+    LBRA IF_END_37
+IF_NEXT_38:
+    LDD #0  ; const ROOM_ENTRANCE
+    STD VAR_ARG0
+    JSR enter_room
+    LDD #2  ; const STATE_ROOM
+    STD VAR_SCREEN
+IF_END_37:
+    LBRA IF_END_35
+IF_NEXT_36:
+IF_END_35:
     RTS
 
 ; Function: enter_room (Bank #0)
@@ -1513,394 +1726,6 @@ IF_NEXT_59:
 IF_END_58:
     LBRA IF_END_39
 IF_END_39:
-    RTS
-
-; Function: check_entrance_hotspots (Bank #0)
-check_entrance_hotspots:
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
-    LDD #0
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DX
-    LDD >VAR_PLAYER_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
-    LDD #0
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DY
-    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
-    LDD #0
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DX
-    TSTA           ; Test sign bit
-    BPL .ABS_2_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_2_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_111_TRUE
-    LDD #0
-    LBRA .CMP_111_END
-.CMP_111_TRUE:
-    LDD #1
-.CMP_111_END:
-    LBEQ .LOGIC_110_FALSE
-    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
-    LDD #0
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DY
-    TSTA           ; Test sign bit
-    BPL .ABS_3_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_3_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_112_TRUE
-    LDD #0
-    LBRA .CMP_112_END
-.CMP_112_TRUE:
-    LDD #1
-.CMP_112_END:
-    LBEQ .LOGIC_110_FALSE
-    LDD #1
-    LBRA .LOGIC_110_END
-.LOGIC_110_FALSE:
-    LDD #0
-.LOGIC_110_END:
-    LBEQ IF_NEXT_120
-    LDD #0
-    STD VAR_NEAR_HS
-    LBRA IF_END_119
-IF_NEXT_120:
-IF_END_119:
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
-    LDD #1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DX
-    LDD >VAR_PLAYER_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
-    LDD #1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DY
-    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
-    LDD #1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DX
-    TSTA           ; Test sign bit
-    BPL .ABS_4_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_4_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_114_TRUE
-    LDD #0
-    LBRA .CMP_114_END
-.CMP_114_TRUE:
-    LDD #1
-.CMP_114_END:
-    LBEQ .LOGIC_113_FALSE
-    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
-    LDD #1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DY
-    TSTA           ; Test sign bit
-    BPL .ABS_5_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_5_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_115_TRUE
-    LDD #0
-    LBRA .CMP_115_END
-.CMP_115_TRUE:
-    LDD #1
-.CMP_115_END:
-    LBEQ .LOGIC_113_FALSE
-    LDD #1
-    LBRA .LOGIC_113_END
-.LOGIC_113_FALSE:
-    LDD #0
-.LOGIC_113_END:
-    LBEQ IF_NEXT_122
-    LDD #1
-    STD VAR_NEAR_HS
-    LBRA IF_END_121
-IF_NEXT_122:
-IF_END_121:
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
-    LDD #2
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DX
-    LDD >VAR_PLAYER_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
-    LDD #2
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DY
-    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
-    LDD #2
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DX
-    TSTA           ; Test sign bit
-    BPL .ABS_6_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_6_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_117_TRUE
-    LDD #0
-    LBRA .CMP_117_END
-.CMP_117_TRUE:
-    LDD #1
-.CMP_117_END:
-    LBEQ .LOGIC_116_FALSE
-    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
-    LDD #2
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DY
-    TSTA           ; Test sign bit
-    BPL .ABS_7_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_7_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_118_TRUE
-    LDD #0
-    LBRA .CMP_118_END
-.CMP_118_TRUE:
-    LDD #1
-.CMP_118_END:
-    LBEQ .LOGIC_116_FALSE
-    LDD #1
-    LBRA .LOGIC_116_END
-.LOGIC_116_FALSE:
-    LDD #0
-.LOGIC_116_END:
-    LBEQ IF_NEXT_124
-    LDD #2
-    STD VAR_NEAR_HS
-    LBRA IF_END_123
-IF_NEXT_124:
-IF_END_123:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FLAGS_A
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #2  ; const FL_TALLER_OPEN
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
-    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
-    CMPD TMPVAL
-    LBNE .CMP_119_TRUE
-    LDD #0
-    LBRA .CMP_119_END
-.CMP_119_TRUE:
-    LDD #1
-.CMP_119_END:
-    LBEQ IF_NEXT_126
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
-    LDD #3
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DX
-    LDD >VAR_PLAYER_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
-    LDD #3
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DY
-    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
-    LDD #3
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DX
-    TSTA           ; Test sign bit
-    BPL .ABS_8_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_8_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_121_TRUE
-    LDD #0
-    LBRA .CMP_121_END
-.CMP_121_TRUE:
-    LDD #1
-.CMP_121_END:
-    LBEQ .LOGIC_120_FALSE
-    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
-    LDD #3
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    ; ABS: Absolute value
-    LDD >VAR_DY
-    TSTA           ; Test sign bit
-    BPL .ABS_9_POS   ; Branch if positive
-    COMA           ; Complement A
-    COMB           ; Complement B
-    ADDD #1        ; Add 1 for two's complement
-.ABS_9_POS:
-    STD RESULT
-    CMPD TMPVAL
-    LBLE .CMP_122_TRUE
-    LDD #0
-    LBRA .CMP_122_END
-.CMP_122_TRUE:
-    LDD #1
-.CMP_122_END:
-    LBEQ .LOGIC_120_FALSE
-    LDD #1
-    LBRA .LOGIC_120_END
-.LOGIC_120_FALSE:
-    LDD #0
-.LOGIC_120_END:
-    LBEQ IF_NEXT_128
-    LDD #3
-    STD VAR_NEAR_HS
-    LBRA IF_END_127
-IF_NEXT_128:
-IF_END_127:
-    LBRA IF_END_125
-IF_NEXT_126:
-IF_END_125:
     RTS
 
 ; Function: check_workshop_hotspots (Bank #0)
@@ -2628,11 +2453,11 @@ IF_NEXT_146:
 IF_END_145:
     RTS
 
-; Function: check_anteroom_hotspots (Bank #0)
-check_anteroom_hotspots:
+; Function: check_weights_hotspots (Bank #0)
+check_weights_hotspots:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
+    LDX #ARRAY_WGT_HS_X_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2646,7 +2471,7 @@ check_anteroom_hotspots:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
+    LDX #ARRAY_WGT_HS_Y_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2658,7 +2483,7 @@ check_anteroom_hotspots:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
+    LDX #ARRAY_WGT_HS_W_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2670,21 +2495,21 @@ check_anteroom_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_24_POS   ; Branch if positive
+    BPL .ABS_32_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_24_POS:
+.ABS_32_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_150_TRUE
+    LBLE .CMP_162_TRUE
     LDD #0
-    LBRA .CMP_150_END
-.CMP_150_TRUE:
+    LBRA .CMP_162_END
+.CMP_162_TRUE:
     LDD #1
-.CMP_150_END:
-    LBEQ .LOGIC_149_FALSE
-    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
+.CMP_162_END:
+    LBEQ .LOGIC_161_FALSE
+    LDX #ARRAY_WGT_HS_H_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2696,34 +2521,34 @@ check_anteroom_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_25_POS   ; Branch if positive
+    BPL .ABS_33_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_25_POS:
+.ABS_33_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_151_TRUE
+    LBLE .CMP_163_TRUE
     LDD #0
-    LBRA .CMP_151_END
-.CMP_151_TRUE:
+    LBRA .CMP_163_END
+.CMP_163_TRUE:
     LDD #1
-.CMP_151_END:
-    LBEQ .LOGIC_149_FALSE
+.CMP_163_END:
+    LBEQ .LOGIC_161_FALSE
     LDD #1
-    LBRA .LOGIC_149_END
-.LOGIC_149_FALSE:
+    LBRA .LOGIC_161_END
+.LOGIC_161_FALSE:
     LDD #0
-.LOGIC_149_END:
-    LBEQ IF_NEXT_148
+.LOGIC_161_END:
+    LBEQ IF_NEXT_156
     LDD #0
     STD VAR_NEAR_HS
-    LBRA IF_END_147
-IF_NEXT_148:
-IF_END_147:
+    LBRA IF_END_155
+IF_NEXT_156:
+IF_END_155:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
+    LDX #ARRAY_WGT_HS_X_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2737,7 +2562,7 @@ IF_END_147:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
+    LDX #ARRAY_WGT_HS_Y_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2749,7 +2574,7 @@ IF_END_147:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
+    LDX #ARRAY_WGT_HS_W_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2761,21 +2586,21 @@ IF_END_147:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_26_POS   ; Branch if positive
+    BPL .ABS_34_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_26_POS:
+.ABS_34_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_153_TRUE
+    LBLE .CMP_165_TRUE
     LDD #0
-    LBRA .CMP_153_END
-.CMP_153_TRUE:
+    LBRA .CMP_165_END
+.CMP_165_TRUE:
     LDD #1
-.CMP_153_END:
-    LBEQ .LOGIC_152_FALSE
-    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
+.CMP_165_END:
+    LBEQ .LOGIC_164_FALSE
+    LDX #ARRAY_WGT_HS_H_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -2787,35 +2612,39 @@ IF_END_147:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_27_POS   ; Branch if positive
+    BPL .ABS_35_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_27_POS:
+.ABS_35_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_154_TRUE
+    LBLE .CMP_166_TRUE
     LDD #0
-    LBRA .CMP_154_END
-.CMP_154_TRUE:
+    LBRA .CMP_166_END
+.CMP_166_TRUE:
     LDD #1
-.CMP_154_END:
-    LBEQ .LOGIC_152_FALSE
+.CMP_166_END:
+    LBEQ .LOGIC_164_FALSE
     LDD #1
-    LBRA .LOGIC_152_END
-.LOGIC_152_FALSE:
+    LBRA .LOGIC_164_END
+.LOGIC_164_FALSE:
     LDD #0
-.LOGIC_152_END:
-    LBEQ IF_NEXT_150
+.LOGIC_164_END:
+    LBEQ IF_NEXT_158
     LDD #1
     STD VAR_NEAR_HS
-    LBRA IF_END_149
-IF_NEXT_150:
-IF_END_149:
+    LBRA IF_END_157
+IF_NEXT_158:
+IF_END_157:
+    RTS
+
+; Function: check_optics_hotspots (Bank #0)
+check_optics_hotspots:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
-    LDD #2
+    LDX #ARRAY_OPT_HS_X_DATA  ; Array base
+    LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2828,8 +2657,8 @@ IF_END_149:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
-    LDD #2
+    LDX #ARRAY_OPT_HS_Y_DATA  ; Array base
+    LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2840,8 +2669,8 @@ IF_END_149:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
-    LDD #2
+    LDX #ARRAY_OPT_HS_W_DATA  ; Array base
+    LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2852,22 +2681,22 @@ IF_END_149:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_28_POS   ; Branch if positive
+    BPL .ABS_36_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_28_POS:
+.ABS_36_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_156_TRUE
+    LBLE .CMP_168_TRUE
     LDD #0
-    LBRA .CMP_156_END
-.CMP_156_TRUE:
+    LBRA .CMP_168_END
+.CMP_168_TRUE:
     LDD #1
-.CMP_156_END:
-    LBEQ .LOGIC_155_FALSE
-    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
-    LDD #2
+.CMP_168_END:
+    LBEQ .LOGIC_167_FALSE
+    LDX #ARRAY_OPT_HS_H_DATA  ; Array base
+    LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2878,35 +2707,52 @@ IF_END_149:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_29_POS   ; Branch if positive
+    BPL .ABS_37_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_29_POS:
+.ABS_37_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_157_TRUE
+    LBLE .CMP_169_TRUE
     LDD #0
-    LBRA .CMP_157_END
-.CMP_157_TRUE:
+    LBRA .CMP_169_END
+.CMP_169_TRUE:
     LDD #1
-.CMP_157_END:
-    LBEQ .LOGIC_155_FALSE
+.CMP_169_END:
+    LBEQ .LOGIC_167_FALSE
     LDD #1
-    LBRA .LOGIC_155_END
-.LOGIC_155_FALSE:
+    LBRA .LOGIC_167_END
+.LOGIC_167_FALSE:
     LDD #0
-.LOGIC_155_END:
-    LBEQ IF_NEXT_152
-    LDD #2
+.LOGIC_167_END:
+    LBEQ IF_NEXT_160
+    LDD #0
     STD VAR_NEAR_HS
-    LBRA IF_END_151
-IF_NEXT_152:
-IF_END_151:
+    LBRA IF_END_159
+IF_NEXT_160:
+IF_END_159:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLAGS_A
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #64  ; const FL_OPTICS_SOLVED
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
+    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
+    CMPD TMPVAL
+    LBNE .CMP_170_TRUE
+    LDD #0
+    LBRA .CMP_170_END
+.CMP_170_TRUE:
+    LDD #1
+.CMP_170_END:
+    LBEQ IF_NEXT_162
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
-    LDD #3
+    LDX #ARRAY_OPT_HS_X_DATA  ; Array base
+    LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2919,8 +2765,8 @@ IF_END_151:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
-    LDD #3
+    LDX #ARRAY_OPT_HS_Y_DATA  ; Array base
+    LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2931,8 +2777,8 @@ IF_END_151:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
-    LDD #3
+    LDX #ARRAY_OPT_HS_W_DATA  ; Array base
+    LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2943,22 +2789,22 @@ IF_END_151:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_30_POS   ; Branch if positive
+    BPL .ABS_38_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_30_POS:
+.ABS_38_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_159_TRUE
+    LBLE .CMP_172_TRUE
     LDD #0
-    LBRA .CMP_159_END
-.CMP_159_TRUE:
+    LBRA .CMP_172_END
+.CMP_172_TRUE:
     LDD #1
-.CMP_159_END:
-    LBEQ .LOGIC_158_FALSE
-    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
-    LDD #3
+.CMP_172_END:
+    LBEQ .LOGIC_171_FALSE
+    LDX #ARRAY_OPT_HS_H_DATA  ; Array base
+    LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -2969,31 +2815,129 @@ IF_END_151:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_31_POS   ; Branch if positive
+    BPL .ABS_39_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_31_POS:
+.ABS_39_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_160_TRUE
+    LBLE .CMP_173_TRUE
     LDD #0
-    LBRA .CMP_160_END
-.CMP_160_TRUE:
+    LBRA .CMP_173_END
+.CMP_173_TRUE:
     LDD #1
-.CMP_160_END:
-    LBEQ .LOGIC_158_FALSE
+.CMP_173_END:
+    LBEQ .LOGIC_171_FALSE
     LDD #1
-    LBRA .LOGIC_158_END
-.LOGIC_158_FALSE:
+    LBRA .LOGIC_171_END
+.LOGIC_171_FALSE:
     LDD #0
-.LOGIC_158_END:
-    LBEQ IF_NEXT_154
-    LDD #3
+.LOGIC_171_END:
+    LBEQ IF_NEXT_164
+    LDD #1
     STD VAR_NEAR_HS
-    LBRA IF_END_153
-IF_NEXT_154:
-IF_END_153:
+    LBRA IF_END_163
+IF_NEXT_164:
+IF_END_163:
+    LBRA IF_END_161
+IF_NEXT_162:
+IF_END_161:
+    RTS
+
+; Function: check_conservatory_hotspots (Bank #0)
+check_conservatory_hotspots:
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_CONS_HS_X_DATA  ; Array base
+    LDD #0
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_CONS_HS_Y_DATA  ; Array base
+    LDD #0
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDX #ARRAY_CONS_HS_W_DATA  ; Array base
+    LDD #0
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DX
+    TSTA           ; Test sign bit
+    BPL .ABS_40_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_40_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_175_TRUE
+    LDD #0
+    LBRA .CMP_175_END
+.CMP_175_TRUE:
+    LDD #1
+.CMP_175_END:
+    LBEQ .LOGIC_174_FALSE
+    LDX #ARRAY_CONS_HS_H_DATA  ; Array base
+    LDD #0
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DY
+    TSTA           ; Test sign bit
+    BPL .ABS_41_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_41_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_176_TRUE
+    LDD #0
+    LBRA .CMP_176_END
+.CMP_176_TRUE:
+    LDD #1
+.CMP_176_END:
+    LBEQ .LOGIC_174_FALSE
+    LDD #1
+    LBRA .LOGIC_174_END
+.LOGIC_174_FALSE:
+    LDD #0
+.LOGIC_174_END:
+    LBEQ IF_NEXT_166
+    LDD #0
+    STD VAR_NEAR_HS
+    LBRA IF_END_165
+IF_NEXT_166:
+IF_END_165:
     RTS
 
 ; Function: check_vault_hotspots (Bank #0)
@@ -3671,6 +3615,400 @@ IF_END_195:
 IF_END_171:
     RTS
 
+; Function: interact_anteroom (Bank #0)
+interact_anteroom:
+    LDD #0  ; const ANT_HS_DIARY
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG0
+    CMPD TMPVAL
+    LBEQ .CMP_235_TRUE
+    LDD #0
+    LBRA .CMP_235_END
+.CMP_235_TRUE:
+    LDD #1
+.CMP_235_END:
+    LBEQ IF_NEXT_236
+    LDD #0  ; const VERB_EXAMINE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_236_TRUE
+    LDD #0
+    LBRA .CMP_236_END
+.CMP_236_TRUE:
+    LDD #1
+.CMP_236_END:
+    LBEQ IF_NEXT_238
+    LDD #9
+    STD VAR_MSG_ID
+    LDD #140
+    STD VAR_MSG_TIMER
+    LBRA IF_END_237
+IF_NEXT_238:
+    LDD #1  ; const VERB_TAKE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_237_TRUE
+    LDD #0
+    LBRA .CMP_237_END
+.CMP_237_TRUE:
+    LDD #1
+.CMP_237_END:
+    LBEQ IF_NEXT_239
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_237
+IF_NEXT_239:
+    LDD #2  ; const VERB_USE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_238_TRUE
+    LDD #0
+    LBRA .CMP_238_END
+.CMP_238_TRUE:
+    LDD #1
+.CMP_238_END:
+    LBEQ IF_END_237
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_INV_ITEMS_DATA  ; Array base
+    LDD #0  ; const ITEM_LENS
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_239_TRUE
+    LDD #0
+    LBRA .CMP_239_END
+.CMP_239_TRUE:
+    LDD #1
+.CMP_239_END:
+    LBEQ IF_NEXT_241
+    LDD #0  ; const ITEM_LENS
+    STD VAR_ARG0
+    JSR pickup_item
+    LDD #10
+    STD VAR_MSG_ID
+    LDD #160
+    STD VAR_MSG_TIMER
+    LBRA IF_END_240
+IF_NEXT_241:
+    LDD #11
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+IF_END_240:
+    LBRA IF_END_237
+IF_END_237:
+    LBRA IF_END_235
+IF_NEXT_236:
+    LDD #1  ; const ANT_HS_EXIT
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG0
+    CMPD TMPVAL
+    LBEQ .CMP_240_TRUE
+    LDD #0
+    LBRA .CMP_240_END
+.CMP_240_TRUE:
+    LDD #1
+.CMP_240_END:
+    LBEQ IF_NEXT_242
+    LDD #0  ; const VERB_EXAMINE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_241_TRUE
+    LDD #0
+    LBRA .CMP_241_END
+.CMP_241_TRUE:
+    LDD #1
+.CMP_241_END:
+    LBEQ IF_NEXT_244
+    LDD #12
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_243
+IF_NEXT_244:
+    LDD #2  ; const VERB_USE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_242_TRUE
+    LDD #0
+    LBRA .CMP_242_END
+.CMP_242_TRUE:
+    LDD #1
+.CMP_242_END:
+    LBEQ IF_NEXT_245
+    LDD #3  ; const ROOM_WEIGHTS
+    STD VAR_EXIT_ROOM_TARGET
+    LDD #1
+    STD VAR_ROOM_EXIT
+    LDD #60
+    STD VAR_MSG_TIMER
+    LBRA IF_END_243
+IF_NEXT_245:
+    LDD #1  ; const VERB_TAKE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_243_TRUE
+    LDD #0
+    LBRA .CMP_243_END
+.CMP_243_TRUE:
+    LDD #1
+.CMP_243_END:
+    LBEQ IF_END_243
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_243
+IF_END_243:
+    LBRA IF_END_235
+IF_NEXT_242:
+    LDD #2  ; const ANT_HS_SHELF
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG0
+    CMPD TMPVAL
+    LBEQ .CMP_244_TRUE
+    LDD #0
+    LBRA .CMP_244_END
+.CMP_244_TRUE:
+    LDD #1
+.CMP_244_END:
+    LBEQ IF_NEXT_246
+    LDD #0  ; const VERB_EXAMINE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_245_TRUE
+    LDD #0
+    LBRA .CMP_245_END
+.CMP_245_TRUE:
+    LDD #1
+.CMP_245_END:
+    LBEQ IF_NEXT_248
+    LDD #33
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+    LBRA IF_END_247
+IF_NEXT_248:
+    LDD #1  ; const VERB_TAKE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_246_TRUE
+    LDD #0
+    LBRA .CMP_246_END
+.CMP_246_TRUE:
+    LDD #1
+.CMP_246_END:
+    LBEQ IF_NEXT_249
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_INV_ITEMS_DATA  ; Array base
+    LDD #6  ; const ITEM_SHEET
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_247_TRUE
+    LDD #0
+    LBRA .CMP_247_END
+.CMP_247_TRUE:
+    LDD #1
+.CMP_247_END:
+    LBEQ IF_NEXT_251
+    LDD #6  ; const ITEM_SHEET
+    STD VAR_ARG0
+    JSR pickup_item
+    LDD #33
+    STD VAR_MSG_ID
+    LDD #140
+    STD VAR_MSG_TIMER
+    LBRA IF_END_250
+IF_NEXT_251:
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+IF_END_250:
+    LBRA IF_END_247
+IF_NEXT_249:
+    LDD #2  ; const VERB_USE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_248_TRUE
+    LDD #0
+    LBRA .CMP_248_END
+.CMP_248_TRUE:
+    LDD #1
+.CMP_248_END:
+    LBEQ IF_END_247
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_247
+IF_END_247:
+    LBRA IF_END_235
+IF_NEXT_246:
+    LDD #3  ; const ANT_HS_CABINET
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG0
+    CMPD TMPVAL
+    LBEQ .CMP_249_TRUE
+    LDD #0
+    LBRA .CMP_249_END
+.CMP_249_TRUE:
+    LDD #1
+.CMP_249_END:
+    LBEQ IF_END_235
+    LDD #0  ; const VERB_EXAMINE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_250_TRUE
+    LDD #0
+    LBRA .CMP_250_END
+.CMP_250_TRUE:
+    LDD #1
+.CMP_250_END:
+    LBEQ IF_NEXT_253
+    LDD #35
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+    LBRA IF_END_252
+IF_NEXT_253:
+    LDD #2  ; const VERB_USE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_251_TRUE
+    LDD #0
+    LBRA .CMP_251_END
+.CMP_251_TRUE:
+    LDD #1
+.CMP_251_END:
+    LBEQ IF_NEXT_254
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_INV_ITEMS_DATA  ; Array base
+    LDD #2  ; const ITEM_PRISM
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_253_TRUE
+    LDD #0
+    LBRA .CMP_253_END
+.CMP_253_TRUE:
+    LDD #1
+.CMP_253_END:
+    LBEQ .LOGIC_252_FALSE
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_INV_ITEMS_DATA  ; Array base
+    LDD #0  ; const ITEM_LENS
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_254_TRUE
+    LDD #0
+    LBRA .CMP_254_END
+.CMP_254_TRUE:
+    LDD #1
+.CMP_254_END:
+    LBEQ .LOGIC_252_FALSE
+    LDD #1
+    LBRA .LOGIC_252_END
+.LOGIC_252_FALSE:
+    LDD #0
+.LOGIC_252_END:
+    LBEQ IF_NEXT_256
+    LDD #2  ; const ITEM_PRISM
+    STD VAR_ARG0
+    JSR pickup_item
+    LDD #35
+    STD VAR_MSG_ID
+    LDD #160
+    STD VAR_MSG_TIMER
+    LBRA IF_END_255
+IF_NEXT_256:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_INV_ITEMS_DATA  ; Array base
+    LDD #2  ; const ITEM_PRISM
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_255_TRUE
+    LDD #0
+    LBRA .CMP_255_END
+.CMP_255_TRUE:
+    LDD #1
+.CMP_255_END:
+    LBEQ IF_NEXT_257
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_255
+IF_NEXT_257:
+    LDD #22
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+IF_END_255:
+    LBRA IF_END_252
+IF_NEXT_254:
+    LDD #1  ; const VERB_TAKE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_256_TRUE
+    LDD #0
+    LBRA .CMP_256_END
+.CMP_256_TRUE:
+    LDD #1
+.CMP_256_END:
+    LBEQ IF_END_252
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_252
+IF_END_252:
+    LBRA IF_END_235
+IF_END_235:
+    RTS
+
 ; Function: interact_conservatory (Bank #0)
 interact_conservatory:
     LDD #0  ; const CONS_HS_ELISA
@@ -3842,6 +4180,858 @@ IF_NEXT_284:
 IF_END_283:
     RTS
 
+; Function: interact_vault (Bank #0)
+interact_vault:
+    LDD #0  ; const VAULT_HS_APPR
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG0
+    CMPD TMPVAL
+    LBEQ .CMP_285_TRUE
+    LDD #0
+    LBRA .CMP_285_END
+.CMP_285_TRUE:
+    LDD #1
+.CMP_285_END:
+    LBEQ IF_NEXT_294
+    LDD #0  ; const VERB_EXAMINE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_286_TRUE
+    LDD #0
+    LBRA .CMP_286_END
+.CMP_286_TRUE:
+    LDD #1
+.CMP_286_END:
+    LBEQ IF_NEXT_296
+    LDD #3  ; const NPC_APPRENTICE
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_NPC_STATE_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #1
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #31
+    STD VAR_MSG_ID
+    LDD #200
+    STD VAR_MSG_TIMER
+    LBRA IF_END_295
+IF_NEXT_296:
+    LDD #2  ; const VERB_USE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_287_TRUE
+    LDD #0
+    LBRA .CMP_287_END
+.CMP_287_TRUE:
+    LDD #1
+.CMP_287_END:
+    LBEQ IF_NEXT_297
+    LDD #39
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+    LBRA IF_END_295
+IF_NEXT_297:
+    LDD #3  ; const VERB_GIVE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_288_TRUE
+    LDD #0
+    LBRA .CMP_288_END
+.CMP_288_TRUE:
+    LDD #1
+.CMP_288_END:
+    LBEQ IF_NEXT_298
+    LDD #1  ; const ITEM_GEAR
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ACTIVE_ITEM
+    CMPD TMPVAL
+    LBEQ .CMP_289_TRUE
+    LDD #0
+    LBRA .CMP_289_END
+.CMP_289_TRUE:
+    LDD #1
+.CMP_289_END:
+    LBEQ IF_NEXT_300
+    LDD #3  ; const NPC_APPRENTICE
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_NPC_STATE_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #2
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #-1
+    STD VAR_ACTIVE_ITEM
+    LDD #32
+    STD VAR_MSG_ID
+    LDD #200
+    STD VAR_MSG_TIMER
+    LBRA IF_END_299
+IF_NEXT_300:
+    LDD #39
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+IF_END_299:
+    LBRA IF_END_295
+IF_NEXT_298:
+    LDD #1  ; const VERB_TAKE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_290_TRUE
+    LDD #0
+    LBRA .CMP_290_END
+.CMP_290_TRUE:
+    LDD #1
+.CMP_290_END:
+    LBEQ IF_END_295
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_295
+IF_END_295:
+    LBRA IF_END_293
+IF_NEXT_294:
+    LDD #1  ; const VAULT_HS_DOOR
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG0
+    CMPD TMPVAL
+    LBEQ .CMP_291_TRUE
+    LDD #0
+    LBRA .CMP_291_END
+.CMP_291_TRUE:
+    LDD #1
+.CMP_291_END:
+    LBEQ IF_END_293
+    LDD #0  ; const VERB_EXAMINE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_292_TRUE
+    LDD #0
+    LBRA .CMP_292_END
+.CMP_292_TRUE:
+    LDD #1
+.CMP_292_END:
+    LBEQ IF_NEXT_302
+    LDD #42
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+    LBRA IF_END_301
+IF_NEXT_302:
+    LDD #2  ; const VERB_USE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_293_TRUE
+    LDD #0
+    LBRA .CMP_293_END
+.CMP_293_TRUE:
+    LDD #1
+.CMP_293_END:
+    LBEQ IF_NEXT_303
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_INV_ITEMS_DATA  ; Array base
+    LDD #7  ; const ITEM_KEY
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_294_TRUE
+    LDD #0
+    LBRA .CMP_294_END
+.CMP_294_TRUE:
+    LDD #1
+.CMP_294_END:
+    LBEQ IF_NEXT_305
+    LDD #7  ; const ITEM_KEY
+    STD VAR_ARG0
+    JSR drop_item
+    LDD #-1
+    STD VAR_ACTIVE_ITEM
+    LDD #1
+    STD VAR_ROOM_EXIT
+    LDD >VAR_FLAGS_B
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #16  ; const FL_EXIT_TESTAMENT
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ORA TMPPTR2     ; A OR TMPPTR2+0 (high byte)
+    ORB TMPPTR2+1   ; B OR TMPPTR2+1 (low byte)
+    STD VAR_FLAGS_B
+    LDD #80
+    STD VAR_MSG_TIMER
+    LBRA IF_END_304
+IF_NEXT_305:
+    LDD #42
+    STD VAR_MSG_ID
+    LDD #120
+    STD VAR_MSG_TIMER
+IF_END_304:
+    LBRA IF_END_301
+IF_NEXT_303:
+    LDD #1  ; const VERB_TAKE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_VERB
+    CMPD TMPVAL
+    LBEQ .CMP_295_TRUE
+    LDD #0
+    LBRA .CMP_295_END
+.CMP_295_TRUE:
+    LDD #1
+.CMP_295_END:
+    LBEQ IF_END_301
+    LDD #5
+    STD VAR_MSG_ID
+    LDD #100
+    STD VAR_MSG_TIMER
+    LBRA IF_END_301
+IF_END_301:
+    LBRA IF_END_293
+IF_END_293:
+    RTS
+
+; Function: draw_room (Bank #0)
+draw_room:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; ===== UPDATE_LEVEL builtin =====
+    JSR UPDATE_LEVEL_RUNTIME
+    LDD #0
+    STD RESULT
+    ; ===== SHOW_LEVEL builtin =====
+    JSR SHOW_LEVEL_RUNTIME
+    LDD #0
+    STD RESULT
+    LDD #0  ; const ROOM_ENTRANCE
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_ROOM
+    CMPD TMPVAL
+    LBEQ .CMP_296_TRUE
+    LDD #0
+    LBRA .CMP_296_END
+.CMP_296_TRUE:
+    LDD #1
+.CMP_296_END:
+    LBEQ IF_NEXT_307
+    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
+    LDD #2  ; const ENT_HS_CARETAKER
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SCROLL_X
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_CARETAKER_SX
+    LDD #-120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CARETAKER_SX
+    CMPD TMPVAL
+    LBGT .CMP_298_TRUE
+    LDD #0
+    LBRA .CMP_298_END
+.CMP_298_TRUE:
+    LDD #1
+.CMP_298_END:
+    LBEQ .LOGIC_297_FALSE
+    LDD #120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CARETAKER_SX
+    CMPD TMPVAL
+    LBLT .CMP_299_TRUE
+    LDD #0
+    LBRA .CMP_299_END
+.CMP_299_TRUE:
+    LDD #1
+.CMP_299_END:
+    LBEQ .LOGIC_297_FALSE
+    LDD #1
+    LBRA .LOGIC_297_END
+.LOGIC_297_FALSE:
+    LDD #0
+.LOGIC_297_END:
+    LBEQ IF_NEXT_309
+    LDD #2
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_NPC_STATE_DATA  ; Array base
+    LDD #0  ; const NPC_CARETAKER
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLT .CMP_300_TRUE
+    LDD #0
+    LBRA .CMP_300_END
+.CMP_300_TRUE:
+    LDD #1
+.CMP_300_END:
+    LBEQ IF_NEXT_311
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #90
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    LBRA IF_END_310
+IF_NEXT_311:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #50
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+IF_END_310:
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: caretaker (index=1, 7 paths)
+    LDD >VAR_CARETAKER_SX
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-118
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #1        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    LBRA IF_END_308
+IF_NEXT_309:
+IF_END_308:
+    LBRA IF_END_306
+IF_NEXT_307:
+IF_END_306:
+    LDD #1  ; const ROOM_WORKSHOP
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_ROOM
+    CMPD TMPVAL
+    LBEQ .CMP_301_TRUE
+    LDD #0
+    LBRA .CMP_301_END
+.CMP_301_TRUE:
+    LDD #1
+.CMP_301_END:
+    LBEQ IF_NEXT_313
+    LDX #ARRAY_CLOCK_HS_X_DATA  ; Array base
+    LDD #3  ; const CLOCK_HS_HANS
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SCROLL_X
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_HANS_SX
+    LDD #-120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_HANS_SX
+    CMPD TMPVAL
+    LBGT .CMP_303_TRUE
+    LDD #0
+    LBRA .CMP_303_END
+.CMP_303_TRUE:
+    LDD #1
+.CMP_303_END:
+    LBEQ .LOGIC_302_FALSE
+    LDD #120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_HANS_SX
+    CMPD TMPVAL
+    LBLT .CMP_304_TRUE
+    LDD #0
+    LBRA .CMP_304_END
+.CMP_304_TRUE:
+    LDD #1
+.CMP_304_END:
+    LBEQ .LOGIC_302_FALSE
+    LDD #1
+    LBRA .LOGIC_302_END
+.LOGIC_302_FALSE:
+    LDD #0
+.LOGIC_302_END:
+    LBEQ IF_NEXT_315
+    LDD #2
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_NPC_STATE_DATA  ; Array base
+    LDD #1  ; const NPC_HANS
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLT .CMP_305_TRUE
+    LDD #0
+    LBRA .CMP_305_END
+.CMP_305_TRUE:
+    LDD #1
+.CMP_305_END:
+    LBEQ IF_NEXT_317
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #90
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    LBRA IF_END_316
+IF_NEXT_317:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #50
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+IF_END_316:
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: hans_automata (index=10, 8 paths)
+    LDD >VAR_HANS_SX
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-118
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #10        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    LBRA IF_END_314
+IF_NEXT_315:
+IF_END_314:
+    LBRA IF_END_312
+IF_NEXT_313:
+IF_END_312:
+    LDD #3  ; const ROOM_WEIGHTS
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_ROOM
+    CMPD TMPVAL
+    LBEQ .CMP_306_TRUE
+    LDD #0
+    LBRA .CMP_306_END
+.CMP_306_TRUE:
+    LDD #1
+.CMP_306_END:
+    LBEQ IF_NEXT_319
+    LDD #3
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_INV_WEIGHT
+    CMPD TMPVAL
+    LBGT .CMP_307_TRUE
+    LDD #0
+    LBRA .CMP_307_END
+.CMP_307_TRUE:
+    LDD #1
+.CMP_307_END:
+    LBEQ IF_NEXT_321
+    LDD >VAR_FLAGS_B
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const FL_PLAT_DOWN
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ORA TMPPTR2     ; A OR TMPPTR2+0 (high byte)
+    ORB TMPPTR2+1   ; B OR TMPPTR2+1 (low byte)
+    STD VAR_FLAGS_B
+    LBRA IF_END_320
+IF_NEXT_321:
+    LDD >VAR_FLAGS_B
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #254
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
+    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
+    STD VAR_FLAGS_B
+IF_END_320:
+    LDD #280
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SCROLL_X
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_PLAT_SX
+    LDD #-120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAT_SX
+    CMPD TMPVAL
+    LBGT .CMP_309_TRUE
+    LDD #0
+    LBRA .CMP_309_END
+.CMP_309_TRUE:
+    LDD #1
+.CMP_309_END:
+    LBEQ .LOGIC_308_FALSE
+    LDD #120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAT_SX
+    CMPD TMPVAL
+    LBLT .CMP_310_TRUE
+    LDD #0
+    LBRA .CMP_310_END
+.CMP_310_TRUE:
+    LDD #1
+.CMP_310_END:
+    LBEQ .LOGIC_308_FALSE
+    LDD #1
+    LBRA .LOGIC_308_END
+.LOGIC_308_FALSE:
+    LDD #0
+.LOGIC_308_END:
+    LBEQ IF_NEXT_323
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLAGS_B
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const FL_PLAT_DOWN
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
+    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
+    CMPD TMPVAL
+    LBEQ .CMP_311_TRUE
+    LDD #0
+    LBRA .CMP_311_END
+.CMP_311_TRUE:
+    LDD #1
+.CMP_311_END:
+    LBEQ IF_NEXT_325
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: platform_up (index=16, 5 paths)
+    LDD >VAR_PLAT_SX
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-85
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #16        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    LBRA IF_END_324
+IF_NEXT_325:
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: platform_down (index=15, 7 paths)
+    LDD >VAR_PLAT_SX
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-85
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #15        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+IF_END_324:
+    LBRA IF_END_322
+IF_NEXT_323:
+IF_END_322:
+    LBRA IF_END_318
+IF_NEXT_319:
+IF_END_318:
+    LDD #4  ; const ROOM_OPTICS
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_ROOM
+    CMPD TMPVAL
+    LBEQ .CMP_312_TRUE
+    LDD #0
+    LBRA .CMP_312_END
+.CMP_312_TRUE:
+    LDD #1
+.CMP_312_END:
+    LBEQ IF_NEXT_327
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLAGS_A
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #64  ; const FL_OPTICS_SOLVED
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
+    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
+    CMPD TMPVAL
+    LBNE .CMP_313_TRUE
+    LDD #0
+    LBRA .CMP_313_END
+.CMP_313_TRUE:
+    LDD #1
+.CMP_313_END:
+    LBEQ IF_NEXT_329
+    LDD #420
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SCROLL_X
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_COMP_SX
+    LDD #-120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_COMP_SX
+    CMPD TMPVAL
+    LBGT .CMP_315_TRUE
+    LDD #0
+    LBRA .CMP_315_END
+.CMP_315_TRUE:
+    LDD #1
+.CMP_315_END:
+    LBEQ .LOGIC_314_FALSE
+    LDD #120
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_COMP_SX
+    CMPD TMPVAL
+    LBLT .CMP_316_TRUE
+    LDD #0
+    LBRA .CMP_316_END
+.CMP_316_TRUE:
+    LDD #1
+.CMP_316_END:
+    LBEQ .LOGIC_314_FALSE
+    LDD #1
+    LBRA .LOGIC_314_END
+.LOGIC_314_FALSE:
+    LDD #0
+.LOGIC_314_END:
+    LBEQ IF_NEXT_331
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #110
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: wall_compartment (index=19, 4 paths)
+    LDD >VAR_COMP_SX
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-88
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #19        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    LBRA IF_END_330
+IF_NEXT_331:
+IF_END_330:
+    LBRA IF_END_328
+IF_NEXT_329:
+IF_END_328:
+    LBRA IF_END_326
+IF_NEXT_327:
+IF_END_326:
+    LDD #5  ; const ROOM_CONSERVATORY
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_ROOM
+    CMPD TMPVAL
+    LBEQ .CMP_317_TRUE
+    LDD #0
+    LBRA .CMP_317_END
+.CMP_317_TRUE:
+    LDD #1
+.CMP_317_END:
+    LBEQ IF_NEXT_333
+    LDD #2
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_NPC_STATE_DATA  ; Array base
+    LDD #2  ; const NPC_ELISA
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLT .CMP_318_TRUE
+    LDD #0
+    LBRA .CMP_318_END
+.CMP_318_TRUE:
+    LDD #1
+.CMP_318_END:
+    LBEQ IF_NEXT_335
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #80
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    LBRA IF_END_334
+IF_NEXT_335:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #30
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+IF_END_334:
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: elisa_ghost (index=7, 3 paths)
+    LDD #0
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-104
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #7        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    LBRA IF_END_332
+IF_NEXT_333:
+IF_END_332:
+    LDD #6  ; const ROOM_VAULT_CORRIDOR
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_ROOM
+    CMPD TMPVAL
+    LBEQ .CMP_319_TRUE
+    LDD #0
+    LBRA .CMP_319_END
+.CMP_319_TRUE:
+    LDD #1
+.CMP_319_END:
+    LBEQ IF_NEXT_337
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #85
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: crystal_apprentice (index=4, 7 paths)
+    LDD #-30
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD #-104
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #4        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    LBRA IF_END_336
+IF_NEXT_337:
+IF_END_336:
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SCROLL_X
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SCREEN_X
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #110
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: player (index=17, 7 paths)
+    LDD >VAR_SCREEN_X
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD >VAR_PLAYER_Y
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    LDX #17        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    LDD #0
+    STD RESULT
+    JSR draw_bottom_hud
+    RTS
+
 ; Function: draw_bottom_hud (Bank #0)
 draw_bottom_hud:
     LDD #7
@@ -3857,8 +5047,7 @@ draw_bottom_hud:
     ; SET_INTENSITY: Set drawing intensity
     LDD #70
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     JSR draw_verb_indicator
@@ -3907,8 +5096,7 @@ draw_hotspot_name:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LDD #0  ; const ROOM_ENTRANCE
@@ -4781,33 +5969,6 @@ IF_END_373:
 IF_END_369:
     RTS
 
-; Function: draw_message (Bank #0)
-draw_message:
-    LDD #7
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_MSG: Dispatch via ROM message table
-    LDD >VAR_MSG_ID
-    STD VAR_ARG0
-    JSR PRINT_MSG_DISPATCH
-    LDD #0
-    STD RESULT
-    RTS
-
 ; Function: pickup_item (Bank #0)
 pickup_item:
     LDD #0
@@ -4940,8 +6101,7 @@ draw_inventory:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -4986,8 +6146,7 @@ draw_inventory:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_388
@@ -4995,8 +6154,7 @@ IF_NEXT_389:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_388:
@@ -5005,8 +6163,7 @@ IF_NEXT_387:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_386:
@@ -5052,8 +6209,7 @@ IF_END_386:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_392
@@ -5061,8 +6217,7 @@ IF_NEXT_393:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_392:
@@ -5071,8 +6226,7 @@ IF_NEXT_391:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_390:
@@ -5118,8 +6272,7 @@ IF_END_390:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_396
@@ -5127,8 +6280,7 @@ IF_NEXT_397:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_396:
@@ -5137,8 +6289,7 @@ IF_NEXT_395:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_394:
@@ -5184,8 +6335,7 @@ IF_END_394:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_400
@@ -5193,8 +6343,7 @@ IF_NEXT_401:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_400:
@@ -5203,8 +6352,7 @@ IF_NEXT_399:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_398:
@@ -5250,8 +6398,7 @@ IF_END_398:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_404
@@ -5259,8 +6406,7 @@ IF_NEXT_405:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_404:
@@ -5269,8 +6415,7 @@ IF_NEXT_403:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_402:
@@ -5316,8 +6461,7 @@ IF_END_402:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_408
@@ -5325,8 +6469,7 @@ IF_NEXT_409:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_408:
@@ -5335,8 +6478,7 @@ IF_NEXT_407:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_406:
@@ -5382,8 +6524,7 @@ IF_END_406:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_412
@@ -5391,8 +6532,7 @@ IF_NEXT_413:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_412:
@@ -5401,8 +6541,7 @@ IF_NEXT_411:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_410:
@@ -5448,8 +6587,7 @@ IF_END_410:
     ; SET_INTENSITY: Set drawing intensity
     LDD #127
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LBRA IF_END_416
@@ -5457,8 +6595,7 @@ IF_NEXT_417:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_416:
@@ -5467,8 +6604,7 @@ IF_NEXT_415:
     ; SET_INTENSITY: Set drawing intensity
     LDD #35
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 IF_END_414:
@@ -5496,8 +6632,7 @@ IF_END_414:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5515,8 +6650,7 @@ IF_NEXT_419:
     ; SET_INTENSITY: Set drawing intensity
     LDD #70
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5533,8 +6667,7 @@ IF_END_418:
     ; SET_INTENSITY: Set drawing intensity
     LDD #60
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5580,8 +6713,7 @@ draw_testament:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5600,8 +6732,7 @@ draw_testament:
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5635,8 +6766,7 @@ IF_NEXT_421:
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5655,8 +6785,7 @@ IF_NEXT_421:
     ; SET_INTENSITY: Set drawing intensity
     LDD #80
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -5715,569 +6844,6 @@ IF_NEXT_423:
 IF_END_422:
     RTS
 
-; Function: draw_ending (Bank #0)
-draw_ending:
-    LDD #7
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-    LDD #50
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ENDING_Y
-    CMPD TMPVAL
-    LBLT .CMP_386_TRUE
-    LDD #0
-    LBRA .CMP_386_END
-.CMP_386_TRUE:
-    LDD #1
-.CMP_386_END:
-    LBEQ IF_NEXT_427
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ENDING_Y
-    LBRA IF_END_426
-IF_NEXT_427:
-IF_END_426:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FLAGS_B
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #2  ; const FL_ELISA_HELPED
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
-    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
-    CMPD TMPVAL
-    LBNE .CMP_388_TRUE
-    LDD #0
-    LBRA .CMP_388_END
-.CMP_388_TRUE:
-    LDD #1
-.CMP_388_END:
-    LBEQ .LOGIC_387_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FLAGS_B
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4  ; const FL_HANS_HELPED
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
-    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
-    CMPD TMPVAL
-    LBNE .CMP_389_TRUE
-    LDD #0
-    LBRA .CMP_389_END
-.CMP_389_TRUE:
-    LDD #1
-.CMP_389_END:
-    LBEQ .LOGIC_387_FALSE
-    LDD #1
-    LBRA .LOGIC_387_END
-.LOGIC_387_FALSE:
-    LDD #0
-.LOGIC_387_END:
-    LBEQ IF_NEXT_429
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #110
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #70
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_3688976395448209650      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #90
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #50
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_4750152274843692088      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-84
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #30
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_17345789615299082788      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #70
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #5
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2502506564742786359      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #15
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_11654038037461762538      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-63
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #35
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_1863858565675      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-63
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #65
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_71091249681780729      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_428
-IF_NEXT_429:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FLAGS_B
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #2  ; const FL_ELISA_HELPED
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
-    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
-    CMPD TMPVAL
-    LBNE .CMP_390_TRUE
-    LDD #0
-    LBRA .CMP_390_END
-.CMP_390_TRUE:
-    LDD #1
-.CMP_390_END:
-    LBEQ IF_NEXT_430
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #110
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #70
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_1694552686414567337      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #90
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-84
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #50
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_894489252191113018      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #30
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_18135904787860682873      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-56
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_70966799469806525      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #60
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #15
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_17643359177242884552      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #35
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_679393960477689362      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-70
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #55
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_6586363433779781634      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-56
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #80
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_69586596903166      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_428
-IF_NEXT_430:
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #110
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-77
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #70
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_15031599020925928582      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #90
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #50
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_8058628335699392711      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #30
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_3134159664534957280      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-84
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_16762347117432342118      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #60
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #15
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_17954386693183881976      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-84
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #35
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_6894498445181154440      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-70
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #65
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_3443128850001289426      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-IF_END_428:
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-49
-    STD VAR_ARG0
-    LDD >VAR_ENDING_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #95
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2376966947138      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LDD #50
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ENDING_Y
-    CMPD TMPVAL
-    LBGE .CMP_391_TRUE
-    LDD #0
-    LBRA .CMP_391_END
-.CMP_391_TRUE:
-    LDD #1
-.CMP_391_END:
-    LBEQ IF_NEXT_432
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #50
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-84
-    STD VAR_ARG0
-    LDD #-90
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_15373067420087200981      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BTN1_FIRED
-    CMPD TMPVAL
-    LBEQ .CMP_392_TRUE
-    LDD #0
-    LBRA .CMP_392_END
-.CMP_392_TRUE:
-    LDD #1
-.CMP_392_END:
-    LBEQ IF_NEXT_434
-    LDD #-110
-    STD VAR_ENDING_Y
-    LDD #0  ; const STATE_TITLE
-    STD VAR_SCREEN
-    LDD #1  ; const MUSIC_TITLE
-    STD VAR_CURRENT_MUSIC
-    ; PLAY_MUSIC("intro") - play music asset (index=1)
-    LDX #1        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_433
-IF_NEXT_434:
-IF_END_433:
-    LBRA IF_END_431
-IF_NEXT_432:
-IF_END_431:
-    RTS
-
 ; Function: accelerate_heartbeat (Bank #0)
 accelerate_heartbeat:
     LDD >VAR_HEARTBEAT_TEMPO
@@ -6307,229 +6873,9 @@ IF_END_435:
 
 
 ; ================================================
-; BANK #1 - 621 function(s), 20 asset(s)
+; BANK #1 - 475 function(s), 20 asset(s)
 ; ================================================
     ORG $0000  ; Sequential bank model
-
-; Function: draw_intro (Bank #1)
-draw_intro:
-    LDD #7
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_INTRO_PAGE
-    CMPD TMPVAL
-    LBEQ .CMP_25_TRUE
-    LDD #0
-    LBRA .CMP_25_END
-.CMP_25_TRUE:
-    LDD #1
-.CMP_25_END:
-    LBEQ IF_NEXT_34
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #40
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_17850884399050856369      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #80
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #20
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_4088011977317884966      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #0
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_17028423667663067371      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #-20
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_4810967809196323313      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #60
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-70
-    STD VAR_ARG0
-    LDD #-80
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_9120385760502433312      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_33
-IF_NEXT_34:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_INTRO_PAGE
-    CMPD TMPVAL
-    LBEQ .CMP_26_TRUE
-    LDD #0
-    LBRA .CMP_26_END
-.CMP_26_TRUE:
-    LDD #1
-.CMP_26_END:
-    LBEQ IF_END_33
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #40
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2725988333465993402      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #25
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_5995724771220415910      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #70
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #-5
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_1961155566409942910      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-91
-    STD VAR_ARG0
-    LDD #-20
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_1423984413427534561      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #60
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-70
-    STD VAR_ARG0
-    LDD #-80
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_9120385760502433312      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_33
-IF_END_33:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BTN1_FIRED
-    CMPD TMPVAL
-    LBEQ .CMP_27_TRUE
-    LDD #0
-    LBRA .CMP_27_END
-.CMP_27_TRUE:
-    LDD #1
-.CMP_27_END:
-    LBEQ IF_NEXT_36
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_INTRO_PAGE
-    CMPD TMPVAL
-    LBLT .CMP_28_TRUE
-    LDD #0
-    LBRA .CMP_28_END
-.CMP_28_TRUE:
-    LDD #1
-.CMP_28_END:
-    LBEQ IF_NEXT_38
-    LDD >VAR_INTRO_PAGE
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_INTRO_PAGE
-    LBRA IF_END_37
-IF_NEXT_38:
-    LDD #0  ; const ROOM_ENTRANCE
-    STD VAR_ARG0
-    JSR enter_room
-    LDD #2  ; const STATE_ROOM
-    STD VAR_SCREEN
-IF_END_37:
-    LBRA IF_END_35
-IF_NEXT_36:
-IF_END_35:
-    RTS
 
 ; Function: update_room (Bank #1)
 update_room:
@@ -7567,11 +7913,11 @@ IF_NEXT_101:
 IF_END_100:
     RTS
 
-; Function: check_weights_hotspots (Bank #1)
-check_weights_hotspots:
+; Function: check_entrance_hotspots (Bank #1)
+check_entrance_hotspots:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_WGT_HS_X_DATA  ; Array base
+    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7585,7 +7931,7 @@ check_weights_hotspots:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_WGT_HS_Y_DATA  ; Array base
+    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7597,7 +7943,7 @@ check_weights_hotspots:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_WGT_HS_W_DATA  ; Array base
+    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7609,21 +7955,21 @@ check_weights_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_32_POS   ; Branch if positive
+    BPL .ABS_2_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_32_POS:
+.ABS_2_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_162_TRUE
+    LBLE .CMP_111_TRUE
     LDD #0
-    LBRA .CMP_162_END
-.CMP_162_TRUE:
+    LBRA .CMP_111_END
+.CMP_111_TRUE:
     LDD #1
-.CMP_162_END:
-    LBEQ .LOGIC_161_FALSE
-    LDX #ARRAY_WGT_HS_H_DATA  ; Array base
+.CMP_111_END:
+    LBEQ .LOGIC_110_FALSE
+    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7635,34 +7981,34 @@ check_weights_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_33_POS   ; Branch if positive
+    BPL .ABS_3_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_33_POS:
+.ABS_3_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_163_TRUE
+    LBLE .CMP_112_TRUE
     LDD #0
-    LBRA .CMP_163_END
-.CMP_163_TRUE:
+    LBRA .CMP_112_END
+.CMP_112_TRUE:
     LDD #1
-.CMP_163_END:
-    LBEQ .LOGIC_161_FALSE
+.CMP_112_END:
+    LBEQ .LOGIC_110_FALSE
     LDD #1
-    LBRA .LOGIC_161_END
-.LOGIC_161_FALSE:
+    LBRA .LOGIC_110_END
+.LOGIC_110_FALSE:
     LDD #0
-.LOGIC_161_END:
-    LBEQ IF_NEXT_156
+.LOGIC_110_END:
+    LBEQ IF_NEXT_120
     LDD #0
     STD VAR_NEAR_HS
-    LBRA IF_END_155
-IF_NEXT_156:
-IF_END_155:
+    LBRA IF_END_119
+IF_NEXT_120:
+IF_END_119:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_WGT_HS_X_DATA  ; Array base
+    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7676,7 +8022,7 @@ IF_END_155:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_WGT_HS_Y_DATA  ; Array base
+    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7688,7 +8034,7 @@ IF_END_155:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_WGT_HS_W_DATA  ; Array base
+    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7700,21 +8046,21 @@ IF_END_155:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_34_POS   ; Branch if positive
+    BPL .ABS_4_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_34_POS:
+.ABS_4_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_165_TRUE
+    LBLE .CMP_114_TRUE
     LDD #0
-    LBRA .CMP_165_END
-.CMP_165_TRUE:
+    LBRA .CMP_114_END
+.CMP_114_TRUE:
     LDD #1
-.CMP_165_END:
-    LBEQ .LOGIC_164_FALSE
-    LDX #ARRAY_WGT_HS_H_DATA  ; Array base
+.CMP_114_END:
+    LBEQ .LOGIC_113_FALSE
+    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7726,39 +8072,35 @@ IF_END_155:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_35_POS   ; Branch if positive
+    BPL .ABS_5_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_35_POS:
+.ABS_5_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_166_TRUE
+    LBLE .CMP_115_TRUE
     LDD #0
-    LBRA .CMP_166_END
-.CMP_166_TRUE:
+    LBRA .CMP_115_END
+.CMP_115_TRUE:
     LDD #1
-.CMP_166_END:
-    LBEQ .LOGIC_164_FALSE
+.CMP_115_END:
+    LBEQ .LOGIC_113_FALSE
     LDD #1
-    LBRA .LOGIC_164_END
-.LOGIC_164_FALSE:
+    LBRA .LOGIC_113_END
+.LOGIC_113_FALSE:
     LDD #0
-.LOGIC_164_END:
-    LBEQ IF_NEXT_158
+.LOGIC_113_END:
+    LBEQ IF_NEXT_122
     LDD #1
     STD VAR_NEAR_HS
-    LBRA IF_END_157
-IF_NEXT_158:
-IF_END_157:
-    RTS
-
-; Function: check_optics_hotspots (Bank #1)
-check_optics_hotspots:
+    LBRA IF_END_121
+IF_NEXT_122:
+IF_END_121:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_OPT_HS_X_DATA  ; Array base
-    LDD #0
+    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
+    LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7771,8 +8113,8 @@ check_optics_hotspots:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_OPT_HS_Y_DATA  ; Array base
-    LDD #0
+    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
+    LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7783,8 +8125,8 @@ check_optics_hotspots:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_OPT_HS_W_DATA  ; Array base
-    LDD #0
+    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
+    LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7795,22 +8137,22 @@ check_optics_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_36_POS   ; Branch if positive
+    BPL .ABS_6_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_36_POS:
+.ABS_6_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_168_TRUE
+    LBLE .CMP_117_TRUE
     LDD #0
-    LBRA .CMP_168_END
-.CMP_168_TRUE:
+    LBRA .CMP_117_END
+.CMP_117_TRUE:
     LDD #1
-.CMP_168_END:
-    LBEQ .LOGIC_167_FALSE
-    LDX #ARRAY_OPT_HS_H_DATA  ; Array base
-    LDD #0
+.CMP_117_END:
+    LBEQ .LOGIC_116_FALSE
+    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
+    LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7821,52 +8163,52 @@ check_optics_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_37_POS   ; Branch if positive
+    BPL .ABS_7_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_37_POS:
+.ABS_7_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_169_TRUE
+    LBLE .CMP_118_TRUE
     LDD #0
-    LBRA .CMP_169_END
-.CMP_169_TRUE:
+    LBRA .CMP_118_END
+.CMP_118_TRUE:
     LDD #1
-.CMP_169_END:
-    LBEQ .LOGIC_167_FALSE
+.CMP_118_END:
+    LBEQ .LOGIC_116_FALSE
     LDD #1
-    LBRA .LOGIC_167_END
-.LOGIC_167_FALSE:
+    LBRA .LOGIC_116_END
+.LOGIC_116_FALSE:
     LDD #0
-.LOGIC_167_END:
-    LBEQ IF_NEXT_160
-    LDD #0
+.LOGIC_116_END:
+    LBEQ IF_NEXT_124
+    LDD #2
     STD VAR_NEAR_HS
-    LBRA IF_END_159
-IF_NEXT_160:
-IF_END_159:
+    LBRA IF_END_123
+IF_NEXT_124:
+IF_END_123:
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_FLAGS_A
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #64  ; const FL_OPTICS_SOLVED
+    LDD #2  ; const FL_TALLER_OPEN
     STD TMPPTR2     ; Save right operand to TMPPTR2
     LDD TMPVAL      ; Get left from TMPVAL
     ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
     ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
     CMPD TMPVAL
-    LBNE .CMP_170_TRUE
+    LBNE .CMP_119_TRUE
     LDD #0
-    LBRA .CMP_170_END
-.CMP_170_TRUE:
+    LBRA .CMP_119_END
+.CMP_119_TRUE:
     LDD #1
-.CMP_170_END:
-    LBEQ IF_NEXT_162
+.CMP_119_END:
+    LBEQ IF_NEXT_126
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_OPT_HS_X_DATA  ; Array base
-    LDD #1
+    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
+    LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7879,8 +8221,8 @@ IF_END_159:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_OPT_HS_Y_DATA  ; Array base
-    LDD #1
+    LDX #ARRAY_ENT_HS_Y_DATA  ; Array base
+    LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7891,8 +8233,8 @@ IF_END_159:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_OPT_HS_W_DATA  ; Array base
-    LDD #1
+    LDX #ARRAY_ENT_HS_W_DATA  ; Array base
+    LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7903,22 +8245,22 @@ IF_END_159:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_38_POS   ; Branch if positive
+    BPL .ABS_8_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_38_POS:
+.ABS_8_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_172_TRUE
+    LBLE .CMP_121_TRUE
     LDD #0
-    LBRA .CMP_172_END
-.CMP_172_TRUE:
+    LBRA .CMP_121_END
+.CMP_121_TRUE:
     LDD #1
-.CMP_172_END:
-    LBEQ .LOGIC_171_FALSE
-    LDX #ARRAY_OPT_HS_H_DATA  ; Array base
-    LDD #1
+.CMP_121_END:
+    LBEQ .LOGIC_120_FALSE
+    LDX #ARRAY_ENT_HS_H_DATA  ; Array base
+    LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
@@ -7929,41 +8271,41 @@ IF_END_159:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_39_POS   ; Branch if positive
+    BPL .ABS_9_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_39_POS:
+.ABS_9_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_173_TRUE
+    LBLE .CMP_122_TRUE
     LDD #0
-    LBRA .CMP_173_END
-.CMP_173_TRUE:
+    LBRA .CMP_122_END
+.CMP_122_TRUE:
     LDD #1
-.CMP_173_END:
-    LBEQ .LOGIC_171_FALSE
+.CMP_122_END:
+    LBEQ .LOGIC_120_FALSE
     LDD #1
-    LBRA .LOGIC_171_END
-.LOGIC_171_FALSE:
+    LBRA .LOGIC_120_END
+.LOGIC_120_FALSE:
     LDD #0
-.LOGIC_171_END:
-    LBEQ IF_NEXT_164
-    LDD #1
+.LOGIC_120_END:
+    LBEQ IF_NEXT_128
+    LDD #3
     STD VAR_NEAR_HS
-    LBRA IF_END_163
-IF_NEXT_164:
-IF_END_163:
-    LBRA IF_END_161
-IF_NEXT_162:
-IF_END_161:
+    LBRA IF_END_127
+IF_NEXT_128:
+IF_END_127:
+    LBRA IF_END_125
+IF_NEXT_126:
+IF_END_125:
     RTS
 
-; Function: check_conservatory_hotspots (Bank #1)
-check_conservatory_hotspots:
+; Function: check_anteroom_hotspots (Bank #1)
+check_anteroom_hotspots:
     LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_CONS_HS_X_DATA  ; Array base
+    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7977,7 +8319,7 @@ check_conservatory_hotspots:
     STD VAR_DX
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #ARRAY_CONS_HS_Y_DATA  ; Array base
+    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -7989,7 +8331,7 @@ check_conservatory_hotspots:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_DY
-    LDX #ARRAY_CONS_HS_W_DATA  ; Array base
+    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -8001,21 +8343,21 @@ check_conservatory_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DX
     TSTA           ; Test sign bit
-    BPL .ABS_40_POS   ; Branch if positive
+    BPL .ABS_24_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_40_POS:
+.ABS_24_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_175_TRUE
+    LBLE .CMP_150_TRUE
     LDD #0
-    LBRA .CMP_175_END
-.CMP_175_TRUE:
+    LBRA .CMP_150_END
+.CMP_150_TRUE:
     LDD #1
-.CMP_175_END:
-    LBEQ .LOGIC_174_FALSE
-    LDX #ARRAY_CONS_HS_H_DATA  ; Array base
+.CMP_150_END:
+    LBEQ .LOGIC_149_FALSE
+    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
@@ -8027,31 +8369,304 @@ check_conservatory_hotspots:
     ; ABS: Absolute value
     LDD >VAR_DY
     TSTA           ; Test sign bit
-    BPL .ABS_41_POS   ; Branch if positive
+    BPL .ABS_25_POS   ; Branch if positive
     COMA           ; Complement A
     COMB           ; Complement B
     ADDD #1        ; Add 1 for two's complement
-.ABS_41_POS:
+.ABS_25_POS:
     STD RESULT
     CMPD TMPVAL
-    LBLE .CMP_176_TRUE
+    LBLE .CMP_151_TRUE
     LDD #0
-    LBRA .CMP_176_END
-.CMP_176_TRUE:
+    LBRA .CMP_151_END
+.CMP_151_TRUE:
     LDD #1
-.CMP_176_END:
-    LBEQ .LOGIC_174_FALSE
+.CMP_151_END:
+    LBEQ .LOGIC_149_FALSE
     LDD #1
-    LBRA .LOGIC_174_END
-.LOGIC_174_FALSE:
+    LBRA .LOGIC_149_END
+.LOGIC_149_FALSE:
     LDD #0
-.LOGIC_174_END:
-    LBEQ IF_NEXT_166
+.LOGIC_149_END:
+    LBEQ IF_NEXT_148
     LDD #0
     STD VAR_NEAR_HS
-    LBRA IF_END_165
-IF_NEXT_166:
-IF_END_165:
+    LBRA IF_END_147
+IF_NEXT_148:
+IF_END_147:
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
+    LDD #1
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
+    LDD #1
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
+    LDD #1
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DX
+    TSTA           ; Test sign bit
+    BPL .ABS_26_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_26_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_153_TRUE
+    LDD #0
+    LBRA .CMP_153_END
+.CMP_153_TRUE:
+    LDD #1
+.CMP_153_END:
+    LBEQ .LOGIC_152_FALSE
+    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
+    LDD #1
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DY
+    TSTA           ; Test sign bit
+    BPL .ABS_27_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_27_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_154_TRUE
+    LDD #0
+    LBRA .CMP_154_END
+.CMP_154_TRUE:
+    LDD #1
+.CMP_154_END:
+    LBEQ .LOGIC_152_FALSE
+    LDD #1
+    LBRA .LOGIC_152_END
+.LOGIC_152_FALSE:
+    LDD #0
+.LOGIC_152_END:
+    LBEQ IF_NEXT_150
+    LDD #1
+    STD VAR_NEAR_HS
+    LBRA IF_END_149
+IF_NEXT_150:
+IF_END_149:
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
+    LDD #2
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
+    LDD #2
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
+    LDD #2
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DX
+    TSTA           ; Test sign bit
+    BPL .ABS_28_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_28_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_156_TRUE
+    LDD #0
+    LBRA .CMP_156_END
+.CMP_156_TRUE:
+    LDD #1
+.CMP_156_END:
+    LBEQ .LOGIC_155_FALSE
+    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
+    LDD #2
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DY
+    TSTA           ; Test sign bit
+    BPL .ABS_29_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_29_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_157_TRUE
+    LDD #0
+    LBRA .CMP_157_END
+.CMP_157_TRUE:
+    LDD #1
+.CMP_157_END:
+    LBEQ .LOGIC_155_FALSE
+    LDD #1
+    LBRA .LOGIC_155_END
+.LOGIC_155_FALSE:
+    LDD #0
+.LOGIC_155_END:
+    LBEQ IF_NEXT_152
+    LDD #2
+    STD VAR_NEAR_HS
+    LBRA IF_END_151
+IF_NEXT_152:
+IF_END_151:
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_ANT_HS_X_DATA  ; Array base
+    LDD #3
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #ARRAY_ANT_HS_Y_DATA  ; Array base
+    LDD #3
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDX #ARRAY_ANT_HS_W_DATA  ; Array base
+    LDD #3
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DX
+    TSTA           ; Test sign bit
+    BPL .ABS_30_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_30_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_159_TRUE
+    LDD #0
+    LBRA .CMP_159_END
+.CMP_159_TRUE:
+    LDD #1
+.CMP_159_END:
+    LBEQ .LOGIC_158_FALSE
+    LDX #ARRAY_ANT_HS_H_DATA  ; Array base
+    LDD #3
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    ; ABS: Absolute value
+    LDD >VAR_DY
+    TSTA           ; Test sign bit
+    BPL .ABS_31_POS   ; Branch if positive
+    COMA           ; Complement A
+    COMB           ; Complement B
+    ADDD #1        ; Add 1 for two's complement
+.ABS_31_POS:
+    STD RESULT
+    CMPD TMPVAL
+    LBLE .CMP_160_TRUE
+    LDD #0
+    LBRA .CMP_160_END
+.CMP_160_TRUE:
+    LDD #1
+.CMP_160_END:
+    LBEQ .LOGIC_158_FALSE
+    LDD #1
+    LBRA .LOGIC_158_END
+.LOGIC_158_FALSE:
+    LDD #0
+.LOGIC_158_END:
+    LBEQ IF_NEXT_154
+    LDD #3
+    STD VAR_NEAR_HS
+    LBRA IF_END_153
+IF_NEXT_154:
+IF_END_153:
     RTS
 
 ; Function: interact_workshop (Bank #1)
@@ -8686,400 +9301,6 @@ IF_END_230:
 IF_END_198:
     RTS
 
-; Function: interact_anteroom (Bank #1)
-interact_anteroom:
-    LDD #0  ; const ANT_HS_DIARY
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_235_TRUE
-    LDD #0
-    LBRA .CMP_235_END
-.CMP_235_TRUE:
-    LDD #1
-.CMP_235_END:
-    LBEQ IF_NEXT_236
-    LDD #0  ; const VERB_EXAMINE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_236_TRUE
-    LDD #0
-    LBRA .CMP_236_END
-.CMP_236_TRUE:
-    LDD #1
-.CMP_236_END:
-    LBEQ IF_NEXT_238
-    LDD #9
-    STD VAR_MSG_ID
-    LDD #140
-    STD VAR_MSG_TIMER
-    LBRA IF_END_237
-IF_NEXT_238:
-    LDD #1  ; const VERB_TAKE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_237_TRUE
-    LDD #0
-    LBRA .CMP_237_END
-.CMP_237_TRUE:
-    LDD #1
-.CMP_237_END:
-    LBEQ IF_NEXT_239
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_237
-IF_NEXT_239:
-    LDD #2  ; const VERB_USE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_238_TRUE
-    LDD #0
-    LBRA .CMP_238_END
-.CMP_238_TRUE:
-    LDD #1
-.CMP_238_END:
-    LBEQ IF_END_237
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_INV_ITEMS_DATA  ; Array base
-    LDD #0  ; const ITEM_LENS
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_239_TRUE
-    LDD #0
-    LBRA .CMP_239_END
-.CMP_239_TRUE:
-    LDD #1
-.CMP_239_END:
-    LBEQ IF_NEXT_241
-    LDD #0  ; const ITEM_LENS
-    STD VAR_ARG0
-    JSR pickup_item
-    LDD #10
-    STD VAR_MSG_ID
-    LDD #160
-    STD VAR_MSG_TIMER
-    LBRA IF_END_240
-IF_NEXT_241:
-    LDD #11
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-IF_END_240:
-    LBRA IF_END_237
-IF_END_237:
-    LBRA IF_END_235
-IF_NEXT_236:
-    LDD #1  ; const ANT_HS_EXIT
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_240_TRUE
-    LDD #0
-    LBRA .CMP_240_END
-.CMP_240_TRUE:
-    LDD #1
-.CMP_240_END:
-    LBEQ IF_NEXT_242
-    LDD #0  ; const VERB_EXAMINE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_241_TRUE
-    LDD #0
-    LBRA .CMP_241_END
-.CMP_241_TRUE:
-    LDD #1
-.CMP_241_END:
-    LBEQ IF_NEXT_244
-    LDD #12
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_243
-IF_NEXT_244:
-    LDD #2  ; const VERB_USE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_242_TRUE
-    LDD #0
-    LBRA .CMP_242_END
-.CMP_242_TRUE:
-    LDD #1
-.CMP_242_END:
-    LBEQ IF_NEXT_245
-    LDD #3  ; const ROOM_WEIGHTS
-    STD VAR_EXIT_ROOM_TARGET
-    LDD #1
-    STD VAR_ROOM_EXIT
-    LDD #60
-    STD VAR_MSG_TIMER
-    LBRA IF_END_243
-IF_NEXT_245:
-    LDD #1  ; const VERB_TAKE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_243_TRUE
-    LDD #0
-    LBRA .CMP_243_END
-.CMP_243_TRUE:
-    LDD #1
-.CMP_243_END:
-    LBEQ IF_END_243
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_243
-IF_END_243:
-    LBRA IF_END_235
-IF_NEXT_242:
-    LDD #2  ; const ANT_HS_SHELF
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_244_TRUE
-    LDD #0
-    LBRA .CMP_244_END
-.CMP_244_TRUE:
-    LDD #1
-.CMP_244_END:
-    LBEQ IF_NEXT_246
-    LDD #0  ; const VERB_EXAMINE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_245_TRUE
-    LDD #0
-    LBRA .CMP_245_END
-.CMP_245_TRUE:
-    LDD #1
-.CMP_245_END:
-    LBEQ IF_NEXT_248
-    LDD #33
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-    LBRA IF_END_247
-IF_NEXT_248:
-    LDD #1  ; const VERB_TAKE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_246_TRUE
-    LDD #0
-    LBRA .CMP_246_END
-.CMP_246_TRUE:
-    LDD #1
-.CMP_246_END:
-    LBEQ IF_NEXT_249
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_INV_ITEMS_DATA  ; Array base
-    LDD #6  ; const ITEM_SHEET
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_247_TRUE
-    LDD #0
-    LBRA .CMP_247_END
-.CMP_247_TRUE:
-    LDD #1
-.CMP_247_END:
-    LBEQ IF_NEXT_251
-    LDD #6  ; const ITEM_SHEET
-    STD VAR_ARG0
-    JSR pickup_item
-    LDD #33
-    STD VAR_MSG_ID
-    LDD #140
-    STD VAR_MSG_TIMER
-    LBRA IF_END_250
-IF_NEXT_251:
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-IF_END_250:
-    LBRA IF_END_247
-IF_NEXT_249:
-    LDD #2  ; const VERB_USE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_248_TRUE
-    LDD #0
-    LBRA .CMP_248_END
-.CMP_248_TRUE:
-    LDD #1
-.CMP_248_END:
-    LBEQ IF_END_247
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_247
-IF_END_247:
-    LBRA IF_END_235
-IF_NEXT_246:
-    LDD #3  ; const ANT_HS_CABINET
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_249_TRUE
-    LDD #0
-    LBRA .CMP_249_END
-.CMP_249_TRUE:
-    LDD #1
-.CMP_249_END:
-    LBEQ IF_END_235
-    LDD #0  ; const VERB_EXAMINE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_250_TRUE
-    LDD #0
-    LBRA .CMP_250_END
-.CMP_250_TRUE:
-    LDD #1
-.CMP_250_END:
-    LBEQ IF_NEXT_253
-    LDD #35
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-    LBRA IF_END_252
-IF_NEXT_253:
-    LDD #2  ; const VERB_USE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_251_TRUE
-    LDD #0
-    LBRA .CMP_251_END
-.CMP_251_TRUE:
-    LDD #1
-.CMP_251_END:
-    LBEQ IF_NEXT_254
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_INV_ITEMS_DATA  ; Array base
-    LDD #2  ; const ITEM_PRISM
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_253_TRUE
-    LDD #0
-    LBRA .CMP_253_END
-.CMP_253_TRUE:
-    LDD #1
-.CMP_253_END:
-    LBEQ .LOGIC_252_FALSE
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_INV_ITEMS_DATA  ; Array base
-    LDD #0  ; const ITEM_LENS
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_254_TRUE
-    LDD #0
-    LBRA .CMP_254_END
-.CMP_254_TRUE:
-    LDD #1
-.CMP_254_END:
-    LBEQ .LOGIC_252_FALSE
-    LDD #1
-    LBRA .LOGIC_252_END
-.LOGIC_252_FALSE:
-    LDD #0
-.LOGIC_252_END:
-    LBEQ IF_NEXT_256
-    LDD #2  ; const ITEM_PRISM
-    STD VAR_ARG0
-    JSR pickup_item
-    LDD #35
-    STD VAR_MSG_ID
-    LDD #160
-    STD VAR_MSG_TIMER
-    LBRA IF_END_255
-IF_NEXT_256:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_INV_ITEMS_DATA  ; Array base
-    LDD #2  ; const ITEM_PRISM
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_255_TRUE
-    LDD #0
-    LBRA .CMP_255_END
-.CMP_255_TRUE:
-    LDD #1
-.CMP_255_END:
-    LBEQ IF_NEXT_257
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_255
-IF_NEXT_257:
-    LDD #22
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-IF_END_255:
-    LBRA IF_END_252
-IF_NEXT_254:
-    LDD #1  ; const VERB_TAKE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_256_TRUE
-    LDD #0
-    LBRA .CMP_256_END
-.CMP_256_TRUE:
-    LDD #1
-.CMP_256_END:
-    LBEQ IF_END_252
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_252
-IF_END_252:
-    LBRA IF_END_235
-IF_END_235:
-    RTS
-
 ; Function: interact_weights (Bank #1)
 interact_weights:
     LDD #0  ; const WGT_HS_PEDESTAL
@@ -9490,867 +9711,579 @@ IF_END_278:
 IF_END_270:
     RTS
 
-; Function: interact_vault (Bank #1)
-interact_vault:
-    LDD #0  ; const VAULT_HS_APPR
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_285_TRUE
-    LDD #0
-    LBRA .CMP_285_END
-.CMP_285_TRUE:
-    LDD #1
-.CMP_285_END:
-    LBEQ IF_NEXT_294
-    LDD #0  ; const VERB_EXAMINE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_286_TRUE
-    LDD #0
-    LBRA .CMP_286_END
-.CMP_286_TRUE:
-    LDD #1
-.CMP_286_END:
-    LBEQ IF_NEXT_296
-    LDD #3  ; const NPC_APPRENTICE
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_NPC_STATE_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #1
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #31
-    STD VAR_MSG_ID
-    LDD #200
-    STD VAR_MSG_TIMER
-    LBRA IF_END_295
-IF_NEXT_296:
-    LDD #2  ; const VERB_USE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_287_TRUE
-    LDD #0
-    LBRA .CMP_287_END
-.CMP_287_TRUE:
-    LDD #1
-.CMP_287_END:
-    LBEQ IF_NEXT_297
-    LDD #39
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-    LBRA IF_END_295
-IF_NEXT_297:
-    LDD #3  ; const VERB_GIVE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_288_TRUE
-    LDD #0
-    LBRA .CMP_288_END
-.CMP_288_TRUE:
-    LDD #1
-.CMP_288_END:
-    LBEQ IF_NEXT_298
-    LDD #1  ; const ITEM_GEAR
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ACTIVE_ITEM
-    CMPD TMPVAL
-    LBEQ .CMP_289_TRUE
-    LDD #0
-    LBRA .CMP_289_END
-.CMP_289_TRUE:
-    LDD #1
-.CMP_289_END:
-    LBEQ IF_NEXT_300
-    LDD #3  ; const NPC_APPRENTICE
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_NPC_STATE_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #2
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #-1
-    STD VAR_ACTIVE_ITEM
-    LDD #32
-    STD VAR_MSG_ID
-    LDD #200
-    STD VAR_MSG_TIMER
-    LBRA IF_END_299
-IF_NEXT_300:
-    LDD #39
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-IF_END_299:
-    LBRA IF_END_295
-IF_NEXT_298:
-    LDD #1  ; const VERB_TAKE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_290_TRUE
-    LDD #0
-    LBRA .CMP_290_END
-.CMP_290_TRUE:
-    LDD #1
-.CMP_290_END:
-    LBEQ IF_END_295
-    LDD #5
-    STD VAR_MSG_ID
+; Function: draw_message (Bank #1)
+draw_message:
+    LDD #7
+    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
+    NEGB            ; B = -n -> TEXT_SCALE_H
+    STB >TEXT_SCALE_H
+    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
+    ASLB            ; n*2
+    ASLB            ; n*4
+    ASLB            ; n*8
+    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
+    STB >TEXT_SCALE_W
+    ; SET_INTENSITY: Set drawing intensity
     LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_295
-IF_END_295:
-    LBRA IF_END_293
-IF_NEXT_294:
-    LDD #1  ; const VAULT_HS_DOOR
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_291_TRUE
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
-    LBRA .CMP_291_END
-.CMP_291_TRUE:
-    LDD #1
-.CMP_291_END:
-    LBEQ IF_END_293
-    LDD #0  ; const VERB_EXAMINE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_292_TRUE
-    LDD #0
-    LBRA .CMP_292_END
-.CMP_292_TRUE:
-    LDD #1
-.CMP_292_END:
-    LBEQ IF_NEXT_302
-    LDD #42
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-    LBRA IF_END_301
-IF_NEXT_302:
-    LDD #2  ; const VERB_USE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_293_TRUE
-    LDD #0
-    LBRA .CMP_293_END
-.CMP_293_TRUE:
-    LDD #1
-.CMP_293_END:
-    LBEQ IF_NEXT_303
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_INV_ITEMS_DATA  ; Array base
-    LDD #7  ; const ITEM_KEY
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_294_TRUE
-    LDD #0
-    LBRA .CMP_294_END
-.CMP_294_TRUE:
-    LDD #1
-.CMP_294_END:
-    LBEQ IF_NEXT_305
-    LDD #7  ; const ITEM_KEY
+    STD RESULT
+    ; PRINT_MSG: Dispatch via ROM message table
+    LDD >VAR_MSG_ID
     STD VAR_ARG0
-    JSR drop_item
-    LDD #-1
-    STD VAR_ACTIVE_ITEM
-    LDD #1
-    STD VAR_ROOM_EXIT
-    LDD >VAR_FLAGS_B
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #16  ; const FL_EXIT_TESTAMENT
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ORA TMPPTR2     ; A OR TMPPTR2+0 (high byte)
-    ORB TMPPTR2+1   ; B OR TMPPTR2+1 (low byte)
-    STD VAR_FLAGS_B
-    LDD #80
-    STD VAR_MSG_TIMER
-    LBRA IF_END_304
-IF_NEXT_305:
-    LDD #42
-    STD VAR_MSG_ID
-    LDD #120
-    STD VAR_MSG_TIMER
-IF_END_304:
-    LBRA IF_END_301
-IF_NEXT_303:
-    LDD #1  ; const VERB_TAKE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_VERB
-    CMPD TMPVAL
-    LBEQ .CMP_295_TRUE
+    JSR PRINT_MSG_DISPATCH
     LDD #0
-    LBRA .CMP_295_END
-.CMP_295_TRUE:
-    LDD #1
-.CMP_295_END:
-    LBEQ IF_END_301
-    LDD #5
-    STD VAR_MSG_ID
-    LDD #100
-    STD VAR_MSG_TIMER
-    LBRA IF_END_301
-IF_END_301:
-    LBRA IF_END_293
-IF_END_293:
+    STD RESULT
     RTS
 
-; Function: draw_room (Bank #1)
-draw_room:
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    ; ===== UPDATE_LEVEL builtin =====
-    JSR UPDATE_LEVEL_RUNTIME
-    LDD #0
-    STD RESULT
-    ; ===== SHOW_LEVEL builtin =====
-    JSR SHOW_LEVEL_RUNTIME
-    LDD #0
-    STD RESULT
-    LDD #0  ; const ROOM_ENTRANCE
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_ROOM
-    CMPD TMPVAL
-    LBEQ .CMP_296_TRUE
-    LDD #0
-    LBRA .CMP_296_END
-.CMP_296_TRUE:
-    LDD #1
-.CMP_296_END:
-    LBEQ IF_NEXT_307
-    LDX #ARRAY_ENT_HS_X_DATA  ; Array base
-    LDD #2  ; const ENT_HS_CARETAKER
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SCROLL_X
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_CARETAKER_SX
-    LDD #-120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CARETAKER_SX
-    CMPD TMPVAL
-    LBGT .CMP_298_TRUE
-    LDD #0
-    LBRA .CMP_298_END
-.CMP_298_TRUE:
-    LDD #1
-.CMP_298_END:
-    LBEQ .LOGIC_297_FALSE
-    LDD #120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CARETAKER_SX
-    CMPD TMPVAL
-    LBLT .CMP_299_TRUE
-    LDD #0
-    LBRA .CMP_299_END
-.CMP_299_TRUE:
-    LDD #1
-.CMP_299_END:
-    LBEQ .LOGIC_297_FALSE
-    LDD #1
-    LBRA .LOGIC_297_END
-.LOGIC_297_FALSE:
-    LDD #0
-.LOGIC_297_END:
-    LBEQ IF_NEXT_309
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_NPC_STATE_DATA  ; Array base
-    LDD #0  ; const NPC_CARETAKER
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBLT .CMP_300_TRUE
-    LDD #0
-    LBRA .CMP_300_END
-.CMP_300_TRUE:
-    LDD #1
-.CMP_300_END:
-    LBEQ IF_NEXT_311
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #90
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    LBRA IF_END_310
-IF_NEXT_311:
-    ; SET_INTENSITY: Set drawing intensity
+; Function: draw_ending (Bank #1)
+draw_ending:
+    LDD #7
+    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
+    NEGB            ; B = -n -> TEXT_SCALE_H
+    STB >TEXT_SCALE_H
+    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
+    ASLB            ; n*2
+    ASLB            ; n*4
+    ASLB            ; n*8
+    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
+    STB >TEXT_SCALE_W
     LDD #50
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-IF_END_310:
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: caretaker (index=1, 7 paths)
-    LDD >VAR_CARETAKER_SX
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-118
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #1        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_308
-IF_NEXT_309:
-IF_END_308:
-    LBRA IF_END_306
-IF_NEXT_307:
-IF_END_306:
-    LDD #1  ; const ROOM_WORKSHOP
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_ROOM
+    LDD >VAR_ENDING_Y
     CMPD TMPVAL
-    LBEQ .CMP_301_TRUE
+    LBLT .CMP_386_TRUE
     LDD #0
-    LBRA .CMP_301_END
-.CMP_301_TRUE:
+    LBRA .CMP_386_END
+.CMP_386_TRUE:
     LDD #1
-.CMP_301_END:
-    LBEQ IF_NEXT_313
-    LDX #ARRAY_CLOCK_HS_X_DATA  ; Array base
-    LDD #3  ; const CLOCK_HS_HANS
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
+.CMP_386_END:
+    LBEQ IF_NEXT_427
+    LDD >VAR_ENDING_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SCROLL_X
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_HANS_SX
-    LDD #-120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_HANS_SX
-    CMPD TMPVAL
-    LBGT .CMP_303_TRUE
-    LDD #0
-    LBRA .CMP_303_END
-.CMP_303_TRUE:
     LDD #1
-.CMP_303_END:
-    LBEQ .LOGIC_302_FALSE
-    LDD #120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_HANS_SX
-    CMPD TMPVAL
-    LBLT .CMP_304_TRUE
-    LDD #0
-    LBRA .CMP_304_END
-.CMP_304_TRUE:
-    LDD #1
-.CMP_304_END:
-    LBEQ .LOGIC_302_FALSE
-    LDD #1
-    LBRA .LOGIC_302_END
-.LOGIC_302_FALSE:
-    LDD #0
-.LOGIC_302_END:
-    LBEQ IF_NEXT_315
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_NPC_STATE_DATA  ; Array base
-    LDD #1  ; const NPC_HANS
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBLT .CMP_305_TRUE
-    LDD #0
-    LBRA .CMP_305_END
-.CMP_305_TRUE:
-    LDD #1
-.CMP_305_END:
-    LBEQ IF_NEXT_317
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #90
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-    LBRA IF_END_316
-IF_NEXT_317:
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #50
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
-IF_END_316:
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: hans_automata (index=10, 8 paths)
-    LDD >VAR_HANS_SX
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-118
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #10        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_314
-IF_NEXT_315:
-IF_END_314:
-    LBRA IF_END_312
-IF_NEXT_313:
-IF_END_312:
-    LDD #3  ; const ROOM_WEIGHTS
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_ROOM
-    CMPD TMPVAL
-    LBEQ .CMP_306_TRUE
-    LDD #0
-    LBRA .CMP_306_END
-.CMP_306_TRUE:
-    LDD #1
-.CMP_306_END:
-    LBEQ IF_NEXT_319
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_INV_WEIGHT
-    CMPD TMPVAL
-    LBGT .CMP_307_TRUE
-    LDD #0
-    LBRA .CMP_307_END
-.CMP_307_TRUE:
-    LDD #1
-.CMP_307_END:
-    LBEQ IF_NEXT_321
-    LDD >VAR_FLAGS_B
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1  ; const FL_PLAT_DOWN
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ORA TMPPTR2     ; A OR TMPPTR2+0 (high byte)
-    ORB TMPPTR2+1   ; B OR TMPPTR2+1 (low byte)
-    STD VAR_FLAGS_B
-    LBRA IF_END_320
-IF_NEXT_321:
-    LDD >VAR_FLAGS_B
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #254
-    STD TMPPTR2     ; Save right operand to TMPPTR2
-    LDD TMPVAL      ; Get left from TMPVAL
-    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
-    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
-    STD VAR_FLAGS_B
-IF_END_320:
-    LDD #280
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SCROLL_X
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_PLAT_SX
-    LDD #-120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAT_SX
-    CMPD TMPVAL
-    LBGT .CMP_309_TRUE
-    LDD #0
-    LBRA .CMP_309_END
-.CMP_309_TRUE:
-    LDD #1
-.CMP_309_END:
-    LBEQ .LOGIC_308_FALSE
-    LDD #120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAT_SX
-    CMPD TMPVAL
-    LBLT .CMP_310_TRUE
-    LDD #0
-    LBRA .CMP_310_END
-.CMP_310_TRUE:
-    LDD #1
-.CMP_310_END:
-    LBEQ .LOGIC_308_FALSE
-    LDD #1
-    LBRA .LOGIC_308_END
-.LOGIC_308_FALSE:
-    LDD #0
-.LOGIC_308_END:
-    LBEQ IF_NEXT_323
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
-    LDD #0
-    STD RESULT
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ENDING_Y
+    LBRA IF_END_426
+IF_NEXT_427:
+IF_END_426:
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_FLAGS_B
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1  ; const FL_PLAT_DOWN
+    LDD #2  ; const FL_ELISA_HELPED
     STD TMPPTR2     ; Save right operand to TMPPTR2
     LDD TMPVAL      ; Get left from TMPVAL
     ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
     ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
     CMPD TMPVAL
-    LBEQ .CMP_311_TRUE
+    LBNE .CMP_388_TRUE
     LDD #0
-    LBRA .CMP_311_END
-.CMP_311_TRUE:
+    LBRA .CMP_388_END
+.CMP_388_TRUE:
     LDD #1
-.CMP_311_END:
-    LBEQ IF_NEXT_325
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: platform_up (index=16, 5 paths)
-    LDD >VAR_PLAT_SX
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-85
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #16        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_324
-IF_NEXT_325:
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: platform_down (index=15, 7 paths)
-    LDD >VAR_PLAT_SX
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-85
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #15        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-IF_END_324:
-    LBRA IF_END_322
-IF_NEXT_323:
-IF_END_322:
-    LBRA IF_END_318
-IF_NEXT_319:
-IF_END_318:
-    LDD #4  ; const ROOM_OPTICS
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_ROOM
-    CMPD TMPVAL
-    LBEQ .CMP_312_TRUE
-    LDD #0
-    LBRA .CMP_312_END
-.CMP_312_TRUE:
-    LDD #1
-.CMP_312_END:
-    LBEQ IF_NEXT_327
+.CMP_388_END:
+    LBEQ .LOGIC_387_FALSE
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FLAGS_A
+    LDD >VAR_FLAGS_B
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #64  ; const FL_OPTICS_SOLVED
+    LDD #4  ; const FL_HANS_HELPED
     STD TMPPTR2     ; Save right operand to TMPPTR2
     LDD TMPVAL      ; Get left from TMPVAL
     ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
     ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
     CMPD TMPVAL
-    LBNE .CMP_313_TRUE
+    LBNE .CMP_389_TRUE
     LDD #0
-    LBRA .CMP_313_END
-.CMP_313_TRUE:
+    LBRA .CMP_389_END
+.CMP_389_TRUE:
     LDD #1
-.CMP_313_END:
-    LBEQ IF_NEXT_329
-    LDD #420
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SCROLL_X
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_COMP_SX
-    LDD #-120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_COMP_SX
-    CMPD TMPVAL
-    LBGT .CMP_315_TRUE
+.CMP_389_END:
+    LBEQ .LOGIC_387_FALSE
+    LDD #1
+    LBRA .LOGIC_387_END
+.LOGIC_387_FALSE:
     LDD #0
-    LBRA .CMP_315_END
-.CMP_315_TRUE:
-    LDD #1
-.CMP_315_END:
-    LBEQ .LOGIC_314_FALSE
-    LDD #120
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_COMP_SX
-    CMPD TMPVAL
-    LBLT .CMP_316_TRUE
-    LDD #0
-    LBRA .CMP_316_END
-.CMP_316_TRUE:
-    LDD #1
-.CMP_316_END:
-    LBEQ .LOGIC_314_FALSE
-    LDD #1
-    LBRA .LOGIC_314_END
-.LOGIC_314_FALSE:
-    LDD #0
-.LOGIC_314_END:
-    LBEQ IF_NEXT_331
+.LOGIC_387_END:
+    LBEQ IF_NEXT_429
     ; SET_INTENSITY: Set drawing intensity
     LDD #110
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: wall_compartment (index=19, 4 paths)
-    LDD >VAR_COMP_SX
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-88
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #19        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #70
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_3688976395448209650      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
-    LBRA IF_END_330
-IF_NEXT_331:
-IF_END_330:
-    LBRA IF_END_328
-IF_NEXT_329:
-IF_END_328:
-    LBRA IF_END_326
-IF_NEXT_327:
-IF_END_326:
-    LDD #5  ; const ROOM_CONSERVATORY
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_ROOM
-    CMPD TMPVAL
-    LBEQ .CMP_317_TRUE
-    LDD #0
-    LBRA .CMP_317_END
-.CMP_317_TRUE:
-    LDD #1
-.CMP_317_END:
-    LBEQ IF_NEXT_333
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_NPC_STATE_DATA  ; Array base
-    LDD #2  ; const NPC_ELISA
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBLT .CMP_318_TRUE
-    LDD #0
-    LBRA .CMP_318_END
-.CMP_318_TRUE:
-    LDD #1
-.CMP_318_END:
-    LBEQ IF_NEXT_335
     ; SET_INTENSITY: Set drawing intensity
-    LDD #80
+    LDD #90
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    LBRA IF_END_334
-IF_NEXT_335:
-    ; SET_INTENSITY: Set drawing intensity
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #50
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_4750152274843692088      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-84
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #30
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_17345789615299082788      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
-IF_END_334:
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: elisa_ghost (index=7, 3 paths)
-    LDD #0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-104
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #7        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_332
-IF_NEXT_333:
-IF_END_332:
-    LDD #6  ; const ROOM_VAULT_CORRIDOR
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_ROOM
-    CMPD TMPVAL
-    LBEQ .CMP_319_TRUE
-    LDD #0
-    LBRA .CMP_319_END
-.CMP_319_TRUE:
-    LDD #1
-.CMP_319_END:
-    LBEQ IF_NEXT_337
     ; SET_INTENSITY: Set drawing intensity
-    LDD #85
+    LDD #70
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: crystal_apprentice (index=4, 7 paths)
-    LDD #-30
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD #-104
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #4        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_336
-IF_NEXT_337:
-IF_END_336:
-    LDD >VAR_PLAYER_X
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SCROLL_X
+    LDD #5
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2502506564742786359      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #15
     STD TMPPTR      ; Save right operand to TMPPTR
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
-    STD VAR_SCREEN_X
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_11654038037461762538      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-63
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #35
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_1863858565675      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-63
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #65
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_71091249681780729      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LBRA IF_END_428
+IF_NEXT_429:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLAGS_B
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #2  ; const FL_ELISA_HELPED
+    STD TMPPTR2     ; Save right operand to TMPPTR2
+    LDD TMPVAL      ; Get left from TMPVAL
+    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)
+    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)
+    CMPD TMPVAL
+    LBNE .CMP_390_TRUE
+    LDD #0
+    LBRA .CMP_390_END
+.CMP_390_TRUE:
+    LDD #1
+.CMP_390_END:
+    LBEQ IF_NEXT_430
     ; SET_INTENSITY: Set drawing intensity
     LDD #110
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: player (index=17, 7 paths)
-    LDD >VAR_SCREEN_X
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_PLAYER_Y
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    LDX #17        ; Asset index for lookup
-    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #70
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_1694552686414567337      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
-    JSR draw_bottom_hud
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #90
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-84
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #50
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_894489252191113018      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #30
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_18135904787860682873      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-56
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #10
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_70966799469806525      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #60
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #15
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_17643359177242884552      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #35
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_679393960477689362      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-70
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #55
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_6586363433779781634      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-56
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #80
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_69586596903166      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LBRA IF_END_428
+IF_NEXT_430:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #110
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-77
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #70
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_15031599020925928582      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #90
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #50
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_8058628335699392711      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #30
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_3134159664534957280      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-84
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #10
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_16762347117432342118      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #60
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-91
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #15
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_17954386693183881976      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-84
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #35
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_6894498445181154440      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-70
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #65
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_3443128850001289426      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+IF_END_428:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #100
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-49
+    STD VAR_ARG0
+    LDD >VAR_ENDING_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #95
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_2376966947138      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LDD #50
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ENDING_Y
+    CMPD TMPVAL
+    LBGE .CMP_391_TRUE
+    LDD #0
+    LBRA .CMP_391_END
+.CMP_391_TRUE:
+    LDD #1
+.CMP_391_END:
+    LBEQ IF_NEXT_432
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #50
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-84
+    STD VAR_ARG0
+    LDD #-90
+    STD VAR_ARG1
+    LDX #PRINT_TEXT_STR_15373067420087200981      ; Pointer to string in helpers bank
+    STX VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BTN1_FIRED
+    CMPD TMPVAL
+    LBEQ .CMP_392_TRUE
+    LDD #0
+    LBRA .CMP_392_END
+.CMP_392_TRUE:
+    LDD #1
+.CMP_392_END:
+    LBEQ IF_NEXT_434
+    LDD #-110
+    STD VAR_ENDING_Y
+    LDD #0  ; const STATE_TITLE
+    STD VAR_SCREEN
+    LDD #1  ; const MUSIC_TITLE
+    STD VAR_CURRENT_MUSIC
+    ; PLAY_MUSIC("intro") - play music asset (index=1)
+    LDX #1        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_433
+IF_NEXT_434:
+IF_END_433:
+    LBRA IF_END_431
+IF_NEXT_432:
+IF_END_431:
     RTS
 
 ;***************************************************************************
@@ -10413,8 +10346,321 @@ _CRYPT_LOGO_VECTORS:  ; Main entry (header + 40 path(s))
     FDB _CRYPT_LOGO_PATH39        ; pointer to path 39
 
 _CRYPT_LOGO_PATH0:    ; Path 0
-    FCB 28              ; path0: intensity
-    FCB $62,$00,0,0        ; path0: header (y=98, x=0)
+    FCB 127              ; path0: intensity
+    FCB $00,$00,0,0        ; path0: header (y=0, x=0)
+    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $EC,$EC,0,0        ; path1: header (y=-20, x=-20)
+    FCB $FF,$13,$F8          ; flag=-1, dy=19, dx=-8
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $FF,$D0,0,0        ; path2: header (y=-1, x=-48)
+    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
+    FCB $FF,$05,$08          ; flag=-1, dy=5, dx=8
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$06,$F8          ; flag=-1, dy=6, dx=-8
+    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
+    FCB $FF,$D8,$00          ; flag=-1, dy=-40, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $0E,$CA,0,0        ; path3: header (y=14, x=-54)
+    FCB $FF,$00,$E9          ; flag=-1, dy=0, dx=-23
+    FCB $FF,$E4,$00          ; flag=-1, dy=-28, dx=0
+    FCB $FF,$00,$17          ; flag=-1, dy=0, dx=23
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
+    FCB $FF,$28,$00          ; flag=-1, dy=40, dx=0
+    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH4:    ; Path 4
+    FCB 70              ; path4: intensity
+    FCB $19,$C5,0,0        ; path4: header (y=25, x=-59)
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH5:    ; Path 5
+    FCB 70              ; path5: intensity
+    FCB $19,$B9,0,0        ; path5: header (y=25, x=-71)
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH6:    ; Path 6
+    FCB 70              ; path6: intensity
+    FCB $23,$B5,0,0        ; path6: header (y=35, x=-75)
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH7:    ; Path 7
+    FCB 70              ; path7: intensity
+    FCB $23,$C7,0,0        ; path7: header (y=35, x=-57)
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH8:    ; Path 8
+    FCB 70              ; path8: intensity
+    FCB $22,$D7,0,0        ; path8: header (y=34, x=-41)
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH9:    ; Path 9
+    FCB 70              ; path9: intensity
+    FCB $23,$D9,0,0        ; path9: header (y=35, x=-39)
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH10:    ; Path 10
+    FCB 70              ; path10: intensity
+    FCB $19,$E1,0,0        ; path10: header (y=25, x=-31)
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH11:    ; Path 11
+    FCB 70              ; path11: intensity
+    FCB $22,$EF,0,0        ; path11: header (y=34, x=-17)
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH12:    ; Path 12
+    FCB 70              ; path12: intensity
+    FCB $1E,$F1,0,0        ; path12: header (y=30, x=-15)
+    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH13:    ; Path 13
+    FCB 70              ; path13: intensity
+    FCB $23,$F1,0,0        ; path13: header (y=35, x=-15)
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH14:    ; Path 14
+    FCB 70              ; path14: intensity
+    FCB $1E,$F1,0,0        ; path14: header (y=30, x=-15)
+    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH15:    ; Path 15
+    FCB 70              ; path15: intensity
+    FCB $19,$F9,0,0        ; path15: header (y=25, x=-7)
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$FB,$03          ; flag=-1, dy=-5, dx=3
+    FCB $FF,$05,$03          ; flag=-1, dy=5, dx=3
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH16:    ; Path 16
+    FCB 70              ; path16: intensity
+    FCB $19,$01,0,0        ; path16: header (y=25, x=1)
+    FCB $FF,$0A,$03          ; flag=-1, dy=10, dx=3
+    FCB $FF,$F6,$03          ; flag=-1, dy=-10, dx=3
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH17:    ; Path 17
+    FCB 70              ; path17: intensity
+    FCB $19,$09,0,0        ; path17: header (y=25, x=9)
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH18:    ; Path 18
+    FCB 70              ; path18: intensity
+    FCB $1E,$09,0,0        ; path18: header (y=30, x=9)
+    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH19:    ; Path 19
+    FCB 70              ; path19: intensity
+    FCB $23,$11,0,0        ; path19: header (y=35, x=17)
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH20:    ; Path 20
+    FCB 70              ; path20: intensity
+    FCB $19,$19,0,0        ; path20: header (y=25, x=25)
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH21:    ; Path 21
+    FCB 70              ; path21: intensity
+    FCB $1A,$24,0,0        ; path21: header (y=26, x=36)
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH22:    ; Path 22
+    FCB 127              ; path22: intensity
+    FCB $14,$36,0,0        ; path22: header (y=20, x=54)
+    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH23:    ; Path 23
+    FCB 70              ; path23: intensity
+    FCB $16,$53,0,0        ; path23: header (y=22, x=83)
+    FCB $FF,$00,$AD          ; sub-seg 1/2 of line 0: dy=0, dx=-83
+    FCB $FF,$00,$AD          ; sub-seg 2/2 of line 0: dy=0, dx=-83
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH24:    ; Path 24
+    FCB 100              ; path24: intensity
+    FCB $E8,$AD,0,0        ; path24: header (y=-24, x=-83)
+    FCB $FF,$00,$53          ; sub-seg 1/2 of line 0: dy=0, dx=83
+    FCB $FF,$00,$53          ; sub-seg 2/2 of line 0: dy=0, dx=83
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH25:    ; Path 25
+    FCB 127              ; path25: intensity
+    FCB $EC,$44,0,0        ; path25: header (y=-20, x=68)
+    FCB $FF,$28,$00          ; flag=-1, dy=40, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH26:    ; Path 26
+    FCB 127              ; path26: intensity
+    FCB $FF,$14,0,0        ; path26: header (y=-1, x=20)
+    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
+    FCB $FF,$05,$08          ; flag=-1, dy=5, dx=8
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$06,$F8          ; flag=-1, dy=6, dx=-8
+    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
+    FCB $FF,$D8,$00          ; flag=-1, dy=-40, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH27:    ; Path 27
+    FCB 80              ; path27: intensity
+    FCB $D8,$00,0,0        ; path27: header (y=-40, x=0)
+    FCB $FF,$FD,$05          ; flag=-1, dy=-3, dx=5
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
+    FCB $FF,$FD,$FB          ; flag=-1, dy=-3, dx=-5
+    FCB $FF,$03,$FB          ; flag=-1, dy=3, dx=-5
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$03,$05          ; flag=-1, dy=3, dx=5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH28:    ; Path 28
+    FCB 80              ; path28: intensity
+    FCB $CD,$00,0,0        ; path28: header (y=-51, x=0)
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH29:    ; Path 29
+    FCB 80              ; path29: intensity
+    FCB $C2,$00,0,0        ; path29: header (y=-62, x=0)
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH30:    ; Path 30
+    FCB 80              ; path30: intensity
+    FCB $C7,$05,0,0        ; path30: header (y=-57, x=5)
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH31:    ; Path 31
+    FCB 127              ; path31: intensity
+    FCB $14,$F2,0,0        ; path31: header (y=20, x=-14)
+    FCB $FF,$EC,$0E          ; flag=-1, dy=-20, dx=14
+    FCB $FF,$14,$0E          ; flag=-1, dy=20, dx=14
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH32:    ; Path 32
+    FCB 70              ; path32: intensity
+    FCB $19,$0E,0,0        ; path32: header (y=25, x=14)
+    FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH33:    ; Path 33
+    FCB 70              ; path33: intensity
+    FCB $1E,$06,0,0        ; path33: header (y=30, x=6)
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH34:    ; Path 34
+    FCB 60              ; path34: intensity
+    FCB $28,$00,0,0        ; path34: header (y=40, x=0)
+    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH35:    ; Path 35
+    FCB 70              ; path35: intensity
+    FCB $2D,$00,0,0        ; path35: header (y=45, x=0)
+    FCB $FF,$FB,$FC          ; flag=-1, dy=-5, dx=-4
+    FCB $FF,$FB,$04          ; flag=-1, dy=-5, dx=4
+    FCB $FF,$05,$04          ; flag=-1, dy=5, dx=4
+    FCB $FF,$05,$FC          ; flag=-1, dy=5, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH36:    ; Path 36
+    FCB 90              ; path36: intensity
+    FCB $4E,$02,0,0        ; path36: header (y=78, x=2)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH37:    ; Path 37
+    FCB 90              ; path37: intensity
+    FCB $4E,$00,0,0        ; path37: header (y=78, x=0)
+    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYPT_LOGO_PATH38:    ; Path 38
+    FCB 28              ; path38: intensity
+    FCB $62,$00,0,0        ; path38: header (y=98, x=0)
     FCB $FF,$FD,$0A          ; flag=-1, dy=-3, dx=10
     FCB $FF,$F9,$08          ; flag=-1, dy=-7, dx=8
     FCB $FF,$F6,$02          ; flag=-1, dy=-10, dx=2
@@ -10429,323 +10675,10 @@ _CRYPT_LOGO_PATH0:    ; Path 0
     FCB $FF,$03,$0A          ; flag=-1, dy=3, dx=10
     FCB 2                ; End marker (path complete)
 
-_CRYPT_LOGO_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $4E,$00,0,0        ; path1: header (y=78, x=0)
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH2:    ; Path 2
-    FCB 90              ; path2: intensity
-    FCB $4E,$00,0,0        ; path2: header (y=78, x=0)
-    FCB $FF,$0C,$F3          ; flag=-1, dy=12, dx=-13
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH3:    ; Path 3
-    FCB 90              ; path3: intensity
-    FCB $50,$00,0,0        ; path3: header (y=80, x=0)
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH4:    ; Path 4
-    FCB 60              ; path4: intensity
-    FCB $3A,$00,0,0        ; path4: header (y=58, x=0)
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH5:    ; Path 5
-    FCB 70              ; path5: intensity
-    FCB $2D,$00,0,0        ; path5: header (y=45, x=0)
-    FCB $FF,$FB,$FC          ; flag=-1, dy=-5, dx=-4
-    FCB $FF,$FB,$04          ; flag=-1, dy=-5, dx=4
-    FCB $FF,$05,$04          ; flag=-1, dy=5, dx=4
-    FCB $FF,$05,$FC          ; flag=-1, dy=5, dx=-4
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH6:    ; Path 6
-    FCB 70              ; path6: intensity
-    FCB $23,$B5,0,0        ; path6: header (y=35, x=-75)
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH7:    ; Path 7
-    FCB 70              ; path7: intensity
-    FCB $23,$B9,0,0        ; path7: header (y=35, x=-71)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH8:    ; Path 8
-    FCB 70              ; path8: intensity
-    FCB $19,$BF,0,0        ; path8: header (y=25, x=-65)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH9:    ; Path 9
-    FCB 70              ; path9: intensity
-    FCB $23,$C7,0,0        ; path9: header (y=35, x=-57)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH10:    ; Path 10
-    FCB 70              ; path10: intensity
-    FCB $22,$D7,0,0        ; path10: header (y=34, x=-41)
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH11:    ; Path 11
-    FCB 70              ; path11: intensity
-    FCB $23,$D9,0,0        ; path11: header (y=35, x=-39)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH12:    ; Path 12
-    FCB 70              ; path12: intensity
-    FCB $23,$E1,0,0        ; path12: header (y=35, x=-31)
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH13:    ; Path 13
-    FCB 70              ; path13: intensity
-    FCB $22,$EF,0,0        ; path13: header (y=34, x=-17)
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH14:    ; Path 14
-    FCB 70              ; path14: intensity
-    FCB $19,$F1,0,0        ; path14: header (y=25, x=-15)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH15:    ; Path 15
-    FCB 70              ; path15: intensity
-    FCB $1E,$F1,0,0        ; path15: header (y=30, x=-15)
-    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH16:    ; Path 16
-    FCB 70              ; path16: intensity
-    FCB $1E,$F1,0,0        ; path16: header (y=30, x=-15)
-    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH17:    ; Path 17
-    FCB 70              ; path17: intensity
-    FCB $19,$F9,0,0        ; path17: header (y=25, x=-7)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$FB,$03          ; flag=-1, dy=-5, dx=3
-    FCB $FF,$05,$03          ; flag=-1, dy=5, dx=3
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH18:    ; Path 18
-    FCB 70              ; path18: intensity
-    FCB $19,$01,0,0        ; path18: header (y=25, x=1)
-    FCB $FF,$0A,$03          ; flag=-1, dy=10, dx=3
-    FCB $FF,$F6,$03          ; flag=-1, dy=-10, dx=3
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH19:    ; Path 19
-    FCB 70              ; path19: intensity
-    FCB $1E,$02,0,0        ; path19: header (y=30, x=2)
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH20:    ; Path 20
-    FCB 70              ; path20: intensity
-    FCB $19,$09,0,0        ; path20: header (y=25, x=9)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH21:    ; Path 21
-    FCB 70              ; path21: intensity
-    FCB $1E,$09,0,0        ; path21: header (y=30, x=9)
-    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH22:    ; Path 22
-    FCB 70              ; path22: intensity
-    FCB $1E,$09,0,0        ; path22: header (y=30, x=9)
-    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH23:    ; Path 23
-    FCB 70              ; path23: intensity
-    FCB $23,$11,0,0        ; path23: header (y=35, x=17)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH24:    ; Path 24
-    FCB 70              ; path24: intensity
-    FCB $19,$19,0,0        ; path24: header (y=25, x=25)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH25:    ; Path 25
-    FCB 70              ; path25: intensity
-    FCB $22,$29,0,0        ; path25: header (y=34, x=41)
-    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH26:    ; Path 26
-    FCB 127              ; path26: intensity
-    FCB $14,$CA,0,0        ; path26: header (y=20, x=-54)
-    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
-    FCB $FF,$D8,$00          ; flag=-1, dy=-40, dx=0
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$E9          ; flag=-1, dy=0, dx=-23
-    FCB $FF,$1C,$00          ; flag=-1, dy=28, dx=0
-    FCB $FF,$00,$17          ; flag=-1, dy=0, dx=23
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH27:    ; Path 27
-    FCB 127              ; path27: intensity
-    FCB $EC,$D0,0,0        ; path27: header (y=-20, x=-48)
-    FCB $FF,$28,$00          ; flag=-1, dy=40, dx=0
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB $FF,$FA,$08          ; flag=-1, dy=-6, dx=8
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$FB,$F8          ; flag=-1, dy=-5, dx=-8
-    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH28:    ; Path 28
-    FCB 127              ; path28: intensity
-    FCB $FF,$E4,0,0        ; path28: header (y=-1, x=-28)
-    FCB $FF,$ED,$08          ; flag=-1, dy=-19, dx=8
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH29:    ; Path 29
-    FCB 127              ; path29: intensity
-    FCB $14,$F2,0,0        ; path29: header (y=20, x=-14)
-    FCB $FF,$EC,$0E          ; flag=-1, dy=-20, dx=14
-    FCB $FF,$14,$0E          ; flag=-1, dy=20, dx=14
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH30:    ; Path 30
-    FCB 127              ; path30: intensity
-    FCB $00,$00,0,0        ; path30: header (y=0, x=0)
-    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH31:    ; Path 31
-    FCB 127              ; path31: intensity
-    FCB $EC,$14,0,0        ; path31: header (y=-20, x=20)
-    FCB $FF,$28,$00          ; flag=-1, dy=40, dx=0
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB $FF,$FA,$08          ; flag=-1, dy=-6, dx=8
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$FB,$F8          ; flag=-1, dy=-5, dx=-8
-    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH32:    ; Path 32
-    FCB 127              ; path32: intensity
-    FCB $14,$36,0,0        ; path32: header (y=20, x=54)
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH33:    ; Path 33
-    FCB 127              ; path33: intensity
-    FCB $14,$44,0,0        ; path33: header (y=20, x=68)
-    FCB $FF,$D8,$00          ; flag=-1, dy=-40, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH34:    ; Path 34
-    FCB 100              ; path34: intensity
-    FCB $E8,$AD,0,0        ; path34: header (y=-24, x=-83)
-    FCB $FF,$00,$53          ; sub-seg 1/2 of line 0: dy=0, dx=83
-    FCB $FF,$00,$53          ; sub-seg 2/2 of line 0: dy=0, dx=83
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH35:    ; Path 35
-    FCB 70              ; path35: intensity
-    FCB $16,$AD,0,0        ; path35: header (y=22, x=-83)
-    FCB $FF,$00,$53          ; sub-seg 1/2 of line 0: dy=0, dx=83
-    FCB $FF,$00,$53          ; sub-seg 2/2 of line 0: dy=0, dx=83
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH36:    ; Path 36
-    FCB 80              ; path36: intensity
-    FCB $D8,$00,0,0        ; path36: header (y=-40, x=0)
-    FCB $FF,$FD,$05          ; flag=-1, dy=-3, dx=5
-    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
-    FCB $FF,$FD,$FB          ; flag=-1, dy=-3, dx=-5
-    FCB $FF,$03,$FB          ; flag=-1, dy=3, dx=-5
-    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
-    FCB $FF,$03,$05          ; flag=-1, dy=3, dx=5
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH37:    ; Path 37
-    FCB 80              ; path37: intensity
-    FCB $CD,$00,0,0        ; path37: header (y=-51, x=0)
-    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYPT_LOGO_PATH38:    ; Path 38
-    FCB 80              ; path38: intensity
-    FCB $C7,$00,0,0        ; path38: header (y=-57, x=0)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB 2                ; End marker (path complete)
-
 _CRYPT_LOGO_PATH39:    ; Path 39
-    FCB 80              ; path39: intensity
-    FCB $C2,$00,0,0        ; path39: header (y=-62, x=0)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB 90              ; path39: intensity
+    FCB $5A,$F3,0,0        ; path39: header (y=90, x=-13)
+    FCB $FF,$F4,$0D          ; flag=-1, dy=-12, dx=13
     FCB 2                ; End marker (path complete)
 
 ; Generated from exploration.vmus (internal name: The Clockmaker's Crypt - Exploration)
@@ -12375,8 +12308,85 @@ _DOOR_LOCKED_VECTORS:  ; Main entry (header + 13 path(s))
     FDB _DOOR_LOCKED_PATH12        ; pointer to path 12
 
 _DOOR_LOCKED_PATH0:    ; Path 0
-    FCB 110              ; path0: intensity
-    FCB $E5,$F5,0,0        ; path0: header (y=-27, x=-11)
+    FCB 100              ; path0: intensity
+    FCB $FB,$00,0,0        ; path0: header (y=-5, x=0)
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $FB,$03,0,0        ; path1: header (y=-5, x=3)
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH2:    ; Path 2
+    FCB 100              ; path2: intensity
+    FCB $F9,$FE,0,0        ; path2: header (y=-7, x=-2)
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH3:    ; Path 3
+    FCB 100              ; path3: intensity
+    FCB $F9,$FB,0,0        ; path3: header (y=-7, x=-5)
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH4:    ; Path 4
+    FCB 120              ; path4: intensity
+    FCB $FB,$F9,0,0        ; path4: header (y=-5, x=-7)
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH5:    ; Path 5
+    FCB 90              ; path5: intensity
+    FCB $03,$F8,0,0        ; path5: header (y=3, x=-8)
+    FCB $FF,$0D,$00          ; flag=-1, dy=13, dx=0
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
+    FCB $FF,$F3,$00          ; flag=-1, dy=-13, dx=0
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH6:    ; Path 6
+    FCB 80              ; path6: intensity
+    FCB $0A,$08,0,0        ; path6: header (y=10, x=8)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH7:    ; Path 7
+    FCB 70              ; path7: intensity
+    FCB $1A,$00,0,0        ; path7: header (y=26, x=0)
+    FCB $FF,$CB,$00          ; flag=-1, dy=-53, dx=0
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH8:    ; Path 8
+    FCB 90              ; path8: intensity
+    FCB $E8,$F8,0,0        ; path8: header (y=-24, x=-8)
+    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
+    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH9:    ; Path 9
+    FCB 110              ; path9: intensity
+    FCB $E5,$F5,0,0        ; path9: header (y=-27, x=-11)
     FCB $FF,$2D,$00          ; flag=-1, dy=45, dx=0
     FCB $FF,$08,$06          ; flag=-1, dy=8, dx=6
     FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
@@ -12385,94 +12395,9 @@ _DOOR_LOCKED_PATH0:    ; Path 0
     FCB $FF,$00,$EA          ; flag=-1, dy=0, dx=-22
     FCB 2                ; End marker (path complete)
 
-_DOOR_LOCKED_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $03,$F8,0,0        ; path1: header (y=3, x=-8)
-    FCB $FF,$0D,$00          ; flag=-1, dy=13, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$F3,$00          ; flag=-1, dy=-13, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH2:    ; Path 2
-    FCB 90              ; path2: intensity
-    FCB $E8,$F8,0,0        ; path2: header (y=-24, x=-8)
-    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH3:    ; Path 3
-    FCB 70              ; path3: intensity
-    FCB $E5,$00,0,0        ; path3: header (y=-27, x=0)
-    FCB $FF,$35,$00          ; flag=-1, dy=53, dx=0
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH4:    ; Path 4
-    FCB 80              ; path4: intensity
-    FCB $0D,$08,0,0        ; path4: header (y=13, x=8)
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH5:    ; Path 5
-    FCB 80              ; path5: intensity
-    FCB $EF,$08,0,0        ; path5: header (y=-17, x=8)
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH6:    ; Path 6
-    FCB 120              ; path6: intensity
-    FCB $FB,$F9,0,0        ; path6: header (y=-5, x=-7)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH7:    ; Path 7
-    FCB 100              ; path7: intensity
-    FCB $F9,$FB,0,0        ; path7: header (y=-7, x=-5)
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH8:    ; Path 8
-    FCB 100              ; path8: intensity
-    FCB $F9,$FE,0,0        ; path8: header (y=-7, x=-2)
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH9:    ; Path 9
-    FCB 100              ; path9: intensity
-    FCB $F9,$01,0,0        ; path9: header (y=-7, x=1)
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB 2                ; End marker (path complete)
-
 _DOOR_LOCKED_PATH10:    ; Path 10
-    FCB 100              ; path10: intensity
-    FCB $F9,$04,0,0        ; path10: header (y=-7, x=4)
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB 2                ; End marker (path complete)
-
-_DOOR_LOCKED_PATH11:    ; Path 11
-    FCB 110              ; path11: intensity
-    FCB $F0,$00,0,0        ; path11: header (y=-16, x=0)
+    FCB 110              ; path10: intensity
+    FCB $F0,$00,0,0        ; path10: header (y=-16, x=0)
     FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
     FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
     FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
@@ -12480,13 +12405,21 @@ _DOOR_LOCKED_PATH11:    ; Path 11
     FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
     FCB 2                ; End marker (path complete)
 
-_DOOR_LOCKED_PATH12:    ; Path 12
-    FCB 110              ; path12: intensity
-    FCB $F0,$00,0,0        ; path12: header (y=-16, x=0)
+_DOOR_LOCKED_PATH11:    ; Path 11
+    FCB 110              ; path11: intensity
+    FCB $F0,$00,0,0        ; path11: header (y=-16, x=0)
     FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
     FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
     FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
     FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_DOOR_LOCKED_PATH12:    ; Path 12
+    FCB 80              ; path12: intensity
+    FCB $EF,$08,0,0        ; path12: header (y=-17, x=8)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 ; Generated from painting.vec (Malban Draw_Sync_List format)
@@ -12515,58 +12448,27 @@ _PAINTING_VECTORS:  ; Main entry (header + 10 path(s))
     FDB _PAINTING_PATH9        ; pointer to path 9
 
 _PAINTING_PATH0:    ; Path 0
-    FCB 110              ; path0: intensity
-    FCB $10,$F2,0,0        ; path0: header (y=16, x=-14)
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB $FF,$E0,$00          ; flag=-1, dy=-32, dx=0
-    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
-    FCB $FF,$20,$00          ; flag=-1, dy=32, dx=0
+    FCB 80              ; path0: intensity
+    FCB $03,$FE,0,0        ; path0: header (y=3, x=-2)
+    FCB $FF,$00,$FF          ; flag=-1, dy=0, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PAINTING_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $0D,$F5,0,0        ; path1: header (y=13, x=-11)
-    FCB $FF,$00,$16          ; flag=-1, dy=0, dx=22
-    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
-    FCB $FF,$00,$EA          ; flag=-1, dy=0, dx=-22
-    FCB $FF,$1A,$00          ; flag=-1, dy=26, dx=0
+    FCB 80              ; path1: intensity
+    FCB $03,$02,0,0        ; path1: header (y=3, x=2)
+    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
     FCB 2                ; End marker (path complete)
 
 _PAINTING_PATH2:    ; Path 2
-    FCB 100              ; path2: intensity
-    FCB $10,$F2,0,0        ; path2: header (y=16, x=-14)
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 70              ; path2: intensity
+    FCB $FE,$04,0,0        ; path2: header (y=-2, x=4)
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
     FCB 2                ; End marker (path complete)
 
 _PAINTING_PATH3:    ; Path 3
-    FCB 100              ; path3: intensity
-    FCB $10,$0E,0,0        ; path3: header (y=16, x=14)
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PAINTING_PATH4:    ; Path 4
-    FCB 100              ; path4: intensity
-    FCB $F0,$F2,0,0        ; path4: header (y=-16, x=-14)
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_PAINTING_PATH5:    ; Path 5
-    FCB 100              ; path5: intensity
-    FCB $F0,$0E,0,0        ; path5: header (y=-16, x=14)
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PAINTING_PATH6:    ; Path 6
-    FCB 70              ; path6: intensity
-    FCB $0A,$FA,0,0        ; path6: header (y=10, x=-6)
+    FCB 70              ; path3: intensity
+    FCB $0A,$FA,0,0        ; path3: header (y=10, x=-6)
     FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB $FF,$FA,$02          ; flag=-1, dy=-6, dx=2
     FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
@@ -12577,23 +12479,54 @@ _PAINTING_PATH6:    ; Path 6
     FCB $FF,$06,$02          ; flag=-1, dy=6, dx=2
     FCB 2                ; End marker (path complete)
 
+_PAINTING_PATH4:    ; Path 4
+    FCB 90              ; path4: intensity
+    FCB $0D,$F5,0,0        ; path4: header (y=13, x=-11)
+    FCB $FF,$00,$16          ; flag=-1, dy=0, dx=22
+    FCB $FF,$E6,$00          ; flag=-1, dy=-26, dx=0
+    FCB $FF,$00,$EA          ; flag=-1, dy=0, dx=-22
+    FCB $FF,$1A,$00          ; flag=-1, dy=26, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PAINTING_PATH5:    ; Path 5
+    FCB 110              ; path5: intensity
+    FCB $10,$F2,0,0        ; path5: header (y=16, x=-14)
+    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
+    FCB $FF,$E0,$00          ; flag=-1, dy=-32, dx=0
+    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
+    FCB $FF,$20,$00          ; flag=-1, dy=32, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PAINTING_PATH6:    ; Path 6
+    FCB 100              ; path6: intensity
+    FCB $10,$F2,0,0        ; path6: header (y=16, x=-14)
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
 _PAINTING_PATH7:    ; Path 7
-    FCB 80              ; path7: intensity
-    FCB $03,$FD,0,0        ; path7: header (y=3, x=-3)
-    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB 100              ; path7: intensity
+    FCB $10,$0E,0,0        ; path7: header (y=16, x=14)
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
     FCB 2                ; End marker (path complete)
 
 _PAINTING_PATH8:    ; Path 8
-    FCB 80              ; path8: intensity
-    FCB $03,$02,0,0        ; path8: header (y=3, x=2)
-    FCB $FF,$00,$01          ; flag=-1, dy=0, dx=1
+    FCB 100              ; path8: intensity
+    FCB $F0,$0E,0,0        ; path8: header (y=-16, x=14)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
     FCB 2                ; End marker (path complete)
 
 _PAINTING_PATH9:    ; Path 9
-    FCB 70              ; path9: intensity
-    FCB $FE,$FC,0,0        ; path9: header (y=-2, x=-4)
-    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
-    FCB $FF,$02,$04          ; flag=-1, dy=2, dx=4
+    FCB 100              ; path9: intensity
+    FCB $F0,$F2,0,0        ; path9: header (y=-16, x=-14)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
     FCB 2                ; End marker (path complete)
 
 ; Generated from vault_corridor.vec (Malban Draw_Sync_List format)
@@ -12624,91 +12557,91 @@ _VAULT_CORRIDOR_VECTORS:  ; Main entry (header + 12 path(s))
     FDB _VAULT_CORRIDOR_PATH11        ; pointer to path 11
 
 _VAULT_CORRIDOR_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $BF,$A6,0,0        ; path0: header (y=-65, x=-90)
-    FCB $FF,$4B,$00          ; sub-seg 1/2 of line 0: dy=75, dx=0
-    FCB $FF,$4B,$00          ; sub-seg 2/2 of line 0: dy=75, dx=0
+    FCB 110              ; path0: intensity
+    FCB $00,$42,0,0        ; path0: header (y=0, x=66)
+    FCB $FF,$F8,$FC          ; flag=-1, dy=-8, dx=-4
+    FCB $FF,$F8,$04          ; flag=-1, dy=-8, dx=4
+    FCB $FF,$FC,$08          ; flag=-1, dy=-4, dx=8
+    FCB $FF,$04,$08          ; flag=-1, dy=4, dx=8
+    FCB $FF,$08,$04          ; flag=-1, dy=8, dx=4
+    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
+    FCB $FF,$04,$F8          ; flag=-1, dy=4, dx=-8
+    FCB $FF,$FC,$F8          ; flag=-1, dy=-4, dx=-8
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $BF,$5A,0,0        ; path1: header (y=-65, x=90)
+    FCB 60              ; path1: intensity
+    FCB $F8,$4E,0,0        ; path1: header (y=-8, x=78)
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 2                ; End marker (path complete)
+
+_VAULT_CORRIDOR_PATH2:    ; Path 2
+    FCB 60              ; path2: intensity
+    FCB $DC,$5A,0,0        ; path2: header (y=-36, x=90)
+    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
+    FCB 2                ; End marker (path complete)
+
+_VAULT_CORRIDOR_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $BF,$5A,0,0        ; path3: header (y=-65, x=90)
     FCB $FF,$4B,$00          ; sub-seg 1/2 of line 0: dy=75, dx=0
     FCB $FF,$4B,$00          ; sub-seg 2/2 of line 0: dy=75, dx=0
     FCB 2                ; End marker (path complete)
 
-_VAULT_CORRIDOR_PATH2:    ; Path 2
-    FCB 100              ; path2: intensity
-    FCB $BF,$A6,0,0        ; path2: header (y=-65, x=-90)
-    FCB $FF,$00,$5A          ; sub-seg 1/2 of line 0: dy=0, dx=90
-    FCB $FF,$00,$5A          ; sub-seg 2/2 of line 0: dy=0, dx=90
-    FCB 2                ; End marker (path complete)
-
-_VAULT_CORRIDOR_PATH3:    ; Path 3
-    FCB 80              ; path3: intensity
-    FCB $55,$A6,0,0        ; path3: header (y=85, x=-90)
-    FCB $FF,$00,$5A          ; sub-seg 1/2 of line 0: dy=0, dx=90
-    FCB $FF,$00,$5A          ; sub-seg 2/2 of line 0: dy=0, dx=90
-    FCB 2                ; End marker (path complete)
-
 _VAULT_CORRIDOR_PATH4:    ; Path 4
-    FCB 60              ; path4: intensity
-    FCB $16,$A6,0,0        ; path4: header (y=22, x=-90)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 80              ; path4: intensity
+    FCB $55,$5A,0,0        ; path4: header (y=85, x=90)
+    FCB $FF,$00,$A6          ; sub-seg 1/2 of line 0: dy=0, dx=-90
+    FCB $FF,$00,$A6          ; sub-seg 2/2 of line 0: dy=0, dx=-90
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH5:    ; Path 5
-    FCB 60              ; path5: intensity
-    FCB $F8,$A6,0,0        ; path5: header (y=-8, x=-90)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 127              ; path5: intensity
+    FCB $55,$A6,0,0        ; path5: header (y=85, x=-90)
+    FCB $FF,$B5,$00          ; sub-seg 1/2 of line 0: dy=-75, dx=0
+    FCB $FF,$B5,$00          ; sub-seg 2/2 of line 0: dy=-75, dx=0
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH6:    ; Path 6
-    FCB 60              ; path6: intensity
-    FCB $DC,$A6,0,0        ; path6: header (y=-36, x=-90)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 100              ; path6: intensity
+    FCB $BF,$A6,0,0        ; path6: header (y=-65, x=-90)
+    FCB $FF,$00,$5A          ; sub-seg 1/2 of line 0: dy=0, dx=90
+    FCB $FF,$00,$5A          ; sub-seg 2/2 of line 0: dy=0, dx=90
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH7:    ; Path 7
-    FCB 60              ; path7: intensity
-    FCB $16,$4E,0,0        ; path7: header (y=22, x=78)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 127              ; path7: intensity
+    FCB $BF,$5A,0,0        ; path7: header (y=-65, x=90)
+    FCB $FF,$2F,$00          ; flag=-1, dy=47, dx=0
+    FCB $FF,$15,$FC          ; flag=-1, dy=21, dx=-4
+    FCB $FF,$11,$F4          ; flag=-1, dy=17, dx=-12
+    FCB $FF,$EF,$F4          ; flag=-1, dy=-17, dx=-12
+    FCB $FF,$EB,$FC          ; flag=-1, dy=-21, dx=-4
+    FCB $FF,$D1,$00          ; flag=-1, dy=-47, dx=0
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH8:    ; Path 8
     FCB 60              ; path8: intensity
-    FCB $F8,$4E,0,0        ; path8: header (y=-8, x=78)
+    FCB $16,$4E,0,0        ; path8: header (y=22, x=78)
     FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH9:    ; Path 9
     FCB 60              ; path9: intensity
-    FCB $DC,$4E,0,0        ; path9: header (y=-36, x=78)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB $16,$B2,0,0        ; path9: header (y=22, x=-78)
+    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH10:    ; Path 10
-    FCB 127              ; path10: intensity
-    FCB $BF,$3A,0,0        ; path10: header (y=-65, x=58)
-    FCB $FF,$2F,$00          ; flag=-1, dy=47, dx=0
-    FCB $FF,$15,$04          ; flag=-1, dy=21, dx=4
-    FCB $FF,$11,$0C          ; flag=-1, dy=17, dx=12
-    FCB $FF,$EF,$0C          ; flag=-1, dy=-17, dx=12
-    FCB $FF,$EB,$04          ; flag=-1, dy=-21, dx=4
-    FCB $FF,$D1,$00          ; flag=-1, dy=-47, dx=0
+    FCB 60              ; path10: intensity
+    FCB $F8,$A6,0,0        ; path10: header (y=-8, x=-90)
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
     FCB 2                ; End marker (path complete)
 
 _VAULT_CORRIDOR_PATH11:    ; Path 11
-    FCB 110              ; path11: intensity
-    FCB $04,$4A,0,0        ; path11: header (y=4, x=74)
-    FCB $FF,$FC,$08          ; flag=-1, dy=-4, dx=8
-    FCB $FF,$F8,$04          ; flag=-1, dy=-8, dx=4
-    FCB $FF,$F8,$FC          ; flag=-1, dy=-8, dx=-4
-    FCB $FF,$FC,$F8          ; flag=-1, dy=-4, dx=-8
-    FCB $FF,$04,$F8          ; flag=-1, dy=4, dx=-8
-    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
-    FCB $FF,$08,$04          ; flag=-1, dy=8, dx=4
-    FCB $FF,$04,$08          ; flag=-1, dy=4, dx=8
+    FCB 60              ; path11: intensity
+    FCB $DC,$B2,0,0        ; path11: header (y=-36, x=-78)
+    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
     FCB 2                ; End marker (path complete)
 
 ; Generated from conservatory.vec (Malban Draw_Sync_List format)
@@ -12737,47 +12670,16 @@ _CONSERVATORY_VECTORS:  ; Main entry (header + 10 path(s))
     FDB _CONSERVATORY_PATH9        ; pointer to path 9
 
 _CONSERVATORY_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $C4,$88,0,0        ; path0: header (y=-60, x=-120)
-    FCB $FF,$00,$78          ; sub-seg 1/2 of line 0: dy=0, dx=120
-    FCB $FF,$00,$78          ; sub-seg 2/2 of line 0: dy=0, dx=120
+    FCB 90              ; path0: intensity
+    FCB $DD,$18,0,0        ; path0: header (y=-35, x=24)
+    FCB $FF,$11,$F0          ; flag=-1, dy=17, dx=-16
+    FCB $FF,$FE,$E0          ; flag=-1, dy=-2, dx=-32
+    FCB $FF,$F1,$F8          ; flag=-1, dy=-15, dx=-8
     FCB 2                ; End marker (path complete)
 
 _CONSERVATORY_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $C4,$A6,0,0        ; path1: header (y=-60, x=-90)
-    FCB $FF,$4B,$00          ; flag=-1, dy=75, dx=0
-    FCB $FF,$28,$14          ; flag=-1, dy=40, dx=20
-    FCB $FF,$D8,$14          ; flag=-1, dy=-40, dx=20
-    FCB $FF,$B5,$00          ; flag=-1, dy=-75, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CONSERVATORY_PATH2:    ; Path 2
-    FCB 80              ; path2: intensity
-    FCB $0F,$AC,0,0        ; path2: header (y=15, x=-84)
-    FCB $FF,$1F,$0E          ; flag=-1, dy=31, dx=14
-    FCB $FF,$E1,$0E          ; flag=-1, dy=-31, dx=14
-    FCB 2                ; End marker (path complete)
-
-_CONSERVATORY_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $C4,$32,0,0        ; path3: header (y=-60, x=50)
-    FCB $FF,$4B,$00          ; flag=-1, dy=75, dx=0
-    FCB $FF,$28,$14          ; flag=-1, dy=40, dx=20
-    FCB $FF,$D8,$14          ; flag=-1, dy=-40, dx=20
-    FCB $FF,$B5,$00          ; flag=-1, dy=-75, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CONSERVATORY_PATH4:    ; Path 4
-    FCB 80              ; path4: intensity
-    FCB $0F,$38,0,0        ; path4: header (y=15, x=56)
-    FCB $FF,$1F,$0E          ; flag=-1, dy=31, dx=14
-    FCB $FF,$E1,$0E          ; flag=-1, dy=-31, dx=14
-    FCB 2                ; End marker (path complete)
-
-_CONSERVATORY_PATH5:    ; Path 5
-    FCB 110              ; path5: intensity
-    FCB $DD,$E0,0,0        ; path5: header (y=-35, x=-32)
+    FCB 110              ; path1: intensity
+    FCB $DD,$E0,0,0        ; path1: header (y=-35, x=-32)
     FCB $FF,$00,$38          ; flag=-1, dy=0, dx=56
     FCB $FF,$F7,$0E          ; flag=-1, dy=-9, dx=14
     FCB $FF,$F5,$FA          ; flag=-1, dy=-11, dx=-6
@@ -12785,30 +12687,61 @@ _CONSERVATORY_PATH5:    ; Path 5
     FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
     FCB 2                ; End marker (path complete)
 
-_CONSERVATORY_PATH6:    ; Path 6
-    FCB 90              ; path6: intensity
-    FCB $DD,$E0,0,0        ; path6: header (y=-35, x=-32)
-    FCB $FF,$0F,$08          ; flag=-1, dy=15, dx=8
-    FCB $FF,$02,$20          ; flag=-1, dy=2, dx=32
-    FCB $FF,$EF,$10          ; flag=-1, dy=-17, dx=16
-    FCB 2                ; End marker (path complete)
-
-_CONSERVATORY_PATH7:    ; Path 7
-    FCB 64              ; path7: intensity
-    FCB $D2,$E4,0,0        ; path7: header (y=-46, x=-28)
-    FCB $FF,$00,$38          ; flag=-1, dy=0, dx=56
-    FCB 2                ; End marker (path complete)
-
-_CONSERVATORY_PATH8:    ; Path 8
-    FCB 90              ; path8: intensity
-    FCB $C9,$E4,0,0        ; path8: header (y=-55, x=-28)
+_CONSERVATORY_PATH2:    ; Path 2
+    FCB 90              ; path2: intensity
+    FCB $C9,$E4,0,0        ; path2: header (y=-55, x=-28)
     FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
     FCB 2                ; End marker (path complete)
 
-_CONSERVATORY_PATH9:    ; Path 9
-    FCB 90              ; path9: intensity
-    FCB $C9,$1C,0,0        ; path9: header (y=-55, x=28)
+_CONSERVATORY_PATH3:    ; Path 3
+    FCB 64              ; path3: intensity
+    FCB $D2,$E4,0,0        ; path3: header (y=-46, x=-28)
+    FCB $FF,$00,$38          ; flag=-1, dy=0, dx=56
+    FCB 2                ; End marker (path complete)
+
+_CONSERVATORY_PATH4:    ; Path 4
+    FCB 90              ; path4: intensity
+    FCB $C9,$1C,0,0        ; path4: header (y=-55, x=28)
     FCB $FF,$FB,$03          ; flag=-1, dy=-5, dx=3
+    FCB 2                ; End marker (path complete)
+
+_CONSERVATORY_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $C4,$32,0,0        ; path5: header (y=-60, x=50)
+    FCB $FF,$4B,$00          ; flag=-1, dy=75, dx=0
+    FCB $FF,$28,$14          ; flag=-1, dy=40, dx=20
+    FCB $FF,$D8,$14          ; flag=-1, dy=-40, dx=20
+    FCB $FF,$B5,$00          ; flag=-1, dy=-75, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CONSERVATORY_PATH6:    ; Path 6
+    FCB 100              ; path6: intensity
+    FCB $C4,$78,0,0        ; path6: header (y=-60, x=120)
+    FCB $FF,$00,$88          ; sub-seg 1/2 of line 0: dy=0, dx=-120
+    FCB $FF,$00,$88          ; sub-seg 2/2 of line 0: dy=0, dx=-120
+    FCB 2                ; End marker (path complete)
+
+_CONSERVATORY_PATH7:    ; Path 7
+    FCB 127              ; path7: intensity
+    FCB $C4,$A6,0,0        ; path7: header (y=-60, x=-90)
+    FCB $FF,$4B,$00          ; flag=-1, dy=75, dx=0
+    FCB $FF,$28,$14          ; flag=-1, dy=40, dx=20
+    FCB $FF,$D8,$14          ; flag=-1, dy=-40, dx=20
+    FCB $FF,$B5,$00          ; flag=-1, dy=-75, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CONSERVATORY_PATH8:    ; Path 8
+    FCB 80              ; path8: intensity
+    FCB $0F,$C8,0,0        ; path8: header (y=15, x=-56)
+    FCB $FF,$1F,$F2          ; flag=-1, dy=31, dx=-14
+    FCB $FF,$E1,$F2          ; flag=-1, dy=-31, dx=-14
+    FCB 2                ; End marker (path complete)
+
+_CONSERVATORY_PATH9:    ; Path 9
+    FCB 80              ; path9: intensity
+    FCB $0F,$38,0,0        ; path9: header (y=15, x=56)
+    FCB $FF,$1F,$0E          ; flag=-1, dy=31, dx=14
+    FCB $FF,$E1,$0E          ; flag=-1, dy=-31, dx=14
     FCB 2                ; End marker (path complete)
 
 ; Generated from crystal_apprentice.vec (Malban Draw_Sync_List format)
@@ -12834,38 +12767,23 @@ _CRYSTAL_APPRENTICE_VECTORS:  ; Main entry (header + 7 path(s))
     FDB _CRYSTAL_APPRENTICE_PATH6        ; pointer to path 6
 
 _CRYSTAL_APPRENTICE_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $EE,$F2,0,0        ; path0: header (y=-18, x=-14)
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYSTAL_APPRENTICE_PATH1:    ; Path 1
-    FCB 110              ; path1: intensity
-    FCB $F6,$F7,0,0        ; path1: header (y=-10, x=-9)
-    FCB $FF,$00,$12          ; flag=-1, dy=0, dx=18
-    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
-    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
-    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CRYSTAL_APPRENTICE_PATH2:    ; Path 2
-    FCB 80              ; path2: intensity
-    FCB $FE,$F8,0,0        ; path2: header (y=-2, x=-8)
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB 2                ; End marker (path complete)
-
-_CRYSTAL_APPRENTICE_PATH3:    ; Path 3
-    FCB 90              ; path3: intensity
-    FCB $04,$FD,0,0        ; path3: header (y=4, x=-3)
+    FCB 90              ; path0: intensity
+    FCB $04,$FD,0,0        ; path0: header (y=4, x=-3)
     FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
     FCB 2                ; End marker (path complete)
 
-_CRYSTAL_APPRENTICE_PATH4:    ; Path 4
-    FCB 110              ; path4: intensity
-    FCB $10,$00,0,0        ; path4: header (y=16, x=0)
+_CRYSTAL_APPRENTICE_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $0A,$04,0,0        ; path1: header (y=10, x=4)
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB 2                ; End marker (path complete)
+
+_CRYSTAL_APPRENTICE_PATH2:    ; Path 2
+    FCB 110              ; path2: intensity
+    FCB $10,$00,0,0        ; path2: header (y=16, x=0)
     FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
     FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
     FCB $FF,$FC,$FF          ; flag=-1, dy=-4, dx=-1
@@ -12876,22 +12794,37 @@ _CRYSTAL_APPRENTICE_PATH4:    ; Path 4
     FCB $FF,$02,$05          ; flag=-1, dy=2, dx=5
     FCB 2                ; End marker (path complete)
 
-_CRYSTAL_APPRENTICE_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $0A,$FC,0,0        ; path5: header (y=10, x=-4)
+_CRYSTAL_APPRENTICE_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $0B,$FA,0,0        ; path3: header (y=11, x=-6)
     FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
-    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
-    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
     FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_CRYSTAL_APPRENTICE_PATH4:    ; Path 4
+    FCB 110              ; path4: intensity
+    FCB $04,$F7,0,0        ; path4: header (y=4, x=-9)
+    FCB $FF,$00,$12          ; flag=-1, dy=0, dx=18
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CRYSTAL_APPRENTICE_PATH5:    ; Path 5
+    FCB 100              ; path5: intensity
+    FCB $F6,$F2,0,0        ; path5: header (y=-10, x=-14)
+    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB 2                ; End marker (path complete)
 
 _CRYSTAL_APPRENTICE_PATH6:    ; Path 6
-    FCB 127              ; path6: intensity
-    FCB $0A,$04,0,0        ; path6: header (y=10, x=4)
-    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
-    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
-    FCB $FF,$FF,$FE          ; flag=-1, dy=-1, dx=-2
-    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB 80              ; path6: intensity
+    FCB $FE,$F8,0,0        ; path6: header (y=-2, x=-8)
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
     FCB 2                ; End marker (path complete)
 
 ; ==== Level: CONSERVATORY ====
@@ -13222,63 +13155,63 @@ _HANS_AUTOMATA_VECTORS:  ; Main entry (header + 8 path(s))
     FDB _HANS_AUTOMATA_PATH7        ; pointer to path 7
 
 _HANS_AUTOMATA_PATH0:    ; Path 0
-    FCB 110              ; path0: intensity
-    FCB $FA,$F9,0,0        ; path0: header (y=-6, x=-7)
+    FCB 85              ; path0: intensity
+    FCB $01,$FA,0,0        ; path0: header (y=1, x=-6)
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 2                ; End marker (path complete)
+
+_HANS_AUTOMATA_PATH1:    ; Path 1
+    FCB 100              ; path1: intensity
+    FCB $03,$07,0,0        ; path1: header (y=3, x=7)
+    FCB $FF,$FC,$04          ; flag=-1, dy=-4, dx=4
+    FCB 2                ; End marker (path complete)
+
+_HANS_AUTOMATA_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $FD,$06,0,0        ; path2: header (y=-3, x=6)
+    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
+    FCB 2                ; End marker (path complete)
+
+_HANS_AUTOMATA_PATH3:    ; Path 3
+    FCB 110              ; path3: intensity
+    FCB $FA,$F9,0,0        ; path3: header (y=-6, x=-7)
     FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
     FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
     FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
     FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
     FCB 2                ; End marker (path complete)
 
-_HANS_AUTOMATA_PATH1:    ; Path 1
-    FCB 110              ; path1: intensity
-    FCB $06,$FC,0,0        ; path1: header (y=6, x=-4)
+_HANS_AUTOMATA_PATH4:    ; Path 4
+    FCB 110              ; path4: intensity
+    FCB $06,$FC,0,0        ; path4: header (y=6, x=-4)
     FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
     FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
     FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
     FCB 2                ; End marker (path complete)
 
-_HANS_AUTOMATA_PATH2:    ; Path 2
-    FCB 100              ; path2: intensity
-    FCB $03,$F9,0,0        ; path2: header (y=3, x=-7)
+_HANS_AUTOMATA_PATH5:    ; Path 5
+    FCB 100              ; path5: intensity
+    FCB $03,$F9,0,0        ; path5: header (y=3, x=-7)
     FCB $FF,$FC,$FC          ; flag=-1, dy=-4, dx=-4
     FCB 2                ; End marker (path complete)
 
-_HANS_AUTOMATA_PATH3:    ; Path 3
-    FCB 100              ; path3: intensity
-    FCB $03,$07,0,0        ; path3: header (y=3, x=7)
-    FCB $FF,$FC,$04          ; flag=-1, dy=-4, dx=4
-    FCB 2                ; End marker (path complete)
-
-_HANS_AUTOMATA_PATH4:    ; Path 4
-    FCB 90              ; path4: intensity
-    FCB $F8,$FA,0,0        ; path4: header (y=-8, x=-6)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_HANS_AUTOMATA_PATH5:    ; Path 5
-    FCB 90              ; path5: intensity
-    FCB $F8,$02,0,0        ; path5: header (y=-8, x=2)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
-    FCB 2                ; End marker (path complete)
-
 _HANS_AUTOMATA_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $01,$FA,0,0        ; path6: header (y=1, x=-6)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 90              ; path6: intensity
+    FCB $F8,$FA,0,0        ; path6: header (y=-8, x=-6)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
     FCB 2                ; End marker (path complete)
 
 _HANS_AUTOMATA_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $FD,$FA,0,0        ; path7: header (y=-3, x=-6)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB 90              ; path7: intensity
+    FCB $F8,$02,0,0        ; path7: header (y=-8, x=2)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
     FCB 2                ; End marker (path complete)
 
 ; Generated from desk.vec (Malban Draw_Sync_List format)
@@ -13307,68 +13240,68 @@ _DESK_VECTORS:  ; Main entry (header + 10 path(s))
     FDB _DESK_PATH9        ; pointer to path 9
 
 _DESK_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $FE,$E2,0,0        ; path0: header (y=-2, x=-30)
+    FCB 80              ; path0: intensity
+    FCB $FE,$00,0,0        ; path0: header (y=-2, x=0)
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH1:    ; Path 1
+    FCB 55              ; path1: intensity
+    FCB $F6,$FE,0,0        ; path1: header (y=-10, x=-2)
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH2:    ; Path 2
+    FCB 55              ; path2: intensity
+    FCB $FA,$F5,0,0        ; path2: header (y=-6, x=-11)
+    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH3:    ; Path 3
+    FCB 55              ; path3: intensity
+    FCB $FA,$02,0,0        ; path3: header (y=-6, x=2)
+    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH4:    ; Path 4
+    FCB 55              ; path4: intensity
+    FCB $F6,$0B,0,0        ; path4: header (y=-10, x=11)
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH5:    ; Path 5
+    FCB 110              ; path5: intensity
+    FCB $FE,$0E,0,0        ; path5: header (y=-2, x=14)
+    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
+    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
+    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH6:    ; Path 6
+    FCB 90              ; path6: intensity
+    FCB $05,$E6,0,0        ; path6: header (y=5, x=-26)
+    FCB $FF,$19,$00          ; flag=-1, dy=25, dx=0
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH7:    ; Path 7
+    FCB 75              ; path7: intensity
+    FCB $12,$E6,0,0        ; path7: header (y=18, x=-26)
+    FCB $FF,$00,$34          ; flag=-1, dy=0, dx=52
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH8:    ; Path 8
+    FCB 90              ; path8: intensity
+    FCB $1E,$1A,0,0        ; path8: header (y=30, x=26)
+    FCB $FF,$E7,$00          ; flag=-1, dy=-25, dx=0
+    FCB 2                ; End marker (path complete)
+
+_DESK_PATH9:    ; Path 9
+    FCB 100              ; path9: intensity
+    FCB $FE,$E2,0,0        ; path9: header (y=-2, x=-30)
     FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
     FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
     FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $05,$E6,0,0        ; path1: header (y=5, x=-26)
-    FCB $FF,$19,$00          ; flag=-1, dy=25, dx=0
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH2:    ; Path 2
-    FCB 90              ; path2: intensity
-    FCB $05,$1A,0,0        ; path2: header (y=5, x=26)
-    FCB $FF,$19,$00          ; flag=-1, dy=25, dx=0
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH3:    ; Path 3
-    FCB 75              ; path3: intensity
-    FCB $12,$E6,0,0        ; path3: header (y=18, x=-26)
-    FCB $FF,$00,$34          ; flag=-1, dy=0, dx=52
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH4:    ; Path 4
-    FCB 110              ; path4: intensity
-    FCB $FE,$F2,0,0        ; path4: header (y=-2, x=-14)
-    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB $FF,$0E,$00          ; flag=-1, dy=14, dx=0
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH5:    ; Path 5
-    FCB 80              ; path5: intensity
-    FCB $FE,$00,0,0        ; path5: header (y=-2, x=0)
-    FCB $FF,$F2,$00          ; flag=-1, dy=-14, dx=0
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH6:    ; Path 6
-    FCB 55              ; path6: intensity
-    FCB $FA,$F5,0,0        ; path6: header (y=-6, x=-11)
-    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH7:    ; Path 7
-    FCB 55              ; path7: intensity
-    FCB $FA,$02,0,0        ; path7: header (y=-6, x=2)
-    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH8:    ; Path 8
-    FCB 55              ; path8: intensity
-    FCB $F6,$F5,0,0        ; path8: header (y=-10, x=-11)
-    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
-    FCB 2                ; End marker (path complete)
-
-_DESK_PATH9:    ; Path 9
-    FCB 55              ; path9: intensity
-    FCB $F6,$02,0,0        ; path9: header (y=-10, x=2)
-    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
     FCB 2                ; End marker (path complete)
 
 ; Generated from player.vec (Malban Draw_Sync_List format)
@@ -13394,8 +13327,41 @@ _PLAYER_VECTORS:  ; Main entry (header + 7 path(s))
     FDB _PLAYER_PATH6        ; pointer to path 6
 
 _PLAYER_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $0D,$FA,0,0        ; path0: header (y=13, x=-6)
+    FCB 100              ; path0: intensity
+    FCB $FF,$05,0,0        ; path0: header (y=-1, x=5)
+    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $F3,$03,0,0        ; path1: header (y=-13, x=3)
+    FCB $FF,$F8,$01          ; flag=-1, dy=-8, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $EB,$FA,0,0        ; path2: header (y=-21, x=-6)
+    FCB $FF,$08,$01          ; flag=-1, dy=8, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_PATH3:    ; Path 3
+    FCB 100              ; path3: intensity
+    FCB $F9,$F5,0,0        ; path3: header (y=-7, x=-11)
+    FCB $FF,$06,$04          ; flag=-1, dy=6, dx=4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_PATH4:    ; Path 4
+    FCB 127              ; path4: intensity
+    FCB $06,$FA,0,0        ; path4: header (y=6, x=-6)
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_PATH5:    ; Path 5
+    FCB 127              ; path5: intensity
+    FCB $0D,$FA,0,0        ; path5: header (y=13, x=-6)
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
     FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
@@ -13406,45 +13372,12 @@ _PLAYER_PATH0:    ; Path 0
     FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 
-_PLAYER_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $06,$FA,0,0        ; path1: header (y=6, x=-6)
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $06,$FB,0,0        ; path2: header (y=6, x=-5)
+_PLAYER_PATH6:    ; Path 6
+    FCB 127              ; path6: intensity
+    FCB $06,$FB,0,0        ; path6: header (y=6, x=-5)
     FCB $FF,$ED,$FC          ; flag=-1, dy=-19, dx=-4
     FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
     FCB $FF,$13,$FC          ; flag=-1, dy=19, dx=-4
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $F3,$FB,0,0        ; path3: header (y=-13, x=-5)
-    FCB $FF,$F8,$FF          ; flag=-1, dy=-8, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_PATH4:    ; Path 4
-    FCB 127              ; path4: intensity
-    FCB $F3,$03,0,0        ; path4: header (y=-13, x=3)
-    FCB $FF,$F8,$01          ; flag=-1, dy=-8, dx=1
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_PATH5:    ; Path 5
-    FCB 100              ; path5: intensity
-    FCB $FF,$F9,0,0        ; path5: header (y=-1, x=-7)
-    FCB $FF,$FA,$FC          ; flag=-1, dy=-6, dx=-4
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_PATH6:    ; Path 6
-    FCB 100              ; path6: intensity
-    FCB $FF,$05,0,0        ; path6: header (y=-1, x=5)
-    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
     FCB 2                ; End marker (path complete)
 
 _PUZZLE_SUCCESS_SFX:
@@ -13523,19 +13456,19 @@ _ENTRANCE_ARC_VECTORS:  ; Main entry (header + 4 path(s))
     FDB _ENTRANCE_ARC_PATH3        ; pointer to path 3
 
 _ENTRANCE_ARC_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $A2,$C4,0,0        ; path0: header (y=-94, x=-60)
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB $FF,$46,$00          ; sub-seg 1/2 of line 1: dy=70, dx=0
-    FCB $FF,$46,$00          ; sub-seg 2/2 of line 1: dy=70, dx=0
-    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
-    FCB $FF,$BA,$00          ; sub-seg 1/2 of closing line: dy=-70, dx=0
-    FCB $FF,$BA,$00          ; sub-seg 2/2 of closing line: dy=-70, dx=0
+    FCB 60              ; path0: intensity
+    FCB $2E,$DD,0,0        ; path0: header (y=46, x=-35)
+    FCB $FF,$00,$46          ; flag=-1, dy=0, dx=70
+    FCB $FF,$BA,$00          ; sub-seg 1/2 of line 1: dy=-70, dx=0
+    FCB $FF,$BA,$00          ; sub-seg 2/2 of line 1: dy=-70, dx=0
+    FCB $FF,$00,$BA          ; flag=-1, dy=0, dx=-70
+    FCB $FF,$46,$00          ; sub-seg 1/2 of closing line: dy=70, dx=0
+    FCB $FF,$46,$00          ; sub-seg 2/2 of closing line: dy=70, dx=0
     FCB 2                ; End marker (path complete)
 
 _ENTRANCE_ARC_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $A2,$28,0,0        ; path1: header (y=-94, x=40)
+    FCB $A2,$C4,0,0        ; path1: header (y=-94, x=-60)
     FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
     FCB $FF,$46,$00          ; sub-seg 1/2 of line 1: dy=70, dx=0
     FCB $FF,$46,$00          ; sub-seg 2/2 of line 1: dy=70, dx=0
@@ -13554,14 +13487,14 @@ _ENTRANCE_ARC_PATH2:    ; Path 2
     FCB 2                ; End marker (path complete)
 
 _ENTRANCE_ARC_PATH3:    ; Path 3
-    FCB 60              ; path3: intensity
-    FCB $A2,$DD,0,0        ; path3: header (y=-94, x=-35)
-    FCB $FF,$00,$46          ; flag=-1, dy=0, dx=70
-    FCB $FF,$46,$00          ; sub-seg 1/2 of line 1: dy=70, dx=0
-    FCB $FF,$46,$00          ; sub-seg 2/2 of line 1: dy=70, dx=0
-    FCB $FF,$00,$BA          ; flag=-1, dy=0, dx=-70
-    FCB $FF,$BA,$00          ; sub-seg 1/2 of closing line: dy=-70, dx=0
-    FCB $FF,$BA,$00          ; sub-seg 2/2 of closing line: dy=-70, dx=0
+    FCB 127              ; path3: intensity
+    FCB $2E,$28,0,0        ; path3: header (y=46, x=40)
+    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
+    FCB $FF,$BA,$00          ; sub-seg 1/2 of line 1: dy=-70, dx=0
+    FCB $FF,$BA,$00          ; sub-seg 2/2 of line 1: dy=-70, dx=0
+    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
+    FCB $FF,$46,$00          ; sub-seg 1/2 of closing line: dy=70, dx=0
+    FCB $FF,$46,$00          ; sub-seg 2/2 of closing line: dy=70, dx=0
     FCB 2                ; End marker (path complete)
 
 _DOOR_UNLOCK_SFX:
@@ -13648,65 +13581,65 @@ _FLOOR_VECTORS:  ; Main entry (header + 12 path(s))
 
 _FLOOR_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $F9,$86,0,0        ; path0: header (y=-7, x=-122)
-    FCB $FF,$00,$43          ; flag=-1, dy=0, dx=67
+    FCB $FB,$FB,0,0        ; path0: header (y=-5, x=-5)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $FA,$8B,0,0        ; path1: header (y=-6, x=-117)
+    FCB $FA,$FA,0,0        ; path1: header (y=-6, x=-6)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH2:    ; Path 2
     FCB 127              ; path2: intensity
-    FCB $F9,$A1,0,0        ; path2: header (y=-7, x=-95)
+    FCB $F9,$E6,0,0        ; path2: header (y=-7, x=-26)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
-    FCB $FA,$FA,0,0        ; path3: header (y=-6, x=-6)
+    FCB $F9,$CC,0,0        ; path3: header (y=-7, x=-52)
+    FCB $FF,$01,$4D          ; flag=-1, dy=1, dx=77
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
-    FCB $F9,$CC,0,0        ; path4: header (y=-7, x=-52)
-    FCB $FF,$01,$4D          ; flag=-1, dy=1, dx=77
+    FCB $FB,$1B,0,0        ; path4: header (y=-5, x=27)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH5:    ; Path 5
     FCB 127              ; path5: intensity
-    FCB $F9,$E6,0,0        ; path5: header (y=-7, x=-26)
+    FCB $FA,$1E,0,0        ; path5: header (y=-6, x=30)
+    FCB $FF,$00,$58          ; flag=-1, dy=0, dx=88
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH6:    ; Path 6
     FCB 127              ; path6: intensity
-    FCB $FB,$FB,0,0        ; path6: header (y=-5, x=-5)
+    FCB $FA,$76,0,0        ; path6: header (y=-6, x=118)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH7:    ; Path 7
     FCB 127              ; path7: intensity
-    FCB $FB,$1B,0,0        ; path7: header (y=-5, x=27)
+    FCB $FA,$5E,0,0        ; path7: header (y=-6, x=94)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH8:    ; Path 8
     FCB 127              ; path8: intensity
-    FCB $FA,$1E,0,0        ; path8: header (y=-6, x=30)
-    FCB $FF,$00,$58          ; flag=-1, dy=0, dx=88
+    FCB $FA,$3C,0,0        ; path8: header (y=-6, x=60)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH9:    ; Path 9
     FCB 127              ; path9: intensity
-    FCB $FA,$76,0,0        ; path9: header (y=-6, x=118)
+    FCB $F9,$C9,0,0        ; path9: header (y=-7, x=-55)
+    FCB $FF,$00,$BD          ; flag=-1, dy=0, dx=-67
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH10:    ; Path 10
     FCB 127              ; path10: intensity
-    FCB $FA,$3C,0,0        ; path10: header (y=-6, x=60)
+    FCB $FA,$8B,0,0        ; path10: header (y=-6, x=-117)
     FCB 2                ; End marker (path complete)
 
 _FLOOR_PATH11:    ; Path 11
     FCB 127              ; path11: intensity
-    FCB $FA,$5E,0,0        ; path11: header (y=-6, x=94)
+    FCB $F9,$A1,0,0        ; path11: header (y=-7, x=-95)
     FCB 2                ; End marker (path complete)
 
 ; Generated from lamp.vec (Malban Draw_Sync_List format)
@@ -13733,36 +13666,36 @@ _LAMP_VECTORS:  ; Main entry (header + 7 path(s))
 
 _LAMP_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $06,$EA,0,0        ; path0: header (y=6, x=-22)
-    FCB $FF,$00,$2C          ; flag=-1, dy=0, dx=44
+    FCB $FF,$00,0,0        ; path0: header (y=-1, x=0)
+    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
     FCB 2                ; End marker (path complete)
 
 _LAMP_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $06,$00,0,0        ; path1: header (y=6, x=0)
-    FCB $FF,$F9,$00          ; flag=-1, dy=-7, dx=0
-    FCB 2                ; End marker (path complete)
-
-_LAMP_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $FF,$FB,0,0        ; path2: header (y=-1, x=-5)
+    FCB $FF,$FB,0,0        ; path1: header (y=-1, x=-5)
     FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
     FCB $FF,$FA,$FE          ; flag=-1, dy=-6, dx=-2
     FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
     FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
     FCB 2                ; End marker (path complete)
 
+_LAMP_PATH2:    ; Path 2
+    FCB 127              ; path2: intensity
+    FCB $00,$F0,0,0        ; path2: header (y=0, x=-16)
+    FCB $FF,$FD,$FE          ; flag=-1, dy=-3, dx=-2
+    FCB $FF,$03,$FE          ; flag=-1, dy=3, dx=-2
+    FCB 2                ; End marker (path complete)
+
 _LAMP_PATH3:    ; Path 3
     FCB 127              ; path3: intensity
-    FCB $06,$EE,0,0        ; path3: header (y=6, x=-18)
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $00,$EE,0,0        ; path3: header (y=0, x=-18)
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 _LAMP_PATH4:    ; Path 4
     FCB 127              ; path4: intensity
-    FCB $00,$EC,0,0        ; path4: header (y=0, x=-20)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $06,$EA,0,0        ; path4: header (y=6, x=-22)
+    FCB $FF,$00,$2C          ; flag=-1, dy=0, dx=44
     FCB 2                ; End marker (path complete)
 
 _LAMP_PATH5:    ; Path 5
@@ -13801,50 +13734,50 @@ _PLATFORM_DOWN_VECTORS:  ; Main entry (header + 7 path(s))
     FDB _PLATFORM_DOWN_PATH6        ; pointer to path 6
 
 _PLATFORM_DOWN_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $12,$DA,0,0        ; path0: header (y=18, x=-38)
-    FCB $FF,$00,$4C          ; flag=-1, dy=0, dx=76
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$B4          ; flag=-1, dy=0, dx=-76
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM_DOWN_PATH1:    ; Path 1
-    FCB 75              ; path1: intensity
-    FCB $15,$DD,0,0        ; path1: header (y=21, x=-35)
-    FCB $FF,$00,$46          ; flag=-1, dy=0, dx=70
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM_DOWN_PATH2:    ; Path 2
-    FCB 80              ; path2: intensity
-    FCB $1C,$F9,0,0        ; path2: header (y=28, x=-7)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM_DOWN_PATH3:    ; Path 3
-    FCB 80              ; path3: intensity
-    FCB $1C,$07,0,0        ; path3: header (y=28, x=7)
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM_DOWN_PATH4:    ; Path 4
-    FCB 90              ; path4: intensity
-    FCB $26,$F4,0,0        ; path4: header (y=38, x=-12)
-    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM_DOWN_PATH5:    ; Path 5
-    FCB 50              ; path5: intensity
-    FCB $02,$F9,0,0        ; path5: header (y=2, x=-7)
+    FCB 50              ; path0: intensity
+    FCB $02,$F9,0,0        ; path0: header (y=2, x=-7)
     FCB $FF,$08,$FE          ; flag=-1, dy=8, dx=-2
     FCB $FF,$08,$03          ; flag=-1, dy=8, dx=3
     FCB 2                ; End marker (path complete)
 
+_PLATFORM_DOWN_PATH1:    ; Path 1
+    FCB 80              ; path1: intensity
+    FCB $1C,$F9,0,0        ; path1: header (y=28, x=-7)
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM_DOWN_PATH2:    ; Path 2
+    FCB 90              ; path2: intensity
+    FCB $26,$F4,0,0        ; path2: header (y=38, x=-12)
+    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM_DOWN_PATH3:    ; Path 3
+    FCB 80              ; path3: intensity
+    FCB $26,$07,0,0        ; path3: header (y=38, x=7)
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM_DOWN_PATH4:    ; Path 4
+    FCB 50              ; path4: intensity
+    FCB $12,$06,0,0        ; path4: header (y=18, x=6)
+    FCB $FF,$F8,$03          ; flag=-1, dy=-8, dx=3
+    FCB $FF,$F8,$FE          ; flag=-1, dy=-8, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM_DOWN_PATH5:    ; Path 5
+    FCB 75              ; path5: intensity
+    FCB $15,$23,0,0        ; path5: header (y=21, x=35)
+    FCB $FF,$00,$BA          ; flag=-1, dy=0, dx=-70
+    FCB 2                ; End marker (path complete)
+
 _PLATFORM_DOWN_PATH6:    ; Path 6
-    FCB 50              ; path6: intensity
-    FCB $02,$07,0,0        ; path6: header (y=2, x=7)
-    FCB $FF,$08,$02          ; flag=-1, dy=8, dx=2
-    FCB $FF,$08,$FD          ; flag=-1, dy=8, dx=-3
+    FCB 100              ; path6: intensity
+    FCB $12,$DA,0,0        ; path6: header (y=18, x=-38)
+    FCB $FF,$00,$4C          ; flag=-1, dy=0, dx=76
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$B4          ; flag=-1, dy=0, dx=-76
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
     FCB 2                ; End marker (path complete)
 
 ; ==== Level: ANTEROOM ====
@@ -14174,48 +14107,48 @@ _CARETAKER_VECTORS:  ; Main entry (header + 7 path(s))
 
 _CARETAKER_PATH0:    ; Path 0
     FCB 80              ; path0: intensity
-    FCB $0E,$FB,0,0        ; path0: header (y=14, x=-5)
+    FCB $FC,$01,0,0        ; path0: header (y=-4, x=1)
+    FCB $FF,$F6,$FE          ; flag=-1, dy=-10, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH1:    ; Path 1
+    FCB 80              ; path1: intensity
+    FCB $F2,$05,0,0        ; path1: header (y=-14, x=5)
+    FCB $FF,$0A,$FE          ; flag=-1, dy=10, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH2:    ; Path 2
+    FCB 80              ; path2: intensity
+    FCB $FC,$03,0,0        ; path2: header (y=-4, x=3)
+    FCB $FF,$0A,$FF          ; flag=-1, dy=10, dx=-1
+    FCB $FF,$08,$FD          ; flag=-1, dy=8, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH3:    ; Path 3
+    FCB 80              ; path3: intensity
+    FCB $0E,$FB,0,0        ; path3: header (y=14, x=-5)
     FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
     FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
     FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
     FCB 2                ; End marker (path complete)
 
-_CARETAKER_PATH1:    ; Path 1
-    FCB 80              ; path1: intensity
-    FCB $0E,$FF,0,0        ; path1: header (y=14, x=-1)
-    FCB $FF,$F8,$03          ; flag=-1, dy=-8, dx=3
-    FCB $FF,$F6,$01          ; flag=-1, dy=-10, dx=1
-    FCB 2                ; End marker (path complete)
-
-_CARETAKER_PATH2:    ; Path 2
-    FCB 75              ; path2: intensity
-    FCB $0A,$01,0,0        ; path2: header (y=10, x=1)
+_CARETAKER_PATH4:    ; Path 4
+    FCB 75              ; path4: intensity
+    FCB $0A,$01,0,0        ; path4: header (y=10, x=1)
     FCB $FF,$FA,$F8          ; flag=-1, dy=-6, dx=-8
     FCB 2                ; End marker (path complete)
 
-_CARETAKER_PATH3:    ; Path 3
-    FCB 75              ; path3: intensity
-    FCB $08,$02,0,0        ; path3: header (y=8, x=2)
+_CARETAKER_PATH5:    ; Path 5
+    FCB 75              ; path5: intensity
+    FCB $08,$02,0,0        ; path5: header (y=8, x=2)
     FCB $FF,$F9,$03          ; flag=-1, dy=-7, dx=3
     FCB 2                ; End marker (path complete)
 
-_CARETAKER_PATH4:    ; Path 4
-    FCB 70              ; path4: intensity
-    FCB $01,$05,0,0        ; path4: header (y=1, x=5)
-    FCB $FF,$F2,$05          ; flag=-1, dy=-14, dx=5
-    FCB 2                ; End marker (path complete)
-
-_CARETAKER_PATH5:    ; Path 5
-    FCB 80              ; path5: intensity
-    FCB $FC,$01,0,0        ; path5: header (y=-4, x=1)
-    FCB $FF,$F6,$FE          ; flag=-1, dy=-10, dx=-2
-    FCB 2                ; End marker (path complete)
-
 _CARETAKER_PATH6:    ; Path 6
-    FCB 80              ; path6: intensity
-    FCB $FC,$03,0,0        ; path6: header (y=-4, x=3)
-    FCB $FF,$F6,$02          ; flag=-1, dy=-10, dx=2
+    FCB 70              ; path6: intensity
+    FCB $01,$05,0,0        ; path6: header (y=1, x=5)
+    FCB $FF,$F2,$05          ; flag=-1, dy=-14, dx=5
     FCB 2                ; End marker (path complete)
 
 ; Generated from locked_door.vec (Malban Draw_Sync_List format)
@@ -14239,36 +14172,36 @@ _LOCKED_DOOR_VECTORS:  ; Main entry (header + 4 path(s))
 
 _LOCKED_DOOR_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $C9,$E2,0,0        ; path0: header (y=-55, x=-30)
-    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
-    FCB $FF,$6E,$00          ; flag=-1, dy=110, dx=0
-    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
-    FCB $FF,$92,$00          ; flag=-1, dy=-110, dx=0
-    FCB 2                ; End marker (path complete)
-
-_LOCKED_DOOR_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $D1,$EA,0,0        ; path1: header (y=-47, x=-22)
-    FCB $FF,$00,$2C          ; flag=-1, dy=0, dx=44
-    FCB $FF,$44,$00          ; flag=-1, dy=68, dx=0
-    FCB $FF,$00,$D4          ; flag=-1, dy=0, dx=-44
-    FCB $FF,$BC,$00          ; flag=-1, dy=-68, dx=0
-    FCB 2                ; End marker (path complete)
-
-_LOCKED_DOOR_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $F9,$FC,0,0        ; path2: header (y=-7, x=-4)
+    FCB $F9,$FC,0,0        ; path0: header (y=-7, x=-4)
     FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
     FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
     FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
     FCB 2                ; End marker (path complete)
 
-_LOCKED_DOOR_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $F9,$FC,0,0        ; path3: header (y=-7, x=-4)
+_LOCKED_DOOR_PATH1:    ; Path 1
+    FCB 127              ; path1: intensity
+    FCB $F9,$FC,0,0        ; path1: header (y=-7, x=-4)
     FCB $FF,$06,$04          ; flag=-1, dy=6, dx=4
     FCB $FF,$FA,$04          ; flag=-1, dy=-6, dx=4
+    FCB 2                ; End marker (path complete)
+
+_LOCKED_DOOR_PATH2:    ; Path 2
+    FCB 90              ; path2: intensity
+    FCB $15,$EA,0,0        ; path2: header (y=21, x=-22)
+    FCB $FF,$00,$2C          ; flag=-1, dy=0, dx=44
+    FCB $FF,$BC,$00          ; flag=-1, dy=-68, dx=0
+    FCB $FF,$00,$D4          ; flag=-1, dy=0, dx=-44
+    FCB $FF,$44,$00          ; flag=-1, dy=68, dx=0
+    FCB 2                ; End marker (path complete)
+
+_LOCKED_DOOR_PATH3:    ; Path 3
+    FCB 127              ; path3: intensity
+    FCB $C9,$E2,0,0        ; path3: header (y=-55, x=-30)
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
+    FCB $FF,$6E,$00          ; flag=-1, dy=110, dx=0
+    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
+    FCB $FF,$92,$00          ; flag=-1, dy=-110, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Generated from optics_pedestal.vec (Malban Draw_Sync_List format)
@@ -14292,11 +14225,11 @@ _OPTICS_PEDESTAL_VECTORS:  ; Main entry (header + 4 path(s))
 
 _OPTICS_PEDESTAL_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
-    FCB $E2,$F2,0,0        ; path0: header (y=-30, x=-14)
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $14,$F0,0,0        ; path0: header (y=20, x=-16)
+    FCB $FF,$00,$20          ; flag=-1, dy=0, dx=32
+    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
+    FCB $FF,$00,$E0          ; flag=-1, dy=0, dx=-32
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
     FCB 2                ; End marker (path complete)
 
 _OPTICS_PEDESTAL_PATH1:    ; Path 1
@@ -14308,20 +14241,20 @@ _OPTICS_PEDESTAL_PATH1:    ; Path 1
     FCB 2                ; End marker (path complete)
 
 _OPTICS_PEDESTAL_PATH2:    ; Path 2
-    FCB 100              ; path2: intensity
-    FCB $14,$F0,0,0        ; path2: header (y=20, x=-16)
-    FCB $FF,$00,$20          ; flag=-1, dy=0, dx=32
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$E0          ; flag=-1, dy=0, dx=-32
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_OPTICS_PEDESTAL_PATH3:    ; Path 3
-    FCB 110              ; path3: intensity
-    FCB $D8,$00,0,0        ; path3: header (y=-40, x=0)
+    FCB 110              ; path2: intensity
+    FCB $D8,$00,0,0        ; path2: header (y=-40, x=0)
     FCB $FF,$0A,$F6          ; flag=-1, dy=10, dx=-10
     FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
     FCB $FF,$F6,$F6          ; flag=-1, dy=-10, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_OPTICS_PEDESTAL_PATH3:    ; Path 3
+    FCB 100              ; path3: intensity
+    FCB $E2,$F2,0,0        ; path3: header (y=-30, x=-14)
+    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Generated from wall_compartment.vec (Malban Draw_Sync_List format)
@@ -14344,37 +14277,37 @@ _WALL_COMPARTMENT_VECTORS:  ; Main entry (header + 4 path(s))
     FDB _WALL_COMPARTMENT_PATH3        ; pointer to path 3
 
 _WALL_COMPARTMENT_PATH0:    ; Path 0
-    FCB 90              ; path0: intensity
-    FCB $E7,$EC,0,0        ; path0: header (y=-25, x=-20)
-    FCB $FF,$00,$28          ; flag=-1, dy=0, dx=40
-    FCB $FF,$1E,$00          ; flag=-1, dy=30, dx=0
-    FCB $FF,$00,$D8          ; flag=-1, dy=0, dx=-40
-    FCB $FF,$E2,$00          ; flag=-1, dy=-30, dx=0
+    FCB 100              ; path0: intensity
+    FCB $F1,$04,0,0        ; path0: header (y=-15, x=4)
+    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
     FCB 2                ; End marker (path complete)
 
 _WALL_COMPARTMENT_PATH1:    ; Path 1
-    FCB 80              ; path1: intensity
-    FCB $E7,$EC,0,0        ; path1: header (y=-25, x=-20)
-    FCB $FF,$F3,$00          ; flag=-1, dy=-13, dx=0
-    FCB $FF,$00,$28          ; flag=-1, dy=0, dx=40
-    FCB 2                ; End marker (path complete)
-
-_WALL_COMPARTMENT_PATH2:    ; Path 2
-    FCB 120              ; path2: intensity
-    FCB $EA,$00,0,0        ; path2: header (y=-22, x=0)
+    FCB 120              ; path1: intensity
+    FCB $EA,$00,0,0        ; path1: header (y=-22, x=0)
     FCB $FF,$07,$F6          ; flag=-1, dy=7, dx=-10
     FCB $FF,$07,$0A          ; flag=-1, dy=7, dx=10
     FCB $FF,$F9,$0A          ; flag=-1, dy=-7, dx=10
     FCB $FF,$F9,$F6          ; flag=-1, dy=-7, dx=-10
     FCB 2                ; End marker (path complete)
 
+_WALL_COMPARTMENT_PATH2:    ; Path 2
+    FCB 80              ; path2: intensity
+    FCB $DA,$14,0,0        ; path2: header (y=-38, x=20)
+    FCB $FF,$00,$D8          ; flag=-1, dy=0, dx=-40
+    FCB $FF,$0D,$00          ; flag=-1, dy=13, dx=0
+    FCB 2                ; End marker (path complete)
+
 _WALL_COMPARTMENT_PATH3:    ; Path 3
-    FCB 100              ; path3: intensity
-    FCB $EE,$00,0,0        ; path3: header (y=-18, x=0)
-    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
-    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
-    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
-    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB 90              ; path3: intensity
+    FCB $E7,$EC,0,0        ; path3: header (y=-25, x=-20)
+    FCB $FF,$00,$28          ; flag=-1, dy=0, dx=40
+    FCB $FF,$1E,$00          ; flag=-1, dy=30, dx=0
+    FCB $FF,$00,$D8          ; flag=-1, dy=0, dx=-40
+    FCB $FF,$E2,$00          ; flag=-1, dy=-30, dx=0
     FCB 2                ; End marker (path complete)
 
 ; ==== Level: WEIGHTS_ROOM ====
@@ -14481,33 +14414,33 @@ _CANVAS_VECTORS:  ; Main entry (header + 4 path(s))
     FDB _CANVAS_PATH3        ; pointer to path 3
 
 _CANVAS_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $EA,$E2,0,0        ; path0: header (y=-22, x=-30)
-    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
-    FCB $FF,$2C,$00          ; flag=-1, dy=44, dx=0
-    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
-    FCB $FF,$D4,$00          ; flag=-1, dy=-44, dx=0
-    FCB 2                ; End marker (path complete)
-
-_CANVAS_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $F0,$E8,0,0        ; path1: header (y=-16, x=-24)
+    FCB 90              ; path0: intensity
+    FCB $F0,$E8,0,0        ; path0: header (y=-16, x=-24)
     FCB $FF,$00,$30          ; flag=-1, dy=0, dx=48
     FCB $FF,$20,$00          ; flag=-1, dy=32, dx=0
     FCB $FF,$00,$D0          ; flag=-1, dy=0, dx=-48
     FCB $FF,$E0,$00          ; flag=-1, dy=-32, dx=0
     FCB 2                ; End marker (path complete)
 
+_CANVAS_PATH1:    ; Path 1
+    FCB 60              ; path1: intensity
+    FCB $10,$E8,0,0        ; path1: header (y=16, x=-24)
+    FCB $FF,$E0,$30          ; flag=-1, dy=-32, dx=48
+    FCB 2                ; End marker (path complete)
+
 _CANVAS_PATH2:    ; Path 2
     FCB 60              ; path2: intensity
-    FCB $F0,$E8,0,0        ; path2: header (y=-16, x=-24)
-    FCB $FF,$20,$30          ; flag=-1, dy=32, dx=48
+    FCB $10,$18,0,0        ; path2: header (y=16, x=24)
+    FCB $FF,$E0,$D0          ; flag=-1, dy=-32, dx=-48
     FCB 2                ; End marker (path complete)
 
 _CANVAS_PATH3:    ; Path 3
-    FCB 60              ; path3: intensity
-    FCB $10,$E8,0,0        ; path3: header (y=16, x=-24)
-    FCB $FF,$E0,$30          ; flag=-1, dy=-32, dx=48
+    FCB 127              ; path3: intensity
+    FCB $EA,$E2,0,0        ; path3: header (y=-22, x=-30)
+    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
+    FCB $FF,$2C,$00          ; flag=-1, dy=44, dx=0
+    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
+    FCB $FF,$D4,$00          ; flag=-1, dy=-44, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Generated from platform_up.vec (Malban Draw_Sync_List format)
@@ -14531,36 +14464,36 @@ _PLATFORM_UP_VECTORS:  ; Main entry (header + 5 path(s))
     FDB _PLATFORM_UP_PATH4        ; pointer to path 4
 
 _PLATFORM_UP_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $F8,$DA,0,0        ; path0: header (y=-8, x=-38)
-    FCB $FF,$00,$4C          ; flag=-1, dy=0, dx=76
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$B4          ; flag=-1, dy=0, dx=-76
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB 85              ; path0: intensity
+    FCB $02,$F9,0,0        ; path0: header (y=2, x=-7)
+    FCB $FF,$24,$00          ; flag=-1, dy=36, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLATFORM_UP_PATH1:    ; Path 1
-    FCB 75              ; path1: intensity
-    FCB $FB,$DD,0,0        ; path1: header (y=-5, x=-35)
-    FCB $FF,$00,$46          ; flag=-1, dy=0, dx=70
+    FCB 90              ; path1: intensity
+    FCB $26,$F4,0,0        ; path1: header (y=38, x=-12)
+    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
     FCB 2                ; End marker (path complete)
 
 _PLATFORM_UP_PATH2:    ; Path 2
     FCB 85              ; path2: intensity
-    FCB $02,$F9,0,0        ; path2: header (y=2, x=-7)
-    FCB $FF,$24,$00          ; flag=-1, dy=36, dx=0
+    FCB $26,$07,0,0        ; path2: header (y=38, x=7)
+    FCB $FF,$DC,$00          ; flag=-1, dy=-36, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLATFORM_UP_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $02,$07,0,0        ; path3: header (y=2, x=7)
-    FCB $FF,$24,$00          ; flag=-1, dy=36, dx=0
+    FCB 75              ; path3: intensity
+    FCB $FB,$23,0,0        ; path3: header (y=-5, x=35)
+    FCB $FF,$00,$BA          ; flag=-1, dy=0, dx=-70
     FCB 2                ; End marker (path complete)
 
 _PLATFORM_UP_PATH4:    ; Path 4
-    FCB 90              ; path4: intensity
-    FCB $26,$F4,0,0        ; path4: header (y=38, x=-12)
-    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
+    FCB 100              ; path4: intensity
+    FCB $F8,$DA,0,0        ; path4: header (y=-8, x=-38)
+    FCB $FF,$00,$4C          ; flag=-1, dy=0, dx=76
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
+    FCB $FF,$00,$B4          ; flag=-1, dy=0, dx=-76
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
     FCB 2                ; End marker (path complete)
 
 _HEARTBEAT_SFX:
@@ -14684,14 +14617,14 @@ _ELISA_GHOST_VECTORS:  ; Main entry (header + 3 path(s))
 
 _ELISA_GHOST_PATH0:    ; Path 0
     FCB 90              ; path0: intensity
-    FCB $0C,$F9,0,0        ; path0: header (y=12, x=-7)
-    FCB $FF,$03,$07          ; flag=-1, dy=3, dx=7
-    FCB $FF,$FD,$07          ; flag=-1, dy=-3, dx=7
-    FCB $FF,$F6,$03          ; flag=-1, dy=-10, dx=3
-    FCB $FF,$F4,$FA          ; flag=-1, dy=-12, dx=-6
-    FCB $FF,$FD,$F6          ; flag=-1, dy=-3, dx=-10
-    FCB $FF,$0D,$FC          ; flag=-1, dy=13, dx=-4
-    FCB $FF,$0C,$03          ; flag=-1, dy=12, dx=3
+    FCB $00,$F6,0,0        ; path0: header (y=0, x=-10)
+    FCB $FF,$F3,$04          ; flag=-1, dy=-13, dx=4
+    FCB $FF,$03,$0A          ; flag=-1, dy=3, dx=10
+    FCB $FF,$0C,$06          ; flag=-1, dy=12, dx=6
+    FCB $FF,$0A,$FD          ; flag=-1, dy=10, dx=-3
+    FCB $FF,$03,$F9          ; flag=-1, dy=3, dx=-7
+    FCB $FF,$FD,$F9          ; flag=-1, dy=-3, dx=-7
+    FCB $FF,$F4,$FD          ; flag=-1, dy=-12, dx=-3
     FCB 2                ; End marker (path complete)
 
 _ELISA_GHOST_PATH1:    ; Path 1
@@ -14702,8 +14635,8 @@ _ELISA_GHOST_PATH1:    ; Path 1
 
 _ELISA_GHOST_PATH2:    ; Path 2
     FCB 65              ; path2: intensity
-    FCB $F3,$FA,0,0        ; path2: header (y=-13, x=-6)
-    FCB $FF,$FA,$02          ; flag=-1, dy=-6, dx=2
+    FCB $ED,$FC,0,0        ; path2: header (y=-19, x=-4)
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
     FCB 2                ; End marker (path complete)
 
 _ITEM_PICKUP_SFX:
@@ -15261,18 +15194,26 @@ Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
 ; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
+; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
+; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
 LDA ,X+                 ; Read per-path intensity from vector data
 DSWM_SET_INTENSITY:
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
+BEQ DSWM_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
+DSWM_USE_FCB_INT:
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
+LDA #$00
+STA >$D000              ; PB=$00: deselect all channels
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -15368,10 +15309,14 @@ LBRA DSWM_LOOP          ; Long branch
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
+LDA ,X+                 ; Read FCB intensity from vector data
 DSWM_NEXT_SET_INTENSITY:
-PSHS A
+TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
+BEQ DSWM_NEXT_USE_FCB_INT
+LDA >DRAW_VEC_INTENSITY  ; non-zero override
+DSWM_NEXT_USE_FCB_INT:
+PSHS A                  ; save intensity for later
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -15385,13 +15330,19 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; Get intensity back
+PULS A                  ; restore intensity
 STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
+PSHS A                  ; save brightness for Z-axis write
+LDA #$05
+STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
 LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
+STA >$D000              ; PB=$04: select Z-axis channel
+PULS A                  ; restore brightness
+STA >$D001              ; PA=brightness while Z-axis selected
+LDA #$00
+STA >$D000              ; PB=$00: deselect
 LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$D000              ; PB=$01: restore X-integrator channel
 PULS D
 ADDD #3
 TFR D,X
@@ -15507,10 +15458,10 @@ LLR_CLR_GP_LOOP:
     LDB >LEVEL_GP_COUNT   ; Reload count after clear loop
     LDX >LEVEL_GP_ROM_PTR ; X = source (ROM)
     LDU #LEVEL_GP_BUFFER  ; U = destination (RAM)
-    PSHS U               ; Save buffer start
+    PSHS U               ; Save buffer START (U advances during copy)
     JSR LLR_COPY_OBJECTS  ; Copy B objects from X(ROM) to U(RAM)
-    PULS D               ; Restore buffer start into D
-    STD >LEVEL_GP_PTR    ; LEVEL_GP_PTR → RAM buffer
+    PULS D               ; D = buffer start address
+    STD >LEVEL_GP_PTR    ; LEVEL_GP_PTR → RAM buffer start
     BRA LLR_GP_DONE
     
 LLR_GP_DONE:
@@ -15607,8 +15558,6 @@ LLR_COPY_DONE:
 SHOW_LEVEL_RUNTIME:
     PSHS D,X,Y,U     ; Preserve registers
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDA #$18
-    STA >$D00B       ; ACR=$18: SR shift-out PHI2, enable beam via SR
     ; MULTIBANK: Switch to level bank so ROM pointers are valid
     LDA >CURRENT_ROM_BANK
     PSHS A              ; Save current bank
