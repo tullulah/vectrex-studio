@@ -489,6 +489,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       this._rp2350System.setJoyAxis(x, y);
     }
+    if (this._activeTarget === 'm6809' && this._vectrexSystem) {
+      this._vectrexSystem.setJoyAxis(x, y);
+    }
   }
 
   /**

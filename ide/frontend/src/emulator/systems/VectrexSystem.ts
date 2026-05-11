@@ -137,6 +137,12 @@ export class VectrexSystem implements ISystem, IBus {
     this.frameCounter = 0;
 
     this.via.reset();
+    // On the 6809/Vectrex, joystick buttons are read via PSG register 14,
+    // NOT via VIA Port B.  The default joyButtons=0xF0 has bit 5 set, which
+    // permanently asserts the analog comparator in Joy_Analog's SAR loop,
+    // making J1_X()/J1_Y() always return +128 (far-right deflection).
+    // Setting it to 0x00 lets alg_compare drive bit 5 correctly.
+    this.via.joyButtons = 0x00;
     this.beam.reset();
     this.psg.reset();
     this.cpu.reset();
@@ -289,6 +295,17 @@ export class VectrexSystem implements ISystem, IBus {
 
   setCanvas(el: HTMLCanvasElement): void {
     this.canvas.setCanvas(el);
+  }
+
+  /**
+   * Update joystick axis input for the 6809/Vectrex analog path.
+   * x, y are raw signed values in [-127, 127] (0 = centred), matching the
+   * range produced by inputManager.update() in EmulatorPanel.tsx.
+   * Converts to the unsigned 0–255 range expected by Beam.alg_jch0/1.
+   */
+  setJoyAxis(x: number, y: number): void {
+    this.beam.alg_jch0 = Math.max(0, Math.min(255, Math.round((x / 127 + 1) * 127.5)));
+    this.beam.alg_jch1 = Math.max(0, Math.min(255, Math.round((y / 127 + 1) * 127.5)));
   }
 
   // ------------------------------------------------------------------ //
