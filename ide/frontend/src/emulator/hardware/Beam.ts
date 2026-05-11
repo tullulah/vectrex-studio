@@ -119,6 +119,11 @@ export class Beam {
     _via_cb2h: number,
     _via_cb2s: number,
   ): void {
+    // DAC (Port A) drives the integrator X reference voltage.
+    // Mirrors vecx_full.js line 4608: this.alg_xsh = data ^ 0x80
+    // Without this, Joy_Analog's SAR comparator is stuck, giving -126 at center.
+    this.alg_xsh = (via_ora ^ 0x80) & 0xFF;
+
     // Joystick channel selection (bits 2:1 of ORB)
     switch (via_orb & 0x06) {
       case 0x00:
@@ -155,9 +160,6 @@ export class Beam {
     this.alg_dx = this.alg_xsh - this.alg_rsh;
     this.alg_dy = this.alg_rsh - this.alg_ysh;
 
-    // Suppress unused-parameter warnings (the full via state is passed for
-    // future use / documentation; only ORA/ORB matter here)
-    void via_ora;
   }
 
   // ------------------------------------------------------------------ //
