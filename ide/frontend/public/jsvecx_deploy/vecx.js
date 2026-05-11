@@ -1063,14 +1063,18 @@ function VecX()
         var f = function()
         {
             if( !vecx.running ) return;
-            vecx.alg_jch0 =
-                 ( vecx.leftHeld ? 0x00 :
-                     ( vecx.rightHeld ? 0xff :
-                        0x80 ) );
-            vecx.alg_jch1 =
-                 ( vecx.downHeld ? 0x00 :
-                    ( vecx.upHeld ? 0xff :
-                        0x80 ) );
+            // When useAnalogJoy=true, alg_jch0/1 are set externally with analog
+            // gamepad values — do not override them with digital boolean states.
+            if ( !vecx.useAnalogJoy ) {
+                vecx.alg_jch0 =
+                     ( vecx.leftHeld ? 0x00 :
+                         ( vecx.rightHeld ? 0xff :
+                            0x80 ) );
+                vecx.alg_jch1 =
+                     ( vecx.downHeld ? 0x00 :
+                        ( vecx.upHeld ? 0xff :
+                            0x80 ) );
+            }
             vecx.snd_regs[14] = vecx.shadow_snd_regs14;
             vecx.vecx_emu.call( vecx, cycles, 0 );
             vecx.count++;
