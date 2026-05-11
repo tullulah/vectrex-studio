@@ -474,6 +474,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     // Mirror cartridge into VectrexSystem.
     if (this._vectrexSystem) {
       this._vectrexSystem.loadCartridge(bytes);
+      // Start PSG audio for the 6809 path (loadRom is always triggered by a
+      // user action, so the AudioContext can be created here).
+      this._vectrexSystem.startAudio();
     }
 
     console.log(`[JsVecxCore] Program loaded: ${romSize} bytes to cartridge (${Math.ceil(romSize / 0x4000)} banks)`);

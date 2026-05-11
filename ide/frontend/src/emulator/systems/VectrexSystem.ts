@@ -95,6 +95,12 @@ export class VectrexSystem implements ISystem, IBus {
   private loadedRomSize: number = 0x8000;
   private frameCounter:  number = 0;
 
+  // Audio
+  private audioCtx:  AudioContext | null        = null;
+  private audioNode: ScriptProcessorNode | null = null;
+  static readonly AUDIO_SAMPLE_RATE = 44100;
+  static readonly AUDIO_BUFFER_SIZE = 512;
+
   /**
    * @param e6809Instance  The raw `e6809` JS object from `(window as any).vecx.e6809`.
    * @param canvasElement  Optional canvas for rendering.  Can be set later via setCanvas().
@@ -295,6 +301,38 @@ export class VectrexSystem implements ISystem, IBus {
 
   setCanvas(el: HTMLCanvasElement): void {
     this.canvas.setCanvas(el);
+  }
+
+  /** Start PSG audio output via Web Audio API (call after a user gesture). */
+  startAudio(): void {
+    if (this.audioCtx) return;
+    try {
+      const ctx = new AudioContext({ sampleRate: VectrexSystem.AUDIO_SAMPLE_RATE });
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const node = ctx.createScriptProcessor(VectrexSystem.AUDIO_BUFFER_SIZE, 0, 1);
+      node.onaudioprocess = (ev) => {
+        this.psg.fillBuffer(
+          ev.outputBuffer.getChannelData(0),
+          VectrexSystem.AUDIO_BUFFER_SIZE,
+        );
+      };
+      node.connect(ctx.destination);
+      this.audioCtx  = ctx;
+      this.audioNode = node;
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    } catch (e) {
+      console.warn('[VectrexSystem] Audio init failed:', e);
+    }
+  }
+
+  /** Stop and destroy the audio context. */
+  stopAudio(): void {
+    try {
+      this.audioNode?.disconnect();
+      this.audioCtx?.close().catch(() => {});
+    } catch {}
+    this.audioNode = null;
+    this.audioCtx  = null;
   }
 
   /**
