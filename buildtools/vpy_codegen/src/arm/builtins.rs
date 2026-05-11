@@ -1742,7 +1742,8 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldr     r6, [r4, #16]            @ ROM gpObjectsPtr\n");
     s.push_str("    ldr     r7, =LEVEL_GP_BUF        @ GP buffer base\n");
     s.push_str("vll_gp_loop:\n");
-    // ROM obj layout (16 bytes): +0=x(i16), +2=y(i16), +14=vel_x_init, +15=vel_y_init
+    // ROM obj layout (20 bytes): +0=x(i16), +2=y(i16), +4=scale, +5=intensity, +6=flags, +7=type,
+    //   +8=vector_ptr(u32), +12=half_w, +13=half_h, +14=vel_x_init, +15=vel_y_init, +16..+19=coll_mesh_ptr
     s.push_str("    ldrsh   r0, [r6, #0]             @ world_x from ROM\n");
     s.push_str("    ldrsh   r1, [r6, #2]             @ world_y from ROM\n");
     s.push_str("    strh    r0, [r7, #0]             @ buf.world_x\n");
@@ -1753,7 +1754,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    strb    r1, [r7, #5]             @ buf.vel_y\n");
     s.push_str("    mov     r0, #1\n    strb    r0, [r7, #6]             @ buf.alive = 1\n");
     s.push_str("    mov     r0, #0\n    strb    r0, [r7, #7]             @ buf.pad = 0\n");
-    s.push_str("    add     r6, r6, #16              @ next ROM obj\n");
+    s.push_str("    add     r6, r6, #20              @ next ROM obj (20 bytes)\n");
     s.push_str("    add     r7, r7, #8               @ next buf slot\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vll_gp_loop\n");
     s.push_str("vll_done:\n");
@@ -1818,7 +1819,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8                @ pop intensity+pad\n");
     s.push_str("vsl_gp_next:\n");
-    s.push_str("    add     r6, r6, #16               @ next ROM obj\n");
+    s.push_str("    add     r6, r6, #20               @ next ROM obj (20 bytes)\n");
     s.push_str("    add     r7, r7, #8                @ next buf slot\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vsl_gp_loop\n");
     s.push_str("vsl_skip_gp:\n");
@@ -1871,7 +1872,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("vsd_next:\n");
-    s.push_str("    add     r5, r5, #16               @ next obj (16 bytes)\n");
+    s.push_str("    add     r5, r5, #20               @ next ROM obj (20 bytes)\n");
     s.push_str("    subs    r4, r4, #1\n    b       vsd_loop\n");
     s.push_str("vsd_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
@@ -1925,7 +1926,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    strb    r0, [r7, #4]\n    strb    r1, [r7, #5]\n");
     s.push_str("    mov     r0, #1\n    strb    r0, [r7, #6]  @ alive=1\n");
     s.push_str("    mov     r0, #0\n    strb    r0, [r7, #7]  @ pad=0\n");
-    s.push_str("    add     r6, r6, #16\n    add     r7, r7, #8\n");
+    s.push_str("    add     r6, r6, #20    @ next ROM obj (20 bytes)\n    add     r7, r7, #8\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vll_gp_loop\n");
     s.push_str("vll_done:\n");
     // Read scroll limits from header (+24..+31)
@@ -1976,7 +1977,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("vsl_gp_next:\n");
-    s.push_str("    add     r6, r6, #16\n    add     r7, r7, #8\n");
+    s.push_str("    add     r6, r6, #20    @ next ROM obj (20 bytes)\n    add     r7, r7, #8\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vsl_gp_loop\n");
     s.push_str("vsl_skip_gp:\n");
     // FG
@@ -2010,7 +2011,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    mov     r2, r1\n    mov     r1, r0\n    ldr     r0, [r5, #8]\n");
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
-    s.push_str("vsd_next:\n    add     r5, r5, #16\n    subs    r4, r4, #1\n    b       vsd_loop\n");
+    s.push_str("vsd_next:\n    add     r5, r5, #20    @ next ROM obj (20 bytes)\n    subs    r4, r4, #1\n    b       vsd_loop\n");
     s.push_str("vsd_done:\n    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
 
     // ── vpy_update_level() ──────────────────────────────────────────────────
@@ -2057,7 +2058,7 @@ fn emit_level_builtins() -> String {
     s.push_str("vul_y_min_ok:\n    cmp     r1, r9\n    ble     vul_y_max_ok\n    mov     r1, r9\n    mov     r2, #0\n    strb    r2, [r4, #5]\n");
     s.push_str("vul_y_max_ok:\n    strh    r1, [r4, #2]\n");
     s.push_str("vul_next:\n");
-    s.push_str("    add     r4, r4, #8\n    add     r10, r10, #16\n");
+    s.push_str("    add     r4, r4, #8\n    add     r10, r10, #20  @ next ROM obj (20 bytes)\n");
     s.push_str("    subs    r5, r5, #1\n    bne     vul_loop\n");
     s.push_str("vul_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
 
@@ -2146,7 +2147,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    sub     r3, r3, r2                @ overlap = total_hw - |dx|\n");
     s.push_str("    cmp     r1, #0\n    bge     vlcx_pos\n    neg     r3, r3\n");
     s.push_str("vlcx_pos:\n    mov     r10, r3\n");
-    s.push_str("vlcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
+    s.push_str("vlcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #20    @ next ROM obj (20 bytes)\n");
     s.push_str("    subs    r8, r8, #1\n    b       vlcx_loop\n");
     s.push_str("vlcx_done:\n    mov     r0, r10\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n");
@@ -2191,7 +2192,7 @@ fn emit_level_builtins() -> String {
     s.push_str("    cmp     r2, r0                    @ obj_top <= player_feet?\n    bgt     vlcy_next\n");
     // Track highest obj_top (closest floor below); sentinel -32767 < any valid top
     s.push_str("    cmp     r10, r2\n    bge     vlcy_next\n    mov     r10, r2\n");
-    s.push_str("vlcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #16\n");
+    s.push_str("vlcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #20    @ next ROM obj (20 bytes)\n");
     s.push_str("    subs    r8, r8, #1\n    b       vlcy_loop\n");
     s.push_str("vlcy_finish:\n");
     // If best_floor_top is still -1 (INT_MIN sentinel mvn #0), return -128+half_h
