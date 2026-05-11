@@ -163,18 +163,32 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
     // MUL16: Multiply X * D -> D
     if needed.contains("MUL16") {
         out.push_str("MUL16:\n");
-        out.push_str("    ; Multiply 16-bit X * D -> D\n");
-        out.push_str("    ; Simple implementation (can be optimized)\n");
+        out.push_str("    ; Signed 16x16->16 multiply: D = X * D (lower 16 bits, sign-correct)\n");
+        out.push_str("    ; Uses 6809 MUL (8x8->16) for constant-time execution.\n");
+        out.push_str("    ; Stack after PSHS X,B,A: [SP+0]=A=D_hi=b_hi, [SP+1]=B=D_lo=b_lo,\n");
+        out.push_str("    ;                         [SP+2]=X_hi=a_hi,  [SP+3]=X_lo=a_lo\n");
+        out.push_str("    ; Result = a_lo*b_lo + (a_hi*b_lo + a_lo*b_hi)*256  (mod 65536)\n");
         out.push_str("    PSHS X,B,A\n");
-        out.push_str("    LDD #0         ; Result accumulator\n");
-        out.push_str("    LDX 2,S        ; Multiplier\n");
-        out.push_str(".MUL16_LOOP:\n");
-        out.push_str("    BEQ .MUL16_END\n");
-        out.push_str("    ADDD ,S        ; Add multiplicand\n");
-        out.push_str("    LEAX -1,X\n");
-        out.push_str("    BRA .MUL16_LOOP\n");
-        out.push_str(".MUL16_END:\n");
-        out.push_str("    LEAS 4,S\n");
+        out.push_str("    ; Step 1: a_lo * b_lo -> 16-bit partial product\n");
+        out.push_str("    LDA 3,S         ; A = a_lo (X low byte)\n");
+        out.push_str("    LDB 1,S         ; B = b_lo (D low byte)\n");
+        out.push_str("    MUL             ; D = a_lo * b_lo (unsigned 16-bit)\n");
+        out.push_str("    STA TMPPTR      ; TMPPTR   = P0_hi (carry into result bits [15:8])\n");
+        out.push_str("    STB TMPPTR+1    ; TMPPTR+1 = P0_lo (result bits [7:0])\n");
+        out.push_str("    ; Step 2: a_hi * b_lo -> only low byte adds to result[15:8]\n");
+        out.push_str("    LDA 2,S         ; A = a_hi (X high byte)\n");
+        out.push_str("    LDB 1,S         ; B = b_lo (D low byte)\n");
+        out.push_str("    MUL             ; D = a_hi * b_lo\n");
+        out.push_str("    ADDB TMPPTR     ; B += P0_hi (ignore carry = mod 256)\n");
+        out.push_str("    STB TMPPTR      ; TMPPTR = accumulated result[15:8]\n");
+        out.push_str("    ; Step 3: a_lo * b_hi -> only low byte adds to result[15:8]\n");
+        out.push_str("    LDA 3,S         ; A = a_lo (X low byte)\n");
+        out.push_str("    LDB 0,S         ; B = b_hi (D high byte)\n");
+        out.push_str("    MUL             ; D = a_lo * b_hi\n");
+        out.push_str("    ADDB TMPPTR     ; B += accumulated result[15:8] (mod 256)\n");
+        out.push_str("    TFR B,A         ; A = result_hi\n");
+        out.push_str("    LDB TMPPTR+1    ; B = result_lo\n");
+        out.push_str("    LEAS 4,S        ; restore stack\n");
         out.push_str("    RTS\n\n");
     }
     

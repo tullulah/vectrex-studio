@@ -342,14 +342,18 @@ pub fn generate_m6809_asm(
     asm.push_str("    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)\n");
     asm.push_str("    TFR X,S\n");
 
-    // CRITICAL: Init_Music_Buf ($F533) uses the current S value to initialize
-    // Vec_Music_Work. Must be called after S = Vec_Default_Stk so that
-    // Wait_Recal uses the correct buffer. Wrong S value causes Wait_Recal to
-    // write garbage to PSG registers each frame (random noise on noise channel).
+    // Set stack pointer to top of Vectrex 2KB RAM ($C800-$CFFF).
+    // BUG FIX (2026-05-11): The BIOS sets SP=$CBEA which collides with user
+    // variable arrays that grow up from $C880. Moving SP to $CFFF gives the
+    // full upper half of RAM as stack space, completely clear of user vars.
+    // IMPORTANT: Init_Music_Buf ($F533) must be called FIRST (below) with SP=$CBEA
+    // because it uses SP as the work buffer address. We set the real SP afterwards.
     use crate::m6809::functions::has_audio_calls;
     if has_audio_calls(module) {
         asm.push_str("    JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk\n");
     }
+    // Now relocate stack to top of RAM, above all user variables
+    asm.push_str("    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)\n\n");
 
     // CRITICAL: Initialize CURRENT_ROM_BANK always (not just multibank).
     // AUDIO_UPDATE compares CURRENT_ROM_BANK vs PSG_MUSIC_BANK; if both are

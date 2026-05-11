@@ -248,7 +248,7 @@ def loop():
         heartbeat_timer = heartbeat_timer + 1
         if heartbeat_timer >= heartbeat_tempo:
             heartbeat_timer = 0
-            PLAY_SFX("heartbeat")
+            #PLAY_SFX("heartbeat")
 
     # Toggle inventory overlay (only in STATE_ROOM)
     if btn2_fired == 1:
@@ -296,24 +296,24 @@ def loop():
 # TITLE SCREEN
 # ═══════════════════════════════════════════════════════════════════════════════
 def draw_title():
-    SET_INTENSITY(127)
-    DRAW_VECTOR("crypt_logo", 0, 10)
+    #SET_INTENSITY(127)
+    DRAW_VECTOR_EX("crypt_logo", 0, 10,0,0)
 
-    blink_timer = blink_timer + 1
-    if blink_timer >= 40:
-        blink_timer = 0
-        if blink_on == 0:
-            blink_on = 1
-        else:
-            blink_on = 0
+    # blink_timer = blink_timer + 1
+    # if blink_timer >= 40:
+    #     blink_timer = 0
+    #     if blink_on == 0:
+    #         blink_on = 1
+    #     else:
+    #         blink_on = 0
 
-    if blink_on == 1:
-        SET_TEXT_SIZE(7)
-        PRINT_TEXT(-77, -100, "PRESS B1 TO START")
+    # if blink_on == 1:
+    #     SET_TEXT_SIZE(7)
+    #     PRINT_TEXT(-77, -100, "PRESS B1 TO START")
 
-    if btn1_fired == 1:
-        intro_page = 0
-        screen = STATE_INTRO
+    # if btn1_fired == 1:
+    #     intro_page = 0
+    #     screen = STATE_INTRO
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INTRO — 3 story pages

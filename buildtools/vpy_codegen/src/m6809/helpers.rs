@@ -253,35 +253,13 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("TEXT_SCALE_W", 1, "Character width for Print_Str_d (default $48 = 72, normal)");
     }
 
-// Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
-    // These need to be at a fixed location for cross-bank compatibility
-    // CRITICAL: Must be within Vectrex 1KB RAM ($C800-$CBFF) — $CFxx is unmapped!
-    // Placed at $CB80, well below stack ($CBEA grows down, ~106 bytes headroom)
-    ram.allocate_fixed("VAR_ARG0", 0xCB80, 2, "Function argument 0 (16-bit)");
-    ram.allocate_fixed("VAR_ARG1", 0xCB82, 2, "Function argument 1 (16-bit)");
-    ram.allocate_fixed("VAR_ARG2", 0xCB84, 2, "Function argument 2 (16-bit)");
-    ram.allocate_fixed("VAR_ARG3", 0xCB86, 2, "Function argument 3 (16-bit)");
-    ram.allocate_fixed("VAR_ARG4", 0xCB88, 2, "Function argument 4 (16-bit)");
+    // NOTE: VAR_ARG0-4 and CURRENT_ROM_BANK are now allocated AFTER user variables
+    // (see below, after generate_user_variables). This prevents collision when
+    // user variable arrays grow past $CB80 (BUG FIX 2026-05-11).
 
-    // CRITICAL (2026-01-20): Multibank bank tracking variable
-    // Required for cross-bank function calls and bank switching wrappers
-    // Must be at fixed address for all banks to access
-    ram.allocate_fixed("CURRENT_ROM_BANK", 0xCB8A, 1, "Current ROM bank ID (multibank tracking)");
-
-    // Audio system variables at FIXED addresses in upper RAM
-    // These are allocated AFTER VAR_ARG0-4 at $CBEB onwards
+    // NOTE: Audio system variables are allocated AFTER user variables (see below)
+    // to prevent overlap with mutable array data buffers.
     use crate::m6809::functions::has_audio_calls;
-    if has_audio_calls(module) {
-        ram.allocate_fixed("PSG_MUSIC_PTR", 0xCBEB, 2, "PSG music data pointer");
-        ram.allocate_fixed("PSG_MUSIC_START", 0xCBED, 2, "PSG music start pointer (for loops)");
-        ram.allocate_fixed("PSG_MUSIC_ACTIVE", 0xCBEF, 1, "PSG music active flag");
-        ram.allocate_fixed("PSG_IS_PLAYING", 0xCBF0, 1, "PSG playing flag");
-        ram.allocate_fixed("PSG_DELAY_FRAMES", 0xCBF1, 1, "PSG frame delay counter");
-        ram.allocate_fixed("PSG_MUSIC_BANK", 0xCBF2, 1, "PSG music bank ID (for multibank)");
-        ram.allocate_fixed("SFX_PTR", 0xCBF3, 2, "SFX data pointer");
-        ram.allocate_fixed("SFX_ACTIVE", 0xCBF5, 1, "SFX active flag");
-        ram.allocate_fixed("SFX_BANK", 0xCBF6, 1, "SFX bank ID (for multibank)");
-    }
 
     if needed.contains("BEEP") {
         ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
@@ -329,6 +307,38 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
 
     // Generate user variables using the same RamLayout instance
     let user_vars_result = crate::m6809::variables::generate_user_variables(module, &mut ram)?;
+
+    // =========================================================================
+    // AUDIO SYSTEM VARIABLES (allocated AFTER all user vars to prevent overlap)
+    // BUG FIX (2026-05-11): Previously hardcoded at $CBEB which overlapped with
+    // mutable array data buffers (e.g. joystick1_state[6] at $CBE4-$CBEF).
+    // Now dynamically allocated after user vars to guarantee no collision.
+    // =========================================================================
+    if has_audio_calls(module) {
+        ram.allocate("PSG_MUSIC_PTR", 2, "PSG music data pointer");
+        ram.allocate("PSG_MUSIC_START", 2, "PSG music start pointer (for loops)");
+        ram.allocate("PSG_MUSIC_ACTIVE", 1, "PSG music active flag");
+        ram.allocate("PSG_IS_PLAYING", 1, "PSG playing flag");
+        ram.allocate("PSG_DELAY_FRAMES", 1, "PSG frame delay counter");
+        ram.allocate("PSG_MUSIC_BANK", 1, "PSG music bank ID (for multibank)");
+        ram.allocate("SFX_PTR", 2, "SFX data pointer");
+        ram.allocate("SFX_ACTIVE", 1, "SFX active flag");
+        ram.allocate("SFX_BANK", 1, "SFX bank ID (for multibank)");
+    }
+
+    // =========================================================================
+    // FUNCTION ARGUMENT SLOTS (allocated AFTER all user vars and PSG vars)
+    // BUG FIX (2026-05-11): Previously fixed at $CB80 which collided with user
+    // variable arrays when the program has many variables (e.g. pang game).
+    // Now dynamically allocated at the end to guarantee no overlap.
+    // CURRENT_ROM_BANK also moved here for the same reason.
+    // =========================================================================
+    ram.allocate("VAR_ARG0", 2, "Function argument 0 (16-bit)");
+    ram.allocate("VAR_ARG1", 2, "Function argument 1 (16-bit)");
+    ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
+    ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
+    ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
+    ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
     
     // =========================================================================
     // EMIT EQU DEFINITIONS
