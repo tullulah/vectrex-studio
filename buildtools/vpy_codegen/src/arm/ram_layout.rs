@@ -73,8 +73,11 @@ pub fn emit_ram_layout() -> String {
         // PSG NOTE engine (0x29C–0x2FF): 3 channels × 32 bytes = 96 bytes + 4-byte mixer shadow
         ("NOTE_STATE",          0x29C, "note engine state: 3 channels × 32 bytes each"),
         ("PSG_MIXER_SHADOW",    0x2FC, "shadow of AY R7 mixer register (0x3F = all disabled)"),
-        // user RAM starts here (0x300)
-        ("USER_RAM_START",      0x300, "user variables begin here"),
+        // MOVE builtin position (used by DRAW_LINE to compute absolute coordinates)
+        ("VPY_MOVE_X",          0x300, "last MOVE X position (added to DRAW_LINE x0/x1)"),
+        ("VPY_MOVE_Y",          0x304, "last MOVE Y position (added to DRAW_LINE y0/y1)"),
+        // user RAM starts here (0x308)
+        ("USER_RAM_START",      0x308, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {
@@ -97,7 +100,7 @@ pub struct RamAllocator {
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F300 } // USER_RAM_START (after note engine + level engine)
+        Self { next: 0x2007_F308 } // USER_RAM_START (after VPY_MOVE_X/Y)
     }
 
     /// Allocate `bytes` bytes, return base address.

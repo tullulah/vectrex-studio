@@ -516,10 +516,12 @@ const SDK_STUBS: Record<string, SdkStub> = {
 
   'v_directDraw32': (s) => {
     // r0=x0, r1=y0, r2=x1, r3=y1, [sp]=brightness
+    // Real hardware uses Vectrex Y+ = up convention. The JS emulator negates Y here
+    // so stored segment values use canvas Y+ = down, matching the JSVecX 6809 emulator.
     const x0  = s.regs[0];
-    const y0  = s.regs[1];
+    const y0  = -(s.regs[1]);
     const x1  = s.regs[2];
-    const y1  = s.regs[3];
+    const y1  = -(s.regs[3]);
     const bri = memRead32(s, s.regs[SP]);
     s.segments.push({ x0, y0, x1, y1, intensity: bri & 0x7F });
   },
@@ -527,16 +529,17 @@ const SDK_STUBS: Record<string, SdkStub> = {
   'v_drawBezierCubic': (s) => {
     // r0=x0, r1=y0, r2=cx0, r3=cy0
     // [sp+0]=cx1, [sp+4]=cy1, [sp+8]=x1, [sp+12]=y1, [sp+16]=steps, [sp+20]=brightness
+    // Y negated: Vectrex Y+ = up → canvas Y+ = down
     const SCALE = 127;
     const sp = s.regs[SP];
-    const x0  = (s.regs[0] | 0) * SCALE;
-    const y0  = (s.regs[1] | 0) * SCALE;
-    const cx0 = (s.regs[2] | 0) * SCALE;
-    const cy0 = (s.regs[3] | 0) * SCALE;
-    const cx1 = (memRead32(s, sp +  0) | 0) * SCALE;
-    const cy1 = (memRead32(s, sp +  4) | 0) * SCALE;
-    const x1  = (memRead32(s, sp +  8) | 0) * SCALE;
-    const y1  = (memRead32(s, sp + 12) | 0) * SCALE;
+    const x0  =  (s.regs[0] | 0) * SCALE;
+    const y0  = -((s.regs[1] | 0) * SCALE);
+    const cx0 =  (s.regs[2] | 0) * SCALE;
+    const cy0 = -((s.regs[3] | 0) * SCALE);
+    const cx1 =  (memRead32(s, sp +  0) | 0) * SCALE;
+    const cy1 = -((memRead32(s, sp +  4) | 0) * SCALE);
+    const x1  =  (memRead32(s, sp +  8) | 0) * SCALE;
+    const y1  = -((memRead32(s, sp + 12) | 0) * SCALE);
     const n   = Math.min(Math.max(memRead32(s, sp + 16) | 0, 2), 64);
     const bri = memRead32(s, sp + 20) & 0x7F;
     if (bri === 0) return;
@@ -557,14 +560,15 @@ const SDK_STUBS: Record<string, SdkStub> = {
   'v_drawBezierQuad': (s) => {
     // r0=x0, r1=y0, r2=cx, r3=cy
     // [sp+0]=x1, [sp+4]=y1, [sp+8]=steps, [sp+12]=brightness
+    // Y negated: Vectrex Y+ = up → canvas Y+ = down
     const SCALE = 127;
     const sp = s.regs[SP];
-    const x0 = (s.regs[0] | 0) * SCALE;
-    const y0 = (s.regs[1] | 0) * SCALE;
-    const cx = (s.regs[2] | 0) * SCALE;
-    const cy = (s.regs[3] | 0) * SCALE;
-    const x1 = (memRead32(s, sp +  0) | 0) * SCALE;
-    const y1 = (memRead32(s, sp +  4) | 0) * SCALE;
+    const x0 =  (s.regs[0] | 0) * SCALE;
+    const y0 = -((s.regs[1] | 0) * SCALE);
+    const cx =  (s.regs[2] | 0) * SCALE;
+    const cy = -((s.regs[3] | 0) * SCALE);
+    const x1 =  (memRead32(s, sp +  0) | 0) * SCALE;
+    const y1 = -((memRead32(s, sp +  4) | 0) * SCALE);
     const n  = Math.min(Math.max(memRead32(s, sp +  8) | 0, 2), 64);
     const bri = memRead32(s, sp + 12) & 0x7F;
     if (bri === 0) return;

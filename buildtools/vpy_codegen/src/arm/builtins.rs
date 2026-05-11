@@ -142,6 +142,10 @@ fn emit_move() -> String {
     s.push_str(".global vpy_move\n.type vpy_move, %function\n.thumb_func\nvpy_move:\n");
     s.push_str("    push    {r4, r5, lr}\n");
     s.push_str("    mov     r4, r0\n    mov     r5, r1\n");
+    // Save MOVE position so vpy_draw_line can apply it as an offset
+    s.push_str("    ldr     r0, =VPY_MOVE_X\n");
+    s.push_str("    str     r4, [r0]            @ VPY_MOVE_X = x\n");
+    s.push_str("    str     r5, [r0, #4]        @ VPY_MOVE_Y = y  (VPY_MOVE_Y = VPY_MOVE_X + 4)\n");
     s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=y
     s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0 (Y mux)
     s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=x
@@ -160,12 +164,24 @@ fn emit_draw_line() -> String {
     s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n"); // 6 regs = 24 bytes
     // r4=x0, r5=y0, r6=x1, r7=y1
     s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
+    // Add MOVE offset (VPY_MOVE_X, VPY_MOVE_Y) to both start and end positions
+    // so dx = (x1+MOVE_X) - (x0+MOVE_X) = x1-x0 correctly cancels
+    // r2 and r3 are free now (already saved in r6, r7)
+    s.push_str("    ldr     r2, =VPY_MOVE_X\n");
+    s.push_str("    ldr     r3, [r2]            @ r3 = VPY_MOVE_X\n");
+    s.push_str("    ldr     r2, [r2, #4]        @ r2 = VPY_MOVE_Y\n");
+    s.push_str("    add     r4, r4, r3          @ x0 += MOVE_X\n");
+    s.push_str("    add     r5, r5, r2          @ y0 += MOVE_Y\n");
+    s.push_str("    add     r6, r6, r3          @ x1 += MOVE_X\n");
+    s.push_str("    add     r7, r7, r2          @ y1 += MOVE_Y\n");
     s.push_str("    ldr     r8, [sp, #24]           @ intensity (5th arg, past 6 saved regs)\n");
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
     s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
-    // Compute dx = x1-x0 → r4 (remaining), dy = y1-y0 → r5 (remaining)
-    s.push_str("    sub     r4, r6, r4\n    sub     r5, r7, r5\n"); // r4=dx, r5=dy
+    // Compute dx = x1-x0, dy = y1-y0 (end coords are NOT offset by MOVE — they are absolute already)
+    // x1 and y1 in DRAW_LINE_ARGS are absolute screen coordinates (same convention as x0,y0)
+    // dx = (MOVE_X + x1) - (MOVE_X + x0) = x1 - x0 (MOVE offsets cancel)
+    s.push_str("    sub     r4, r6, r4\n    sub     r5, r7, r5\n"); // r4=dx=x1-x0, r5=dy=y1-y0 (MOVE cancels)
     // abs(dx) → r6
     s.push_str("    movs    r6, r4\n");
     s.push_str("    bpl     vdl_dx_pos\n");
