@@ -1870,7 +1870,11 @@ export const EmulatorPanel: React.FC = () => {
     }
 
     const PITREX_MAX_X = 16500;
-    const PITREX_MAX_Y = 16500; // matched to PITREX_MAX_X so VPy coords scale identically on both axes (vs 6809)
+    // PITREX_MAX_Y = ALG_MAX_Y/2 = 20500. The Vectrex screen is portrait (9×11 cm),
+    // so the Y range in JSVecX is 41000 (half=20500) while X is 33000 (half=16500).
+    // Both axes share T1 period ≈127 cycles, producing 127×127=16129 units per axis.
+    // Scale: 16129 / 20500 × 205px ≈ 161px from center — same as X (161px), isotropic.
+    const PITREX_MAX_Y = 20500;
     const TARGET_MS = 1000 / 50; // 50 Hz
     let lastFrameTs = 0;
 
