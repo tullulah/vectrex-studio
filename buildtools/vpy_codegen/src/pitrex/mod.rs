@@ -97,6 +97,10 @@ pub fn generate_pitrex_asm(
     // are allocated as .equ constants by allocate_globals_bss() above.
     asm.push_str("PITREX_CUR_X: .space 4\n");
     asm.push_str("PITREX_CUR_Y: .space 4\n");
+    // PITREX_MOVE_X/Y: set only by MOVE() builtin, read by DRAW_LINE as offset.
+    // Separate from PITREX_CUR_X/Y which tracks beam position inside DRAW_VECTOR.
+    asm.push_str("PITREX_MOVE_X: .space 4\n");
+    asm.push_str("PITREX_MOVE_Y: .space 4\n");
     asm.push_str("UART_TRACE_FRAMES_LEFT: .space 4\n");
     asm.push_str("UART_FRAME_NUM: .space 4\n");
     asm.push_str("FRAME_WORK_START: .space 4\n");    // µs timestamp after v_WaitRecal

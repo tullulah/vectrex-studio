@@ -213,10 +213,14 @@ fn emit_pitrex_move() -> String {
     s.push_str("    mul     r2, r0, r4          @ r2 = x*127 (Rd≠Rm)\n");
     s.push_str("    ldr     r4, =PITREX_CUR_X\n");
     s.push_str("    str     r2, [r4]            @ PITREX_CUR_X = x*127\n");
+    s.push_str("    ldr     r4, =PITREX_MOVE_X\n");
+    s.push_str("    str     r2, [r4]            @ PITREX_MOVE_X = x*127\n");
     s.push_str("    mov     r4, #127\n");
     s.push_str("    mul     r2, r1, r4          @ r2 = y*127 (Rd≠Rm)\n");
     s.push_str("    ldr     r4, =PITREX_CUR_Y\n");
     s.push_str("    str     r2, [r4]            @ PITREX_CUR_Y = y*127\n");
+    s.push_str("    ldr     r4, =PITREX_MOVE_Y\n");
+    s.push_str("    str     r2, [r4]            @ PITREX_MOVE_Y = y*127\n");
     // Call v_directMove32(x, y) — unscaled coords; r0, r1 still intact
     s.push_str("    bl      v_directMove32\n");
     s.push_str("    pop     {r4, pc}\n");
@@ -242,10 +246,12 @@ fn emit_pitrex_draw_line() -> String {
     s.push_str("    mul     r1, r1, r12         @ r1 = y0 * 127\n");
     s.push_str("    mul     r2, r2, r12         @ r2 = x1 * 127\n");
     s.push_str("    mul     r3, r3, r12         @ r3 = y1 * 127\n");
-    // Load PITREX_CUR_X and PITREX_CUR_Y (set by MOVE builtin, Vectrex Y+ = up)
-    s.push_str("    ldr     r6, =PITREX_CUR_X\n");
-    s.push_str("    ldr     r5, [r6]            @ r5 = PITREX_CUR_X\n");
-    s.push_str("    ldr     r6, [r6, #4]        @ r6 = PITREX_CUR_Y\n");
+    // Load PITREX_MOVE_X and PITREX_MOVE_Y (set only by MOVE() builtin, Vectrex Y+ = up).
+    // This is separate from PITREX_CUR_X/Y which tracks the beam inside DRAW_VECTOR.
+    // Using PITREX_MOVE_X/Y means DRAW_VECTOR does NOT corrupt the MOVE offset.
+    s.push_str("    ldr     r6, =PITREX_MOVE_X\n");
+    s.push_str("    ldr     r5, [r6]            @ r5 = PITREX_MOVE_X\n");
+    s.push_str("    ldr     r6, [r6, #4]        @ r6 = PITREX_MOVE_Y\n");
     // Add MOVE offset to convert relative DRAW_LINE coords to absolute screen coords
     s.push_str("    add     r0, r0, r5          @ abs_x0 = x0*127 + cur_x\n");
     s.push_str("    add     r1, r1, r6          @ abs_y0 = y0*127 + cur_y\n");
