@@ -619,6 +619,7 @@ export const EmulatorPanel: React.FC = () => {
         pitrexCoreRef.current?.setInput(kb.x, kb.y, kb.buttons & 0xF);
         if (vecx) {
           try {
+            vecx.useAnalogJoy = false; // keyboard is digital — let emuloop handle alg_jch from held flags
             vecx.leftHeld  = kbX < -0.3;
             vecx.rightHeld = kbX > 0.3;
             vecx.downHeld  = kbY < -0.3;
@@ -676,6 +677,9 @@ export const EmulatorPanel: React.FC = () => {
       // JSVecX-specific: directional booleans, analog channels, PSG buttons
       if (vecx) {
         try {
+          // Enable analog joystick mode: alg_jch0/1 are set directly from gamepad
+          // axes below, and vecx_emuloop will NOT override them with digital values.
+          vecx.useAnalogJoy = true;
           vecx.leftHeld  = (x < -0.3) || dpadLeft;
           vecx.rightHeld = (x > 0.3)  || dpadRight;
           vecx.downHeld  = (y < -0.3) || dpadDown;
