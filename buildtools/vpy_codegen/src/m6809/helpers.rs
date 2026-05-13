@@ -206,9 +206,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES")
     {
         let max_enemies: usize = module.meta.max_enemies.unwrap_or(8) as usize;
-        const ENEMY_STRIDE: usize = 16;
+        const ENEMY_STRIDE: usize = 17;
         ram.allocate("ENEMY_POOL", max_enemies * ENEMY_STRIDE,
-            "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+sm_state+sm_timer × N)");
+            "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N)");
         ram.allocate("ENEMY_LOOP_IDX", 1, "Enemy loop counter");
         ram.allocate("ENEMY_COUNT", 1, "Active enemy count");
         ram.allocate("ENEMY_SCRATCH_PTR", 2, "Scratch pointer for enemy iteration");
@@ -602,7 +602,7 @@ fn get_bios_address(symbol_name: &str, fallback_address: &str) -> String {
     fallback_address.to_string()
 }
 
-pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, String> {
+pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::AssetInfo]) -> Result<String, String> {
     let mut asm = String::new();
 
     // Import has_audio_calls for audio helper detection
@@ -790,7 +790,16 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
     // Enemy system runtime subroutines
     if needed.contains("SPAWN_ENEMIES") || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES") {
         let max_enemies = module.meta.max_enemies.unwrap_or(8) as usize;
-        emit_enemy_system_runtime(&mut asm, max_enemies, is_multibank);
+        // Check if any enemy type uses vanim actions (determines if DRAW_ANIM_BANKED is needed)
+        let has_vanim_enemies = assets.iter()
+            .filter(|a| matches!(a.asset_type, crate::AssetType::Enemy))
+            .any(|a| crate::venemy::EnemyResource::load(std::path::Path::new(&a.path))
+                .map(|r| r.actions.iter().any(|act| {
+                    std::path::Path::new(&act.sprite).extension()
+                        .and_then(|e| e.to_str()).unwrap_or("") == "vanim"
+                }))
+                .unwrap_or(false));
+        emit_enemy_system_runtime(&mut asm, max_enemies, is_multibank, has_vanim_enemies);
     }
 
     Ok(asm)
@@ -2436,12 +2445,12 @@ DAR_DONE:\n\
 ///   +8    respawn  (FCB)
 ///   +9    wp_count (FCB)
 ///   +10,11 wp_ptr  (FDB)
-fn emit_enemy_system_runtime(asm: &mut String, max_enemies: usize, is_multibank: bool) {
+fn emit_enemy_system_runtime(asm: &mut String, max_enemies: usize, is_multibank: bool, has_vanim_enemies: bool) {
     asm.push_str(&format!(
 "; ============================================================================\n\
-; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 16 bytes)\n\
+; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 17 bytes)\n\
 ; ============================================================================\n\
-ENEMY_POOL_STRIDE EQU 16\n\
+ENEMY_POOL_STRIDE EQU 17\n\
 ENEMY_POOL_MAX    EQU {max_enemies}\n\
 \n\
 ; Pool record offsets\n\
@@ -2460,6 +2469,7 @@ POOL_WPPTR   EQU 11\n\
 POOL_SM_STATE EQU 13\n\
 POOL_SM_TMR_HI EQU 14\n\
 POOL_SM_TMR_LO EQU 15\n\
+POOL_WPCOUNT   EQU 16\n\
 ; SM state record layout (SM_STATE_STRIDE = 13 bytes, max 4 events)\n\
 SM_STATE_STRIDE EQU 13\n\
 SM_HDR_INIT   EQU 1\n\
@@ -2489,6 +2499,7 @@ SPAWN_ENEMIES_RUNTIME:\n\
     LDY #ENEMY_POOL\n\
     CLRA\n\
 SPAWN_CLR_LOOP:\n\
+    STA ,Y+\n\
     STA ,Y+\n\
     STA ,Y+\n\
     STA ,Y+\n\
@@ -2539,11 +2550,14 @@ SPAWN_FILL_LOOP:\n\
     PULS B,X,Y\n\
     STA 9,Y             ; +9 hp\n\
     CLR 10,Y            ; +10 wp_idx=0\n\
+    LDA 9,X\n\
+    STA 16,Y            ; +16 wp_count\n\
     LDA 10,X\n\
     STA 11,Y            ; +11 wp_ptr hi\n\
     LDA 11,X\n\
     STA 12,Y            ; +12 wp_ptr lo\n\
     ; Init SM state (+13) from type header [5-6] = SM ptr\n\
+    PSHS B              ; save loop counter (B clobbered by LDB below)\n\
     LDA 5,Y             ; type_ptr hi (pool)\n\
     LDB 6,Y             ; type_ptr lo (pool)\n\
     TFR D,X             ; X = _NAME_ENEMY header\n\
@@ -2569,16 +2583,17 @@ SPAWN_SM_NOSM:\n\
     LDA #$FF\n\
     STA 13,Y            ; pool.sm_state = $FF (no SM)\n\
 SPAWN_SM_DONE:\n\
+    PULS B              ; restore loop counter\n\
     CLR 14,Y            ; pool.sm_decay_timer hi = 0\n\
     CLR 15,Y            ; pool.sm_decay_timer lo = 0\n\
     LDX >ENEMY_SCRATCH_PTR ; restore instance ptr (clobbered above)\n\
     ; advance X by 12 (instance stride)\n\
     LEAX 12,X\n\
     STX >ENEMY_SCRATCH_PTR\n\
-    ; advance Y by 16 (pool stride)\n\
-    LEAY 16,Y\n\
+    ; advance Y by 17 (pool stride)\n\
+    LEAY 17,Y\n\
     DECB\n\
-    BNE SPAWN_FILL_LOOP\n\
+    LBNE SPAWN_FILL_LOOP\n\
 SPAWN_ENE_DONE:\n\
     RTS\n\
 \n"
@@ -2614,100 +2629,51 @@ UPD_ENE_LOOP:\n\
     TFR D,X             ; X = wp_ptr base (level bank)\n\
     LDA 10,Y            ; wp_idx\n\
     ASLA\n\
-    ASLA                ; × 4 bytes per waypoint\n\
+    ASLA                ; × 4 bytes per waypoint (FDB x, FDB y)\n\
     LEAX A,X            ; X = &wp[wp_idx]\n\
-    LDA ,X              ; target x hi\n\
-    CMPA 1,Y\n\
-    BEQ UPD_TRY_XLO\n\
-    BGT UPD_INC_XHI\n\
-    DEC 1,Y\n\
-    BRA UPD_MOVE_Y\n\
-UPD_INC_XHI:\n\
-    INC 1,Y\n\
-    BRA UPD_MOVE_Y\n\
-UPD_TRY_XLO:\n\
-    LDA 1,X             ; target x lo\n\
-    CMPA 2,Y\n\
-    BEQ UPD_MOVE_Y\n\
-    BGT UPD_INC_XLO\n\
-    DEC 2,Y\n\
-    BRA UPD_MOVE_Y\n\
-UPD_INC_XLO:\n\
-    INC 2,Y\n\
-UPD_MOVE_Y:\n\
-    LDA 2,X             ; target y hi\n\
-    CMPA 3,Y\n\
-    BEQ UPD_TRY_YLO\n\
-    BGT UPD_INC_YHI\n\
-    DEC 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_INC_YHI:\n\
-    INC 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_TRY_YLO:\n\
-    LDA 3,X             ; target y lo\n\
-    CMPA 4,Y\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    BGT UPD_INC_YLO\n\
-    DEC 4,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_INC_YLO:\n\
-    INC 4,Y\n\
-UPD_SM_DECAY:\n\
-    LDA 13,Y            ; sm_state ($FF = no SM)\n\
-    CMPA #$FF\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    LDD 14,Y            ; sm_decay_timer (16-bit)\n\
-    CMPD #0\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
+    ; ---- Move X (16-bit signed) ----\n\
+    LDD ,X              ; D = target_x (FDB)\n\
+    CMPD 1,Y            ; target_x - world_x\n\
+    LBEQ UPD_MOVE_Y     ; x already at target\n\
+    LBGT UPD_INC_X\n\
+    LDD 1,Y\n\
     SUBD #1\n\
-    STD 14,Y\n\
-    CMPD #0\n\
-    LBNE UPD_ENE_NEXT_POP\n\
-    ; Timer hit 0: look up decay_to\n\
-    LDA 5,Y\n\
-    LDB 6,Y\n\
-    TFR D,X\n\
-    LDA 5,X\n\
-    LDB 6,X\n\
-    CMPD #0\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    TFR D,X\n\
-    LEAX 2,X\n\
-    LDB 13,Y\n\
-    LDA #13\n\
-    MUL\n\
-    LDA 5,Y\n\
-    LDB 6,Y\n\
-    TFR D,X\n\
-    LDA 5,X\n\
-    LDB 6,X\n\
-    TFR D,X\n\
-    LEAX 2,X\n\
-    LEAX D,X\n\
-    LDA 3,X\n\
-    CMPA #$FF\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    STA 13,Y\n\
-    LDB #13\n\
-    MUL\n\
-    LDA 5,Y\n\
-    LDB 6,Y\n\
-    TFR D,X\n\
-    LDA 5,X\n\
-    LDB 6,X\n\
-    TFR D,X\n\
-    LEAX 2,X\n\
-    LEAX D,X\n\
-    LDA 0,X\n\
-    STA 7,Y\n\
-    LDA 1,X\n\
-    STA 14,Y\n\
-    LDA 2,X\n\
-    STA 15,Y\n\
+    STD 1,Y\n\
+    LBRA UPD_MOVE_Y\n\
+UPD_INC_X:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+UPD_MOVE_Y:\n\
+    ; ---- Move Y (16-bit signed) ----\n\
+    LDD 2,X             ; D = target_y (FDB)\n\
+    CMPD 3,Y            ; target_y - world_y\n\
+    LBEQ UPD_CHECK_WP   ; y at target\n\
+    LBGT UPD_INC_Y\n\
+    LDD 3,Y\n\
+    SUBD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_INC_Y:\n\
+    LDD 3,Y\n\
+    ADDD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_CHECK_WP:\n\
+    ; y at target: check x too\n\
+    LDD ,X              ; D = target_x\n\
+    CMPD 1,Y\n\
+    LBNE UPD_ENE_NEXT_POP ; x not yet at target\n\
+    ; Both x and y at target: advance wp_idx\n\
+    INC 10,Y            ; wp_idx++\n\
+    LDA 10,Y\n\
+    CMPA 16,Y           ; compare to wp_count (pool +16)\n\
+    LBLO UPD_ENE_NEXT_POP ; if idx < count, done\n\
+    CLR 10,Y            ; else wrap to 0\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
-    LEAY 16,Y           ; next pool record\n\
+    LEAY 17,Y           ; next pool record\n\
     DECB\n\
     LBNE UPD_ENE_LOOP\n\
     PULS A              ; restore original bank\n\
@@ -2738,100 +2704,51 @@ UPD_ENE_LOOP:\n\
     TFR D,X             ; X = wp_ptr base\n\
     LDA 10,Y            ; wp_idx\n\
     ASLA\n\
-    ASLA                ; × 4 bytes per waypoint\n\
+    ASLA                ; × 4 bytes per waypoint (FDB x, FDB y)\n\
     LEAX A,X            ; X = &wp[wp_idx]\n\
-    LDA ,X              ; target x hi\n\
-    CMPA 1,Y\n\
-    BEQ UPD_TRY_XLO\n\
-    BGT UPD_INC_XHI\n\
-    DEC 1,Y\n\
-    BRA UPD_MOVE_Y\n\
-UPD_INC_XHI:\n\
-    INC 1,Y\n\
-    BRA UPD_MOVE_Y\n\
-UPD_TRY_XLO:\n\
-    LDA 1,X             ; target x lo\n\
-    CMPA 2,Y\n\
-    BEQ UPD_MOVE_Y\n\
-    BGT UPD_INC_XLO\n\
-    DEC 2,Y\n\
-    BRA UPD_MOVE_Y\n\
-UPD_INC_XLO:\n\
-    INC 2,Y\n\
-UPD_MOVE_Y:\n\
-    LDA 2,X             ; target y hi\n\
-    CMPA 3,Y\n\
-    BEQ UPD_TRY_YLO\n\
-    BGT UPD_INC_YHI\n\
-    DEC 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_INC_YHI:\n\
-    INC 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_TRY_YLO:\n\
-    LDA 3,X             ; target y lo\n\
-    CMPA 4,Y\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    BGT UPD_INC_YLO\n\
-    DEC 4,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_INC_YLO:\n\
-    INC 4,Y\n\
-UPD_SM_DECAY:\n\
-    LDA 13,Y            ; sm_state ($FF = no SM)\n\
-    CMPA #$FF\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    LDD 14,Y            ; sm_decay_timer (16-bit)\n\
-    CMPD #0\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
+    ; ---- Move X (16-bit signed) ----\n\
+    LDD ,X              ; D = target_x (FDB)\n\
+    CMPD 1,Y            ; target_x - world_x\n\
+    LBEQ UPD_MOVE_Y     ; x already at target\n\
+    LBGT UPD_INC_X\n\
+    LDD 1,Y\n\
     SUBD #1\n\
-    STD 14,Y\n\
-    CMPD #0\n\
-    LBNE UPD_ENE_NEXT_POP\n\
-    ; Timer hit 0: look up decay_to\n\
-    LDA 5,Y\n\
-    LDB 6,Y\n\
-    TFR D,X\n\
-    LDA 5,X\n\
-    LDB 6,X\n\
-    CMPD #0\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    TFR D,X\n\
-    LEAX 2,X\n\
-    LDB 13,Y\n\
-    LDA #13\n\
-    MUL\n\
-    LDA 5,Y\n\
-    LDB 6,Y\n\
-    TFR D,X\n\
-    LDA 5,X\n\
-    LDB 6,X\n\
-    TFR D,X\n\
-    LEAX 2,X\n\
-    LEAX D,X\n\
-    LDA 3,X\n\
-    CMPA #$FF\n\
-    LBEQ UPD_ENE_NEXT_POP\n\
-    STA 13,Y\n\
-    LDB #13\n\
-    MUL\n\
-    LDA 5,Y\n\
-    LDB 6,Y\n\
-    TFR D,X\n\
-    LDA 5,X\n\
-    LDB 6,X\n\
-    TFR D,X\n\
-    LEAX 2,X\n\
-    LEAX D,X\n\
-    LDA 0,X\n\
-    STA 7,Y\n\
-    LDA 1,X\n\
-    STA 14,Y\n\
-    LDA 2,X\n\
-    STA 15,Y\n\
+    STD 1,Y\n\
+    LBRA UPD_MOVE_Y\n\
+UPD_INC_X:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+UPD_MOVE_Y:\n\
+    ; ---- Move Y (16-bit signed) ----\n\
+    LDD 2,X             ; D = target_y (FDB)\n\
+    CMPD 3,Y            ; target_y - world_y\n\
+    LBEQ UPD_CHECK_WP   ; y at target\n\
+    LBGT UPD_INC_Y\n\
+    LDD 3,Y\n\
+    SUBD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_INC_Y:\n\
+    LDD 3,Y\n\
+    ADDD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_CHECK_WP:\n\
+    ; y at target: check x too\n\
+    LDD ,X              ; D = target_x\n\
+    CMPD 1,Y\n\
+    LBNE UPD_ENE_NEXT_POP ; x not yet at target\n\
+    ; Both x and y at target: advance wp_idx\n\
+    INC 10,Y            ; wp_idx++\n\
+    LDA 10,Y\n\
+    CMPA 16,Y           ; compare to wp_count (pool +16)\n\
+    LBLO UPD_ENE_NEXT_POP ; if idx < count, done\n\
+    CLR 10,Y            ; else wrap to 0\n\
+    LBRA UPD_ENE_NEXT_POP\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
-    LEAY 16,Y           ; next pool record\n\
+    LEAY 17,Y           ; next pool record\n\
     DECB\n\
     LBNE UPD_ENE_LOOP\n\
 UPD_ENE_DONE:\n\
@@ -2860,20 +2777,18 @@ DRW_ENE_LOOP:\n\
     LDA ,Y              ; active?\n\
     LBEQ DRW_ENE_NEXT_POP\n\
     ; Resolve type header and action table entry\n\
-    LDA 5,Y             ; type_ptr hi (helpers bank in multibank)\n\
+    LDA 5,Y             ; type_ptr hi\n\
     LDB 6,Y             ; type_ptr lo\n\
     TFR D,X             ; X = _NAME_ENEMY header\n\
-    LEAX 7,X            ; skip 7-byte header (hp,speed,action_dur×2,action_count,sm_ptr×2) → action table\n\
-    LDA 7,Y             ; action index\n\
-    LDB #6              ; 6 bytes per action entry\n\
-    MUL                 ; D = action_idx * 6\n\
-    LEAX D,X            ; X = &actions[action]\n");
+    LEAX 7,X            ; skip 7-byte header → action table\n\
+    LDA 7,Y             ; action index\n");
 
-    // Conditional draw code: multibank uses FCB sprite_idx + DRAW_VECTOR_BANKED / DRAW_ANIM_BANKED,
-    // single-bank uses FDB sprite_ptr with direct Draw_Sync_List_At_With_Mirrors.
     if is_multibank {
         asm.push_str(
-"; --- Multibank: FCB sprite_idx at action[+0], FCB sprite_type at action[+1] ---\n\
+"    LDB #6              ; 6 bytes per action entry (multibank)\n\
+    MUL                 ; D = action_idx * 6\n\
+    LEAX D,X            ; X = &actions[action]\n\
+; --- Multibank: FCB sprite_idx at action[+0], FCB sprite_type at action[+1] ---\n\
     LDA ,X              ; sprite_idx (byte [0])\n\
     CMPA #$FF           ; $FF = no sprite assigned\n\
     LBEQ DRW_ENE_NEXT_POP\n\
@@ -2903,7 +2818,11 @@ DRW_ENE_LOOP:\n\
     JSR DRAW_VECTOR_BANKED\n\
     PULS Y              ; restore pool pointer\n\
     LBRA DRW_ENE_NEXT_POP\n\
-; --- Vanim path: DRAW_ANIM_BANKED (anim data is in helpers bank; no bank switch) ---\n\
+");
+        // Vanim branch: only emitted when enemy types use .vanim sprites
+        if has_vanim_enemies {
+            asm.push_str(
+"; --- Vanim path: DRAW_ANIM_BANKED ---\n\
 DRW_ENE_VANIM:\n\
     LDA >ENEMY_SCRATCH_X    ; anim_state ptr hi\n\
     LDB >ENEMY_SCRATCH_X+1  ; anim_state ptr lo\n\
@@ -2916,35 +2835,64 @@ DRW_ENE_VANIM:\n\
     TFR D,X             ; X = anim_idx (16-bit, A=0)\n\
     JSR DRAW_ANIM_BANKED\n\
     PULS Y              ; restore pool pointer\n\
-DRW_ENE_NEXT_POP:\n\
+");
+        } else {
+            // No vanim enemies — DRW_ENE_VANIM just falls through to DRW_ENE_NEXT_POP
+            asm.push_str("DRW_ENE_VANIM:\n");
+        }
+        asm.push_str(
+"DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
-    LEAY 16,Y           ; next pool record\n\
+    LEAY 17,Y           ; next pool record\n\
     DECB\n\
     LBNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
     RTS\n\n"
         );
     } else {
+        // SINGLE-BANK: action table uses compile_to_asm_with_name() format:
+        //   [0-1] FDB sprite_ptr  — direct address of _NAME_VECTORS (0=no sprite)
+        //   [2]   FCB sprite_type — 0=vec, 1=vanim
+        //   [3]   FCB loop
+        // Total: 4 bytes per entry.
+        // Path loop mirrors DRAW_VECTOR_BANKED (no bank switch needed).
         asm.push_str(
-"; --- Single-bank: FDB sprite_ptr at action[+0,+1]; direct draw ---\n\
-    LDD ,X              ; sprite_ptr (FDB)\n\
-    STD >ENEMY_SCRATCH_PTR\n\
-    ; Set draw position\n\
-    LDA 2,Y             ; x lo\n\
-    STA >DRAW_VEC_X\n\
-    CLR >DRAW_VEC_X_HI\n\
-    LDA 4,Y             ; y lo\n\
-    STA >DRAW_VEC_Y\n\
-    LDX >ENEMY_SCRATCH_PTR\n\
-    LBEQ DRW_ENE_NEXT_POP    ; sprite_ptr == 0 → no sprite\n\
-    LDX 1,X             ; X = path0 ptr (FDB at header+1)\n\
-    LDA >DRAW_VEC_Y\n\
-    LDB >DRAW_VEC_X\n\
-    JSR $F2B0           ; Moveto_d (A=y, B=x)\n\
-    JSR $F1AA           ; Draw_Sync_List_At_With_Mirrors\n\
+"    LDB #4              ; 4 bytes per action entry (FDB sprite_ptr+FCB type+FCB loop)\n\
+    MUL                 ; D = action_idx * 4\n\
+    LEAX D,X            ; X = &actions[action]\n\
+    LDD ,X              ; sprite_ptr = FDB at action[0,1] (_NAME_VECTORS address)\n\
+    CMPD #0             ; 0 = no sprite assigned\n\
+    LBEQ DRW_ENE_NEXT_POP\n\
+    TFR D,X             ; X = _NAME_VECTORS header address\n\
+    ; Set draw position while DP=$C8 (direct page addressing)\n\
+    LDA 2,Y             ; world_x lo (pool +2)\n\
+    STA DRAW_VEC_X\n\
+    LDA 4,Y             ; world_y lo (pool +4)\n\
+    STA DRAW_VEC_Y\n\
+    CLR DRAW_VEC_INTENSITY  ; use vector's own intensity\n\
+    CLR MIRROR_X\n\
+    CLR MIRROR_Y\n\
+    ; Draw paths — mirrors DRAW_VECTOR_BANKED path loop (no bank switch)\n\
+    JSR $F1AA           ; DP_to_D0 (required before DSWM / VIA access)\n\
+    LDD ,X              ; D = path_count (FDB at vector header start)\n\
+    CMPD #0\n\
+    LBEQ DRW_ENE_SB_DONE\n\
+    PSHS Y              ; save pool ptr (Y used as path table ptr below)\n\
+    LEAY 2,X            ; Y = first path FDB entry (skip 2-byte path_count)\n\
+DRW_ENE_SB_PATH:\n\
+    PSHS D              ; save remaining path count\n\
+    LDX ,Y              ; X = path data address (FDB entry)\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    LEAY 2,Y            ; advance to next FDB entry\n\
+    PULS D              ; restore count\n\
+    SUBD #1\n\
+    BNE DRW_ENE_SB_PATH\n\
+    PULS Y              ; restore pool ptr\n\
+DRW_ENE_SB_DONE:\n\
+    JSR $F1AF           ; DP_to_C8 (restore DP for RAM access)\n\
 DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
-    LEAY 16,Y           ; next pool record\n\
+    LEAY 17,Y           ; next pool record\n\
     DECB\n\
     LBNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
@@ -2960,7 +2908,7 @@ DRW_ENE_DONE:\n\
 ; Effect: pool[A].active=0, ENEMY_COUNT--\n\
 ; Return: RESULT = new ENEMY_COUNT (D)\n\
 KILL_ENEMY_RUNTIME:\n\
-    LDB #16\n\
+    LDB #17\n\
     MUL\n\
     LDX #ENEMY_POOL\n\
     LEAX D,X\n\
@@ -2977,7 +2925,7 @@ KILL_ENEMY_RUNTIME:\n\
 ; Uses ENEMY_SCRATCH_PTR (2 bytes) and ENEMY_SCRATCH_X (1 byte) as temporals.\n\
 ENEMY_FIRE_EVENT_RUNTIME:\n\
     STB >ENEMY_SCRATCH_X    ; save event hash (1 byte)\n\
-    LDB #16\n\
+    LDB #17\n\
     MUL                     ; D = A * stride\n\
     LDX #ENEMY_POOL\n\
     LEAX D,X                ; X = &pool[A]\n\
