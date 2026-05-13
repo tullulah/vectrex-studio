@@ -1591,6 +1591,9 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r7, =LEVEL_GP_BUF   @ buf (current x,y)\n");
     s.push_str("    cmp     r4, #0\n    beq     .Lshl_fg\n");
     s.push_str(".Lshl_gp_loop:\n");
+    s.push_str("    ldrb    r12, [r5, #7]       @ obj type (1=enemy)\n");
+    s.push_str("    cmp     r12, #1\n");
+    s.push_str("    beq     .Lshl_gp_skip       @ enemies drawn by DRAW_ENEMIES\n");
     s.push_str("    ldrsh   r0, [r7]            @ buf.x\n");
     s.push_str("    ldrsh   r1, [r7, #2]        @ buf.y\n");
     s.push_str("    ldrb    r8, [r5, #5]        @ intensity (from ROM obj)\n");
