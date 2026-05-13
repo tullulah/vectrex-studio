@@ -220,6 +220,9 @@ export class Rp2350System implements ISystem, IBus {
   // Signed i8 axis values [-127, 127]. Default 0 (centred).
   private joyJ1X: number = 0;
   private joyJ1Y: number = 0;
+  // Button state for BTN_STATE_J1 (bits 4-7, active-low). Default 0xF0 = no buttons pressed.
+  // Kept separate from this.via.joyButtons (which is reset to 0x00 for analog SAR correctness).
+  private joyButtonState: number = 0xF0;
 
   // ---- Audio ----
   private audioCtx:  AudioContext | null           = null;
@@ -314,6 +317,7 @@ export class Rp2350System implements ISystem, IBus {
   reset(entryPoint: number = DEFAULT_ENTRY_POINT): void {
     this.sram.fill(0);
     this.frameCounter = 0;
+    this.joyButtonState = 0xF0;  // default: no buttons pressed (active-low)
 
     // BTN_STATE_J1 / BTN_STATE_J2 must default to 0xF0 / 0xFF (active-low, no buttons pressed).
     // vpy_update_buttons caches VIA Port B into these before the first loop iteration, but until
@@ -415,6 +419,19 @@ export class Rp2350System implements ISystem, IBus {
       console.log(`[Rp2350System.runFrame] EXIT frame=${fc} reason=${reason}`);
       if (firstPcs.length > 0) {
         console.log(`[Rp2350System.runFrame] first PCs: ${firstPcs.join(' → ')}`);
+      }
+    }
+    // Dump enemy pool state every frame for the first 90 frames, then every 60
+    if (fc < 90 || fc % 60 === 0) {
+      const ecOff = 0x7F308;
+      const count = (this.sram[ecOff] | (this.sram[ecOff+1]<<8) | (this.sram[ecOff+2]<<16) | (this.sram[ecOff+3]<<24)) >>> 0;
+      if (count > 0) {
+        const b = 0x7F30C;
+        const active = (this.sram[b] | (this.sram[b+1]<<8) | (this.sram[b+2]<<16) | (this.sram[b+3]<<24)) >>> 0;
+        const wx = (this.sram[b+4]  | (this.sram[b+5]<<8)  | (this.sram[b+6]<<16)  | (this.sram[b+7]<<24))  | 0;
+        const wy = (this.sram[b+8]  | (this.sram[b+9]<<8)  | (this.sram[b+10]<<16) | (this.sram[b+11]<<24)) | 0;
+        const wpIdx = this.sram[b+20];
+        console.log(`[Rp2350 ENEMY] frame=${fc} world=(${wx},${wy}) wp_idx=${wpIdx}`);
       }
     }
 
@@ -596,8 +613,9 @@ export class Rp2350System implements ISystem, IBus {
         const j2Off = btnJ2Addr !== undefined
           ? btnJ2Addr - 0x20000000
           : BTN_J2_OFF;
-        // joyButtons: bits 4-7 active-low.  Lower bits don't matter for button reads.
-        this.sram[j1Off] = this.via.joyButtons & 0xF0;
+        // joyButtons: bits 4-7 active-low.  Use joyButtonState (not via.joyButtons, which
+        // is reset to 0x00 for analog SAR correctness and would read as all-pressed).
+        this.sram[j1Off] = this.joyButtonState & 0xF0;
         // PSG register 14 (J2 buttons) — not yet wired to host input; 0xFF = all released.
         this.sram[j2Off] = 0xFF;
         return 10;
@@ -892,6 +910,7 @@ export class Rp2350System implements ISystem, IBus {
    * Example — Button 1 pressed: setJoyButtons(0xE0)
    */
   setJoyButtons(portBMask: number): void {
+    this.joyButtonState = portBMask & 0xF0;
     this.via.joyButtons = portBMask & 0xF0;
   }
 
