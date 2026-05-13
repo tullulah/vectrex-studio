@@ -2897,13 +2897,14 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    strb    r6, [r7, #24]   @ pool.mirror_on_patrol\n");
     s.push_str("    ldrb    r6, [r4, #11]   @ default_facing\n");
     s.push_str("    strb    r6, [r7, #25]   @ pool.default_facing\n");
-    // active=1, cur_target=0, dir=1 (start facing right), clear pad (+28..+31)
+    // active=1, cur_target=0, dir=1 (start facing right); store ROM waypoints base at pool+28
     s.push_str("    mov     r6, #1\n");
     s.push_str("    strb    r6, [r7, #12]   @ pool.active = 1\n");
     s.push_str("    strb    r6, [r7, #26]   @ pool.dir = 1 (right, initial)\n");
     s.push_str("    mov     r6, #0\n");
     s.push_str("    strb    r6, [r7, #14]   @ pool.cur_target = 0\n");
-    s.push_str("    str     r6, [r7, #28]   @ pool.pad (+28..+31) = 0 (also zeros anim state)\n");
+    s.push_str("    add     r6, r4, #12     @ ROM waypoints base (ROM entry + 12)\n");
+    s.push_str("    str     r6, [r7, #28]   @ pool.wp_base = ptr to ROM waypoints\n");
     // is_anim flag is at ROM+12 + wp_count*4 (variable offset after all waypoints)
     s.push_str("    ldrb    r6, [r4, #9]    @ wp_count (re-read for is_anim offset)\n");
     s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
@@ -2935,18 +2936,20 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
 
 fn emit_pitrex_update_enemies() -> String {
     // pitrex_update_enemies() — advance enemy AI one frame.
-    // Only patrol AI (ai_type=1) implemented: moves enemy along X axis
-    // between wp0 and wp1, reversing direction at each endpoint.
+    // Patrol AI (ai_type=1): moves enemy toward each waypoint in sequence (X+Y),
+    // advancing wp_idx when both axes reach the target, then wrapping.
+    // pool+28 = wp_base: pointer to the ROM waypoints array (stored by spawn).
     // Speed: PATROL_SPEED = 1 VPy unit/frame.
     let mut s = String::new();
-    s.push_str("@ pitrex_update_enemies() — advance enemy AI (patrol)\n");
+    s.push_str("@ pitrex_update_enemies() — advance enemy AI (full X+Y patrol)\n");
     s.push_str(".global pitrex_update_enemies\n.type pitrex_update_enemies, %function\npitrex_update_enemies:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}\n");
     s.push_str("    ldr     r4, =PITREX_ENEMY_COUNT\n");
     s.push_str("    ldr     r4, [r4]\n");
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    beq     .Lpue_done\n");
     s.push_str("    ldr     r5, =PITREX_ENEMY_POOL\n");
+    s.push_str("    mov     r12, #1             @ PATROL_SPEED\n");
     s.push_str(".Lpue_loop:\n");
     // skip inactive
     s.push_str("    ldrb    r6, [r5, #12]       @ active\n");
@@ -2960,55 +2963,82 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
     s.push_str("    cmp     r6, #2\n");
     s.push_str("    blt     .Lpue_skip\n");
-    // load cur_target (0 or 1), compute target_x address: wp0 at +16, wp1 at +20
+    // compute &wp[cur_target] from pool.wp_base (pool+28) and cur_target (pool+14)
     s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
-    s.push_str("    mov     r7, r5\n");
-    s.push_str("    add     r7, r7, #16         @ &wp0_x\n");
-    s.push_str("    lsl     r8, r6, #2          @ cur_target * 4\n");
-    s.push_str("    add     r7, r7, r8          @ &wp[cur_target].x\n");
+    s.push_str("    ldr     r7, [r5, #28]       @ pool.wp_base (ROM waypoints ptr)\n");
+    s.push_str("    lsl     r6, r6, #2          @ cur_target * 4\n");
+    s.push_str("    add     r7, r7, r6          @ &wp[cur_target]\n");
     s.push_str("    ldrsh   r8, [r7]            @ target_x\n");
-    // load current x
-    s.push_str("    ldrsh   r9, [r5, #4]        @ current x\n");
-    // dx = target_x - current_x
-    s.push_str("    sub     r10, r8, r9         @ dx = target_x - x\n");
-    // Update dir from dx sign (0=left, 1=right); skip if dx==0
-    s.push_str("    cmp     r10, #0\n");
-    s.push_str("    beq     .Lpue_move          @ dx==0, skip dir update\n");
-    s.push_str("    movgt   r6, #1              @ dir=right if dx>0\n");
-    s.push_str("    movlt   r6, #0              @ dir=left  if dx<0\n");
-    s.push_str("    strb    r6, [r5, #26]       @ pool.dir\n");
-    s.push_str(".Lpue_move:\n");
-    // speed = 1
-    s.push_str("    mov     r7, #1              @ PATROL_SPEED\n");
-    // move or snap
-    s.push_str("    cmp     r10, #0\n");
-    s.push_str("    blt     .Lpue_neg\n");
-    // dx >= 0
-    s.push_str("    cmp     r10, r7             @ dx <= speed?\n");
-    s.push_str("    ble     .Lpue_snap\n");
-    s.push_str("    add     r9, r9, r7          @ x += speed\n");
-    s.push_str("    strh    r9, [r5, #4]\n");
-    s.push_str("    b       .Lpue_skip\n");
-    s.push_str(".Lpue_neg:\n");
-    // dx < 0
-    s.push_str("    rsb     r10, r10, #0        @ |dx|\n");
-    s.push_str("    cmp     r10, r7             @ |dx| <= speed?\n");
-    s.push_str("    ble     .Lpue_snap\n");
-    s.push_str("    sub     r9, r9, r7          @ x -= speed\n");
-    s.push_str("    strh    r9, [r5, #4]\n");
-    s.push_str("    b       .Lpue_skip\n");
-    s.push_str(".Lpue_snap:\n");
-    // snap to target_x and flip cur_target
-    s.push_str("    strh    r8, [r5, #4]        @ x = target_x\n");
+    s.push_str("    ldrsh   r9, [r7, #2]        @ target_y\n");
+    // load current position
+    s.push_str("    ldrsh   r10, [r5, #4]       @ x\n");
+    s.push_str("    ldrsh   r11, [r5, #6]       @ y\n");
+    // ── move x toward target_x ──
+    s.push_str("    sub     r6, r8, r10         @ dx = target_x - x\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_movey         @ dx==0, skip x\n");
+    // update dir from dx sign
+    s.push_str("    mov     r7, #0              @ dir=left default\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r7, #1              @ dir=right if dx>0\n");
+    s.push_str("    strb    r7, [r5, #26]       @ pool.dir\n");
+    s.push_str("    blt     .Lpue_xneg\n");
+    // dx > 0: move right
+    s.push_str("    cmp     r6, r12             @ dx vs SPEED\n");
+    s.push_str("    ble     .Lpue_xsnap\n");
+    s.push_str("    add     r10, r10, r12       @ x += SPEED\n");
+    s.push_str("    b       .Lpue_movey\n");
+    s.push_str(".Lpue_xneg:\n");
+    // dx < 0: move left
+    s.push_str("    rsb     r6, r6, #0          @ |dx|\n");
+    s.push_str("    cmp     r6, r12\n");
+    s.push_str("    ble     .Lpue_xsnap\n");
+    s.push_str("    sub     r10, r10, r12       @ x -= SPEED\n");
+    s.push_str("    b       .Lpue_movey\n");
+    s.push_str(".Lpue_xsnap:\n");
+    s.push_str("    mov     r10, r8             @ x = target_x\n");
+    // ── move y toward target_y ──
+    s.push_str(".Lpue_movey:\n");
+    s.push_str("    sub     r6, r9, r11         @ dy = target_y - y\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_store         @ dy==0, skip y\n");
+    s.push_str("    blt     .Lpue_yneg\n");
+    // dy > 0: move up
+    s.push_str("    cmp     r6, r12\n");
+    s.push_str("    ble     .Lpue_ysnap\n");
+    s.push_str("    add     r11, r11, r12       @ y += SPEED\n");
+    s.push_str("    b       .Lpue_store\n");
+    s.push_str(".Lpue_yneg:\n");
+    // dy < 0: move down
+    s.push_str("    rsb     r6, r6, #0          @ |dy|\n");
+    s.push_str("    cmp     r6, r12\n");
+    s.push_str("    ble     .Lpue_ysnap\n");
+    s.push_str("    sub     r11, r11, r12       @ y -= SPEED\n");
+    s.push_str("    b       .Lpue_store\n");
+    s.push_str(".Lpue_ysnap:\n");
+    s.push_str("    mov     r11, r9             @ y = target_y\n");
+    // ── write back position ──
+    s.push_str(".Lpue_store:\n");
+    s.push_str("    strh    r10, [r5, #4]       @ pool.x = x\n");
+    s.push_str("    strh    r11, [r5, #6]       @ pool.y = y\n");
+    // advance waypoint if both axes reached target
+    s.push_str("    cmp     r10, r8             @ x == target_x?\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    cmp     r11, r9             @ y == target_y?\n");
+    s.push_str("    bne     .Lpue_skip\n");
     s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
-    s.push_str("    eor     r6, r6, #1          @ toggle 0↔1\n");
-    s.push_str("    strb    r6, [r5, #14]\n");
+    s.push_str("    ldrb    r7, [r5, #15]       @ wp_count\n");
+    s.push_str("    add     r6, r6, #1\n");
+    s.push_str("    cmp     r6, r7\n");
+    s.push_str("    it      ge\n");
+    s.push_str("    movge   r6, #0              @ wrap\n");
+    s.push_str("    strb    r6, [r5, #14]       @ pool.cur_target\n");
     s.push_str(".Lpue_skip:\n");
     s.push_str("    add     r5, r5, #32         @ next pool entry\n");
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     .Lpue_loop\n");
     s.push_str(".Lpue_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, r12, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
