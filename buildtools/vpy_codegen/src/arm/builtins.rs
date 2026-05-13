@@ -542,7 +542,147 @@ fn emit_draw_shapes() -> String {
     s.push_str("vpy_arc_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
+    emit_bezier_functions(&mut s);
+
     s
+}
+
+/// Emit vpy_draw_bezier and vpy_draw_bezier_quad as ARM Thumb2 functions.
+///
+/// Cubic De Casteljau — no push/pop inside the loop.
+/// Stack: push {r4..r11,lr} = 36 bytes + sub sp,#36 = 36 bytes → total 72 (8-byte aligned).
+///
+/// Locals (9 words, [sp+0..sp+32]):
+///   [sp+0]  = steps_total      [sp+4]  = t_num
+///   [sp+8]  = prev_x           [sp+12] = prev_y
+///   [sp+16] = t256
+///   [sp+20] = q0x → r0x       [sp+24] = q0y → r0y  (dual-use after Level-2)
+///   [sp+28] = q1x → r1x       [sp+32] = q1y → r1y  (dual-use after Level-2)
+///
+/// Caller args (6 words) at sp+72:
+///   [sp+72]=cp2x [sp+76]=cp2y [sp+80]=x1 [sp+84]=y1 [sp+88]=steps [sp+92]=intensity
+fn emit_bezier_functions(s: &mut String) {
+    // ── cubic ──────────────────────────────────────────────────────────────────
+    s.push_str("@ vpy_draw_bezier(x0,y0,cp1x,cp1y,[sp+0]=cp2x,cp2y,x1,y1,steps,intensity)\n");
+    s.push_str(".global vpy_draw_bezier\n.type vpy_draw_bezier, %function\n.thumb_func\nvpy_draw_bezier:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");    // 36 bytes
+    s.push_str("    sub     sp, sp, #36\n");                                 // 9 slots; total=72
+    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
+    s.push_str("    ldr     r8,  [sp, #72]      @ cp2x\n");
+    s.push_str("    ldr     r9,  [sp, #76]      @ cp2y\n");
+    s.push_str("    ldr     r10, [sp, #80]      @ x1\n");
+    s.push_str("    ldr     r11, [sp, #84]      @ y1\n");
+    s.push_str("    ldr     r1,  [sp, #88]      @ steps\n");
+    s.push_str("    ldr     r0,  [sp, #92]      @ intensity\n");
+    s.push_str("    cmp     r1, #1\n    blt     vbez_done\n");
+    s.push_str("    str     r1, [sp]\n");                                    // steps_total
+    s.push_str("    mov     r1, #1\n    str     r1, [sp, #4]\n");            // t_num = 1
+    s.push_str("    bl      dv_reset\n    bl      vpy_set_intensity\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
+    s.push_str("    str     r4, [sp, #8]\n    str     r5, [sp, #12]\n");     // prev = P0
+
+    s.push_str("vbez_loop:\n");
+    s.push_str("    ldr     r0, [sp, #4]\n    ldr     r1, [sp]\n");          // t_num, steps_total
+    s.push_str("    cmp     r0, r1\n    bgt     vbez_done\n");
+    s.push_str("    lsl     r2, r0, #8\n    sdiv    r2, r2, r1\n");          // t256 = t_num*256/steps
+    // r2 = t256 preserved through all lerps (mul writes target, never r2)
+
+    // Level-1: store q0x/q0y/q1x/q1y to [sp+20..32]; q2x→r1, q2y→r3
+    s.push_str("    sub     r0, r6, r4\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r4\n    str     r0, [sp, #20]\n"); // q0x
+    s.push_str("    sub     r0, r7, r5\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r5\n    str     r0, [sp, #24]\n"); // q0y
+    s.push_str("    sub     r0, r8, r6\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r6\n    str     r0, [sp, #28]\n"); // q1x
+    s.push_str("    sub     r0, r9, r7\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r7\n    str     r0, [sp, #32]\n"); // q1y
+    s.push_str("    sub     r1, r10, r8\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    add     r1, r1, r8\n"); // q2x → r1
+    s.push_str("    sub     r3, r11, r9\n    mul     r3, r3, r2\n    asr     r3, r3, #8\n    add     r3, r3, r9\n"); // q2y → r3
+
+    // Level-2: overwrite [sp+20..32] with r0x,r0y,r1x,r1y (dual-use slots)
+    // r0x = lerp(q0x=[sp+20], q1x=[sp+28], t) → store at [sp+20]
+    s.push_str("    ldr     r12, [sp, #20]\n    ldr     r0, [sp, #28]\n");
+    s.push_str("    sub     r0, r0, r12\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r12\n    str     r0, [sp, #20]\n");
+    // r0y = lerp(q0y=[sp+24], q1y=[sp+32], t) → store at [sp+24]
+    s.push_str("    ldr     r12, [sp, #24]\n    ldr     r0, [sp, #32]\n");
+    s.push_str("    sub     r0, r0, r12\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r12\n    str     r0, [sp, #24]\n");
+    // r1x = lerp(q1x=[sp+28], q2x=r1, t) → store at [sp+28]
+    s.push_str("    ldr     r12, [sp, #28]\n");
+    s.push_str("    sub     r1, r1, r12\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    add     r1, r1, r12\n    str     r1, [sp, #28]\n");
+    // r1y = lerp(q1y=[sp+32], q2y=r3, t) → store at [sp+32]
+    s.push_str("    ldr     r12, [sp, #32]\n");
+    s.push_str("    sub     r3, r3, r12\n    mul     r3, r3, r2\n    asr     r3, r3, #8\n    add     r3, r3, r12\n    str     r3, [sp, #32]\n");
+
+    // Level-3: bx = lerp(r0x=[sp+20], r1x=[sp+28], t); by = lerp(r0y=[sp+24], r1y=[sp+32], t)
+    s.push_str("    ldr     r12, [sp, #20]\n    ldr     r0, [sp, #28]\n");
+    s.push_str("    sub     r0, r0, r12\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r12\n"); // bx → r0
+    s.push_str("    ldr     r12, [sp, #24]\n    ldr     r1, [sp, #32]\n");
+    s.push_str("    sub     r1, r1, r12\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    add     r1, r1, r12\n"); // by → r1
+
+    // Compute delta from prev and call dv_draw_delta(dx, dy)
+    s.push_str("    ldr     r2, [sp, #8]        @ prev_x\n");
+    s.push_str("    ldr     r3, [sp, #12]       @ prev_y\n");
+    s.push_str("    str     r0, [sp, #8]        @ prev_x = bx\n");
+    s.push_str("    str     r1, [sp, #12]       @ prev_y = by\n");
+    s.push_str("    sub     r0, r0, r2          @ dx = bx - prev_x\n");
+    s.push_str("    sub     r1, r1, r3          @ dy = by - prev_y\n");
+    s.push_str("    bl      dv_draw_delta\n");
+
+    // t_num++
+    s.push_str("    ldr     r0, [sp, #4]\n    add     r0, r0, #1\n    str     r0, [sp, #4]\n");
+    s.push_str("    b       vbez_loop\n");
+
+    s.push_str("vbez_done:\n");
+    s.push_str("    add     sp, sp, #36\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    // ── quadratic ─────────────────────────────────────────────────────────────
+    // vpy_draw_bezier_quad(r0=x0, r1=y0, r2=cpx, r3=cpy,
+    //   [sp+0]=x1, [sp+4]=y1, [sp+8]=steps, [sp+12]=intensity)
+    // push {r4..r9,lr} = 28 bytes; sub sp,#28 = 28 bytes → total 56 (8-byte aligned).
+    // Locals: [sp+0]=steps [sp+4]=t_num [sp+8]=prev_x [sp+12]=prev_y [sp+16]=t256 [sp+20]=bx_tmp
+    // Caller args at sp+56: [sp+56]=x1 [sp+60]=y1 [sp+64]=steps [sp+68]=intensity
+    s.push_str("@ vpy_draw_bezier_quad(x0,y0,cpx,cpy,[sp+0]=x1,y1,steps,intensity)\n");
+    s.push_str(".global vpy_draw_bezier_quad\n.type vpy_draw_bezier_quad, %function\n.thumb_func\nvpy_draw_bezier_quad:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");    // 28 bytes
+    s.push_str("    sub     sp, sp, #28\n");                       // 7 slots; total=56
+    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n    mov     r7, r3\n");
+    s.push_str("    ldr     r8, [sp, #56]       @ x1\n");
+    s.push_str("    ldr     r9, [sp, #60]       @ y1\n");
+    s.push_str("    ldr     r1, [sp, #64]       @ steps\n");
+    s.push_str("    ldr     r0, [sp, #68]       @ intensity\n");
+    s.push_str("    cmp     r1, #1\n    blt     vbezq_done\n");
+    s.push_str("    str     r1, [sp]\n");
+    s.push_str("    mov     r1, #1\n    str     r1, [sp, #4]\n");
+    s.push_str("    bl      dv_reset\n    bl      vpy_set_intensity\n");
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
+    s.push_str("    str     r4, [sp, #8]\n    str     r5, [sp, #12]\n");
+
+    s.push_str("vbezq_loop:\n");
+    s.push_str("    ldr     r0, [sp, #4]\n    ldr     r1, [sp]\n");
+    s.push_str("    cmp     r0, r1\n    bgt     vbezq_done\n");
+    s.push_str("    lsl     r2, r0, #8\n    sdiv    r2, r2, r1\n"); // t256
+
+    // Quadratic De Casteljau: q0=lerp(P0,CP), q1=lerp(CP,P1), b=lerp(q0,q1)
+    // x: r3=q0x, r0=q1x, then bx=lerp(q0x,q1x)
+    s.push_str("    sub     r3, r6, r4\n    mul     r3, r3, r2\n    asr     r3, r3, #8\n    add     r3, r3, r4\n"); // q0x → r3
+    s.push_str("    sub     r0, r8, r6\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r6\n"); // q1x → r0
+    s.push_str("    sub     r0, r0, r3\n    mul     r0, r0, r2\n    asr     r0, r0, #8\n    add     r0, r0, r3\n    str     r0, [sp, #20]\n"); // bx
+    // y: r3=q0y, r1=q1y, then by=lerp(q0y,q1y)
+    s.push_str("    sub     r3, r7, r5\n    mul     r3, r3, r2\n    asr     r3, r3, #8\n    add     r3, r3, r5\n"); // q0y → r3
+    s.push_str("    sub     r1, r9, r7\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    add     r1, r1, r7\n"); // q1y → r1
+    s.push_str("    sub     r1, r1, r3\n    mul     r1, r1, r2\n    asr     r1, r1, #8\n    add     r1, r1, r3\n"); // by → r1
+
+    s.push_str("    ldr     r0, [sp, #20]       @ bx\n");
+    s.push_str("    ldr     r2, [sp, #8]        @ prev_x\n");
+    s.push_str("    ldr     r3, [sp, #12]       @ prev_y\n");
+    s.push_str("    str     r0, [sp, #8]        @ prev_x = bx\n");
+    s.push_str("    str     r1, [sp, #12]       @ prev_y = by\n");
+    s.push_str("    sub     r0, r0, r2          @ dx\n");
+    s.push_str("    sub     r1, r1, r3          @ dy\n");
+    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    ldr     r0, [sp, #4]\n    add     r0, r0, #1\n    str     r0, [sp, #4]\n");
+    s.push_str("    b       vbezq_loop\n");
+
+    s.push_str("vbezq_done:\n");
+    s.push_str("    add     sp, sp, #28\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
 }
 
 // ─── PRINT_TEXT ────────────────────────────────────────────────────────────
@@ -1814,6 +1954,9 @@ fn emit_level_builtins() -> String {
     // Load camera into r8 (CAMERA_X addr; CAMERA_Y = CAMERA_X+4 since they're adjacent)
     s.push_str("    ldr     r8, =CAMERA_X\n");
     s.push_str("vsl_gp_loop:\n");
+    s.push_str("    ldrb    r3, [r6, #7]              @ obj type (1=enemy)\n");
+    s.push_str("    cmp     r3, #1\n");
+    s.push_str("    beq     vsl_gp_next               @ enemies drawn by DRAW_ENEMIES\n");
     s.push_str("    ldrb    r0, [r7, #6]              @ alive\n");
     s.push_str("    cbz     r0, vsl_gp_next\n");
     s.push_str("    ldrsh   r0, [r7, #0]              @ world_x\n");
@@ -1981,6 +2124,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
     s.push_str("    ldr     r8, =CAMERA_X\n");
     s.push_str("vsl_gp_loop:\n");
+    s.push_str("    ldrb    r3, [r6, #7]              @ obj type (1=enemy)\n");
+    s.push_str("    cmp     r3, #1\n");
+    s.push_str("    beq     vsl_gp_next               @ enemies drawn by DRAW_ENEMIES\n");
     s.push_str("    ldrb    r0, [r7, #6]              @ alive\n");
     s.push_str("    cbz     r0, vsl_gp_next\n");
     s.push_str("    ldrsh   r0, [r7, #0]              @ world_x\n");
