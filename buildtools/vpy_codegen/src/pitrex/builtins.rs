@@ -724,10 +724,12 @@ fn emit_pitrex_print_text() -> String {
     s.push_str("    mov     r0, r4              @ VPy_x\n");
     s.push_str("    mov     r1, r5              @ VPy_y\n");
     s.push_str("    mov     r2, r6              @ str_ptr\n");
-    // textSize from PITREX_TEXT_SIZE, default=5
+    // textSize from PITREX_TEXT_SIZE, default=8 (matches VPy SIZE=8 = m6809 normal).
+    // Emulator maps textSize*5/14 → scale, so textSize=8 → scale=2.857 → 10 VPy/char
+    // matching m6809 Vec_Text_Width=72 (default "normal").
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
-    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
+    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #8\n");
     // y convention: VPy y = top of text. v_printString y = baseline. Subtract cap_height
     // FIRST (in VPy space), then apply the coordinate rescale below.
     s.push_str("    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)\n");
@@ -1388,7 +1390,13 @@ fn emit_pitrex_music_helpers() -> String {
     // PSG_MUSIC_START stores the base; PSG_MUSIC_PTR is the cursor
     // pointing to the *current* event (initially base+8).
     s.push_str("@ pitrex_play_music(r0=music_base)\n");
+    s.push_str("@ Guard: if same music is already playing, do nothing (prevents per-frame restart).\n");
     s.push_str(".global pitrex_play_music\n.type pitrex_play_music, %function\npitrex_play_music:\n");
+    s.push_str("    ldr     r1, =PSG_IS_PLAYING\n    ldr     r2, [r1]\n");
+    s.push_str("    cmp     r2, #0\n    beq     .Lppm_start      @ not playing -> always start\n");
+    s.push_str("    ldr     r1, =PSG_MUSIC_START\n    ldr     r2, [r1]\n");
+    s.push_str("    cmp     r2, r0\n    bxeq    lr               @ same music already playing -> skip\n");
+    s.push_str(".Lppm_start:\n");
     s.push_str("    ldr     r1, =PSG_MUSIC_START\n    str     r0, [r1]\n");
     s.push_str("    add     r2, r0, #8          @ first event = base + 8\n");
     s.push_str("    ldr     r1, =PSG_MUSIC_PTR\n    str     r2, [r1]\n");
@@ -2431,7 +2439,7 @@ fn emit_pitrex_print_number_impl() -> String {
     // Load textSize (needed for both minus sign and v_printString)
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
-    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
+    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #8\n");
     // If negative: draw minus sign as a horizontal line in PiTrex units.
     // v_printString uses startX = x_passed * 128; we pass VPy*127/128, so
     // startX = VPy * 127.  The '-' glyph advances 6*SCALEFONT = 9*textSize units.
@@ -2453,7 +2461,7 @@ fn emit_pitrex_print_number_impl() -> String {
     // Reload textSize (clobbered by v_directDraw32 as r3 is caller-saved)
     s.push_str("    ldr     r3, =PITREX_TEXT_SIZE\n");
     s.push_str("    ldr     r3, [r3]\n");
-    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #5\n");
+    s.push_str("    cmp     r3, #0\n    it eq\n    moveq   r3, #8\n");
     s.push_str("pn_print_str:\n");
     // Set r2 = buf start, then skip leading '0' chars (but always keep at least 1 digit).
     s.push_str("    mov     r2, sp          @ buf ptr\n");
@@ -2896,8 +2904,11 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    mov     r6, #0\n");
     s.push_str("    strb    r6, [r7, #14]   @ pool.cur_target = 0\n");
     s.push_str("    str     r6, [r7, #28]   @ pool.pad (+28..+31) = 0 (also zeros anim state)\n");
-    // is_anim flag from ROM +20 → pool +27; init anim state if vanim
-    s.push_str("    ldrb    r8, [r4, #20]   @ ROM is_anim flag\n");
+    // is_anim flag is at ROM+12 + wp_count*4 (variable offset after all waypoints)
+    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count (re-read for is_anim offset)\n");
+    s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
+    s.push_str("    add     r6, r6, #12     @ offset = 12 + wp_count*4\n");
+    s.push_str("    ldrb    r8, [r4, r6]    @ ROM is_anim flag\n");
     s.push_str("    strb    r8, [r7, #27]   @ pool.is_anim\n");
     s.push_str("    cmp     r8, #0\n");
     s.push_str("    beq     .Lspe_novam\n");
@@ -2908,8 +2919,11 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    ldrb    r8, [r8]        @ frame0 duration_ticks\n");
     s.push_str("    strb    r8, [r7, #29]   @ pool.anim_ticks_left = frame0.duration\n");
     s.push_str(".Lspe_novam:\n");
-    // ROM record = 24 bytes, pool entry = 32 bytes
-    s.push_str("    add     r4, r4, #24\n");
+    // ROM stride = 12 + wp_count*4 + 4 (is_anim+3×pad) = 16 + wp_count*4 (variable)
+    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count for stride\n");
+    s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
+    s.push_str("    add     r6, r6, #16     @ stride = 16 + wp_count*4\n");
+    s.push_str("    add     r4, r4, r6      @ advance ROM ptr\n");
     s.push_str("    add     r7, r7, #32\n");
     s.push_str("    subs    r5, r5, #1\n");
     s.push_str("    bne     .Lspe_loop\n");
