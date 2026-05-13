@@ -562,9 +562,7 @@ impl VPlayLevel {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
                 let ai = ai_type_byte(&obj.ai_type);
                 let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
-                let wpc = wps.len().min(2) as u8;
-                let wp0 = wps.get(0);
-                let wp1 = wps.get(1);
+                let wpc = wps.len() as u8;
                 out.push_str(&format!("    @ enemy type={et}, ai={ai}, wp_count={wpc}\n"));
                 let (sprite_sym, is_anim_bool) = Self::lookup_venemy_patrol_sprite(&et.to_lowercase(), venemy_dir)
                     .unwrap_or_else(|| (format!("_{et}_VECTORS"), false));
@@ -587,10 +585,11 @@ impl VPlayLevel {
                 out.push_str(&format!("    .byte {}   @ wp_count\n", wpc));
                 out.push_str(&format!("    .byte {}   @ mirror_on_patrol\n", mirror_byte));
                 out.push_str(&format!("    .byte {}   @ default_facing (0=right 1=left)\n", facing_byte));
-                out.push_str(&format!("    .hword {}  @ wp0_x\n", wp0.map_or(obj.x, |w| w.x)));
-                out.push_str(&format!("    .hword {}  @ wp0_y\n", wp0.map_or(obj.y, |w| w.y)));
-                out.push_str(&format!("    .hword {}  @ wp1_x\n", wp1.map_or(obj.x, |w| w.x)));
-                out.push_str(&format!("    .hword {}  @ wp1_y\n", wp1.map_or(obj.y, |w| w.y)));
+                // Emit all waypoints (variable count — stride = 12 + wp_count*4 + 4)
+                for (i, wp) in wps.iter().enumerate() {
+                    out.push_str(&format!("    .hword {}  @ wp{}_x\n", wp.x, i));
+                    out.push_str(&format!("    .hword {}  @ wp{}_y\n", wp.y, i));
+                }
                 out.push_str(&format!("    .byte {}   @ is_anim (0=vec 1=vanim)\n", is_anim_byte));
                 out.push_str("    .byte 0    @ pad\n");
                 out.push_str("    .byte 0    @ pad\n");
@@ -655,8 +654,9 @@ impl VPlayLevel {
         out.push_str(&format!("    .byte {}   @ type\n", type_byte));
 
         // +8: vector_ptr (32-bit absolute address, resolved at link time)
-        // Enemy placement markers have no vector — emit null pointer.
-        if obj.vector_name.is_empty() {
+        // Enemy-type objects: visual is managed by the enemy system, not the level renderer.
+        let is_enemy_arm = obj.enemy_type.as_ref().map_or(false, |t| !t.is_empty());
+        if obj.vector_name.is_empty() || is_enemy_arm {
             out.push_str("    .word 0  @ vector_ptr (none — enemy marker)\n");
         } else {
             let vec_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase().replace('-', "_").replace(' ', "_"));
@@ -828,9 +828,10 @@ impl VPlayLevel {
         out.push_str(&format!("    FDB {}  ; spawn_delay\n", obj.spawn_delay));
         
         // Pointer to vector data (will be resolved by linker)
-        // Enemy placement objects with no vector_name get a null vector_ptr (they are
-        // data-only markers; their visual comes from the enemy type definition, not the level).
-        if obj.vector_name.is_empty() {
+        // Enemy-type objects: visual is managed by the enemy system, not the level renderer.
+        // Use null vector_ptr (level renderer checks CMPU #0 and skips drawing if null).
+        let is_enemy_obj = obj.enemy_type.as_ref().map_or(false, |t| !t.is_empty());
+        if obj.vector_name.is_empty() || is_enemy_obj {
             out.push_str("    FDB 0  ; vector_ptr (no visual for this object)\n");
             out.push_str("    FCB 8  ; half_width (default, ROM+18)\n");
             out.push_str("    FCB 8  ; half_height (default, ROM+19)\n");
@@ -846,36 +847,28 @@ impl VPlayLevel {
             let coll_override_h_m6809 = obj.collision.as_ref().and_then(|c| c.height);
             let vec_key = obj.vector_name.to_lowercase();
 
-            // half_width — prefer computed literal (avoids cross-bank EQU reference)
+            // half_width — always emit a literal (avoids cross-bank EQU references and vanim gaps)
+            // Priority: explicit override → dims map → dims map of first frame (vanim) → default 8
+            let frame1_key = format!("{}1", vec_key);
             if let Some(nat_w) = coll_override_w_m6809 {
                 let hw = ((nat_w as f32 * obj.scale).round() as u32).clamp(1, 127);
                 out.push_str(&format!("    FCB {}  ; half_width (explicit override, ROM+18)\n", hw));
-            } else if let Some(&(hw, _)) = dims.get(&vec_key) {
+            } else if let Some(&(hw, _)) = dims.get(&vec_key).or_else(|| dims.get(&frame1_key)) {
                 let scaled = ((hw as f32 * obj.scale).round() as u32).clamp(1, 127);
                 out.push_str(&format!("    FCB {}  ; half_width ({:.2}x, ROM+18)\n", scaled, obj.scale));
-            } else if (obj.scale - 1.0).abs() < 0.001 {
-                let lbl = format!("_{}_HALF_WIDTH", obj.vector_name.to_uppercase());
-                out.push_str(&format!("    FCB {}  ; half_width (ROM+18)\n", lbl));
             } else {
-                let scale_pct = (obj.scale * 100.0).round() as u32;
-                let expr = format!("(_{}_HALF_WIDTH * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
-                out.push_str(&format!("    FCB {}  ; half_width scaled by {} (ROM+18)\n", expr, obj.scale));
+                out.push_str("    FCB 8  ; half_width (default, ROM+18)\n");
             }
 
-            // half_height — prefer computed literal (avoids cross-bank EQU reference)
+            // half_height — always emit a literal (avoids cross-bank EQU references and vanim gaps)
             if let Some(nat_h) = coll_override_h_m6809 {
                 let hh = ((nat_h as f32 * obj.scale).round() as u32).clamp(1, 127);
                 out.push_str(&format!("    FCB {}  ; half_height (explicit override, ROM+19)\n", hh));
-            } else if let Some(&(_, hh)) = dims.get(&vec_key) {
+            } else if let Some(&(_, hh)) = dims.get(&vec_key).or_else(|| dims.get(&frame1_key)) {
                 let scaled = ((hh as f32 * obj.scale).round() as u32).clamp(1, 127);
                 out.push_str(&format!("    FCB {}  ; half_height ({:.2}x, ROM+19)\n", scaled, obj.scale));
-            } else if (obj.scale - 1.0).abs() < 0.001 {
-                let lbl = format!("_{}_HALF_HEIGHT", obj.vector_name.to_uppercase());
-                out.push_str(&format!("    FCB {}  ; half_height (collision AABB, ROM+19)\n", lbl));
             } else {
-                let scale_pct = (obj.scale * 100.0).round() as u32;
-                let expr = format!("(_{}_HALF_HEIGHT * {}) / 100", obj.vector_name.to_uppercase(), scale_pct);
-                out.push_str(&format!("    FCB {}  ; half_height scaled by {} (ROM+19)\n", expr, obj.scale));
+                out.push_str("    FCB 8  ; half_height (default, ROM+19)\n");
             }
         }
         
