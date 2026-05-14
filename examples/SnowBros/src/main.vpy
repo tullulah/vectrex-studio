@@ -140,7 +140,7 @@ def state_title():
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
 def state_game_start():
     PRINT_TEXT(-30, 20, "ROUND")
-    PRINT_NUMBER(20, 20, current_level)
+    #PRINT_NUMBER(20, 20, current_level)
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         load_current_level()
@@ -156,13 +156,14 @@ def state_playing():
     UPDATE_ENEMIES()
     check_snowball_enemy_collision()
     check_player_enemy_collision()
-    SHOW_LEVEL()
+    
     draw_player()
     draw_snowballs()
     DRAW_ENEMIES()
     draw_hud()
     if enemy_count <= 0:
         enter_level_clear()
+    SHOW_LEVEL()
 
 # ── Estado: muerte del jugador ───────────────────────────────────────────────
 def state_player_dead():
@@ -224,7 +225,7 @@ def state_boss():
 # ── Estado: game over ────────────────────────────────────────────────────────
     PRINT_TEXT(-35, 20, "GAME OVER")
     PRINT_TEXT(-25, -10, "SCORE")
-    PRINT_NUMBER(30, -10, score)
+    #PRINT_NUMBER(30, -10, score)
     if J1_BUTTON_1():
         STOP_MUSIC()
         game_state = STATE_TITLE
@@ -233,7 +234,7 @@ def state_boss():
 def state_game_over():
     PRINT_TEXT(-30, 20, "GAME OVER")
     PRINT_TEXT(-30, 0, "SCORE")
-    PRINT_NUMBER(30, 0, score)
+    #PRINT_NUMBER(30, 0, score)
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         game_state = STATE_TITLE
@@ -243,7 +244,7 @@ def state_all_clear():
     PRINT_TEXT(-55, 30, "CONGRATULATIONS!")
     PRINT_TEXT(-30, 5, "ALL CLEAR!")
     PRINT_TEXT(-25, -20, "SCORE")
-    PRINT_NUMBER(30, -20, score)
+    #PRINT_NUMBER(30, -20, score)
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         game_state = STATE_TITLE
@@ -297,7 +298,7 @@ def load_current_level():
     player_has_power = 0
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
+        #SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 2:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_2
@@ -355,11 +356,6 @@ def play_boss_music():
 
 # ── Jugador ──────────────────────────────────────────────────────────────────
 def update_player():
-    #debug
-    
-    #PRINT_NUMBER(-20, 120, player_facing)
-    
-
     # Movimiento horizontal con joystick
     player_vx = clamp(J1_X() / 32, -4, 4)
     if player_vx > 0:
@@ -512,9 +508,10 @@ def draw_snowballs():
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
-    PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
-    PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
-    PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha
+    # PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
+    # PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
+    # PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha
+    pass
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():

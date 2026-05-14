@@ -259,6 +259,14 @@ export class VectrexSystem implements ISystem, IBus {
     address &= 0xffff;
     data    &= 0xff;
 
+    // Bank-switching register at 0xDF00 — must be checked before the
+    // 0xC000–0xDFFF region guard, because $DF00 falls inside that range
+    // and the region handler returns early, making the check unreachable.
+    if (address === 0xdf00) {
+      this.currentBank = data;
+      return;
+    }
+
     // BIOS ROM — ignore writes
     if ((address & 0xe000) === 0xe000) return;
 
@@ -273,12 +281,6 @@ export class VectrexSystem implements ISystem, IBus {
           this.beam.alg_xsh = xsh;
         });
       }
-      return;
-    }
-
-    // Bank-switching register at 0xDF00
-    if (address === 0xdf00) {
-      this.currentBank = data;
       return;
     }
 

@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -64,12 +66,12 @@ VLINE_DY             EQU $C880+$33   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
 VLINE_DY_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
 VLINE_DX_REMAINING   EQU $C880+$36   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 DRAW_SCALE           EQU $C880+$38   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$39   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$3B   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$3D   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3F   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$41   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$43   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -112,127 +114,752 @@ LOOP_BODY:
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    LDD #55
-    STD VAR_ARG0
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$64
+    JSR Intensity_a
+    LDA #$00
+    LDB #$37
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$06
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FA
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG1
-    LDD #55
-    STD VAR_ARG2
-    LDD #30
-    STD VAR_ARG3
-    LDD #30
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$64
+    JSR Intensity_a
+    LDA #$37
+    LDB #$00
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FA
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG0
-    LDD #55
-    STD VAR_ARG1
-    LDD #-30
-    STD VAR_ARG2
-    LDD #55
-    STD VAR_ARG3
-    LDD #-55
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
-    LDD #-55
-    STD VAR_ARG0
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$64
+    JSR Intensity_a
+    LDA #$00
+    LDB #$C9
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$06
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG1
-    LDD #-55
-    STD VAR_ARG2
-    LDD #-30
-    STD VAR_ARG3
-    LDD #-30
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$64
+    JSR Intensity_a
+    LDA #$C9
+    LDB #$00
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$06
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$06
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG0
-    LDD #-55
-    STD VAR_ARG1
-    LDD #30
-    STD VAR_ARG2
-    LDD #-55
-    STD VAR_ARG3
-    LDD #55
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$0E
+    LDB #$00
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG0
-    LDD #14
-    STD VAR_ARG1
-    LDD #-8
-    STD VAR_ARG2
-    LDD #14
-    STD VAR_ARG3
-    LDD #-20
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
-    LDD #-20
-    STD VAR_ARG0
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$00
+    LDB #$EC
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$03
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG1
-    LDD #-20
-    STD VAR_ARG2
-    LDD #-11
-    STD VAR_ARG3
-    LDD #-14
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$E6
+    LDB #$00
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG0
-    LDD #-26
-    STD VAR_ARG1
-    LDD #14
-    STD VAR_ARG2
-    LDD #-26
-    STD VAR_ARG3
-    LDD #32
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
-    LDD #32
-    STD VAR_ARG0
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$00
+    LDB #$20
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FB
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG1
-    LDD #32
-    STD VAR_ARG2
-    LDD #18
-    STD VAR_ARG3
-    LDD #21
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$26
+    LDB #$00
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FA
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$FB
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FD
+    LDB #$FC
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FD
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$00
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG0
-    LDD #38
-    STD VAR_ARG1
-    LDD #-21
-    STD VAR_ARG2
-    LDD #38
-    STD VAR_ARG3
-    LDD #-44
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
-    LDD #-44
-    STD VAR_ARG0
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$00
+    LDB #$D4
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FA
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FB
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FC
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$06
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$06
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$07
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG1
-    LDD #-44
-    STD VAR_ARG2
-    LDD #-24
-    STD VAR_ARG3
-    LDD #-28
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$50
+    JSR Intensity_a
+    LDA #$CE
+    LDB #$00
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$06
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$03
+    LDB #$06
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$04
+    LDB #$06
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$04
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$05
+    LDB #$05
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$06
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$03
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$01
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP
     LDD #0
-    STD VAR_ARG0
-    LDD #-50
-    STD VAR_ARG1
-    LDD #28
-    STD VAR_ARG2
-    LDD #-50
-    STD VAR_ARG3
-    LDD #56
-    STD VAR_ARG4
-    JSR DRAW_BEZIER
+    STD RESULT
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: test (index=0, 1 paths)
     LDD #0
@@ -247,11 +874,11 @@ LOOP_BODY:
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_TEST_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
     RTS
@@ -273,12 +900,12 @@ _TEST_CENTER_X EQU 0
 _TEST_CENTER_Y EQU 4
 
 _TEST_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (runtime metadata, 2 bytes)
+    FCB 1               ; path_count (runtime metadata)
     FDB _TEST_PATH0        ; pointer to path 0
 
 _TEST_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $29,$E0,0,0        ; path0: header (y=41, x=-32)
+    FCB $25,$E0,0,0        ; path0: header (y=37, x=-32)
     FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
     FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
@@ -457,27 +1084,15 @@ MOD16:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
-; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
-LDA ,X+                 ; Read per-path intensity from vector data
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
-BEQ DSWM_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
-DSWM_USE_FCB_INT:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
-LDA #$00
-STA >$D000              ; PB=$00: deselect all channels
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -517,8 +1132,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
+; Timing setup (match core: hardcoded $7F)
+LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
@@ -564,23 +1179,22 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)
-CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)
-INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)
-CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)
+CLR VIA_port_a          ; stop X integrator drift between segments
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
-LDA ,X+                 ; Read FCB intensity from vector data
+; Check intensity override (same logic as start)
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
-BEQ DSWM_NEXT_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override
-DSWM_NEXT_USE_FCB_INT:
-PSHS A                  ; save intensity for later
+PSHS A
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -594,19 +1208,8 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; restore intensity
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness for Z-axis write
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected
-LDA #$00
-STA >$D000              ; PB=$00: deselect
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
+PULS A                  ; Get intensity back
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -634,8 +1237,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
+; Timing setup (match core: hardcoded $7F)
+LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X

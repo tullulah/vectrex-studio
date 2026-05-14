@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-10"
+    "description": "Created in Playground - 2026-05-11"
   },
   "worldBounds": {
     "xMin": -96,
@@ -132,25 +132,6 @@
         "gravity": 0,
         "bounceDamping": 0,
         "physicsType": "static"
-      },
-      {
-        "id": "obj_1773216572040",
-        "type": "enemy",
-        "vectorName": "mountain",
-        "layer": "gameplay",
-        "x": 270,
-        "y": -50,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": false,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
       },
       {
         "id": "obj_bg_7",

@@ -498,6 +498,112 @@ pub fn emit_draw_sprite(
     out.push_str("    LDD #0\n    STD RESULT\n");
 }
 
+/// DRAW_BEZIER(x0,y0,cp1x,cp1y,cp2x,cp2y,x1,y1,steps,intensity)
+/// Cubic Bézier approximated as `steps` line segments (compile-time constant args only).
+pub fn emit_draw_bezier(args: &[Expr], out: &mut String) {
+    if args.len() != 10 {
+        out.push_str("    ; ERROR: DRAW_BEZIER requires 10 arguments\n");
+        return;
+    }
+    if !args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        out.push_str("    ; ERROR: DRAW_BEZIER with variables not yet implemented for m6809\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    }
+    let nums: Vec<i32> = args.iter().map(|a| if let Expr::Number(n) = a { *n } else { 0 }).collect();
+    let (x0, y0, cx0, cy0, cx1, cy1, x1, y1) = (
+        nums[0] as f64, nums[1] as f64,
+        nums[2] as f64, nums[3] as f64,
+        nums[4] as f64, nums[5] as f64,
+        nums[6] as f64, nums[7] as f64,
+    );
+    let steps = nums[8].max(2).min(32) as usize;
+    let intensity = nums[9];
+
+    // De Casteljau subdivision — generate steps+1 points
+    let mut pts: Vec<(i32, i32)> = Vec::with_capacity(steps + 1);
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
+        let u = 1.0 - t;
+        let bx = u*u*u*x0 + 3.0*u*u*t*cx0 + 3.0*u*t*t*cx1 + t*t*t*x1;
+        let by = u*u*u*y0 + 3.0*u*u*t*cy0 + 3.0*u*t*t*cy1 + t*t*t*y1;
+        pts.push((bx.round() as i32, by.round() as i32));
+    }
+
+    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+    if intensity == 0x5F {
+        out.push_str("    JSR Intensity_5F\n");
+    } else {
+        out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
+    }
+    let (sx, sy) = pts[0];
+    out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+        (sy & 0xFF), (sx & 0xFF)));
+    for i in 0..steps {
+        let (px, py) = pts[i];
+        let (qx, qy) = pts[i + 1];
+        let dx = (qx - px) & 0xFF;
+        let dy = (qy - py) & 0xFF;
+        out.push_str("    CLR Vec_Misc_Count\n");
+        out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+            dy, dx));
+    }
+    out.push_str("    LDA #$C8\n    TFR A,DP\n");
+    out.push_str("    LDD #0\n    STD RESULT\n");
+}
+
+/// DRAW_BEZIER_QUAD(x0,y0,cpx,cpy,x1,y1,steps,intensity)
+/// Quadratic Bézier approximated as `steps` line segments (compile-time constant args only).
+pub fn emit_draw_bezier_quad(args: &[Expr], out: &mut String) {
+    if args.len() != 8 {
+        out.push_str("    ; ERROR: DRAW_BEZIER_QUAD requires 8 arguments\n");
+        return;
+    }
+    if !args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        out.push_str("    ; ERROR: DRAW_BEZIER_QUAD with variables not yet implemented for m6809\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    }
+    let nums: Vec<i32> = args.iter().map(|a| if let Expr::Number(n) = a { *n } else { 0 }).collect();
+    let (x0, y0, cpx, cpy, x1, y1) = (
+        nums[0] as f64, nums[1] as f64,
+        nums[2] as f64, nums[3] as f64,
+        nums[4] as f64, nums[5] as f64,
+    );
+    let steps = nums[6].max(2).min(32) as usize;
+    let intensity = nums[7];
+
+    let mut pts: Vec<(i32, i32)> = Vec::with_capacity(steps + 1);
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
+        let u = 1.0 - t;
+        let bx = u*u*x0 + 2.0*u*t*cpx + t*t*x1;
+        let by = u*u*y0 + 2.0*u*t*cpy + t*t*y1;
+        pts.push((bx.round() as i32, by.round() as i32));
+    }
+
+    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+    if intensity == 0x5F {
+        out.push_str("    JSR Intensity_5F\n");
+    } else {
+        out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
+    }
+    let (sx, sy) = pts[0];
+    out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+        (sy & 0xFF), (sx & 0xFF)));
+    for i in 0..steps {
+        let (px, py) = pts[i];
+        let (qx, qy) = pts[i + 1];
+        let dx = (qx - px) & 0xFF;
+        let dy = (qy - py) & 0xFF;
+        out.push_str("    CLR Vec_Misc_Count\n");
+        out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+            dy, dx));
+    }
+    out.push_str("    LDA #$C8\n    TFR A,DP\n");
+    out.push_str("    LDD #0\n    STD RESULT\n");
+}
+
 /// Emit runtime helpers for drawing builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {

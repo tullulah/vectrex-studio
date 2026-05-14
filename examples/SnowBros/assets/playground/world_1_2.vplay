@@ -1,0 +1,282 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "world_1_2",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-05-13"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_1777629435866",
+        "type": "obstacle",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": -71,
+        "y": -86,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1777629603657",
+        "type": "obstacle",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": 72,
+        "y": -86,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1777629716564",
+        "type": "obstacle",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": 1,
+        "y": -87,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1777629652016",
+        "type": "obstacle",
+        "vectorName": "platform2",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -37,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1777629837468",
+        "type": "obstacle",
+        "vectorName": "platform3",
+        "layer": "gameplay",
+        "x": -54,
+        "y": 13,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1777629850372",
+        "type": "obstacle",
+        "vectorName": "platform3",
+        "layer": "gameplay",
+        "x": 54,
+        "y": 13,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static"
+      },
+      {
+        "id": "obj_1777629612161",
+        "type": "obstacle",
+        "vectorName": "platform4",
+        "layer": "gameplay",
+        "x": 0,
+        "y": 67,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 0,
+        "bounceDamping": 0,
+        "physicsType": "static",
+        "collision": {
+          "enabled": true,
+          "segments": [
+            {
+              "x1": -70,
+              "y1": -6,
+              "x2": -45,
+              "y2": -6
+            },
+            {
+              "x1": -45,
+              "y1": 12,
+              "x2": 47,
+              "y2": 12
+            },
+            {
+              "x1": 47,
+              "y1": -4,
+              "x2": 70,
+              "y2": -4
+            }
+          ]
+        }
+      },
+      {
+        "id": "enemy_1778250201678",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": -42,
+        "y": 95,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1778250209582",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": 46,
+        "y": 94,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1778250211554",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": -92,
+        "y": 32,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1778250212985",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": 92,
+        "y": 31,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1778250214379",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": -55,
+        "y": -21,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": []
+}

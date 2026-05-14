@@ -1775,18 +1775,16 @@ export const EmulatorPanel: React.FC = () => {
     const win = window as any;
     if (!win.PSG_WRITE_LOG) win.PSG_WRITE_LOG = [];
     win.PSG_WRITE_LOG.length = 0;
-    win.PSG_LOG_ENABLED = true;
+    win.PSG_LOG_ENABLED = false;  // disabled by default — enable via DevTools: window.PSG_LOG_ENABLED=true
     win.PSG_LOG_LIMIT = 10000;
-    console.log('[EmulatorPanel] PSG logging initialized: enabled=true, limit=10000, log length=' + win.PSG_WRITE_LOG.length);
   };
 
-  // Enable PSG logging on mount and keep it enabled
+  // Initialize PSG log array (disabled by default for performance)
   useEffect(() => {
     const win = window as any;
     if (!win.PSG_WRITE_LOG) win.PSG_WRITE_LOG = [];
-    win.PSG_LOG_ENABLED = true;
+    win.PSG_LOG_ENABLED = false;  // disabled by default
     win.PSG_LOG_LIMIT = 10000;
-    console.log('[EmulatorPanel] PSG logging enabled globally on mount');
   }, []);
 
   const onSnapshotROM = () => {
@@ -2451,6 +2449,34 @@ export const EmulatorPanel: React.FC = () => {
         return;
       }
 
+      // ── Shared helper: stop ALL three emulators before switching targets ──
+      const stopAllEmulators = () => {
+        // 1. JSVecX (m6809) — stop its internal setInterval/setTimeout loop
+        const _vecx = (window as any).vecx;
+        if (_vecx) { try { _vecx.stop(); } catch {} }
+
+        // 2. PiTrex — cancel RAF loop and stop audio context
+        if (pitrexLoopRef.current !== null) {
+          cancelAnimationFrame(pitrexLoopRef.current);
+          pitrexLoopRef.current = null;
+        }
+        if (pitrexCoreRef.current) {
+          try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+          pitrexCoreRef.current = null;
+        }
+
+        // 3. rp2350 — cancel RAF loop and stop audio context via emuCore
+        if (rp2350LoopRef.current !== null) {
+          cancelAnimationFrame(rp2350LoopRef.current);
+          rp2350LoopRef.current = null;
+        }
+        // stopAudio is called inside emuCore.loadProgram when _activeTarget==='rp2350';
+        // call it explicitly here too so switching pitrex→rp2350 also cleans up.
+        try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+
+        console.log('[EmulatorPanel] ✓ All emulators stopped');
+      };
+
       // ── pitrex path: ARM32 interpreter + vector renderer ──
       if (payload.target === 'pitrex') {
         setShowPitrexOverlay(false);
@@ -2461,16 +2487,7 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
         try {
-          // Stop JSVecX
-          const vecx = (window as any).vecx;
-          if (vecx) vecx.stop();
-
-          // Cancel any existing pitrex loop and stop its audio
-          if (pitrexLoopRef.current !== null) {
-            cancelAnimationFrame(pitrexLoopRef.current);
-            pitrexLoopRef.current = null;
-          }
-          pitrexCoreRef.current?.stopAudio?.();
+          stopAllEmulators();
 
           // Dynamically import PitrexCore to avoid bundling it unless needed
           const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
@@ -2509,6 +2526,8 @@ export const EmulatorPanel: React.FC = () => {
       if (payload.target === 'rp2350') {
         setShowPitrexOverlay(false);
         try {
+          stopAllEmulators();
+
           const bin = Uint8Array.from(atob(payload.base64), c => c.charCodeAt(0));
           const elf = payload.elfBase64
             ? Uint8Array.from(atob(payload.elfBase64), c => c.charCodeAt(0))
@@ -2518,23 +2537,6 @@ export const EmulatorPanel: React.FC = () => {
             // Pass the shared canvas so Rp2350System renders directly to it
             emuCore.loadArm(bin, elf, canvasRef.current ?? undefined);
             console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
-
-            // Stop JSVecX internal loop (it drives the M6809 path)
-            const vecx = (window as any).vecx;
-            if (vecx) vecx.stop();
-
-            // Cancel any existing pitrex loop
-            if (pitrexLoopRef.current !== null) {
-              cancelAnimationFrame(pitrexLoopRef.current);
-              pitrexLoopRef.current = null;
-              pitrexCoreRef.current = null;
-            }
-
-            // Cancel any previous rp2350 RAF loop
-            if (rp2350LoopRef.current !== null) {
-              cancelAnimationFrame(rp2350LoopRef.current);
-              rp2350LoopRef.current = null;
-            }
 
             // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
             if (canvasRef.current) {
@@ -2593,21 +2595,8 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
 
-        // Detener emulador antes de cargar (y cancelar loop rp2350/pitrex si estaba activo)
-        console.log('[EmulatorPanel] Stopping emulator before load...');
-        if (rp2350LoopRef.current !== null) {
-          cancelAnimationFrame(rp2350LoopRef.current);
-          rp2350LoopRef.current = null;
-          console.log('[EmulatorPanel] rp2350 rAF loop cancelled');
-        }
-        if (pitrexLoopRef.current !== null) {
-          cancelAnimationFrame(pitrexLoopRef.current);
-          pitrexLoopRef.current = null;
-          pitrexCoreRef.current = null;
-          console.log('[EmulatorPanel] pitrex rAF loop cancelled');
-        }
-        vecx.stop();
-        console.log('[EmulatorPanel] Emulator stopped');
+        // Stop ALL emulators before loading m6809 ROM
+        stopAllEmulators();
         
         // Cargar el binario en la instancia global Globals.cartdata
         const Globals = (window as any).Globals;
@@ -2618,19 +2607,16 @@ export const EmulatorPanel: React.FC = () => {
           // Dispatch event para notificar a otros paneles
           window.dispatchEvent(new Event('programLoaded'));
         }
-        
+
         // CRITICAL: Verificar que JSVecX esté completamente inicializado antes de reset
         // Si el panel del emulador no estaba visible, JSVecX puede no estar inicializado
-        console.log('[EmulatorPanel] Checking JSVecX initialization...');
         const isInitialized = vecx.ram && vecx.ram.length > 0;
         
         if (!isInitialized) {
-          console.warn('[EmulatorPanel] JSVecX not initialized - running full initialization...');
           // Inicializar JSVecX completamente (igual que cuando el panel es visible)
           try {
             // Fase 1: Reset inicial
             vecx.reset();
-            console.log('[EmulatorPanel] ✓ JSVecX reset successful');
             
             // Fase 2: Main initialization (necesario para setup completo)
             vecx.main();

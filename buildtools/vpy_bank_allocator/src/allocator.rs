@@ -151,10 +151,11 @@ impl BankAllocator {
         //   - Vectrex cartridge header (~300 bytes)
         //   - MAIN startup + LOOP_BODY generated code (~2000 bytes)
         //   - Injected EQU symbol section (~500 bytes)
-        // Other banks only have the EQU overhead (~500 bytes).
+        //   - Safety margin for estimation inaccuracy (~400 bytes)
+        // Other banks only have the EQU overhead (~500 bytes) + safety margin.
         // Pre-charge each bank with its fixed overhead so fit checks are accurate.
-        const BANK0_FIXED_OVERHEAD: usize = 3000;
-        const BANKN_FIXED_OVERHEAD: usize = 600;
+        const BANK0_FIXED_OVERHEAD: usize = 3200;
+        const BANKN_FIXED_OVERHEAD: usize = 1600;
         let mut banks: Vec<BankInfo> = (0..code_banks_count as usize)
             .map(|i| {
                 let mut b = BankInfo::new(i as u8);
@@ -179,8 +180,11 @@ impl BankAllocator {
             // Try to fit cluster functions in one bank
             for bank in &mut banks {
                 if bank.can_fit(cluster_code_size, bank_size) {
-                    // Add only functions to bank (assets go to their own banks)
-                    for func in &cluster.functions {
+                    // Add only functions to bank (assets go to their own banks).
+                    // Sort for deterministic insertion order.
+                    let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                    funcs_sorted.sort();
+                    for func in funcs_sorted {
                         let size = func_sizes.get(func).copied().unwrap_or(100);
                         bank.add_function(func.clone(), size);
                         assignments.insert(func.clone(), bank.id);
@@ -195,7 +199,12 @@ impl BankAllocator {
             // Cross-bank calls will be handled by trampolines in the helpers bank.
             if !assigned {
                 eprintln!("       ⚠ Cluster too large for any single bank ({} bytes), splitting across banks with trampolines", cluster_code_size);
-                for func in &cluster.functions {
+                // Sort functions by name for deterministic assignment — HashSet iteration is
+                // non-deterministic, and different orderings produce different bank splits
+                // (and thus random overflow errors on successive builds).
+                let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                funcs_sorted.sort();
+                for func in funcs_sorted {
                     let size = func_sizes.get(func).copied().unwrap_or(100);
                     // Find first bank with space; if none, use bank 0
                     let target_bank = banks.iter()
@@ -304,8 +313,11 @@ impl BankAllocator {
             // Try to fit functions in one bank
             for bank in &mut banks {
                 if bank.can_fit(cluster_code_size, bank_size) {
-                    // Add only functions to this bank (NOT assets)
-                    for func in &cluster.functions {
+                    // Add only functions to this bank (NOT assets).
+                    // Sort for deterministic assignment order.
+                    let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                    funcs_sorted.sort();
+                    for func in funcs_sorted {
                         let func_size = func_sizes.get(func).copied().unwrap_or(100);
                         bank.add_function(func.clone(), func_size);
                         assignments.insert(func.clone(), bank.id);
@@ -318,7 +330,10 @@ impl BankAllocator {
             
             // If functions don't fit together, assign individually
             if !assigned {
-                for func_name in &cluster.functions {
+                // Sort for deterministic assignment order across runs.
+                let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                funcs_sorted.sort();
+                for func_name in funcs_sorted {
                     let func_size = func_sizes.get(func_name).copied().unwrap_or(100);
                     
                     for bank in &mut banks {

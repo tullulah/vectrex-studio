@@ -152,7 +152,12 @@ export class Via6522 {
     this.via_orb   = 0;
     this.via_ddra  = 0;
     this.via_ddrb  = 0;
-    this.joyButtons = 0xF0;
+    // Joystick buttons on the Vectrex are read via PSG register 14 / VIA_port_a,
+    // NOT via VIA_port_b.  The old default 0xF0 had bit 5 set, permanently
+    // asserting the analog comparator in Joy_Analog's SAR loop and making
+    // J1_X()/J1_Y() always return +128 (far-right deflection).
+    // 0x00 lets alg_compare drive bit 5 correctly.
+    this.joyButtons = 0x00;
     this.via_t1on  = 0;
     this.via_t1int = 0;
     this.via_t1c   = 0;

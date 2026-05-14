@@ -166,7 +166,7 @@ npc_state = [0, 0, 0, 0]
 exit_room_target = 1
 
 # Music state
-current_music = MUSIC_TITLE
+current_music : i8 = MUSIC_NONE
 
 # Button state (fired = 1 only on rising edge, 0 otherwise)
 btn1_fired = 0
@@ -208,12 +208,18 @@ skippedframes = 0
 
 # ─── Entry point ───────────────────────────────────────────────────────────────
 def main():
-    # LOAD_LEVEL("entrance")
-    PLAY_MUSIC("intro")
+    LOAD_LEVEL("entrance")
+    
     pass
 
 # ─── Main loop ─────────────────────────────────────────────────────────────────
 def loop():
+    #PRINT_NUMBER(-100, 100, current_music)
+    if current_music == MUSIC_NONE: 
+        current_music = MUSIC_TITLE
+        PLAY_MUSIC("intro")
+        
+
     # Skip first 10 frames to let hardware settle; prime prev_btn during skip
     if skippedframes < 10:
         skippedframes += 1
@@ -297,23 +303,23 @@ def loop():
 # ═══════════════════════════════════════════════════════════════════════════════
 def draw_title():
     #SET_INTENSITY(127)
-    DRAW_VECTOR_EX("crypt_logo", 0, 10,0,0)
+    DRAW_VECTOR_EX("crypt_logo",0,10,0,0)
 
-    # blink_timer = blink_timer + 1
-    # if blink_timer >= 40:
-    #     blink_timer = 0
-    #     if blink_on == 0:
-    #         blink_on = 1
-    #     else:
-    #         blink_on = 0
+    blink_timer = blink_timer + 1
+    if blink_timer >= 40:
+        blink_timer = 0
+        if blink_on == 0:
+            blink_on = 1
+        else:
+            blink_on = 0
 
-    # if blink_on == 1:
-    #     SET_TEXT_SIZE(7)
-    #     PRINT_TEXT(-77, -100, "PRESS B1 TO START")
+    if blink_on == 1:
+        SET_TEXT_SIZE(7)
+        #PRINT_TEXT(-77, -100, "PRESS B1 TO START")
 
-    # if btn1_fired == 1:
-    #     intro_page = 0
-    #     screen = STATE_INTRO
+    if btn1_fired == 1:
+        intro_page = 0
+        screen = STATE_INTRO
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INTRO — 3 story pages

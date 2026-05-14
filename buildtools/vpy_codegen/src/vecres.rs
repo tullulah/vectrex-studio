@@ -455,7 +455,7 @@ impl VecResource {
         let path_count = paths.len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
-        asm.push_str(&format!("    FCB {}               ; path_count (runtime metadata)\n", path_count));
+        asm.push_str(&format!("    FDB {}               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)\n", path_count));
         
         // Emit pointer table for all paths (allows runtime iteration)
         for path_idx in 0..path_count {

@@ -609,9 +609,15 @@ const SDK_STUBS: Record<string, SdkStub> = {
   },
   'v_printString': (s) => {
     // v_printString(x=r0, y=r1, str=r2, textSize=r3, brightness=[sp]) — vector font.
-    // Codegen pre-scales coords: x' = VPy * 25/32, y' = (VPy_y - 8) * 25/32.
-    // Undo: VPy_x = x' * 32/25 = x' * 1.28,  VPy_y = y' * 1.28 + 8.
-    // scale factor: textSize=5 → emulator scale=3.0, so scale = textSize * 0.6.
+    // Codegen sends: r0 = VPy_x * 127/128 ≈ VPy_x,  r1 = (VPy_y - 8) * 127/128 ≈ VPy_y-8.
+    // drawTextAsSegments expects y = top-of-character in VPy units, so add back 8.
+    // No *1.28 unscaling — drawTextAsSegments multiplies by PITREX_COORD_SCALE(128)
+    // giving curX ≈ VPy_x * 127, matching v_directDraw32 circle coordinates.
+    // scale factor: VPy SIZE=8 (normal) → textSize=8 should match m6809 Vec_Text_Height=-8 (~10 VPy/char).
+    // rp2350 SIZE=8 → TEXT_SIZE=3 → advance=(7*3)>>1=10 VPy/char (reference).
+    // For pitrex: advance = 7 * scale / 2 = 10 → scale = 20/7 at textSize=8.
+    // So: scale = textSize * (20/7) / 8 = textSize * 5/14 ≈ textSize * 0.357.
+    // Glyph height = 3 * scale = 3 * (8 * 5/14) = 8.57 VPy ≈ m6809 Vec_Text_Height=8 ✓
     const strPtr = s.regs[2];
     let text = '';
     for (let i = 0; i < 128; i++) {
@@ -620,10 +626,8 @@ const SDK_STUBS: Record<string, SdkStub> = {
       text += String.fromCharCode(ch);
     }
     if (text.length > 0) {
-      const scale = Math.max(0.5, s.regs[3] * 0.6);
-      const vpyX = Math.round(s.regs[0] * 1.28);
-      const vpyY = Math.round(s.regs[1] * 1.28) + 8;
-      drawTextAsSegments(s, vpyX, vpyY, text, scale);
+      const scale = Math.max(0.3, s.regs[3] * 5 / 14);
+      drawTextAsSegments(s, s.regs[0], (s.regs[1] | 0) + 8, text, scale);
     }
   },
 

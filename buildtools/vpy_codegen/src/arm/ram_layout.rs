@@ -39,6 +39,8 @@ pub fn emit_ram_layout() -> String {
         ("_dv3d_cur",       0x03C, "3D current beam pos: cur_x, cur_y (2 bytes)"),
         ("_dv3d_fst",       0x03E, "3D first vertex of path: first_x, first_y (2 bytes)"),
         ("_dv3d_vbuf",      0x040, "3D rotated vertex cache: sx,sy pairs (254 bytes max)"),
+        // Animation state (0x13E–0x13F): 2-byte gap between vbuf and RAND_SEED
+        ("VPY_ANIM_STATE_BUF",  0x13E, "animation frame_idx(u8) at +0, ticks_left(u8) at +1"),
         // Runtime state variables (0x140–0x1BF)
         ("RAND_SEED",        0x140, "LCG random number seed"),
         ("BTN_STATE_J1",     0x144, "cached VIA Port B (J1 buttons, bits 4-7 active-low)"),
@@ -76,8 +78,19 @@ pub fn emit_ram_layout() -> String {
         // MOVE builtin position (used by DRAW_LINE to compute absolute coordinates)
         ("VPY_MOVE_X",          0x300, "last MOVE X position (added to DRAW_LINE x0/x1)"),
         ("VPY_MOVE_Y",          0x304, "last MOVE Y position (added to DRAW_LINE y0/y1)"),
-        // user RAM starts here (0x308)
-        ("USER_RAM_START",      0x308, "user variables begin here"),
+        // Enemy system (0x308–0x3C7): 1 count word + 8 slots × 24 bytes each
+        // Each pool slot: +0 active(u32), +4 world_x(i32), +8 world_y(i32),
+        //   +12 sprite_ptr(u32), +16 wp_base(u32), +20 wp_idx(u8)+wp_count(u8)+ai_type(u8)+pad(u8)
+        ("ENEMY_COUNT_ARM",     0x308, "active enemy count"),
+        ("ENEMY_POOL_ARM",      0x30C, "enemy pool: 8 slots × 24 bytes"),
+        // Joystick axis cache (0x3CC–0x3DB): read once during WAIT_RECAL, used during game loop
+        // Prevents bus_write($D000,...) during display which corrupts VIA PORT B / beam positioning
+        ("J1_AXIS_X",           0x3CC, "cached J1 X axis (-127..127), updated each WAIT_RECAL"),
+        ("J1_AXIS_Y",           0x3D0, "cached J1 Y axis (-127..127), updated each WAIT_RECAL"),
+        ("J2_AXIS_X",           0x3D4, "cached J2 X axis (-127..127), updated each WAIT_RECAL"),
+        ("J2_AXIS_Y",           0x3D8, "cached J2 Y axis (-127..127), updated each WAIT_RECAL"),
+        // user RAM starts here (0x3DC)
+        ("USER_RAM_START",      0x3DC, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {
@@ -100,7 +113,7 @@ pub struct RamAllocator {
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F308 } // USER_RAM_START (after VPY_MOVE_X/Y)
+        Self { next: 0x2007_F3DC } // USER_RAM_START (after joystick cache at 0x3CC–0x3DB)
     }
 
     /// Allocate `bytes` bytes, return base address.

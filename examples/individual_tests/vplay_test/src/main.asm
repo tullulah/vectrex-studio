@@ -1199,7 +1199,7 @@ LOOP_BODY:
     STD RESULT
     LDA RESULT+1  ; X position (low byte)
     STA TMPPTR    ; Save X to temporary storage
-    LDD #20
+    LDD #80
     STD RESULT
     LDA RESULT+1  ; Y position (low byte)
     STA TMPPTR+1  ; Save Y to temporary storage

@@ -141,7 +141,11 @@ impl CallGraph {
     /// Returns clusters sorted by size (largest first)
     pub fn build_clusters(&self, asset_sizes: &HashMap<String, usize>) -> Vec<FunctionCluster> {
         // Union-Find for clustering
-        let func_names: Vec<&String> = self.nodes.keys().collect();
+        // IMPORTANT: Sort func_names so Union-Find indices are deterministic across runs.
+        // HashMap iteration order is non-deterministic; without sorting the same program
+        // can produce different cluster-to-bank assignments on each run, causing random overflows.
+        let mut func_names: Vec<&String> = self.nodes.keys().collect();
+        func_names.sort();
         let n = func_names.len();
         
         if n == 0 {
@@ -179,12 +183,15 @@ impl CallGraph {
             }
         }
         
-        // Union functions that share assets
+        // Union functions that share assets.
+        // Build asset→functions map in deterministic order: use sorted func_names indices so
+        // that funcs[0] is always the function with the smallest sorted name, regardless of
+        // HashMap (self.nodes) iteration order.
         let mut asset_to_funcs: HashMap<&String, Vec<usize>> = HashMap::new();
-        for (name, node) in &self.nodes {
-            if let Some(&idx) = name_to_idx.get(name) {
+        for (i, name) in func_names.iter().enumerate() {
+            if let Some(node) = self.nodes.get(*name) {
                 for asset in &node.assets_used {
-                    asset_to_funcs.entry(asset).or_default().push(idx);
+                    asset_to_funcs.entry(asset).or_default().push(i);
                 }
             }
         }
@@ -197,8 +204,9 @@ impl CallGraph {
             }
         }
         
-        // Build clusters from Union-Find result
-        let mut cluster_members: HashMap<usize, HashSet<String>> = HashMap::new();
+        // Build clusters from Union-Find result.
+        // Use BTreeMap so cluster iteration is in deterministic (sorted-key) order.
+        let mut cluster_members: std::collections::BTreeMap<usize, HashSet<String>> = std::collections::BTreeMap::new();
         for (i, name) in func_names.iter().enumerate() {
             let root = find(&mut parent, i);
             cluster_members.entry(root).or_default().insert((*name).clone());
@@ -235,8 +243,17 @@ impl CallGraph {
             })
             .collect();
         
-        // Sort clusters by total size (largest first) - helps pack efficiently
-        clusters.sort_by(|a, b| b.total_size.cmp(&a.total_size));
+        // Sort clusters by total size (largest first) - helps pack efficiently.
+        // Secondary key: minimum function name (alphabetical) to break ties deterministically.
+        // Without a secondary key, equal-size clusters sort non-deterministically (HashMap
+        // iteration order), causing different bank assignments across runs → random overflows.
+        clusters.sort_by(|a, b| {
+            b.total_size.cmp(&a.total_size).then_with(|| {
+                let a_min = a.functions.iter().min().map(|s| s.as_str()).unwrap_or("");
+                let b_min = b.functions.iter().min().map(|s| s.as_str()).unwrap_or("");
+                a_min.cmp(b_min)
+            })
+        });
         
         clusters
     }

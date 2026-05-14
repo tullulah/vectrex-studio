@@ -348,19 +348,6 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     // CRITICAL: Start PSG audio system
     if (this.inst.e8910 && typeof this.inst.e8910.start === 'function') {
       this.inst.e8910.start();
-      console.log(`[JsVecxCore] PSG audio system started`);
-      
-      // CRITICAL: Intercept e8910_write for PSG logging
-      const originalWrite = this.inst.e8910.e8910_write;
-      if (originalWrite) {
-        this.inst.e8910.e8910_write = (reg: number, val: number) => {
-          console.log(`[PSG-WRITE] Register ${reg} = 0x${val.toString(16).toUpperCase()}`);
-          return originalWrite.call(this.inst.e8910, reg, val);
-        };
-        console.log(`[JsVecxCore] PSG write interceptor installed`);
-      }
-    } else {
-      console.warn(`[JsVecxCore] PSG audio system not available or already started`);
     }
     
     // AHORA QUE LA BIOS ESTÁ CARGADA, CONFIGURAR PC AL RESET VECTOR
@@ -455,6 +442,13 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
 
   loadProgram(bytes: Uint8Array, _base?: number){
     if (!this.inst) return;
+
+    // When switching FROM rp2350 back to m6809, stop rp2350 audio so it
+    // doesn't keep synthesising into the background AudioContext.
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      try { this._rp2350System.stopAudio(); } catch {}
+      console.log('[JsVecxCore] rp2350 audio stopped (switching to m6809)');
+    }
 
     const romSize = bytes.length;
 

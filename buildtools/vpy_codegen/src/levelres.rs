@@ -496,17 +496,17 @@ impl VPlayLevel {
         // then emit contiguous 20-byte struct arrays per layer.
         let mut bg_meshes = String::new(); let mut bg_structs = String::new();
         for obj in &self.layers.background {
-            let (m, s) = self.compile_arm_object(obj, dims);
+            let (m, s) = self.compile_arm_object(obj, dims, &name);
             bg_meshes.push_str(&m); bg_structs.push_str(&s);
         }
         let mut gp_meshes = String::new(); let mut gp_structs = String::new();
         for obj in &self.layers.gameplay {
-            let (m, s) = self.compile_arm_object(obj, dims);
+            let (m, s) = self.compile_arm_object(obj, dims, &name);
             gp_meshes.push_str(&m); gp_structs.push_str(&s);
         }
         let mut fg_meshes = String::new(); let mut fg_structs = String::new();
         for obj in &self.layers.foreground {
-            let (m, s) = self.compile_arm_object(obj, dims);
+            let (m, s) = self.compile_arm_object(obj, dims, &name);
             fg_meshes.push_str(&m); fg_structs.push_str(&s);
         }
 
@@ -604,7 +604,7 @@ impl VPlayLevel {
     /// Compile a single object for the ARM binary format (20 bytes).
     /// Returns (mesh_data, struct_data). mesh_data contains the _COLMESH_* label + segments
     /// (empty string if no segments defined). struct_data is the 20-byte object struct.
-    fn compile_arm_object(&self, obj: &VPlayObject, dims: &HashMap<String, (i32, i32)>) -> (String, String) {
+    fn compile_arm_object(&self, obj: &VPlayObject, dims: &HashMap<String, (i32, i32)>, level_name: &str) -> (String, String) {
         let mut mesh = String::new();
         let mut out = String::new();
         out.push_str(&format!("    @ {} ({})\n", obj.id, obj.obj_type));
@@ -689,7 +689,7 @@ impl VPlayLevel {
 
         // +16..+20: collision mesh pointer
         // Build mesh label from sanitized object ID
-        let mesh_label = format!("_COLMESH_{}", obj.id.replace('-', "_").replace(' ', "_"));
+        let mesh_label = format!("_COLMESH_{}_{}", level_name, obj.id.replace('-', "_").replace(' ', "_"));
         let segs_opt = obj.collision.as_ref()
             .and_then(|c| c.segments.as_ref())
             .filter(|v| !v.is_empty());

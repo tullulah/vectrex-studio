@@ -33,6 +33,8 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -139,21 +141,21 @@ VAR_FLOOR_Y          EQU $C880+$270   ; User variable: FLOOR_Y (2 bytes)
 VAR_JOY_X            EQU $C880+$272   ; User variable: JOY_X (2 bytes)
 VAR_BTN_JUMP         EQU $C880+$274   ; User variable: BTN_JUMP (2 bytes)
 VAR_DX_PUSH          EQU $C880+$276   ; User variable: DX_PUSH (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-PSG_MUSIC_PTR        EQU $CBEB   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $CBED   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $CBEF   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $CBF0   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $CBF1   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
+PSG_MUSIC_PTR        EQU $C880+$278   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$27A   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$27C   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$27D   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$27E   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$27F   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$280   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$282   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$283   ; SFX bank ID (for multibank) (1 bytes)
+VAR_ARG0             EQU $C880+$284   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$286   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$288   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$28A   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$28C   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$28E   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -1079,7 +1081,7 @@ _WORLD_1_1_LEVEL:
     FDB 0  ; Time limit (seconds)
     FDB 0  ; Target score
     FCB 4  ; Background object count
-    FCB 30  ; Gameplay object count
+    FCB 29  ; Gameplay object count
     FCB 0  ; Foreground object count
     FDB _WORLD_1_1_BG_OBJECTS
     FDB _WORLD_1_1_GAMEPLAY_OBJECTS
@@ -1183,23 +1185,6 @@ _WORLD_1_1_GAMEPLAY_OBJECTS:
     FCB 255  ; type
     FDB 730  ; x
     FDB 6  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _MOUNTAIN_VECTORS  ; vector_ptr
-    FCB 30  ; half_width (1.00x, ROM+18)
-    FCB 19  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1773216572040 (enemy)
-    FCB 1  ; type
-    FDB 270  ; x
-    FDB -50  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)

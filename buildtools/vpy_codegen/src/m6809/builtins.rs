@@ -66,6 +66,8 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("PRINT_NUMBER", 3),    // x, y, number
     ("SET_TEXT_SIZE", 1),   // n (1-8, 8=normal): sets Vec_Text_Height/Width
     ("DRAW_LINE", 5),       // x0, y0, x1, y1, intensity
+    ("DRAW_BEZIER", 10),    // x0, y0, cp1x, cp1y, cp2x, cp2y, x1, y1, steps, intensity
+    ("DRAW_BEZIER_QUAD", 8),// x0, y0, cpx, cpy, x1, y1, steps, intensity
     ("DRAW_RECT", 5),       // x, y, width, height, intensity
     ("SET_INTENSITY", 1),   // intensity
     ("RESET0REF", 0),       // no args
@@ -696,6 +698,14 @@ pub fn emit_builtin(
             drawing::emit_draw_ellipse(args, out);
             true
         }
+        "DRAW_BEZIER" => {
+            drawing::emit_draw_bezier(args, out);
+            true
+        }
+        "DRAW_BEZIER_QUAD" => {
+            drawing::emit_draw_bezier_quad(args, out);
+            true
+        }
         "DRAW_SPRITE" => {
             drawing::emit_draw_sprite(args, out);
             true
@@ -899,10 +909,9 @@ pub fn emit_builtin(
                     // Multibank: LOAD_LEVEL already set LEVEL_BANK/LEVEL_ENEMY_COUNT/LEVEL_ENEMY_INSTANCES_PTR
                     out.push_str("    JSR SPAWN_ENEMIES_BANKED\n");
                 } else {
-                    // Single-bank: use direct symbol references (set by LOAD_LEVEL_RUNTIME)
-                    let sym = level_name.to_uppercase().replace('-', "_").replace(' ', "_");
-                    out.push_str(&format!("    LDB #_{sym}_ENEMY_COUNT\n"));
-                    out.push_str(&format!("    LDX #_{sym}_ENEMY_INSTANCES\n"));
+                    // Single-bank: LOAD_LEVEL_RUNTIME already stored count and instances ptr into RAM
+                    out.push_str("    LDB >LEVEL_ENEMY_COUNT        ; count stored by LOAD_LEVEL_RUNTIME\n");
+                    out.push_str("    LDX >LEVEL_ENEMY_INSTANCES_PTR ; instances ptr stored by LOAD_LEVEL_RUNTIME\n");
                     out.push_str("    JSR SPAWN_ENEMIES_RUNTIME\n");
                 }
             } else {
@@ -1200,7 +1209,8 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             
             if use_banked_assets() {
                 // MULTIBANK MODE: Use banked access via lookup tables in Bank #31
-                // The DRAW_VECTOR_BANKED helper handles bank switching automatically
+                // DRAW_VECTOR_BANKED expects MIRROR_X/Y and DRAW_VEC_INTENSITY set by caller
+                out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities\n");
                 out.push_str(&format!("    LDX #{}        ; Asset index for lookup\n", asset_index));
                 out.push_str("    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching\n");
             } else {
@@ -1245,9 +1255,17 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                  1
             };
             
+            // Find asset index for multibank lookup tables
+            let vector_assets: Vec<_> = assets.iter()
+                .filter(|a| matches!(a.asset_type, AssetType::Vector))
+                .collect();
+            let asset_index = vector_assets.iter()
+                .position(|a| a.name == *asset_name)
+                .unwrap_or(0);
+            
             let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
             
-            out.push_str(&format!("    ; Asset: {} ({} paths) with mirror + intensity\n", asset_name, path_count));
+            out.push_str(&format!("    ; Asset: {} (index={}, {} paths) with mirror + intensity\n", asset_name, asset_index, path_count));
             
             // Evaluate x position (arg 1)
             expressions::emit_simple_expr(&args[1], out, assets);
@@ -1290,19 +1308,22 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             out.push_str("    TFR B,A       ; Intensity (0-127) — B already holds it\n");
             out.push_str("    STA DRAW_VEC_INTENSITY  ; Store intensity override\n");
             
-            // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
-            out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
-            // NOTE: do NOT set ACR here — DRAW_VECTOR works without it and
-            // setting ACR=$18 breaks T1 timing inside DSWM (same fix as DRAW_ANIM).
-            
-            // Loop through all paths
-            for i in 0..path_count {
-                out.push_str(&format!("    LDX #{}_PATH{}  ; Load path {}\n", symbol, i, i));
-                out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
+            if use_banked_assets() {
+                // MULTIBANK MODE: DRAW_VECTOR_BANKED handles DP setup, bank switch, path loop
+                // MIRROR_X/Y and DRAW_VEC_INTENSITY are already set above
+                out.push_str(&format!("    LDX #{}        ; Asset index for lookup\n", asset_index));
+                out.push_str("    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching\n");
+            } else {
+                // SINGLE-BANK MODE: Direct path label loop
+                // NOTE: do NOT set ACR here — DRAW_VECTOR works without it and
+                // setting ACR=$18 breaks T1 timing inside DSWM (same fix as DRAW_ANIM).
+                out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
+                for i in 0..path_count {
+                    out.push_str(&format!("    LDX #{}_PATH{}  ; Load path {}\n", symbol, i, i));
+                    out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
+                }
+                out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             }
-            
-            // Restore DP (CRITICAL PATTERN FROM CORE)
-            out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             
             out.push_str("    CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw\n");
             out.push_str("    LDD #0\n    STD RESULT\n");

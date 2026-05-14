@@ -583,13 +583,13 @@ pub fn generate_m6809_asm(
         // NOTE: VAR_ARG0-4 are already defined in SYSTEM RAM VARIABLES section above
         // (before bank split). No need to redefine them here in helpers bank.
 
-        let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
+        let helpers_asm = helpers::generate_helpers(module, is_multibank, &assets)?;
         asm.push_str(&helpers_asm);
     }
 
     // For single-bank: Emit helpers normally
     if !is_multibank {
-        let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
+        let helpers_asm = helpers::generate_helpers(module, is_multibank, &assets)?;
         asm.push_str(&helpers_asm);
     }
     

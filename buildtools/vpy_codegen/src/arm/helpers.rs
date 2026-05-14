@@ -300,13 +300,13 @@ pub fn emit_helpers() -> String {
     s.push_str("    ldr     r2, [r5, #8]         @ world_y\n");
     s.push_str("    sub     r2, r2, r7           @ screen_y\n");
     // vpy_draw_vector_ex(sprite_ptr, ox, oy, mirror=0, intensity=127)
+    // Use sub/add sp by 8 (not push {r3}) to keep SP 8-byte aligned before bl
     s.push_str("    mov     r3, #0               @ mirror=0\n");
-    s.push_str("    push    {r3}                 @ intensity arg on stack (127)\n");
-    s.push_str("    mov     r3, #127\n");
-    s.push_str("    str     r3, [sp]             @ intensity=127\n");
-    s.push_str("    mov     r3, #0               @ mirror=0\n");
+    s.push_str("    sub     sp, sp, #8           @ reserve 8 bytes (keeps 8-byte alignment)\n");
+    s.push_str("    mov     r12, #127\n");
+    s.push_str("    str     r12, [sp]            @ intensity=127 at [sp+0] (5th arg)\n");
     s.push_str("    bl      vpy_draw_vector_ex\n");
-    s.push_str("    add     sp, sp, #4           @ clean up intensity arg\n");
+    s.push_str("    add     sp, sp, #8           @ clean up stack reservation\n");
     s.push_str("vdre_next:\n");
     s.push_str("    add     r5, r5, r8\n");
     s.push_str("    subs    r4, r4, #1\n");

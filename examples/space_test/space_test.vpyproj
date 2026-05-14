@@ -1,0 +1,19 @@
+[project]
+name = "space_test"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/space_test.bin"
+optimization = 0
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors = ["assets/vectors/**/*.vec"]
+animations = ["assets/animations/**/*.vanim"]
+music = ["assets/music/**/*.vmus"]
+sfx = ["assets/sfx/**/*.vsfx"]
+playground = ["assets/playground/**/*.vplay"]

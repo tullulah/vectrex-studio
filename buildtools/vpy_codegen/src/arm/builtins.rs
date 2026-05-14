@@ -1114,23 +1114,16 @@ fn emit_print_number() -> String {
 fn emit_joystick() -> String {
     let mut s = String::new();
 
-    // J1_X
-    s.push_str("@ vpy_j1_x() → r0 = X axis (-127..127)\n");
+    // J1_X — reads from SRAM cache (populated each frame by vpy_update_buttons in WAIT_RECAL window)
+    // No bus_write during game loop — avoids corrupting VIA PORT B / beam positioning
+    s.push_str("@ vpy_j1_x() → r0 = cached J1 X axis (-127..127)\n");
     s.push_str(".global vpy_j1_x\n.type vpy_j1_x, %function\n.thumb_func\nvpy_j1_x:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // MUX=1 (X)
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r0, r0\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    ldr     r0, =J1_AXIS_X\n    ldr     r0, [r0]\n    bx      lr\n\n");
 
     // J1_Y
-    s.push_str("@ vpy_j1_y() → r0 = Y axis (-127..127)\n");
+    s.push_str("@ vpy_j1_y() → r0 = cached J1 Y axis (-127..127)\n");
     s.push_str(".global vpy_j1_y\n.type vpy_j1_y, %function\n.thumb_func\nvpy_j1_y:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x03\n    bl      bus_write\n"); // MUX=0b11 → J1 Y
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r0, r0\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    ldr     r0, =J1_AXIS_Y\n    ldr     r0, [r0]\n    bx      lr\n\n");
 
     // J1_BTN1..4 — read from cached BTN_STATE_J1
     for (name, bit) in [("btn1", 4u8), ("btn2", 5), ("btn3", 6), ("btn4", 7)] {
@@ -1140,24 +1133,15 @@ fn emit_joystick() -> String {
         s.push_str("    eor     r0, r0, #1\n    bx      lr\n\n");
     }
 
-    // J2_X — 4052 mux channel 0b00 = 0x00
-    // TODO: implement successive approximation when BUS_MASTER_AVAILABLE=true
-    s.push_str("@ vpy_j2_x() → r0 = J2 X axis (-127..127)\n");
+    // J2_X — reads from SRAM cache (no bus_write during game loop)
+    s.push_str("@ vpy_j2_x() → r0 = cached J2 X axis (-127..127)\n");
     s.push_str(".global vpy_j2_x\n.type vpy_j2_x, %function\n.thumb_func\nvpy_j2_x:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // MUX=0b00 → J2 X
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r0, r0\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    ldr     r0, =J2_AXIS_X\n    ldr     r0, [r0]\n    bx      lr\n\n");
 
-    // J2_Y — 4052 mux channel 0b10 = 0x02
-    s.push_str("@ vpy_j2_y() → r0 = J2 Y axis (-127..127)\n");
+    // J2_Y
+    s.push_str("@ vpy_j2_y() → r0 = cached J2 Y axis (-127..127)\n");
     s.push_str(".global vpy_j2_y\n.type vpy_j2_y, %function\n.thumb_func\nvpy_j2_y:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n"); // MUX=0b10 → J2 Y
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r0, r0\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    ldr     r0, =J2_AXIS_Y\n    ldr     r0, [r0]\n    bx      lr\n\n");
 
     // J2_BTN1..4 — read from cached BTN_STATE_J2 (PSG reg 14, active-low)
     for (name, bit) in [("btn1", 0u8), ("btn2", 1), ("btn3", 2), ("btn4", 3)] {
@@ -1226,16 +1210,38 @@ fn emit_psg_helpers() -> String {
     s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
 
     // ─── vpy_update_buttons() ────────────────────────────────────────────
-    s.push_str("@ vpy_update_buttons() — cache VIA Port B (J1) and PSG reg14 (J2)\n");
+    s.push_str("@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)\n");
     s.push_str(".global vpy_update_buttons\n.type vpy_update_buttons, %function\n.thumb_func\nvpy_update_buttons:\n");
-    s.push_str("    push    {lr}\n");
-    // Read J1 buttons (VIA Port B)
+    s.push_str("    push    {r4, lr}\n");
+    // Read J1 buttons (VIA Port B) — read while PORT_B is in neutral state
     s.push_str("    mov     r0, #0xD000\n    bl      bus_read\n");
     s.push_str("    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
     // Read J2 buttons (PSG reg 14)
     s.push_str("    mov     r0, #14\n    bl      psg_read\n");
     s.push_str("    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    // Cache J1 X axis: PORT_B = 0x01 (mux A0=1 = X channel)
+    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
+    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
+    s.push_str("    sxtb    r4, r0\n");
+    s.push_str("    ldr     r0, =J1_AXIS_X\n    str     r4, [r0]\n");
+    // Cache J1 Y axis: PORT_B = 0x03 (mux A0=1, A1=1 = J1 Y channel)
+    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x03\n    bl      bus_write\n");
+    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
+    s.push_str("    sxtb    r4, r0\n");
+    s.push_str("    ldr     r0, =J1_AXIS_Y\n    str     r4, [r0]\n");
+    // Cache J2 X axis: PORT_B = 0x00 (mux A0=0, A1=0 = J2 X channel)
+    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n");
+    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
+    s.push_str("    sxtb    r4, r0\n");
+    s.push_str("    ldr     r0, =J2_AXIS_X\n    str     r4, [r0]\n");
+    // Cache J2 Y axis: PORT_B = 0x02 (mux A0=0, A1=1 = J2 Y channel)
+    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n");
+    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
+    s.push_str("    sxtb    r4, r0\n");
+    s.push_str("    ldr     r0, =J2_AXIS_Y\n    str     r4, [r0]\n");
+    // Restore PORT_B to neutral (0x01 = same as J1_X mux, safe for display)
+    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
+    s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
 
     s
 }
@@ -2325,53 +2331,87 @@ fn emit_level_builtins() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
     // ── vpy_level_collision_y(r0=px, r1=py, r2=half_h) → r0 = floor_y ───────
-    // Finds the highest floor (top edge of collidable GP object) that is at or below
-    // player's feet (py - half_h). Returns floor_y + half_h (where player center should be).
+    // Finds the highest floor at or below player's feet (py - half_h).
+    // For objects with coll_mesh_ptr != 0: ray-casts against horizontal segments
+    //   (mesh format: .word seg_count; .hword x1,y1,x2,y2 per segment, local coords).
+    // For objects without a mesh: AABB fallback (world_y + half_h).
+    // Returns best_floor_top + half_h (player center Y when standing).
     // Returns -128 + half_h if no floor found.
     s.push_str("@ vpy_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y\n");
     s.push_str(".global vpy_level_collision_y\n.type vpy_level_collision_y, %function\n.thumb_func\nvpy_level_collision_y:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs\n");
     s.push_str("    mov     r4, r0                    @ px\n");
-    s.push_str("    mov     r5, r1                    @ py\n");
+    s.push_str("    sub     r5, r1, r2                @ player_feet = py - hh\n");
     s.push_str("    mov     r6, r2                    @ half_h (player)\n");
     s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n    ldr     r7, [r7]\n");
-    s.push_str("    ldr     r10, =-32767              @ best_floor_top sentinel (below any valid Y)\n");
+    s.push_str("    ldr     r10, =-32767              @ best_floor_top sentinel\n");
     s.push_str("    cbz     r7, vlcy_finish\n");
     s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
     s.push_str("    cbz     r8, vlcy_finish\n");
     s.push_str("    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)\n");
     s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
-    // player_feet = py - half_h
-    s.push_str("    sub     r0, r5, r6                @ player_feet\n");
     s.push_str("vlcy_loop:\n    cbz     r8, vlcy_finish\n");
     s.push_str("    ldrb    r1, [r7, #6]\n    cbz     r1, vlcy_next\n");
-    // collidable
+    // collidable check
     s.push_str("    ldrb    r1, [r9, #6]\n    tst     r1, #0x10\n    beq     vlcy_next\n");
-    // x range check: |px - obj_x| < player_hw(8) + obj_hw
+    // X broadphase: |px - obj_x| <= half_w (skip obj if too far left/right)
     s.push_str("    ldrb    r1, [r9, #12]             @ obj half_w\n");
     s.push_str("    ldrsh   r2, [r7, #0]              @ obj world_x\n");
     s.push_str("    sub     r2, r4, r2                @ dx = px - obj_x\n");
     s.push_str("    movs    r3, r2\n    bpl     vlcy_dxok\n    neg     r3, r2\n");
-    s.push_str("vlcy_dxok:\n    add     r1, r1, #8     @ total_hw = obj_hw + 8\n");
-    s.push_str("    cmp     r3, r1\n    bge     vlcy_next\n");
-    // obj top edge = obj.world_y + obj.half_h
+    s.push_str("vlcy_dxok:\n    cmp     r3, r1\n    bgt     vlcy_next\n");
+    // Check coll_mesh_ptr at ROM+16 — if non-zero, do ray-cast; else AABB
+    s.push_str("    ldr     r11, [r9, #16]            @ coll_mesh_ptr\n");
+    s.push_str("    cmp     r11, #0\n    beq     vlcy_aabb\n");
+    // ── Segment mesh ray-cast ──
+    // Push local_px and obj_world_y on stack for use in inner loop
+    s.push_str("    ldrsh   r0, [r7, #0]              @ obj_world_x\n");
+    s.push_str("    sub     r0, r4, r0                @ local_px = px - obj_world_x\n");
+    s.push_str("    ldrsh   r1, [r7, #2]              @ obj_world_y\n");
+    s.push_str("    push    {r0, r1}                  @ [sp]=local_px [sp+4]=obj_world_y\n");
+    s.push_str("    ldr     r12, [r11], #4            @ seg_count; r11 → first segment\n");
+    s.push_str("vlcy_seg_loop:\n    cmp     r12, #0\n    beq     vlcy_seg_done\n");
+    s.push_str("    ldrsh   r0, [r11]                 @ x1\n");
+    s.push_str("    ldrsh   r1, [r11, #2]             @ y1\n");
+    s.push_str("    ldrsh   r2, [r11, #4]             @ x2\n");
+    s.push_str("    ldrsh   r3, [r11, #6]             @ y2\n");
+    s.push_str("    add     r11, r11, #8\n    subs    r12, r12, #1\n");
+    s.push_str("    cmp     r1, r3\n    bne     vlcy_seg_loop @ skip non-horizontal\n");
+    s.push_str("    ldr     r14, [sp]                 @ local_px\n");
+    // x-range check: must be within [min(x1,x2), max(x1,x2)]
+    s.push_str("    cmp     r0, r2\n    blt     vlcy_seg_x1lt\n");
+    s.push_str("    @ x1 >= x2: range [x2, x1]\n");
+    s.push_str("    cmp     r14, r2\n    blt     vlcy_seg_loop\n");
+    s.push_str("    cmp     r14, r0\n    bgt     vlcy_seg_loop\n");
+    s.push_str("    b       vlcy_seg_y\n");
+    s.push_str("vlcy_seg_x1lt:\n");
+    s.push_str("    @ x1 < x2: range [x1, x2]\n");
+    s.push_str("    cmp     r14, r0\n    blt     vlcy_seg_loop\n");
+    s.push_str("    cmp     r14, r2\n    bgt     vlcy_seg_loop\n");
+    s.push_str("vlcy_seg_y:\n");
+    s.push_str("    ldr     r14, [sp, #4]             @ obj_world_y\n");
+    s.push_str("    add     r3, r1, r14               @ world_seg_y = y1(local) + obj_world_y\n");
+    s.push_str("    cmp     r3, r5\n    bgt     vlcy_seg_loop @ above feet → skip\n");
+    s.push_str("    cmp     r3, r10\n    ble     vlcy_seg_loop @ not better → skip\n");
+    s.push_str("    mov     r10, r3\n    b       vlcy_seg_loop\n");
+    s.push_str("vlcy_seg_done:\n    pop     {r0, r1}              @ restore stack balance\n");
+    s.push_str("    b       vlcy_next\n");
+    // ── AABB fallback ──
+    s.push_str("vlcy_aabb:\n");
     s.push_str("    ldrsh   r2, [r7, #2]              @ obj world_y\n");
     s.push_str("    ldrb    r3, [r9, #13]             @ obj half_h\n");
     s.push_str("    add     r2, r2, r3                @ obj_top = world_y + half_h\n");
-    // Only consider if obj_top <= player_feet (surface player could stand on)
-    s.push_str("    cmp     r2, r0                    @ obj_top <= player_feet?\n    bgt     vlcy_next\n");
-    // Track highest obj_top (closest floor below); sentinel -32767 < any valid top
+    s.push_str("    cmp     r2, r5                    @ obj_top <= player_feet?\n    bgt     vlcy_next\n");
     s.push_str("    cmp     r10, r2\n    bge     vlcy_next\n    mov     r10, r2\n");
     s.push_str(&format!("vlcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #{}    @ next ROM obj ({} bytes)\n", ARM_ROM_OBJ_STRIDE, ARM_ROM_OBJ_STRIDE));
     s.push_str("    subs    r8, r8, #1\n    b       vlcy_loop\n");
     s.push_str("vlcy_finish:\n");
-    // If best_floor_top is still -1 (INT_MIN sentinel mvn #0), return -128+half_h
     s.push_str("    ldr     r1, =-32767\n    cmp     r10, r1\n    beq     vlcy_no_floor\n");
-    s.push_str("    add     r0, r10, r6               @ floor_y + half_h (player center)\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
+    s.push_str("    add     r0, r10, r6               @ floor_top + half_h\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("vlcy_no_floor:\n");
-    s.push_str("    mov     r0, #-128\n    add     r0, r0, r6  @ -128 + half_h\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
+    s.push_str("    mov     r0, #-128\n    add     r0, r0, r6\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
     s
 }
@@ -2399,7 +2439,7 @@ fn emit_draw_anim() -> String {
     let mut s = String::new();
     s.push_str("@ vpy_draw_anim(r0 = ARM ptr to _ANIM_NAME data block, r1 = ox, r2 = oy)\n");
     s.push_str(".global vpy_draw_anim\n.type vpy_draw_anim, %function\n.thumb_func\nvpy_draw_anim:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}\n");
     s.push_str("    mov     r4, r0                      @ anim header ptr\n");
     s.push_str("    mov     r10, r1                     @ save ox\n");
     s.push_str("    mov     r11, r2                     @ save oy\n");
@@ -2488,13 +2528,8 @@ fn emit_draw_anim() -> String {
     s.push_str("    subs    r6, r6, #1\n");
     s.push_str("    bne     dar_vec_loop\n");
     s.push_str("dar_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, r12, pc}\n");
     s.push_str("    .ltorg\n\n");
-
-    s.push_str(".bss\n");
-    s.push_str(".balign 4\n");
-    s.push_str("VPY_ANIM_STATE_BUF: .space 2\n");
-    s.push_str(".text\n\n");
 
     s
 }

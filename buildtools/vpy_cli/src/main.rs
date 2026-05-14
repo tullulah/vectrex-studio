@@ -1785,17 +1785,21 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                     // Phase 9: Generate PDB debug symbols for multibank
                     {
                         println!("\n{}", "Phase 9: Generating debug symbols (multibank)...".bright_cyan());
-                        
-                        // Load VECTREX.I for BIOS symbols
-                        let vectrex_i_path = include_dir.join("VECTREX.I");
-                        let _vectrex_i_content = if vectrex_i_path.exists() {
-                            std::fs::read_to_string(&vectrex_i_path).ok()
-                        } else {
-                            None
-                        };
-                        
-                        // TODO: PDB generation disabled - vpy_debug_gen incomplete
-                        eprintln!("  ⚠ PDB generation skipped (buildtools implementation incomplete)");
+                        // Use bank_00_full.asm which contains all EQU definitions for the project
+                        let flat_asm_path = output_path_mb.parent()
+                            .unwrap_or_else(|| std::path::Path::new("."))
+                            .join("multibank_temp")
+                            .join("bank_00_full.asm");
+                        let pdb_path = output_path_mb.with_extension("pdb");
+                        match std::fs::read_to_string(&flat_asm_path) {
+                            Ok(flat_asm) => {
+                                match generate_pdb(&flat_asm, &project_name, &pdb_path) {
+                                    Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+                                    Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+                                }
+                            }
+                            Err(_) => eprintln!("  ⚠ PDB skipped: bank_00_full.asm not found"),
+                        }
                     }
                     
                     println!("\n{}", format!("✓ BUILD SUCCESS (multibank): {} KB written to {}", 
@@ -2040,19 +2044,20 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                 // Phase 9: Generate PDB debug symbols for multibank (single-file path)
                 {
                     println!("\n{}", "Phase 9: Generating debug symbols (multibank)...".bright_cyan());
-                    
-                    let include_dir = resolve_include_dir();
-                    
-                    // Load VECTREX.I for BIOS symbols
-                    let vectrex_i_path = include_dir.join("VECTREX.I");
-                    let _vectrex_i_content = if vectrex_i_path.exists() {
-                        std::fs::read_to_string(&vectrex_i_path).ok()
-                    } else {
-                        None
-                    };
-                    
-                    // TODO: PDB generation disabled - vpy_debug_gen incomplete
-                    eprintln!("  ⚠ PDB generation skipped (buildtools implementation incomplete)");
+                    let flat_asm_path = output_path_mb.parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .join("multibank_temp")
+                        .join("bank_00_full.asm");
+                    let pdb_path = output_path_mb.with_extension("pdb");
+                    match std::fs::read_to_string(&flat_asm_path) {
+                        Ok(flat_asm) => {
+                            match generate_pdb(&flat_asm, &project_name, &pdb_path) {
+                                Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+                                Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+                            }
+                        }
+                        Err(_) => eprintln!("  ⚠ PDB skipped: bank_00_full.asm not found"),
+                    }
                 }
                 
                 println!("\n{}", format!("✓ Build SUCCESS (multibank): {} KB written to {}", 
@@ -2127,19 +2132,14 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         println!("  BIN written: {}", output_path.display());
     }
     
-    // Phase 9: Generate PDB debug symbols (if requested or always for now)
+    // Phase 9: Generate PDB debug symbols
     {
         println!("\n{}", "Phase 9: Generating debug symbols...".bright_cyan());
-        
-        // Load VECTREX.I for BIOS symbols
-        let _vectrex_i_content = if include_dir.join("VECTREX.I").exists() {
-            std::fs::read_to_string(include_dir.join("VECTREX.I")).ok()
-        } else {
-            None
-        };
-        
-        // TODO: PDB generation disabled - vpy_debug_gen incomplete
-        eprintln!("  ⚠ PDB generation skipped (buildtools implementation incomplete)");
+        let pdb_path = output_path.with_extension("pdb");
+        match generate_pdb(&generated.asm_source, source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy"), &pdb_path) {
+            Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+            Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+        }
     }
     
     println!("\n{}", format!("✓ Build SUCCESS: {} bytes written to {}", 
@@ -2147,4 +2147,138 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         output_path.display()).green().bold());
     
     Ok(())
+}
+
+/// Generate a minimal .pdb JSON file by parsing the generated ASM source.
+///
+/// Extracts:
+///   - variables: lines matching `VAR_FOO  EQU $BASE+$OFF  ; ... (N bytes)`
+///   - functions: lines matching `FUNC_NAME:` at start of line (not VAR_/EQU/FCB/FDB)
+///   - labels: all other `LABEL:` definitions
+///   - line map: `; VPy_LINE:N` annotations
+fn generate_pdb(
+    asm_source: &str,
+    source_name: &str,
+    output_pdb_path: &std::path::Path,
+) -> std::io::Result<()> {
+    #[allow(unused_imports)]
+    use std::collections::HashMap as _HashMap;
+
+    let mut variables: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut labels: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut vpy_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+    // EQU address parser: `NAME  EQU $BASE+$OFF` or `NAME  EQU $ADDR`
+    let parse_equ_address = |line: &str| -> Option<u32> {
+        let code = line.split(';').next()?.trim();
+        let mut it = code.split_whitespace();
+        let _name = it.next()?;
+        let kw = it.next()?.to_uppercase();
+        if kw != "EQU" { return None; }
+        let rhs = it.next()?;
+        // Handle `$BASE+$OFF` or `$ADDR`
+        if let Some((base, off)) = rhs.split_once('+') {
+            let b = u32::from_str_radix(base.trim_start_matches('$'), 16).ok()?;
+            let o = u32::from_str_radix(off.trim_start_matches('$'), 16).ok()?;
+            Some(b.wrapping_add(o))
+        } else {
+            u32::from_str_radix(rhs.trim_start_matches('$'), 16).ok()
+        }
+    };
+
+    // Size from comment: look for `(N bytes)` at end of comment
+    let parse_comment_size = |line: &str| -> usize {
+        let comment = line.split(';').nth(1).unwrap_or("");
+        if let Some(bp) = comment.rfind(" bytes)") {
+            let before = &comment[..bp];
+            if let Some(pp) = before.rfind('(') {
+                if let Ok(n) = before[pp+1..].trim().parse::<usize>() {
+                    return n;
+                }
+            }
+        }
+        2 // default i16
+    };
+
+    for (line_idx, line) in asm_source.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // VPy line annotation: `; VPy_LINE:N`
+        if trimmed.starts_with("; VPy_LINE:") {
+            if let Ok(vpy_n) = trimmed["// VPy_LINE:".len()..].trim().parse::<u32>()
+                .or_else(|_| trimmed["; VPy_LINE:".len()..].trim().parse::<u32>()) {
+                let asm_key = line_idx.to_string();
+                let vpy_key = vpy_n.to_string();
+                vpy_line_map.insert(vpy_key.clone(), serde_json::Value::Number(line_idx.into()));
+                asm_line_map.insert(asm_key, serde_json::Value::Number(vpy_n.into()));
+            }
+            continue;
+        }
+
+        let code = trimmed.split(';').next().unwrap_or("").trim();
+
+        // EQU lines
+        if code.to_uppercase().contains(" EQU ") {
+            let mut it = code.split_whitespace();
+            if let Some(name) = it.next() {
+                if let Some(addr) = parse_equ_address(trimmed) {
+                    if name.starts_with("VAR_") {
+                        let size = parse_comment_size(trimmed);
+                        let clean = name.strip_prefix("VAR_").unwrap_or(name).to_lowercase();
+                        let var_type = if line.contains("system") || line.contains("System") {
+                            "system"
+                        } else if line.contains("array") || name.contains("_DATA") {
+                            "array"
+                        } else {
+                            "unknown"
+                        };
+                        variables.insert(clean.clone(), serde_json::json!({
+                            "name": clean,
+                            "address": format!("0x{:04X}", addr),
+                            "size": size,
+                            "type": var_type,
+                            "declLine": null
+                        }));
+                    } else if !name.starts_with("_") {
+                        labels.insert(name.to_string(), serde_json::Value::Number(addr.into()));
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Label definitions (no EQU): `LABEL_NAME:` at start
+        if let Some(label) = code.strip_suffix(':') {
+            let label = label.trim();
+            if !label.is_empty() && !label.contains(' ') && !label.starts_with('.') {
+                // Likely a function if uppercase and not VAR_
+                let up = label.to_uppercase();
+                if up == label && !label.starts_with("VAR_") {
+                    functions.insert(label.to_string(), serde_json::Value::Number(0.into()));
+                }
+            }
+        }
+    }
+
+    let pdb = serde_json::json!({
+        "version": "2.0",
+        "source": source_name,
+        "variables": variables,
+        "functions": functions,
+        "labels": labels,
+        "vpyLineMap": vpy_line_map,
+        "asmLineMap": asm_line_map,
+        "lineMap": {},
+        "symbols": {},
+        "nativeCalls": {},
+        "asmFunctions": {},
+        "asmAddressMap": {},
+        "bios_symbols": {}
+    });
+
+    let json_str = serde_json::to_string_pretty(&pdb)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(output_pdb_path, json_str)
 }

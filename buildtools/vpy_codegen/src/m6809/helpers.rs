@@ -642,7 +642,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         asm.push_str("    STA >$C82B      ; Vec_Text_Width: controls character X spacing\n");
         asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
         asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
+        asm.push_str("    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)\n");
+        asm.push_str("    PSHS X\n");
         asm.push_str("    JSR Print_Str_d\n");
+        asm.push_str("    PULS X\n");
+        asm.push_str("    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value\n");
         asm.push_str("    LDA #$F8\n");
         asm.push_str("    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)\n");
         asm.push_str("    LDA #$48\n");
@@ -737,7 +741,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         asm.push_str("    STA >$C82B       ; Vec_Text_Width: character X spacing\n");
         asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
         asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
+        asm.push_str("    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)\n");
+        asm.push_str("    PSHS X\n");
         asm.push_str("    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n");
+        asm.push_str("    PULS X\n");
+        asm.push_str("    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)\n");
         asm.push_str("    LDA #$F8\n");
         asm.push_str("    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)\n");
         asm.push_str("    LDA #$48\n");
@@ -2269,10 +2277,9 @@ DAR_BASE_LOOP:\n\
     LDX ,Y              ; X = _VECNAME_VECTORS header\n\
     CLR >MIRROR_Y\n\
     JSR $F1AA           ; DP_to_D0\n\
-    CLRA                ; path_count is 1 byte (FCB), high byte = 0\n\
-    LDB ,X              ; B = path_count (8-bit FCB)\n\
+    LDD ,X              ; D = path_count (FDB, 2 bytes)\n\
     BEQ DAR_BASE_SKIP\n\
-    LEAY 1,X            ; Y = first path FDB in vec table (skip 1-byte count)\n\
+    LEAY 2,X            ; Y = first path FDB in vec table (skip 2-byte count)\n\
 DAR_BASE_PATH_LOOP:\n\
     PSHS D,Y\n\
     LDX ,Y\n\
@@ -2375,10 +2382,9 @@ DAR_VEC_LOOP:\n\
     PSHS B,Y\n\
     LDX ,Y\n\
     JSR $F1AA           ; DP_to_D0\n\
-    CLRA                ; path_count is 1 byte (FCB), high byte = 0\n\
-    LDB ,X              ; B = path_count (8-bit FCB)\n\
+    LDD ,X              ; D = path_count (FDB, 2 bytes)\n\
     BEQ DAR_VEC_DONE\n\
-    LEAY 1,X            ; Y = first path FDB (skip 1-byte count)\n\
+    LEAY 2,X            ; Y = first path FDB (skip 2-byte count)\n\
 DAR_VEC_PATH_LOOP:\n\
     PSHS D,Y\n\
     LDX ,Y\n\

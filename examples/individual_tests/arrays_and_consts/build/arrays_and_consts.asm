@@ -33,6 +33,8 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -78,28 +80,28 @@ VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-
 TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
 VAR_NUM_ITEMS        EQU $C880+$38   ; User variable: NUM_ITEMS (2 bytes)
-VAR_ROW_Y            EQU $C880+$3A   ; User variable: row_y (2 bytes)
-VAR_SELECTED         EQU $C880+$3C   ; User variable: selected (2 bytes)
-VAR_COOLDOWN         EQU $C880+$3E   ; User variable: cooldown (2 bytes)
-VAR_JOY_Y            EQU $C880+$40   ; User variable: joy_y (2 bytes)
-VAR_CUR_SCORE        EQU $C880+$42   ; User variable: cur_score (2 bytes)
-VAR_ITEM_SCORE       EQU $C880+$44   ; User variable: item_score (2 bytes)
-VAR_ITEM_SCORE_DATA  EQU $C880+$46   ; Mutable array 'item_score' data (4 elements x 2 bytes) (8 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-PSG_MUSIC_PTR        EQU $CBEB   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $CBED   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $CBEF   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $CBF0   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $CBF1   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
+VAR_ROW_Y            EQU $C880+$3A   ; User variable: ROW_Y (2 bytes)
+VAR_SELECTED         EQU $C880+$3C   ; User variable: SELECTED (2 bytes)
+VAR_COOLDOWN         EQU $C880+$3E   ; User variable: COOLDOWN (2 bytes)
+VAR_JOY_Y            EQU $C880+$40   ; User variable: JOY_Y (2 bytes)
+VAR_CUR_SCORE        EQU $C880+$42   ; User variable: CUR_SCORE (2 bytes)
+VAR_ITEM_SCORE       EQU $C880+$44   ; User variable: ITEM_SCORE (2 bytes)
+VAR_ITEM_SCORE_DATA  EQU $C880+$46   ; Mutable array 'ITEM_SCORE' data (4 elements x 2 bytes) (8 bytes)
+PSG_MUSIC_PTR        EQU $C880+$4E   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$50   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$52   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$53   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$54   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$55   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$56   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$58   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$59   ; SFX bank ID (for multibank) (1 bytes)
+VAR_ARG0             EQU $C880+$5A   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$5C   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$5E   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$60   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$62   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$64   ; Current ROM bank ID (multibank tracking) (1 bytes)
 ; Array length constants
 ARRAY_ROW_Y_LEN         EQU 4   ; 4 elements
 ARRAY_ITEM_SCORE_LEN         EQU 4   ; 4 elements
@@ -110,14 +112,14 @@ ARRAY_ITEM_SCORE_LEN         EQU 4   ; 4 elements
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'row_y' (4 elements, 2 bytes each)
+; Array literal for variable 'ROW_Y' (4 elements, 2 bytes each)
 ARRAY_ROW_Y_DATA:
     FDB 70   ; Element 0
     FDB 40   ; Element 1
     FDB 10   ; Element 2
     FDB -20   ; Element 3
 
-; Array literal for variable 'item_score' (4 elements, 2 bytes each)
+; Array literal for variable 'ITEM_SCORE' (4 elements, 2 bytes each)
 ARRAY_ITEM_SCORE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -137,7 +139,7 @@ MAIN:
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    ; Copy array 'item_score' from ROM to RAM (4 elements)
+    ; Copy array 'ITEM_SCORE' from ROM to RAM (4 elements)
     LDX #ARRAY_ITEM_SCORE_DATA       ; Source: ROM array data
     LDU #VAR_ITEM_SCORE_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements

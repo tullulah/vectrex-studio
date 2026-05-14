@@ -1,7 +1,7 @@
 ; VPy M6809 Assembly (Vectrex)
-; ROM: 131072 bytes
-; Multibank cartridge: 8 banks (16KB each)
-; Helpers bank: 7 (fixed bank at $4000-$7FFF)
+; ROM: 65536 bytes
+; Multibank cartridge: 4 banks (16KB each)
+; Helpers bank: 3 (fixed bank at $4000-$7FFF)
 
 ; ================================================
 
@@ -66,142 +66,142 @@ SLR_CUR_X            EQU $C880+$6F   ; SHOW_LEVEL: tracked beam X for per-segmen
 DRAW_T1_SCALED       EQU $C880+$70   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
 LEVEL_GP_BUFFER      EQU $C880+$71   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
 LCOL_PX              EQU $C880+$251   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$253   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
-LCOL_PY              EQU $C880+$254   ; LEVEL_COLLISION player_y (lo byte) (1 bytes)
-LCOL_PHH             EQU $C880+$255   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$256   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$257   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$258   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$259   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$25A   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$25B   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$25D   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$25F   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$260   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$261   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$262   ; GP-FG |dy| (1 bytes)
-ENEMY_POOL           EQU $C880+$263   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+sm_state+sm_timer × N) (128 bytes)
-ENEMY_LOOP_IDX       EQU $C880+$2E3   ; Enemy loop counter (1 bytes)
-ENEMY_COUNT          EQU $C880+$2E4   ; Active enemy count (1 bytes)
-ENEMY_SCRATCH_PTR    EQU $C880+$2E5   ; Scratch pointer for enemy iteration (2 bytes)
-ENEMY_SCRATCH_X      EQU $C880+$2E7   ; Enemy scratch X (2 bytes)
-ENEMY_SCRATCH_Y      EQU $C880+$2E9   ; Enemy scratch Y (2 bytes)
-ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2EB   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2ED   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$2EF   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$2F0   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-ANIM_PLAYER_WALK_STATE EQU $C880+$2F1   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
-DRAW_ANIM_MIRROR_X   EQU $C880+$2F3   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
-DRAW_ANIM_SCALE      EQU $C880+$2F4   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
-DRAW_ANIM_SPEED_MUL  EQU $C880+$2F5   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$2F6   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$2F7   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_GAME_START EQU $C880+$2F9   ; User variable: STATE_GAME_START (2 bytes)
-VAR_STATE_PLAYING    EQU $C880+$2FB   ; User variable: STATE_PLAYING (2 bytes)
-VAR_STATE_PLAYER_DEAD EQU $C880+$2FD   ; User variable: STATE_PLAYER_DEAD (2 bytes)
-VAR_STATE_LEVEL_CLEAR EQU $C880+$2FF   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
-VAR_STATE_BOSS_INTRO EQU $C880+$301   ; User variable: STATE_BOSS_INTRO (2 bytes)
-VAR_STATE_BOSS       EQU $C880+$303   ; User variable: STATE_BOSS (2 bytes)
-VAR_STATE_GAME_OVER  EQU $C880+$305   ; User variable: STATE_GAME_OVER (2 bytes)
-VAR_STATE_ALL_CLEAR  EQU $C880+$307   ; User variable: STATE_ALL_CLEAR (2 bytes)
-VAR_TITCHI_STATE_NORMAL EQU $C880+$309   ; User variable: TITCHI_STATE_NORMAL (2 bytes)
-VAR_TITCHI_STATE_SNOW1 EQU $C880+$30B   ; User variable: TITCHI_STATE_SNOW1 (2 bytes)
-VAR_TITCHI_STATE_SNOW2 EQU $C880+$30D   ; User variable: TITCHI_STATE_SNOW2 (2 bytes)
-VAR_TITCHI_STATE_BALL EQU $C880+$30F   ; User variable: TITCHI_STATE_BALL (2 bytes)
-VAR_SNOW_HW          EQU $C880+$311   ; User variable: SNOW_HW (2 bytes)
-VAR_SNOW_HH          EQU $C880+$313   ; User variable: SNOW_HH (2 bytes)
-VAR_ENEMY_HW         EQU $C880+$315   ; User variable: ENEMY_HW (2 bytes)
-VAR_ENEMY_HH         EQU $C880+$317   ; User variable: ENEMY_HH (2 bytes)
-VAR_GAME_STATE       EQU $C880+$319   ; User variable: game_state (2 bytes)
-VAR_SCORE            EQU $C880+$31B   ; User variable: score (2 bytes)
-VAR_LIVES            EQU $C880+$31D   ; User variable: lives (2 bytes)
-VAR_CURRENT_LEVEL    EQU $C880+$31F   ; User variable: current_level (2 bytes)
-VAR_TIME_LEFT        EQU $C880+$321   ; User variable: time_left (2 bytes)
-VAR_ENEMY_COUNT      EQU $C880+$323   ; User variable: enemy_count (2 bytes)
-VAR_FRAME_TIMER      EQU $C880+$325   ; User variable: frame_timer (2 bytes)
-VAR_NEXT_IS_BOSS     EQU $C880+$327   ; User variable: next_is_boss (2 bytes)
-VAR_PLAYER_X         EQU $C880+$329   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$32B   ; User variable: player_y (2 bytes)
-VAR_PLAYER_VX        EQU $C880+$32D   ; User variable: player_vx (2 bytes)
-VAR_PLAYER_VY        EQU $C880+$32F   ; User variable: player_vy (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$331   ; User variable: player_facing (2 bytes)
-VAR_PLAYER_ON_GROUND EQU $C880+$333   ; User variable: player_on_ground (2 bytes)
-VAR_FLOOR_Y          EQU $C880+$335   ; User variable: floor_y (2 bytes)
-VAR_PREV_Y           EQU $C880+$337   ; User variable: prev_y (2 bytes)
-VAR_GRAVITY          EQU $C880+$339   ; User variable: GRAVITY (2 bytes)
-VAR_JUMP_SPEED       EQU $C880+$33B   ; User variable: JUMP_SPEED (2 bytes)
-VAR_MAX_FALL_SPEED   EQU $C880+$33D   ; User variable: MAX_FALL_SPEED (2 bytes)
-VAR_PLAYER_HH        EQU $C880+$33F   ; User variable: PLAYER_HH (2 bytes)
-VAR_WORLD_X_MIN      EQU $C880+$341   ; User variable: WORLD_X_MIN (2 bytes)
-VAR_WORLD_X_MAX      EQU $C880+$343   ; User variable: WORLD_X_MAX (2 bytes)
-VAR_WORLD_Y_MIN      EQU $C880+$345   ; User variable: WORLD_Y_MIN (2 bytes)
-VAR_WORLD_Y_MAX      EQU $C880+$347   ; User variable: WORLD_Y_MAX (2 bytes)
-VAR_SNOW_SPEED       EQU $C880+$349   ; User variable: SNOW_SPEED (2 bytes)
-VAR_SNOW_LAUNCH_VY   EQU $C880+$34B   ; User variable: SNOW_LAUNCH_VY (2 bytes)
-VAR_SNOW_LIFE_NORMAL EQU $C880+$34D   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
-VAR_SNOW_LIFE_POWER  EQU $C880+$34F   ; User variable: SNOW_LIFE_POWER (2 bytes)
-VAR_SHOOT_COOLDOWN_MAX EQU $C880+$351   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
-VAR_SHOOT_COOLDOWN   EQU $C880+$353   ; User variable: shoot_cooldown (2 bytes)
-VAR_PLAYER_HAS_POWER EQU $C880+$355   ; User variable: player_has_power (2 bytes)
-VAR_SNOW_LIFE_MAX    EQU $C880+$357   ; User variable: snow_life_max (2 bytes)
-VAR_SNOW_SPAWN_VX    EQU $C880+$359   ; User variable: snow_spawn_vx (2 bytes)
-VAR_SNOW0_ACTIVE     EQU $C880+$35B   ; User variable: snow0_active (2 bytes)
-VAR_SNOW0_X          EQU $C880+$35D   ; User variable: snow0_x (2 bytes)
-VAR_SNOW0_Y          EQU $C880+$35F   ; User variable: snow0_y (2 bytes)
-VAR_SNOW0_VX         EQU $C880+$361   ; User variable: snow0_vx (2 bytes)
-VAR_SNOW0_VY         EQU $C880+$363   ; User variable: snow0_vy (2 bytes)
-VAR_SNOW0_LIFE       EQU $C880+$365   ; User variable: snow0_life (2 bytes)
-VAR_SNOW1_ACTIVE     EQU $C880+$367   ; User variable: snow1_active (2 bytes)
-VAR_SNOW1_X          EQU $C880+$369   ; User variable: snow1_x (2 bytes)
-VAR_SNOW1_Y          EQU $C880+$36B   ; User variable: snow1_y (2 bytes)
-VAR_SNOW1_VX         EQU $C880+$36D   ; User variable: snow1_vx (2 bytes)
-VAR_SNOW1_VY         EQU $C880+$36F   ; User variable: snow1_vy (2 bytes)
-VAR_SNOW1_LIFE       EQU $C880+$371   ; User variable: snow1_life (2 bytes)
-VAR_SNOW2_ACTIVE     EQU $C880+$373   ; User variable: snow2_active (2 bytes)
-VAR_SNOW2_X          EQU $C880+$375   ; User variable: snow2_x (2 bytes)
-VAR_SNOW2_Y          EQU $C880+$377   ; User variable: snow2_y (2 bytes)
-VAR_SNOW2_VX         EQU $C880+$379   ; User variable: snow2_vx (2 bytes)
-VAR_SNOW2_VY         EQU $C880+$37B   ; User variable: snow2_vy (2 bytes)
-VAR_SNOW2_LIFE       EQU $C880+$37D   ; User variable: snow2_life (2 bytes)
-VAR_LEVEL_TIME       EQU $C880+$37F   ; User variable: LEVEL_TIME (2 bytes)
-VAR_LIVES_START      EQU $C880+$381   ; User variable: LIVES_START (2 bytes)
-VAR_GAME_START_DELAY EQU $C880+$383   ; User variable: GAME_START_DELAY (2 bytes)
-VAR_DEATH_DELAY      EQU $C880+$385   ; User variable: DEATH_DELAY (2 bytes)
-VAR_LEVEL_CLEAR_DELAY EQU $C880+$387   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
-VAR_BOSS_INTRO_DELAY EQU $C880+$389   ; User variable: BOSS_INTRO_DELAY (2 bytes)
-VAR_ALL_CLEAR_DELAY  EQU $C880+$38B   ; User variable: ALL_CLEAR_DELAY (2 bytes)
-VAR_I                EQU $C880+$38D   ; User variable: i (2 bytes)
-VAR_EX               EQU $C880+$38F   ; User variable: ex (2 bytes)
-VAR_EY               EQU $C880+$391   ; User variable: ey (2 bytes)
-VAR_IDX              EQU $C880+$393   ; User variable: idx (2 bytes)
-VAR_THW              EQU $C880+$395   ; User variable: thw (2 bytes)
-VAR_THH              EQU $C880+$397   ; User variable: thh (2 bytes)
-VAR_DX               EQU $C880+$399   ; User variable: dx (2 bytes)
-VAR_DY               EQU $C880+$39B   ; User variable: dy (2 bytes)
-VAR_ST               EQU $C880+$39D   ; User variable: st (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-PSG_MUSIC_PTR        EQU $CBEB   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $CBED   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $CBEF   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $CBF0   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $CBF1   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
+LCOL_BEST_Y          EQU $C880+$253   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$255   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$257   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$258   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$259   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$25A   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$25B   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$25C   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$25D   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$25F   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$261   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$262   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$263   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$264   ; GP-FG |dy| (1 bytes)
+ENEMY_POOL           EQU $C880+$265   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N) (136 bytes)
+ENEMY_LOOP_IDX       EQU $C880+$2ED   ; Enemy loop counter (1 bytes)
+ENEMY_COUNT          EQU $C880+$2EE   ; Active enemy count (1 bytes)
+ENEMY_SCRATCH_PTR    EQU $C880+$2EF   ; Scratch pointer for enemy iteration (2 bytes)
+ENEMY_SCRATCH_X      EQU $C880+$2F1   ; Enemy scratch X (2 bytes)
+ENEMY_SCRATCH_Y      EQU $C880+$2F3   ; Enemy scratch Y (2 bytes)
+ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2F5   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2F7   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$2F9   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$2FA   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+ANIM_PLAYER_WALK_STATE EQU $C880+$2FB   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
+DRAW_ANIM_MIRROR_X   EQU $C880+$2FD   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
+DRAW_ANIM_SCALE      EQU $C880+$2FE   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
+DRAW_ANIM_SPEED_MUL  EQU $C880+$2FF   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$300   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_STATE_TITLE      EQU $C880+$301   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_GAME_START EQU $C880+$303   ; User variable: STATE_GAME_START (2 bytes)
+VAR_STATE_PLAYING    EQU $C880+$305   ; User variable: STATE_PLAYING (2 bytes)
+VAR_STATE_PLAYER_DEAD EQU $C880+$307   ; User variable: STATE_PLAYER_DEAD (2 bytes)
+VAR_STATE_LEVEL_CLEAR EQU $C880+$309   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
+VAR_STATE_BOSS_INTRO EQU $C880+$30B   ; User variable: STATE_BOSS_INTRO (2 bytes)
+VAR_STATE_BOSS       EQU $C880+$30D   ; User variable: STATE_BOSS (2 bytes)
+VAR_STATE_GAME_OVER  EQU $C880+$30F   ; User variable: STATE_GAME_OVER (2 bytes)
+VAR_STATE_ALL_CLEAR  EQU $C880+$311   ; User variable: STATE_ALL_CLEAR (2 bytes)
+VAR_TITCHI_STATE_NORMAL EQU $C880+$313   ; User variable: TITCHI_STATE_NORMAL (2 bytes)
+VAR_TITCHI_STATE_SNOW1 EQU $C880+$315   ; User variable: TITCHI_STATE_SNOW1 (2 bytes)
+VAR_TITCHI_STATE_SNOW2 EQU $C880+$317   ; User variable: TITCHI_STATE_SNOW2 (2 bytes)
+VAR_TITCHI_STATE_BALL EQU $C880+$319   ; User variable: TITCHI_STATE_BALL (2 bytes)
+VAR_SNOW_HW          EQU $C880+$31B   ; User variable: SNOW_HW (2 bytes)
+VAR_SNOW_HH          EQU $C880+$31D   ; User variable: SNOW_HH (2 bytes)
+VAR_ENEMY_HW         EQU $C880+$31F   ; User variable: ENEMY_HW (2 bytes)
+VAR_ENEMY_HH         EQU $C880+$321   ; User variable: ENEMY_HH (2 bytes)
+VAR_GAME_STATE       EQU $C880+$323   ; User variable: game_state (2 bytes)
+VAR_SCORE            EQU $C880+$325   ; User variable: score (2 bytes)
+VAR_LIVES            EQU $C880+$327   ; User variable: lives (2 bytes)
+VAR_CURRENT_LEVEL    EQU $C880+$329   ; User variable: current_level (2 bytes)
+VAR_TIME_LEFT        EQU $C880+$32B   ; User variable: time_left (2 bytes)
+VAR_ENEMY_COUNT      EQU $C880+$32D   ; User variable: enemy_count (2 bytes)
+VAR_FRAME_TIMER      EQU $C880+$32F   ; User variable: frame_timer (2 bytes)
+VAR_NEXT_IS_BOSS     EQU $C880+$331   ; User variable: next_is_boss (2 bytes)
+VAR_PLAYER_X         EQU $C880+$333   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$335   ; User variable: player_y (2 bytes)
+VAR_PLAYER_VX        EQU $C880+$337   ; User variable: player_vx (2 bytes)
+VAR_PLAYER_VY        EQU $C880+$339   ; User variable: player_vy (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$33B   ; User variable: player_facing (2 bytes)
+VAR_PLAYER_ON_GROUND EQU $C880+$33D   ; User variable: player_on_ground (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$33F   ; User variable: floor_y (2 bytes)
+VAR_PREV_Y           EQU $C880+$341   ; User variable: prev_y (2 bytes)
+VAR_GRAVITY          EQU $C880+$343   ; User variable: GRAVITY (2 bytes)
+VAR_JUMP_SPEED       EQU $C880+$345   ; User variable: JUMP_SPEED (2 bytes)
+VAR_MAX_FALL_SPEED   EQU $C880+$347   ; User variable: MAX_FALL_SPEED (2 bytes)
+VAR_PLAYER_HH        EQU $C880+$349   ; User variable: PLAYER_HH (2 bytes)
+VAR_WORLD_X_MIN      EQU $C880+$34B   ; User variable: WORLD_X_MIN (2 bytes)
+VAR_WORLD_X_MAX      EQU $C880+$34D   ; User variable: WORLD_X_MAX (2 bytes)
+VAR_WORLD_Y_MIN      EQU $C880+$34F   ; User variable: WORLD_Y_MIN (2 bytes)
+VAR_WORLD_Y_MAX      EQU $C880+$351   ; User variable: WORLD_Y_MAX (2 bytes)
+VAR_SNOW_SPEED       EQU $C880+$353   ; User variable: SNOW_SPEED (2 bytes)
+VAR_SNOW_LAUNCH_VY   EQU $C880+$355   ; User variable: SNOW_LAUNCH_VY (2 bytes)
+VAR_SNOW_LIFE_NORMAL EQU $C880+$357   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
+VAR_SNOW_LIFE_POWER  EQU $C880+$359   ; User variable: SNOW_LIFE_POWER (2 bytes)
+VAR_SHOOT_COOLDOWN_MAX EQU $C880+$35B   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
+VAR_SHOOT_COOLDOWN   EQU $C880+$35D   ; User variable: shoot_cooldown (2 bytes)
+VAR_PLAYER_HAS_POWER EQU $C880+$35F   ; User variable: player_has_power (2 bytes)
+VAR_SNOW_LIFE_MAX    EQU $C880+$361   ; User variable: snow_life_max (2 bytes)
+VAR_SNOW_SPAWN_VX    EQU $C880+$363   ; User variable: snow_spawn_vx (2 bytes)
+VAR_SNOW0_ACTIVE     EQU $C880+$365   ; User variable: snow0_active (2 bytes)
+VAR_SNOW0_X          EQU $C880+$367   ; User variable: snow0_x (2 bytes)
+VAR_SNOW0_Y          EQU $C880+$369   ; User variable: snow0_y (2 bytes)
+VAR_SNOW0_VX         EQU $C880+$36B   ; User variable: snow0_vx (2 bytes)
+VAR_SNOW0_VY         EQU $C880+$36D   ; User variable: snow0_vy (2 bytes)
+VAR_SNOW0_LIFE       EQU $C880+$36F   ; User variable: snow0_life (2 bytes)
+VAR_SNOW1_ACTIVE     EQU $C880+$371   ; User variable: snow1_active (2 bytes)
+VAR_SNOW1_X          EQU $C880+$373   ; User variable: snow1_x (2 bytes)
+VAR_SNOW1_Y          EQU $C880+$375   ; User variable: snow1_y (2 bytes)
+VAR_SNOW1_VX         EQU $C880+$377   ; User variable: snow1_vx (2 bytes)
+VAR_SNOW1_VY         EQU $C880+$379   ; User variable: snow1_vy (2 bytes)
+VAR_SNOW1_LIFE       EQU $C880+$37B   ; User variable: snow1_life (2 bytes)
+VAR_SNOW2_ACTIVE     EQU $C880+$37D   ; User variable: snow2_active (2 bytes)
+VAR_SNOW2_X          EQU $C880+$37F   ; User variable: snow2_x (2 bytes)
+VAR_SNOW2_Y          EQU $C880+$381   ; User variable: snow2_y (2 bytes)
+VAR_SNOW2_VX         EQU $C880+$383   ; User variable: snow2_vx (2 bytes)
+VAR_SNOW2_VY         EQU $C880+$385   ; User variable: snow2_vy (2 bytes)
+VAR_SNOW2_LIFE       EQU $C880+$387   ; User variable: snow2_life (2 bytes)
+VAR_LEVEL_TIME       EQU $C880+$389   ; User variable: LEVEL_TIME (2 bytes)
+VAR_LIVES_START      EQU $C880+$38B   ; User variable: LIVES_START (2 bytes)
+VAR_GAME_START_DELAY EQU $C880+$38D   ; User variable: GAME_START_DELAY (2 bytes)
+VAR_DEATH_DELAY      EQU $C880+$38F   ; User variable: DEATH_DELAY (2 bytes)
+VAR_LEVEL_CLEAR_DELAY EQU $C880+$391   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
+VAR_BOSS_INTRO_DELAY EQU $C880+$393   ; User variable: BOSS_INTRO_DELAY (2 bytes)
+VAR_ALL_CLEAR_DELAY  EQU $C880+$395   ; User variable: ALL_CLEAR_DELAY (2 bytes)
+VAR_I                EQU $C880+$397   ; User variable: i (2 bytes)
+VAR_EX               EQU $C880+$399   ; User variable: ex (2 bytes)
+VAR_EY               EQU $C880+$39B   ; User variable: ey (2 bytes)
+VAR_IDX              EQU $C880+$39D   ; User variable: idx (2 bytes)
+VAR_THW              EQU $C880+$39F   ; User variable: thw (2 bytes)
+VAR_THH              EQU $C880+$3A1   ; User variable: thh (2 bytes)
+VAR_DX               EQU $C880+$3A3   ; User variable: dx (2 bytes)
+VAR_DY               EQU $C880+$3A5   ; User variable: dy (2 bytes)
+VAR_ST               EQU $C880+$3A7   ; User variable: st (2 bytes)
+PSG_MUSIC_PTR        EQU $C880+$3A9   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$3AB   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$3AD   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$3AE   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$3AF   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$3B0   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$3B1   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$3B3   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$3B4   ; SFX bank ID (for multibank) (1 bytes)
+VAR_ARG0             EQU $C880+$3B5   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$3B7   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$3B9   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3BB   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$3BD   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$3BF   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 
 ; ================================================
 
 ; VPy M6809 Assembly (Vectrex)
-; ROM: 131072 bytes
-; Multibank cartridge: 8 banks (16KB each)
-; Helpers bank: 7 (fixed bank at $4000-$7FFF)
+; ROM: 65536 bytes
+; Multibank cartridge: 4 banks (16KB each)
+; Helpers bank: 3 (fixed bank at $4000-$7FFF)
 
 ; ================================================
 
@@ -212,964 +212,958 @@ SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
 ;***************************************************************************
     INCLUDE "VECTREX.I"
 ; External symbols (helpers, BIOS, and shared data)
-_GAME_OVER_MUSIC EQU $2C5D
-VECTREX_PRINT_NUMBER.PN_L100 EQU $4692
-DAR_INIT EQU $51C7
-MUSIC6 EQU $FE76
-Sound_Byte_raw EQU $F25B
-VECTREX_PRINT_NUMBER.PN_D100 EQU $46A4
-VEC_BRIGHTNESS EQU $C827
-Reset0Int EQU $F36B
-_TITCHI_SNOW1_PATH8 EQU $2E37
-_TITCHI_SNOW1_PATH1 EQU $2DC8
-PRINT_TEXT_STR_17169778266052697977 EQU $5627
-_PLATFORM2_VECTORS EQU $32DA
-_TITCHI_WALK2_PATH4 EQU $453F
-DSWM_W2 EQU $49FB
-_PLAYER_JUMP_PATH1 EQU $2F5C
-SLR_RAM_VISIBLE EQU $4C69
-_PLAYER_WALK4_PATH1 EQU $44A5
-SFX_DOFRAME EQU $5091
-_PLAYER_WALK1_PATH6 EQU $4608
-Delay_0 EQU $F579
-UPD_SM_DECAY EQU $53B7
-Intensity_1F EQU $F29D
-SOUND_BYTE EQU $F256
-SLR_PATH_LOOP EQU $4D1C
-DAR_SCAN EQU $5246
-music7 EQU $FEC6
-SLR_DONE EQU $4BED
-Init_OS EQU $F18B
-MUL16 EQU $46FC
-Draw_VLcs EQU $F3D6
-PSG_update_done EQU $4F9B
-DRAW_VL_AB EQU $F3D8
-Add_Score_d EQU $F87C
-VEC_RISERUN_LEN EQU $C83B
-VEC_ADSR_TIMERS EQU $C85E
-MOVE_MEM_A_1 EQU $F67F
-_PLATFORM2_PATH2 EQU $330C
-PRINT_TEXT_STR_1785516508540691 EQU $55B4
-_INIT_SCREEN_PATH46 EQU $29EA
-_PLAYER_JUMP_VECTORS EQU $2F35
-SPAWN_FILL_LOOP EQU $52A3
-_INIT_SCREEN_PATH44 EQU $29D8
-DAR_BASE_SKIP EQU $5161
-Init_VIA EQU $F14C
-MUSICC EQU $FF7A
-SDCP_DONE EQU $4E40
-DP_TO_D0 EQU $F1AA
-ADD_SCORE_D EQU $F87C
-DRAW_VLC EQU $F3CE
-UPD_INC_YHI EQU $539F
-ENEMY_BANK_TABLE EQU $4036
-Vec_High_Score EQU $CBEB
-SPAWN_SM_DONE EQU $5313
-VECTREX_PRINT_NUMBER.PN_L1000 EQU $4678
-VEC_BTN_STATE EQU $C80F
-Vec_Button_1_1 EQU $C812
-PLAY_BOSS_MUSIC.CMP_39_END EQU $0CFB
-_PLAYER_WALK4_PATH0 EQU $4499
-VEC_COUNTER_1 EQU $C82E
-_TITCHI_WALK1_PATH9 EQU $42C2
-_TITCHI_WALK2_PATH3 EQU $4533
-FIRE_EVT_SCAN EQU $5521
-MOVETO_IX EQU $F310
-Vec_NMI_Vector EQU $CBFB
-DOT_IX_B EQU $F2BE
-_TITCHI_WALK1_PATH5 EQU $4289
-RISE_RUN_X EQU $F5FF
-Vec_Expl_Flag EQU $C867
-_INIT_SCREEN_PATH40 EQU $29B1
-_INIT_SCREEN_PATH42 EQU $29C3
-RECALIBRATE EQU $F2E6
-Bitmask_a EQU $F57E
-UPD_INC_XHI EQU $5376
-DIV16 EQU $4711
-Print_Str_d EQU $F37A
-MOVE_MEM_A EQU $F683
-VEC_MUSIC_FLAG EQU $C856
-_TITCHI_SNOW1_PATH11 EQU $2E5E
-XFORM_RUN EQU $F65D
-Vec_Counter_2 EQU $C82F
-_PLAYER_IDLE_PATH5 EQU $3198
-_TITCHI_BALL_VECTORS EQU $31D7
-_INIT_SCREEN_PATH34 EQU $292A
-Vec_IRQ_Vector EQU $CBF8
-WAIT_RECAL EQU $F192
-_TITCHI_WALK3_PATH9 EQU $43E3
-Draw_VL_mode EQU $F46E
-Vec_Joy_Mux_2_Y EQU $C822
-_INIT_SCREEN_PATH5 EQU $2792
-_INIT_SCREEN_PATH56 EQU $2ABC
-music2 EQU $FD1D
-SOUND_BYTE_RAW EQU $F25B
-_INIT_SCREEN_PATH32 EQU $28EB
-MUSIC2 EQU $FD1D
-SLR_ROM_A_ZERO EQU $4CFE
-SFX_M_WRITE EQU $50F7
-RESET_PEN EQU $F35B
-Vec_Str_Ptr EQU $C82C
-PRINT_TEXT_STR_97774210848817 EQU $55A0
-DSWM_NEXT_NO_NEGATE_Y EQU $4A2F
-_PLATFORM2_PATH1 EQU $32FA
-Vec_Counter_3 EQU $C830
-UPD_TRY_YLO EQU $53A4
-Xform_Rise_a EQU $F661
-ROT_VL EQU $F616
-DRAW_ANIM_RUNTIME EQU $5122
-sfx_m_tonedis EQU $50E8
-_PLAYER_JUMP_PATH3 EQU $2F71
-LEVEL_COLLISION_Y_RUNTIME EQU $4E41
-_TITCHI_WALK2_PATH1 EQU $4524
-AU_MUSIC_ENDED EQU $504B
-SLR_PATH_DONE EQU $4D34
-RISE_RUN_Y EQU $F601
-_TITCHI_IDLE_PATH10 EQU $3133
-SLR_OBJ_LOOP EQU $4BFC
-LLR_COPY_OBJECTS EQU $4B41
-VEC_MAX_PLAYERS EQU $C84F
-SFX_CHECKTONEFREQ EQU $50A4
-Draw_VLp EQU $F410
-VEC_RISERUN_TMP EQU $C834
-_PLAYER_IDLE_PATH8 EQU $31C5
-AU_BANK_OK EQU $4FE0
-PRINT_TEXT_STR_89062161292953211 EQU $55CA
-Vec_Duration EQU $C857
-_INIT_SCREEN_PATH3 EQU $2768
-DCR_intensity_5F EQU $481D
-Draw_VLp_scale EQU $F40C
-_TITCHI_WALK2_PATH5 EQU $4545
-DSWM_NEXT_USE_FCB_INT EQU $4A23
-Print_Str_yx EQU $F378
-VEC_SWI2_VECTOR EQU $CBF2
-PSG_music_loop_d EQU $4F93
-_INIT_SCREEN_PATH9 EQU $27EF
-CLEAR_SCORE EQU $F84F
-AUDIO_UPDATE EQU $4FC6
-_HENSHOKU_MUSIC EQU $0000
-DVB_PATH_LOOP EQU $411D
-DAR_FREEZE EQU $51B2
-_PLAYER_IDLE_PATH6 EQU $31A4
-Vec_Misc_Count EQU $C823
-MUSIC7 EQU $FEC6
-_PLATFORM4_PATH3 EQU $2EA2
-Vec_ADSR_Table EQU $C84F
-DO_SOUND_X EQU $F28C
-_ANIM_TITCHI_WALK_F1 EQU $4230
-MUSICB EQU $FF62
-DELAY_2 EQU $F571
-DELAY_1 EQU $F575
-noay EQU $5090
-Vec_Freq_Table EQU $C84D
-_PLATFORM3_VECTORS EQU $3344
-DRAW_VECTOR_BANKED EQU $40DA
-_INIT_SCREEN_PATH16 EQU $283A
-_PLAYER_JUMP_PATH5 EQU $2F89
-sfx_doframe EQU $5091
-SLR_DRAW_CLIPPED_PATH EQU $4D43
-SLR_FG_COUNT EQU $4BDB
-_INIT_SCREEN_PATH6 EQU $27A4
-LLR_COPY_LOOP EQU $4B41
-Clear_x_256 EQU $F545
-VEC_MUSIC_WK_A EQU $C842
-PRINT_TEXT_STR_62413928761410 EQU $558C
-musica EQU $FF44
-_TITCHI_WALK2_PATH8 EQU $4578
-_PLATFORM4_PATH6 EQU $2EF6
-_PLATFORM3_PATH0 EQU $334C
-WARM_START EQU $F06C
-DAR_SPEED1_OK EQU $51AD
-PRINT_SHIPS_X EQU $F391
-_INIT_SCREEN_PATH25 EQU $28A9
-_PLAYER_WALK2_PATH3 EQU $4449
-SPAWN_CLR_LOOP EQU $5277
-Vec_Music_Wk_6 EQU $C846
-_ENEMY1_ENEMY EQU $403C
-DELAY_0 EQU $F579
-SLR_ROM_Y_ZERO EQU $4CBF
-MUSICA EQU $FF44
-_INIT_SCREEN_PATH49 EQU $2A0B
-MOVETO_D EQU $F312
-DP_to_C8 EQU $F1AF
-Draw_VLp_FF EQU $F404
-UPD_ENE_DONE EQU $543C
-_ANIM_PLAYER_WALK_F2 EQU $4217
-Reset_Pen EQU $F35B
-AU_MUSIC_DONE EQU $5045
-PLAY_BOSS_MUSIC EQU $0CE1
-_PLAYER_JUMP_PATH7 EQU $2F9E
-GET_RUN_IDX EQU $F5DB
-Select_Game EQU $F7A9
-_INIT_SCREEN_PATH10 EQU $27FB
-_INIT_SCREEN_PATH24 EQU $28A0
-Vec_Rfrsh_lo EQU $C83D
-_TITCHI_WALK3_PATH2 EQU $4392
-_TITCHI_WALK3_PATH4 EQU $439E
-MOVETO_IX_A EQU $F30E
-SPAWN_SM_NOSM EQU $530F
-_ANIM_TITCHI_WALK_F2 EQU $4235
-music3 EQU $FD81
-DAR_SPEED1 EQU $51A5
-_TITCHI_SNOW1_PATH0 EQU $2DB9
-DELAY_3 EQU $F56D
-Recalibrate EQU $F2E6
-Vec_Counter_6 EQU $C833
-VEC_ADSR_TABLE EQU $C84F
-_PLAYER_WALK2_PATH2 EQU $443D
-Sound_Bytes_x EQU $F284
-_TITCHI_WALK3_PATH7 EQU $43CB
-JOY_ANALOG EQU $F1F5
-PRINT_TEXT_STR_1989933374265095120 EQU $55FA
-Sound_Bytes EQU $F27D
-NEW_HIGH_SCORE EQU $F8D8
-DCR_after_intensity EQU $4820
-VEC_IRQ_VECTOR EQU $CBF8
-_INIT_SCREEN_PATH22 EQU $288B
-VEC_MUSIC_WK_5 EQU $C847
-Delay_1 EQU $F575
-PRINT_LIST_CHK EQU $F38C
-Rise_Run_Angle EQU $F593
-Vec_Counter_1 EQU $C82E
-Vec_Snd_Shadow EQU $C800
-_INIT_SCREEN_PATH8 EQU $27E3
-VEC_LOOP_COUNT EQU $C825
-SLR_ROM_VISIBLE EQU $4D06
-VECTREX_PRINT_NUMBER.PN_D1000 EQU $468A
-VEC_BUTTON_2_2 EQU $C817
-SLR_BG_COUNT EQU $4BB7
-VEC_EXPL_CHANS EQU $C854
-AU_MUSIC_LOOP EQU $5051
-MUL16.MUL16_LOOP EQU $4703
-Vec_Joy_2_Y EQU $C81E
-_PLAYER_WALK1_PATH4 EQU $45F0
-Vec_Button_1_3 EQU $C814
-_INIT_SCREEN_PATH31 EQU $28E2
-_TITCHI_SNOW1_PATH10 EQU $2E4F
-CLEAR_C8_RAM EQU $F542
-UPDATE_ENEMIES_RUNTIME EQU $5328
-Draw_Pat_VL_d EQU $F439
-_PLAYER_WALK2_PATH7 EQU $447F
-INIT_OS_RAM EQU $F164
-VEC_COUNTERS EQU $C82E
-Dot_d EQU $F2C3
-AU_MUSIC_PROCESS_WRITES EQU $502C
-PRINT_TEXT_STR_9120385685437879118 EQU $5607
-Do_Sound EQU $F289
-_TITCHI_SNOW1_PATH5 EQU $2E07
-_PLATFORM4_PATH5 EQU $2EE4
-VEC_BUTTON_1_1 EQU $C812
-Vec_RiseRun_Tmp EQU $C834
-DRAW_SYNC_LIST_AT_WITH_MIRRORS EQU $492D
-_INIT_SCREEN_PATH33 EQU $2918
-_INIT_SCREEN_PATH27 EQU $28BB
-VEC_RFRSH_HI EQU $C83E
-Sound_Byte EQU $F256
-Vec_ADSR_Timers EQU $C85E
-DRAW_ENEMIES_RUNTIME EQU $543D
-Xform_Rise EQU $F663
-VEC_RFRSH EQU $C83D
-EXPLOSION_SND EQU $F92E
-VEC_BUTTON_2_3 EQU $C818
-_TITCHI_SNOW2_PATH0 EQU $3001
-PRINT_TEXT_STR_78166382 EQU $556E
-Mov_Draw_VL_d EQU $F3BE
-New_High_Score EQU $F8D8
-VECTREX_PRINT_NUMBER EQU $4656
-_PLAYER_WALK3_PATH4 EQU $4349
-Vec_0Ref_Enable EQU $C824
-VEC_SWI3_VECTOR EQU $CBF2
-VEC_COUNTER_4 EQU $C831
-SFX_M_NOISEDIS EQU $50F5
-_PLAYER_WALK2_PATH0 EQU $4428
-Explosion_Snd EQU $F92E
-DRAW_PAT_VL_A EQU $F434
-VEC_TEXT_HW EQU $C82A
-Draw_VLc EQU $F3CE
-VEC_COUNTER_2 EQU $C82F
-AU_DONE EQU $5072
-DIV16.D16_DPOS EQU $472E
-Vec_Buttons EQU $C811
-VECTREX_PRINT_NUMBER.PN_D10 EQU $46BE
-_PLATFORM4_PATH0 EQU $2E84
-Clear_Score EQU $F84F
-DIV16.D16_DONE EQU $477B
-RESET0REF EQU $F354
-MUSIC9 EQU $FF26
-MOD16.M16_DPOS EQU $4799
-LLR_SKIP_GP EQU $4B39
-sfx_checkvolume EQU $50CF
-_PLAYER_WALK1_PATH3 EQU $45E4
-_TITCHI_SNOW1_PATH9 EQU $2E43
-DO_SOUND EQU $F289
-DRAW_GRID_VL EQU $FF9F
-SDCP_CHECK_POS EQU $4D77
-_TITCHI_WALK1_VECTORS EQU $423A
-Vec_Expl_ChanB EQU $C85D
-_INIT_SCREEN_PATH7 EQU $27B9
-_PLAYER_IDLE_PATH7 EQU $31B9
-MOV_DRAW_VLCS EQU $F3B5
-SFX_NEXTFRAME EQU $50FF
-Move_Mem_a EQU $F683
-SLR_OBJ_NEXT EQU $4D36
-_TITCHI_ENEMY_ACTIONS EQU $4056
-Vec_Expl_Timer EQU $C877
-Draw_VLp_b EQU $F40E
-_INIT_SCREEN_PATH18 EQU $2858
-KILL_ENEMY_RUNTIME EQU $54C7
-Vec_Joy_1_Y EQU $C81C
-VEC_EXPL_CHANA EQU $C853
-_INIT_SCREEN_PATH29 EQU $28D0
-UPD_TRY_XLO EQU $537B
-_PLAYER_WALK3_PATH1 EQU $430D
-READ_BTNS EQU $F1BA
-COLD_START EQU $F000
-sfx_checktonefreq EQU $50A4
-DSWM_W3 EQU $4AAE
-VEC_MUSIC_PTR EQU $C853
-Init_Music_x EQU $F692
-Vec_Default_Stk EQU $CBEA
-Rot_VL EQU $F616
-VEC_PATTERN EQU $C829
-PRINT_STR_YX EQU $F378
-_PLAYER_WALK2_PATH1 EQU $4434
-VEC_DOT_DWELL EQU $C828
-PRINT_TEXT_STR_104652296222070 EQU $55AA
-Vec_Random_Seed EQU $C87D
-Clear_Sound EQU $F272
-musicc EQU $FF7A
-Vec_Joy_Mux_1_Y EQU $C820
-Vec_Counters EQU $C82E
-PLAY_MUSIC_RUNTIME EQU $4EBD
-PRINT_TEXT_STR_1842954771884826 EQU $55BF
-DEC_6_COUNTERS EQU $F55E
-PMr_start_new EQU $4ECB
-_INIT_SCREEN_PATH48 EQU $2A02
-_INIT_SCREEN_PATH38 EQU $298D
-UPD_INC_XLO EQU $538C
-DAR_PATH_LOOP EQU $5237
-PRINT_STR_HWYX EQU $F373
-XFORM_RISE_A EQU $F661
-AU_MUSIC_READ EQU $4FFE
-VEC_JOY_1_X EQU $C81B
-_TITCHI_SNOW2_PATH6 EQU $3079
-ROT_VL_AB EQU $F610
-SFX_CHECKVOLUME EQU $50CF
-MUL16.MUL16_END EQU $470E
-Vec_Expl_1 EQU $C858
-_TITCHI_SNOW2_PATH5 EQU $306A
-Vec_Button_1_4 EQU $C815
-Mov_Draw_VLcs EQU $F3B5
-Moveto_ix_FF EQU $F308
-SLR_RAM_Y_ZERO EQU $4C88
-PSG_WRITE_LOOP EQU $4F48
-PRINT_TEXT_STR_2073804707667 EQU $557A
-_PLAYER_IDLE_VECTORS EQU $313F
-Reset0Ref EQU $F354
-_TITCHI_BALL_PATH1 EQU $31F0
-Dec_3_Counters EQU $F55A
-SFX_ENDOFEFFECT EQU $5104
-VEC_SEED_PTR EQU $C87B
-_TITCHI_WALK1_PATH0 EQU $4256
-PSG_MUSIC_LOOP EQU $4F88
-PRINT_SHIPS EQU $F393
-PSG_MUSIC_LOOP_D EQU $4F93
-VEC_TWANG_TABLE EQU $C851
-_INIT_SCREEN_PATH37 EQU $297B
-Clear_C8_RAM EQU $F542
-DAR_EMIT EQU $51FC
-_TITCHI_WALK2_PATH12 EQU $45AB
-_PLAYER_JUMP_PATH10 EQU $2FBC
-Vec_SWI3_Vector EQU $CBF2
-Vec_Button_2_2 EQU $C817
-MOD16 EQU $477C
-CLEAR_X_D EQU $F548
-JOY_DIGITAL EQU $F1F8
-DEC_3_COUNTERS EQU $F55A
-DVB_DONE EQU $412F
-_ANIM_TITCHI_WALK EQU $4221
-AU_MUSIC_READ_COUNT EQU $500F
-Rot_VL_Mode EQU $F62B
-DSWM_W1 EQU $49B9
-COMPARE_SCORE EQU $F8C7
-Print_Ships_x EQU $F391
-sfx_m_noisedis EQU $50F5
-UPD_MOVE_Y EQU $538E
-music6 EQU $FE76
-Compare_Score EQU $F8C7
-Vec_Dot_Dwell EQU $C828
-_PLATFORM4_PATH8 EQU $2F14
-SOUND_BYTES EQU $F27D
-Vec_Text_Height EQU $C82A
-_INIT_SCREEN_PATH52 EQU $2A2F
-Dot_here EQU $F2C5
-_PLAYER_WALK4_VECTORS EQU $448B
-VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT EQU $46CF
-LLR_GP_DONE EQU $4B39
-_TITCHI_WALK3_PATH12 EQU $440A
-DSWM_LOOP EQU $49C2
-Intensity_3F EQU $F2A1
-Clear_x_b_a EQU $F552
-sfx_m_write EQU $50F7
-Moveto_ix EQU $F310
-_INIT_SCREEN_PATH36 EQU $295A
-SLR_GP_COUNT EQU $4BC9
-Print_Str_hwyx EQU $F373
-_PLAYER_WALK3_PATH2 EQU $4316
-VECTOR_BANK_TABLE EQU $4000
-_PLATFORM4_PATH2 EQU $2E96
-_TITCHI_WALK3_PATH0 EQU $437A
-Vec_Button_2_4 EQU $C819
-VEC_DEFAULT_STK EQU $CBEA
-OBJ_HIT EQU $F8FF
-Draw_VL_b EQU $F3D2
-Get_Run_Idx EQU $F5DB
-Rot_VL_ab EQU $F610
-Vec_SWI2_Vector EQU $CBF2
-PSG_PROCESS_EVENT EQU $4F37
-SOUND_BYTES_X EQU $F284
-DSWM_NEXT_PATH EQU $4A13
-_TITCHI_WALK2_PATH9 EQU $4584
-_PLAYER_WALK4_PATH5 EQU $44F0
-Xform_Run_a EQU $F65B
-_INIT_SCREEN_PATH1 EQU $274A
-_TITCHI_IDLE_PATH8 EQU $3121
-RESET0REF_D0 EQU $F34A
-_TITCHI_WALK3_PATH1 EQU $4389
-VEC_JOY_1_Y EQU $C81C
-Mov_Draw_VLc_a EQU $F3AD
-DIV16.D16_RCHECK EQU $4736
-_PLAYER_IDLE_PATH2 EQU $3168
-_INIT_SCREEN_PATH15 EQU $2831
-UPD_ENE_NEXT_POP EQU $542A
-DSWM_SET_INTENSITY EQU $492F
-Vec_Expl_Chan EQU $C85C
-VEC_JOY_RESLTN EQU $C81A
-_PLAYER_WALK3_VECTORS EQU $42F5
-MOV_DRAW_VL_B EQU $F3B1
-PRINT_TEXT_STR_94739999784698482 EQU $55D6
-FIRE_EVT_RTS EQU $556D
-VEC_MUSIC_WK_7 EQU $C845
-MOD16.M16_RPOS EQU $47B0
-Vec_Joy_Mux_1_X EQU $C81F
-_INIT_SCREEN_PATH35 EQU $2948
-_TITCHI_SNOW1_PATH6 EQU $2E10
-VEC_JOY_MUX_2_Y EQU $C822
-Random EQU $F517
-DSWM_NO_NEGATE_DY EQU $49DA
-Abs_a_b EQU $F584
-ROT_VL_MODE EQU $F62B
-_PLAYER_WALK3_PATH3 EQU $433D
-DAR_NO_WRAP EQU $518A
-DSWM_NEXT_NO_NEGATE_X EQU $4A3C
-Vec_Btn_State EQU $C80F
-PRINT_TEXT_STR_63323706877185 EQU $5596
-_ANIM_PLAYER_WALK EQU $4201
-_PLAYER_WALK2_PATH6 EQU $446D
-_INIT_SCREEN_PATH2 EQU $2756
-_TITCHI_WALK2_PATH11 EQU $459F
-VECTREX_PRINT_NUMBER.PN_DIV1000 EQU $4676
-PSG_music_loop EQU $4F88
-_PLAYER_JUMP_PATH8 EQU $2FAA
-DCR_INTENSITY_5F EQU $481D
-PSG_process_event EQU $4F37
-VEC_MUSIC_FREQ EQU $C861
-DOT_D EQU $F2C3
-MOV_DRAW_VL EQU $F3BC
-VEC_NUM_PLAYERS EQU $C879
-_TITCHI_SNOW2_PATH4 EQU $305E
-_TITCHI_WALK2_PATH7 EQU $456F
-VEC_ANGLE EQU $C836
-Vec_Music_Twang EQU $C858
-_INIT_SCREEN_PATH54 EQU $2A89
-DAR_SPEED2_OK EQU $51E7
-MUSIC4 EQU $FDD3
-Vec_Expl_Chans EQU $C854
-MOD16.M16_RCHECK EQU $47A1
-MOD16.M16_END EQU $47C0
-_PLATFORM1_VECTORS EQU $3312
-INTENSITY_3F EQU $F2A1
-PRINT_TEXT_STR_2453707043877 EQU $5583
-INIT_OS EQU $F18B
-_PLAYER_JUMP_PATH2 EQU $2F65
-Strip_Zeros EQU $F8B7
-MOVETO_X_7F EQU $F2F2
-VEC_EXPL_CHAN EQU $C85C
-UPD_ENE_LOOP EQU $5341
-_TITCHI_SNOW1_VECTORS EQU $2D9D
-MOVETO_IX_FF EQU $F308
-MUSIC_BANK_TABLE EQU $4021
-SLR_FOREGROUND EQU $4BDB
-ROT_VL_DFT EQU $F637
-DRAW_VL_A EQU $F3DA
-_INIT_SCREEN_PATH19 EQU $2861
-Random_3 EQU $F511
-DELAY_RTS EQU $F57D
-INTENSITY_7F EQU $F2A9
-Sound_Byte_x EQU $F259
-DAR_VEC_LOOP EQU $5204
-DIV16.D16_LOOP EQU $4753
-_TITCHI_WALK3_PATH5 EQU $43AA
-_PLATFORM3_PATH2 EQU $3364
-Rot_VL_dft EQU $F637
-_INIT_SCREEN_PATH14 EQU $2828
-SLR_RAM_A_ZERO EQU $4C61
-_INIT_SCREEN_PATH55 EQU $2AA7
-SFX_M_TONEDIS EQU $50E8
-_TITCHI_WALK3_PATH6 EQU $43B0
-Wait_Recal EQU $F192
-_PLATFORM1_PATH2 EQU $3332
-Draw_Pat_VL_a EQU $F434
-DAR_DONE EQU $5260
-Rot_VL_Mode_a EQU $F61F
-VEC_JOY_MUX EQU $C81F
-AU_UPDATE_SFX EQU $505F
-ENEMY_FIRE_EVENT_RUNTIME EQU $54DC
-_PLATFORM3_PATH1 EQU $3352
-_TITCHI_WALK1_PATH6 EQU $428F
-_YUKIDAMA_ONDO_MUSIC EQU $0000
-Vec_Text_Width EQU $C82B
-Vec_Loop_Count EQU $C825
-_PLAYER_JUMP_PATH0 EQU $2F53
-sfx_nextframe EQU $50FF
-DRAW_VLP_7F EQU $F408
-DP_to_D0 EQU $F1AA
-_INIT_SCREEN_PATH21 EQU $287F
-DRAW_VLP_FF EQU $F404
-DSWM_NO_NEGATE_X EQU $496E
-Delay_2 EQU $F571
-music9 EQU $FF26
-DOT_IX EQU $F2C1
-DRAW_PAT_VL EQU $F437
-LCOL_Y_NEXT EQU $4EAC
-_PLAYER_WALK1_VECTORS EQU $45B1
-Dot_List_Reset EQU $F2DE
-Vec_Angle EQU $C836
-LEVEL_ADDR_TABLE EQU $402E
-_TITCHI_WALK2_VECTORS EQU $44F9
-DAR_BASE_LOOP EQU $513D
-Vec_RiseRun_Len EQU $C83B
-MOD16.M16_LOOP EQU $47B0
-MUSIC3 EQU $FD81
-VEC_0REF_ENABLE EQU $C824
-DRAW_VLP EQU $F410
-DCR_AFTER_INTENSITY EQU $4820
-SDCP_SEG_LOOP EQU $4DD2
-INTENSITY_A EQU $F2AB
-VEC_JOY_MUX_1_Y EQU $C820
-Vec_Prev_Btns EQU $C810
-VEC_JOY_2_X EQU $C81D
-Intensity_a EQU $F2AB
-ADD_SCORE_A EQU $F85E
-Dec_6_Counters EQU $F55E
-NOAY EQU $5090
-RANDOM_3 EQU $F511
-PSG_music_ended EQU $4F82
-DAR_SPEED2 EQU $51DF
-MUSIC_ADDR_TABLE EQU $4025
-Vec_Button_1_2 EQU $C813
-VEC_BUTTON_1_2 EQU $C813
-Init_Music_chk EQU $F687
-SELECT_GAME EQU $F7A9
-MOVETO_D_7F EQU $F2FC
-Vec_Joy_Mux EQU $C81F
-_INIT_SCREEN_PATH12 EQU $2816
-SET_REFRESH EQU $F1A2
-_TITCHI_WALK3_PATH3 EQU $4398
-_TITCHI_WALK2_PATH10 EQU $4593
-DSWM_NEXT_SET_INTENSITY EQU $4A19
-DRAW_LINE_D EQU $F3DF
-PMr_done EQU $4EFD
-Vec_Brightness EQU $C827
-_INIT_SCREEN_PATH41 EQU $29BA
-_TITCHI_BALL_PATH4 EQU $3229
-_INIT_SCREEN_PATH0 EQU $2738
-Obj_Hit EQU $F8FF
-SLR_ROM_OFFSETS EQU $4C9C
-_TITCHI_WALK3_VECTORS EQU $435E
-Obj_Will_Hit_u EQU $F8E5
-sfx_endofeffect EQU $5104
-Moveto_ix_a EQU $F30E
-DAR_PATH_DONE EQU $5259
-DSWM_DONE EQU $4ABA
-Vec_Joy_Resltn EQU $C81A
-_INIT_SCREEN_PATH50 EQU $2A14
-Draw_VL_a EQU $F3DA
-Moveto_ix_7F EQU $F30C
-VEC_EXPL_1 EQU $C858
-Init_Music EQU $F68D
-Vec_Rise_Index EQU $C839
-DRAW_VL EQU $F3DD
-DRAW_PAT_VL_D EQU $F439
-_INIT_SCREEN_PATH39 EQU $29A8
-VEC_JOY_MUX_1_X EQU $C81F
-VEC_RISE_INDEX EQU $C839
-SHOW_LEVEL_RUNTIME EQU $4B89
-VEC_EXPL_TIMER EQU $C877
-Vec_Max_Players EQU $C84F
-VEC_MISC_COUNT EQU $C823
-_PLAYER_WALK4_PATH2 EQU $44C3
-DOT_LIST_RESET EQU $F2DE
-Vec_Cold_Flag EQU $CBFE
-_INIT_SCREEN_PATH4 EQU $277A
-Vec_Rfrsh EQU $C83D
-SLR_DRAW_VECTOR EQU $4D14
-MUSIC1 EQU $FD0D
-VEC_BUTTON_1_3 EQU $C814
-VEC_EXPL_2 EQU $C859
-SPAWN_ENEMIES_RUNTIME EQU $5268
-_TITCHI_WALK1_PATH7 EQU $42AA
-Read_Btns EQU $F1BA
-VEC_FIRQ_VECTOR EQU $CBF5
-_INIT_SCREEN_PATH51 EQU $2A1D
-_INIT_SCREEN_PATH47 EQU $29F6
-Vec_Button_2_3 EQU $C818
-Vec_Rfrsh_hi EQU $C83E
-Moveto_d EQU $F312
-_PLATFORM2_PATH0 EQU $32E2
-VEC_DURATION EQU $C857
-LOAD_LEVEL_RUNTIME EQU $4ABB
-_PLAYER_IDLE_PATH1 EQU $315C
-_PLATFORM1_PATH0 EQU $331A
-Vec_Counter_4 EQU $C831
-_PLAYER_WALK1_PATH1 EQU $45CF
-MOV_DRAW_VL_D EQU $F3BE
-MOV_DRAW_VL_A EQU $F3B9
-DRAW_ANIM_BANKED EQU $41CB
-_TITCHI_SNOW2_PATH1 EQU $3010
-VEC_TEXT_WIDTH EQU $C82B
-INTENSITY_1F EQU $F29D
-_PLAYER_IDLE_PATH4 EQU $3186
-_TITCHI_BALL_PATH5 EQU $3232
-Vec_Expl_3 EQU $C85A
-VEC_NMI_VECTOR EQU $CBFB
-Draw_VLp_7F EQU $F408
-UPD_INC_YLO EQU $53B5
-Draw_Line_d EQU $F3DF
-DOT_HERE EQU $F2C5
-SLR_GAMEPLAY EQU $4BC9
-_TITCHI_SNOW1_PATH2 EQU $2DD1
-DAR_INLINE EQU $5231
-_TITCHI_WALK1_PATH1 EQU $4265
-AU_MUSIC_HAS_DELAY EQU $501E
-J1X_BUILTIN EQU $47D0
-_BOSS_INTRO_MUSIC EQU $324A
-ASSET_BANK_TABLE EQU $40AA
-_TITCHI_ENEMY EQU $404F
-_TITCHI_IDLE_PATH1 EQU $30BE
-AU_MUSIC_WRITE_LOOP EQU $502E
-_TITCHI_SNOW1_PATH12 EQU $2E64
-CLEAR_X_B_80 EQU $F550
-Draw_Sync_List_At_With_Mirrors EQU $492D
-_TITCHI_SNOW2_PATH7 EQU $308B
-MUSIC8 EQU $FEF8
-DSWM_NO_NEGATE_DX EQU $49E4
-_TITCHI_WALK1_PATH11 EQU $42DD
-Dec_Counters EQU $F563
-MOV_DRAW_VLC_A EQU $F3AD
-_PLAYER_WALK4_PATH4 EQU $44DE
-PMR_START_NEW EQU $4ECB
-Vec_SWI_Vector EQU $CBFB
-Rise_Run_Y EQU $F601
-VEC_JOY_2_Y EQU $C81E
-SFX_M_NOISE EQU $50EA
-VEC_TEXT_HEIGHT EQU $C82A
-SLR_ROM_ADDR_LOOP EQU $4C15
-sfx_updatemixer EQU $50D8
-Move_Mem_a_1 EQU $F67F
-Moveto_d_7F EQU $F2FC
-Intensity_7F EQU $F2A9
-_TITCHI_WALK1_PATH8 EQU $42B9
-Init_Music_Buf EQU $F533
-DRAW_VLP_SCALE EQU $F40C
-_TITCHI_BALL_PATH0 EQU $31E7
-VEC_COUNTER_5 EQU $C832
-SDCP_W_DRAW EQU $4E0B
-PRINT_TEXT_STR_94739999784744652 EQU $55E2
-VEC_JOY_MUX_2_X EQU $C821
-INIT_MUSIC_X EQU $F692
 ABS_A_B EQU $F584
-DRAW_VL_B EQU $F3D2
-_INIT_SCREEN_PATH26 EQU $28B2
-_TITCHI_WALK2_PATH6 EQU $4560
-_PLAYER_JUMP_PATH11 EQU $2FC8
-SLR_RAM_Y_VISIBLE EQU $4C8F
-INIT_MUSIC_CHK EQU $F687
-MOVETO_IX_7F EQU $F30C
-SPAWN_ENEMIES_BANKED EQU $41A7
-Reset0Ref_D0 EQU $F34A
-ASSET_ADDR_TABLE EQU $40BA
-SDCP_MOVETO_W EQU $4DC9
-_PLATFORM4_VECTORS EQU $2E70
-SFX_CHECKNOISEFREQ EQU $50BE
-Vec_Pattern EQU $C829
-Vec_Button_2_1 EQU $C816
-VEC_RUN_INDEX EQU $C837
-PSG_UPDATE_DONE EQU $4F9B
-SPAWN_ENE_DONE EQU $5327
-Do_Sound_x EQU $F28C
-SOUND_BYTE_X EQU $F259
-_PLAYER_WALK2_PATH5 EQU $4461
-_TITCHI_WALK3_PATH11 EQU $43FE
-VEC_BUTTONS EQU $C811
-Print_Ships EQU $F393
-_TITCHI_WALK2_PATH2 EQU $452D
-_TITCHI_WALK1_PATH3 EQU $4274
-Draw_Grid_VL EQU $FF9F
-_TITCHI_IDLE_PATH9 EQU $312D
-_PLAYER_JUMP_PATH13 EQU $2FE3
-music5 EQU $FE38
-_TITCHI_IDLE_VECTORS EQU $3097
-DAR_TICK EQU $516D
-Warm_Start EQU $F06C
-GET_RISE_IDX EQU $F5D9
-DRAW_VLP_B EQU $F40E
-_TITCHI_SM_STATES EQU $4076
-_PLATFORM4_PATH4 EQU $2ECC
-RESET0INT EQU $F36B
-PRINT_STR_D EQU $F37A
-Xform_Run EQU $F65D
-DRW_ENE_DONE EQU $54C6
-_TITCHI_WALK1_PATH4 EQU $427A
-_PLATFORM1_PATH1 EQU $3320
-VEC_NUM_GAME EQU $C87A
-music8 EQU $FEF8
-VEC_RFRSH_LO EQU $C83D
-Cold_Start EQU $F000
-DSWM_NO_NEGATE_Y EQU $4961
-VEC_MUSIC_WK_6 EQU $C846
-Vec_Expl_ChanA EQU $C853
-Vec_Music_Wk_7 EQU $C845
-DRAW_VLCS EQU $F3D6
-_TITCHI_SNOW1_PATH3 EQU $2DE0
-LCOL_Y_DONE EQU $4EB4
-SDCP_USE_OVERRIDE EQU $4D4F
-Delay_b EQU $F57A
-INIT_MUSIC EQU $F68D
-MOV_DRAW_VL_AB EQU $F3B7
-VEC_COLD_FLAG EQU $CBFE
-Vec_Joy_2_X EQU $C81D
-RANDOM EQU $F517
-Print_List EQU $F38A
-Vec_Joy_Mux_2_X EQU $C821
-Mov_Draw_VL_a EQU $F3B9
-_PLAYER_WALK2_PATH4 EQU $4455
-LCOL_Y_LOOP EQU $4E59
-ENEMY_ADDR_TABLE EQU $4038
-VEC_PREV_BTNS EQU $C810
-_TITCHI_SNOW1_PATH7 EQU $2E1F
-SLR_INTENSITY_READ EQU $4C20
-_ANIM_PLAYER_WALK_F1 EQU $4212
-Joy_Analog EQU $F1F5
-_TITCHI_BALL_PATH6 EQU $323B
-_PLAYER_IDLE_PATH0 EQU $3153
-Vec_Counter_5 EQU $C832
-SLR_ROM_Y_VISIBLE EQU $4CC6
-SDCP_SKIP_PATH EQU $4D7B
-PRINT_TEXT_STR_13399742582312315532 EQU $5616
-SDCP_CLIP EQU $4E1A
-LLR_CLR_GP_LOOP EQU $4B1A
-_ANIM_TITCHI_WALK_F0 EQU $422B
-Vec_Music_Work EQU $C83F
-DRW_ENE_NEXT_POP EQU $54BC
-music1 EQU $FD0D
-Vec_Run_Index EQU $C837
-_TITCHI_IDLE_PATH4 EQU $30F1
-_INIT_SCREEN_PATH23 EQU $2897
-_PLAYER_WALK2_VECTORS EQU $4416
-VEC_STR_PTR EQU $C82C
-Delay_RTS EQU $F57D
-MUSICD EQU $FF8F
-_INIT_SCREEN_PATH17 EQU $2846
-PSG_read_delay EQU $4F1C
-Vec_Music_Chan EQU $C855
-_TITCHI_BALL_PATH2 EQU $31FC
-STRIP_ZEROS EQU $F8B7
-_PLAYER_IDLE_PATH3 EQU $3177
-_TITCHI_WALK1_PATH10 EQU $42CE
-VEC_BUTTON_2_1 EQU $C816
-_TITCHI_SNOW2_VECTORS EQU $2FEF
-Draw_VL EQU $F3DD
-SDCP_SET_INTENS EQU $4D51
-PMR_DONE EQU $4EFD
-PLAY_BOSS_MUSIC.CMP_39_TRUE EQU $0CF8
-VEC_HIGH_SCORE EQU $CBEB
-VEC_EXPL_3 EQU $C85A
-musicd EQU $FF8F
-Draw_Pat_VL EQU $F437
-READ_BTNS_MASK EQU $F1B4
-Mov_Draw_VL EQU $F3BC
-Moveto_x_7F EQU $F2F2
-_PLAYER_WALK1_PATH5 EQU $45FC
-SFX_UPDATE EQU $5086
-_PLAYER_WALK1_PATH7 EQU $461A
-DRAW_VL_MODE EQU $F46E
-OBJ_WILL_HIT EQU $F8F3
-Obj_Will_Hit EQU $F8F3
-Dot_ix EQU $F2C1
-VEC_MUSIC_CHAN EQU $C855
-PRINT_STR EQU $F495
-Draw_VL_ab EQU $F3D8
-Vec_Expl_4 EQU $C85B
-DP_TO_C8 EQU $F1AF
-Rise_Run_X EQU $F5FF
-VEC_COUNTER_3 EQU $C830
-PRINT_TEXT_STR_94739999785112679 EQU $55EE
-SLR_OBJ_DONE EQU $4D40
-Intensity_5F EQU $F2A5
-_PLAYER_WALK1_PATH0 EQU $45C3
-SDCP_W_MOVE EQU $4E34
-_TITCHI_SM EQU $4074
-_TITCHI_SNOW2_PATH2 EQU $3034
-CLEAR_X_B EQU $F53F
-INIT_VIA EQU $F14C
-_ANIM_PLAYER_WALK_F0 EQU $420D
-SEB_DONE EQU $41CA
-_TITCHI_IDLE_PATH5 EQU $30FD
-CHECK0REF EQU $F34F
-Mov_Draw_VL_b EQU $F3B1
-sfx_checknoisefreq EQU $50BE
-Vec_Music_Ptr EQU $C853
-VEC_MUSIC_WORK EQU $C83F
-_INIT_SCREEN_PATH20 EQU $2876
-Rise_Run_Len EQU $F603
-DRW_ENE_LOOP EQU $5448
-_PLAYER_JUMP_PATH6 EQU $2F92
-Vec_Expl_2 EQU $C859
-DSWM_USE_FCB_INT EQU $4939
-DEC_COUNTERS EQU $F563
-_TITCHI_WALK2_PATH0 EQU $4515
-ANIM_BANK_TABLE EQU $4030
-PRINT_LIST EQU $F38A
-DAR_BASE_PATH_LOOP EQU $514F
-AU_MUSIC_NO_DELAY EQU $500F
-Vec_Music_Wk_A EQU $C842
-Vec_Text_HW EQU $C82A
-SFX_UPDATEMIXER EQU $50D8
-Joy_Digital EQU $F1F8
-VEC_MAX_GAMES EQU $C850
-Init_OS_RAM EQU $F164
-Delay_3 EQU $F56D
-VEC_EXPL_4 EQU $C85B
-_INIT_SCREEN_PATH45 EQU $29E1
-UPDATE_MUSIC_PSG EQU $4EFE
-LOAD_LEVEL_BANKED EQU $4173
-_TITCHI_IDLE_PATH6 EQU $3106
-VECTREX_PRINT_NUMBER.PN_L10 EQU $46AC
-PLAY_SFX_RUNTIME EQU $507D
-SDCP_ABS_OK EQU $4D7C
-VECTREX_PRINT_TEXT EQU $4626
-music4 EQU $FDD3
-PRINT_TEXT_STR_17825111777351717868 EQU $5635
-Get_Rise_Idx EQU $F5D9
-_TITCHI_WALK3_PATH8 EQU $43DA
-DIV16.D16_END EQU $476C
-ANIM_ADDR_TABLE EQU $4032
-_INIT_SCREEN_PATH53 EQU $2A65
-AU_SKIP_MUSIC EQU $505C
-_TITCHI_SNOW2_PATH3 EQU $3043
-PSG_READ_DELAY EQU $4F1C
-_TITCHI_IDLE_PATH3 EQU $30D6
-RISE_RUN_LEN EQU $F603
-ROT_VL_MODE_A EQU $F61F
-DAR_VEC_PATH_LOOP EQU $5213
-_INIT_SCREEN_VECTORS EQU $26C4
-XFORM_RUN_A EQU $F65B
-VEC_BUTTON_1_4 EQU $C815
-FIRE_EVT_MATCH EQU $5531
-PSG_event_done EQU $4F79
-Vec_Music_Flag EQU $C856
-_PLATFORM4_PATH7 EQU $2F08
-VEC_FREQ_TABLE EQU $C84D
-VEC_MUSIC_WK_1 EQU $C84B
-_ANIM_PLAYER_WALK_F3 EQU $421C
-_INIT_SCREEN_PATH11 EQU $2807
-PRINT_LIST_HW EQU $F385
-Check0Ref EQU $F34F
-_PLAYER_WALK4_PATH3 EQU $44CF
-_TITCHI_WALK1_PATH2 EQU $426E
-_PLAYER_JUMP_PATH9 EQU $2FB3
-Clear_x_b EQU $F53F
-DOT_LIST EQU $F2D5
-_INIT_SCREEN_PATH30 EQU $28D9
-VEC_EXPL_FLAG EQU $C867
-Mov_Draw_VL_ab EQU $F3B7
-DRAW_CIRCLE_RUNTIME EQU $47E8
-RISE_RUN_ANGLE EQU $F593
-VEC_EXPL_CHANB EQU $C85D
-SLR_DRAW_OBJECTS EQU $4BFA
-DRW_ENE_VANIM EQU $549F
-LLR_COPY_DONE EQU $4B88
-_TITCHI_WALK1_PATH12 EQU $42E9
-Vec_Num_Players EQU $C879
-Vec_Joy_1_X EQU $C81B
-Abs_b EQU $F58B
-_TITCHI_SNOW1_PATH4 EQU $2DFB
-VEC_BUTTON_2_4 EQU $C819
-_INIT_SCREEN_PATH13 EQU $281F
-PSG_MUSIC_ENDED EQU $4F82
-VECTOR_ADDR_TABLE EQU $400B
-_PLATFORM4_PATH1 EQU $2E8D
-_PLAYER_JUMP_PATH4 EQU $2F7A
-_ENEMY1_ENEMY_ACTIONS EQU $4043
-Vec_Num_Game EQU $C87A
-VEC_SWI_VECTOR EQU $CBFB
-DAR_VEC_DONE EQU $5225
-_TITCHI_BALL_PATH3 EQU $3220
-_TITCHI_IDLE_PATH7 EQU $3115
-Set_Refresh EQU $F1A2
-Vec_Music_Freq EQU $C861
-Vec_Seed_Ptr EQU $C87B
-Read_Btns_Mask EQU $F1B4
-DIV16.D16_RPOS EQU $474D
-CLEAR_X_256 EQU $F545
-Print_List_chk EQU $F38C
-STOP_MUSIC_RUNTIME EQU $4F9F
-Print_Str EQU $F495
-LEVEL_BANK_TABLE EQU $402D
-Vec_Max_Games EQU $C850
-VEC_COUNTER_6 EQU $C833
-Vec_Music_Wk_1 EQU $C84B
-PSG_EVENT_DONE EQU $4F79
-_TITCHI_IDLE_PATH0 EQU $30AF
-Vec_Music_Wk_5 EQU $C847
-DELAY_B EQU $F57A
-PRINT_TEXT_STR_78726770 EQU $5574
-_PLAYER_WALK1_PATH2 EQU $45D8
-INIT_MUSIC_BUF EQU $F533
-INTENSITY_5F EQU $F2A5
-Clear_x_b_80 EQU $F550
-PLAY_MUSIC_BANKED EQU $413B
-BITMASK_A EQU $F57E
-PSG_write_loop EQU $4F48
-_PLAYER_WALK3_PATH0 EQU $4301
-GET_RISE_RUN EQU $F5EF
-_PLAYER_JUMP_PATH12 EQU $2FD1
-Dot_List EQU $F2D5
-sfx_m_noise EQU $50EA
-Add_Score_a EQU $F85E
-Dot_ix_b EQU $F2BE
-MOD16.M16_DONE EQU $47CF
-_INIT_SCREEN_PATH43 EQU $29CF
-OBJ_WILL_HIT_U EQU $F8E5
-Vec_FIRQ_Vector EQU $CBF5
 ABS_B EQU $F58B
+ADD_SCORE_A EQU $F85E
+ADD_SCORE_D EQU $F87C
+ANIM_ADDR_TABLE EQU $4032
+ANIM_BANK_TABLE EQU $4030
+ASSET_ADDR_TABLE EQU $40BA
+ASSET_BANK_TABLE EQU $40AA
+AUDIO_UPDATE EQU $4FAB
+AU_BANK_OK EQU $4FC5
+AU_DONE EQU $5057
+AU_MUSIC_DONE EQU $502A
+AU_MUSIC_ENDED EQU $5030
+AU_MUSIC_HAS_DELAY EQU $5003
+AU_MUSIC_LOOP EQU $5036
+AU_MUSIC_NO_DELAY EQU $4FF4
+AU_MUSIC_PROCESS_WRITES EQU $5011
+AU_MUSIC_READ EQU $4FE3
+AU_MUSIC_READ_COUNT EQU $4FF4
+AU_MUSIC_WRITE_LOOP EQU $5013
+AU_SKIP_MUSIC EQU $5041
+AU_UPDATE_SFX EQU $5044
+Abs_a_b EQU $F584
+Abs_b EQU $F58B
+Add_Score_a EQU $F85E
+Add_Score_d EQU $F87C
+BITMASK_A EQU $F57E
+Bitmask_a EQU $F57E
+CHECK0REF EQU $F34F
+CLEAR_C8_RAM EQU $F542
+CLEAR_SCORE EQU $F84F
 CLEAR_SOUND EQU $F272
-VEC_SND_SHADOW EQU $C800
-VEC_RANDOM_SEED EQU $C87D
-Print_List_hw EQU $F385
-_TITCHI_WALK3_PATH10 EQU $43EF
+CLEAR_X_256 EQU $F545
+CLEAR_X_B EQU $F53F
+CLEAR_X_B_80 EQU $F550
 CLEAR_X_B_A EQU $F552
-Get_Rise_Run EQU $F5EF
-MUSIC5 EQU $FE38
-Vec_Twang_Table EQU $C851
-VEC_MUSIC_TWANG EQU $C858
-musicb EQU $FF62
-_TITCHI_IDLE_PATH2 EQU $30C7
-_INIT_SCREEN_PATH28 EQU $28C4
-XFORM_RISE EQU $F663
-DAR_DRAW EQU $51EC
+CLEAR_X_D EQU $F548
+COLD_START EQU $F000
+COMPARE_SCORE EQU $F8C7
+Check0Ref EQU $F34F
+Clear_C8_RAM EQU $F542
+Clear_Score EQU $F84F
+Clear_Sound EQU $F272
+Clear_x_256 EQU $F545
+Clear_x_b EQU $F53F
+Clear_x_b_80 EQU $F550
+Clear_x_b_a EQU $F552
 Clear_x_d EQU $F548
+Cold_Start EQU $F000
+Compare_Score EQU $F8C7
+DAR_BASE_LOOP EQU $511D
+DAR_BASE_PATH_LOOP EQU $5130
+DAR_BASE_SKIP EQU $5142
+DAR_DONE EQU $5242
+DAR_DRAW EQU $51CD
+DAR_EMIT EQU $51DD
+DAR_FREEZE EQU $5193
+DAR_INIT EQU $51A8
+DAR_INLINE EQU $5213
+DAR_NO_WRAP EQU $516B
+DAR_PATH_DONE EQU $523B
+DAR_PATH_LOOP EQU $5219
+DAR_SCAN EQU $5228
+DAR_SPEED1 EQU $5186
+DAR_SPEED1_OK EQU $518E
+DAR_SPEED2 EQU $51C0
+DAR_SPEED2_OK EQU $51C8
+DAR_TICK EQU $514E
+DAR_VEC_DONE EQU $5207
+DAR_VEC_LOOP EQU $51E5
+DAR_VEC_PATH_LOOP EQU $51F5
+DCR_AFTER_INTENSITY EQU $4832
+DCR_INTENSITY_5F EQU $482F
+DCR_after_intensity EQU $4832
+DCR_intensity_5F EQU $482F
+DEC_3_COUNTERS EQU $F55A
+DEC_6_COUNTERS EQU $F55E
+DEC_COUNTERS EQU $F563
+DELAY_0 EQU $F579
+DELAY_1 EQU $F575
+DELAY_2 EQU $F571
+DELAY_3 EQU $F56D
+DELAY_B EQU $F57A
+DELAY_RTS EQU $F57D
+DIV16 EQU $4723
+DIV16.D16_DONE EQU $478D
+DIV16.D16_DPOS EQU $4740
+DIV16.D16_END EQU $477E
+DIV16.D16_LOOP EQU $4765
+DIV16.D16_RCHECK EQU $4748
+DIV16.D16_RPOS EQU $475F
+DOT_D EQU $F2C3
+DOT_HERE EQU $F2C5
+DOT_IX EQU $F2C1
+DOT_IX_B EQU $F2BE
+DOT_LIST EQU $F2D5
+DOT_LIST_RESET EQU $F2DE
+DO_SOUND EQU $F289
+DO_SOUND_X EQU $F28C
+DP_TO_C8 EQU $F1AF
+DP_TO_D0 EQU $F1AA
+DP_to_C8 EQU $F1AF
+DP_to_D0 EQU $F1AA
+DRAW_ANIM_BANKED EQU $41B6
+DRAW_ANIM_RUNTIME EQU $5107
+DRAW_CIRCLE_RUNTIME EQU $47FA
+DRAW_ENEMIES_RUNTIME EQU $53BD
+DRAW_GRID_VL EQU $FF9F
+DRAW_LINE_D EQU $F3DF
+DRAW_PAT_VL EQU $F437
+DRAW_PAT_VL_A EQU $F434
+DRAW_PAT_VL_D EQU $F439
+DRAW_SYNC_LIST_AT_WITH_MIRRORS EQU $493F
+DRAW_VECTOR_BANKED EQU $40DA
+DRAW_VL EQU $F3DD
+DRAW_VLC EQU $F3CE
+DRAW_VLCS EQU $F3D6
+DRAW_VLP EQU $F410
+DRAW_VLP_7F EQU $F408
+DRAW_VLP_B EQU $F40E
+DRAW_VLP_FF EQU $F404
+DRAW_VLP_SCALE EQU $F40C
+DRAW_VL_A EQU $F3DA
+DRAW_VL_AB EQU $F3D8
+DRAW_VL_B EQU $F3D2
+DRAW_VL_MODE EQU $F46E
+DRW_ENE_DONE EQU $5446
+DRW_ENE_LOOP EQU $53C8
+DRW_ENE_NEXT_POP EQU $543C
+DRW_ENE_VANIM EQU $541F
+DSWM_DONE EQU $4A92
+DSWM_LOOP EQU $49BA
+DSWM_NEXT_NO_NEGATE_X EQU $4A30
+DSWM_NEXT_NO_NEGATE_Y EQU $4A23
+DSWM_NEXT_PATH EQU $4A05
+DSWM_NEXT_SET_INTENSITY EQU $4A17
+DSWM_NEXT_USE_OVERRIDE EQU $4A15
+DSWM_NO_NEGATE_DX EQU $49DC
+DSWM_NO_NEGATE_DY EQU $49D2
+DSWM_NO_NEGATE_X EQU $4967
+DSWM_NO_NEGATE_Y EQU $495A
+DSWM_SET_INTENSITY EQU $494D
+DSWM_USE_OVERRIDE EQU $494B
+DSWM_W1 EQU $49B1
+DSWM_W2 EQU $49F3
+DSWM_W3 EQU $4A86
+DVB_DONE EQU $411A
+DVB_PATH_LOOP EQU $4108
+Dec_3_Counters EQU $F55A
+Dec_6_Counters EQU $F55E
+Dec_Counters EQU $F563
+Delay_0 EQU $F579
+Delay_1 EQU $F575
+Delay_2 EQU $F571
+Delay_3 EQU $F56D
+Delay_RTS EQU $F57D
+Delay_b EQU $F57A
+Do_Sound EQU $F289
+Do_Sound_x EQU $F28C
+Dot_List EQU $F2D5
+Dot_List_Reset EQU $F2DE
+Dot_d EQU $F2C3
+Dot_here EQU $F2C5
+Dot_ix EQU $F2C1
+Dot_ix_b EQU $F2BE
+Draw_Grid_VL EQU $FF9F
+Draw_Line_d EQU $F3DF
+Draw_Pat_VL EQU $F437
+Draw_Pat_VL_a EQU $F434
+Draw_Pat_VL_d EQU $F439
+Draw_Sync_List_At_With_Mirrors EQU $493F
+Draw_VL EQU $F3DD
+Draw_VL_a EQU $F3DA
+Draw_VL_ab EQU $F3D8
+Draw_VL_b EQU $F3D2
+Draw_VL_mode EQU $F46E
+Draw_VLc EQU $F3CE
+Draw_VLcs EQU $F3D6
+Draw_VLp EQU $F410
+Draw_VLp_7F EQU $F408
+Draw_VLp_FF EQU $F404
+Draw_VLp_b EQU $F40E
+Draw_VLp_scale EQU $F40C
+ENEMY_ADDR_TABLE EQU $4038
+ENEMY_BANK_TABLE EQU $4036
+ENEMY_FIRE_EVENT_RUNTIME EQU $545C
+EXPLOSION_SND EQU $F92E
+Explosion_Snd EQU $F92E
+FIRE_EVT_MATCH EQU $54B1
+FIRE_EVT_RTS EQU $54ED
+FIRE_EVT_SCAN EQU $54A1
+GET_RISE_IDX EQU $F5D9
+GET_RISE_RUN EQU $F5EF
+GET_RUN_IDX EQU $F5DB
+Get_Rise_Idx EQU $F5D9
+Get_Rise_Run EQU $F5EF
+Get_Run_Idx EQU $F5DB
+INIT_MUSIC EQU $F68D
+INIT_MUSIC_BUF EQU $F533
+INIT_MUSIC_CHK EQU $F687
+INIT_MUSIC_X EQU $F692
+INIT_OS EQU $F18B
+INIT_OS_RAM EQU $F164
+INIT_VIA EQU $F14C
+INTENSITY_1F EQU $F29D
+INTENSITY_3F EQU $F2A1
+INTENSITY_5F EQU $F2A5
+INTENSITY_7F EQU $F2A9
+INTENSITY_A EQU $F2AB
+Init_Music EQU $F68D
+Init_Music_Buf EQU $F533
+Init_Music_chk EQU $F687
+Init_Music_x EQU $F692
+Init_OS EQU $F18B
+Init_OS_RAM EQU $F164
+Init_VIA EQU $F14C
+Intensity_1F EQU $F29D
+Intensity_3F EQU $F2A1
+Intensity_5F EQU $F2A5
+Intensity_7F EQU $F2A9
+Intensity_a EQU $F2AB
+J1X_BUILTIN EQU $47E2
+JOY_ANALOG EQU $F1F5
+JOY_DIGITAL EQU $F1F8
+Joy_Analog EQU $F1F5
+Joy_Digital EQU $F1F8
+KILL_ENEMY_RUNTIME EQU $5447
+LCOL_Y_DONE EQU $4E8F
+LCOL_Y_LOOP EQU $4E28
+LCOL_Y_NEXT EQU $4E86
+LCOL_Y_RET EQU $4E9D
+LEVEL_ADDR_TABLE EQU $402E
+LEVEL_BANK_TABLE EQU $402D
+LEVEL_COLLISION_Y_RUNTIME EQU $4E0F
+LLR_COPY_DONE EQU $4B40
+LLR_COPY_LOOP EQU $4AF9
+LLR_COPY_OBJECTS EQU $4AF9
+LLR_GP_DONE EQU $4AF1
+LLR_SKIP_GP EQU $4AF1
+LOAD_LEVEL_BANKED EQU $415E
+LOAD_LEVEL_RUNTIME EQU $4A93
+MOD16 EQU $478E
+MOD16.M16_DONE EQU $47E1
+MOD16.M16_DPOS EQU $47AB
+MOD16.M16_END EQU $47D2
+MOD16.M16_LOOP EQU $47C2
+MOD16.M16_RCHECK EQU $47B3
+MOD16.M16_RPOS EQU $47C2
+MOVETO_D EQU $F312
+MOVETO_D_7F EQU $F2FC
+MOVETO_IX EQU $F310
+MOVETO_IX_7F EQU $F30C
+MOVETO_IX_A EQU $F30E
+MOVETO_IX_FF EQU $F308
+MOVETO_X_7F EQU $F2F2
+MOVE_MEM_A EQU $F683
+MOVE_MEM_A_1 EQU $F67F
+MOV_DRAW_VL EQU $F3BC
+MOV_DRAW_VLCS EQU $F3B5
+MOV_DRAW_VLC_A EQU $F3AD
+MOV_DRAW_VL_A EQU $F3B9
+MOV_DRAW_VL_AB EQU $F3B7
+MOV_DRAW_VL_B EQU $F3B1
+MOV_DRAW_VL_D EQU $F3BE
+MUL16 EQU $46FB
+MUSIC1 EQU $FD0D
+MUSIC2 EQU $FD1D
+MUSIC3 EQU $FD81
+MUSIC4 EQU $FDD3
+MUSIC5 EQU $FE38
+MUSIC6 EQU $FE76
+MUSIC7 EQU $FEC6
+MUSIC8 EQU $FEF8
+MUSIC9 EQU $FF26
+MUSICA EQU $FF44
+MUSICB EQU $FF62
+MUSICC EQU $FF7A
+MUSICD EQU $FF8F
+MUSIC_ADDR_TABLE EQU $4025
+MUSIC_BANK_TABLE EQU $4021
+Mov_Draw_VL EQU $F3BC
+Mov_Draw_VL_a EQU $F3B9
+Mov_Draw_VL_ab EQU $F3B7
+Mov_Draw_VL_b EQU $F3B1
+Mov_Draw_VL_d EQU $F3BE
+Mov_Draw_VLc_a EQU $F3AD
+Mov_Draw_VLcs EQU $F3B5
+Move_Mem_a EQU $F683
+Move_Mem_a_1 EQU $F67F
+Moveto_d EQU $F312
+Moveto_d_7F EQU $F2FC
+Moveto_ix EQU $F310
+Moveto_ix_7F EQU $F30C
+Moveto_ix_FF EQU $F308
+Moveto_ix_a EQU $F30E
+Moveto_x_7F EQU $F2F2
+NEW_HIGH_SCORE EQU $F8D8
+NOAY EQU $5075
+New_High_Score EQU $F8D8
+OBJ_HIT EQU $F8FF
+OBJ_WILL_HIT EQU $F8F3
+OBJ_WILL_HIT_U EQU $F8E5
+Obj_Hit EQU $F8FF
+Obj_Will_Hit EQU $F8F3
+Obj_Will_Hit_u EQU $F8E5
+PLAY_BOSS_MUSIC EQU $0CEB
+PLAY_BOSS_MUSIC.CMP_39_END EQU $0D05
+PLAY_BOSS_MUSIC.CMP_39_TRUE EQU $0D02
+PLAY_MUSIC_BANKED EQU $4126
+PLAY_MUSIC_RUNTIME EQU $4EA2
+PLAY_SFX_RUNTIME EQU $5062
+PMR_DONE EQU $4EE2
+PMR_START_NEW EQU $4EB0
+PMr_done EQU $4EE2
+PMr_start_new EQU $4EB0
+PRINT_LIST EQU $F38A
+PRINT_LIST_CHK EQU $F38C
+PRINT_LIST_HW EQU $F385
+PRINT_SHIPS EQU $F393
+PRINT_SHIPS_X EQU $F391
+PRINT_STR EQU $F495
+PRINT_STR_D EQU $F37A
+PRINT_STR_HWYX EQU $F373
+PRINT_STR_YX EQU $F378
+PRINT_TEXT_STR_104652296222070 EQU $552A
+PRINT_TEXT_STR_13399742582312315532 EQU $5596
+PRINT_TEXT_STR_17169778266052697977 EQU $55A7
+PRINT_TEXT_STR_17825111777351717868 EQU $55B5
+PRINT_TEXT_STR_1785516508540691 EQU $5534
+PRINT_TEXT_STR_1842954771884826 EQU $553F
+PRINT_TEXT_STR_1989933374265095120 EQU $557A
+PRINT_TEXT_STR_2073804707667 EQU $54FA
+PRINT_TEXT_STR_2453707043877 EQU $5503
+PRINT_TEXT_STR_62413928761410 EQU $550C
+PRINT_TEXT_STR_63323706877185 EQU $5516
+PRINT_TEXT_STR_78166382 EQU $54EE
+PRINT_TEXT_STR_78726770 EQU $54F4
+PRINT_TEXT_STR_89062161292953211 EQU $554A
+PRINT_TEXT_STR_9120385685437879118 EQU $5587
+PRINT_TEXT_STR_94739999784698482 EQU $5556
+PRINT_TEXT_STR_94739999784744652 EQU $5562
+PRINT_TEXT_STR_94739999785112679 EQU $556E
+PRINT_TEXT_STR_97774210848817 EQU $5520
+PSG_EVENT_DONE EQU $4F5E
+PSG_MUSIC_ENDED EQU $4F67
+PSG_MUSIC_LOOP EQU $4F6D
+PSG_MUSIC_LOOP_D EQU $4F78
+PSG_PROCESS_EVENT EQU $4F1C
+PSG_READ_DELAY EQU $4F01
+PSG_UPDATE_DONE EQU $4F80
+PSG_WRITE_LOOP EQU $4F2D
+PSG_event_done EQU $4F5E
+PSG_music_ended EQU $4F67
+PSG_music_loop EQU $4F6D
+PSG_music_loop_d EQU $4F78
+PSG_process_event EQU $4F1C
+PSG_read_delay EQU $4F01
+PSG_update_done EQU $4F80
+PSG_write_loop EQU $4F2D
+Print_List EQU $F38A
+Print_List_chk EQU $F38C
+Print_List_hw EQU $F385
+Print_Ships EQU $F393
+Print_Ships_x EQU $F391
+Print_Str EQU $F495
+Print_Str_d EQU $F37A
+Print_Str_hwyx EQU $F373
+Print_Str_yx EQU $F378
+RANDOM EQU $F517
+RANDOM_3 EQU $F511
+READ_BTNS EQU $F1BA
+READ_BTNS_MASK EQU $F1B4
+RECALIBRATE EQU $F2E6
+RESET0INT EQU $F36B
+RESET0REF EQU $F354
+RESET0REF_D0 EQU $F34A
+RESET_PEN EQU $F35B
+RISE_RUN_ANGLE EQU $F593
+RISE_RUN_LEN EQU $F603
+RISE_RUN_X EQU $F5FF
+RISE_RUN_Y EQU $F601
+ROT_VL EQU $F616
+ROT_VL_AB EQU $F610
+ROT_VL_DFT EQU $F637
+ROT_VL_MODE EQU $F62B
+ROT_VL_MODE_A EQU $F61F
+Random EQU $F517
+Random_3 EQU $F511
+Read_Btns EQU $F1BA
+Read_Btns_Mask EQU $F1B4
+Recalibrate EQU $F2E6
+Reset0Int EQU $F36B
+Reset0Ref EQU $F354
+Reset0Ref_D0 EQU $F34A
+Reset_Pen EQU $F35B
+Rise_Run_Angle EQU $F593
+Rise_Run_Len EQU $F603
+Rise_Run_X EQU $F5FF
+Rise_Run_Y EQU $F601
+Rot_VL EQU $F616
+Rot_VL_Mode EQU $F62B
+Rot_VL_Mode_a EQU $F61F
+Rot_VL_ab EQU $F610
+Rot_VL_dft EQU $F637
+SDCP_ABS_OK EQU $4D4A
+SDCP_CHECK_POS EQU $4D45
+SDCP_CLIP EQU $4DE8
+SDCP_DONE EQU $4E0E
+SDCP_MOVETO_W EQU $4D97
+SDCP_SEG_LOOP EQU $4DA0
+SDCP_SET_INTENS EQU $4D1F
+SDCP_SKIP_PATH EQU $4D49
+SDCP_USE_OVERRIDE EQU $4D1D
+SDCP_W_DRAW EQU $4DD9
+SDCP_W_MOVE EQU $4E02
+SEB_DONE EQU $41B5
+SELECT_GAME EQU $F7A9
+SET_REFRESH EQU $F1A2
+SFX_CHECKNOISEFREQ EQU $50A3
+SFX_CHECKTONEFREQ EQU $5089
+SFX_CHECKVOLUME EQU $50B4
+SFX_DOFRAME EQU $5076
+SFX_ENDOFEFFECT EQU $50E9
+SFX_M_NOISE EQU $50CF
+SFX_M_NOISEDIS EQU $50DA
+SFX_M_TONEDIS EQU $50CD
+SFX_M_WRITE EQU $50DC
+SFX_NEXTFRAME EQU $50E4
+SFX_UPDATE EQU $506B
+SFX_UPDATEMIXER EQU $50BD
+SHOW_LEVEL_RUNTIME EQU $4B41
+SLR_BG_COUNT EQU $4B6F
+SLR_DONE EQU $4BA5
+SLR_DRAW_CLIPPED_PATH EQU $4D11
+SLR_DRAW_OBJECTS EQU $4BB2
+SLR_DRAW_VECTOR EQU $4CE4
+SLR_FG_COUNT EQU $4B93
+SLR_FOREGROUND EQU $4B93
+SLR_GAMEPLAY EQU $4B81
+SLR_GP_COUNT EQU $4B81
+SLR_INTENSITY_READ EQU $4BD8
+SLR_OBJ_DONE EQU $4D0E
+SLR_OBJ_LOOP EQU $4BB4
+SLR_OBJ_NEXT EQU $4D04
+SLR_PATH_DONE EQU $4D02
+SLR_PATH_LOOP EQU $4CEA
+SLR_RAM_A_ZERO EQU $4C19
+SLR_RAM_VISIBLE EQU $4C21
+SLR_RAM_Y_VISIBLE EQU $4C47
+SLR_RAM_Y_ZERO EQU $4C40
+SLR_ROM_ADDR_LOOP EQU $4BCD
+SLR_ROM_A_ZERO EQU $4CC6
+SLR_ROM_OFFSETS EQU $4C5C
+SLR_ROM_VISIBLE EQU $4CCE
+SLR_ROM_Y_VISIBLE EQU $4C8E
+SLR_ROM_Y_ZERO EQU $4C87
+SOUND_BYTE EQU $F256
+SOUND_BYTES EQU $F27D
+SOUND_BYTES_X EQU $F284
+SOUND_BYTE_RAW EQU $F25B
+SOUND_BYTE_X EQU $F259
+SPAWN_CLR_LOOP EQU $5259
+SPAWN_ENEMIES_BANKED EQU $4192
+SPAWN_ENEMIES_RUNTIME EQU $524A
+SPAWN_ENE_DONE EQU $5314
+SPAWN_FILL_LOOP EQU $5287
+SPAWN_SM_DONE EQU $52FE
+SPAWN_SM_NOSM EQU $52FA
+STOP_MUSIC_RUNTIME EQU $4F84
+STRIP_ZEROS EQU $F8B7
+Select_Game EQU $F7A9
+Set_Refresh EQU $F1A2
+Sound_Byte EQU $F256
+Sound_Byte_raw EQU $F25B
+Sound_Byte_x EQU $F259
+Sound_Bytes EQU $F27D
+Sound_Bytes_x EQU $F284
+Strip_Zeros EQU $F8B7
+UPDATE_ENEMIES_RUNTIME EQU $5315
+UPDATE_MUSIC_PSG EQU $4EE3
+UPD_CHECK_WP EQU $5391
+UPD_ENE_DONE EQU $53BC
+UPD_ENE_LOOP EQU $532E
+UPD_ENE_NEXT_POP EQU $53AA
+UPD_INC_X EQU $5369
+UPD_INC_Y EQU $5387
+UPD_MOVE_Y EQU $5370
+VECTOR_ADDR_TABLE EQU $400B
+VECTOR_BANK_TABLE EQU $4000
+VECTREX_PRINT_NUMBER EQU $464B
+VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT EQU $46C4
+VECTREX_PRINT_NUMBER.PN_D10 EQU $46B3
+VECTREX_PRINT_NUMBER.PN_D100 EQU $4699
+VECTREX_PRINT_NUMBER.PN_D1000 EQU $467F
+VECTREX_PRINT_NUMBER.PN_DIV1000 EQU $466B
+VECTREX_PRINT_NUMBER.PN_L10 EQU $46A1
+VECTREX_PRINT_NUMBER.PN_L100 EQU $4687
+VECTREX_PRINT_NUMBER.PN_L1000 EQU $466D
+VECTREX_PRINT_TEXT EQU $4611
+VEC_0REF_ENABLE EQU $C824
+VEC_ADSR_TABLE EQU $C84F
+VEC_ADSR_TIMERS EQU $C85E
+VEC_ANGLE EQU $C836
+VEC_BRIGHTNESS EQU $C827
+VEC_BTN_STATE EQU $C80F
+VEC_BUTTONS EQU $C811
+VEC_BUTTON_1_1 EQU $C812
+VEC_BUTTON_1_2 EQU $C813
+VEC_BUTTON_1_3 EQU $C814
+VEC_BUTTON_1_4 EQU $C815
+VEC_BUTTON_2_1 EQU $C816
+VEC_BUTTON_2_2 EQU $C817
+VEC_BUTTON_2_3 EQU $C818
+VEC_BUTTON_2_4 EQU $C819
+VEC_COLD_FLAG EQU $CBFE
+VEC_COUNTERS EQU $C82E
+VEC_COUNTER_1 EQU $C82E
+VEC_COUNTER_2 EQU $C82F
+VEC_COUNTER_3 EQU $C830
+VEC_COUNTER_4 EQU $C831
+VEC_COUNTER_5 EQU $C832
+VEC_COUNTER_6 EQU $C833
+VEC_DEFAULT_STK EQU $CBEA
+VEC_DOT_DWELL EQU $C828
+VEC_DURATION EQU $C857
+VEC_EXPL_1 EQU $C858
+VEC_EXPL_2 EQU $C859
+VEC_EXPL_3 EQU $C85A
+VEC_EXPL_4 EQU $C85B
+VEC_EXPL_CHAN EQU $C85C
+VEC_EXPL_CHANA EQU $C853
+VEC_EXPL_CHANB EQU $C85D
+VEC_EXPL_CHANS EQU $C854
+VEC_EXPL_FLAG EQU $C867
+VEC_EXPL_TIMER EQU $C877
+VEC_FIRQ_VECTOR EQU $CBF5
+VEC_FREQ_TABLE EQU $C84D
+VEC_HIGH_SCORE EQU $CBEB
+VEC_IRQ_VECTOR EQU $CBF8
+VEC_JOY_1_X EQU $C81B
+VEC_JOY_1_Y EQU $C81C
+VEC_JOY_2_X EQU $C81D
+VEC_JOY_2_Y EQU $C81E
+VEC_JOY_MUX EQU $C81F
+VEC_JOY_MUX_1_X EQU $C81F
+VEC_JOY_MUX_1_Y EQU $C820
+VEC_JOY_MUX_2_X EQU $C821
+VEC_JOY_MUX_2_Y EQU $C822
+VEC_JOY_RESLTN EQU $C81A
+VEC_LOOP_COUNT EQU $C825
+VEC_MAX_GAMES EQU $C850
+VEC_MAX_PLAYERS EQU $C84F
+VEC_MISC_COUNT EQU $C823
+VEC_MUSIC_CHAN EQU $C855
+VEC_MUSIC_FLAG EQU $C856
+VEC_MUSIC_FREQ EQU $C861
+VEC_MUSIC_PTR EQU $C853
+VEC_MUSIC_TWANG EQU $C858
+VEC_MUSIC_WK_1 EQU $C84B
+VEC_MUSIC_WK_5 EQU $C847
+VEC_MUSIC_WK_6 EQU $C846
+VEC_MUSIC_WK_7 EQU $C845
+VEC_MUSIC_WK_A EQU $C842
+VEC_MUSIC_WORK EQU $C83F
+VEC_NMI_VECTOR EQU $CBFB
+VEC_NUM_GAME EQU $C87A
+VEC_NUM_PLAYERS EQU $C879
+VEC_PATTERN EQU $C829
+VEC_PREV_BTNS EQU $C810
+VEC_RANDOM_SEED EQU $C87D
+VEC_RFRSH EQU $C83D
+VEC_RFRSH_HI EQU $C83E
+VEC_RFRSH_LO EQU $C83D
+VEC_RISERUN_LEN EQU $C83B
+VEC_RISERUN_TMP EQU $C834
+VEC_RISE_INDEX EQU $C839
+VEC_RUN_INDEX EQU $C837
+VEC_SEED_PTR EQU $C87B
+VEC_SND_SHADOW EQU $C800
+VEC_STR_PTR EQU $C82C
+VEC_SWI2_VECTOR EQU $CBF2
+VEC_SWI3_VECTOR EQU $CBF2
+VEC_SWI_VECTOR EQU $CBFB
+VEC_TEXT_HEIGHT EQU $C82A
+VEC_TEXT_HW EQU $C82A
+VEC_TEXT_WIDTH EQU $C82B
+VEC_TWANG_TABLE EQU $C851
+Vec_0Ref_Enable EQU $C824
+Vec_ADSR_Table EQU $C84F
+Vec_ADSR_Timers EQU $C85E
+Vec_Angle EQU $C836
+Vec_Brightness EQU $C827
+Vec_Btn_State EQU $C80F
+Vec_Button_1_1 EQU $C812
+Vec_Button_1_2 EQU $C813
+Vec_Button_1_3 EQU $C814
+Vec_Button_1_4 EQU $C815
+Vec_Button_2_1 EQU $C816
+Vec_Button_2_2 EQU $C817
+Vec_Button_2_3 EQU $C818
+Vec_Button_2_4 EQU $C819
+Vec_Buttons EQU $C811
+Vec_Cold_Flag EQU $CBFE
+Vec_Counter_1 EQU $C82E
+Vec_Counter_2 EQU $C82F
+Vec_Counter_3 EQU $C830
+Vec_Counter_4 EQU $C831
+Vec_Counter_5 EQU $C832
+Vec_Counter_6 EQU $C833
+Vec_Counters EQU $C82E
+Vec_Default_Stk EQU $CBEA
+Vec_Dot_Dwell EQU $C828
+Vec_Duration EQU $C857
+Vec_Expl_1 EQU $C858
+Vec_Expl_2 EQU $C859
+Vec_Expl_3 EQU $C85A
+Vec_Expl_4 EQU $C85B
+Vec_Expl_Chan EQU $C85C
+Vec_Expl_ChanA EQU $C853
+Vec_Expl_ChanB EQU $C85D
+Vec_Expl_Chans EQU $C854
+Vec_Expl_Flag EQU $C867
+Vec_Expl_Timer EQU $C877
+Vec_FIRQ_Vector EQU $CBF5
+Vec_Freq_Table EQU $C84D
+Vec_High_Score EQU $CBEB
+Vec_IRQ_Vector EQU $CBF8
+Vec_Joy_1_X EQU $C81B
+Vec_Joy_1_Y EQU $C81C
+Vec_Joy_2_X EQU $C81D
+Vec_Joy_2_Y EQU $C81E
+Vec_Joy_Mux EQU $C81F
+Vec_Joy_Mux_1_X EQU $C81F
+Vec_Joy_Mux_1_Y EQU $C820
+Vec_Joy_Mux_2_X EQU $C821
+Vec_Joy_Mux_2_Y EQU $C822
+Vec_Joy_Resltn EQU $C81A
+Vec_Loop_Count EQU $C825
+Vec_Max_Games EQU $C850
+Vec_Max_Players EQU $C84F
+Vec_Misc_Count EQU $C823
+Vec_Music_Chan EQU $C855
+Vec_Music_Flag EQU $C856
+Vec_Music_Freq EQU $C861
+Vec_Music_Ptr EQU $C853
+Vec_Music_Twang EQU $C858
+Vec_Music_Wk_1 EQU $C84B
+Vec_Music_Wk_5 EQU $C847
+Vec_Music_Wk_6 EQU $C846
+Vec_Music_Wk_7 EQU $C845
+Vec_Music_Wk_A EQU $C842
+Vec_Music_Work EQU $C83F
+Vec_NMI_Vector EQU $CBFB
+Vec_Num_Game EQU $C87A
+Vec_Num_Players EQU $C879
+Vec_Pattern EQU $C829
+Vec_Prev_Btns EQU $C810
+Vec_Random_Seed EQU $C87D
+Vec_Rfrsh EQU $C83D
+Vec_Rfrsh_hi EQU $C83E
+Vec_Rfrsh_lo EQU $C83D
+Vec_RiseRun_Len EQU $C83B
+Vec_RiseRun_Tmp EQU $C834
+Vec_Rise_Index EQU $C839
+Vec_Run_Index EQU $C837
+Vec_SWI2_Vector EQU $CBF2
+Vec_SWI3_Vector EQU $CBF2
+Vec_SWI_Vector EQU $CBFB
+Vec_Seed_Ptr EQU $C87B
+Vec_Snd_Shadow EQU $C800
+Vec_Str_Ptr EQU $C82C
+Vec_Text_HW EQU $C82A
+Vec_Text_Height EQU $C82A
+Vec_Text_Width EQU $C82B
+Vec_Twang_Table EQU $C851
+WAIT_RECAL EQU $F192
+WARM_START EQU $F06C
+Wait_Recal EQU $F192
+Warm_Start EQU $F06C
+XFORM_RISE EQU $F663
+XFORM_RISE_A EQU $F661
+XFORM_RUN EQU $F65D
+XFORM_RUN_A EQU $F65B
+Xform_Rise EQU $F663
+Xform_Rise_a EQU $F661
+Xform_Run EQU $F65D
+Xform_Run_a EQU $F65B
+_ANIM_PLAYER_WALK EQU $41EC
+_ANIM_PLAYER_WALK_F0 EQU $41F8
+_ANIM_PLAYER_WALK_F1 EQU $41FD
+_ANIM_PLAYER_WALK_F2 EQU $4202
+_ANIM_PLAYER_WALK_F3 EQU $4207
+_ANIM_TITCHI_WALK EQU $420C
+_ANIM_TITCHI_WALK_F0 EQU $4216
+_ANIM_TITCHI_WALK_F1 EQU $421B
+_ANIM_TITCHI_WALK_F2 EQU $4220
+_BOSS_INTRO_MUSIC EQU $324A
+_ENEMY1_ENEMY EQU $403C
+_ENEMY1_ENEMY_ACTIONS EQU $4043
+_GAME_OVER_MUSIC EQU $2C5D
+_HENSHOKU_MUSIC EQU $0000
+_INIT_SCREEN_PATH0 EQU $2738
+_INIT_SCREEN_PATH1 EQU $274A
+_INIT_SCREEN_PATH10 EQU $27FB
+_INIT_SCREEN_PATH11 EQU $2807
+_INIT_SCREEN_PATH12 EQU $2816
+_INIT_SCREEN_PATH13 EQU $281F
+_INIT_SCREEN_PATH14 EQU $2828
+_INIT_SCREEN_PATH15 EQU $2831
+_INIT_SCREEN_PATH16 EQU $283A
+_INIT_SCREEN_PATH17 EQU $2846
+_INIT_SCREEN_PATH18 EQU $2858
+_INIT_SCREEN_PATH19 EQU $2861
+_INIT_SCREEN_PATH2 EQU $2756
+_INIT_SCREEN_PATH20 EQU $2876
+_INIT_SCREEN_PATH21 EQU $287F
+_INIT_SCREEN_PATH22 EQU $288B
+_INIT_SCREEN_PATH23 EQU $2897
+_INIT_SCREEN_PATH24 EQU $28A0
+_INIT_SCREEN_PATH25 EQU $28A9
+_INIT_SCREEN_PATH26 EQU $28B2
+_INIT_SCREEN_PATH27 EQU $28BB
+_INIT_SCREEN_PATH28 EQU $28C4
+_INIT_SCREEN_PATH29 EQU $28D0
+_INIT_SCREEN_PATH3 EQU $2768
+_INIT_SCREEN_PATH30 EQU $28D9
+_INIT_SCREEN_PATH31 EQU $28E2
+_INIT_SCREEN_PATH32 EQU $28EB
+_INIT_SCREEN_PATH33 EQU $2918
+_INIT_SCREEN_PATH34 EQU $292A
+_INIT_SCREEN_PATH35 EQU $2948
+_INIT_SCREEN_PATH36 EQU $295A
+_INIT_SCREEN_PATH37 EQU $297B
+_INIT_SCREEN_PATH38 EQU $298D
+_INIT_SCREEN_PATH39 EQU $29A8
+_INIT_SCREEN_PATH4 EQU $277A
+_INIT_SCREEN_PATH40 EQU $29B1
+_INIT_SCREEN_PATH41 EQU $29BA
+_INIT_SCREEN_PATH42 EQU $29C3
+_INIT_SCREEN_PATH43 EQU $29CF
+_INIT_SCREEN_PATH44 EQU $29D8
+_INIT_SCREEN_PATH45 EQU $29E1
+_INIT_SCREEN_PATH46 EQU $29EA
+_INIT_SCREEN_PATH47 EQU $29F6
+_INIT_SCREEN_PATH48 EQU $2A02
+_INIT_SCREEN_PATH49 EQU $2A0B
+_INIT_SCREEN_PATH5 EQU $2792
+_INIT_SCREEN_PATH50 EQU $2A14
+_INIT_SCREEN_PATH51 EQU $2A1D
+_INIT_SCREEN_PATH52 EQU $2A2F
+_INIT_SCREEN_PATH53 EQU $2A65
+_INIT_SCREEN_PATH54 EQU $2A89
+_INIT_SCREEN_PATH55 EQU $2AA7
+_INIT_SCREEN_PATH56 EQU $2ABC
+_INIT_SCREEN_PATH6 EQU $27A4
+_INIT_SCREEN_PATH7 EQU $27B9
+_INIT_SCREEN_PATH8 EQU $27E3
+_INIT_SCREEN_PATH9 EQU $27EF
+_INIT_SCREEN_VECTORS EQU $26C4
+_PLATFORM1_PATH0 EQU $331A
+_PLATFORM1_PATH1 EQU $3320
+_PLATFORM1_PATH2 EQU $3332
+_PLATFORM1_VECTORS EQU $3312
+_PLATFORM2_PATH0 EQU $32E2
+_PLATFORM2_PATH1 EQU $32FA
+_PLATFORM2_PATH2 EQU $330C
+_PLATFORM2_VECTORS EQU $32DA
+_PLATFORM3_PATH0 EQU $334C
+_PLATFORM3_PATH1 EQU $3352
+_PLATFORM3_PATH2 EQU $3364
+_PLATFORM3_VECTORS EQU $3344
+_PLATFORM4_PATH0 EQU $2E84
+_PLATFORM4_PATH1 EQU $2E8D
+_PLATFORM4_PATH2 EQU $2E96
+_PLATFORM4_PATH3 EQU $2EA2
+_PLATFORM4_PATH4 EQU $2ECC
+_PLATFORM4_PATH5 EQU $2EE4
+_PLATFORM4_PATH6 EQU $2EF6
+_PLATFORM4_PATH7 EQU $2F08
+_PLATFORM4_PATH8 EQU $2F14
+_PLATFORM4_VECTORS EQU $2E70
+_PLAYER_IDLE_PATH0 EQU $3153
+_PLAYER_IDLE_PATH1 EQU $315C
+_PLAYER_IDLE_PATH2 EQU $3168
+_PLAYER_IDLE_PATH3 EQU $3177
+_PLAYER_IDLE_PATH4 EQU $3186
+_PLAYER_IDLE_PATH5 EQU $3198
+_PLAYER_IDLE_PATH6 EQU $31A4
+_PLAYER_IDLE_PATH7 EQU $31B9
+_PLAYER_IDLE_PATH8 EQU $31C5
+_PLAYER_IDLE_VECTORS EQU $313F
+_PLAYER_JUMP_PATH0 EQU $2F53
+_PLAYER_JUMP_PATH1 EQU $2F5C
+_PLAYER_JUMP_PATH10 EQU $2FBC
+_PLAYER_JUMP_PATH11 EQU $2FC8
+_PLAYER_JUMP_PATH12 EQU $2FD1
+_PLAYER_JUMP_PATH13 EQU $2FE3
+_PLAYER_JUMP_PATH2 EQU $2F65
+_PLAYER_JUMP_PATH3 EQU $2F71
+_PLAYER_JUMP_PATH4 EQU $2F7A
+_PLAYER_JUMP_PATH5 EQU $2F89
+_PLAYER_JUMP_PATH6 EQU $2F92
+_PLAYER_JUMP_PATH7 EQU $2F9E
+_PLAYER_JUMP_PATH8 EQU $2FAA
+_PLAYER_JUMP_PATH9 EQU $2FB3
+_PLAYER_JUMP_VECTORS EQU $2F35
+_PLAYER_WALK1_PATH0 EQU $4358
+_PLAYER_WALK1_PATH1 EQU $4364
+_PLAYER_WALK1_PATH2 EQU $436D
+_PLAYER_WALK1_PATH3 EQU $4379
+_PLAYER_WALK1_PATH4 EQU $4385
+_PLAYER_WALK1_PATH5 EQU $4391
+_PLAYER_WALK1_PATH6 EQU $439D
+_PLAYER_WALK1_PATH7 EQU $43AF
+_PLAYER_WALK1_VECTORS EQU $4346
+_PLAYER_WALK2_PATH0 EQU $43CD
+_PLAYER_WALK2_PATH1 EQU $43D9
+_PLAYER_WALK2_PATH2 EQU $43E2
+_PLAYER_WALK2_PATH3 EQU $43EE
+_PLAYER_WALK2_PATH4 EQU $43FA
+_PLAYER_WALK2_PATH5 EQU $4406
+_PLAYER_WALK2_PATH6 EQU $4412
+_PLAYER_WALK2_PATH7 EQU $4424
+_PLAYER_WALK2_VECTORS EQU $43BB
+_PLAYER_WALK3_PATH0 EQU $4231
+_PLAYER_WALK3_PATH1 EQU $423D
+_PLAYER_WALK3_PATH2 EQU $4246
+_PLAYER_WALK3_PATH3 EQU $426D
+_PLAYER_WALK3_PATH4 EQU $4279
+_PLAYER_WALK3_VECTORS EQU $4225
+_PLAYER_WALK4_PATH0 EQU $44F9
+_PLAYER_WALK4_PATH1 EQU $4505
+_PLAYER_WALK4_PATH2 EQU $4523
+_PLAYER_WALK4_PATH3 EQU $452F
+_PLAYER_WALK4_PATH4 EQU $453E
+_PLAYER_WALK4_PATH5 EQU $4550
+_PLAYER_WALK4_VECTORS EQU $44EB
+_TITCHI_BALL_PATH0 EQU $31E7
+_TITCHI_BALL_PATH1 EQU $31F0
+_TITCHI_BALL_PATH2 EQU $31FC
+_TITCHI_BALL_PATH3 EQU $3220
+_TITCHI_BALL_PATH4 EQU $3229
+_TITCHI_BALL_PATH5 EQU $3232
+_TITCHI_BALL_PATH6 EQU $323B
+_TITCHI_BALL_VECTORS EQU $31D7
+_TITCHI_ENEMY EQU $404F
+_TITCHI_ENEMY_ACTIONS EQU $4056
+_TITCHI_IDLE_PATH0 EQU $30AF
+_TITCHI_IDLE_PATH1 EQU $30BE
+_TITCHI_IDLE_PATH10 EQU $3133
+_TITCHI_IDLE_PATH2 EQU $30C7
+_TITCHI_IDLE_PATH3 EQU $30D6
+_TITCHI_IDLE_PATH4 EQU $30F1
+_TITCHI_IDLE_PATH5 EQU $30FD
+_TITCHI_IDLE_PATH6 EQU $3106
+_TITCHI_IDLE_PATH7 EQU $3115
+_TITCHI_IDLE_PATH8 EQU $3121
+_TITCHI_IDLE_PATH9 EQU $312D
+_TITCHI_IDLE_VECTORS EQU $3097
+_TITCHI_SM EQU $4074
+_TITCHI_SM_STATES EQU $4076
+_TITCHI_SNOW1_PATH0 EQU $2DB9
+_TITCHI_SNOW1_PATH1 EQU $2DC8
+_TITCHI_SNOW1_PATH10 EQU $2E4F
+_TITCHI_SNOW1_PATH11 EQU $2E5E
+_TITCHI_SNOW1_PATH12 EQU $2E64
+_TITCHI_SNOW1_PATH2 EQU $2DD1
+_TITCHI_SNOW1_PATH3 EQU $2DE0
+_TITCHI_SNOW1_PATH4 EQU $2DFB
+_TITCHI_SNOW1_PATH5 EQU $2E07
+_TITCHI_SNOW1_PATH6 EQU $2E10
+_TITCHI_SNOW1_PATH7 EQU $2E1F
+_TITCHI_SNOW1_PATH8 EQU $2E37
+_TITCHI_SNOW1_PATH9 EQU $2E43
+_TITCHI_SNOW1_VECTORS EQU $2D9D
+_TITCHI_SNOW2_PATH0 EQU $3001
+_TITCHI_SNOW2_PATH1 EQU $3010
+_TITCHI_SNOW2_PATH2 EQU $3034
+_TITCHI_SNOW2_PATH3 EQU $3043
+_TITCHI_SNOW2_PATH4 EQU $305E
+_TITCHI_SNOW2_PATH5 EQU $306A
+_TITCHI_SNOW2_PATH6 EQU $3079
+_TITCHI_SNOW2_PATH7 EQU $308B
+_TITCHI_SNOW2_VECTORS EQU $2FEF
+_TITCHI_WALK1_PATH0 EQU $444C
+_TITCHI_WALK1_PATH1 EQU $445B
+_TITCHI_WALK1_PATH10 EQU $44C4
+_TITCHI_WALK1_PATH11 EQU $44D3
+_TITCHI_WALK1_PATH12 EQU $44DF
+_TITCHI_WALK1_PATH2 EQU $4464
+_TITCHI_WALK1_PATH3 EQU $446A
+_TITCHI_WALK1_PATH4 EQU $4470
+_TITCHI_WALK1_PATH5 EQU $447F
+_TITCHI_WALK1_PATH6 EQU $4485
+_TITCHI_WALK1_PATH7 EQU $44A0
+_TITCHI_WALK1_PATH8 EQU $44AF
+_TITCHI_WALK1_PATH9 EQU $44B8
+_TITCHI_WALK1_VECTORS EQU $4430
+_TITCHI_WALK2_PATH0 EQU $42AA
+_TITCHI_WALK2_PATH1 EQU $42B9
+_TITCHI_WALK2_PATH10 EQU $4328
+_TITCHI_WALK2_PATH11 EQU $4334
+_TITCHI_WALK2_PATH12 EQU $4340
+_TITCHI_WALK2_PATH2 EQU $42C2
+_TITCHI_WALK2_PATH3 EQU $42C8
+_TITCHI_WALK2_PATH4 EQU $42D4
+_TITCHI_WALK2_PATH5 EQU $42DA
+_TITCHI_WALK2_PATH6 EQU $42F5
+_TITCHI_WALK2_PATH7 EQU $4304
+_TITCHI_WALK2_PATH8 EQU $430D
+_TITCHI_WALK2_PATH9 EQU $4319
+_TITCHI_WALK2_VECTORS EQU $428E
+_TITCHI_WALK3_PATH0 EQU $4575
+_TITCHI_WALK3_PATH1 EQU $4584
+_TITCHI_WALK3_PATH10 EQU $45EA
+_TITCHI_WALK3_PATH11 EQU $45F9
+_TITCHI_WALK3_PATH12 EQU $4605
+_TITCHI_WALK3_PATH2 EQU $458D
+_TITCHI_WALK3_PATH3 EQU $4593
+_TITCHI_WALK3_PATH4 EQU $4599
+_TITCHI_WALK3_PATH5 EQU $45A5
+_TITCHI_WALK3_PATH6 EQU $45AB
+_TITCHI_WALK3_PATH7 EQU $45C6
+_TITCHI_WALK3_PATH8 EQU $45D5
+_TITCHI_WALK3_PATH9 EQU $45DE
+_TITCHI_WALK3_VECTORS EQU $4559
+_YUKIDAMA_ONDO_MUSIC EQU $0000
+music1 EQU $FD0D
+music2 EQU $FD1D
+music3 EQU $FD81
+music4 EQU $FDD3
+music5 EQU $FE38
+music6 EQU $FE76
+music7 EQU $FEC6
+music8 EQU $FEF8
+music9 EQU $FF26
+musica EQU $FF44
+musicb EQU $FF62
+musicc EQU $FF7A
+musicd EQU $FF8F
+noay EQU $5075
+sfx_checknoisefreq EQU $50A3
+sfx_checktonefreq EQU $5089
+sfx_checkvolume EQU $50B4
+sfx_doframe EQU $5076
+sfx_endofeffect EQU $50E9
+sfx_m_noise EQU $50CF
+sfx_m_noisedis EQU $50DA
+sfx_m_tonedis EQU $50CD
+sfx_m_write EQU $50DC
+sfx_nextframe EQU $50E4
+sfx_updatemixer EQU $50BD
 
 
 ;***************************************************************************
@@ -1196,6 +1190,8 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -1210,7 +1206,7 @@ START:
     CLR >PSG_DELAY_FRAMES   ; Clear delay counter
     STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)
     STD >PSG_MUSIC_START    ; Clear loop pointer
-; Bank 0 ($0000) is active; fixed bank 7 ($4000-$7FFF) always visible
+; Bank 0 ($0000) is active; fixed bank 3 ($4000-$7FFF) always visible
     JMP MAIN
 
 ;***************************************************************************
@@ -1274,134 +1270,134 @@ SLR_CUR_X            EQU $C880+$6F   ; SHOW_LEVEL: tracked beam X for per-segmen
 DRAW_T1_SCALED       EQU $C880+$70   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
 LEVEL_GP_BUFFER      EQU $C880+$71   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
 LCOL_PX              EQU $C880+$251   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$253   ; LEVEL_COLLISION_Y best floor y found (signed byte) (1 bytes)
-LCOL_PY              EQU $C880+$254   ; LEVEL_COLLISION player_y (lo byte) (1 bytes)
-LCOL_PHH             EQU $C880+$255   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$256   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$257   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$258   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$259   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$25A   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$25B   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$25D   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$25F   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$260   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$261   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$262   ; GP-FG |dy| (1 bytes)
-ENEMY_POOL           EQU $C880+$263   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+sm_state+sm_timer × N) (128 bytes)
-ENEMY_LOOP_IDX       EQU $C880+$2E3   ; Enemy loop counter (1 bytes)
-ENEMY_COUNT          EQU $C880+$2E4   ; Active enemy count (1 bytes)
-ENEMY_SCRATCH_PTR    EQU $C880+$2E5   ; Scratch pointer for enemy iteration (2 bytes)
-ENEMY_SCRATCH_X      EQU $C880+$2E7   ; Enemy scratch X (2 bytes)
-ENEMY_SCRATCH_Y      EQU $C880+$2E9   ; Enemy scratch Y (2 bytes)
-ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2EB   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2ED   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$2EF   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$2F0   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-ANIM_PLAYER_WALK_STATE EQU $C880+$2F1   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
-DRAW_ANIM_MIRROR_X   EQU $C880+$2F3   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
-DRAW_ANIM_SCALE      EQU $C880+$2F4   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
-DRAW_ANIM_SPEED_MUL  EQU $C880+$2F5   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$2F6   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$2F7   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_GAME_START EQU $C880+$2F9   ; User variable: STATE_GAME_START (2 bytes)
-VAR_STATE_PLAYING    EQU $C880+$2FB   ; User variable: STATE_PLAYING (2 bytes)
-VAR_STATE_PLAYER_DEAD EQU $C880+$2FD   ; User variable: STATE_PLAYER_DEAD (2 bytes)
-VAR_STATE_LEVEL_CLEAR EQU $C880+$2FF   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
-VAR_STATE_BOSS_INTRO EQU $C880+$301   ; User variable: STATE_BOSS_INTRO (2 bytes)
-VAR_STATE_BOSS       EQU $C880+$303   ; User variable: STATE_BOSS (2 bytes)
-VAR_STATE_GAME_OVER  EQU $C880+$305   ; User variable: STATE_GAME_OVER (2 bytes)
-VAR_STATE_ALL_CLEAR  EQU $C880+$307   ; User variable: STATE_ALL_CLEAR (2 bytes)
-VAR_TITCHI_STATE_NORMAL EQU $C880+$309   ; User variable: TITCHI_STATE_NORMAL (2 bytes)
-VAR_TITCHI_STATE_SNOW1 EQU $C880+$30B   ; User variable: TITCHI_STATE_SNOW1 (2 bytes)
-VAR_TITCHI_STATE_SNOW2 EQU $C880+$30D   ; User variable: TITCHI_STATE_SNOW2 (2 bytes)
-VAR_TITCHI_STATE_BALL EQU $C880+$30F   ; User variable: TITCHI_STATE_BALL (2 bytes)
-VAR_SNOW_HW          EQU $C880+$311   ; User variable: SNOW_HW (2 bytes)
-VAR_SNOW_HH          EQU $C880+$313   ; User variable: SNOW_HH (2 bytes)
-VAR_ENEMY_HW         EQU $C880+$315   ; User variable: ENEMY_HW (2 bytes)
-VAR_ENEMY_HH         EQU $C880+$317   ; User variable: ENEMY_HH (2 bytes)
-VAR_GAME_STATE       EQU $C880+$319   ; User variable: game_state (2 bytes)
-VAR_SCORE            EQU $C880+$31B   ; User variable: score (2 bytes)
-VAR_LIVES            EQU $C880+$31D   ; User variable: lives (2 bytes)
-VAR_CURRENT_LEVEL    EQU $C880+$31F   ; User variable: current_level (2 bytes)
-VAR_TIME_LEFT        EQU $C880+$321   ; User variable: time_left (2 bytes)
-VAR_ENEMY_COUNT      EQU $C880+$323   ; User variable: enemy_count (2 bytes)
-VAR_FRAME_TIMER      EQU $C880+$325   ; User variable: frame_timer (2 bytes)
-VAR_NEXT_IS_BOSS     EQU $C880+$327   ; User variable: next_is_boss (2 bytes)
-VAR_PLAYER_X         EQU $C880+$329   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$32B   ; User variable: player_y (2 bytes)
-VAR_PLAYER_VX        EQU $C880+$32D   ; User variable: player_vx (2 bytes)
-VAR_PLAYER_VY        EQU $C880+$32F   ; User variable: player_vy (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$331   ; User variable: player_facing (2 bytes)
-VAR_PLAYER_ON_GROUND EQU $C880+$333   ; User variable: player_on_ground (2 bytes)
-VAR_FLOOR_Y          EQU $C880+$335   ; User variable: floor_y (2 bytes)
-VAR_PREV_Y           EQU $C880+$337   ; User variable: prev_y (2 bytes)
-VAR_GRAVITY          EQU $C880+$339   ; User variable: GRAVITY (2 bytes)
-VAR_JUMP_SPEED       EQU $C880+$33B   ; User variable: JUMP_SPEED (2 bytes)
-VAR_MAX_FALL_SPEED   EQU $C880+$33D   ; User variable: MAX_FALL_SPEED (2 bytes)
-VAR_PLAYER_HH        EQU $C880+$33F   ; User variable: PLAYER_HH (2 bytes)
-VAR_WORLD_X_MIN      EQU $C880+$341   ; User variable: WORLD_X_MIN (2 bytes)
-VAR_WORLD_X_MAX      EQU $C880+$343   ; User variable: WORLD_X_MAX (2 bytes)
-VAR_WORLD_Y_MIN      EQU $C880+$345   ; User variable: WORLD_Y_MIN (2 bytes)
-VAR_WORLD_Y_MAX      EQU $C880+$347   ; User variable: WORLD_Y_MAX (2 bytes)
-VAR_SNOW_SPEED       EQU $C880+$349   ; User variable: SNOW_SPEED (2 bytes)
-VAR_SNOW_LAUNCH_VY   EQU $C880+$34B   ; User variable: SNOW_LAUNCH_VY (2 bytes)
-VAR_SNOW_LIFE_NORMAL EQU $C880+$34D   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
-VAR_SNOW_LIFE_POWER  EQU $C880+$34F   ; User variable: SNOW_LIFE_POWER (2 bytes)
-VAR_SHOOT_COOLDOWN_MAX EQU $C880+$351   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
-VAR_SHOOT_COOLDOWN   EQU $C880+$353   ; User variable: shoot_cooldown (2 bytes)
-VAR_PLAYER_HAS_POWER EQU $C880+$355   ; User variable: player_has_power (2 bytes)
-VAR_SNOW_LIFE_MAX    EQU $C880+$357   ; User variable: snow_life_max (2 bytes)
-VAR_SNOW_SPAWN_VX    EQU $C880+$359   ; User variable: snow_spawn_vx (2 bytes)
-VAR_SNOW0_ACTIVE     EQU $C880+$35B   ; User variable: snow0_active (2 bytes)
-VAR_SNOW0_X          EQU $C880+$35D   ; User variable: snow0_x (2 bytes)
-VAR_SNOW0_Y          EQU $C880+$35F   ; User variable: snow0_y (2 bytes)
-VAR_SNOW0_VX         EQU $C880+$361   ; User variable: snow0_vx (2 bytes)
-VAR_SNOW0_VY         EQU $C880+$363   ; User variable: snow0_vy (2 bytes)
-VAR_SNOW0_LIFE       EQU $C880+$365   ; User variable: snow0_life (2 bytes)
-VAR_SNOW1_ACTIVE     EQU $C880+$367   ; User variable: snow1_active (2 bytes)
-VAR_SNOW1_X          EQU $C880+$369   ; User variable: snow1_x (2 bytes)
-VAR_SNOW1_Y          EQU $C880+$36B   ; User variable: snow1_y (2 bytes)
-VAR_SNOW1_VX         EQU $C880+$36D   ; User variable: snow1_vx (2 bytes)
-VAR_SNOW1_VY         EQU $C880+$36F   ; User variable: snow1_vy (2 bytes)
-VAR_SNOW1_LIFE       EQU $C880+$371   ; User variable: snow1_life (2 bytes)
-VAR_SNOW2_ACTIVE     EQU $C880+$373   ; User variable: snow2_active (2 bytes)
-VAR_SNOW2_X          EQU $C880+$375   ; User variable: snow2_x (2 bytes)
-VAR_SNOW2_Y          EQU $C880+$377   ; User variable: snow2_y (2 bytes)
-VAR_SNOW2_VX         EQU $C880+$379   ; User variable: snow2_vx (2 bytes)
-VAR_SNOW2_VY         EQU $C880+$37B   ; User variable: snow2_vy (2 bytes)
-VAR_SNOW2_LIFE       EQU $C880+$37D   ; User variable: snow2_life (2 bytes)
-VAR_LEVEL_TIME       EQU $C880+$37F   ; User variable: LEVEL_TIME (2 bytes)
-VAR_LIVES_START      EQU $C880+$381   ; User variable: LIVES_START (2 bytes)
-VAR_GAME_START_DELAY EQU $C880+$383   ; User variable: GAME_START_DELAY (2 bytes)
-VAR_DEATH_DELAY      EQU $C880+$385   ; User variable: DEATH_DELAY (2 bytes)
-VAR_LEVEL_CLEAR_DELAY EQU $C880+$387   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
-VAR_BOSS_INTRO_DELAY EQU $C880+$389   ; User variable: BOSS_INTRO_DELAY (2 bytes)
-VAR_ALL_CLEAR_DELAY  EQU $C880+$38B   ; User variable: ALL_CLEAR_DELAY (2 bytes)
-VAR_I                EQU $C880+$38D   ; User variable: i (2 bytes)
-VAR_EX               EQU $C880+$38F   ; User variable: ex (2 bytes)
-VAR_EY               EQU $C880+$391   ; User variable: ey (2 bytes)
-VAR_IDX              EQU $C880+$393   ; User variable: idx (2 bytes)
-VAR_THW              EQU $C880+$395   ; User variable: thw (2 bytes)
-VAR_THH              EQU $C880+$397   ; User variable: thh (2 bytes)
-VAR_DX               EQU $C880+$399   ; User variable: dx (2 bytes)
-VAR_DY               EQU $C880+$39B   ; User variable: dy (2 bytes)
-VAR_ST               EQU $C880+$39D   ; User variable: st (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-PSG_MUSIC_PTR        EQU $CBEB   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $CBED   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $CBEF   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $CBF0   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $CBF1   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $CBF6   ; SFX bank ID (for multibank) (1 bytes)
+LCOL_BEST_Y          EQU $C880+$253   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$255   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$257   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$258   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$259   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$25A   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$25B   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$25C   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$25D   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$25F   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$261   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$262   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$263   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$264   ; GP-FG |dy| (1 bytes)
+ENEMY_POOL           EQU $C880+$265   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N) (136 bytes)
+ENEMY_LOOP_IDX       EQU $C880+$2ED   ; Enemy loop counter (1 bytes)
+ENEMY_COUNT          EQU $C880+$2EE   ; Active enemy count (1 bytes)
+ENEMY_SCRATCH_PTR    EQU $C880+$2EF   ; Scratch pointer for enemy iteration (2 bytes)
+ENEMY_SCRATCH_X      EQU $C880+$2F1   ; Enemy scratch X (2 bytes)
+ENEMY_SCRATCH_Y      EQU $C880+$2F3   ; Enemy scratch Y (2 bytes)
+ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2F5   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2F7   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$2F9   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$2FA   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+ANIM_PLAYER_WALK_STATE EQU $C880+$2FB   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
+DRAW_ANIM_MIRROR_X   EQU $C880+$2FD   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
+DRAW_ANIM_SCALE      EQU $C880+$2FE   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
+DRAW_ANIM_SPEED_MUL  EQU $C880+$2FF   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$300   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_STATE_TITLE      EQU $C880+$301   ; User variable: STATE_TITLE (2 bytes)
+VAR_STATE_GAME_START EQU $C880+$303   ; User variable: STATE_GAME_START (2 bytes)
+VAR_STATE_PLAYING    EQU $C880+$305   ; User variable: STATE_PLAYING (2 bytes)
+VAR_STATE_PLAYER_DEAD EQU $C880+$307   ; User variable: STATE_PLAYER_DEAD (2 bytes)
+VAR_STATE_LEVEL_CLEAR EQU $C880+$309   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
+VAR_STATE_BOSS_INTRO EQU $C880+$30B   ; User variable: STATE_BOSS_INTRO (2 bytes)
+VAR_STATE_BOSS       EQU $C880+$30D   ; User variable: STATE_BOSS (2 bytes)
+VAR_STATE_GAME_OVER  EQU $C880+$30F   ; User variable: STATE_GAME_OVER (2 bytes)
+VAR_STATE_ALL_CLEAR  EQU $C880+$311   ; User variable: STATE_ALL_CLEAR (2 bytes)
+VAR_TITCHI_STATE_NORMAL EQU $C880+$313   ; User variable: TITCHI_STATE_NORMAL (2 bytes)
+VAR_TITCHI_STATE_SNOW1 EQU $C880+$315   ; User variable: TITCHI_STATE_SNOW1 (2 bytes)
+VAR_TITCHI_STATE_SNOW2 EQU $C880+$317   ; User variable: TITCHI_STATE_SNOW2 (2 bytes)
+VAR_TITCHI_STATE_BALL EQU $C880+$319   ; User variable: TITCHI_STATE_BALL (2 bytes)
+VAR_SNOW_HW          EQU $C880+$31B   ; User variable: SNOW_HW (2 bytes)
+VAR_SNOW_HH          EQU $C880+$31D   ; User variable: SNOW_HH (2 bytes)
+VAR_ENEMY_HW         EQU $C880+$31F   ; User variable: ENEMY_HW (2 bytes)
+VAR_ENEMY_HH         EQU $C880+$321   ; User variable: ENEMY_HH (2 bytes)
+VAR_GAME_STATE       EQU $C880+$323   ; User variable: game_state (2 bytes)
+VAR_SCORE            EQU $C880+$325   ; User variable: score (2 bytes)
+VAR_LIVES            EQU $C880+$327   ; User variable: lives (2 bytes)
+VAR_CURRENT_LEVEL    EQU $C880+$329   ; User variable: current_level (2 bytes)
+VAR_TIME_LEFT        EQU $C880+$32B   ; User variable: time_left (2 bytes)
+VAR_ENEMY_COUNT      EQU $C880+$32D   ; User variable: enemy_count (2 bytes)
+VAR_FRAME_TIMER      EQU $C880+$32F   ; User variable: frame_timer (2 bytes)
+VAR_NEXT_IS_BOSS     EQU $C880+$331   ; User variable: next_is_boss (2 bytes)
+VAR_PLAYER_X         EQU $C880+$333   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$335   ; User variable: player_y (2 bytes)
+VAR_PLAYER_VX        EQU $C880+$337   ; User variable: player_vx (2 bytes)
+VAR_PLAYER_VY        EQU $C880+$339   ; User variable: player_vy (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$33B   ; User variable: player_facing (2 bytes)
+VAR_PLAYER_ON_GROUND EQU $C880+$33D   ; User variable: player_on_ground (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$33F   ; User variable: floor_y (2 bytes)
+VAR_PREV_Y           EQU $C880+$341   ; User variable: prev_y (2 bytes)
+VAR_GRAVITY          EQU $C880+$343   ; User variable: GRAVITY (2 bytes)
+VAR_JUMP_SPEED       EQU $C880+$345   ; User variable: JUMP_SPEED (2 bytes)
+VAR_MAX_FALL_SPEED   EQU $C880+$347   ; User variable: MAX_FALL_SPEED (2 bytes)
+VAR_PLAYER_HH        EQU $C880+$349   ; User variable: PLAYER_HH (2 bytes)
+VAR_WORLD_X_MIN      EQU $C880+$34B   ; User variable: WORLD_X_MIN (2 bytes)
+VAR_WORLD_X_MAX      EQU $C880+$34D   ; User variable: WORLD_X_MAX (2 bytes)
+VAR_WORLD_Y_MIN      EQU $C880+$34F   ; User variable: WORLD_Y_MIN (2 bytes)
+VAR_WORLD_Y_MAX      EQU $C880+$351   ; User variable: WORLD_Y_MAX (2 bytes)
+VAR_SNOW_SPEED       EQU $C880+$353   ; User variable: SNOW_SPEED (2 bytes)
+VAR_SNOW_LAUNCH_VY   EQU $C880+$355   ; User variable: SNOW_LAUNCH_VY (2 bytes)
+VAR_SNOW_LIFE_NORMAL EQU $C880+$357   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
+VAR_SNOW_LIFE_POWER  EQU $C880+$359   ; User variable: SNOW_LIFE_POWER (2 bytes)
+VAR_SHOOT_COOLDOWN_MAX EQU $C880+$35B   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
+VAR_SHOOT_COOLDOWN   EQU $C880+$35D   ; User variable: shoot_cooldown (2 bytes)
+VAR_PLAYER_HAS_POWER EQU $C880+$35F   ; User variable: player_has_power (2 bytes)
+VAR_SNOW_LIFE_MAX    EQU $C880+$361   ; User variable: snow_life_max (2 bytes)
+VAR_SNOW_SPAWN_VX    EQU $C880+$363   ; User variable: snow_spawn_vx (2 bytes)
+VAR_SNOW0_ACTIVE     EQU $C880+$365   ; User variable: snow0_active (2 bytes)
+VAR_SNOW0_X          EQU $C880+$367   ; User variable: snow0_x (2 bytes)
+VAR_SNOW0_Y          EQU $C880+$369   ; User variable: snow0_y (2 bytes)
+VAR_SNOW0_VX         EQU $C880+$36B   ; User variable: snow0_vx (2 bytes)
+VAR_SNOW0_VY         EQU $C880+$36D   ; User variable: snow0_vy (2 bytes)
+VAR_SNOW0_LIFE       EQU $C880+$36F   ; User variable: snow0_life (2 bytes)
+VAR_SNOW1_ACTIVE     EQU $C880+$371   ; User variable: snow1_active (2 bytes)
+VAR_SNOW1_X          EQU $C880+$373   ; User variable: snow1_x (2 bytes)
+VAR_SNOW1_Y          EQU $C880+$375   ; User variable: snow1_y (2 bytes)
+VAR_SNOW1_VX         EQU $C880+$377   ; User variable: snow1_vx (2 bytes)
+VAR_SNOW1_VY         EQU $C880+$379   ; User variable: snow1_vy (2 bytes)
+VAR_SNOW1_LIFE       EQU $C880+$37B   ; User variable: snow1_life (2 bytes)
+VAR_SNOW2_ACTIVE     EQU $C880+$37D   ; User variable: snow2_active (2 bytes)
+VAR_SNOW2_X          EQU $C880+$37F   ; User variable: snow2_x (2 bytes)
+VAR_SNOW2_Y          EQU $C880+$381   ; User variable: snow2_y (2 bytes)
+VAR_SNOW2_VX         EQU $C880+$383   ; User variable: snow2_vx (2 bytes)
+VAR_SNOW2_VY         EQU $C880+$385   ; User variable: snow2_vy (2 bytes)
+VAR_SNOW2_LIFE       EQU $C880+$387   ; User variable: snow2_life (2 bytes)
+VAR_LEVEL_TIME       EQU $C880+$389   ; User variable: LEVEL_TIME (2 bytes)
+VAR_LIVES_START      EQU $C880+$38B   ; User variable: LIVES_START (2 bytes)
+VAR_GAME_START_DELAY EQU $C880+$38D   ; User variable: GAME_START_DELAY (2 bytes)
+VAR_DEATH_DELAY      EQU $C880+$38F   ; User variable: DEATH_DELAY (2 bytes)
+VAR_LEVEL_CLEAR_DELAY EQU $C880+$391   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
+VAR_BOSS_INTRO_DELAY EQU $C880+$393   ; User variable: BOSS_INTRO_DELAY (2 bytes)
+VAR_ALL_CLEAR_DELAY  EQU $C880+$395   ; User variable: ALL_CLEAR_DELAY (2 bytes)
+VAR_I                EQU $C880+$397   ; User variable: i (2 bytes)
+VAR_EX               EQU $C880+$399   ; User variable: ex (2 bytes)
+VAR_EY               EQU $C880+$39B   ; User variable: ey (2 bytes)
+VAR_IDX              EQU $C880+$39D   ; User variable: idx (2 bytes)
+VAR_THW              EQU $C880+$39F   ; User variable: thw (2 bytes)
+VAR_THH              EQU $C880+$3A1   ; User variable: thh (2 bytes)
+VAR_DX               EQU $C880+$3A3   ; User variable: dx (2 bytes)
+VAR_DY               EQU $C880+$3A5   ; User variable: dy (2 bytes)
+VAR_ST               EQU $C880+$3A7   ; User variable: st (2 bytes)
+PSG_MUSIC_PTR        EQU $C880+$3A9   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$3AB   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$3AD   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$3AE   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$3AF   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$3B0   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$3B1   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$3B3   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$3B4   ; SFX bank ID (for multibank) (1 bytes)
+VAR_ARG0             EQU $C880+$3B5   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$3B7   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$3B9   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3BB   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$3BD   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$3BF   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM (Bank #0)
@@ -1420,6 +1416,8 @@ MAIN:
     LDA #$7F
     STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)
     CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)
+    CLR ANIM_PLAYER_WALK_STATE     ; frame_idx = 0
+    CLR ANIM_PLAYER_WALK_STATE+1   ; ticks_left = 0 (forces DAR_INIT)
     LDD #0
     STD VAR_STATE_TITLE
     LDD #1
@@ -1755,9 +1753,9 @@ state_title:
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
     LDX #0        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
@@ -2994,8 +2992,10 @@ IF_END_98:
     LDD >VAR_PLAYER_HH
     STB >LCOL_PHH        ; store player half_height
     LDD >VAR_PLAYER_Y
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh = player_top
-    STB >LCOL_PY         ; store player top Y for surface filter
+    ; Compute player_top = player_y + player_hh (16-bit)
+    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
+    ADCA #0              ; propagate carry to high byte
+    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
     JSR LEVEL_COLLISION_Y_RUNTIME
     STD VAR_FLOOR_Y
     LDD >VAR_PLAYER_Y
@@ -3086,8 +3086,10 @@ IF_END_106:
     LDD >VAR_PLAYER_HH
     STB >LCOL_PHH        ; store player half_height
     LDD >VAR_PREV_Y
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh = player_top
-    STB >LCOL_PY         ; store player top Y for surface filter
+    ; Compute player_top = player_y + player_hh (16-bit)
+    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
+    ADCA #0              ; propagate carry to high byte
+    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
     JSR LEVEL_COLLISION_Y_RUNTIME
     STD VAR_FLOOR_Y
     LDD >VAR_FLOOR_Y
@@ -3262,9 +3264,9 @@ draw_player:
     TFR B,A
     STA MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
     LDX #6        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
     LBRA IF_END_124
@@ -3308,9 +3310,9 @@ IF_END_124:
     TFR B,A
     STA MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
     LDX #5        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
     LBRA IF_END_128

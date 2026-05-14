@@ -520,7 +520,11 @@ export function PlaygroundPanel() {
               x: Math.round(obj.velocity.x), 
               y: Math.round(obj.velocity.y) 
             } : { x: 0, y: 0 },
-            layer: 'gameplay' as const
+            layer: 'gameplay' as const,
+            // Fill vectorName for enemy objects from the enemy type's idle sprite
+            vectorName: (obj.type === 'enemy' && !obj.vectorName && obj.enemyType)
+              ? (enemyTypeVectorMap.get(obj.enemyType) || obj.vectorName)
+              : obj.vectorName,
           })) as VPlayObject[],
           foreground: objects.filter(obj => obj.layer === 'foreground').map(obj => ({
             ...obj,

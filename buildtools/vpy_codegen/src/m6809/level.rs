@@ -246,13 +246,17 @@ pub fn emit_level_collision_y(args: &[Expr], out: &mut String, assets: &[crate::
     // arg[2]: player_half_height → LCOL_PHH (evaluate first so B is available for subtraction)
     expressions::emit_simple_expr(&args[2], out, assets);
     out.push_str("    STB >LCOL_PHH        ; store player half_height\n");
-    // arg[1]: player_y (16-bit) + player_hh → LCOL_PY (player's top/head, 16-bit)
-    // Filter: skip surfaces whose top > player_top (surface is above the player's head)
+    // arg[1]: player_y (16-bit) - player_hh → LCOL_PY (player's feet, 16-bit)
+    // Filter: skip surfaces whose top > player_feet (already below the feet — can't land on it from below)
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    ; Compute player_top = player_y + player_hh (16-bit)\n");
-    out.push_str("    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh\n");
-    out.push_str("    ADCA #0              ; propagate carry to high byte\n");
-    out.push_str("    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter\n");
+    out.push_str("    ; Compute player_feet = player_y - player_hh (16-bit)\n");
+    out.push_str("    STD >TMPVAL          ; save player_y\n");
+    out.push_str("    LDB >LCOL_PHH        ; B = player_hh\n");
+    out.push_str("    CLRA\n");
+    out.push_str("    STD >LCOL_PY         ; reuse as scratch (16-bit hh)\n");
+    out.push_str("    LDD >TMPVAL          ; D = player_y\n");
+    out.push_str("    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet\n");
+    out.push_str("    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter\n");
     out.push_str("    JSR LEVEL_COLLISION_Y_RUNTIME\n");
 }
 
@@ -617,12 +621,18 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SLR_RAM_Y_VISIBLE:\n");
         out.push_str("    STB >DRAW_VEC_Y\n");
         out.push_str("    LDU 11,X         ; vector_ptr at RAM +11\n");
+        out.push_str("    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)\n");
+        out.push_str("    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned\n");
         out.push_str("    LDA 3,X          ; scale_t1 from RAM +3 (pre-computed T1 = scale*127)\n");
         out.push_str("    STA >DRAW_T1_SCALED\n");
-        out.push_str("    BRA SLR_DRAW_VECTOR\n");
+        out.push_str("    LBRA SLR_DRAW_VECTOR\n");
         out.push_str("    \n");
         out.push_str("SLR_ROM_OFFSETS:\n");
         out.push_str("    ; === ROM object (stride=20) ===\n");
+        out.push_str("    ; Skip enemy spawn markers (type==1): drawn by DRAW_ENEMIES, not SHOW_LEVEL\n");
+        out.push_str("    LDA ,X           ; type byte at ROM+0\n");
+        out.push_str("    CMPA #1\n");
+        out.push_str("    LBEQ SLR_OBJ_NEXT ; enemy marker: skip, handle via DRAW_ENEMIES\n");
         out.push_str("    CLR >MIRROR_X    ; DP=$D0, must use extended addressing\n");
         out.push_str("    CLR >MIRROR_Y\n");
         out.push_str("    LDA 8,X          ; intensity at ROM +8\n");
@@ -675,6 +685,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)\n");
         out.push_str("    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)\n");
         out.push_str("    LDU 16,X         ; vector_ptr FDB at ROM +16\n");
+        out.push_str("    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)\n");
+        out.push_str("    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned\n");
         out.push_str("    LDA 6,X          ; scale_t1 from ROM +6 (low byte of scale FDB; pre-computed T1 = scale*127)\n");
         out.push_str("    STA >DRAW_T1_SCALED\n");
         out.push_str("    \n");
@@ -682,8 +694,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PSHS X           ; Save object pointer\n");
         out.push_str("    TFR U,X          ; X = vector data pointer (header)\n");
         out.push_str("    \n");
-        out.push_str("    ; Read path_count from vector header (FCB = 1 byte)\n");
-        out.push_str("    LDB ,X+          ; B = path_count, X now at pointer table\n");
+        out.push_str("    ; Read path_count from vector header (FDB = 2 bytes, high byte ignored)\n");
+        out.push_str("    LDD ,X++         ; D = path_count FDB; B = low byte = actual count, X now at pointer table\n");
         out.push_str("    \n");
         out.push_str("    ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)\n");
         out.push_str("SLR_PATH_LOOP:\n");
@@ -1365,7 +1377,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; === LEVEL_COLLISION_Y_RUNTIME ===\n");
         out.push_str("; Find the highest collidable floor Y at player_x in the GP layer.\n");
         out.push_str("; Input:  LCOL_PX (16-bit) = player world_x\n");
-        out.push_str(";         LCOL_PY (16-bit) = player_top (player_y + player_hh)\n");
+        out.push_str(";         LCOL_PY (16-bit) = player_feet (player_y - player_hh)\n");
         out.push_str("; Output: RESULT = highest floor landing Y (i16)\n");
         out.push_str(";         Returns $FF80 (-128) if no collidable surface found at that X.\n");
         out.push_str("; Algorithm: for each collidable GP object, check X AABB overlap,\n");
@@ -1374,6 +1386,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str(";   +18=half_width, +19=half_height. Stride=20.\n");
         out.push_str("LEVEL_COLLISION_Y_RUNTIME:\n");
         out.push_str("    PSHS X,Y,U       ; Save regs (NOT D - result returns in D)\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Switch to level bank so ROM GP pointer dereferences land in the right bank\n");
+            out.push_str("    LDA >CURRENT_ROM_BANK\n");
+            out.push_str("    PSHS A              ; Save current bank\n");
+            out.push_str("    LDA >LEVEL_BANK\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Switch to level bank\n");
+        }
         out.push_str("    \n");
         out.push_str("    ; Initialize best_floor = -32768 ($8000, no floor found)\n");
         out.push_str("    LDD #$8000\n");
@@ -1425,9 +1445,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ADDB 19,X        ; B = world_y_lo + half_height\n");
         out.push_str("    ADCA #0          ; propagate carry to high byte\n");
         out.push_str("    STD >TMPVAL      ; TMPVAL = surface_top (16-bit)\n");
-        out.push_str("    ; Filter: skip surfaces above the player's head (surface_top > player_top)\n");
-        out.push_str("    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_top\n");
-        out.push_str("    BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip\n");
+        out.push_str("    ; Filter: skip surfaces above the player's feet (surface_top > player_feet)\n");
+        out.push_str("    ;   — player can only land on surfaces at or below their feet level.\n");
+        out.push_str("    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_feet\n");
+        out.push_str("    LBGT LCOL_Y_NEXT ; surface_top > player_feet → already passed below → skip\n");
         out.push_str("    ; Compute landing Y = surface_top + player_half_height (16-bit)\n");
         out.push_str("    LDD >TMPVAL      ; reload surface_top\n");
         out.push_str("    ADDB >LCOL_PHH   ; add player_hh to low byte\n");
@@ -1452,6 +1473,13 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD #$FF80       ; -128\n");
         out.push_str("LCOL_Y_RET:\n");
         out.push_str("    STD RESULT\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Restore original bank (result is in RESULT, will reload after)\n");
+            out.push_str("    PULS A              ; A = saved bank\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Restore bank\n");
+            out.push_str("    LDD RESULT          ; Reload return value into D\n");
+        }
         out.push_str("    \n");
         out.push_str("    PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)\n");
         out.push_str("\n");
@@ -1473,6 +1501,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str(";   +18=half_width, +19=half_height. Stride=20.\n");
         out.push_str("LEVEL_COLLISION_X_RUNTIME:\n");
         out.push_str("    PSHS X,Y,U\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Switch to level bank so ROM GP pointer dereferences land in the right bank\n");
+            out.push_str("    LDA >CURRENT_ROM_BANK\n");
+            out.push_str("    PSHS A              ; Save current bank\n");
+            out.push_str("    LDA >LEVEL_BANK\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Switch to level bank\n");
+        }
         out.push_str("    LDD #0\n");
         out.push_str("    STD RESULT\n");
         out.push_str("    TST >LEVEL_LOADED\n");
@@ -1567,6 +1603,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    DECB\n");
         out.push_str("    LBRA LCOL_X_LOOP\n");
         out.push_str("LCOL_X_DONE:\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Restore original bank\n");
+            out.push_str("    PULS A              ; A = saved bank\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00           ; Restore bank\n");
+        }
         out.push_str("    LDD RESULT\n");   // reload result into D (PULS B in loop corrupts B)
         out.push_str("    PULS X,Y,U,PC\n");
         out.push_str("\n");

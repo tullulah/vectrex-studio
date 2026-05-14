@@ -237,18 +237,34 @@ pub fn emit_call(
         // Fallthrough for non-Var args → returns 0 via vpy_len
     }
 
-    // M6809-only builtins — no-op on rp2350.
-    // SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES drive the Vectrex vector engine
-    // directly and have no ARM equivalent.  The query/command builtins
-    // (GET_ENEMY_ACTIVE, GET_ENEMY_X/Y/STATE, KILL_ENEMY, ENEMY_FIRE_EVENT) only
-    // exist in the pitrex target; on bare rp2350 they return 0 (queries) or are
-    // no-ops (commands) so the VPy game logic still compiles cleanly.
+    // Enemy system builtins — implemented on rp2350 via vpy_spawn/update/draw_enemies.
+    {
+        let name_up = info.name.to_uppercase();
+        if name_up == "SPAWN_ENEMIES" {
+            // SPAWN_ENEMIES("level_name") → load count + instances from ROM, populate pool
+            if let Some(Expr::StringLit(level)) = info.args.first() {
+                let sym = level.to_uppercase().replace('-', "_").replace(' ', "_");
+                let mut s = format!("    ldr     r0, =_{}_{}\n", sym, "PITREX_ENEMY_COUNT");
+                s.push_str(&format!("    ldr     r1, =_{}_{}\n", sym, "PITREX_ENEMIES"));
+                s.push_str("    bl      vpy_spawn_enemies\n");
+                return Ok(s);
+            }
+            return Ok(format!("    @ SPAWN_ENEMIES — no level arg\n"));
+        }
+        if name_up == "UPDATE_ENEMIES" {
+            return Ok("    bl      vpy_update_enemies\n".to_string());
+        }
+        if name_up == "DRAW_ENEMIES" {
+            return Ok("    bl      vpy_draw_enemies\n".to_string());
+        }
+    }
+
+    // Remaining M6809-only builtins — no-op on rp2350.
     {
         let name_up = info.name.to_uppercase();
         let is_query = matches!(name_up.as_str(),
             "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE");
         let is_m6809_only = matches!(name_up.as_str(),
-            "SPAWN_ENEMIES" | "UPDATE_ENEMIES" | "DRAW_ENEMIES" |
             "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE" |
             "KILL_ENEMY" | "ENEMY_FIRE_EVENT");
         if is_m6809_only {
@@ -271,6 +287,8 @@ pub fn emit_call(
         "DRAW_POLYGON"    => "vpy_draw_polygon",
         "DRAW_ARC"        => "vpy_draw_arc",
         "DRAW_ELLIPSE"    => "vpy_draw_ellipse",
+        "DRAW_BEZIER"     => "vpy_draw_bezier",
+        "DRAW_BEZIER_QUAD"=> "vpy_draw_bezier_quad",
         "MOVE"            => "vpy_move",
         "DRAW_VECTOR"     => "vpy_draw_vector",
         "DRAW_VECTOR_EX"  => "vpy_draw_vector_ex",

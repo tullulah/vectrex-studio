@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -66,20 +68,20 @@ VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_X                EQU $C880+$38   ; User variable: x (2 bytes)
-VAR_Y                EQU $C880+$3A   ; User variable: y (2 bytes)
-VAR_CIRCLE_X         EQU $C880+$3C   ; User variable: circle_x (2 bytes)
-VAR_CIRCLE_Y         EQU $C880+$3E   ; User variable: circle_y (2 bytes)
-VAR_BTN1             EQU $C880+$40   ; User variable: btn1 (2 bytes)
-VAR_BTN2             EQU $C880+$42   ; User variable: btn2 (2 bytes)
-VAR_BTN3             EQU $C880+$44   ; User variable: btn3 (2 bytes)
-VAR_BTN4             EQU $C880+$46   ; User variable: btn4 (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_X                EQU $C880+$38   ; User variable: X (2 bytes)
+VAR_Y                EQU $C880+$3A   ; User variable: Y (2 bytes)
+VAR_CIRCLE_X         EQU $C880+$3C   ; User variable: CIRCLE_X (2 bytes)
+VAR_CIRCLE_Y         EQU $C880+$3E   ; User variable: CIRCLE_Y (2 bytes)
+VAR_BTN1             EQU $C880+$40   ; User variable: BTN1 (2 bytes)
+VAR_BTN2             EQU $C880+$42   ; User variable: BTN2 (2 bytes)
+VAR_BTN3             EQU $C880+$44   ; User variable: BTN3 (2 bytes)
+VAR_BTN4             EQU $C880+$46   ; User variable: BTN4 (2 bytes)
+VAR_ARG0             EQU $C880+$48   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$4A   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$4C   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$4E   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$50   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$52   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM

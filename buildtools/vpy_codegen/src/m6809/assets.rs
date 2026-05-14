@@ -665,9 +665,13 @@ pub fn distribute_assets(
     let total_assets = sized_assets.len();
     let total_bytes: usize = sized_assets.iter().map(|a| a.binary_size).sum();
     
-    // First-Fit Decreasing bin packing: larger assets first
+    // First-Fit Decreasing bin packing: larger assets first.
+    // Secondary key: asset name for deterministic ordering when sizes are equal.
     let mut sorted_assets = sized_assets;
-    sorted_assets.sort_by(|a, b| b.binary_size.cmp(&a.binary_size));
+    sorted_assets.sort_by(|a, b| {
+        b.binary_size.cmp(&a.binary_size)
+            .then_with(|| a.info.name.cmp(&b.info.name))
+    });
     
     for asset in sorted_assets {
         // Find a bank with enough space
@@ -1207,8 +1211,10 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm.push_str(";***************************************************************************\n");
     asm.push_str("; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching\n");
     asm.push_str("; Input: X = asset index (0-based), DRAW_VEC_X/Y set for position\n");
-    asm.push_str("; Uses: A, B, X, Y\n");
+    asm.push_str(";        MIRROR_X, MIRROR_Y, DRAW_VEC_INTENSITY must be set by caller\n");
+    asm.push_str("; Uses: A, B, D, X, Y, U\n");
     asm.push_str("; Preserves: CURRENT_ROM_BANK (restored after drawing)\n");
+    asm.push_str("; Note: DSWM handles beam positioning internally via DRAW_VEC_X/Y\n");
     asm.push_str(";***************************************************************************\n");
     asm.push_str("DRAW_VECTOR_BANKED:\n");
     asm.push_str("    ; Save index to U register (avoid stack order issues)\n");
@@ -1232,21 +1238,11 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm.push_str("    LEAX D,X             ; X points to address entry\n");
     asm.push_str("    LDX ,X               ; X = _VEC_VECTORS header address in banked ROM\n");
     asm.push_str("\n");
-    asm.push_str("    ; Set up for drawing\n");
-    asm.push_str("    CLR MIRROR_X\n");
-    asm.push_str("    CLR MIRROR_Y\n");
-    asm.push_str("    CLR DRAW_VEC_INTENSITY\n");
+    asm.push_str("    ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)\n");
     asm.push_str("    JSR $F1AA            ; DP_to_D0\n");
     asm.push_str("\n");
-    asm.push_str("    ; Position beam at DRAW_VEC_X/Y before drawing\n");
-    asm.push_str("    ; With DP=$D0, RAM vars need extended addressing (> prefix)\n");
-    asm.push_str("    JSR Reset0Ref        ; Reset integrators to center (0,0)\n");
-    asm.push_str("    LDA >DRAW_VEC_Y      ; A = Y position\n");
-    asm.push_str("    LDB >DRAW_VEC_X      ; B = X position\n");
-    asm.push_str("    JSR Moveto_d         ; Move beam to (Y, X)\n");
-    asm.push_str("\n");
-    asm.push_str("    ; Loop over all paths (header bytes 0-1 = path_count FDB, +2.. = FDB table)\n");
-    asm.push_str("    LDD ,X               ; D = path_count (16-bit)\n");
+    asm.push_str("    ; Loop over all paths (header: FDB path_count, then FDB table)\n");
+    asm.push_str("    LDD ,X               ; D = path_count (16-bit FDB at header start)\n");
     asm.push_str("    CMPD #0\n");
     asm.push_str("    LBEQ DVB_DONE        ; No paths\n");
     asm.push_str("    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)\n");
