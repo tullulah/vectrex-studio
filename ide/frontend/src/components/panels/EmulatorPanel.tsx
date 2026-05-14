@@ -2129,77 +2129,145 @@ export const EmulatorPanel: React.FC = () => {
     }
   };
 
-  const onLoadROM = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.bin,.vec,.rom';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      
-      try {
-        console.log(`[EmulatorPanel] Loading ROM: ${file.name} (${file.size} bytes)`);
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const romData = new Uint8Array(arrayBuffer);
-        
-        const vecx = (window as any).vecx;
-        if (!vecx) {
-          console.error('[EmulatorPanel] vecx instance not available');
-          return;
-        }
-        
-        // Convertir Uint8Array a string para JSVecX
-        let cartDataString = '';
-        for (let i = 0; i < romData.length; i++) {
-          cartDataString += String.fromCharCode(romData[i]);
-        }
-        
-        // Cargar ROM en Globals.cartdata (método correcto para JSVecX)
-        // Globals es una variable global, no está en window
-        const Globals = (window as any).Globals || (globalThis as any).Globals;
-        if (!Globals) {
-          console.error('[EmulatorPanel] Globals not available');
-          return;
-        }
-        
-        Globals.cartdata = cartDataString;
-        console.log(`[EmulatorPanel] ✓ ROM loaded into Globals.cartdata (${romData.length} bytes)`);
-        
-        // Dispatch event para notificar a otros paneles
-        window.dispatchEvent(new Event('programLoaded'));
-        
-        // Actualizar estado del ROM cargado
-        setLoadedROM(`${file.name} (${romData.length} bytes)`);
-        
-        // Save the loaded ROM info for persistence
-        setLastRom(null, file.name); // File object doesn't have path, just name
-        
-        // Resetear combo selector (carga manual no debe seleccionar combo)
-        setSelectedROM('');
-        
-        // Recalcular overlay basado en nombre del archivo
-        await loadOverlay(file.name);
-        
-        // Reset después de cargar - esto copiará cartdata al array cart[]
-        console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: File upload (insert cartridge)');
-        console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack);
-        vecx.reset();
-        console.log('[EmulatorPanel] ✓ Reset after ROM load');
-        
-        // Si estaba corriendo, reiniciar
-        if (status === 'running') {
-          vecx.debugState = 'running';
-          vecx.start();
-          console.log('[EmulatorPanel] ✓ Restarted after ROM load');
-        }
-        
-      } catch (error) {
-        console.error('[EmulatorPanel] Failed to load ROM:', error);
+  const onLoadROM = async () => {
+    // Prefer the Electron native dialog: it gives us the absolute path, which we
+    // need to locate the sibling .elf for rp2350 binaries. Fall back to the
+    // browser <input type="file"> if the IPC bridge isn't available.
+    const filesApi = (window as any).files;
+    let romData: Uint8Array | null = null;
+    let romName = '';
+    let romPath: string | null = null;
+
+    if (filesApi?.openBin) {
+      const picked = await filesApi.openBin();
+      if (!picked || (picked as any).error) {
+        if ((picked as any)?.error) console.error('[EmulatorPanel] openBin error:', (picked as any).error);
+        return;
       }
-    };
-    
-    input.click();
+      romPath = picked.path;
+      romName = picked.path.split(/[/\\]/).pop() || 'rom.bin';
+      romData = Uint8Array.from(atob(picked.base64), c => c.charCodeAt(0));
+    } else {
+      const file = await new Promise<File | null>((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.bin,.vec,.rom';
+        input.onchange = (e) => resolve((e.target as HTMLInputElement).files?.[0] ?? null);
+        input.click();
+      });
+      if (!file) return;
+      romName = file.name;
+      romData = new Uint8Array(await file.arrayBuffer());
+    }
+
+    try {
+      console.log(`[EmulatorPanel] Loading ROM: ${romName} (${romData.length} bytes)${romPath ? ` from ${romPath}` : ''}`);
+
+      const vecx = (window as any).vecx;
+      if (!vecx) {
+        console.error('[EmulatorPanel] vecx instance not available');
+        return;
+      }
+
+      // Auto-detect rp2350 binaries by magic header "VPy2" (0x56 0x50 0x79 0x32)
+      const isRp2350 =
+        romData.length >= 4 &&
+        romData[0] === 0x56 && romData[1] === 0x50 &&
+        romData[2] === 0x79 && romData[3] === 0x32;
+
+      if (isRp2350) {
+        console.log(`[EmulatorPanel] ✓ Detected rp2350 binary (magic "VPy2") — routing to Rp2350System`);
+        if (typeof emuCore.loadArm !== 'function') {
+          console.error('[EmulatorPanel] emuCore.loadArm not available — rp2350 target unsupported in this build');
+          return;
+        }
+
+        // Try to load the sibling .elf (same path, .elf extension) so traps
+        // can be registered from symbol addresses instead of prologue heuristics.
+        let elfData: Uint8Array | undefined;
+        if (romPath && filesApi?.readFileBin) {
+          const elfPath = romPath.replace(/\.bin$/i, '.elf');
+          if (elfPath !== romPath) {
+            try {
+              const elfRes = await filesApi.readFileBin(elfPath);
+              if (elfRes && !(elfRes as any).error && (elfRes as any).base64) {
+                elfData = Uint8Array.from(atob((elfRes as any).base64), c => c.charCodeAt(0));
+                console.log(`[EmulatorPanel] ✓ Sibling ELF loaded: ${elfPath} (${elfData.length} bytes)`);
+              } else {
+                console.log(`[EmulatorPanel] No sibling .elf at ${elfPath} — using VPy2 header entry + prologue scan`);
+              }
+            } catch (e) {
+              console.log(`[EmulatorPanel] No sibling .elf — using VPy2 header entry + prologue scan`);
+            }
+          }
+        }
+
+        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined);
+        console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+
+        // Clear the canvas before first rp2350 frame
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
+        }
+
+        // Start rAF loop capped at 60 fps (same pattern as handleCompiledBin)
+        const TARGET_MS = 1000 / 60;
+        let lastFrameTs = 0;
+        const rp2350Loop = (ts: number) => {
+          rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
+          const elapsed = ts - lastFrameTs;
+          if (elapsed < TARGET_MS) return;
+          lastFrameTs = ts - (elapsed % TARGET_MS);
+          if (useDebugStore.getState().state !== 'running') return;
+          emuCore.runFrame();
+        };
+        useDebugStore.getState().setState('running');
+        rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
+
+        setLoadedROM(`${romName} (${romData.length} bytes, rp2350${elfData ? ' + elf' : ''})`);
+        setLastRom(null, romName);
+        setSelectedROM('');
+        window.dispatchEvent(new Event('programLoaded'));
+        return;
+      }
+
+      // ── M6809 cartridge path ────────────────────────────────────────────
+      let cartDataString = '';
+      for (let i = 0; i < romData.length; i++) {
+        cartDataString += String.fromCharCode(romData[i]);
+      }
+
+      const Globals = (window as any).Globals || (globalThis as any).Globals;
+      if (!Globals) {
+        console.error('[EmulatorPanel] Globals not available');
+        return;
+      }
+
+      Globals.cartdata = cartDataString;
+      console.log(`[EmulatorPanel] ✓ ROM loaded into Globals.cartdata (${romData.length} bytes)`);
+
+      window.dispatchEvent(new Event('programLoaded'));
+      setLoadedROM(`${romName} (${romData.length} bytes)`);
+      setLastRom(null, romName);
+      setSelectedROM('');
+      await loadOverlay(romName);
+
+      console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: File upload (insert cartridge)');
+      vecx.reset();
+      console.log('[EmulatorPanel] ✓ Reset after ROM load');
+
+      if (status === 'running') {
+        vecx.debugState = 'running';
+        vecx.start();
+        console.log('[EmulatorPanel] ✓ Restarted after ROM load');
+      }
+    } catch (error) {
+      console.error('[EmulatorPanel] Failed to load ROM:', error);
+    }
   };
 
 

@@ -1300,18 +1300,26 @@ export class Thumb2 implements ICpu {
       // Detect imm12 (hw1[11:0]) vs PUW form (hw1[10:8] + imm8)
       const hw1_11    = (hw1 >>> 11) & 1;
       let addr: number;
+      let writeback = false;
+      let wbValue = 0;
+      const base = this.regs[rn];
       if ((hw0 & 0xfe00) === 0xf800 && hw1_11 === 0 && (hw1 >>> 8) === 0) {
-        // Positive imm12
+        // Positive imm12 (no writeback in this encoding)
         const imm12 = hw1 & 0xfff;
-        addr = u32(this.regs[rn] + imm12);
-      } else if ((hw1 >>> 8) & 1) {
-        // PUW form with signed imm8
-        const U    = (hw1 >>> 9) & 1;
+        addr = u32(base + imm12);
+      } else if (hw1_11 === 1) {
+        // T4 PUW form: hw1 = Rt[15:12] | 1 | P[10] | U[9] | W[8] | imm8[7:0]
+        // Honour P (pre/post-index) and W (writeback) bits.
+        const P    = (hw1 >>> 10) & 1;
+        const U    = (hw1 >>> 9)  & 1;
+        const W    = (hw1 >>> 8)  & 1;
         const imm8 = hw1 & 0xff;
-        addr = U ? u32(this.regs[rn] + imm8) : u32(this.regs[rn] - imm8);
+        const offset = U ? imm8 : -imm8;
+        addr = P ? u32(base + offset) : u32(base);
+        if (W) { writeback = true; wbValue = u32(base + offset); }
       } else {
         const imm12 = hw1 & 0xfff;
-        addr = u32(this.regs[rn] + imm12);
+        addr = u32(base + imm12);
       }
       const actualLoad = ((hw0 >>> 4) & 1) !== 0;
       if (actualLoad) {
@@ -1319,6 +1327,7 @@ export class Thumb2 implements ICpu {
       } else {
         this.write32(bus, addr, this.regs[rt]);
       }
+      if (writeback) this.regs[rn] = wbValue;
       return 2;
     }
 

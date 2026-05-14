@@ -1213,9 +1213,17 @@ fn emit_psg_helpers() -> String {
     s.push_str("@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)\n");
     s.push_str(".global vpy_update_buttons\n.type vpy_update_buttons, %function\n.thumb_func\nvpy_update_buttons:\n");
     s.push_str("    push    {r4, lr}\n");
-    // Read J1 buttons (VIA Port B) — read while PORT_B is in neutral state
+    // DDR_B = 0x0F: bits 4-7 become inputs so J1 button pins drive PORT_B[4-7].
+    // The Vectrex BIOS leaves DDR_B = 0xFF (all-output); if we read PORT_B without
+    // switching, we get the output latch (0x01 from dv_draw_delta) → bits 4-7 = 0 →
+    // all J1 buttons appear pressed → try_shoot fires every frame → snowballs → frame
+    // time exceeds phosphor persistence → blank display.
+    s.push_str("    mov     r0, #0xD002\n    mov     r1, #0x0F\n    bl      bus_write\n");
+    // Read J1 buttons (VIA Port B bits 4-7 = hardware button state)
     s.push_str("    mov     r0, #0xD000\n    bl      bus_read\n");
     s.push_str("    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
+    // Restore DDR_B = 0xFF so drawing code can drive all PORT_B lines as output
+    s.push_str("    mov     r0, #0xD002\n    mov     r1, #0xFF\n    bl      bus_write\n");
     // Read J2 buttons (PSG reg 14)
     s.push_str("    mov     r0, #14\n    bl      psg_read\n");
     s.push_str("    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
@@ -2352,19 +2360,14 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
     s.push_str("vlcy_loop:\n    cbz     r8, vlcy_finish\n");
     s.push_str("    ldrb    r1, [r7, #6]\n    cbz     r1, vlcy_next\n");
-    // collidable check
     s.push_str("    ldrb    r1, [r9, #6]\n    tst     r1, #0x10\n    beq     vlcy_next\n");
-    // X broadphase: |px - obj_x| <= half_w (skip obj if too far left/right)
     s.push_str("    ldrb    r1, [r9, #12]             @ obj half_w\n");
     s.push_str("    ldrsh   r2, [r7, #0]              @ obj world_x\n");
     s.push_str("    sub     r2, r4, r2                @ dx = px - obj_x\n");
     s.push_str("    movs    r3, r2\n    bpl     vlcy_dxok\n    neg     r3, r2\n");
     s.push_str("vlcy_dxok:\n    cmp     r3, r1\n    bgt     vlcy_next\n");
-    // Check coll_mesh_ptr at ROM+16 — if non-zero, do ray-cast; else AABB
     s.push_str("    ldr     r11, [r9, #16]            @ coll_mesh_ptr\n");
     s.push_str("    cmp     r11, #0\n    beq     vlcy_aabb\n");
-    // ── Segment mesh ray-cast ──
-    // Push local_px and obj_world_y on stack for use in inner loop
     s.push_str("    ldrsh   r0, [r7, #0]              @ obj_world_x\n");
     s.push_str("    sub     r0, r4, r0                @ local_px = px - obj_world_x\n");
     s.push_str("    ldrsh   r1, [r7, #2]              @ obj_world_y\n");
@@ -2378,30 +2381,25 @@ fn emit_level_builtins() -> String {
     s.push_str("    add     r11, r11, #8\n    subs    r12, r12, #1\n");
     s.push_str("    cmp     r1, r3\n    bne     vlcy_seg_loop @ skip non-horizontal\n");
     s.push_str("    ldr     r14, [sp]                 @ local_px\n");
-    // x-range check: must be within [min(x1,x2), max(x1,x2)]
     s.push_str("    cmp     r0, r2\n    blt     vlcy_seg_x1lt\n");
-    s.push_str("    @ x1 >= x2: range [x2, x1]\n");
     s.push_str("    cmp     r14, r2\n    blt     vlcy_seg_loop\n");
     s.push_str("    cmp     r14, r0\n    bgt     vlcy_seg_loop\n");
     s.push_str("    b       vlcy_seg_y\n");
     s.push_str("vlcy_seg_x1lt:\n");
-    s.push_str("    @ x1 < x2: range [x1, x2]\n");
     s.push_str("    cmp     r14, r0\n    blt     vlcy_seg_loop\n");
     s.push_str("    cmp     r14, r2\n    bgt     vlcy_seg_loop\n");
     s.push_str("vlcy_seg_y:\n");
     s.push_str("    ldr     r14, [sp, #4]             @ obj_world_y\n");
-    s.push_str("    add     r3, r1, r14               @ world_seg_y = y1(local) + obj_world_y\n");
-    s.push_str("    cmp     r3, r5\n    bgt     vlcy_seg_loop @ above feet → skip\n");
-    s.push_str("    cmp     r3, r10\n    ble     vlcy_seg_loop @ not better → skip\n");
+    s.push_str("    add     r3, r1, r14               @ world_seg_y = y1 + obj_world_y\n");
+    s.push_str("    cmp     r3, r5\n    bgt     vlcy_seg_loop\n");
+    s.push_str("    cmp     r3, r10\n    ble     vlcy_seg_loop\n");
     s.push_str("    mov     r10, r3\n    b       vlcy_seg_loop\n");
-    s.push_str("vlcy_seg_done:\n    pop     {r0, r1}              @ restore stack balance\n");
-    s.push_str("    b       vlcy_next\n");
-    // ── AABB fallback ──
+    s.push_str("vlcy_seg_done:\n    pop     {r0, r1}\n    b       vlcy_next\n");
     s.push_str("vlcy_aabb:\n");
     s.push_str("    ldrsh   r2, [r7, #2]              @ obj world_y\n");
     s.push_str("    ldrb    r3, [r9, #13]             @ obj half_h\n");
     s.push_str("    add     r2, r2, r3                @ obj_top = world_y + half_h\n");
-    s.push_str("    cmp     r2, r5                    @ obj_top <= player_feet?\n    bgt     vlcy_next\n");
+    s.push_str("    cmp     r2, r5\n    bgt     vlcy_next\n");
     s.push_str("    cmp     r10, r2\n    bge     vlcy_next\n    mov     r10, r2\n");
     s.push_str(&format!("vlcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #{}    @ next ROM obj ({} bytes)\n", ARM_ROM_OBJ_STRIDE, ARM_ROM_OBJ_STRIDE));
     s.push_str("    subs    r8, r8, #1\n    b       vlcy_loop\n");

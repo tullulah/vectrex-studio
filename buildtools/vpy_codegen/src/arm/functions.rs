@@ -378,6 +378,13 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    mov     r0, #0x3F\n");
     s.push_str("    str     r0, [r1]\n");
 
+    // Zero ENEMY_COUNT_ARM — stale SRAM from a warm reset would otherwise cause
+    // vpy_draw_enemies to loop over garbage pool slots before SPAWN_ENEMIES runs.
+    s.push_str("    @ zero ENEMY_COUNT_ARM (guard against warm-reset SRAM)\n");
+    s.push_str("    ldr     r1, =ENEMY_COUNT_ARM\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    str     r0, [r1]\n");
+
     let loop_labels: Vec<(String, String)> = Vec::new();
 
     // main() body

@@ -302,7 +302,19 @@ export class Rp2350System implements ISystem, IBus {
         Object.fromEntries([...symbols.entries()].map(([k,v]) => [k, '0x'+v.toString(16)])));
       this.registerTrapsFromSymbols(symbols);
     } else {
-      console.log(`[Rp2350System.init] No ELF — prologue scan. elfData=${elfData?.length ?? 0}b`);
+      // No ELF: parse the VPy2 game header to recover the real entry point.
+      // Layout (16 bytes at offset 0): [magic u32 'VPy2'][game_main u32][rsv u32][rsv u32].
+      // Without this, we'd fall back to DEFAULT_ENTRY_POINT (hardcoded), which only
+      // matches the binary that DEFAULT_ENTRY_POINT was originally captured from.
+      if (rom.length >= 8 &&
+          rom[0] === 0x56 && rom[1] === 0x50 && rom[2] === 0x79 && rom[3] === 0x32) {
+        const headerEntry = rom[4] | (rom[5] << 8) | (rom[6] << 16) | (rom[7] << 24);
+        if (headerEntry !== 0) {
+          entryPoint = headerEntry >>> 0;
+          console.log(`[Rp2350System.init] VPy2 header entry=0x${entryPoint.toString(16)}`);
+        }
+      }
+      console.log(`[Rp2350System.init] No ELF — prologue scan. elfData=${elfData?.length ?? 0}b, entry=0x${entryPoint.toString(16)}`);
       this.registerTrapsFromPrologue();
     }
 
@@ -493,7 +505,6 @@ export class Rp2350System implements ISystem, IBus {
                  | (this.sram[0x7F296] << 16) | (this.sram[0x7F297] << 24);
         console.log(`[bounce-trace] BALL_VX written: ${vx | 0}  frame=${this.frameCounter}`);
       }
-      // ─────────────────────────────────────────────────────────────────
       return;
     }
 

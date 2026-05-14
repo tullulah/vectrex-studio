@@ -156,7 +156,7 @@ def state_playing():
     UPDATE_ENEMIES()
     check_snowball_enemy_collision()
     check_player_enemy_collision()
-    
+
     draw_player()
     draw_snowballs()
     DRAW_ENEMIES()
@@ -174,7 +174,6 @@ def state_player_dead():
     if frame_timer <= 0:
         if lives <= 0:
             PLAY_MUSIC("Game_Over")
-            game_state = STATE_GAME_OVER
         if lives > 0:
             enter_game_start()
 
@@ -387,7 +386,6 @@ def update_player():
         # Colisión con plataformas al caer (usa prev_y para evitar tunneling)
         if player_vy <= 0:
             floor_y = LEVEL_COLLISION_Y(player_x, prev_y, PLAYER_HH)
-            
             if player_y <= floor_y:
                 player_y = floor_y
                 player_vy = 0
@@ -508,6 +506,7 @@ def draw_snowballs():
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
+    #(rompe 6809)
     # PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
     # PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
     # PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha

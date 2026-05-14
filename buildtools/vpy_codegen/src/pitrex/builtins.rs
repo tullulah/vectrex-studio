@@ -3419,31 +3419,31 @@ mod tests {
     // ── Bug 3 regression tests ────────────────────────────────────────────────
 
     /// Regression test for Bug 3 (part A): pitrex_spawn_enemies must set is_anim
-    /// in the pool entry from the ROM record's is_anim byte at offset +20.
+    /// in the pool entry from the ROM record's is_anim byte.
     ///
-    /// The generated pitrex_spawn_enemies code reads ROM[+20] and stores it to
-    /// pool[+27].  This test verifies the generated assembly contains those exact
-    /// load/store instructions so that vanim enemies are drawn with animation.
+    /// The is_anim byte lives at ROM offset `12 + wp_count*4` (variable, after
+    /// all waypoints).  The generated code computes that offset into r6 and reads
+    /// via `ldrb r8, [r4, r6]`, then stores to pool[+27].
     #[test]
     fn test_pitrex_spawn_sets_is_anim_from_rom() {
         let asm = super::emit_pitrex_spawn_enemies();
 
-        // Must read is_anim from ROM offset +20
+        // Must compute variable offset (12 + wp_count*4) and read via register-indexed load
         assert!(
-            asm.contains("[r4, #20]"),
-            "Bug 3A regression: pitrex_spawn must read ROM[+20] for is_anim (got: ...)"
+            asm.contains("[r4, r6]"),
+            "Bug 3A regression: pitrex_spawn must read ROM[12+wp_count*4] via [r4, r6] (got: ...)"
         );
         // Must store is_anim into pool offset +27
         assert!(
             asm.contains("[r7, #27]"),
             "Bug 3A regression: pitrex_spawn must write pool[+27] for is_anim (got: ...)"
         );
-        // The read and store must both reference is_anim in comments
-        let rom20_pos  = asm.find("[r4, #20]").unwrap();
+        // The read must come before the store
+        let rom_read_pos  = asm.find("[r4, r6]").unwrap();
         let pool27_pos = asm.find("[r7, #27]").unwrap();
         assert!(
-            rom20_pos < pool27_pos,
-            "Bug 3A regression: ROM[+20] must be read before pool[+27] is written"
+            rom_read_pos < pool27_pos,
+            "Bug 3A regression: ROM is_anim must be read before pool[+27] is written"
         );
     }
 

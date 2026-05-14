@@ -467,6 +467,11 @@ impl VPlayLevel {
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
 
         out.push_str(&format!("@ ==== ARM Level: {} ====\n", name));
+        // Level header is read with `ldr [r4, #16]` (gpObjectsPtr at offset 16) and
+        // similar 32-bit loads. ARM requires the base address to be 4-byte aligned;
+        // without an explicit balign the symbol can land on an odd address and the
+        // loads return shifted bytes, corrupting every pointer in the chain.
+        out.push_str("    .balign 4\n");
         out.push_str(&format!(".global _{name}_LEVEL\n_{name}_LEVEL:\n"));
         // World bounds
         out.push_str(&format!("    .hword {}  @ xMin\n", self.world_bounds.x_min));
@@ -517,14 +522,20 @@ impl VPlayLevel {
             out.push_str("\n");
         }
 
+        // Each ROM object is read with .word loads at offsets +8 (vector_ptr) and
+        // +16 (coll_mesh_ptr). Object stride is 20 bytes — odd start makes every
+        // object misaligned. Force 4-byte alignment before each array.
+        out.push_str("    .balign 4\n");
         out.push_str(&format!("_{name}_BG_OBJECTS:\n"));
         out.push_str(&bg_structs);
         out.push_str("\n");
 
+        out.push_str("    .balign 4\n");
         out.push_str(&format!("_{name}_GP_OBJECTS:\n"));
         out.push_str(&gp_structs);
         out.push_str("\n");
 
+        out.push_str("    .balign 4\n");
         out.push_str(&format!("_{name}_FG_OBJECTS:\n"));
         out.push_str(&fg_structs);
         out.push_str("\n");
@@ -694,12 +705,49 @@ impl VPlayLevel {
             .and_then(|c| c.segments.as_ref())
             .filter(|v| !v.is_empty());
         if let Some(segs) = segs_opt {
-            mesh.push_str(&format!("{}:  @ {} collision segments (local coords)\n", mesh_label, segs.len()));
-            mesh.push_str(&format!("    .word {}  @ segment count\n", segs.len()));
+            // Optimization: only emit "top edge" horizontal segments — those whose
+            // X-range has no other horizontal segment with a strictly greater Y above
+            // them. The collision runtime only cares about what the player can stand
+            // on; interior or bottom edges of the mesh are never relevant for floor
+            // detection. Reduces seg_count from ~46 (full mesh) to ~1-3 for typical
+            // platforms, dramatically lowering per-frame cycles in vpy_level_collision_y.
+            let mut horiz: Vec<(i16, i16, i16)> = Vec::new();
             for seg in segs {
+                if seg.y1 == seg.y2 {
+                    let xa = seg.x1.min(seg.x2);
+                    let xb = seg.x1.max(seg.x2);
+                    horiz.push((xa, xb, seg.y1));
+                }
+            }
+            // Keep only top edges: for each segment S, drop it if any other horizontal
+            // segment T has T.y > S.y and T's X-range overlaps S's X-range (T sits above S).
+            let top_edges: Vec<(i16, i16, i16)> = horiz
+                .iter()
+                .filter(|&&(xa, xb, y)| {
+                    !horiz.iter().any(|&(txa, txb, ty)| {
+                        ty > y && txa < xb && txb > xa
+                    })
+                })
+                .cloned()
+                .collect();
+            let emitted: Vec<(i16, i16, i16)> = if top_edges.is_empty() {
+                // Mesh has no horizontal segments at all — keep original for safety
+                segs.iter().map(|s| (s.x1.min(s.x2), s.x1.max(s.x2), s.y1)).collect()
+            } else {
+                top_edges
+            };
+            // .word requires 4-byte alignment on ARM. Without an explicit balign,
+            // the symbol can land on an odd address (e.g. right after a .byte or
+            // .hword section), making `ldr r12, [r11], #4` read garbage — the
+            // first byte gets combined with adjacent data, producing a "seg_count"
+            // in the billions and turning the raycast loop into an infinite spin.
+            mesh.push_str("    .balign 4\n");
+            mesh.push_str(&format!("{}:  @ {} top-edge collision segments (filtered from {} original)\n",
+                mesh_label, emitted.len(), segs.len()));
+            mesh.push_str(&format!("    .word {}  @ segment count\n", emitted.len()));
+            for (xa, xb, y) in &emitted {
                 mesh.push_str(&format!("    .hword {}, {}, {}, {}  @ x1={} y1={} x2={} y2={}\n",
-                    seg.x1, seg.y1, seg.x2, seg.y2,
-                    seg.x1, seg.y1, seg.x2, seg.y2));
+                    xa, y, xb, y, xa, y, xb, y));
             }
             out.push_str(&format!("    .word {}  @ coll_mesh_ptr\n\n", mesh_label));
         } else {

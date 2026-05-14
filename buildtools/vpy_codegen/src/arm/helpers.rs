@@ -163,7 +163,11 @@ pub fn emit_helpers() -> String {
     s.push_str("    strb    r2, [r7, #20]        @ wp_idx\n");
     s.push_str("    strb    r1, [r7, #21]        @ wp_count\n");
     s.push_str("    strb    r0, [r7, #22]        @ ai_type\n");
-    s.push_str("    strb    r2, [r7, #23]        @ pad\n");
+    // read is_anim from ROM at offset 12 + wp_count*4 (r1 = wp_count still valid)
+    s.push_str("    lsl     r0, r1, #2           @ wp_count * 4\n");
+    s.push_str("    add     r0, r0, #12          @ offset = 12 + wp_count*4\n");
+    s.push_str("    ldrb    r0, [r6, r0]         @ is_anim byte\n");
+    s.push_str("    strb    r0, [r7, #23]        @ pool[+23] = is_anim\n");
     // advance ROM ptr: base(12) + wp_count*4 + 4 (is_anim+pad)
     s.push_str("    ldrb    r1, [r6, #9]         @ wp_count again\n");
     s.push_str("    mov     r0, #4\n");
@@ -299,14 +303,21 @@ pub fn emit_helpers() -> String {
     s.push_str("    sub     r1, r1, r6           @ screen_x\n");
     s.push_str("    ldr     r2, [r5, #8]         @ world_y\n");
     s.push_str("    sub     r2, r2, r7           @ screen_y\n");
-    // vpy_draw_vector_ex(sprite_ptr, ox, oy, mirror=0, intensity=127)
-    // Use sub/add sp by 8 (not push {r3}) to keep SP 8-byte aligned before bl
+    // branch on is_anim: VEC → vpy_draw_vector_ex, VANIM → vpy_draw_anim
+    s.push_str("    ldrb    r3, [r5, #23]        @ is_anim\n");
+    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    bne.w   vdre_use_anim\n");
+    // static vector path
     s.push_str("    mov     r3, #0               @ mirror=0\n");
     s.push_str("    sub     sp, sp, #8           @ reserve 8 bytes (keeps 8-byte alignment)\n");
     s.push_str("    mov     r12, #127\n");
     s.push_str("    str     r12, [sp]            @ intensity=127 at [sp+0] (5th arg)\n");
     s.push_str("    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8           @ clean up stack reservation\n");
+    s.push_str("    b.w     vdre_next\n");
+    // animation path: vpy_draw_anim(r0=anim_ptr, r1=ox, r2=oy)
+    s.push_str("vdre_use_anim:\n");
+    s.push_str("    bl      vpy_draw_anim\n");
     s.push_str("vdre_next:\n");
     s.push_str("    add     r5, r5, r8\n");
     s.push_str("    subs    r4, r4, #1\n");
