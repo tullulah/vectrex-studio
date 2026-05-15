@@ -388,7 +388,22 @@ pub fn generate_m6809_asm(
         asm.push_str("    STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)\n");
         asm.push_str("    STD >PSG_MUSIC_START    ; Clear loop pointer\n");
     }
-    
+
+    // Initialize ENEMY_COUNT to 0 at boot if the enemy system is used.
+    // SRAM is not zero-initialized — without this, UPDATE_ENEMIES_RUNTIME called
+    // before the first SPAWN_ENEMIES (e.g. during state_title) would iterate over
+    // garbage count, reading random pool bytes and corrupting nearby BIOS state.
+    {
+        let needed_for_init = crate::m6809::helpers::analyze_module_helpers(module);
+        if needed_for_init.contains("SPAWN_ENEMIES")
+            || needed_for_init.contains("UPDATE_ENEMIES")
+            || needed_for_init.contains("DRAW_ENEMIES")
+            || needed_for_init.contains("ENEMY_SYSTEM")
+        {
+            asm.push_str("    CLR >ENEMY_COUNT        ; No enemies until SPAWN_ENEMIES runs\n");
+        }
+    }
+
     // For multibank: Fixed bank is ALWAYS visible at $4000-$7FFF
     // No need to write bank register - cartridge hardware has it configured
     // from factory. Bank 0 is at $0000, fixed bank at $4000.
