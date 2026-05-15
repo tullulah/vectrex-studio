@@ -733,6 +733,7 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely\n");
         asm.push_str("    LDA #$D0\n");
         asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
+        asm.push_str("    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT — required for Print_Str_d's T1 wait)\n");
         asm.push_str("    JSR Reset0Ref    ; Reset beam to center before positioning text\n");
         asm.push_str("    LDU #NUM_STR     ; String pointer\n");
         asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte)\n");
