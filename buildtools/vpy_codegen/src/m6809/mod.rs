@@ -401,6 +401,25 @@ pub fn generate_m6809_asm(
             || needed_for_init.contains("ENEMY_SYSTEM")
         {
             asm.push_str("    CLR >ENEMY_COUNT        ; No enemies until SPAWN_ENEMIES runs\n");
+            // Zero-init per-enemy vanim state buffers (frame_idx + ticks_left).
+            // Without this, DRAW_ANIM_RUNTIME reads garbage frame_idx > frame_count
+            // → computes a bogus frame_ptr → JSR through it → instant hang.
+            for asset in assets.iter().filter(|a| matches!(a.asset_type, crate::AssetType::Enemy)) {
+                if let Ok(resource) = crate::venemy::EnemyResource::load(std::path::Path::new(&asset.path)) {
+                    for action in &resource.actions {
+                        let ext = std::path::Path::new(&action.sprite)
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("");
+                        if ext == "vanim" && !action.sprite.is_empty() {
+                            let type_up = asset.name.to_uppercase().replace(' ', "_").replace('-', "_");
+                            let action_up = action.name.to_uppercase().replace(' ', "_").replace('-', "_");
+                            let var = format!("ANIM_ENEMY_{}_{}_STATE", type_up, action_up);
+                            asm.push_str(&format!("    CLR >{}\n    CLR >{}+1\n", var, var));
+                        }
+                    }
+                }
+            }
         }
     }
 

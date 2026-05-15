@@ -4,27 +4,27 @@ META ROM_BANK_SIZE = 16384
 META MAX_ENEMIES = 8
 
 # ── States ──────────────────────────────────────────────────────────────────
-STATE_TITLE: i16 = 0        # título + "press a button"
-STATE_GAME_START: i16 = 1   # "ROUND N" antes de empezar
-STATE_PLAYING: i16 = 2      # gameplay activo
-STATE_PLAYER_DEAD: i16 = 3  # animación de muerte + delay
-STATE_LEVEL_CLEAR: i16 = 4  # todos los enemigos derrotados
-STATE_BOSS_INTRO: i16 = 5   # pantalla de aviso boss (niveles múltiplos de 10)
-STATE_BOSS: i16 = 6         # combate boss
-STATE_GAME_OVER: i16 = 7    # game over
-STATE_ALL_CLEAR: i16 = 8    # completados los 50 niveles
+const STATE_TITLE = 0        # título + "press a button"
+const STATE_GAME_START = 1   # "ROUND N" antes de empezar
+const STATE_PLAYING = 2      # gameplay activo
+const STATE_PLAYER_DEAD = 3  # animación de muerte + delay
+const STATE_LEVEL_CLEAR = 4  # todos los enemigos derrotados
+const STATE_BOSS_INTRO = 5   # pantalla de aviso boss (niveles múltiplos de 10)
+const STATE_BOSS = 6         # combate boss
+const STATE_GAME_OVER = 7    # game over
+const STATE_ALL_CLEAR = 8    # completados los 50 niveles
 
 # ── Enemy SM state indices (must match titchi.venemy state order) ─────────
-TITCHI_STATE_NORMAL: i16 = 0
-TITCHI_STATE_SNOW1:  i16 = 1
-TITCHI_STATE_SNOW2:  i16 = 2
-TITCHI_STATE_BALL:   i16 = 3
+const TITCHI_STATE_NORMAL = 0
+const TITCHI_STATE_SNOW1 = 1
+const TITCHI_STATE_SNOW2 = 2
+const TITCHI_STATE_BALL = 3
 
 # Half-sizes for AABB collision (approx from vec files)
-SNOW_HW: i16 = 6    # snowball half-width
-SNOW_HH: i16 = 6    # snowball half-height
-ENEMY_HW: i16 = 10  # enemy half-width
-ENEMY_HH: i16 = 14  # enemy half-height
+const SNOW_HW = 6    # snowball half-width
+const SNOW_HH = 6    # snowball half-height
+const ENEMY_HW = 10  # enemy half-width
+const ENEMY_HH = 14  # enemy half-height
 
 # ── Globals de partida ──────────────────────────────────────────────────────
 game_state: i16 = 0
@@ -48,23 +48,23 @@ floor_y: i16 = 0
 prev_y: i16 = 0
 
 # ── Physics ──────────────────────────────────────────────────────────────────
-GRAVITY: i16 = 1
-JUMP_SPEED: i16 = 12
-MAX_FALL_SPEED: i16 = 12
-PLAYER_HH: i16 = 14     # half-height de player_idle.vec
+const GRAVITY = 1
+const JUMP_SPEED = 12
+const MAX_FALL_SPEED = 12
+const PLAYER_HH = 14     # half-height de player_idle.vec
 
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
-WORLD_X_MIN: i16 = -96
-WORLD_X_MAX: i16 = 95
-WORLD_Y_MIN: i16 = -110    # suelo + margen sprite
-WORLD_Y_MAX: i16 = 127     # techo + margen sprite (pantalla llega a 127)
+const WORLD_X_MIN = -96
+const WORLD_X_MAX = 95
+const WORLD_Y_MIN = -110    # suelo + margen sprite
+const WORLD_Y_MAX = 127     # techo + margen sprite (pantalla llega a 127)
 
 # ── Snowball system ───────────────────────────────────────────────────────────
-SNOW_SPEED: i16 = 5             # velocidad horizontal
-SNOW_LAUNCH_VY: i16 = 3        # arco inicial hacia arriba
-SNOW_LIFE_NORMAL: i16 = 14     # frames de vida sin power-up (~70px)
-SNOW_LIFE_POWER: i16 = 30      # frames de vida con power-up (~150px)
-SHOOT_COOLDOWN_MAX: i16 = 15   # frames entre disparos
+const SNOW_SPEED = 5             # velocidad horizontal
+const SNOW_LAUNCH_VY = 3        # arco inicial hacia arriba
+const SNOW_LIFE_NORMAL = 14     # frames de vida sin power-up (~70px)
+const SNOW_LIFE_POWER = 30      # frames de vida con power-up (~150px)
+const SHOOT_COOLDOWN_MAX = 15   # frames entre disparos
 
 shoot_cooldown: i16 = 0
 player_has_power: i16 = 0
@@ -93,13 +93,13 @@ snow2_vy: i16 = 0
 snow2_life: i16 = 0
 
 # ── Timings (en frames a ~60fps) ────────────────────────────────────────────
-LEVEL_TIME: i16 = 3600      # 60 segundos por nivel
-LIVES_START: i16 = 3
-GAME_START_DELAY: i16 = 120
-DEATH_DELAY: i16 = 120
-LEVEL_CLEAR_DELAY: i16 = 150
-BOSS_INTRO_DELAY: i16 = 180
-ALL_CLEAR_DELAY: i16 = 300
+const LEVEL_TIME = 3600      # 60 segundos por nivel
+const LIVES_START = 3
+const GAME_START_DELAY = 120
+const DEATH_DELAY = 120
+const LEVEL_CLEAR_DELAY = 150
+const BOSS_INTRO_DELAY = 180
+const ALL_CLEAR_DELAY = 300
 
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -154,13 +154,14 @@ def state_playing():
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
-    check_snowball_enemy_collision()
-    check_player_enemy_collision()
+    #check_snowball_enemy_collision()
+    #check_player_enemy_collision()
 
     draw_player()
     draw_snowballs()
     DRAW_ENEMIES()
     draw_hud()
+    PRINT_NUMBER(-80, 100, score)  # TEST HUD
     if enemy_count <= 0:
         enter_level_clear()
     SHOW_LEVEL()
@@ -297,7 +298,7 @@ def load_current_level():
     player_has_power = 0
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
-        #SPAWN_ENEMIES("world_1_1")
+        SPAWN_ENEMIES("world_1_1")
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 2:
         LOAD_LEVEL("world_1_1")         # TODO: world_1_2

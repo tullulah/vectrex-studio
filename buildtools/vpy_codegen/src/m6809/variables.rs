@@ -36,9 +36,18 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
                     vars.push((name.clone(), bytes));
                 }
             }
-            Item::Const { name, type_annotation, .. } => {
+            Item::Const { name, value, type_annotation, .. } => {
                 let (bytes, signed) = size_for_annotation(type_annotation);
                 context::set_var_size(name, bytes, signed);
+                // SCALAR const literals (numeric) are inlined as immediates at every use
+                // (see mod.rs:set_const_value + expressions.rs:emit_simple_expr). No RAM
+                // slot needed. Skipping these saves significant RAM in programs with many
+                // tunables — critical for keeping the layout inside the 1KB Vectrex RAM
+                // window ($C800-$CBFF). Array consts still need allocation for the
+                // pointer; we handle those below in mutable_arrays.
+                if !matches!(value, Expr::List(_)) && matches!(value, Expr::Number(_)) {
+                    continue;
+                }
                 vars.push((name.clone(), bytes));
             }
             _ => {}
@@ -60,11 +69,21 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
         }
     }
 
-    // Allocate all user variables using RamLayout with correct sizes
-    let mut seen = HashSet::new();  // Track which variables we've already allocated
+    // Allocate all user variables using RamLayout with correct sizes.
+    // Skip vars that are promoted to compile-time constants — every reference
+    // is inlined as an LDD #N immediate (see expressions.rs:emit_simple_expr),
+    // so no RAM slot is needed. This is essential for SnowBros and similar
+    // programs that declare many scalar tunables; without skipping, those vars
+    // would push later allocations past $CBFF into BIOS-aliased RAM.
+    // Dedupe by UPPERCASED name to avoid collisions when both `ex` and `EX`
+    // appear in the same module (both emit `VAR_EX` and the second clobbers).
+    let mut seen = HashSet::new();
     for (var, bytes) in vars.iter() {
-        if seen.insert(var.clone()) {
-            // First time seeing this variable
+        let canonical = var.to_uppercase();
+        if seen.insert(canonical) {
+            if context::get_const_value(var).is_some() {
+                continue;
+            }
             ram.allocate(&format!("VAR_{}", var.to_uppercase()), *bytes, &format!("User variable: {}", var));
         }
     }

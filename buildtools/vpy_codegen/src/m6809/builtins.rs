@@ -1056,11 +1056,11 @@ fn emit_print_text(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Store all 3 arguments in VAR_ARG0, VAR_ARG1, VAR_ARG2 (like core implementation)
     // Arg 0: x coordinate; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    STD >VAR_ARG0\n");
 
     // Arg 1: y coordinate; D = y after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    STD VAR_ARG1\n");
+    out.push_str("    STD >VAR_ARG1\n");
     
     // Arg 2: text string
     match &args[2] {
@@ -1068,12 +1068,12 @@ fn emit_print_text(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Load pointer to string in helpers bank
             let str_label = format!("PRINT_TEXT_STR_{}", hash_string(s));
             out.push_str(&format!("    LDX #{}      ; Pointer to string in helpers bank\n", str_label));
-            out.push_str("    STX VAR_ARG2\n");
+            out.push_str("    STX >VAR_ARG2\n");
         }
         _ => {
             // Variable or expression - evaluate to pointer; D = pointer after emit
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    STD VAR_ARG2\n");
+            out.push_str("    STD >VAR_ARG2\n");
         }
     }
     
@@ -1091,7 +1091,7 @@ fn emit_print_msg(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     }
     out.push_str("    ; PRINT_MSG: Dispatch via ROM message table\n");
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    STD >VAR_ARG0\n");
     out.push_str("    JSR PRINT_MSG_DISPATCH\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
@@ -1633,7 +1633,7 @@ pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
     out.push_str(";**** PRINT_MSG Dispatch ****\n");
     out.push_str("PRINT_MSG_DISPATCH:\n");
     out.push_str("    ; VAR_ARG0 = msg_id (set by PRINT_MSG caller)\n");
-    out.push_str("    LDB VAR_ARG0+1      ; B = msg_id (low byte)\n");
+    out.push_str("    LDB >VAR_ARG0+1      ; B = msg_id (low byte)\n");
     out.push_str("    BEQ PRINT_MSG_SKIP  ; id=0 → nothing to print\n");
     out.push_str("    DECB                ; 0-based index (id starts at 1)\n");
     out.push_str("    LSLB               ; B = index * 2\n");
@@ -1642,12 +1642,12 @@ pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
     out.push_str("    ABX                ; X = &table[index * 4]\n");
     out.push_str("    LDB ,X+            ; B = x (signed byte)\n");
     out.push_str("    SEX                ; D = sign-extended x\n");
-    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    STD >VAR_ARG0\n");
     out.push_str("    LDB ,X+            ; B = y (signed byte)\n");
     out.push_str("    SEX                ; D = sign-extended y\n");
-    out.push_str("    STD VAR_ARG1\n");
+    out.push_str("    STD >VAR_ARG1\n");
     out.push_str("    LDX ,X             ; X = string pointer\n");
-    out.push_str("    STX VAR_ARG2\n");
+    out.push_str("    STX >VAR_ARG2\n");
     out.push_str("    JMP VECTREX_PRINT_TEXT  ; tail call (no RTS needed)\n");
     out.push_str("PRINT_MSG_SKIP:\n");
     out.push_str("    RTS\n\n");

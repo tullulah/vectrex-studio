@@ -163,15 +163,15 @@ pub fn emit_print_number(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
     
     // Evaluate x position; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD VAR_ARG0    ; X position\n");
+    out.push_str("    STD >VAR_ARG0    ; X position\n");
 
     // Evaluate y position; D = y after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    STD VAR_ARG1    ; Y position\n");
+    out.push_str("    STD >VAR_ARG1    ; Y position\n");
 
     // Evaluate number; D = num after emit
     expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    STD VAR_ARG2    ; Number value\n");
+    out.push_str("    STD >VAR_ARG2    ; Number value\n");
     
     // Call helper
     out.push_str("    JSR VECTREX_PRINT_NUMBER\n");

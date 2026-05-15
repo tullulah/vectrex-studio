@@ -302,6 +302,22 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     }
 
     // =========================================================================
+    // FUNCTION ARGUMENT SLOTS — allocated EARLY so they always live inside the
+    // 1KB Vectrex RAM window ($C800-$CBFF). When allocated last in a program
+    // with many globals (e.g. SnowBros), VAR_ARG0-4 fell into $CC00+, which
+    // aliases to $C800+ (BIOS music workspace). Each PLAY_MUSIC would then
+    // corrupt VAR_ARG between every frame, breaking PRINT_NUMBER, function
+    // calls, etc.
+    // CURRENT_ROM_BANK has the same problem in multibank ROMs.
+    // =========================================================================
+    ram.allocate("VAR_ARG0", 2, "Function argument 0 (16-bit)");
+    ram.allocate("VAR_ARG1", 2, "Function argument 1 (16-bit)");
+    ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
+    ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
+    ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
+    ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
+
+    // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
     // =========================================================================
 
@@ -326,20 +342,8 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("SFX_BANK", 1, "SFX bank ID (for multibank)");
     }
 
-    // =========================================================================
-    // FUNCTION ARGUMENT SLOTS (allocated AFTER all user vars and PSG vars)
-    // BUG FIX (2026-05-11): Previously fixed at $CB80 which collided with user
-    // variable arrays when the program has many variables (e.g. pang game).
-    // Now dynamically allocated at the end to guarantee no overlap.
-    // CURRENT_ROM_BANK also moved here for the same reason.
-    // =========================================================================
-    ram.allocate("VAR_ARG0", 2, "Function argument 0 (16-bit)");
-    ram.allocate("VAR_ARG1", 2, "Function argument 1 (16-bit)");
-    ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
-    ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
-    ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
-    ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
-    
+    // (VAR_ARG0-4 + CURRENT_ROM_BANK already allocated above, before user vars.)
+
     // =========================================================================
     // EMIT EQU DEFINITIONS
     // =========================================================================
@@ -730,10 +734,9 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         asm.push_str("    \n");
         asm.push_str(".PN_AFTER_CONVERT:\n");
         asm.push_str("    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n");
-        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely\n");
         asm.push_str("    LDA #$D0\n");
-        asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
-        asm.push_str("    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT — required for Print_Str_d's T1 wait)\n");
+        asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS\n");
+        asm.push_str("    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)\n");
         asm.push_str("    JSR Reset0Ref    ; Reset beam to center before positioning text\n");
         asm.push_str("    LDU #NUM_STR     ; String pointer\n");
         asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte)\n");
