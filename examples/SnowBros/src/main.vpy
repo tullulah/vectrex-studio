@@ -171,13 +171,27 @@ def state_playing():
 def state_player_dead():
     SHOW_LEVEL()
     draw_hud()
-    # TODO: draw_player_death_anim()
+    draw_player_death()
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         if lives <= 0:
             PLAY_MUSIC("Game_Over")
         if lives > 0:
             enter_game_start()
+
+def draw_player_death():
+    SET_INTENSITY(65)
+    elapsed = DEATH_DELAY - frame_timer
+    if elapsed < 12:
+        DRAW_VECTOR("player_die1", player_x, player_y, player_facing)
+    else:
+        if elapsed < 22:
+            DRAW_VECTOR("player_die2", player_x, player_y, player_facing)
+        else:
+            if elapsed < 32:
+                DRAW_VECTOR("player_die3", player_x, player_y, player_facing)
+            else:
+                DRAW_VECTOR("player_die4", player_x, player_y, player_facing)
 
 # ── Estado: nivel completado ─────────────────────────────────────────────────
 def state_level_clear():

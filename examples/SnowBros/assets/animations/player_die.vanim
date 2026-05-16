@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "name": "player_die",
+  "loop": false,
+  "base_refs": [],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 12,
+      "vec_refs": ["player_die1"],
+      "paths": []
+    },
+    {
+      "index": 1,
+      "duration_ticks": 10,
+      "vec_refs": ["player_die2"],
+      "paths": []
+    },
+    {
+      "index": 2,
+      "duration_ticks": 10,
+      "vec_refs": ["player_die3"],
+      "paths": []
+    },
+    {
+      "index": 3,
+      "duration_ticks": 30,
+      "vec_refs": ["player_die4"],
+      "paths": []
+    }
+  ]
+}
