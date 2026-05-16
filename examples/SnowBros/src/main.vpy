@@ -446,6 +446,7 @@ def try_shoot():
         snow0_life = snow_life_max
         snow0_active = 1
         shoot_cooldown = SHOOT_COOLDOWN_MAX
+        PLAY_SFX("shot_normal")
     else:
         if snow1_active == 0:
             snow1_x = player_x
@@ -455,6 +456,7 @@ def try_shoot():
             snow1_life = snow_life_max
             snow1_active = 1
             shoot_cooldown = SHOOT_COOLDOWN_MAX
+            PLAY_SFX("shot_normal")
         else:
             if snow2_active == 0:
                 snow2_x = player_x
@@ -464,6 +466,7 @@ def try_shoot():
                 snow2_life = snow_life_max
                 snow2_active = 1
                 shoot_cooldown = SHOOT_COOLDOWN_MAX
+                PLAY_SFX("shot_normal")
 
 def update_snowballs():
     if snow0_active == 1:
