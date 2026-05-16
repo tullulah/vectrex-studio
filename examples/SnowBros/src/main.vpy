@@ -20,6 +20,18 @@ const TITCHI_STATE_SNOW1 = 1
 const TITCHI_STATE_SNOW2 = 2
 const TITCHI_STATE_BALL = 3
 
+# ── Thaw timers (one per enemy slot, managed in VPy) ─────────────────────
+const THAW_TICKS_SNOW = 180   # snow1/snow2: ~3s at 60fps
+const THAW_TICKS_BALL = 300   # ball: ~5s at 60fps
+thaw_timer0: i16 = 0
+thaw_timer1: i16 = 0
+thaw_timer2: i16 = 0
+thaw_timer3: i16 = 0
+thaw_timer4: i16 = 0
+thaw_timer5: i16 = 0
+thaw_timer6: i16 = 0
+thaw_timer7: i16 = 0
+
 # Half-sizes for AABB collision (approx from vec files)
 const SNOW_HW = 6    # snowball half-width
 const SNOW_HH = 16    # snowball half-height
@@ -155,6 +167,7 @@ def state_playing():
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
+    update_thaw()
     # update_balls()  # DEBUG: deshabilitado para ver si los saltos vienen de aquí
     check_snowball_enemy_collision()
     check_player_enemy_collision()
@@ -586,6 +599,92 @@ def check_snow_vs_enemy(idx, ex, ey):
 
 def on_snow_hit_enemy(idx):
     ENEMY_FIRE_EVENT(idx, "onSnowHit")
+    new_state = GET_ENEMY_STATE(idx)
+    ticks = THAW_TICKS_SNOW
+    if new_state == TITCHI_STATE_BALL:
+        ticks = THAW_TICKS_BALL
+    if idx == 0:
+        thaw_timer0 = ticks
+    if idx == 1:
+        thaw_timer1 = ticks
+    if idx == 2:
+        thaw_timer2 = ticks
+    if idx == 3:
+        thaw_timer3 = ticks
+    if idx == 4:
+        thaw_timer4 = ticks
+    if idx == 5:
+        thaw_timer5 = ticks
+    if idx == 6:
+        thaw_timer6 = ticks
+    if idx == 7:
+        thaw_timer7 = ticks
+
+def update_thaw():
+    thaw_slot_state = GET_ENEMY_STATE(0)
+    if thaw_slot_state > 0:
+        thaw_timer0 = thaw_timer0 - 1
+        if thaw_timer0 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(0, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer0 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(1)
+    if thaw_slot_state > 0:
+        thaw_timer1 = thaw_timer1 - 1
+        if thaw_timer1 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(1, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer1 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(2)
+    if thaw_slot_state > 0:
+        thaw_timer2 = thaw_timer2 - 1
+        if thaw_timer2 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(2, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer2 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(3)
+    if thaw_slot_state > 0:
+        thaw_timer3 = thaw_timer3 - 1
+        if thaw_timer3 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(3, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer3 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(4)
+    if thaw_slot_state > 0:
+        thaw_timer4 = thaw_timer4 - 1
+        if thaw_timer4 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(4, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer4 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(5)
+    if thaw_slot_state > 0:
+        thaw_timer5 = thaw_timer5 - 1
+        if thaw_timer5 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(5, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer5 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(6)
+    if thaw_slot_state > 0:
+        thaw_timer6 = thaw_timer6 - 1
+        if thaw_timer6 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(6, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer6 = THAW_TICKS_SNOW
+    thaw_slot_state = GET_ENEMY_STATE(7)
+    if thaw_slot_state > 0:
+        thaw_timer7 = thaw_timer7 - 1
+        if thaw_timer7 <= 0:
+            thaw_slot_state = thaw_slot_state - 1
+            SET_ENEMY_STATE(7, thaw_slot_state)
+            if thaw_slot_state > 0:
+                thaw_timer7 = THAW_TICKS_SNOW
 
 # ── Gravedad sobre bolas/snow (caen por precipicios) ────────────────────────
 # - Si LEVEL_COLLISION_Y devuelve <= -100 (sentinel "no floor"), no cae
