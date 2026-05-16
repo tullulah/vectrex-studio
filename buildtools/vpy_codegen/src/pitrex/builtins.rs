@@ -3141,6 +3141,7 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     s.push_str("    push    {r4, r5, r8, r9}    @ save loop state\n");
     s.push_str("    ldrsh   r1, [r5, #6]        @ pool.y\n");
     s.push_str("    sub     r1, r1, r9          @ oy = y - cam_y\n");
+    s.push_str("    sub     r1, r1, #5          @ draw y offset: sprite center to feet\n");
     s.push_str("    mov     r2, r1              @ oy\n");
     s.push_str("    mov     r1, r7              @ ox\n");
     s.push_str("    mov     r0, r6              @ sprite_ptr\n");
@@ -3193,6 +3194,7 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     s.push_str("    push    {r4, r5, r8, r9}    @ save loop state\n");
     s.push_str("    ldrsh   r1, [r5, #6]        @ pool.y\n");
     s.push_str("    sub     r1, r1, r9          @ oy = y - cam_y\n");
+    s.push_str("    sub     r1, r1, #5          @ draw y offset: sprite center to feet\n");
     s.push_str("    mov     r2, r1              @ oy\n");
     s.push_str("    mov     r1, r7              @ ox\n");
     s.push_str("    mov     r12, #127\n");
