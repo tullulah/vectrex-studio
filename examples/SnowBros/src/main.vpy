@@ -51,7 +51,7 @@ prev_y: i16 = 0
 const GRAVITY = 1
 const JUMP_SPEED = 11
 const MAX_FALL_SPEED = 12
-const PLAYER_HH = 8     # half-height de player_idle.vec
+const PLAYER_HH = 11     # half-height de player_idle.vec
 
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
 const WORLD_X_MIN = -96
