@@ -2859,7 +2859,7 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     //   +16+wp_count*4   type_data_ptr (u32: ROM pointer to per-type SM data)
     // Pool entry layout (32 bytes):
     //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
-    //   +8  spawn_x (i16), +10 spawn_y (i16)
+    //   +8  thaw_timer (i16), +10 (free i16)
     //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
     //   +16 anim_frame_idx (u8), +17 anim_ticks_left (u8)
     //   +18 sm_state (u8, state machine state)
@@ -2883,23 +2883,12 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    str     r6, [r7]        @ pool.sprite_ptr\n");
     s.push_str("    ldrsh   r6, [r4, #4]    @ spawn_x\n");
     s.push_str("    strh    r6, [r7, #4]    @ pool.x\n");
-    s.push_str("    strh    r6, [r7, #8]    @ pool.spawn_x\n");
     s.push_str("    ldrsh   r6, [r4, #6]    @ spawn_y\n");
     s.push_str("    strh    r6, [r7, #6]    @ pool.y\n");
-    s.push_str("    strh    r6, [r7, #10]   @ pool.spawn_y\n");
     s.push_str("    ldrb    r6, [r4, #8]    @ ai_type\n");
     s.push_str("    strb    r6, [r7, #13]   @ pool.ai_type\n");
     s.push_str("    ldrb    r6, [r4, #9]    @ wp_count\n");
     s.push_str("    strb    r6, [r7, #15]   @ pool.wp_count\n");
-    // Copy waypoints
-    s.push_str("    ldrsh   r6, [r4, #12]   @ wp0_x\n");
-    s.push_str("    strh    r6, [r7, #16]   @ pool.wp0_x\n");
-    s.push_str("    ldrsh   r6, [r4, #14]   @ wp0_y\n");
-    s.push_str("    strh    r6, [r7, #18]   @ pool.wp0_y\n");
-    s.push_str("    ldrsh   r6, [r4, #16]   @ wp1_x\n");
-    s.push_str("    strh    r6, [r7, #20]   @ pool.wp1_x\n");
-    s.push_str("    ldrsh   r6, [r4, #18]   @ wp1_y\n");
-    s.push_str("    strh    r6, [r7, #22]   @ pool.wp1_y\n");
     // mirror_on_patrol and default_facing from ROM +10/+11
     s.push_str("    ldrb    r6, [r4, #10]   @ mirror_on_patrol\n");
     s.push_str("    strb    r6, [r7, #24]   @ pool.mirror_on_patrol\n");
@@ -2912,6 +2901,7 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    mov     r6, #0\n");
     s.push_str("    strb    r6, [r7, #14]   @ pool.cur_target = 0\n");
     s.push_str("    strb    r6, [r7, #18]   @ pool.sm_state = 0\n");
+    s.push_str("    strh    r6, [r7, #8]    @ pool.thaw_timer = 0\n");
     s.push_str("    add     r6, r4, #12     @ ROM waypoints base (ROM entry + 12)\n");
     s.push_str("    str     r6, [r7, #28]   @ pool.wp_base = ptr to ROM waypoints\n");
     // is_anim flag is at ROM+12 + wp_count*4 (variable offset after all waypoints)
@@ -2974,10 +2964,22 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    ldrb    r6, [r5, #12]       @ active\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    beq     .Lpue_skip\n");
-    // Freeze in place when sm_state != 0 (snowed/balled). Patrol AI only runs in state 0.
+    // Thaw logic: if sm_state > 0, decrement thaw_timer; when it hits 0, decrement sm_state.
+    // sm_state 0 = patrol; 1 = snow1 (180f); 2 = snow2 (180f); 3 = ball (300f).
     s.push_str("    ldrb    r6, [r5, #18]       @ sm_state\n");
     s.push_str("    cmp     r6, #0\n");
-    s.push_str("    bne     .Lpue_skip          @ frozen: do not patrol\n");
+    s.push_str("    beq     .Lpue_patrol        @ state=0: go to patrol\n");
+    s.push_str("    ldrsh   r7, [r5, #8]        @ thaw_timer\n");
+    s.push_str("    subs    r7, r7, #1\n");
+    s.push_str("    strh    r7, [r5, #8]        @ save decremented timer\n");
+    s.push_str("    bgt     .Lpue_skip          @ timer > 0: still frozen\n");
+    s.push_str("    subs    r6, r6, #1          @ sm_state--\n");
+    s.push_str("    strb    r6, [r5, #18]       @ store new sm_state\n");
+    s.push_str("    beq     .Lpue_skip          @ thawed to walk: skip patrol this frame\n");
+    s.push_str("    mov     r7, #180            @ still frozen: reset timer (snow states = 3s)\n");
+    s.push_str("    strh    r7, [r5, #8]\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_patrol:\n");
     // only patrol (ai_type==1)
     s.push_str("    ldrb    r6, [r5, #13]       @ ai_type\n");
     s.push_str("    cmp     r6, #1\n");
@@ -3313,6 +3315,15 @@ fn emit_pitrex_enemy_fire_event() -> String {
     s.push_str("    cmp     r0, #3\n");
     s.push_str("    movgt   r0, #3\n");
     s.push_str("    strb    r0, [r2, #18]   @ store new sm_state\n");
+    // set thaw_timer at pool+8: ball(3)→300 frames (~5s), snow1/2→180 frames (~3s)
+    s.push_str("    cmp     r0, #3\n");
+    s.push_str("    bne     .Lpfe_timer_normal\n");
+    s.push_str("    movw    r3, #300        @ ball: ~5 seconds\n");
+    s.push_str("    b       .Lpfe_timer_store\n");
+    s.push_str(".Lpfe_timer_normal:\n");
+    s.push_str("    mov     r3, #180        @ snow1/snow2: ~3 seconds\n");
+    s.push_str(".Lpfe_timer_store:\n");
+    s.push_str("    strh    r3, [r2, #8]    @ pool.thaw_timer\n");
     s.push_str("    pop     {r2, r3, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
