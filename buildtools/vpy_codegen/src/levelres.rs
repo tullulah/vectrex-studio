@@ -605,6 +605,10 @@ impl VPlayLevel {
                 out.push_str("    .byte 0    @ pad\n");
                 out.push_str("    .byte 0    @ pad\n");
                 out.push_str("    .byte 0    @ pad\n");
+                // type_data_ptr: 4-byte ROM pointer to per-type SM data table
+                // (state→sprite_ptr table + state→is_anim flags). Read by spawn
+                // into pool+20; used by update/draw_enemies to pick frozen sprite.
+                out.push_str(&format!("    .word _{et}_DATA   @ type_data_ptr\n"));
             }
             out.push_str("\n");
         }

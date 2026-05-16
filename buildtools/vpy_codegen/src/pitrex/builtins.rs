@@ -2850,18 +2850,23 @@ fn emit_pitrex_note_engine() -> String {
 
 pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // pitrex_spawn_enemies(r0=data_ptr, r1=count)
-    // ROM record layout (24 bytes):
+    // ROM record layout (variable, stride = 20 + wp_count*4):
     //   +0  sprite_ptr (u32), +4 spawn_x (i16), +6 spawn_y (i16)
     //   +8  ai_type (u8), +9 wp_count (u8)
     //   +10 mirror_on_patrol (u8), +11 default_facing (u8: 0=right 1=left)
-    //   +12 wp0_x (i16), +14 wp0_y (i16), +16 wp1_x (i16), +18 wp1_y (i16)
-    //   +20 pad (u32)
+    //   +12 wp0_x..wp(N-1)_y (wp_count * 4 bytes)
+    //   +12+wp_count*4   is_anim (u8) + 3 pad bytes
+    //   +16+wp_count*4   type_data_ptr (u32: ROM pointer to per-type SM data)
     // Pool entry layout (32 bytes):
     //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
     //   +8  spawn_x (i16), +10 spawn_y (i16)
     //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
-    //   +16 wp0_x (i16), +18 wp0_y (i16), +20 wp1_x (i16), +22 wp1_y (i16)
-    //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27..+31 pad
+    //   +16 anim_frame_idx (u8), +17 anim_ticks_left (u8)
+    //   +18 sm_state (u8, state machine state)
+    //   +19 (free)
+    //   +20..+23 type_data_ptr (u32 ROM ptr to per-type SM data table)
+    //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27 is_anim (u8)
+    //   +28..+31 wp_base (u32 ROM ptr) — must not be touched by anim state
     let mut s = String::new();
     s.push_str("@ pitrex_spawn_enemies(r0=data_ptr, r1=count) — fill enemy pool from ROM table\n");
     s.push_str(".global pitrex_spawn_enemies\n.type pitrex_spawn_enemies, %function\npitrex_spawn_enemies:\n");
@@ -2906,6 +2911,7 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    strb    r6, [r7, #26]   @ pool.dir = 1 (right, initial)\n");
     s.push_str("    mov     r6, #0\n");
     s.push_str("    strb    r6, [r7, #14]   @ pool.cur_target = 0\n");
+    s.push_str("    strb    r6, [r7, #18]   @ pool.sm_state = 0\n");
     s.push_str("    add     r6, r4, #12     @ ROM waypoints base (ROM entry + 12)\n");
     s.push_str("    str     r6, [r7, #28]   @ pool.wp_base = ptr to ROM waypoints\n");
     // is_anim flag is at ROM+12 + wp_count*4 (variable offset after all waypoints)
@@ -2914,19 +2920,29 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    add     r6, r6, #12     @ offset = 12 + wp_count*4\n");
     s.push_str("    ldrb    r8, [r4, r6]    @ ROM is_anim flag\n");
     s.push_str("    strb    r8, [r7, #27]   @ pool.is_anim\n");
+    // Read type_data_ptr from ROM at (12 + wp_count*4 + 4 = 16 + wp_count*4)
+    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count\n");
+    s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
+    s.push_str("    add     r6, r6, #16     @ offset = 16 + wp_count*4 (after is_anim+3 pad)\n");
+    s.push_str("    ldr     r6, [r4, r6]    @ type_data_ptr (4-byte ROM ptr)\n");
+    s.push_str("    str     r6, [r7, #20]   @ pool.type_data_ptr\n");
+    s.push_str("    ldrb    r8, [r7, #27]   @ reload is_anim for branch below\n");
     s.push_str("    cmp     r8, #0\n");
     s.push_str("    beq     .Lspe_novam\n");
-    // vanim: set pool.anim_ticks_left to frame0's duration_ticks
+    // vanim: zero frame_idx and set anim_ticks_left to frame0's duration_ticks
+    // Anim state lives at pool +16/+17 to avoid collision with wp_base at +28..+31.
     s.push_str("    ldr     r6, [r4]        @ sprite_ptr (anim header)\n");
     s.push_str("    ldrb    r8, [r6, #3]    @ frame_table_offset (byte3 of header)\n");
     s.push_str("    ldr     r8, [r6, r8]    @ frame0_ptr = anim_header[frame_table_offset]\n");
     s.push_str("    ldrb    r8, [r8]        @ frame0 duration_ticks\n");
-    s.push_str("    strb    r8, [r7, #29]   @ pool.anim_ticks_left = frame0.duration\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("    strb    r6, [r7, #16]   @ pool.anim_frame_idx = 0\n");
+    s.push_str("    strb    r8, [r7, #17]   @ pool.anim_ticks_left = frame0.duration\n");
     s.push_str(".Lspe_novam:\n");
-    // ROM stride = 12 + wp_count*4 + 4 (is_anim+3×pad) = 16 + wp_count*4 (variable)
+    // ROM stride = 12 + wp_count*4 + 4 (is_anim+3×pad) + 4 (type_data_ptr) = 20 + wp_count*4
     s.push_str("    ldrb    r6, [r4, #9]    @ wp_count for stride\n");
     s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
-    s.push_str("    add     r6, r6, #16     @ stride = 16 + wp_count*4\n");
+    s.push_str("    add     r6, r6, #20     @ stride = 20 + wp_count*4\n");
     s.push_str("    add     r4, r4, r6      @ advance ROM ptr\n");
     s.push_str("    add     r7, r7, #32\n");
     s.push_str("    subs    r5, r5, #1\n");
@@ -2958,6 +2974,10 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    ldrb    r6, [r5, #12]       @ active\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    beq     .Lpue_skip\n");
+    // Freeze in place when sm_state != 0 (snowed/balled). Patrol AI only runs in state 0.
+    s.push_str("    ldrb    r6, [r5, #18]       @ sm_state\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    bne     .Lpue_skip          @ frozen: do not patrol\n");
     // only patrol (ai_type==1)
     s.push_str("    ldrb    r6, [r5, #13]       @ ai_type\n");
     s.push_str("    cmp     r6, #1\n");
@@ -3073,7 +3093,29 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     s.push_str("    ldrb    r6, [r5, #12]       @ active\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    beq     .Lpde_skip\n");
-    s.push_str("    ldr     r6, [r5]            @ sprite_ptr\n");
+    // Pick sprite and is_anim flag based on sm_state.
+    // state 0 (default) → pool.sprite_ptr (+0) and pool.is_anim (+27)
+    // state > 0          → type_data_ptr[sm_state*4]    and type_data_ptr[16 + sm_state]
+    // After this block: r6 = sprite_ptr, r0 = is_anim flag (saved later into r10).
+    s.push_str("    ldrb    r0, [r5, #18]       @ sm_state\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lpde_default_sprite\n");
+    s.push_str("    ldr     r1, [r5, #20]       @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     .Lpde_default_sprite @ no per-type data → fall back\n");
+    s.push_str("    lsl     r2, r0, #2          @ sm_state * 4\n");
+    s.push_str("    ldr     r6, [r1, r2]        @ state-specific sprite_ptr\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpde_default_sprite @ slot empty → fall back\n");
+    s.push_str("    add     r2, r1, #16         @ &is_anim_table[0]\n");
+    s.push_str("    ldrb    r2, [r2, r0]        @ state-specific is_anim flag\n");
+    s.push_str("    strb    r2, [r5, #19]       @ stash temp is_anim at pool+19 (free byte)\n");
+    s.push_str("    b       .Lpde_check_sprite\n");
+    s.push_str(".Lpde_default_sprite:\n");
+    s.push_str("    ldr     r6, [r5]            @ default sprite_ptr (pool+0)\n");
+    s.push_str("    ldrb    r2, [r5, #27]       @ default is_anim (pool+27)\n");
+    s.push_str("    strb    r2, [r5, #19]       @ stash temp is_anim at pool+19\n");
+    s.push_str(".Lpde_check_sprite:\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    beq     .Lpde_skip\n");
     // Compute screen ox, oy
@@ -3091,8 +3133,8 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     s.push_str(".Lpde_no_mirror:\n");
     s.push_str("    mov     r3, #0              @ mirror=0\n");
     s.push_str(".Lpde_do_draw:\n");
-    // Dispatch on is_anim flag (pool +27): vec → draw directly; vanim → tick + extract frame vec
-    s.push_str("    ldrb    r10, [r5, #27]      @ is_anim\n");
+    // Dispatch on temp is_anim flag (stashed at pool+19 above, derived from sm_state)
+    s.push_str("    ldrb    r10, [r5, #19]      @ temp is_anim (state-aware)\n");
     s.push_str("    cmp     r10, #0\n");
     s.push_str("    bne     .Lpde_anim\n");
     // ── Vector sprite: pass sprite_ptr directly ──
@@ -3111,8 +3153,8 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     // ── Vanim sprite: tick frame state, extract current frame's vec_ref ──
     s.push_str(".Lpde_anim:\n");
     // r6 = sprite_ptr = anim header ptr; r5 = pool entry
-    s.push_str("    ldrb    r11, [r5, #28]      @ anim_frame_idx\n");
-    s.push_str("    ldrb    r12, [r5, #29]      @ anim_ticks_left\n");
+    s.push_str("    ldrb    r11, [r5, #16]      @ anim_frame_idx\n");
+    s.push_str("    ldrb    r12, [r5, #17]      @ anim_ticks_left\n");
     s.push_str("    subs    r12, r12, #1        @ ticks--; set flags\n");
     s.push_str("    bgt     .Lpde_anim_sf       @ ticks > 0: keep frame\n");
     // Advance frame: frame_idx++ wrapping on frame_count
@@ -3122,27 +3164,27 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     s.push_str("    blt     .Lpde_no_wrap\n");
     s.push_str("    mov     r11, #0             @ wrap to 0\n");
     s.push_str(".Lpde_no_wrap:\n");
-    s.push_str("    strb    r11, [r5, #28]      @ store frame_idx\n");
+    s.push_str("    strb    r11, [r5, #16]      @ store frame_idx\n");
     // frame_ptr = anim_header[frame_table_offset + frame_idx*4]
     // Read frame_table_offset from header byte 3 (= 4 + base_ref_count*4).
     // Hardcoding #4 breaks animations that have base_refs (base_ref_count > 0).
     s.push_str("    ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)\n");
-    s.push_str("    lsl     r9, r11, #2         @ frame_idx * 4  (use r9; r10 = offset)\n");
-    s.push_str("    add     r10, r10, r9        @ frame_table_offset + frame_idx*4\n");
+    s.push_str("    lsl     r0, r11, #2         @ frame_idx * 4 (use r0; r9=cam_y preserved)\n");
+    s.push_str("    add     r10, r10, r0        @ frame_table_offset + frame_idx*4\n");
     s.push_str("    ldr     r10, [r6, r10]      @ frame_ptr\n");
     // new ticks from frame_ptr[0] = duration_ticks
     s.push_str("    ldrb    r12, [r10]          @ new duration_ticks\n");
-    s.push_str("    strb    r12, [r5, #29]      @ store ticks_left\n");
+    s.push_str("    strb    r12, [r5, #17]      @ store ticks_left\n");
     // vec_ref at frame_ptr+4
     s.push_str("    ldr     r0, [r10, #4]       @ vec_ref\n");
     s.push_str("    b       .Lpde_anim_draw\n");
     // Same frame: just decrement ticks and get current vec_ref
     s.push_str(".Lpde_anim_sf:\n");
-    s.push_str("    strb    r12, [r5, #29]      @ store decremented ticks\n");
+    s.push_str("    strb    r12, [r5, #17]      @ store decremented ticks\n");
     // frame_ptr = anim_header[frame_table_offset + frame_idx*4]
     s.push_str("    ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)\n");
-    s.push_str("    lsl     r9, r11, #2         @ frame_idx * 4\n");
-    s.push_str("    add     r10, r10, r9        @ frame_table_offset + frame_idx*4\n");
+    s.push_str("    lsl     r0, r11, #2         @ frame_idx * 4 (use r0; r9=cam_y preserved)\n");
+    s.push_str("    add     r10, r10, r0        @ frame_table_offset + frame_idx*4\n");
     s.push_str("    ldr     r10, [r6, r10]      @ frame_ptr\n");
     // vec_ref at frame_ptr+4
     s.push_str("    ldr     r0, [r10, #4]       @ vec_ref\n");
@@ -3244,7 +3286,7 @@ fn emit_pitrex_kill_enemy() -> String {
 
 fn emit_pitrex_enemy_fire_event() -> String {
     // pitrex_enemy_fire_event(r0=idx, r1=event_hash) — transition enemy SM state.
-    // Pool[idx*32+28] = sm_state (u8). Iterates the state's event table looking
+    // Pool[idx*32+18] = sm_state (u8). Iterates the state's event table looking
     // for a matching hash; if found, sets sm_state to the target state.
     // SM record layout (13 bytes, at _NAME_SM_STATES + state_idx*13):
     //   +0: action_idx, +1-2: decay_frames, +3: decay_to, +4: event_count
@@ -3263,12 +3305,12 @@ fn emit_pitrex_enemy_fire_event() -> String {
     s.push_str("    ldr     r3, =PITREX_ENEMY_POOL\n");
     s.push_str("    add     r2, r3, r2\n");
     // r0 = current sm_state
-    s.push_str("    ldrb    r0, [r2, #28]   @ sm_state\n");
+    s.push_str("    ldrb    r0, [r2, #18]   @ sm_state\n");
     // bump: sm_state = min(sm_state+1, 3)
     s.push_str("    add     r0, r0, #1\n");
     s.push_str("    cmp     r0, #3\n");
     s.push_str("    movgt   r0, #3\n");
-    s.push_str("    strb    r0, [r2, #28]   @ store new sm_state\n");
+    s.push_str("    strb    r0, [r2, #18]   @ store new sm_state\n");
     s.push_str("    pop     {r2, r3, pc}\n");
     s.push_str("    .ltorg\n\n");
     s

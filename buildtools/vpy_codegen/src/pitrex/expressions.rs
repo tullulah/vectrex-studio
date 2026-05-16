@@ -290,7 +290,7 @@ pub fn emit_call(
     }
 
     // ── Enemy query/command builtins — ARM32 pool access ───────────────────
-    // Pool layout: stride=32, active@+12, x@+4(i16), y@+6(i16), sm_state@+28
+    // Pool layout: stride=32, active@+12, x@+4(i16), y@+6(i16), sm_state@+18
     if info.name.to_uppercase() == "GET_ENEMY_ACTIVE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_ACTIVE: missing arg")?, var_addrs)?;
         return Ok(format!(
@@ -327,6 +327,38 @@ pub fn emit_call(
              \x20   ldrsh   r0, [r1, #6]    @ y (i16)\n"
         ));
     }
+    if info.name.to_uppercase() == "SET_ENEMY_X" {
+        let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_X: missing idx arg")?, var_addrs)?;
+        let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_X: missing x arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ SET_ENEMY_X(idx, x)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   push    {{r1}}              @ save pool entry ptr\n\
+             {val_s}\
+             \x20   pop     {{r1}}\n\
+             \x20   strh    r0, [r1, #4]    @ pool.x = r0\n"
+        ));
+    }
+    if info.name.to_uppercase() == "SET_ENEMY_Y" {
+        let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_Y: missing idx arg")?, var_addrs)?;
+        let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_Y: missing y arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ SET_ENEMY_Y(idx, y)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   push    {{r1}}              @ save pool entry ptr\n\
+             {val_s}\
+             \x20   pop     {{r1}}\n\
+             \x20   strh    r0, [r1, #6]    @ pool.y = r0\n"
+        ));
+    }
     if info.name.to_uppercase() == "GET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_STATE: missing arg")?, var_addrs)?;
         return Ok(format!(
@@ -336,7 +368,7 @@ pub fn emit_call(
              \x20   mul     r0, r0, r1\n\
              \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
              \x20   add     r1, r1, r0\n\
-             \x20   ldrb    r0, [r1, #28]   @ sm_state\n"
+             \x20   ldrb    r0, [r1, #18]   @ sm_state\n"
         ));
     }
     if info.name.to_uppercase() == "KILL_ENEMY" {

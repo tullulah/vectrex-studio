@@ -8,6 +8,8 @@ use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
 use crate::animres::VanimResource;
 use crate::instrres::InstrResource;
+use crate::venemy::EnemyResource;
+use std::path::Path;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use serde::Deserialize;
@@ -393,7 +395,9 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
 
     // Build a dims map: lowercase vector name → (natural_half_width, natural_half_height)
     // Used by level compilation to emit correct scaled collision AABBs.
+    // Also build a parsed-vec cache so the center-override pre-pass can reuse them.
     let mut dims_map: HashMap<String, (i32, i32)> = HashMap::new();
+    let mut vec_cache: HashMap<String, VecResource> = HashMap::new();
     for asset in assets {
         if !matches!(asset.asset_type, AssetType::Vector) { continue; }
         if let Ok(text) = fs::read_to_string(&asset.path) {
@@ -406,9 +410,18 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                 // so max_y is the correct unscaled top extent for collision.
                 let hh = (max_y as i32).max(1);
                 dims_map.insert(asset.name.to_lowercase(), (hw, hh));
+                vec_cache.insert(asset.name.to_lowercase(), res);
             }
         }
     }
+
+    // ── Center-override pre-pass ────────────────────────────────────────────
+    // Sprites that belong to a vanim group OR a venemy group share a single
+    // bounding-box center, so per-frame / per-state geometry shifts no longer
+    // produce a visible vertical jiggle. Venemy groups override vanim groups
+    // because they're the larger context.
+    let vec_to_override_center: HashMap<String, (i16, i16)> =
+        build_center_overrides(assets, &vec_cache);
 
     for asset in assets {
         let sym = asset.name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -428,7 +441,10 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                         continue;
                     }
                 };
-                s.push_str(&emit_vec_resource(&resource, &asset.name));
+                let override_center = vec_to_override_center
+                    .get(&asset.name.to_lowercase())
+                    .copied();
+                s.push_str(&emit_vec_resource(&resource, &asset.name, override_center));
                 s.push_str(&emit_3d_resource(&resource, &asset.name));
             }
             AssetType::Music => {
@@ -527,6 +543,25 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     }
                 }
             }
+            AssetType::Enemy => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_DATA\n.balign 4\n_{sym}_DATA:\n    .word 0, 0, 0, 0\n    .byte 0, 0, 0, 0\n    .byte 0, 0, 0, 0\n\n"));
+                        continue;
+                    }
+                };
+                let resource: EnemyResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_DATA\n.balign 4\n_{sym}_DATA:\n    .word 0, 0, 0, 0\n    .byte 0, 0, 0, 0\n    .byte 0, 0, 0, 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&emit_enemy_data_for_pitrex(&resource, &sym));
+            }
             #[allow(unreachable_patterns)]
             _ => {
                 s.push_str(&format!("@ Asset stub: {} ({:?})\n", asset.name, asset.asset_type));
@@ -536,6 +571,126 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
     }
 
     s
+}
+
+// ============================================================
+// Center-override pre-pass (group-shared bbox centers)
+// ============================================================
+//
+// Goal: when multiple .vec sprites are rendered as frames of an animation
+// (.vanim) or as states of an enemy (.venemy), each per-vec center can differ
+// by a few pixels (legs move between walk frames, snowball is round vs the
+// walking guy, etc).  Per-vec centering produces a visible vertical jiggle on
+// every frame swap or state transition.
+//
+// Fix: compute the COMBINED bounding box of every vec in the group, and use
+// THAT center for all vecs in the group.  Venemy groups override vanim groups
+// because they're the larger context (a venemy may reference both a .vanim and
+// stand-alone .vec actions; all of them should share one anchor).
+fn build_center_overrides(
+    assets: &[AssetInfo],
+    vec_cache: &HashMap<String, VecResource>,
+) -> HashMap<String, (i16, i16)> {
+    let mut out: HashMap<String, (i16, i16)> = HashMap::new();
+
+    // Lookup: lowercased asset name → AssetInfo  (we resolve sprite paths via stem)
+    let asset_by_name: HashMap<String, &AssetInfo> = assets
+        .iter()
+        .map(|a| (a.name.to_lowercase(), a))
+        .collect();
+
+    // Helper: combine the bbox of a set of vec names into a single center.
+    let combined_center = |vec_names: &HashSet<String>| -> Option<(i16, i16)> {
+        let mut min_x = i16::MAX;
+        let mut max_x = i16::MIN;
+        let mut min_y = i16::MAX;
+        let mut max_y = i16::MIN;
+        let mut found_any = false;
+        for name in vec_names {
+            let Some(res) = vec_cache.get(&name.to_lowercase()) else { continue };
+            for layer in &res.layers {
+                for path in &layer.paths {
+                    for pt in &path.points {
+                        if pt.x < min_x { min_x = pt.x; }
+                        if pt.x > max_x { max_x = pt.x; }
+                        if pt.y < min_y { min_y = pt.y; }
+                        if pt.y > max_y { max_y = pt.y; }
+                        found_any = true;
+                    }
+                }
+            }
+        }
+        if !found_any { return None; }
+        Some(((max_x + min_x) / 2, (max_y + min_y) / 2))
+    };
+
+    // Helper: given a vanim asset, return all vec stems it references.
+    let vanim_vec_refs = |anim_path: &str| -> HashSet<String> {
+        let mut set = HashSet::new();
+        if let Ok(res) = VanimResource::load(Path::new(anim_path)) {
+            for n in &res.base_refs { set.insert(n.clone()); }
+            for f in &res.frames {
+                for n in &f.vec_refs { set.insert(n.clone()); }
+            }
+        }
+        set
+    };
+
+    // ── PASS 1: vanim groups ────────────────────────────────────────────────
+    for asset in assets {
+        if !matches!(asset.asset_type, AssetType::Animation) { continue; }
+        let vec_refs = vanim_vec_refs(&asset.path);
+        if vec_refs.is_empty() { continue; }
+        let Some(center) = combined_center(&vec_refs) else { continue };
+        for name in &vec_refs {
+            out.insert(name.to_lowercase(), center);
+        }
+    }
+
+    // ── PASS 2: venemy groups (override pass 1) ─────────────────────────────
+    for asset in assets {
+        if !matches!(asset.asset_type, AssetType::Enemy) { continue; }
+        let Ok(text) = fs::read_to_string(&asset.path) else { continue };
+        let Ok(enemy) = serde_json::from_str::<EnemyResource>(&text) else { continue };
+
+        // Collect all vec names this enemy references (directly or via vanim).
+        let mut vec_names: HashSet<String> = HashSet::new();
+        for action in &enemy.actions {
+            if action.sprite.is_empty() { continue; }
+            let p = Path::new(&action.sprite);
+            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+            let stem = match p.file_stem().and_then(|s| s.to_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            match ext.as_str() {
+                "vec" => {
+                    vec_names.insert(stem);
+                }
+                "vanim" => {
+                    // Look up the vanim AssetInfo by stem to get its real path,
+                    // then collect every vec_ref inside it.
+                    if let Some(anim_asset) = asset_by_name.get(&stem.to_lowercase()) {
+                        if matches!(anim_asset.asset_type, AssetType::Animation) {
+                            for n in vanim_vec_refs(&anim_asset.path) {
+                                vec_names.insert(n);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if vec_names.is_empty() { continue; }
+        let Some(center) = combined_center(&vec_names) else { continue };
+        for name in &vec_names {
+            // Venemy overrides vanim mapping (insert always wins).
+            out.insert(name.to_lowercase(), center);
+        }
+    }
+
+    out
 }
 
 // ============================================================
@@ -897,13 +1052,22 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
 // Vector asset emitters (unchanged)
 // ============================================================
 
-fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
+fn emit_vec_resource(
+    res: &VecResource,
+    override_name: &str,
+    override_center: Option<(i16, i16)>,
+) -> String {
     let mut s = String::new();
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
     // Subtract bounding-box center from all start/bezier coords so that
     // pitrex_draw_vector_ex with ox=oy=0 renders at screen center — matching
     // the m6809 and arm backends which also center assets.
-    let (center_x, center_y) = res.calculate_center();
+    //
+    // If this vec belongs to a vanim or venemy group, use the GROUP combined
+    // bounding-box center (passed in) instead of the per-vec center. This keeps
+    // animation frames and state-machine sprites anchored to the same screen
+    // position, preventing visible jiggle/teleport on transition.
+    let (center_x, center_y) = override_center.unwrap_or_else(|| res.calculate_center());
 
     let paths = res.visible_paths();
 
@@ -1164,6 +1328,85 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
         // Inline paths not supported on pitrex (always 0)
         s.push_str("    .byte 0  @ inline_path_count (not rendered on pitrex)\n");
     }
+    s.push('\n');
+    s
+}
+
+// ============================================================
+// Enemy per-type DATA table (.venemy → ARM)
+// ============================================================
+//
+// Emits `_<NAME>_DATA` — a fixed-size table read by the runtime enemy
+// system to pick the sprite for each state machine state. The table is
+// referenced via pool.type_data_ptr (+20), populated by spawn from the
+// level enemy instance's trailing word.
+//
+// Layout (fixed 24 bytes, .balign 4):
+//   [0..15]  4 × .word — sprite_ptr for state 0..3 (0 if no such state)
+//   [16..19] 4 × .byte — is_anim flag (0=vec, 1=vanim) for state 0..3
+//   [20]     .byte    — state_count (1..4)
+//   [21..23] .byte    — pad to 4-byte alignment
+//
+// State i resolution:
+//   1. state_machine.states[i].action → action name
+//   2. find actions[].name == action_name → sprite path
+//   3. sprite path → ARM label (vec → _STEM_VECTORS, vanim → _ANIM_STEM)
+//
+// If state machine is absent, all 4 slots are 0 and state_count = 0.
+fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
+    let mut s = String::new();
+    s.push_str(&format!("@ ---- Enemy DATA (state→sprite table): {} ----\n", name_up));
+    s.push_str(&format!(".global _{name_up}_DATA\n"));
+    s.push_str(".balign 4\n");
+    s.push_str(&format!("_{name_up}_DATA:\n"));
+
+    // Resolve each state slot (0..3): (sprite_label, is_anim)
+    let mut slot_data: [(String, u8); 4] =
+        [("0".to_string(), 0), ("0".to_string(), 0),
+         ("0".to_string(), 0), ("0".to_string(), 0)];
+    let mut state_count: u8 = 0;
+
+    if let Some(sm) = &res.state_machine {
+        for (i, state) in sm.states.iter().take(4).enumerate() {
+            // Find the action that matches this state's action name
+            let action = res.actions.iter().find(|a| a.name == state.action);
+            if let Some(action) = action {
+                let sprite_path = &action.sprite;
+                if sprite_path.is_empty() {
+                    slot_data[i] = ("0".to_string(), 0);
+                } else {
+                    let path = Path::new(sprite_path);
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    let stem = path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_uppercase()
+                        .replace('-', "_")
+                        .replace(' ', "_");
+                    let (label, is_anim) = match ext {
+                        "vec"   => (format!("_{}_VECTORS", stem), 0u8),
+                        "vanim" => (format!("_ANIM_{}", stem), 1u8),
+                        _       => ("0".to_string(), 0),
+                    };
+                    slot_data[i] = (label, is_anim);
+                }
+            }
+        }
+        state_count = sm.states.len().min(4) as u8;
+    }
+
+    // Emit 4 × .word sprite_ptr
+    s.push_str(&format!("    .word {}    @ state 0 sprite_ptr\n", slot_data[0].0));
+    s.push_str(&format!("    .word {}    @ state 1 sprite_ptr\n", slot_data[1].0));
+    s.push_str(&format!("    .word {}    @ state 2 sprite_ptr\n", slot_data[2].0));
+    s.push_str(&format!("    .word {}    @ state 3 sprite_ptr\n", slot_data[3].0));
+    // Emit 4 × .byte is_anim
+    s.push_str(&format!("    .byte {}    @ state 0 is_anim\n", slot_data[0].1));
+    s.push_str(&format!("    .byte {}    @ state 1 is_anim\n", slot_data[1].1));
+    s.push_str(&format!("    .byte {}    @ state 2 is_anim\n", slot_data[2].1));
+    s.push_str(&format!("    .byte {}    @ state 3 is_anim\n", slot_data[3].1));
+    s.push_str(&format!("    .byte {}    @ state_count\n", state_count));
+    s.push_str("    .byte 0, 0, 0    @ pad to 4-byte alignment\n");
     s.push('\n');
     s
 }

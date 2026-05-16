@@ -22,9 +22,9 @@ const TITCHI_STATE_BALL = 3
 
 # Half-sizes for AABB collision (approx from vec files)
 const SNOW_HW = 6    # snowball half-width
-const SNOW_HH = 6    # snowball half-height
-const ENEMY_HW = 10  # enemy half-width
-const ENEMY_HH = 14  # enemy half-height
+const SNOW_HH = 16    # snowball half-height
+const ENEMY_HW = 12  # enemy half-width
+const ENEMY_HH = 8  # enemy half-height
 
 # ── Globals de partida ──────────────────────────────────────────────────────
 game_state: i16 = 0
@@ -49,14 +49,14 @@ prev_y: i16 = 0
 
 # ── Physics ──────────────────────────────────────────────────────────────────
 const GRAVITY = 1
-const JUMP_SPEED = 12
+const JUMP_SPEED = 11
 const MAX_FALL_SPEED = 12
-const PLAYER_HH = 14     # half-height de player_idle.vec
+const PLAYER_HH = 8     # half-height de player_idle.vec
 
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
 const WORLD_X_MIN = -96
 const WORLD_X_MAX = 95
-const WORLD_Y_MIN = -110    # suelo + margen sprite
+const WORLD_Y_MIN = -99    # suelo + margen sprite
 const WORLD_Y_MAX = 127     # techo + margen sprite (pantalla llega a 127)
 
 # ── Snowball system ───────────────────────────────────────────────────────────
@@ -129,8 +129,8 @@ def loop():
 
 # ── Estado: título ───────────────────────────────────────────────────────────
 def state_title():
-    DRAW_VECTOR("init_screen", 0, 0)
-    PRINT_TEXT(-50, -90, "PRESS A BUTTON")
+    DRAW_VECTOR("init_screen", 0, 40)
+    PRINT_TEXT(-70, -40, "PRESS A BUTTON")
     if J1_BUTTON_1():
         score = 0
         lives = LIVES_START
@@ -140,7 +140,8 @@ def state_title():
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
 def state_game_start():
     PRINT_TEXT(-30, 20, "ROUND")
-    #PRINT_NUMBER(20, 20, current_level)
+    PRINT_NUMBER(30, 20, current_level)
+    PLAY_MUSIC("intro")
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         load_current_level()
@@ -154,14 +155,14 @@ def state_playing():
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
-    #check_snowball_enemy_collision()
-    #check_player_enemy_collision()
+    # update_balls()  # DEBUG: deshabilitado para ver si los saltos vienen de aquí
+    check_snowball_enemy_collision()
+    check_player_enemy_collision()
 
     draw_player()
     draw_snowballs()
     DRAW_ENEMIES()
     draw_hud()
-    PRINT_NUMBER(-80, 100, score)  # TEST HUD
     if enemy_count <= 0:
         enter_level_clear()
     SHOW_LEVEL()
@@ -225,7 +226,7 @@ def state_boss():
 # ── Estado: game over ────────────────────────────────────────────────────────
     PRINT_TEXT(-35, 20, "GAME OVER")
     PRINT_TEXT(-25, -10, "SCORE")
-    #PRINT_NUMBER(30, -10, score)
+    PRINT_NUMBER(30, -10, score)
     if J1_BUTTON_1():
         STOP_MUSIC()
         game_state = STATE_TITLE
@@ -234,7 +235,7 @@ def state_boss():
 def state_game_over():
     PRINT_TEXT(-30, 20, "GAME OVER")
     PRINT_TEXT(-30, 0, "SCORE")
-    #PRINT_NUMBER(30, 0, score)
+    PRINT_NUMBER(30, 0, score)
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         game_state = STATE_TITLE
@@ -244,7 +245,7 @@ def state_all_clear():
     PRINT_TEXT(-55, 30, "CONGRATULATIONS!")
     PRINT_TEXT(-30, 5, "ALL CLEAR!")
     PRINT_TEXT(-25, -20, "SCORE")
-    #PRINT_NUMBER(30, -20, score)
+    PRINT_NUMBER(30, -20, score)
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         game_state = STATE_TITLE
@@ -508,10 +509,16 @@ def draw_snowballs():
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
     #(rompe 6809)
-    # PRINT_NUMBER(-80, 106, score)          # puntuación, arriba-izquierda
-    # PRINT_NUMBER(-60, 93, lives)           # vidas, debajo del score
-    # PRINT_NUMBER(48, 102, time_left / 60)   # tiempo en segundos, arriba-derecha
-    pass
+    PRINT_NUMBER(-10, 127, score)          # puntuación, arriba-izquierda
+    PRINT_NUMBER(-78, 116, lives)           # vidas, debajo del score
+    PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha
+    # DEBUG: titchi superior (idx 1) — waypoints (y=99,y=99): Y debe ser constante
+    PRINT_TEXT(-98, -110, "Y")
+    PRINT_NUMBER(-85, -110, GET_ENEMY_Y(1))
+    PRINT_TEXT(-25, -110, "X")
+    PRINT_NUMBER(-10, -110, GET_ENEMY_X(1))
+    PRINT_TEXT(40, -110, "S")
+    PRINT_NUMBER(55, -110, GET_ENEMY_STATE(1))
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():
@@ -563,6 +570,28 @@ def check_snow_vs_enemy(idx, ex, ey):
 def on_snow_hit_enemy(idx):
     ENEMY_FIRE_EVENT(idx, "onSnowHit")
 
+# ── Gravedad sobre bolas/snow (caen por precipicios) ────────────────────────
+# - Si LEVEL_COLLISION_Y devuelve <= -100 (sentinel "no floor"), no cae
+#   (evita caer infinitamente al ser empujado fuera del nivel).
+# - Cae sólo si gap > ENEMY_HH (mismatch de patrol_y vs platform_top no aplica).
+def update_balls():
+    i = 0
+    while i < 8:
+        if GET_ENEMY_ACTIVE(i) == 1:
+            st = GET_ENEMY_STATE(i)
+            if st != TITCHI_STATE_NORMAL:
+                ex = GET_ENEMY_X(i)
+                ey = GET_ENEMY_Y(i)
+                floor = LEVEL_COLLISION_Y(ex, ey, ENEMY_HH)
+                if floor > -100:
+                    gap = ey - floor
+                    if gap > ENEMY_HH:
+                        new_y = ey - 3
+                        if new_y < floor:
+                            new_y = floor
+                        SET_ENEMY_Y(i, new_y)
+        i = i + 1
+
 # ── Colisión jugador vs enemigos ──────────────────────────────────────────────
 def check_player_enemy_collision():
     i = 0
@@ -579,12 +608,15 @@ def check_player_enemy_collision():
                 dy = -dy
             if dx < 20:
                 if dy < 20:
-                    if st == TITCHI_STATE_BALL:
-                        # Patear bola → matar enemy y sumar puntos
-                        KILL_ENEMY(i)
-                        enemy_count = enemy_count - 1
-                        score = score + 100
-                    if st != TITCHI_STATE_BALL:
-                        # Daño al jugador
+                    if st == TITCHI_STATE_NORMAL:
+                        # Sólo muere el jugador al tocar un TITCHI patrullando
                         on_player_death()
+                    if st != TITCHI_STATE_NORMAL:
+                        # Empujar bola/snow lejos del jugador, bloquear al jugador
+                        if ex >= player_x:
+                            SET_ENEMY_X(i, player_x + 20)
+                            player_x = player_x - 1
+                        if ex < player_x:
+                            SET_ENEMY_X(i, player_x - 20)
+                            player_x = player_x + 1
         i = i + 1

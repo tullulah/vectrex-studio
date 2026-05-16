@@ -129,6 +129,8 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("GET_ENEMY_Y", 1),       // i → i16 y
     ("GET_ENEMY_HP", 1),      // i → u8 hp
     ("GET_ENEMY_STATE", 1),   // i → u8 sm_state ($FF = no SM)
+    ("SET_ENEMY_X", 2),       // i, x → writes pool[i].x
+    ("SET_ENEMY_Y", 2),       // i, y → writes pool[i].y
     ("KILL_ENEMY", 1),        // i → kills enemy, returns new ENEMY_COUNT
     ("ENEMY_FIRE_EVENT", 2),  // i, "eventName" → fires event hash
 ];
@@ -968,6 +970,35 @@ pub fn emit_builtin(
                 _ => {}
             }
             out.push_str("    STD RESULT\n");
+            true
+        }
+
+        // ===== Enemy write builtins =====
+        "SET_ENEMY_X" | "SET_ENEMY_Y" => {
+            if args.len() != 2 {
+                out.push_str(&format!("    ; ERROR: {} requires 2 arguments (idx, value)\n", name));
+                return true;
+            }
+            // Compute pool entry pointer: X = &pool[i]
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
+            out.push_str("    LDB #16             ; ENEMY_POOL_STRIDE (mirrors GET_ENEMY_X)\n");
+            out.push_str("    MUL                 ; D = A * stride\n");
+            out.push_str("    LDX #ENEMY_POOL\n");
+            out.push_str("    LEAX D,X            ; X = &pool[i]\n");
+            out.push_str("    STX >TMPPTR         ; save pool entry ptr across value eval\n");
+            // Evaluate value into D
+            expressions::emit_simple_expr(&args[1], out, assets);
+            out.push_str("    LDX >TMPPTR         ; restore pool entry ptr\n");
+            match up.as_str() {
+                "SET_ENEMY_X" => {
+                    out.push_str("    STD 1,X             ; x hi @+1, x lo @+2\n");
+                }
+                "SET_ENEMY_Y" => {
+                    out.push_str("    STD 3,X             ; y hi @+3, y lo @+4\n");
+                }
+                _ => {}
+            }
             true
         }
 

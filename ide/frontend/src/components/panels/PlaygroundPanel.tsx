@@ -2261,12 +2261,61 @@ export function PlaygroundPanel() {
                           )}
                         </div>
                         {(obj.patrolWaypoints?.length ?? 0) > 0 && (
-                          <button
-                            onClick={() => setObjects(objects.map(o => o.id === selectedId ? { ...o, patrolWaypoints: [] } : o))}
-                            style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
-                          >
-                            Clear waypoints
-                          </button>
+                          <div style={{ marginTop: 4 }}>
+                            {obj.patrolWaypoints!.map((wp, wpIdx) => (
+                              <div key={wpIdx} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2, fontSize: '10px' }}>
+                                <span style={{ color: '#888', width: 24 }}>wp{wpIdx}</span>
+                                <span style={{ color: '#666' }}>x</span>
+                                <input
+                                  type="number"
+                                  value={wp.x}
+                                  onChange={e => {
+                                    const v = parseInt(e.target.value, 10);
+                                    if (Number.isNaN(v)) return;
+                                    setObjects(objects.map(o => {
+                                      if (o.id !== selectedId) return o;
+                                      const wps = [...(o.patrolWaypoints || [])];
+                                      wps[wpIdx] = { ...wps[wpIdx], x: v };
+                                      return { ...o, patrolWaypoints: wps };
+                                    }));
+                                  }}
+                                  style={{ width: 50, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}
+                                />
+                                <span style={{ color: '#666' }}>y</span>
+                                <input
+                                  type="number"
+                                  value={wp.y}
+                                  onChange={e => {
+                                    const v = parseInt(e.target.value, 10);
+                                    if (Number.isNaN(v)) return;
+                                    setObjects(objects.map(o => {
+                                      if (o.id !== selectedId) return o;
+                                      const wps = [...(o.patrolWaypoints || [])];
+                                      wps[wpIdx] = { ...wps[wpIdx], y: v };
+                                      return { ...o, patrolWaypoints: wps };
+                                    }));
+                                  }}
+                                  style={{ width: 50, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}
+                                />
+                                <button
+                                  onClick={() => setObjects(objects.map(o => {
+                                    if (o.id !== selectedId) return o;
+                                    const wps = [...(o.patrolWaypoints || [])];
+                                    wps.splice(wpIdx, 1);
+                                    return { ...o, patrolWaypoints: wps };
+                                  }))}
+                                  title="Remove this waypoint"
+                                  style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                >×</button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => setObjects(objects.map(o => o.id === selectedId ? { ...o, patrolWaypoints: [] } : o))}
+                              style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
+                            >
+                              Clear waypoints
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
