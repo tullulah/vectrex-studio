@@ -25,6 +25,18 @@ const THAW_TICKS_SNOW = 180   # snow1/snow2: ~3s at 60fps
 const THAW_TICKS_BALL = 300   # ball: ~5s at 60fps
 thaw_timers = [0, 0, 0, 0, 0, 0, 0, 0]
 
+# ── Ball-rolling system ───────────────────────────────────────────────────
+const BALL_SPEED = 4
+const BALL_GRAVITY = 1
+const BALL_MAX_FALL = 8
+
+ball_rolling  = [0, 0, 0, 0, 0, 0, 0, 0]   # 1 = bola en movimiento
+ball_vx_arr   = [0, 0, 0, 0, 0, 0, 0, 0]   # velocidad horizontal
+ball_vy_arr   = [0, 0, 0, 0, 0, 0, 0, 0]   # velocidad vertical
+ball_bounces  = [0, 0, 0, 0, 0, 0, 0, 0]   # rebotes restantes antes de desaparecer
+ball_collided = [0, 0, 0, 0, 0, 0, 0, 0]   # guard por frame: evita doble proceso
+ball_launched: i16 = 0                       # flag: try_launch_ball encontró bola
+
 # Half-sizes for AABB collision (approx from vec files)
 const SNOW_HW = 6    # snowball half-width
 const SNOW_HH = 16    # snowball half-height
@@ -44,7 +56,7 @@ next_is_boss: i16 = 0       # flag auxiliar para detección de nivel boss
 
 # ── Player ──────────────────────────────────────────────────────────────────
 player_x: i16 = 0
-player_y: i16 = -120
+player_y: i16 = -2424
 player_vx: i16 = 0
 player_vy: i16 = 0
 player_facing: i16 = 0
@@ -61,8 +73,12 @@ const PLAYER_HH = 11     # half-height de player_idle.vec
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
 const WORLD_X_MIN = -96
 const WORLD_X_MAX = 95
-const WORLD_Y_MIN = -99    # suelo + margen sprite
-const WORLD_Y_MAX = 127     # techo + margen sprite (pantalla llega a 127)
+const WORLD_Y_MIN = -2403   # suelo de pantalla 1 (desplazado -2304)
+const WORLD_Y_MAX = 127     # techo de pantalla 10
+const CAMERA_Y_MAX = 2304   # rango de scroll (9 × 256)
+const CAMERA_Y_MIN = -2304  # posición cámara mostrando pantalla 1
+
+camera_y: i16 = -2304
 
 # ── Snowball system ───────────────────────────────────────────────────────────
 const SNOW_SPEED = 5             # velocidad horizontal
@@ -104,6 +120,7 @@ const GAME_START_DELAY = 120
 const DEATH_DELAY = 120
 const LEVEL_CLEAR_DELAY = 150
 const BOSS_INTRO_DELAY = 180
+const GAME_OVER_DELAY = 300
 const ALL_CLEAR_DELAY = 300
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -161,14 +178,23 @@ def state_playing():
     update_snowballs()
     UPDATE_ENEMIES()
     update_thaw()
-    # update_balls()  # DEBUG: deshabilitado para ver si los saltos vienen de aquí
+    update_balls()
+    ball_ball_collision()
     check_snowball_enemy_collision()
     check_player_enemy_collision()
+
+    camera_y = player_y - 30
+    if camera_y > 0:
+        camera_y = 0
+    if camera_y < CAMERA_Y_MIN:
+        camera_y = CAMERA_Y_MIN
+    SET_CAMERA_Y(camera_y)
 
     draw_player()
     draw_snowballs()
     DRAW_ENEMIES()
     draw_hud()
+    enemy_count = count_active_enemies()
     if enemy_count <= 0:
         enter_level_clear()
     SHOW_LEVEL()
@@ -182,11 +208,14 @@ def state_player_dead():
     if frame_timer <= 0:
         if lives <= 0:
             PLAY_MUSIC("Game_Over")
+            frame_timer = GAME_OVER_DELAY
+            game_state = STATE_GAME_OVER
         if lives > 0:
             enter_game_start()
 
 def draw_player_death():
     SET_INTENSITY(65)
+    stop_music()
     elapsed = DEATH_DELAY - frame_timer
     if elapsed < 12:
         DRAW_VECTOR("player_die1", player_x, player_y, player_facing)
@@ -244,20 +273,13 @@ def state_boss():
     draw_hud()
 
 # ── Estado: game over ────────────────────────────────────────────────────────
-    PRINT_TEXT(-35, 20, "GAME OVER")
-    PRINT_TEXT(-25, -10, "SCORE")
-    PRINT_NUMBER(30, -10, score)
-    if J1_BUTTON_1():
-        STOP_MUSIC()
-        game_state = STATE_TITLE
-
-# ── Estado: game over ────────────────────────────────────────────────────────
 def state_game_over():
     PRINT_TEXT(-30, 20, "GAME OVER")
     PRINT_TEXT(-30, 0, "SCORE")
     PRINT_NUMBER(30, 0, score)
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
+        STOP_MUSIC()
         game_state = STATE_TITLE
 
 # ── Estado: all clear ────────────────────────────────────────────────────────
@@ -277,6 +299,8 @@ def enter_game_start():
 
 def enter_level_clear():
     frame_timer = LEVEL_CLEAR_DELAY
+    camera_y = CAMERA_Y_MIN
+    SET_CAMERA_Y(camera_y)
     game_state = STATE_LEVEL_CLEAR
 
 def enter_boss_intro():
@@ -287,6 +311,8 @@ def enter_boss_intro():
 def on_player_death():
     lives = lives - 1
     frame_timer = DEATH_DELAY
+    camera_y = CAMERA_Y_MIN
+    SET_CAMERA_Y(camera_y)
     game_state = STATE_PLAYER_DEAD
 
 # ── Detección nivel boss (múltiplos de 10) ───────────────────────────────────
@@ -308,7 +334,7 @@ def load_current_level():
     time_left = LEVEL_TIME
     enemy_count = 2     # world_1_1 has 2 enemies
     player_x = 0
-    player_y = -114
+    player_y = -2418
     player_vy = 0
     player_on_ground = 0
     shoot_cooldown = 0
@@ -317,6 +343,9 @@ def load_current_level():
     snow2_active = 0
     snow_life_max = SNOW_LIFE_NORMAL
     player_has_power = 0
+    camera_y = CAMERA_Y_MIN
+    SET_CAMERA_Y(camera_y)
+    reset_balls()
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
@@ -427,10 +456,13 @@ def update_player():
         shoot_cooldown = shoot_cooldown - 1
     if J1_BUTTON_2():
         if shoot_cooldown == 0:
-            snow_spawn_vx = SNOW_SPEED
-            if player_facing == 1:
-                snow_spawn_vx = -SNOW_SPEED
-            try_shoot()
+            ball_launched = 0
+            try_launch_ball()
+            if ball_launched == 0:
+                snow_spawn_vx = SNOW_SPEED
+                if player_facing == 1:
+                    snow_spawn_vx = -SNOW_SPEED
+                try_shoot()
 
 def draw_player():
     SET_INTENSITY(65)
@@ -536,12 +568,8 @@ def draw_hud():
     PRINT_NUMBER(-78, 116, lives)           # vidas, debajo del score
     PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha
     # DEBUG: titchi superior (idx 1) — waypoints (y=99,y=99): Y debe ser constante
-    PRINT_TEXT(-98, -110, "Y")
-    PRINT_NUMBER(-85, -110, GET_ENEMY_Y(1))
-    PRINT_TEXT(-25, -110, "X")
-    PRINT_NUMBER(-10, -110, GET_ENEMY_X(1))
-    PRINT_TEXT(40, -110, "S")
-    PRINT_NUMBER(55, -110, GET_ENEMY_STATE(1))
+    PRINT_TEXT(-98, -110, "C")
+    PRINT_NUMBER(-85, -110, enemy_count)
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():
@@ -603,35 +631,176 @@ def update_thaw():
     while i < 8:
         st = GET_ENEMY_STATE(i)
         if st > 0:
-            thaw_timers[i] = thaw_timers[i] - 1
-            if thaw_timers[i] <= 0:
-                st = st - 1
-                SET_ENEMY_STATE(i, st)
-                if st > 0:
-                    thaw_timers[i] = THAW_TICKS_SNOW
+            if ball_rolling[i] == 0:
+                thaw_timers[i] = thaw_timers[i] - 1
+                if thaw_timers[i] <= 0:
+                    st = st - 1
+                    SET_ENEMY_STATE(i, st)
+                    if st > 0:
+                        thaw_timers[i] = THAW_TICKS_SNOW
         i = i + 1
 
-# ── Gravedad sobre bolas/snow (caen por precipicios) ────────────────────────
-# - Si LEVEL_COLLISION_Y devuelve <= -100 (sentinel "no floor"), no cae
-#   (evita caer infinitamente al ser empujado fuera del nivel).
-# - Cae sólo si gap > ENEMY_HH (mismatch de patrol_y vs platform_top no aplica).
-def update_balls():
+# ── Cuenta enemigos activos directamente del pool ───────────────────────────
+def count_active_enemies():
+    n = 0
     i = 0
     while i < 8:
         if GET_ENEMY_ACTIVE(i) == 1:
-            st = GET_ENEMY_STATE(i)
-            if st != TITCHI_STATE_NORMAL:
-                ex = GET_ENEMY_X(i)
-                ey = GET_ENEMY_Y(i)
-                floor = LEVEL_COLLISION_Y(ex, ey, ENEMY_HH)
-                if floor > -100:
-                    gap = ey - floor
-                    if gap > ENEMY_HH:
-                        new_y = ey - 3
-                        if new_y < floor:
-                            new_y = floor
-                        SET_ENEMY_Y(i, new_y)
+            n = n + 1
         i = i + 1
+    enemy_count = n
+
+# ── Reset del sistema de bolas al cargar nivel ──────────────────────────────
+def reset_balls():
+    i = 0
+    while i < 8:
+        ball_rolling[i] = 0
+        ball_vx_arr[i] = 0
+        ball_vy_arr[i] = 0
+        ball_bounces[i] = 0
+        ball_collided[i] = 0
+        i = i + 1
+
+# ── Lanzamiento de bola (si el jugador dispara tocando una bola) ─────────────
+def try_launch_ball():
+    i = 0
+    found = 0
+    while i < 8:
+        if found == 0:
+            if GET_ENEMY_ACTIVE(i) == 1:
+                if GET_ENEMY_STATE(i) == TITCHI_STATE_BALL:
+                    if ball_rolling[i] == 0:
+                        ex = GET_ENEMY_X(i)
+                        ey = GET_ENEMY_Y(i)
+                        dx = player_x - ex
+                        if dx < 0:
+                            dx = -dx
+                        dy = player_y - ey
+                        if dy < 0:
+                            dy = -dy
+                        if dx < 25:
+                            if dy < 25:
+                                ball_rolling[i] = 1
+                                ball_vx_arr[i] = BALL_SPEED
+                                if player_facing == 1:
+                                    ball_vx_arr[i] = -BALL_SPEED
+                                ball_vy_arr[i] = 0
+                                ball_bounces[i] = rand_range(3, 5)
+                                thaw_timers[i] = 0
+                                shoot_cooldown = SHOOT_COOLDOWN_MAX
+                                ball_launched = 1
+                                found = 1
+        i = i + 1
+
+# ── Física y colisión de bolas rodando ──────────────────────────────────────
+def update_balls():
+    i = 0
+    while i < 8:
+        if ball_rolling[i] == 1:
+            # Gravedad vertical
+            ball_vy_arr[i] = ball_vy_arr[i] - BALL_GRAVITY
+            if ball_vy_arr[i] < -BALL_MAX_FALL:
+                ball_vy_arr[i] = -BALL_MAX_FALL
+            # Guardar posición anterior y calcular nueva
+            prev_by = GET_ENEMY_Y(i)
+            bx = GET_ENEMY_X(i) + ball_vx_arr[i]
+            by = prev_by + ball_vy_arr[i]
+            # Colisión con plataforma: raycast desde posición ANTERIOR
+            # (igual que el player: prev_y → evita tunneling a través de plataformas)
+            if ball_vy_arr[i] <= 0:
+                floor = LEVEL_COLLISION_Y(bx, prev_by, ENEMY_HH)
+                if floor > -100:
+                    if by <= floor:
+                        by = floor
+                        ball_vy_arr[i] = 0
+            # Fallback: fondo del mundo
+            if by < WORLD_Y_MIN:
+                by = WORLD_Y_MIN
+                ball_vy_arr[i] = 0
+            # Rebote en paredes
+            if bx < WORLD_X_MIN:
+                bx = WORLD_X_MIN
+                ball_vx_arr[i] = BALL_SPEED
+                ball_bounces[i] = ball_bounces[i] - 1
+            if bx > WORLD_X_MAX:
+                bx = WORLD_X_MAX
+                ball_vx_arr[i] = -BALL_SPEED
+                ball_bounces[i] = ball_bounces[i] - 1
+            SET_ENEMY_X(i, bx)
+            SET_ENEMY_Y(i, by)
+            # Matar enemigos que toca
+            ball_kill_enemies(bx, by)
+            # ¿Se ha agotado el número de rebotes?
+            if ball_bounces[i] <= 0:
+                ball_rolling[i] = 0
+                KILL_ENEMY(i)
+        i = i + 1
+
+# ── Colisión bola vs bola: repulsión tipo billar ────────────────────────────
+# Guard ball_collided: cada par (i,j) se procesa una sola vez por frame.
+# i invierte dirección; j hereda la dirección original de i (efecto billar).
+def ball_ball_collision():
+    k = 0
+    while k < 8:
+        ball_collided[k] = 0
+        k = k + 1
+    i = 0
+    while i < 8:
+        if ball_rolling[i] == 1:
+            if ball_collided[i] == 0:
+                bx = GET_ENEMY_X(i)
+                by = GET_ENEMY_Y(i)
+                j = 0
+                while j < 8:
+                    skip = 0
+                    if i == j:
+                        skip = 1
+                    if skip == 0:
+                        if ball_collided[j] == 0:
+                            if GET_ENEMY_ACTIVE(j) == 1:
+                                if GET_ENEMY_STATE(j) == TITCHI_STATE_BALL:
+                                    ejx = GET_ENEMY_X(j)
+                                    ejy = GET_ENEMY_Y(j)
+                                    dx = bx - ejx
+                                    if dx < 0:
+                                        dx = -dx
+                                    dy = by - ejy
+                                    if dy < 0:
+                                        dy = -dy
+                                    if dx < 20:
+                                        if dy < 20:
+                                            old_vx = ball_vx_arr[i]
+                                            ball_vx_arr[i] = -old_vx
+                                            ball_vx_arr[j] = old_vx
+                                            ball_rolling[j] = 1
+                                            thaw_timers[j] = 0
+                                            if ball_bounces[j] <= 0:
+                                                ball_bounces[j] = rand_range(3, 5)
+                                            ball_collided[i] = 1
+                                            ball_collided[j] = 1
+                    j = j + 1
+        i = i + 1
+
+# ── Colisión de bola rodando vs enemigos ────────────────────────────────────
+def ball_kill_enemies(bx, by):
+    j = 0
+    while j < 8:
+        if GET_ENEMY_ACTIVE(j) == 1:
+            st = GET_ENEMY_STATE(j)
+            if st < TITCHI_STATE_BALL:
+                ejx = GET_ENEMY_X(j)
+                ejy = GET_ENEMY_Y(j)
+                dx = bx - ejx
+                if dx < 0:
+                    dx = -dx
+                dy = by - ejy
+                if dy < 0:
+                    dy = -dy
+                if dx < 24:
+                    if dy < 24:
+                        KILL_ENEMY(j)
+                        score = score + 200
+        j = j + 1
 
 # ── Colisión jugador vs enemigos ──────────────────────────────────────────────
 def check_player_enemy_collision():
