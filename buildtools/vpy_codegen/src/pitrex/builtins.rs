@@ -1486,10 +1486,8 @@ fn emit_pitrex_music_helpers() -> String {
     // Store LEVEL_DATA_PTR
     s.push_str("    ldr     r1, =LEVEL_DATA_PTR\n");
     s.push_str("    str     r4, [r1]\n");
-    // Read and store GP count (byte offset 9), clamped to 64
-    s.push_str("    ldrb    r5, [r4, #9]        @ r5 = gpCount\n");
-    s.push_str("    cmp     r5, #64\n");
-    s.push_str("    movgt   r5, #64\n");
+    // Read and store GP count (byte offset 9), natural u8 max = 255
+    s.push_str("    ldrb    r5, [r4, #9]        @ r5 = gpCount (no cap: 255 max)\n");
     s.push_str("    ldr     r1, =LEVEL_GP_COUNT\n");
     s.push_str("    str     r5, [r1]\n");
     // Copy GP objects to LEVEL_GP_BUF (x,y,vx,vy per entry)
@@ -1561,12 +1559,18 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
-    s.push_str("    @ Cull: skip if |ox| > 180 (fully off-screen)\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 200 (off-screen)\n");
     s.push_str("    mov     r12, r0\n");
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r12, r12, #0        @ r12 = |ox|\n");
     s.push_str("    cmp     r12, #180\n");
+    s.push_str("    bgt     .Lshl_bg_skip\n");
+    s.push_str("    mov     r12, r1\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r12, r12, #0        @ r12 = |oy|\n");
+    s.push_str("    cmp     r12, #200\n");
     s.push_str("    bgt     .Lshl_bg_skip\n");
     s.push_str("    push    {r4, r5, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
@@ -1600,12 +1604,18 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr (from ROM obj)\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
-    s.push_str("    @ Cull: skip if |ox| > 180 (fully off-screen)\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 200 (off-screen)\n");
     s.push_str("    mov     r12, r0\n");
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r12, r12, #0        @ r12 = |ox|\n");
     s.push_str("    cmp     r12, #180\n");
+    s.push_str("    bgt     .Lshl_gp_skip\n");
+    s.push_str("    mov     r12, r1\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r12, r12, #0        @ r12 = |oy|\n");
+    s.push_str("    cmp     r12, #200\n");
     s.push_str("    bgt     .Lshl_gp_skip\n");
     s.push_str("    push    {r4, r5, r7, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
@@ -1635,12 +1645,18 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
-    s.push_str("    @ Cull: skip if |ox| > 180 (fully off-screen)\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 200 (off-screen)\n");
     s.push_str("    mov     r12, r0\n");
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r12, r12, #0        @ r12 = |ox|\n");
     s.push_str("    cmp     r12, #180\n");
+    s.push_str("    bgt     .Lshl_fg_skip\n");
+    s.push_str("    mov     r12, r1\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r12, r12, #0        @ r12 = |oy|\n");
+    s.push_str("    cmp     r12, #200\n");
     s.push_str("    bgt     .Lshl_fg_skip\n");
     s.push_str("    push    {r4, r5, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
