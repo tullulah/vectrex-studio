@@ -279,19 +279,14 @@ export function PlaygroundPanel() {
               const res = await filesAPI?.readFile?.(path);
               if (res?.content) {
                 const data = JSON.parse(res.content);
-                // Prefer the patrol action's sprite; fall back to first action
-                let spritePath: string = '';
-                const patrolAction: string = data.behavior?.patrol?.patrolAction || '';
-                if (patrolAction) {
-                  const act = (data.actions as any[])?.find((a: any) => a.name === patrolAction);
-                  spritePath = act?.sprite || '';
-                }
-                if (!spritePath) spritePath = data.actions?.[0]?.sprite || '';
+                // Prefer first .vec action (directly renderable); vanim frames
+                // are not loaded into loadedVectors so would show as diamond.
+                const actions: any[] = data.actions || [];
+                const vecAction = actions.find((a: any) => a.sprite?.endsWith('.vec'));
+                const spritePath: string = vecAction?.sprite || actions[0]?.sprite || '';
                 if (spritePath) {
                   const filename = spritePath.split('/').pop() || '';
-                  const stem = filename.endsWith('.vanim')
-                    ? filename.replace('.vanim', '')
-                    : filename.replace('.vec', '');
+                  const stem = filename.replace(/\.(vec|vanim)$/, '');
                   if (stem) vecMap.set(enemyName, stem);
                 }
               }
