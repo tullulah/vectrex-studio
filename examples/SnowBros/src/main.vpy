@@ -4,7 +4,7 @@ META MAX_ENEMIES = 8
 
 # ── Debug ────────────────────────────────────────────────────────────────────
 const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 1   # piso inicial al pulsar start (1 = abajo)
+const START_FLOOR = 2   # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE = 0        # título + "press a button"
@@ -160,7 +160,9 @@ def state_title():
     if J1_BUTTON_1():
         score = 0
         lives = LIVES_START
-        current_level = START_FLOOR
+        current_level = 1
+        if START_FLOOR > 0:
+            current_level = START_FLOOR
         enter_game_start()
 
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
