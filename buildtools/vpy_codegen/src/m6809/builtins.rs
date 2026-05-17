@@ -131,6 +131,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("GET_ENEMY_STATE", 1),   // i → u8 sm_state ($FF = no SM)
     ("SET_ENEMY_X", 2),       // i, x → writes pool[i].x
     ("SET_ENEMY_Y", 2),       // i, y → writes pool[i].y
+    ("SET_ENEMY_STATE", 2),   // i, state → writes pool[i].sm_state byte
     ("KILL_ENEMY", 1),        // i → kills enemy, returns new ENEMY_COUNT
     ("ENEMY_FIRE_EVENT", 2),  // i, "eventName" → fires event hash
 ];
@@ -974,7 +975,7 @@ pub fn emit_builtin(
         }
 
         // ===== Enemy write builtins =====
-        "SET_ENEMY_X" | "SET_ENEMY_Y" => {
+        "SET_ENEMY_X" | "SET_ENEMY_Y" | "SET_ENEMY_STATE" => {
             if args.len() != 2 {
                 out.push_str(&format!("    ; ERROR: {} requires 2 arguments (idx, value)\n", name));
                 return true;
@@ -996,6 +997,9 @@ pub fn emit_builtin(
                 }
                 "SET_ENEMY_Y" => {
                     out.push_str("    STD 3,X             ; y hi @+3, y lo @+4\n");
+                }
+                "SET_ENEMY_STATE" => {
+                    out.push_str("    STB 13,X            ; sm_state byte @+13\n");
                 }
                 _ => {}
             }

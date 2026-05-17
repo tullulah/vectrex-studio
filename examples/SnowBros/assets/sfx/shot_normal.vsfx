@@ -5,7 +5,7 @@
   "duration_ms": 150,
   "oscillator": {
     "frequency": 199,
-    "channel": 2,
+    "channel": 0,
     "duty": 50
   },
   "envelope": {
@@ -13,7 +13,7 @@
     "decay": 113,
     "sustain": 12,
     "release": 100,
-    "peak": 2
+    "peak": 10
   },
   "pitch": {
     "enabled": true,

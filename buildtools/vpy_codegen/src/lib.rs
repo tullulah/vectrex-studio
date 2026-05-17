@@ -143,6 +143,17 @@ impl BankConfig {
             helpers_bank: 0,
         }
     }
+
+    /// PiTrex configuration — ARM bare-metal, no cartridge ROM limit (8MB ceiling)
+    pub fn pitrex() -> Self {
+        const PITREX_MAX: usize = 8 * 1024 * 1024;
+        Self {
+            rom_total_size: PITREX_MAX,
+            rom_bank_size: PITREX_MAX,
+            rom_bank_count: 1,
+            helpers_bank: 0,
+        }
+    }
 }
 
 /// Generated assembly output - UNIFIED format

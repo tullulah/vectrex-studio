@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-16"
+    "description": "Created in Playground - 2026-05-17"
   },
   "worldBounds": {
     "xMin": -96,
@@ -27,7 +27,10 @@
         "y": -2377,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -43,7 +46,10 @@
         "y": -2377,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -59,7 +65,10 @@
         "y": -2377,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -75,7 +84,10 @@
         "y": -2331,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -91,7 +103,10 @@
         "y": -2283,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -107,7 +122,10 @@
         "y": -2282,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -123,7 +141,10 @@
         "y": -2237,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -132,9 +153,24 @@
         "collision": {
           "enabled": true,
           "segments": [
-            {"x1": -70, "y1": -6, "x2": -45, "y2": -6},
-            {"x1": -45, "y1": 12, "x2": 47, "y2": 12},
-            {"x1": 47, "y1": -4, "x2": 70, "y2": -4}
+            {
+              "x1": -70,
+              "y1": -6,
+              "x2": -45,
+              "y2": -6
+            },
+            {
+              "x1": -45,
+              "y1": 12,
+              "x2": 47,
+              "y2": 12
+            },
+            {
+              "x1": 47,
+              "y1": -4,
+              "x2": 70,
+              "y2": -4
+            }
           ]
         }
       },
@@ -149,10 +185,22 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [{"x": -3, "y": -2205}, {"x": -42, "y": -2205}],
+        "patrolWaypoints": [
+          {
+            "x": -3,
+            "y": -2205
+          },
+          {
+            "x": -42,
+            "y": -2205
+          }
+        ],
         "wave": 0,
         "respawn": false,
-        "velocity": {"x": 0, "y": 0}
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       },
       {
         "id": "enemy_1778250209582",
@@ -165,10 +213,22 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [{"x": 45, "y": -2205}, {"x": 3, "y": -2205}],
+        "patrolWaypoints": [
+          {
+            "x": 45,
+            "y": -2205
+          },
+          {
+            "x": 3,
+            "y": -2205
+          }
+        ],
         "wave": 0,
         "respawn": false,
-        "velocity": {"x": 0, "y": 0}
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       },
       {
         "id": "enemy_1778250211554",
@@ -181,10 +241,22 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [{"x": -91, "y": -2262}, {"x": -14, "y": -2262}],
+        "patrolWaypoints": [
+          {
+            "x": -91,
+            "y": -2262
+          },
+          {
+            "x": -14,
+            "y": -2262
+          }
+        ],
         "wave": 0,
         "respawn": false,
-        "velocity": {"x": 0, "y": 0}
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       },
       {
         "id": "enemy_1778250212985",
@@ -197,10 +269,22 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [{"x": 89, "y": -2261}, {"x": 14, "y": -2261}],
+        "patrolWaypoints": [
+          {
+            "x": 89,
+            "y": -2261
+          },
+          {
+            "x": 14,
+            "y": -2261
+          }
+        ],
         "wave": 0,
         "respawn": false,
-        "velocity": {"x": 0, "y": 0}
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       },
       {
         "id": "enemy_1778250214379",
@@ -213,10 +297,22 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [{"x": -55, "y": -2312}, {"x": 56, "y": -2312}],
+        "patrolWaypoints": [
+          {
+            "x": -55,
+            "y": -2312
+          },
+          {
+            "x": 56,
+            "y": -2312
+          }
+        ],
         "wave": 0,
         "respawn": false,
-        "velocity": {"x": 0, "y": 0}
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       },
       {
         "id": "plat_f2_1",
@@ -227,7 +323,10 @@
         "y": -2121,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -243,7 +342,10 @@
         "y": -2121,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -259,7 +361,10 @@
         "y": -2075,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -275,7 +380,10 @@
         "y": -2027,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -291,7 +399,10 @@
         "y": -2027,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -307,7 +418,10 @@
         "y": -1981,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -323,7 +437,10 @@
         "y": -1865,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -339,7 +456,10 @@
         "y": -1819,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -355,7 +475,10 @@
         "y": -1771,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -371,7 +494,10 @@
         "y": -1725,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -387,7 +513,10 @@
         "y": -1609,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -403,7 +532,10 @@
         "y": -1609,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -419,7 +551,10 @@
         "y": -1609,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -435,7 +570,10 @@
         "y": -1515,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -451,7 +589,10 @@
         "y": -1469,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -467,7 +608,10 @@
         "y": -1469,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -483,7 +627,10 @@
         "y": -1353,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -499,7 +646,10 @@
         "y": -1353,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -515,7 +665,10 @@
         "y": -1307,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -531,7 +684,10 @@
         "y": -1259,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -547,7 +703,10 @@
         "y": -1259,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -563,7 +722,10 @@
         "y": -1097,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -579,7 +741,10 @@
         "y": -1097,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -595,7 +760,10 @@
         "y": -1051,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -611,7 +779,10 @@
         "y": -1051,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -627,7 +798,10 @@
         "y": -957,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -643,7 +817,10 @@
         "y": -841,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -659,7 +836,10 @@
         "y": -795,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -675,7 +855,10 @@
         "y": -747,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -691,7 +874,10 @@
         "y": -701,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -707,7 +893,10 @@
         "y": -585,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -723,7 +912,10 @@
         "y": -585,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -739,7 +931,10 @@
         "y": -585,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -755,7 +950,10 @@
         "y": -539,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -771,7 +969,10 @@
         "y": -539,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -787,7 +988,10 @@
         "y": -491,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -803,7 +1007,10 @@
         "y": -445,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -819,7 +1026,10 @@
         "y": -445,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -835,7 +1045,10 @@
         "y": -329,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -851,7 +1064,10 @@
         "y": -329,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -867,7 +1083,10 @@
         "y": -329,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -883,7 +1102,10 @@
         "y": -329,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -899,7 +1121,10 @@
         "y": -283,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -915,7 +1140,10 @@
         "y": -283,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -931,7 +1159,10 @@
         "y": -235,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -947,7 +1178,10 @@
         "y": -235,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -963,7 +1197,10 @@
         "y": -235,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -979,7 +1216,10 @@
         "y": -73,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -995,7 +1235,10 @@
         "y": -73,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
@@ -1011,18 +1254,62 @@
         "y": 67,
         "rotation": 0,
         "scale": 1,
-        "velocity": {"x": 0, "y": 0},
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
         "physicsEnabled": false,
         "collidable": true,
         "gravity": 0,
         "bounceDamping": 0,
         "physicsType": "static"
+      },
+      {
+        "id": "enemy_1779034959450",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": -36,
+        "y": -1960,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779034961460",
+        "type": "enemy",
+        "vectorName": "titchi_walk",
+        "layer": "gameplay",
+        "x": 27,
+        "y": -1959,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       }
     ],
     "foreground": []
   },
   "spawnPoints": {
-    "player": {"x": 0, "y": -2404}
+    "player": {
+      "x": 0,
+      "y": -100
+    }
   },
   "hotspots": []
 }

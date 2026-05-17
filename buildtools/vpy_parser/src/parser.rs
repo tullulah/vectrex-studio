@@ -300,6 +300,12 @@ impl<'a> Parser<'a> {
                         if let Expr::Number(n) = &value {
                             meta.max_enemies = Some((*n as u8).max(1));
                         }
+                    } else if key.eq_ignore_ascii_case("TARGET") {
+                        match &value {
+                            Expr::StringLit(s) => meta.target = Some(s.to_lowercase()),
+                            Expr::Ident(id)    => meta.target = Some(id.name.to_lowercase()),
+                            _ => {}
+                        }
                     }
                     
                     if let Expr::StringLit(s) = &value {

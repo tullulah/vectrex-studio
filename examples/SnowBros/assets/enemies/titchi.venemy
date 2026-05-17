@@ -2,15 +2,35 @@
   "version": "2.0",
   "name": "titchi",
   "actions": [
-    { "name": "idle",    "sprite": "assets/vectors/titchi_idle.vec",   "loop": true  },
-    { "name": "walk",    "sprite": "assets/animations/titchi_walk.vanim", "loop": true  },
-    { "name": "snow1",   "sprite": "assets/vectors/titchi_snow1.vec",  "loop": true  },
-    { "name": "snow2",   "sprite": "assets/vectors/titchi_snow2.vec",  "loop": true  },
-    { "name": "ball",    "sprite": "assets/vectors/titchi_ball.vec",   "loop": true  }
+    {
+      "name": "idle",
+      "sprite": "assets/vectors/titchi_idle.vec",
+      "loop": true
+    },
+    {
+      "name": "walk",
+      "sprite": "assets/animations/titchi_walk.vanim",
+      "loop": true
+    },
+    {
+      "name": "snow1",
+      "sprite": "assets/vectors/titchi_snow1.vec",
+      "loop": true
+    },
+    {
+      "name": "snow2",
+      "sprite": "assets/vectors/titchi_snow2.vec",
+      "loop": true
+    },
+    {
+      "name": "ball",
+      "sprite": "assets/vectors/titchi_ball.vec",
+      "loop": true
+    }
   ],
   "stats": {
     "hp": 3,
-    "speed": 40,
+    "speed": 30,
     "action_duration": 180
   },
   "behavior": {
@@ -35,7 +55,10 @@
         "decay_frames": 0,
         "decay_to": "",
         "on_event": [
-          { "event": "onSnowHit", "to": "snow1" }
+          {
+            "event": "onSnowHit",
+            "to": "snow1"
+          }
         ]
       },
       {
@@ -44,7 +67,10 @@
         "decay_frames": 120,
         "decay_to": "normal",
         "on_event": [
-          { "event": "onSnowHit", "to": "snow2" }
+          {
+            "event": "onSnowHit",
+            "to": "snow2"
+          }
         ]
       },
       {
@@ -53,7 +79,10 @@
         "decay_frames": 180,
         "decay_to": "snow1",
         "on_event": [
-          { "event": "onSnowHit", "to": "ball" }
+          {
+            "event": "onSnowHit",
+            "to": "ball"
+          }
         ]
       },
       {
@@ -62,7 +91,10 @@
         "decay_frames": 300,
         "decay_to": "snow2",
         "on_event": [
-          { "event": "onKick", "to": "normal" }
+          {
+            "event": "onKick",
+            "to": "normal"
+          }
         ]
       }
     ]

@@ -1,6 +1,5 @@
 META TITLE = "SNOW BROS"
-META ROM_TOTAL_SIZE = 65536
-META ROM_BANK_SIZE = 16384
+META TARGET = pitrex
 META MAX_ENEMIES = 8
 
 # ── States ──────────────────────────────────────────────────────────────────
@@ -79,6 +78,7 @@ const CAMERA_Y_MAX = 2304   # rango de scroll (9 × 256)
 const CAMERA_Y_MIN = -2304  # posición cámara mostrando pantalla 1
 
 camera_y: i16 = -2304
+scroll_target: i16 = -2304   # objetivo de cámara durante transición de nivel
 
 # ── Snowball system ───────────────────────────────────────────────────────────
 const SNOW_SPEED = 5             # velocidad horizontal
@@ -161,9 +161,9 @@ def state_title():
 
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
 def state_game_start():
+    SHOW_LEVEL()
     PRINT_TEXT(-30, 20, "ROUND")
     PRINT_NUMBER(30, 20, current_level)
-    PLAY_MUSIC("intro")
     frame_timer = frame_timer - 1
     if frame_timer <= 0:
         load_current_level()
@@ -183,11 +183,6 @@ def state_playing():
     check_snowball_enemy_collision()
     check_player_enemy_collision()
 
-    camera_y = player_y - 30
-    if camera_y > 0:
-        camera_y = 0
-    if camera_y < CAMERA_Y_MIN:
-        camera_y = CAMERA_Y_MIN
     SET_CAMERA_Y(camera_y)
 
     draw_player()
@@ -230,6 +225,11 @@ def draw_player_death():
 
 # ── Estado: nivel completado ─────────────────────────────────────────────────
 def state_level_clear():
+    if camera_y < scroll_target:
+        camera_y = camera_y + 3
+        if camera_y > scroll_target:
+            camera_y = scroll_target
+    SET_CAMERA_Y(camera_y)
     SHOW_LEVEL()
     draw_hud()
     PRINT_TEXT(-35, 0, "LEVEL CLEAR!")
@@ -295,12 +295,18 @@ def state_all_clear():
 # ── Transiciones ────────────────────────────────────────────────────────────
 def enter_game_start():
     frame_timer = GAME_START_DELAY
+    camera_y = CAMERA_Y_MIN + (current_level - 1) * 256
+    if camera_y > 0:
+        camera_y = 0
+    SET_CAMERA_Y(camera_y)
+    LOAD_LEVEL("world_1_1")
     game_state = STATE_GAME_START
 
 def enter_level_clear():
     frame_timer = LEVEL_CLEAR_DELAY
-    camera_y = CAMERA_Y_MIN
-    SET_CAMERA_Y(camera_y)
+    scroll_target = camera_y + 256
+    if scroll_target > 0:
+        scroll_target = 0
     game_state = STATE_LEVEL_CLEAR
 
 def enter_boss_intro():
@@ -311,8 +317,6 @@ def enter_boss_intro():
 def on_player_death():
     lives = lives - 1
     frame_timer = DEATH_DELAY
-    camera_y = CAMERA_Y_MIN
-    SET_CAMERA_Y(camera_y)
     game_state = STATE_PLAYER_DEAD
 
 # ── Detección nivel boss (múltiplos de 10) ───────────────────────────────────
@@ -332,65 +336,76 @@ def check_if_boss_level():
 # ── Carga de nivel + música ──────────────────────────────────────────────────
 def load_current_level():
     time_left = LEVEL_TIME
-    enemy_count = 2     # world_1_1 has 2 enemies
     player_x = 0
-    player_y = -2418
+    camera_y = CAMERA_Y_MIN + (current_level - 1) * 256
+    if camera_y > 0:
+        camera_y = 0
+    player_y = camera_y - 86
     player_vy = 0
-    player_on_ground = 0
+    player_on_ground = 1
     shoot_cooldown = 0
     snow0_active = 0
     snow1_active = 0
     snow2_active = 0
     snow_life_max = SNOW_LIFE_NORMAL
     player_has_power = 0
-    camera_y = CAMERA_Y_MIN
     SET_CAMERA_Y(camera_y)
     reset_balls()
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 2:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_2
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 3:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_3
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 4:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_4
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 5:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_5
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 6:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_6
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Henshoku")
     if current_level == 7:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_7
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Henshoku")
     if current_level == 8:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_8
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 9:
-        LOAD_LEVEL("world_1_1")         # TODO: world_1_9
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 11:
-        LOAD_LEVEL("world_1_1")         # TODO: world_2_1
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
     if current_level == 12:
-        LOAD_LEVEL("world_1_1")         # TODO: world_2_2
+        LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
+        kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
-    # TODO: niveles 13-50
 
 def play_boss_music():
     if current_level == 10:
@@ -420,8 +435,11 @@ def update_player():
             player_vy = JUMP_SPEED
             player_on_ground = 0
         if player_on_ground == 1:
-            # Verificar que sigue habiendo suelo bajo el jugador (walkoff detection)
+            # Walkoff: ignore floors below visible screen (vplay has 1-screen data)
             floor_y = LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH)
+            screen_bottom = camera_y - 127
+            if floor_y < screen_bottom:
+                floor_y = camera_y - 86
             if floor_y < player_y:
                 player_on_ground = 0
 
@@ -437,6 +455,9 @@ def update_player():
         # Colisión con plataformas al caer (usa prev_y para evitar tunneling)
         if player_vy <= 0:
             floor_y = LEVEL_COLLISION_Y(player_x, prev_y, PLAYER_HH)
+            screen_bottom = camera_y - 127
+            if floor_y < screen_bottom:
+                floor_y = camera_y - 86
             if player_y <= floor_y:
                 player_y = floor_y
                 player_vy = 0
@@ -446,8 +467,9 @@ def update_player():
     if player_y > WORLD_Y_MAX:
         player_y = WORLD_Y_MAX
         player_vy = 0
-    if player_y < WORLD_Y_MIN:
-        player_y = WORLD_Y_MIN
+    screen_floor = camera_y - 86
+    if player_y < screen_floor:
+        player_y = screen_floor
         player_vy = 0
         player_on_ground = 1
 
@@ -649,6 +671,20 @@ def count_active_enemies():
             n = n + 1
         i = i + 1
     enemy_count = n
+
+# ── Elimina enemigos fuera de la pantalla actual ────────────────────────────
+def kill_offscreen_enemies():
+    i = 0
+    screen_min = camera_y - 150
+    screen_max = camera_y + 150
+    while i < 8:
+        if GET_ENEMY_ACTIVE(i) == 1:
+            ey = GET_ENEMY_Y(i)
+            if ey < screen_min:
+                KILL_ENEMY(i)
+            if ey > screen_max:
+                KILL_ENEMY(i)
+        i = i + 1
 
 # ── Reset del sistema de bolas al cargar nivel ──────────────────────────────
 def reset_balls():

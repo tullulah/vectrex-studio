@@ -808,7 +808,7 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
     // Phase 4: PiTrex ARM32 codegen
     println!("\n{}", "Phase 3: PiTrex ARM32 Codegen".bright_cyan().bold());
     let title = unified.meta.title_override.as_deref().unwrap_or("VPY GAME");
-    let bank_config = vpy_codegen::BankConfig::single_bank();
+    let bank_config = vpy_codegen::BankConfig::pitrex();
     let assets = discover_assets(&source_path);
 
     let generated = vpy_codegen::generate_from_module_with_target(
@@ -1653,7 +1653,17 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
             .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
         
         println!("  {} Unified {} items", "✓".green(), unified.items.len());
-        
+
+        // META TARGET override: redirect to pitrex/rp2350 build path
+        if let Some(meta_target) = &unified.meta.target {
+            if meta_target == "pitrex" {
+                return cmd_build_pitrex(input, output, verbose);
+            }
+            if meta_target == "rp2350" {
+                return cmd_build_rp2350(input, output, verbose);
+            }
+        }
+
         // **CRITICAL**: Override rom_size and bank_size from META if specified
         let rom_size = unified.meta.rom_total_size.map(|s| s as usize).unwrap_or(rom_size);
         let bank_size = unified.meta.rom_bank_size.map(|s| s as usize).unwrap_or(bank_size);
