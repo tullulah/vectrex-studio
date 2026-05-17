@@ -94,6 +94,7 @@ export function PlaygroundPanel() {
   const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string }[]>([]);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
+  const pendingScrollRef = useRef<{ top: number; left: number } | null>(null);
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -318,6 +319,33 @@ export function PlaygroundPanel() {
       window.removeEventListener('playground:loadScene' as any, handleLoadSceneRequest);
     };
   }, [vpyProject]); // handleLoadScene uses vpyProject, so include it in deps
+
+  // Auto-load last opened scene when project is ready
+  useEffect(() => {
+    if (!vpyProject?.rootDir) return;
+    try {
+      const raw = localStorage.getItem('playground_last_scene');
+      if (!raw) return;
+      const { sceneName: lastScene, projectRoot } = JSON.parse(raw);
+      if (projectRoot !== vpyProject.rootDir) return;
+      if (!lastScene) return;
+      handleLoadScene(lastScene);
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vpyProject?.rootDir]);
+
+  // Apply pending scroll restore after render
+  useEffect(() => {
+    if (!pendingScrollRef.current || !containerRef.current) return;
+    const { top, left } = pendingScrollRef.current;
+    pendingScrollRef.current = null;
+    requestAnimationFrame(() => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = top;
+        containerRef.current.scrollLeft = left;
+      }
+    });
+  });
 
   // Physics simulation loop
   useEffect(() => {
@@ -662,6 +690,21 @@ export function PlaygroundPanel() {
       setSelectedLimit(null);
       setSelectedId(null);
       setSceneName(name); // Remember the scene name for future saves
+      // Persist last opened scene for auto-restore on next panel visit
+      if (vpyProject?.rootDir) {
+        localStorage.setItem('playground_last_scene', JSON.stringify({
+          sceneName: name,
+          projectRoot: vpyProject.rootDir,
+        }));
+      }
+      // Schedule scroll restore if pending (e.g. coming from auto-load)
+      const savedScroll = localStorage.getItem('playground_scroll_' + name);
+      if (savedScroll) {
+        try {
+          const { top, left } = JSON.parse(savedScroll);
+          pendingScrollRef.current = { top, left };
+        } catch {}
+      }
       console.log('[Playground] Loaded scene:', name, `(${loadedObjects.length} objects)`);
       showToast(`Scene "${name}" loaded!`, 'success');
       setShowSaveLoadModal(false);
@@ -1677,6 +1720,12 @@ export function PlaygroundPanel() {
           padding: '20px',
           minWidth: 0,
           minHeight: 0,
+        }} onScroll={() => {
+          if (!containerRef.current || !sceneName) return;
+          localStorage.setItem('playground_scroll_' + sceneName, JSON.stringify({
+            top: containerRef.current.scrollTop,
+            left: containerRef.current.scrollLeft,
+          }));
         }}>
           <div style={{ width: 'fit-content' }}>
             <svg
