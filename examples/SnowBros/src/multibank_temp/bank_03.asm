@@ -13,182 +13,182 @@ TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes
 BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
 BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
 NUM_STR              EQU $C880+$0E   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$14   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$15   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$16   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$17   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$18   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$19   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$21   ; Vector intensity override (0=use vector data) (1 bytes)
-DRAW_VEC_X_HI        EQU $C880+$22   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
-DRAW_VEC_X           EQU $C880+$23   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$24   ; Vector draw Y offset (1 bytes)
-MIRROR_PAD           EQU $C880+$25   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$35   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$36   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$37   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$41   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$43   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$45   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$46   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$47   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$49   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-LEVEL_PTR            EQU $C880+$4B   ; Pointer to currently loaded level header (2 bytes)
-LEVEL_LOADED         EQU $C880+$4D   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
-LEVEL_WIDTH          EQU $C880+$4E   ; Level width (legacy tile API) (1 bytes)
-LEVEL_HEIGHT         EQU $C880+$4F   ; Level height (legacy tile API) (1 bytes)
-LEVEL_TILE_SIZE      EQU $C880+$50   ; Tile size (legacy tile API) (1 bytes)
-LEVEL_Y_IDX          EQU $C880+$51   ; SHOW_LEVEL row counter (legacy) (1 bytes)
-LEVEL_X_IDX          EQU $C880+$52   ; SHOW_LEVEL column counter (legacy) (1 bytes)
-LEVEL_TEMP           EQU $C880+$53   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
-LEVEL_BG_COUNT       EQU $C880+$54   ; BG object count (1 bytes)
-LEVEL_GP_COUNT       EQU $C880+$55   ; GP object count (1 bytes)
-LEVEL_FG_COUNT       EQU $C880+$56   ; FG object count (1 bytes)
-CAMERA_X             EQU $C880+$57   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
-CAMERA_Y             EQU $C880+$59   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
-SCROLL_LIMIT_LEFT    EQU $C880+$5B   ; Camera scroll limit: left world X (2 bytes)
-SCROLL_LIMIT_RIGHT   EQU $C880+$5D   ; Camera scroll limit: right world X (2 bytes)
-SCROLL_LIMIT_TOP     EQU $C880+$5F   ; Camera scroll limit: top world Y (2 bytes)
-SCROLL_LIMIT_BOTTOM  EQU $C880+$61   ; Camera scroll limit: bottom world Y (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$63   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$65   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$67   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$69   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$6B   ; Bank ID for current level (for multibank) (1 bytes)
-LEVEL_ENEMY_COUNT    EQU $C880+$6C   ; Enemy count from current level header (1 bytes)
-LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$6D   ; Ptr to enemy instances table in level bank (2 bytes)
-SLR_CUR_X            EQU $C880+$6F   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-DRAW_T1_SCALED       EQU $C880+$70   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$71   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
-LCOL_PX              EQU $C880+$251   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$253   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
-LCOL_PY              EQU $C880+$255   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
-LCOL_PHH             EQU $C880+$257   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$258   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$259   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$25A   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$25B   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$25C   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$25D   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$25F   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$261   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$262   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$263   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$264   ; GP-FG |dy| (1 bytes)
-ENEMY_POOL           EQU $C880+$265   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N) (136 bytes)
-ENEMY_LOOP_IDX       EQU $C880+$2ED   ; Enemy loop counter (1 bytes)
-ENEMY_COUNT          EQU $C880+$2EE   ; Active enemy count (1 bytes)
-ENEMY_SCRATCH_PTR    EQU $C880+$2EF   ; Scratch pointer for enemy iteration (2 bytes)
-ENEMY_SCRATCH_X      EQU $C880+$2F1   ; Enemy scratch X (2 bytes)
-ENEMY_SCRATCH_Y      EQU $C880+$2F3   ; Enemy scratch Y (2 bytes)
-ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2F5   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2F7   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$2F9   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$2FA   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-ANIM_PLAYER_WALK_STATE EQU $C880+$2FB   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
-DRAW_ANIM_MIRROR_X   EQU $C880+$2FD   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
-DRAW_ANIM_SCALE      EQU $C880+$2FE   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
-DRAW_ANIM_SPEED_MUL  EQU $C880+$2FF   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$300   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$301   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_GAME_START EQU $C880+$303   ; User variable: STATE_GAME_START (2 bytes)
-VAR_STATE_PLAYING    EQU $C880+$305   ; User variable: STATE_PLAYING (2 bytes)
-VAR_STATE_PLAYER_DEAD EQU $C880+$307   ; User variable: STATE_PLAYER_DEAD (2 bytes)
-VAR_STATE_LEVEL_CLEAR EQU $C880+$309   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
-VAR_STATE_BOSS_INTRO EQU $C880+$30B   ; User variable: STATE_BOSS_INTRO (2 bytes)
-VAR_STATE_BOSS       EQU $C880+$30D   ; User variable: STATE_BOSS (2 bytes)
-VAR_STATE_GAME_OVER  EQU $C880+$30F   ; User variable: STATE_GAME_OVER (2 bytes)
-VAR_STATE_ALL_CLEAR  EQU $C880+$311   ; User variable: STATE_ALL_CLEAR (2 bytes)
-VAR_TITCHI_STATE_NORMAL EQU $C880+$313   ; User variable: TITCHI_STATE_NORMAL (2 bytes)
-VAR_TITCHI_STATE_SNOW1 EQU $C880+$315   ; User variable: TITCHI_STATE_SNOW1 (2 bytes)
-VAR_TITCHI_STATE_SNOW2 EQU $C880+$317   ; User variable: TITCHI_STATE_SNOW2 (2 bytes)
-VAR_TITCHI_STATE_BALL EQU $C880+$319   ; User variable: TITCHI_STATE_BALL (2 bytes)
-VAR_SNOW_HW          EQU $C880+$31B   ; User variable: SNOW_HW (2 bytes)
-VAR_SNOW_HH          EQU $C880+$31D   ; User variable: SNOW_HH (2 bytes)
-VAR_ENEMY_HW         EQU $C880+$31F   ; User variable: ENEMY_HW (2 bytes)
-VAR_ENEMY_HH         EQU $C880+$321   ; User variable: ENEMY_HH (2 bytes)
-VAR_GAME_STATE       EQU $C880+$323   ; User variable: game_state (2 bytes)
-VAR_SCORE            EQU $C880+$325   ; User variable: score (2 bytes)
-VAR_LIVES            EQU $C880+$327   ; User variable: lives (2 bytes)
-VAR_CURRENT_LEVEL    EQU $C880+$329   ; User variable: current_level (2 bytes)
-VAR_TIME_LEFT        EQU $C880+$32B   ; User variable: time_left (2 bytes)
-VAR_ENEMY_COUNT      EQU $C880+$32D   ; User variable: enemy_count (2 bytes)
-VAR_FRAME_TIMER      EQU $C880+$32F   ; User variable: frame_timer (2 bytes)
-VAR_NEXT_IS_BOSS     EQU $C880+$331   ; User variable: next_is_boss (2 bytes)
-VAR_PLAYER_X         EQU $C880+$333   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$335   ; User variable: player_y (2 bytes)
-VAR_PLAYER_VX        EQU $C880+$337   ; User variable: player_vx (2 bytes)
-VAR_PLAYER_VY        EQU $C880+$339   ; User variable: player_vy (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$33B   ; User variable: player_facing (2 bytes)
-VAR_PLAYER_ON_GROUND EQU $C880+$33D   ; User variable: player_on_ground (2 bytes)
-VAR_FLOOR_Y          EQU $C880+$33F   ; User variable: floor_y (2 bytes)
-VAR_PREV_Y           EQU $C880+$341   ; User variable: prev_y (2 bytes)
-VAR_GRAVITY          EQU $C880+$343   ; User variable: GRAVITY (2 bytes)
-VAR_JUMP_SPEED       EQU $C880+$345   ; User variable: JUMP_SPEED (2 bytes)
-VAR_MAX_FALL_SPEED   EQU $C880+$347   ; User variable: MAX_FALL_SPEED (2 bytes)
-VAR_PLAYER_HH        EQU $C880+$349   ; User variable: PLAYER_HH (2 bytes)
-VAR_WORLD_X_MIN      EQU $C880+$34B   ; User variable: WORLD_X_MIN (2 bytes)
-VAR_WORLD_X_MAX      EQU $C880+$34D   ; User variable: WORLD_X_MAX (2 bytes)
-VAR_WORLD_Y_MIN      EQU $C880+$34F   ; User variable: WORLD_Y_MIN (2 bytes)
-VAR_WORLD_Y_MAX      EQU $C880+$351   ; User variable: WORLD_Y_MAX (2 bytes)
-VAR_SNOW_SPEED       EQU $C880+$353   ; User variable: SNOW_SPEED (2 bytes)
-VAR_SNOW_LAUNCH_VY   EQU $C880+$355   ; User variable: SNOW_LAUNCH_VY (2 bytes)
-VAR_SNOW_LIFE_NORMAL EQU $C880+$357   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
-VAR_SNOW_LIFE_POWER  EQU $C880+$359   ; User variable: SNOW_LIFE_POWER (2 bytes)
-VAR_SHOOT_COOLDOWN_MAX EQU $C880+$35B   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
-VAR_SHOOT_COOLDOWN   EQU $C880+$35D   ; User variable: shoot_cooldown (2 bytes)
-VAR_PLAYER_HAS_POWER EQU $C880+$35F   ; User variable: player_has_power (2 bytes)
-VAR_SNOW_LIFE_MAX    EQU $C880+$361   ; User variable: snow_life_max (2 bytes)
-VAR_SNOW_SPAWN_VX    EQU $C880+$363   ; User variable: snow_spawn_vx (2 bytes)
-VAR_SNOW0_ACTIVE     EQU $C880+$365   ; User variable: snow0_active (2 bytes)
-VAR_SNOW0_X          EQU $C880+$367   ; User variable: snow0_x (2 bytes)
-VAR_SNOW0_Y          EQU $C880+$369   ; User variable: snow0_y (2 bytes)
-VAR_SNOW0_VX         EQU $C880+$36B   ; User variable: snow0_vx (2 bytes)
-VAR_SNOW0_VY         EQU $C880+$36D   ; User variable: snow0_vy (2 bytes)
-VAR_SNOW0_LIFE       EQU $C880+$36F   ; User variable: snow0_life (2 bytes)
-VAR_SNOW1_ACTIVE     EQU $C880+$371   ; User variable: snow1_active (2 bytes)
-VAR_SNOW1_X          EQU $C880+$373   ; User variable: snow1_x (2 bytes)
-VAR_SNOW1_Y          EQU $C880+$375   ; User variable: snow1_y (2 bytes)
-VAR_SNOW1_VX         EQU $C880+$377   ; User variable: snow1_vx (2 bytes)
-VAR_SNOW1_VY         EQU $C880+$379   ; User variable: snow1_vy (2 bytes)
-VAR_SNOW1_LIFE       EQU $C880+$37B   ; User variable: snow1_life (2 bytes)
-VAR_SNOW2_ACTIVE     EQU $C880+$37D   ; User variable: snow2_active (2 bytes)
-VAR_SNOW2_X          EQU $C880+$37F   ; User variable: snow2_x (2 bytes)
-VAR_SNOW2_Y          EQU $C880+$381   ; User variable: snow2_y (2 bytes)
-VAR_SNOW2_VX         EQU $C880+$383   ; User variable: snow2_vx (2 bytes)
-VAR_SNOW2_VY         EQU $C880+$385   ; User variable: snow2_vy (2 bytes)
-VAR_SNOW2_LIFE       EQU $C880+$387   ; User variable: snow2_life (2 bytes)
-VAR_LEVEL_TIME       EQU $C880+$389   ; User variable: LEVEL_TIME (2 bytes)
-VAR_LIVES_START      EQU $C880+$38B   ; User variable: LIVES_START (2 bytes)
-VAR_GAME_START_DELAY EQU $C880+$38D   ; User variable: GAME_START_DELAY (2 bytes)
-VAR_DEATH_DELAY      EQU $C880+$38F   ; User variable: DEATH_DELAY (2 bytes)
-VAR_LEVEL_CLEAR_DELAY EQU $C880+$391   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
-VAR_BOSS_INTRO_DELAY EQU $C880+$393   ; User variable: BOSS_INTRO_DELAY (2 bytes)
-VAR_ALL_CLEAR_DELAY  EQU $C880+$395   ; User variable: ALL_CLEAR_DELAY (2 bytes)
-VAR_I                EQU $C880+$397   ; User variable: i (2 bytes)
-VAR_EX               EQU $C880+$399   ; User variable: ex (2 bytes)
-VAR_EY               EQU $C880+$39B   ; User variable: ey (2 bytes)
-VAR_IDX              EQU $C880+$39D   ; User variable: idx (2 bytes)
-VAR_THW              EQU $C880+$39F   ; User variable: thw (2 bytes)
-VAR_THH              EQU $C880+$3A1   ; User variable: thh (2 bytes)
-VAR_DX               EQU $C880+$3A3   ; User variable: dx (2 bytes)
-VAR_DY               EQU $C880+$3A5   ; User variable: dy (2 bytes)
-VAR_ST               EQU $C880+$3A7   ; User variable: st (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$3A9   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$3AB   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$3AD   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$3AE   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$3AF   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$3B0   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$3B1   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$3B3   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$3B4   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$3B5   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$3B7   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$3B9   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$3BB   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$3BD   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$3BF   ; Current ROM bank ID (multibank tracking) (1 bytes)
+RAND_SEED            EQU $C880+$14   ; Random seed for RAND() (2 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$16   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$17   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$18   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$19   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$1A   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$1B   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$23   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_VEC_X_HI        EQU $C880+$24   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
+DRAW_VEC_X           EQU $C880+$25   ; Vector draw X offset (1 bytes)
+DRAW_VEC_Y           EQU $C880+$26   ; Vector draw Y offset (1 bytes)
+MIRROR_PAD           EQU $C880+$27   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
+MIRROR_X             EQU $C880+$37   ; X mirror flag (0=normal, 1=flip) (1 bytes)
+MIRROR_Y             EQU $C880+$38   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$39   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$43   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$45   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$47   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$48   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$49   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$4B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+LEVEL_PTR            EQU $C880+$4D   ; Pointer to currently loaded level header (2 bytes)
+LEVEL_LOADED         EQU $C880+$4F   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
+LEVEL_WIDTH          EQU $C880+$50   ; Level width (legacy tile API) (1 bytes)
+LEVEL_HEIGHT         EQU $C880+$51   ; Level height (legacy tile API) (1 bytes)
+LEVEL_TILE_SIZE      EQU $C880+$52   ; Tile size (legacy tile API) (1 bytes)
+LEVEL_Y_IDX          EQU $C880+$53   ; SHOW_LEVEL row counter (legacy) (1 bytes)
+LEVEL_X_IDX          EQU $C880+$54   ; SHOW_LEVEL column counter (legacy) (1 bytes)
+LEVEL_TEMP           EQU $C880+$55   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
+LEVEL_BG_COUNT       EQU $C880+$56   ; BG object count (1 bytes)
+LEVEL_GP_COUNT       EQU $C880+$57   ; GP object count (1 bytes)
+LEVEL_FG_COUNT       EQU $C880+$58   ; FG object count (1 bytes)
+CAMERA_X             EQU $C880+$59   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
+CAMERA_Y             EQU $C880+$5B   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
+SCROLL_LIMIT_LEFT    EQU $C880+$5D   ; Camera scroll limit: left world X (2 bytes)
+SCROLL_LIMIT_RIGHT   EQU $C880+$5F   ; Camera scroll limit: right world X (2 bytes)
+SCROLL_LIMIT_TOP     EQU $C880+$61   ; Camera scroll limit: top world Y (2 bytes)
+SCROLL_LIMIT_BOTTOM  EQU $C880+$63   ; Camera scroll limit: bottom world Y (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$65   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$67   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$69   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$6B   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$6D   ; Bank ID for current level (for multibank) (1 bytes)
+LEVEL_ENEMY_COUNT    EQU $C880+$6E   ; Enemy count from current level header (1 bytes)
+LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$6F   ; Ptr to enemy instances table in level bank (2 bytes)
+SLR_CUR_X            EQU $C880+$71   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
+DRAW_T1_SCALED       EQU $C880+$72   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$73   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$253   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$255   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$257   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$259   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$25A   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$25B   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$25C   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$25D   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$25E   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$25F   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$261   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$263   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$264   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$265   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$266   ; GP-FG |dy| (1 bytes)
+ENEMY_POOL           EQU $C880+$267   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N) (136 bytes)
+ENEMY_LOOP_IDX       EQU $C880+$2EF   ; Enemy loop counter (1 bytes)
+ENEMY_COUNT          EQU $C880+$2F0   ; Active enemy count (1 bytes)
+ENEMY_SCRATCH_PTR    EQU $C880+$2F1   ; Scratch pointer for enemy iteration (2 bytes)
+ENEMY_SCRATCH_X      EQU $C880+$2F3   ; Enemy scratch X (2 bytes)
+ENEMY_SCRATCH_Y      EQU $C880+$2F5   ; Enemy scratch Y (2 bytes)
+ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2F7   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2F9   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$2FB   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$2FC   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+ANIM_PLAYER_WALK_STATE EQU $C880+$2FD   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
+DRAW_ANIM_MIRROR_X   EQU $C880+$2FF   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
+DRAW_ANIM_SCALE      EQU $C880+$300   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
+DRAW_ANIM_SPEED_MUL  EQU $C880+$301   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$302   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$303   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$305   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$307   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$309   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$30B   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$30D   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_BALL_LAUNCHED    EQU $C880+$30E   ; User variable: ball_launched (2 bytes)
+VAR_GAME_STATE       EQU $C880+$310   ; User variable: game_state (2 bytes)
+VAR_SCORE            EQU $C880+$312   ; User variable: score (2 bytes)
+VAR_LIVES            EQU $C880+$314   ; User variable: lives (2 bytes)
+VAR_CURRENT_LEVEL    EQU $C880+$316   ; User variable: current_level (2 bytes)
+VAR_TIME_LEFT        EQU $C880+$318   ; User variable: time_left (2 bytes)
+VAR_ENEMY_COUNT      EQU $C880+$31A   ; User variable: enemy_count (2 bytes)
+VAR_FRAME_TIMER      EQU $C880+$31C   ; User variable: frame_timer (2 bytes)
+VAR_NEXT_IS_BOSS     EQU $C880+$31E   ; User variable: next_is_boss (2 bytes)
+VAR_PLAYER_X         EQU $C880+$320   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$322   ; User variable: player_y (2 bytes)
+VAR_PLAYER_VX        EQU $C880+$324   ; User variable: player_vx (2 bytes)
+VAR_PLAYER_VY        EQU $C880+$326   ; User variable: player_vy (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$328   ; User variable: player_facing (2 bytes)
+VAR_PLAYER_ON_GROUND EQU $C880+$32A   ; User variable: player_on_ground (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$32C   ; User variable: floor_y (2 bytes)
+VAR_PREV_Y           EQU $C880+$32E   ; User variable: prev_y (2 bytes)
+VAR_CAMERA_Y         EQU $C880+$330   ; User variable: camera_y (2 bytes)
+VAR_SHOOT_COOLDOWN   EQU $C880+$332   ; User variable: shoot_cooldown (2 bytes)
+VAR_PLAYER_HAS_POWER EQU $C880+$334   ; User variable: player_has_power (2 bytes)
+VAR_SNOW_LIFE_MAX    EQU $C880+$336   ; User variable: snow_life_max (2 bytes)
+VAR_SNOW_SPAWN_VX    EQU $C880+$338   ; User variable: snow_spawn_vx (2 bytes)
+VAR_SNOW0_ACTIVE     EQU $C880+$33A   ; User variable: snow0_active (2 bytes)
+VAR_SNOW0_X          EQU $C880+$33C   ; User variable: snow0_x (2 bytes)
+VAR_SNOW0_Y          EQU $C880+$33E   ; User variable: snow0_y (2 bytes)
+VAR_SNOW0_VX         EQU $C880+$340   ; User variable: snow0_vx (2 bytes)
+VAR_SNOW0_VY         EQU $C880+$342   ; User variable: snow0_vy (2 bytes)
+VAR_SNOW0_LIFE       EQU $C880+$344   ; User variable: snow0_life (2 bytes)
+VAR_SNOW1_ACTIVE     EQU $C880+$346   ; User variable: snow1_active (2 bytes)
+VAR_SNOW1_X          EQU $C880+$348   ; User variable: snow1_x (2 bytes)
+VAR_SNOW1_Y          EQU $C880+$34A   ; User variable: snow1_y (2 bytes)
+VAR_SNOW1_VX         EQU $C880+$34C   ; User variable: snow1_vx (2 bytes)
+VAR_SNOW1_VY         EQU $C880+$34E   ; User variable: snow1_vy (2 bytes)
+VAR_SNOW1_LIFE       EQU $C880+$350   ; User variable: snow1_life (2 bytes)
+VAR_SNOW2_ACTIVE     EQU $C880+$352   ; User variable: snow2_active (2 bytes)
+VAR_SNOW2_X          EQU $C880+$354   ; User variable: snow2_x (2 bytes)
+VAR_SNOW2_Y          EQU $C880+$356   ; User variable: snow2_y (2 bytes)
+VAR_SNOW2_VX         EQU $C880+$358   ; User variable: snow2_vx (2 bytes)
+VAR_SNOW2_VY         EQU $C880+$35A   ; User variable: snow2_vy (2 bytes)
+VAR_SNOW2_LIFE       EQU $C880+$35C   ; User variable: snow2_life (2 bytes)
+VAR_ELAPSED          EQU $C880+$35E   ; User variable: elapsed (2 bytes)
+VAR_I                EQU $C880+$360   ; User variable: i (2 bytes)
+VAR_EX               EQU $C880+$362   ; User variable: ex (2 bytes)
+VAR_EY               EQU $C880+$364   ; User variable: ey (2 bytes)
+VAR_IDX              EQU $C880+$366   ; User variable: idx (2 bytes)
+VAR_THW              EQU $C880+$368   ; User variable: thw (2 bytes)
+VAR_THH              EQU $C880+$36A   ; User variable: thh (2 bytes)
+VAR_DX               EQU $C880+$36C   ; User variable: dx (2 bytes)
+VAR_DY               EQU $C880+$36E   ; User variable: dy (2 bytes)
+VAR_NEW_STATE        EQU $C880+$370   ; User variable: new_state (2 bytes)
+VAR_TICKS            EQU $C880+$372   ; User variable: ticks (2 bytes)
+VAR_THAW_TIMERS      EQU $C880+$374   ; User variable: thaw_timers (2 bytes)
+VAR_ST               EQU $C880+$376   ; User variable: st (2 bytes)
+VAR_BALL_ROLLING     EQU $C880+$378   ; User variable: ball_rolling (2 bytes)
+VAR_N                EQU $C880+$37A   ; User variable: n (2 bytes)
+VAR_BALL_VX_ARR      EQU $C880+$37C   ; User variable: ball_vx_arr (2 bytes)
+VAR_BALL_VY_ARR      EQU $C880+$37E   ; User variable: ball_vy_arr (2 bytes)
+VAR_BALL_BOUNCES     EQU $C880+$380   ; User variable: ball_bounces (2 bytes)
+VAR_BALL_COLLIDED    EQU $C880+$382   ; User variable: ball_collided (2 bytes)
+VAR_FOUND            EQU $C880+$384   ; User variable: found (2 bytes)
+VAR_PREV_BY          EQU $C880+$386   ; User variable: prev_by (2 bytes)
+VAR_BX               EQU $C880+$388   ; User variable: bx (2 bytes)
+VAR_BY               EQU $C880+$38A   ; User variable: by (2 bytes)
+VAR_FLOOR            EQU $C880+$38C   ; User variable: floor (2 bytes)
+VAR_K                EQU $C880+$38E   ; User variable: k (2 bytes)
+VAR_J                EQU $C880+$390   ; User variable: j (2 bytes)
+VAR_SKIP             EQU $C880+$392   ; User variable: skip (2 bytes)
+VAR_EJX              EQU $C880+$394   ; User variable: ejx (2 bytes)
+VAR_EJY              EQU $C880+$396   ; User variable: ejy (2 bytes)
+VAR_OLD_VX           EQU $C880+$398   ; User variable: old_vx (2 bytes)
+VAR_THAW_TIMERS_DATA EQU $C880+$39A   ; Mutable array 'thaw_timers' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_ROLLING_DATA EQU $C880+$3AA   ; Mutable array 'ball_rolling' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_VX_ARR_DATA EQU $C880+$3BA   ; Mutable array 'ball_vx_arr' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_VY_ARR_DATA EQU $C880+$3CA   ; Mutable array 'ball_vy_arr' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_BOUNCES_DATA EQU $C880+$3DA   ; Mutable array 'ball_bounces' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_COLLIDED_DATA EQU $C880+$3EA   ; Mutable array 'ball_collided' data (8 elements x 2 bytes) (16 bytes)
+PSG_MUSIC_PTR        EQU $C880+$3FA   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$3FC   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$3FE   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$3FF   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$400   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$401   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$402   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$404   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$405   ; SFX bank ID (for multibank) (1 bytes)
+; Array length constants
+ARRAY_THAW_TIMERS_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_ROLLING_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_VX_ARR_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_VY_ARR_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_BOUNCES_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_COLLIDED_LEN         EQU 8   ; 8 elements
 
 
 
@@ -197,23 +197,31 @@ CURRENT_ROM_BANK     EQU $C880+$3BF   ; Current ROM bank ID (multibank tracking)
 
 ;***************************************************************************
 ; ASSET LOOKUP TABLES (for banked asset access)
-; Total: 11 vectors, 4 music, 0 sfx, 1 levels, 2 animations, 0 instruments, 2 enemies
+; Total: 15 vectors, 5 music, 1 sfx, 1 levels, 2 animations, 0 instruments, 2 enemies
 ;***************************************************************************
 
 ; Vector Asset Index Mapping:
 ;   0 = init_screen (Bank #1)
-;   1 = platform1 (Bank #1)
+;   1 = platform1 (Bank #2)
 ;   2 = platform2 (Bank #1)
-;   3 = platform3 (Bank #1)
+;   3 = platform3 (Bank #2)
 ;   4 = platform4 (Bank #1)
-;   5 = player_idle (Bank #1)
-;   6 = player_jump (Bank #1)
-;   7 = titchi_ball (Bank #1)
-;   8 = titchi_idle (Bank #1)
-;   9 = titchi_snow1 (Bank #1)
-;   10 = titchi_snow2 (Bank #1)
+;   5 = player_die1 (Bank #1)
+;   6 = player_die2 (Bank #1)
+;   7 = player_die3 (Bank #1)
+;   8 = player_die4 (Bank #1)
+;   9 = player_idle (Bank #1)
+;   10 = player_jump (Bank #1)
+;   11 = titchi_ball (Bank #1)
+;   12 = titchi_idle (Bank #1)
+;   13 = titchi_snow1 (Bank #1)
+;   14 = titchi_snow2 (Bank #1)
 
 VECTOR_BANK_TABLE:
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
@@ -232,6 +240,10 @@ VECTOR_ADDR_TABLE:
     FDB _PLATFORM2_VECTORS    ; platform2
     FDB _PLATFORM3_VECTORS    ; platform3
     FDB _PLATFORM4_VECTORS    ; platform4
+    FDB _PLAYER_DIE1_VECTORS    ; player_die1
+    FDB _PLAYER_DIE2_VECTORS    ; player_die2
+    FDB _PLAYER_DIE3_VECTORS    ; player_die3
+    FDB _PLAYER_DIE4_VECTORS    ; player_die4
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
     FDB _PLAYER_JUMP_VECTORS    ; player_jump
     FDB _TITCHI_BALL_VECTORS    ; titchi_ball
@@ -244,11 +256,13 @@ VECTOR_ADDR_TABLE:
 ;   1 = Game_Over (Bank #1)
 ;   2 = Henshoku (Bank #2)
 ;   3 = Yukidama-Ondo (Bank #1)
+;   4 = intro (Bank #1)
 
 MUSIC_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
     FCB 1              ; Bank ID
 
 MUSIC_ADDR_TABLE:
@@ -256,6 +270,16 @@ MUSIC_ADDR_TABLE:
     FDB _GAME_OVER_MUSIC    ; Game_Over
     FDB _HENSHOKU_MUSIC    ; Henshoku
     FDB _YUKIDAMA_ONDO_MUSIC    ; Yukidama-Ondo
+    FDB _INTRO_MUSIC    ; intro
+
+; SFX Asset Index Mapping:
+;   0 = shot_normal (Bank #1)
+
+SFX_BANK_TABLE:
+    FCB 1              ; Bank ID
+
+SFX_ADDR_TABLE:
+    FDB _SHOT_NORMAL_SFX    ; shot_normal
 
 ; Level Asset Index Mapping:
 ;   0 = world_1_1 (Bank #1)
@@ -306,7 +330,7 @@ _ENEMY1_ENEMY:
     FDB 0           ; [5-6] no state machine
 
 _ENEMY1_ENEMY_ACTIONS:
-    FCB $05   ; action 0 (idle) sprite_idx ($FF=none)
+    FCB $09   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 0                   ; loop=false
     FCB 0                    ; pad (entry byte [3])
@@ -326,13 +350,13 @@ _TITCHI_ACTION_BALL EQU 4
 
 _TITCHI_ENEMY:
     FCB 3          ; [0] hp
-    FCB 40          ; [1] speed
+    FCB 30          ; [1] speed
     FDB 180          ; [2-3] action_duration
     FCB 5          ; [4] action_count
     FDB _TITCHI_SM      ; [5-6] state machine ptr
 
 _TITCHI_ENEMY_ACTIONS:
-    FCB $08   ; action 0 (idle) sprite_idx ($FF=none)
+    FCB $0C   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
@@ -342,17 +366,17 @@ _TITCHI_ENEMY_ACTIONS:
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
     FDB ANIM_ENEMY_TITCHI_WALK_STATE    ; [4-5] anim state RAM ptr (frame_idx, ticks_left)
-    FCB $09   ; action 2 (snow1) sprite_idx ($FF=none)
+    FCB $0D   ; action 2 (snow1) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
     FDB 0                    ; [4-5] no anim state (vec action)
-    FCB $0A   ; action 3 (snow2) sprite_idx ($FF=none)
+    FCB $0E   ; action 3 (snow2) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
     FDB 0                    ; [4-5] no anim state (vec action)
-    FCB $07   ; action 4 (ball) sprite_idx ($FF=none)
+    FCB $0B   ; action 4 (ball) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
@@ -434,25 +458,37 @@ ASSET_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 2              ; Bank ID
 
 ASSET_ADDR_TABLE:
     FDB _YUKIDAMA_ONDO_MUSIC    ; Yukidama-Ondo
-    FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _WORLD_1_1_LEVEL    ; world_1_1
+    FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _GAME_OVER_MUSIC    ; Game_Over
     FDB _TITCHI_SNOW1_VECTORS    ; titchi_snow1
     FDB _PLATFORM4_VECTORS    ; platform4
     FDB _PLAYER_JUMP_VECTORS    ; player_jump
+    FDB _PLAYER_DIE1_VECTORS    ; player_die1
     FDB _TITCHI_SNOW2_VECTORS    ; titchi_snow2
+    FDB _PLAYER_DIE2_VECTORS    ; player_die2
     FDB _TITCHI_IDLE_VECTORS    ; titchi_idle
+    FDB _PLAYER_DIE3_VECTORS    ; player_die3
+    FDB _PLAYER_DIE4_VECTORS    ; player_die4
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
     FDB _TITCHI_BALL_VECTORS    ; titchi_ball
     FDB _BOSS_INTRO_MUSIC    ; Boss_Intro
+    FDB _INTRO_MUSIC    ; intro
     FDB _PLATFORM2_VECTORS    ; platform2
+    FDB _SHOT_NORMAL_SFX    ; shot_normal
+    FDB _HENSHOKU_MUSIC    ; Henshoku
     FDB _PLATFORM1_VECTORS    ; platform1
     FDB _PLATFORM3_VECTORS    ; platform3
-    FDB _HENSHOKU_MUSIC    ; Henshoku
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
@@ -554,6 +590,44 @@ PLAY_MUSIC_BANKED:
 
     ; Call PLAY_MUSIC_RUNTIME with X pointing to music data
     JSR PLAY_MUSIC_RUNTIME
+
+    ; Restore original bank from stack
+    PULS A               ; A = original bank
+    STA CURRENT_ROM_BANK
+    STA $DF00            ; Restore bank
+
+    RTS
+
+;***************************************************************************
+; PLAY_SFX_BANKED - Play SFX asset with automatic bank switching
+; Input: X = SFX asset index (0-based)
+; Uses: A, B, X
+;***************************************************************************
+PLAY_SFX_BANKED:
+    ; Save index to U register (avoid stack order issues)
+    TFR X,U              ; U = SFX index
+    ; Save context: original bank on stack
+    LDA CURRENT_ROM_BANK
+    PSHS A               ; Stack: [A]
+
+    ; Get SFX's bank from lookup table
+    TFR U,D              ; D = SFX index (from U)
+    LDX #SFX_BANK_TABLE
+    LDA D,X              ; A = bank ID for this SFX
+    STA CURRENT_ROM_BANK ; Update RAM tracker
+    STA >SFX_BANK        ; Save SFX bank for AUDIO_UPDATE
+    STA $DF00            ; Switch bank hardware register
+
+    ; Get SFX's address from lookup table (2 bytes per entry)
+    TFR U,D              ; Reload SFX index from U
+    ASLB                 ; *2 for FDB entries
+    ROLA
+    LDX #SFX_ADDR_TABLE
+    LEAX D,X             ; X points to address entry
+    LDX ,X               ; X = actual SFX address in banked ROM
+
+    ; Call PLAY_SFX_RUNTIME with X pointing to SFX data
+    JSR PLAY_SFX_RUNTIME
 
     ; Restore original bank from stack
     PULS A               ; A = original bank
@@ -738,191 +812,6 @@ _ANIM_TITCHI_WALK_F2:
 
 ; Vec files referenced by animations (helpers bank for cross-bank safety)
 
-; Generated from player_walk3.vec (Malban Draw_Sync_List format)
-; Total paths: 5, points: 26
-; X bounds: min=-7, max=6, width=13
-; Center: (0, 0)
-
-_PLAYER_WALK3_WIDTH EQU 13
-_PLAYER_WALK3_HALF_WIDTH EQU 6
-_PLAYER_WALK3_HEIGHT EQU 19
-_PLAYER_WALK3_HALF_HEIGHT EQU 9
-_PLAYER_WALK3_CENTER_X EQU 0
-_PLAYER_WALK3_CENTER_Y EQU 0
-
-_PLAYER_WALK3_VECTORS:  ; Main entry (header + 5 path(s))
-    FDB 5               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
-    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
-    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
-    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
-    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
-
-_PLAYER_WALK3_PATH0:    ; Path 0
-    FCB 65              ; path0: intensity
-    FCB $02,$00,0,0        ; path0: header (y=2, x=0)
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH1:    ; Path 1
-    FCB 65              ; path1: intensity
-    FCB $FF,$03,0,0        ; path1: header (y=-1, x=3)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH2:    ; Path 2
-    FCB 65              ; path2: intensity
-    FCB $FE,$FE,0,0        ; path2: header (y=-2, x=-2)
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
-    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
-    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
-    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$02,$FA          ; flag=-1, dy=2, dx=-6
-    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH3:    ; Path 3
-    FCB 65              ; path3: intensity
-    FCB $06,$FE,0,0        ; path3: header (y=6, x=-2)
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH4:    ; Path 4
-    FCB 65              ; path4: intensity
-    FCB $07,$01,0,0        ; path4: header (y=7, x=1)
-    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB 2                ; End marker (path complete)
-
-; Generated from titchi_walk2.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 39
-; X bounds: min=-7, max=7, width=14
-; Center: (0, 0)
-
-_TITCHI_WALK2_WIDTH EQU 14
-_TITCHI_WALK2_HALF_WIDTH EQU 7
-_TITCHI_WALK2_HEIGHT EQU 13
-_TITCHI_WALK2_HALF_HEIGHT EQU 6
-_TITCHI_WALK2_CENTER_X EQU 0
-_TITCHI_WALK2_CENTER_Y EQU 0
-
-_TITCHI_WALK2_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _TITCHI_WALK2_PATH0        ; pointer to path 0
-    FDB _TITCHI_WALK2_PATH1        ; pointer to path 1
-    FDB _TITCHI_WALK2_PATH2        ; pointer to path 2
-    FDB _TITCHI_WALK2_PATH3        ; pointer to path 3
-    FDB _TITCHI_WALK2_PATH4        ; pointer to path 4
-    FDB _TITCHI_WALK2_PATH5        ; pointer to path 5
-    FDB _TITCHI_WALK2_PATH6        ; pointer to path 6
-    FDB _TITCHI_WALK2_PATH7        ; pointer to path 7
-    FDB _TITCHI_WALK2_PATH8        ; pointer to path 8
-    FDB _TITCHI_WALK2_PATH9        ; pointer to path 9
-    FDB _TITCHI_WALK2_PATH10        ; pointer to path 10
-    FDB _TITCHI_WALK2_PATH11        ; pointer to path 11
-    FDB _TITCHI_WALK2_PATH12        ; pointer to path 12
-
-_TITCHI_WALK2_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $FC,$FC,0,0        ; path1: header (y=-4, x=-4)
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $F9,$FB,0,0        ; path2: header (y=-7, x=-5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $F9,$01,0,0        ; path3: header (y=-7, x=1)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $FD,$05,0,0        ; path4: header (y=-3, x=5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $FF,$05,0,0        ; path5: header (y=-1, x=5)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $03,$FE,0,0        ; path6: header (y=3, x=-2)
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $05,$FF,0,0        ; path7: header (y=5, x=-1)
-    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $03,$04,0,0        ; path8: header (y=3, x=4)
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $03,$02,0,0        ; path9: header (y=3, x=2)
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $03,$04,0,0        ; path10: header (y=3, x=4)
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $01,$05,0,0        ; path11: header (y=1, x=5)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $F9,$01,0,0        ; path12: header (y=-7, x=1)
-    FCB 2                ; End marker (path complete)
-
 ; Generated from player_walk1.vec (Malban Draw_Sync_List format)
 ; Total paths: 8, points: 25
 ; X bounds: min=-5, max=5, width=10
@@ -1001,6 +890,191 @@ _PLAYER_WALK1_PATH7:    ; Path 7
     FCB $08,$FD,0,0        ; path7: header (y=8, x=-3)
     FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
     FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk3.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 26
+; X bounds: min=-7, max=6, width=13
+; Center: (0, 0)
+
+_PLAYER_WALK3_WIDTH EQU 13
+_PLAYER_WALK3_HALF_WIDTH EQU 6
+_PLAYER_WALK3_HEIGHT EQU 19
+_PLAYER_WALK3_HALF_HEIGHT EQU 9
+_PLAYER_WALK3_CENTER_X EQU 0
+_PLAYER_WALK3_CENTER_Y EQU 0
+
+_PLAYER_WALK3_VECTORS:  ; Main entry (header + 5 path(s))
+    FDB 5               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
+
+_PLAYER_WALK3_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $02,$00,0,0        ; path0: header (y=2, x=0)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $FF,$03,0,0        ; path1: header (y=-1, x=3)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FE,$FE,0,0        ; path2: header (y=-2, x=-2)
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
+    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
+    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$02,$FA          ; flag=-1, dy=2, dx=-6
+    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $06,$FE,0,0        ; path3: header (y=6, x=-2)
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $07,$01,0,0        ; path4: header (y=7, x=1)
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB 2                ; End marker (path complete)
+
+; Generated from titchi_walk3.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 39
+; X bounds: min=-7, max=7, width=14
+; Center: (0, -1)
+
+_TITCHI_WALK3_WIDTH EQU 14
+_TITCHI_WALK3_HALF_WIDTH EQU 7
+_TITCHI_WALK3_HEIGHT EQU 15
+_TITCHI_WALK3_HALF_HEIGHT EQU 7
+_TITCHI_WALK3_CENTER_X EQU 0
+_TITCHI_WALK3_CENTER_Y EQU -1
+
+_TITCHI_WALK3_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _TITCHI_WALK3_PATH0        ; pointer to path 0
+    FDB _TITCHI_WALK3_PATH1        ; pointer to path 1
+    FDB _TITCHI_WALK3_PATH2        ; pointer to path 2
+    FDB _TITCHI_WALK3_PATH3        ; pointer to path 3
+    FDB _TITCHI_WALK3_PATH4        ; pointer to path 4
+    FDB _TITCHI_WALK3_PATH5        ; pointer to path 5
+    FDB _TITCHI_WALK3_PATH6        ; pointer to path 6
+    FDB _TITCHI_WALK3_PATH7        ; pointer to path 7
+    FDB _TITCHI_WALK3_PATH8        ; pointer to path 8
+    FDB _TITCHI_WALK3_PATH9        ; pointer to path 9
+    FDB _TITCHI_WALK3_PATH10        ; pointer to path 10
+    FDB _TITCHI_WALK3_PATH11        ; pointer to path 11
+    FDB _TITCHI_WALK3_PATH12        ; pointer to path 12
+
+_TITCHI_WALK3_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $00,$FE,0,0        ; path0: header (y=0, x=-2)
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $FD,$FC,0,0        ; path1: header (y=-3, x=-4)
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $F8,$FD,0,0        ; path2: header (y=-8, x=-3)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $FA,$00,0,0        ; path3: header (y=-6, x=0)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH4:    ; Path 4
+    FCB 85              ; path4: intensity
+    FCB $FA,$01,0,0        ; path4: header (y=-6, x=1)
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH5:    ; Path 5
+    FCB 85              ; path5: intensity
+    FCB $FE,$05,0,0        ; path5: header (y=-2, x=5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH6:    ; Path 6
+    FCB 85              ; path6: intensity
+    FCB $00,$05,0,0        ; path6: header (y=0, x=5)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
+    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
+    FCB $FF,$FE,$FA          ; flag=-1, dy=-2, dx=-6
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH7:    ; Path 7
+    FCB 85              ; path7: intensity
+    FCB $04,$FE,0,0        ; path7: header (y=4, x=-2)
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH8:    ; Path 8
+    FCB 85              ; path8: intensity
+    FCB $06,$FF,0,0        ; path8: header (y=6, x=-1)
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH9:    ; Path 9
+    FCB 85              ; path9: intensity
+    FCB $04,$04,0,0        ; path9: header (y=4, x=4)
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH10:    ; Path 10
+    FCB 85              ; path10: intensity
+    FCB $04,$02,0,0        ; path10: header (y=4, x=2)
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH11:    ; Path 11
+    FCB 85              ; path11: intensity
+    FCB $04,$04,0,0        ; path11: header (y=4, x=4)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH12:    ; Path 12
+    FCB 85              ; path12: intensity
+    FCB $02,$05,0,0        ; path12: header (y=2, x=5)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 ; Generated from player_walk2.vec (Malban Draw_Sync_List format)
@@ -1203,6 +1277,125 @@ _TITCHI_WALK1_PATH12:    ; Path 12
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
+; Generated from titchi_walk2.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 39
+; X bounds: min=-7, max=7, width=14
+; Center: (0, 0)
+
+_TITCHI_WALK2_WIDTH EQU 14
+_TITCHI_WALK2_HALF_WIDTH EQU 7
+_TITCHI_WALK2_HEIGHT EQU 13
+_TITCHI_WALK2_HALF_HEIGHT EQU 6
+_TITCHI_WALK2_CENTER_X EQU 0
+_TITCHI_WALK2_CENTER_Y EQU 0
+
+_TITCHI_WALK2_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _TITCHI_WALK2_PATH0        ; pointer to path 0
+    FDB _TITCHI_WALK2_PATH1        ; pointer to path 1
+    FDB _TITCHI_WALK2_PATH2        ; pointer to path 2
+    FDB _TITCHI_WALK2_PATH3        ; pointer to path 3
+    FDB _TITCHI_WALK2_PATH4        ; pointer to path 4
+    FDB _TITCHI_WALK2_PATH5        ; pointer to path 5
+    FDB _TITCHI_WALK2_PATH6        ; pointer to path 6
+    FDB _TITCHI_WALK2_PATH7        ; pointer to path 7
+    FDB _TITCHI_WALK2_PATH8        ; pointer to path 8
+    FDB _TITCHI_WALK2_PATH9        ; pointer to path 9
+    FDB _TITCHI_WALK2_PATH10        ; pointer to path 10
+    FDB _TITCHI_WALK2_PATH11        ; pointer to path 11
+    FDB _TITCHI_WALK2_PATH12        ; pointer to path 12
+
+_TITCHI_WALK2_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $FC,$FC,0,0        ; path1: header (y=-4, x=-4)
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $F9,$FB,0,0        ; path2: header (y=-7, x=-5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $F9,$01,0,0        ; path3: header (y=-7, x=1)
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH4:    ; Path 4
+    FCB 85              ; path4: intensity
+    FCB $FD,$05,0,0        ; path4: header (y=-3, x=5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH5:    ; Path 5
+    FCB 85              ; path5: intensity
+    FCB $FF,$05,0,0        ; path5: header (y=-1, x=5)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH6:    ; Path 6
+    FCB 85              ; path6: intensity
+    FCB $03,$FE,0,0        ; path6: header (y=3, x=-2)
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH7:    ; Path 7
+    FCB 85              ; path7: intensity
+    FCB $05,$FF,0,0        ; path7: header (y=5, x=-1)
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH8:    ; Path 8
+    FCB 85              ; path8: intensity
+    FCB $03,$04,0,0        ; path8: header (y=3, x=4)
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH9:    ; Path 9
+    FCB 85              ; path9: intensity
+    FCB $03,$02,0,0        ; path9: header (y=3, x=2)
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH10:    ; Path 10
+    FCB 85              ; path10: intensity
+    FCB $03,$04,0,0        ; path10: header (y=3, x=4)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH11:    ; Path 11
+    FCB 85              ; path11: intensity
+    FCB $01,$05,0,0        ; path11: header (y=1, x=5)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH12:    ; Path 12
+    FCB 85              ; path12: intensity
+    FCB $F9,$01,0,0        ; path12: header (y=-7, x=1)
+    FCB 2                ; End marker (path complete)
+
 ; Generated from player_walk4.vec (Malban Draw_Sync_List format)
 ; Total paths: 6, points: 26
 ; X bounds: min=-7, max=6, width=13
@@ -1272,125 +1465,6 @@ _PLAYER_WALK4_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
     FCB $FF,$03,0,0        ; path5: header (y=-1, x=3)
     FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-; Generated from titchi_walk3.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 39
-; X bounds: min=-7, max=7, width=14
-; Center: (0, -1)
-
-_TITCHI_WALK3_WIDTH EQU 14
-_TITCHI_WALK3_HALF_WIDTH EQU 7
-_TITCHI_WALK3_HEIGHT EQU 15
-_TITCHI_WALK3_HALF_HEIGHT EQU 7
-_TITCHI_WALK3_CENTER_X EQU 0
-_TITCHI_WALK3_CENTER_Y EQU -1
-
-_TITCHI_WALK3_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _TITCHI_WALK3_PATH0        ; pointer to path 0
-    FDB _TITCHI_WALK3_PATH1        ; pointer to path 1
-    FDB _TITCHI_WALK3_PATH2        ; pointer to path 2
-    FDB _TITCHI_WALK3_PATH3        ; pointer to path 3
-    FDB _TITCHI_WALK3_PATH4        ; pointer to path 4
-    FDB _TITCHI_WALK3_PATH5        ; pointer to path 5
-    FDB _TITCHI_WALK3_PATH6        ; pointer to path 6
-    FDB _TITCHI_WALK3_PATH7        ; pointer to path 7
-    FDB _TITCHI_WALK3_PATH8        ; pointer to path 8
-    FDB _TITCHI_WALK3_PATH9        ; pointer to path 9
-    FDB _TITCHI_WALK3_PATH10        ; pointer to path 10
-    FDB _TITCHI_WALK3_PATH11        ; pointer to path 11
-    FDB _TITCHI_WALK3_PATH12        ; pointer to path 12
-
-_TITCHI_WALK3_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $00,$FE,0,0        ; path0: header (y=0, x=-2)
-    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $FD,$FC,0,0        ; path1: header (y=-3, x=-4)
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $F8,$FD,0,0        ; path2: header (y=-8, x=-3)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $FA,$00,0,0        ; path3: header (y=-6, x=0)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $FA,$01,0,0        ; path4: header (y=-6, x=1)
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $FE,$05,0,0        ; path5: header (y=-2, x=5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $00,$05,0,0        ; path6: header (y=0, x=5)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$FE,$FA          ; flag=-1, dy=-2, dx=-6
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $04,$FE,0,0        ; path7: header (y=4, x=-2)
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $06,$FF,0,0        ; path8: header (y=6, x=-1)
-    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $04,$04,0,0        ; path9: header (y=4, x=4)
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $04,$02,0,0        ; path10: header (y=4, x=2)
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $04,$04,0,0        ; path11: header (y=4, x=4)
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $02,$05,0,0        ; path12: header (y=2, x=5)
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 ;***************************************************************************
@@ -1498,9 +1572,9 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
     LDU #NUM_STR     ; String pointer
     LDA >TEXT_SCALE_H ; height (signed byte)
@@ -1640,6 +1714,43 @@ MOD16:
     COMB
     ADDD #1             ; negate (same sign as dividend)
 .M16_DONE:
+    RTS
+
+RAND_HELPER:
+    ; LCG: seed = (seed * 1103515245 + 12345) & 0x7FFF
+    ; Simplified for 6809: seed = (seed * 25 + 13) & 0x7FFF
+    LDD RAND_SEED
+    LDX #26
+    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)
+    PSHS D
+    LDD #0
+RAND_MUL_LOOP:
+    LEAX -1,X
+    BEQ RAND_MUL_DONE
+    ADDD ,S
+    BRA RAND_MUL_LOOP
+RAND_MUL_DONE:
+    LEAS 2,S
+    ADDD #13       ; Add constant c=13 (odd, Hull-Dobell ok)
+    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output
+    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)
+    RTS
+
+RAND_RANGE_HELPER:
+    ; Input: TMPPTR = min (i16), TMPPTR2 = max (i16)
+    ; Returns: D = min + (rand % (max - min + 1))
+    JSR RAND_HELPER        ; D = rand (0..$7FFF)
+    PSHS D                 ; Save rand
+    LDD TMPPTR2            ; max
+    SUBD TMPPTR            ; D = max - min
+    ADDD #1                ; D = inclusive range
+    STD TMPPTR2            ; TMPPTR2 = range
+    PULS D                 ; Restore rand
+RRH_MOD:
+    SUBD TMPPTR2           ; D -= range
+    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting
+    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range
+    ADDD TMPPTR            ; Add min -> D in [min, max]
     RTS
 
 ; === JOYSTICK BUILTIN SUBROUTINES ===
@@ -2574,7 +2685,7 @@ SDCP_DONE:
 ; === LEVEL_COLLISION_Y_RUNTIME ===
 ; Find the highest collidable floor Y at player_x in the GP layer.
 ; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (16-bit) = player_top (player_y + player_hh)
+;         LCOL_PY (16-bit) = player_feet (player_y - player_hh)
 ; Output: RESULT = highest floor landing Y (i16)
 ;         Returns $FF80 (-128) if no collidable surface found at that X.
 ; Algorithm: for each collidable GP object, check X AABB overlap,
@@ -2583,6 +2694,12 @@ SDCP_DONE:
 ;   +18=half_width, +19=half_height. Stride=20.
 LEVEL_COLLISION_Y_RUNTIME:
     PSHS X,Y,U       ; Save regs (NOT D - result returns in D)
+    ; MULTIBANK: Switch to level bank so ROM GP pointer dereferences land in the right bank
+    LDA >CURRENT_ROM_BANK
+    PSHS A              ; Save current bank
+    LDA >LEVEL_BANK
+    STA >CURRENT_ROM_BANK
+    STA $DF00           ; Switch to level bank
     
     ; Initialize best_floor = -32768 ($8000, no floor found)
     LDD #$8000
@@ -2634,9 +2751,10 @@ LCOL_Y_LOOP:
     ADDB 19,X        ; B = world_y_lo + half_height
     ADCA #0          ; propagate carry to high byte
     STD >TMPVAL      ; TMPVAL = surface_top (16-bit)
-    ; Filter: skip surfaces above the player's head (surface_top > player_top)
-    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_top
-    BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip
+    ; Filter: skip surfaces above the player's feet (surface_top > player_feet)
+    ;   — player can only land on surfaces at or below their feet level.
+    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_feet
+    LBGT LCOL_Y_NEXT ; surface_top > player_feet → already passed below → skip
     ; Compute landing Y = surface_top + player_half_height (16-bit)
     LDD >TMPVAL      ; reload surface_top
     ADDB >LCOL_PHH   ; add player_hh to low byte
@@ -2661,6 +2779,11 @@ LCOL_Y_DONE:
     LDD #$FF80       ; -128
 LCOL_Y_RET:
     STD RESULT
+    ; MULTIBANK: Restore original bank (result is in RESULT, will reload after)
+    PULS A              ; A = saved bank
+    STA >CURRENT_ROM_BANK
+    STA $DF00           ; Restore bank
+    LDD RESULT          ; Reload return value into D
     
     PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)
 
@@ -3097,10 +3220,9 @@ PSHS B,X,Y
 LDX ,Y              ; X = _VECNAME_VECTORS header
 CLR >MIRROR_Y
 JSR $F1AA           ; DP_to_D0
-CLRA                ; path_count is 1 byte (FCB), high byte = 0
-LDB ,X              ; B = path_count (8-bit FCB)
+LDD ,X              ; D = path_count (FDB, 2 bytes)
 BEQ DAR_BASE_SKIP
-LEAY 1,X            ; Y = first path FDB in vec table (skip 1-byte count)
+LEAY 2,X            ; Y = first path FDB in vec table (skip 2-byte count)
 DAR_BASE_PATH_LOOP:
 PSHS D,Y
 LDX ,Y
@@ -3203,10 +3325,9 @@ DAR_VEC_LOOP:
 PSHS B,Y
 LDX ,Y
 JSR $F1AA           ; DP_to_D0
-CLRA                ; path_count is 1 byte (FCB), high byte = 0
-LDB ,X              ; B = path_count (8-bit FCB)
+LDD ,X              ; D = path_count (FDB, 2 bytes)
 BEQ DAR_VEC_DONE
-LEAY 1,X            ; Y = first path FDB (skip 1-byte count)
+LEAY 2,X            ; Y = first path FDB (skip 2-byte count)
 DAR_VEC_PATH_LOOP:
 PSHS D,Y
 LDX ,Y
@@ -3650,12 +3771,20 @@ FIRE_EVT_RTS:
 RTS
 
 ;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_67:
+    FCC "C"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_78166382:
     FCC "ROUND"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_78726770:
     FCC "SCORE"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_100361836:
+    FCC "intro"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_2073804707667:
@@ -3694,6 +3823,22 @@ PRINT_TEXT_STR_89062161292953211:
     FCC "init_screen"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_94739999784554063:
+    FCC "player_die1"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94739999784554064:
+    FCC "player_die2"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94739999784554065:
+    FCC "player_die3"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94739999784554066:
+    FCC "player_die4"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_94739999784698482:
     FCC "player_idle"
     FCB $80          ; Vectrex string terminator
@@ -3704,6 +3849,10 @@ PRINT_TEXT_STR_94739999784744652:
 
 PRINT_TEXT_STR_94739999785112679:
     FCC "player_walk"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_97104923643965900:
+    FCC "shot_normal"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_1989933374265095120:
@@ -3725,3 +3874,121 @@ PRINT_TEXT_STR_17169778266052697977:
 PRINT_TEXT_STR_17825111777351717868:
     FCC "Yukidama-Ondo"
     FCB $80          ; Vectrex string terminator
+
+; === CROSS-BANK USER FUNCTION TRAMPOLINES ===
+TRAMP_try_launch_ball:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$00  ; switch to bank #0
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR try_launch_ball
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_try_shoot:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$00  ; switch to bank #0
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR try_shoot
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_update_player:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR update_player
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_update_snowballs:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR update_snowballs
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+
+; === CONST ARRAY DATA (relocated to fixed bank - accessible from any bank) ===
+ARRAY_THAW_TIMERS_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_rolling' (8 elements, 2 bytes each)
+ARRAY_BALL_ROLLING_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_vx_arr' (8 elements, 2 bytes each)
+ARRAY_BALL_VX_ARR_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_vy_arr' (8 elements, 2 bytes each)
+ARRAY_BALL_VY_ARR_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_bounces' (8 elements, 2 bytes each)
+ARRAY_BALL_BOUNCES_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_collided' (8 elements, 2 bytes each)
+ARRAY_BALL_COLLIDED_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+
+;***************************************************************************
+; MAIN PROGRAM (Bank #0)
+;***************************************************************************
+

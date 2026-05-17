@@ -1,806 +1,3 @@
-; External symbols (helpers, BIOS, and shared data)
-ABS_A_B EQU $F584
-ABS_B EQU $F58B
-ADD_SCORE_A EQU $F85E
-ADD_SCORE_D EQU $F87C
-ANIM_ADDR_TABLE EQU $4032
-ANIM_BANK_TABLE EQU $4030
-ASSET_ADDR_TABLE EQU $40BA
-ASSET_BANK_TABLE EQU $40AA
-AUDIO_UPDATE EQU $4FAB
-AU_BANK_OK EQU $4FC5
-AU_DONE EQU $5057
-AU_MUSIC_DONE EQU $502A
-AU_MUSIC_ENDED EQU $5030
-AU_MUSIC_HAS_DELAY EQU $5003
-AU_MUSIC_LOOP EQU $5036
-AU_MUSIC_NO_DELAY EQU $4FF4
-AU_MUSIC_PROCESS_WRITES EQU $5011
-AU_MUSIC_READ EQU $4FE3
-AU_MUSIC_READ_COUNT EQU $4FF4
-AU_MUSIC_WRITE_LOOP EQU $5013
-AU_SKIP_MUSIC EQU $5041
-AU_UPDATE_SFX EQU $5044
-Abs_a_b EQU $F584
-Abs_b EQU $F58B
-Add_Score_a EQU $F85E
-Add_Score_d EQU $F87C
-BITMASK_A EQU $F57E
-Bitmask_a EQU $F57E
-CHECK0REF EQU $F34F
-CLEAR_C8_RAM EQU $F542
-CLEAR_SCORE EQU $F84F
-CLEAR_SOUND EQU $F272
-CLEAR_X_256 EQU $F545
-CLEAR_X_B EQU $F53F
-CLEAR_X_B_80 EQU $F550
-CLEAR_X_B_A EQU $F552
-CLEAR_X_D EQU $F548
-COLD_START EQU $F000
-COMPARE_SCORE EQU $F8C7
-Check0Ref EQU $F34F
-Clear_C8_RAM EQU $F542
-Clear_Score EQU $F84F
-Clear_Sound EQU $F272
-Clear_x_256 EQU $F545
-Clear_x_b EQU $F53F
-Clear_x_b_80 EQU $F550
-Clear_x_b_a EQU $F552
-Clear_x_d EQU $F548
-Cold_Start EQU $F000
-Compare_Score EQU $F8C7
-DAR_BASE_LOOP EQU $511D
-DAR_BASE_PATH_LOOP EQU $5130
-DAR_BASE_SKIP EQU $5142
-DAR_DONE EQU $5242
-DAR_DRAW EQU $51CD
-DAR_EMIT EQU $51DD
-DAR_FREEZE EQU $5193
-DAR_INIT EQU $51A8
-DAR_INLINE EQU $5213
-DAR_NO_WRAP EQU $516B
-DAR_PATH_DONE EQU $523B
-DAR_PATH_LOOP EQU $5219
-DAR_SCAN EQU $5228
-DAR_SPEED1 EQU $5186
-DAR_SPEED1_OK EQU $518E
-DAR_SPEED2 EQU $51C0
-DAR_SPEED2_OK EQU $51C8
-DAR_TICK EQU $514E
-DAR_VEC_DONE EQU $5207
-DAR_VEC_LOOP EQU $51E5
-DAR_VEC_PATH_LOOP EQU $51F5
-DCR_AFTER_INTENSITY EQU $4832
-DCR_INTENSITY_5F EQU $482F
-DCR_after_intensity EQU $4832
-DCR_intensity_5F EQU $482F
-DEC_3_COUNTERS EQU $F55A
-DEC_6_COUNTERS EQU $F55E
-DEC_COUNTERS EQU $F563
-DELAY_0 EQU $F579
-DELAY_1 EQU $F575
-DELAY_2 EQU $F571
-DELAY_3 EQU $F56D
-DELAY_B EQU $F57A
-DELAY_RTS EQU $F57D
-DIV16 EQU $4723
-DIV16.D16_DONE EQU $478D
-DIV16.D16_DPOS EQU $4740
-DIV16.D16_END EQU $477E
-DIV16.D16_LOOP EQU $4765
-DIV16.D16_RCHECK EQU $4748
-DIV16.D16_RPOS EQU $475F
-DOT_D EQU $F2C3
-DOT_HERE EQU $F2C5
-DOT_IX EQU $F2C1
-DOT_IX_B EQU $F2BE
-DOT_LIST EQU $F2D5
-DOT_LIST_RESET EQU $F2DE
-DO_SOUND EQU $F289
-DO_SOUND_X EQU $F28C
-DP_TO_C8 EQU $F1AF
-DP_TO_D0 EQU $F1AA
-DP_to_C8 EQU $F1AF
-DP_to_D0 EQU $F1AA
-DRAW_ANIM_BANKED EQU $41B6
-DRAW_ANIM_RUNTIME EQU $5107
-DRAW_CIRCLE_RUNTIME EQU $47FA
-DRAW_ENEMIES_RUNTIME EQU $53BD
-DRAW_GRID_VL EQU $FF9F
-DRAW_LINE_D EQU $F3DF
-DRAW_PAT_VL EQU $F437
-DRAW_PAT_VL_A EQU $F434
-DRAW_PAT_VL_D EQU $F439
-DRAW_SYNC_LIST_AT_WITH_MIRRORS EQU $493F
-DRAW_VECTOR_BANKED EQU $40DA
-DRAW_VL EQU $F3DD
-DRAW_VLC EQU $F3CE
-DRAW_VLCS EQU $F3D6
-DRAW_VLP EQU $F410
-DRAW_VLP_7F EQU $F408
-DRAW_VLP_B EQU $F40E
-DRAW_VLP_FF EQU $F404
-DRAW_VLP_SCALE EQU $F40C
-DRAW_VL_A EQU $F3DA
-DRAW_VL_AB EQU $F3D8
-DRAW_VL_B EQU $F3D2
-DRAW_VL_MODE EQU $F46E
-DRW_ENE_DONE EQU $5446
-DRW_ENE_LOOP EQU $53C8
-DRW_ENE_NEXT_POP EQU $543C
-DRW_ENE_VANIM EQU $541F
-DSWM_DONE EQU $4A92
-DSWM_LOOP EQU $49BA
-DSWM_NEXT_NO_NEGATE_X EQU $4A30
-DSWM_NEXT_NO_NEGATE_Y EQU $4A23
-DSWM_NEXT_PATH EQU $4A05
-DSWM_NEXT_SET_INTENSITY EQU $4A17
-DSWM_NEXT_USE_OVERRIDE EQU $4A15
-DSWM_NO_NEGATE_DX EQU $49DC
-DSWM_NO_NEGATE_DY EQU $49D2
-DSWM_NO_NEGATE_X EQU $4967
-DSWM_NO_NEGATE_Y EQU $495A
-DSWM_SET_INTENSITY EQU $494D
-DSWM_USE_OVERRIDE EQU $494B
-DSWM_W1 EQU $49B1
-DSWM_W2 EQU $49F3
-DSWM_W3 EQU $4A86
-DVB_DONE EQU $411A
-DVB_PATH_LOOP EQU $4108
-Dec_3_Counters EQU $F55A
-Dec_6_Counters EQU $F55E
-Dec_Counters EQU $F563
-Delay_0 EQU $F579
-Delay_1 EQU $F575
-Delay_2 EQU $F571
-Delay_3 EQU $F56D
-Delay_RTS EQU $F57D
-Delay_b EQU $F57A
-Do_Sound EQU $F289
-Do_Sound_x EQU $F28C
-Dot_List EQU $F2D5
-Dot_List_Reset EQU $F2DE
-Dot_d EQU $F2C3
-Dot_here EQU $F2C5
-Dot_ix EQU $F2C1
-Dot_ix_b EQU $F2BE
-Draw_Grid_VL EQU $FF9F
-Draw_Line_d EQU $F3DF
-Draw_Pat_VL EQU $F437
-Draw_Pat_VL_a EQU $F434
-Draw_Pat_VL_d EQU $F439
-Draw_Sync_List_At_With_Mirrors EQU $493F
-Draw_VL EQU $F3DD
-Draw_VL_a EQU $F3DA
-Draw_VL_ab EQU $F3D8
-Draw_VL_b EQU $F3D2
-Draw_VL_mode EQU $F46E
-Draw_VLc EQU $F3CE
-Draw_VLcs EQU $F3D6
-Draw_VLp EQU $F410
-Draw_VLp_7F EQU $F408
-Draw_VLp_FF EQU $F404
-Draw_VLp_b EQU $F40E
-Draw_VLp_scale EQU $F40C
-ENEMY_ADDR_TABLE EQU $4038
-ENEMY_BANK_TABLE EQU $4036
-ENEMY_FIRE_EVENT_RUNTIME EQU $545C
-EXPLOSION_SND EQU $F92E
-Explosion_Snd EQU $F92E
-FIRE_EVT_MATCH EQU $54B1
-FIRE_EVT_RTS EQU $54ED
-FIRE_EVT_SCAN EQU $54A1
-GET_RISE_IDX EQU $F5D9
-GET_RISE_RUN EQU $F5EF
-GET_RUN_IDX EQU $F5DB
-Get_Rise_Idx EQU $F5D9
-Get_Rise_Run EQU $F5EF
-Get_Run_Idx EQU $F5DB
-INIT_MUSIC EQU $F68D
-INIT_MUSIC_BUF EQU $F533
-INIT_MUSIC_CHK EQU $F687
-INIT_MUSIC_X EQU $F692
-INIT_OS EQU $F18B
-INIT_OS_RAM EQU $F164
-INIT_VIA EQU $F14C
-INTENSITY_1F EQU $F29D
-INTENSITY_3F EQU $F2A1
-INTENSITY_5F EQU $F2A5
-INTENSITY_7F EQU $F2A9
-INTENSITY_A EQU $F2AB
-Init_Music EQU $F68D
-Init_Music_Buf EQU $F533
-Init_Music_chk EQU $F687
-Init_Music_x EQU $F692
-Init_OS EQU $F18B
-Init_OS_RAM EQU $F164
-Init_VIA EQU $F14C
-Intensity_1F EQU $F29D
-Intensity_3F EQU $F2A1
-Intensity_5F EQU $F2A5
-Intensity_7F EQU $F2A9
-Intensity_a EQU $F2AB
-J1X_BUILTIN EQU $47E2
-JOY_ANALOG EQU $F1F5
-JOY_DIGITAL EQU $F1F8
-Joy_Analog EQU $F1F5
-Joy_Digital EQU $F1F8
-KILL_ENEMY_RUNTIME EQU $5447
-LCOL_Y_DONE EQU $4E8F
-LCOL_Y_LOOP EQU $4E28
-LCOL_Y_NEXT EQU $4E86
-LCOL_Y_RET EQU $4E9D
-LEVEL_ADDR_TABLE EQU $402E
-LEVEL_BANK_TABLE EQU $402D
-LEVEL_COLLISION_Y_RUNTIME EQU $4E0F
-LLR_COPY_DONE EQU $4B40
-LLR_COPY_LOOP EQU $4AF9
-LLR_COPY_OBJECTS EQU $4AF9
-LLR_GP_DONE EQU $4AF1
-LLR_SKIP_GP EQU $4AF1
-LOAD_LEVEL_BANKED EQU $415E
-LOAD_LEVEL_RUNTIME EQU $4A93
-MOD16 EQU $478E
-MOD16.M16_DONE EQU $47E1
-MOD16.M16_DPOS EQU $47AB
-MOD16.M16_END EQU $47D2
-MOD16.M16_LOOP EQU $47C2
-MOD16.M16_RCHECK EQU $47B3
-MOD16.M16_RPOS EQU $47C2
-MOVETO_D EQU $F312
-MOVETO_D_7F EQU $F2FC
-MOVETO_IX EQU $F310
-MOVETO_IX_7F EQU $F30C
-MOVETO_IX_A EQU $F30E
-MOVETO_IX_FF EQU $F308
-MOVETO_X_7F EQU $F2F2
-MOVE_MEM_A EQU $F683
-MOVE_MEM_A_1 EQU $F67F
-MOV_DRAW_VL EQU $F3BC
-MOV_DRAW_VLCS EQU $F3B5
-MOV_DRAW_VLC_A EQU $F3AD
-MOV_DRAW_VL_A EQU $F3B9
-MOV_DRAW_VL_AB EQU $F3B7
-MOV_DRAW_VL_B EQU $F3B1
-MOV_DRAW_VL_D EQU $F3BE
-MUL16 EQU $46FB
-MUSIC1 EQU $FD0D
-MUSIC2 EQU $FD1D
-MUSIC3 EQU $FD81
-MUSIC4 EQU $FDD3
-MUSIC5 EQU $FE38
-MUSIC6 EQU $FE76
-MUSIC7 EQU $FEC6
-MUSIC8 EQU $FEF8
-MUSIC9 EQU $FF26
-MUSICA EQU $FF44
-MUSICB EQU $FF62
-MUSICC EQU $FF7A
-MUSICD EQU $FF8F
-MUSIC_ADDR_TABLE EQU $4025
-MUSIC_BANK_TABLE EQU $4021
-Mov_Draw_VL EQU $F3BC
-Mov_Draw_VL_a EQU $F3B9
-Mov_Draw_VL_ab EQU $F3B7
-Mov_Draw_VL_b EQU $F3B1
-Mov_Draw_VL_d EQU $F3BE
-Mov_Draw_VLc_a EQU $F3AD
-Mov_Draw_VLcs EQU $F3B5
-Move_Mem_a EQU $F683
-Move_Mem_a_1 EQU $F67F
-Moveto_d EQU $F312
-Moveto_d_7F EQU $F2FC
-Moveto_ix EQU $F310
-Moveto_ix_7F EQU $F30C
-Moveto_ix_FF EQU $F308
-Moveto_ix_a EQU $F30E
-Moveto_x_7F EQU $F2F2
-NEW_HIGH_SCORE EQU $F8D8
-NOAY EQU $5075
-New_High_Score EQU $F8D8
-OBJ_HIT EQU $F8FF
-OBJ_WILL_HIT EQU $F8F3
-OBJ_WILL_HIT_U EQU $F8E5
-Obj_Hit EQU $F8FF
-Obj_Will_Hit EQU $F8F3
-Obj_Will_Hit_u EQU $F8E5
-PLAY_BOSS_MUSIC EQU $0CEB
-PLAY_BOSS_MUSIC.CMP_39_END EQU $0D05
-PLAY_BOSS_MUSIC.CMP_39_TRUE EQU $0D02
-PLAY_MUSIC_BANKED EQU $4126
-PLAY_MUSIC_RUNTIME EQU $4EA2
-PLAY_SFX_RUNTIME EQU $5062
-PMR_DONE EQU $4EE2
-PMR_START_NEW EQU $4EB0
-PMr_done EQU $4EE2
-PMr_start_new EQU $4EB0
-PRINT_LIST EQU $F38A
-PRINT_LIST_CHK EQU $F38C
-PRINT_LIST_HW EQU $F385
-PRINT_SHIPS EQU $F393
-PRINT_SHIPS_X EQU $F391
-PRINT_STR EQU $F495
-PRINT_STR_D EQU $F37A
-PRINT_STR_HWYX EQU $F373
-PRINT_STR_YX EQU $F378
-PRINT_TEXT_STR_104652296222070 EQU $552A
-PRINT_TEXT_STR_13399742582312315532 EQU $5596
-PRINT_TEXT_STR_17169778266052697977 EQU $55A7
-PRINT_TEXT_STR_17825111777351717868 EQU $55B5
-PRINT_TEXT_STR_1785516508540691 EQU $5534
-PRINT_TEXT_STR_1842954771884826 EQU $553F
-PRINT_TEXT_STR_1989933374265095120 EQU $557A
-PRINT_TEXT_STR_2073804707667 EQU $54FA
-PRINT_TEXT_STR_2453707043877 EQU $5503
-PRINT_TEXT_STR_62413928761410 EQU $550C
-PRINT_TEXT_STR_63323706877185 EQU $5516
-PRINT_TEXT_STR_78166382 EQU $54EE
-PRINT_TEXT_STR_78726770 EQU $54F4
-PRINT_TEXT_STR_89062161292953211 EQU $554A
-PRINT_TEXT_STR_9120385685437879118 EQU $5587
-PRINT_TEXT_STR_94739999784698482 EQU $5556
-PRINT_TEXT_STR_94739999784744652 EQU $5562
-PRINT_TEXT_STR_94739999785112679 EQU $556E
-PRINT_TEXT_STR_97774210848817 EQU $5520
-PSG_EVENT_DONE EQU $4F5E
-PSG_MUSIC_ENDED EQU $4F67
-PSG_MUSIC_LOOP EQU $4F6D
-PSG_MUSIC_LOOP_D EQU $4F78
-PSG_PROCESS_EVENT EQU $4F1C
-PSG_READ_DELAY EQU $4F01
-PSG_UPDATE_DONE EQU $4F80
-PSG_WRITE_LOOP EQU $4F2D
-PSG_event_done EQU $4F5E
-PSG_music_ended EQU $4F67
-PSG_music_loop EQU $4F6D
-PSG_music_loop_d EQU $4F78
-PSG_process_event EQU $4F1C
-PSG_read_delay EQU $4F01
-PSG_update_done EQU $4F80
-PSG_write_loop EQU $4F2D
-Print_List EQU $F38A
-Print_List_chk EQU $F38C
-Print_List_hw EQU $F385
-Print_Ships EQU $F393
-Print_Ships_x EQU $F391
-Print_Str EQU $F495
-Print_Str_d EQU $F37A
-Print_Str_hwyx EQU $F373
-Print_Str_yx EQU $F378
-RANDOM EQU $F517
-RANDOM_3 EQU $F511
-READ_BTNS EQU $F1BA
-READ_BTNS_MASK EQU $F1B4
-RECALIBRATE EQU $F2E6
-RESET0INT EQU $F36B
-RESET0REF EQU $F354
-RESET0REF_D0 EQU $F34A
-RESET_PEN EQU $F35B
-RISE_RUN_ANGLE EQU $F593
-RISE_RUN_LEN EQU $F603
-RISE_RUN_X EQU $F5FF
-RISE_RUN_Y EQU $F601
-ROT_VL EQU $F616
-ROT_VL_AB EQU $F610
-ROT_VL_DFT EQU $F637
-ROT_VL_MODE EQU $F62B
-ROT_VL_MODE_A EQU $F61F
-Random EQU $F517
-Random_3 EQU $F511
-Read_Btns EQU $F1BA
-Read_Btns_Mask EQU $F1B4
-Recalibrate EQU $F2E6
-Reset0Int EQU $F36B
-Reset0Ref EQU $F354
-Reset0Ref_D0 EQU $F34A
-Reset_Pen EQU $F35B
-Rise_Run_Angle EQU $F593
-Rise_Run_Len EQU $F603
-Rise_Run_X EQU $F5FF
-Rise_Run_Y EQU $F601
-Rot_VL EQU $F616
-Rot_VL_Mode EQU $F62B
-Rot_VL_Mode_a EQU $F61F
-Rot_VL_ab EQU $F610
-Rot_VL_dft EQU $F637
-SDCP_ABS_OK EQU $4D4A
-SDCP_CHECK_POS EQU $4D45
-SDCP_CLIP EQU $4DE8
-SDCP_DONE EQU $4E0E
-SDCP_MOVETO_W EQU $4D97
-SDCP_SEG_LOOP EQU $4DA0
-SDCP_SET_INTENS EQU $4D1F
-SDCP_SKIP_PATH EQU $4D49
-SDCP_USE_OVERRIDE EQU $4D1D
-SDCP_W_DRAW EQU $4DD9
-SDCP_W_MOVE EQU $4E02
-SEB_DONE EQU $41B5
-SELECT_GAME EQU $F7A9
-SET_REFRESH EQU $F1A2
-SFX_CHECKNOISEFREQ EQU $50A3
-SFX_CHECKTONEFREQ EQU $5089
-SFX_CHECKVOLUME EQU $50B4
-SFX_DOFRAME EQU $5076
-SFX_ENDOFEFFECT EQU $50E9
-SFX_M_NOISE EQU $50CF
-SFX_M_NOISEDIS EQU $50DA
-SFX_M_TONEDIS EQU $50CD
-SFX_M_WRITE EQU $50DC
-SFX_NEXTFRAME EQU $50E4
-SFX_UPDATE EQU $506B
-SFX_UPDATEMIXER EQU $50BD
-SHOW_LEVEL_RUNTIME EQU $4B41
-SLR_BG_COUNT EQU $4B6F
-SLR_DONE EQU $4BA5
-SLR_DRAW_CLIPPED_PATH EQU $4D11
-SLR_DRAW_OBJECTS EQU $4BB2
-SLR_DRAW_VECTOR EQU $4CE4
-SLR_FG_COUNT EQU $4B93
-SLR_FOREGROUND EQU $4B93
-SLR_GAMEPLAY EQU $4B81
-SLR_GP_COUNT EQU $4B81
-SLR_INTENSITY_READ EQU $4BD8
-SLR_OBJ_DONE EQU $4D0E
-SLR_OBJ_LOOP EQU $4BB4
-SLR_OBJ_NEXT EQU $4D04
-SLR_PATH_DONE EQU $4D02
-SLR_PATH_LOOP EQU $4CEA
-SLR_RAM_A_ZERO EQU $4C19
-SLR_RAM_VISIBLE EQU $4C21
-SLR_RAM_Y_VISIBLE EQU $4C47
-SLR_RAM_Y_ZERO EQU $4C40
-SLR_ROM_ADDR_LOOP EQU $4BCD
-SLR_ROM_A_ZERO EQU $4CC6
-SLR_ROM_OFFSETS EQU $4C5C
-SLR_ROM_VISIBLE EQU $4CCE
-SLR_ROM_Y_VISIBLE EQU $4C8E
-SLR_ROM_Y_ZERO EQU $4C87
-SOUND_BYTE EQU $F256
-SOUND_BYTES EQU $F27D
-SOUND_BYTES_X EQU $F284
-SOUND_BYTE_RAW EQU $F25B
-SOUND_BYTE_X EQU $F259
-SPAWN_CLR_LOOP EQU $5259
-SPAWN_ENEMIES_BANKED EQU $4192
-SPAWN_ENEMIES_RUNTIME EQU $524A
-SPAWN_ENE_DONE EQU $5314
-SPAWN_FILL_LOOP EQU $5287
-SPAWN_SM_DONE EQU $52FE
-SPAWN_SM_NOSM EQU $52FA
-STOP_MUSIC_RUNTIME EQU $4F84
-STRIP_ZEROS EQU $F8B7
-Select_Game EQU $F7A9
-Set_Refresh EQU $F1A2
-Sound_Byte EQU $F256
-Sound_Byte_raw EQU $F25B
-Sound_Byte_x EQU $F259
-Sound_Bytes EQU $F27D
-Sound_Bytes_x EQU $F284
-Strip_Zeros EQU $F8B7
-UPDATE_ENEMIES_RUNTIME EQU $5315
-UPDATE_MUSIC_PSG EQU $4EE3
-UPD_CHECK_WP EQU $5391
-UPD_ENE_DONE EQU $53BC
-UPD_ENE_LOOP EQU $532E
-UPD_ENE_NEXT_POP EQU $53AA
-UPD_INC_X EQU $5369
-UPD_INC_Y EQU $5387
-UPD_MOVE_Y EQU $5370
-VECTOR_ADDR_TABLE EQU $400B
-VECTOR_BANK_TABLE EQU $4000
-VECTREX_PRINT_NUMBER EQU $464B
-VECTREX_PRINT_NUMBER.PN_AFTER_CONVERT EQU $46C4
-VECTREX_PRINT_NUMBER.PN_D10 EQU $46B3
-VECTREX_PRINT_NUMBER.PN_D100 EQU $4699
-VECTREX_PRINT_NUMBER.PN_D1000 EQU $467F
-VECTREX_PRINT_NUMBER.PN_DIV1000 EQU $466B
-VECTREX_PRINT_NUMBER.PN_L10 EQU $46A1
-VECTREX_PRINT_NUMBER.PN_L100 EQU $4687
-VECTREX_PRINT_NUMBER.PN_L1000 EQU $466D
-VECTREX_PRINT_TEXT EQU $4611
-VEC_0REF_ENABLE EQU $C824
-VEC_ADSR_TABLE EQU $C84F
-VEC_ADSR_TIMERS EQU $C85E
-VEC_ANGLE EQU $C836
-VEC_BRIGHTNESS EQU $C827
-VEC_BTN_STATE EQU $C80F
-VEC_BUTTONS EQU $C811
-VEC_BUTTON_1_1 EQU $C812
-VEC_BUTTON_1_2 EQU $C813
-VEC_BUTTON_1_3 EQU $C814
-VEC_BUTTON_1_4 EQU $C815
-VEC_BUTTON_2_1 EQU $C816
-VEC_BUTTON_2_2 EQU $C817
-VEC_BUTTON_2_3 EQU $C818
-VEC_BUTTON_2_4 EQU $C819
-VEC_COLD_FLAG EQU $CBFE
-VEC_COUNTERS EQU $C82E
-VEC_COUNTER_1 EQU $C82E
-VEC_COUNTER_2 EQU $C82F
-VEC_COUNTER_3 EQU $C830
-VEC_COUNTER_4 EQU $C831
-VEC_COUNTER_5 EQU $C832
-VEC_COUNTER_6 EQU $C833
-VEC_DEFAULT_STK EQU $CBEA
-VEC_DOT_DWELL EQU $C828
-VEC_DURATION EQU $C857
-VEC_EXPL_1 EQU $C858
-VEC_EXPL_2 EQU $C859
-VEC_EXPL_3 EQU $C85A
-VEC_EXPL_4 EQU $C85B
-VEC_EXPL_CHAN EQU $C85C
-VEC_EXPL_CHANA EQU $C853
-VEC_EXPL_CHANB EQU $C85D
-VEC_EXPL_CHANS EQU $C854
-VEC_EXPL_FLAG EQU $C867
-VEC_EXPL_TIMER EQU $C877
-VEC_FIRQ_VECTOR EQU $CBF5
-VEC_FREQ_TABLE EQU $C84D
-VEC_HIGH_SCORE EQU $CBEB
-VEC_IRQ_VECTOR EQU $CBF8
-VEC_JOY_1_X EQU $C81B
-VEC_JOY_1_Y EQU $C81C
-VEC_JOY_2_X EQU $C81D
-VEC_JOY_2_Y EQU $C81E
-VEC_JOY_MUX EQU $C81F
-VEC_JOY_MUX_1_X EQU $C81F
-VEC_JOY_MUX_1_Y EQU $C820
-VEC_JOY_MUX_2_X EQU $C821
-VEC_JOY_MUX_2_Y EQU $C822
-VEC_JOY_RESLTN EQU $C81A
-VEC_LOOP_COUNT EQU $C825
-VEC_MAX_GAMES EQU $C850
-VEC_MAX_PLAYERS EQU $C84F
-VEC_MISC_COUNT EQU $C823
-VEC_MUSIC_CHAN EQU $C855
-VEC_MUSIC_FLAG EQU $C856
-VEC_MUSIC_FREQ EQU $C861
-VEC_MUSIC_PTR EQU $C853
-VEC_MUSIC_TWANG EQU $C858
-VEC_MUSIC_WK_1 EQU $C84B
-VEC_MUSIC_WK_5 EQU $C847
-VEC_MUSIC_WK_6 EQU $C846
-VEC_MUSIC_WK_7 EQU $C845
-VEC_MUSIC_WK_A EQU $C842
-VEC_MUSIC_WORK EQU $C83F
-VEC_NMI_VECTOR EQU $CBFB
-VEC_NUM_GAME EQU $C87A
-VEC_NUM_PLAYERS EQU $C879
-VEC_PATTERN EQU $C829
-VEC_PREV_BTNS EQU $C810
-VEC_RANDOM_SEED EQU $C87D
-VEC_RFRSH EQU $C83D
-VEC_RFRSH_HI EQU $C83E
-VEC_RFRSH_LO EQU $C83D
-VEC_RISERUN_LEN EQU $C83B
-VEC_RISERUN_TMP EQU $C834
-VEC_RISE_INDEX EQU $C839
-VEC_RUN_INDEX EQU $C837
-VEC_SEED_PTR EQU $C87B
-VEC_SND_SHADOW EQU $C800
-VEC_STR_PTR EQU $C82C
-VEC_SWI2_VECTOR EQU $CBF2
-VEC_SWI3_VECTOR EQU $CBF2
-VEC_SWI_VECTOR EQU $CBFB
-VEC_TEXT_HEIGHT EQU $C82A
-VEC_TEXT_HW EQU $C82A
-VEC_TEXT_WIDTH EQU $C82B
-VEC_TWANG_TABLE EQU $C851
-Vec_0Ref_Enable EQU $C824
-Vec_ADSR_Table EQU $C84F
-Vec_ADSR_Timers EQU $C85E
-Vec_Angle EQU $C836
-Vec_Brightness EQU $C827
-Vec_Btn_State EQU $C80F
-Vec_Button_1_1 EQU $C812
-Vec_Button_1_2 EQU $C813
-Vec_Button_1_3 EQU $C814
-Vec_Button_1_4 EQU $C815
-Vec_Button_2_1 EQU $C816
-Vec_Button_2_2 EQU $C817
-Vec_Button_2_3 EQU $C818
-Vec_Button_2_4 EQU $C819
-Vec_Buttons EQU $C811
-Vec_Cold_Flag EQU $CBFE
-Vec_Counter_1 EQU $C82E
-Vec_Counter_2 EQU $C82F
-Vec_Counter_3 EQU $C830
-Vec_Counter_4 EQU $C831
-Vec_Counter_5 EQU $C832
-Vec_Counter_6 EQU $C833
-Vec_Counters EQU $C82E
-Vec_Default_Stk EQU $CBEA
-Vec_Dot_Dwell EQU $C828
-Vec_Duration EQU $C857
-Vec_Expl_1 EQU $C858
-Vec_Expl_2 EQU $C859
-Vec_Expl_3 EQU $C85A
-Vec_Expl_4 EQU $C85B
-Vec_Expl_Chan EQU $C85C
-Vec_Expl_ChanA EQU $C853
-Vec_Expl_ChanB EQU $C85D
-Vec_Expl_Chans EQU $C854
-Vec_Expl_Flag EQU $C867
-Vec_Expl_Timer EQU $C877
-Vec_FIRQ_Vector EQU $CBF5
-Vec_Freq_Table EQU $C84D
-Vec_High_Score EQU $CBEB
-Vec_IRQ_Vector EQU $CBF8
-Vec_Joy_1_X EQU $C81B
-Vec_Joy_1_Y EQU $C81C
-Vec_Joy_2_X EQU $C81D
-Vec_Joy_2_Y EQU $C81E
-Vec_Joy_Mux EQU $C81F
-Vec_Joy_Mux_1_X EQU $C81F
-Vec_Joy_Mux_1_Y EQU $C820
-Vec_Joy_Mux_2_X EQU $C821
-Vec_Joy_Mux_2_Y EQU $C822
-Vec_Joy_Resltn EQU $C81A
-Vec_Loop_Count EQU $C825
-Vec_Max_Games EQU $C850
-Vec_Max_Players EQU $C84F
-Vec_Misc_Count EQU $C823
-Vec_Music_Chan EQU $C855
-Vec_Music_Flag EQU $C856
-Vec_Music_Freq EQU $C861
-Vec_Music_Ptr EQU $C853
-Vec_Music_Twang EQU $C858
-Vec_Music_Wk_1 EQU $C84B
-Vec_Music_Wk_5 EQU $C847
-Vec_Music_Wk_6 EQU $C846
-Vec_Music_Wk_7 EQU $C845
-Vec_Music_Wk_A EQU $C842
-Vec_Music_Work EQU $C83F
-Vec_NMI_Vector EQU $CBFB
-Vec_Num_Game EQU $C87A
-Vec_Num_Players EQU $C879
-Vec_Pattern EQU $C829
-Vec_Prev_Btns EQU $C810
-Vec_Random_Seed EQU $C87D
-Vec_Rfrsh EQU $C83D
-Vec_Rfrsh_hi EQU $C83E
-Vec_Rfrsh_lo EQU $C83D
-Vec_RiseRun_Len EQU $C83B
-Vec_RiseRun_Tmp EQU $C834
-Vec_Rise_Index EQU $C839
-Vec_Run_Index EQU $C837
-Vec_SWI2_Vector EQU $CBF2
-Vec_SWI3_Vector EQU $CBF2
-Vec_SWI_Vector EQU $CBFB
-Vec_Seed_Ptr EQU $C87B
-Vec_Snd_Shadow EQU $C800
-Vec_Str_Ptr EQU $C82C
-Vec_Text_HW EQU $C82A
-Vec_Text_Height EQU $C82A
-Vec_Text_Width EQU $C82B
-Vec_Twang_Table EQU $C851
-WAIT_RECAL EQU $F192
-WARM_START EQU $F06C
-Wait_Recal EQU $F192
-Warm_Start EQU $F06C
-XFORM_RISE EQU $F663
-XFORM_RISE_A EQU $F661
-XFORM_RUN EQU $F65D
-XFORM_RUN_A EQU $F65B
-Xform_Rise EQU $F663
-Xform_Rise_a EQU $F661
-Xform_Run EQU $F65D
-Xform_Run_a EQU $F65B
-_ANIM_PLAYER_WALK EQU $41EC
-_ANIM_PLAYER_WALK_F0 EQU $41F8
-_ANIM_PLAYER_WALK_F1 EQU $41FD
-_ANIM_PLAYER_WALK_F2 EQU $4202
-_ANIM_PLAYER_WALK_F3 EQU $4207
-_ANIM_TITCHI_WALK EQU $420C
-_ANIM_TITCHI_WALK_F0 EQU $4216
-_ANIM_TITCHI_WALK_F1 EQU $421B
-_ANIM_TITCHI_WALK_F2 EQU $4220
-_ENEMY1_ENEMY EQU $403C
-_ENEMY1_ENEMY_ACTIONS EQU $4043
-_HENSHOKU_MUSIC EQU $0000
-_PLAYER_WALK1_PATH0 EQU $4358
-_PLAYER_WALK1_PATH1 EQU $4364
-_PLAYER_WALK1_PATH2 EQU $436D
-_PLAYER_WALK1_PATH3 EQU $4379
-_PLAYER_WALK1_PATH4 EQU $4385
-_PLAYER_WALK1_PATH5 EQU $4391
-_PLAYER_WALK1_PATH6 EQU $439D
-_PLAYER_WALK1_PATH7 EQU $43AF
-_PLAYER_WALK1_VECTORS EQU $4346
-_PLAYER_WALK2_PATH0 EQU $43CD
-_PLAYER_WALK2_PATH1 EQU $43D9
-_PLAYER_WALK2_PATH2 EQU $43E2
-_PLAYER_WALK2_PATH3 EQU $43EE
-_PLAYER_WALK2_PATH4 EQU $43FA
-_PLAYER_WALK2_PATH5 EQU $4406
-_PLAYER_WALK2_PATH6 EQU $4412
-_PLAYER_WALK2_PATH7 EQU $4424
-_PLAYER_WALK2_VECTORS EQU $43BB
-_PLAYER_WALK3_PATH0 EQU $4231
-_PLAYER_WALK3_PATH1 EQU $423D
-_PLAYER_WALK3_PATH2 EQU $4246
-_PLAYER_WALK3_PATH3 EQU $426D
-_PLAYER_WALK3_PATH4 EQU $4279
-_PLAYER_WALK3_VECTORS EQU $4225
-_PLAYER_WALK4_PATH0 EQU $44F9
-_PLAYER_WALK4_PATH1 EQU $4505
-_PLAYER_WALK4_PATH2 EQU $4523
-_PLAYER_WALK4_PATH3 EQU $452F
-_PLAYER_WALK4_PATH4 EQU $453E
-_PLAYER_WALK4_PATH5 EQU $4550
-_PLAYER_WALK4_VECTORS EQU $44EB
-_TITCHI_ENEMY EQU $404F
-_TITCHI_ENEMY_ACTIONS EQU $4056
-_TITCHI_SM EQU $4074
-_TITCHI_SM_STATES EQU $4076
-_TITCHI_WALK1_PATH0 EQU $444C
-_TITCHI_WALK1_PATH1 EQU $445B
-_TITCHI_WALK1_PATH10 EQU $44C4
-_TITCHI_WALK1_PATH11 EQU $44D3
-_TITCHI_WALK1_PATH12 EQU $44DF
-_TITCHI_WALK1_PATH2 EQU $4464
-_TITCHI_WALK1_PATH3 EQU $446A
-_TITCHI_WALK1_PATH4 EQU $4470
-_TITCHI_WALK1_PATH5 EQU $447F
-_TITCHI_WALK1_PATH6 EQU $4485
-_TITCHI_WALK1_PATH7 EQU $44A0
-_TITCHI_WALK1_PATH8 EQU $44AF
-_TITCHI_WALK1_PATH9 EQU $44B8
-_TITCHI_WALK1_VECTORS EQU $4430
-_TITCHI_WALK2_PATH0 EQU $42AA
-_TITCHI_WALK2_PATH1 EQU $42B9
-_TITCHI_WALK2_PATH10 EQU $4328
-_TITCHI_WALK2_PATH11 EQU $4334
-_TITCHI_WALK2_PATH12 EQU $4340
-_TITCHI_WALK2_PATH2 EQU $42C2
-_TITCHI_WALK2_PATH3 EQU $42C8
-_TITCHI_WALK2_PATH4 EQU $42D4
-_TITCHI_WALK2_PATH5 EQU $42DA
-_TITCHI_WALK2_PATH6 EQU $42F5
-_TITCHI_WALK2_PATH7 EQU $4304
-_TITCHI_WALK2_PATH8 EQU $430D
-_TITCHI_WALK2_PATH9 EQU $4319
-_TITCHI_WALK2_VECTORS EQU $428E
-_TITCHI_WALK3_PATH0 EQU $4575
-_TITCHI_WALK3_PATH1 EQU $4584
-_TITCHI_WALK3_PATH10 EQU $45EA
-_TITCHI_WALK3_PATH11 EQU $45F9
-_TITCHI_WALK3_PATH12 EQU $4605
-_TITCHI_WALK3_PATH2 EQU $458D
-_TITCHI_WALK3_PATH3 EQU $4593
-_TITCHI_WALK3_PATH4 EQU $4599
-_TITCHI_WALK3_PATH5 EQU $45A5
-_TITCHI_WALK3_PATH6 EQU $45AB
-_TITCHI_WALK3_PATH7 EQU $45C6
-_TITCHI_WALK3_PATH8 EQU $45D5
-_TITCHI_WALK3_PATH9 EQU $45DE
-_TITCHI_WALK3_VECTORS EQU $4559
-music1 EQU $FD0D
-music2 EQU $FD1D
-music3 EQU $FD81
-music4 EQU $FDD3
-music5 EQU $FE38
-music6 EQU $FE76
-music7 EQU $FEC6
-music8 EQU $FEF8
-music9 EQU $FF26
-musica EQU $FF44
-musicb EQU $FF62
-musicc EQU $FF7A
-musicd EQU $FF8F
-noay EQU $5075
-sfx_checknoisefreq EQU $50A3
-sfx_checktonefreq EQU $5089
-sfx_checkvolume EQU $50B4
-sfx_doframe EQU $5076
-sfx_endofeffect EQU $50E9
-sfx_m_noise EQU $50CF
-sfx_m_noisedis EQU $50DA
-sfx_m_tonedis EQU $50CD
-sfx_m_write EQU $50DC
-sfx_nextframe EQU $50E4
-sfx_updatemixer EQU $50BD
-
 
 ; === RAM VARIABLE DEFINITIONS ===
 ;***************************************************************************
@@ -814,189 +11,970 @@ TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes
 BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
 BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
 NUM_STR              EQU $C880+$0E   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$14   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$15   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$16   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$17   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$18   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$19   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$21   ; Vector intensity override (0=use vector data) (1 bytes)
-DRAW_VEC_X_HI        EQU $C880+$22   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
-DRAW_VEC_X           EQU $C880+$23   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$24   ; Vector draw Y offset (1 bytes)
-MIRROR_PAD           EQU $C880+$25   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$35   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$36   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$37   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$41   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$43   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$45   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$46   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$47   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$49   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-LEVEL_PTR            EQU $C880+$4B   ; Pointer to currently loaded level header (2 bytes)
-LEVEL_LOADED         EQU $C880+$4D   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
-LEVEL_WIDTH          EQU $C880+$4E   ; Level width (legacy tile API) (1 bytes)
-LEVEL_HEIGHT         EQU $C880+$4F   ; Level height (legacy tile API) (1 bytes)
-LEVEL_TILE_SIZE      EQU $C880+$50   ; Tile size (legacy tile API) (1 bytes)
-LEVEL_Y_IDX          EQU $C880+$51   ; SHOW_LEVEL row counter (legacy) (1 bytes)
-LEVEL_X_IDX          EQU $C880+$52   ; SHOW_LEVEL column counter (legacy) (1 bytes)
-LEVEL_TEMP           EQU $C880+$53   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
-LEVEL_BG_COUNT       EQU $C880+$54   ; BG object count (1 bytes)
-LEVEL_GP_COUNT       EQU $C880+$55   ; GP object count (1 bytes)
-LEVEL_FG_COUNT       EQU $C880+$56   ; FG object count (1 bytes)
-CAMERA_X             EQU $C880+$57   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
-CAMERA_Y             EQU $C880+$59   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
-SCROLL_LIMIT_LEFT    EQU $C880+$5B   ; Camera scroll limit: left world X (2 bytes)
-SCROLL_LIMIT_RIGHT   EQU $C880+$5D   ; Camera scroll limit: right world X (2 bytes)
-SCROLL_LIMIT_TOP     EQU $C880+$5F   ; Camera scroll limit: top world Y (2 bytes)
-SCROLL_LIMIT_BOTTOM  EQU $C880+$61   ; Camera scroll limit: bottom world Y (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$63   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$65   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$67   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$69   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$6B   ; Bank ID for current level (for multibank) (1 bytes)
-LEVEL_ENEMY_COUNT    EQU $C880+$6C   ; Enemy count from current level header (1 bytes)
-LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$6D   ; Ptr to enemy instances table in level bank (2 bytes)
-SLR_CUR_X            EQU $C880+$6F   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-DRAW_T1_SCALED       EQU $C880+$70   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$71   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
-LCOL_PX              EQU $C880+$251   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$253   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
-LCOL_PY              EQU $C880+$255   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
-LCOL_PHH             EQU $C880+$257   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$258   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$259   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$25A   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$25B   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$25C   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$25D   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$25F   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$261   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$262   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$263   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$264   ; GP-FG |dy| (1 bytes)
-ENEMY_POOL           EQU $C880+$265   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N) (136 bytes)
-ENEMY_LOOP_IDX       EQU $C880+$2ED   ; Enemy loop counter (1 bytes)
-ENEMY_COUNT          EQU $C880+$2EE   ; Active enemy count (1 bytes)
-ENEMY_SCRATCH_PTR    EQU $C880+$2EF   ; Scratch pointer for enemy iteration (2 bytes)
-ENEMY_SCRATCH_X      EQU $C880+$2F1   ; Enemy scratch X (2 bytes)
-ENEMY_SCRATCH_Y      EQU $C880+$2F3   ; Enemy scratch Y (2 bytes)
-ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2F5   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2F7   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$2F9   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$2FA   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-ANIM_PLAYER_WALK_STATE EQU $C880+$2FB   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
-DRAW_ANIM_MIRROR_X   EQU $C880+$2FD   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
-DRAW_ANIM_SCALE      EQU $C880+$2FE   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
-DRAW_ANIM_SPEED_MUL  EQU $C880+$2FF   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$300   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$301   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_GAME_START EQU $C880+$303   ; User variable: STATE_GAME_START (2 bytes)
-VAR_STATE_PLAYING    EQU $C880+$305   ; User variable: STATE_PLAYING (2 bytes)
-VAR_STATE_PLAYER_DEAD EQU $C880+$307   ; User variable: STATE_PLAYER_DEAD (2 bytes)
-VAR_STATE_LEVEL_CLEAR EQU $C880+$309   ; User variable: STATE_LEVEL_CLEAR (2 bytes)
-VAR_STATE_BOSS_INTRO EQU $C880+$30B   ; User variable: STATE_BOSS_INTRO (2 bytes)
-VAR_STATE_BOSS       EQU $C880+$30D   ; User variable: STATE_BOSS (2 bytes)
-VAR_STATE_GAME_OVER  EQU $C880+$30F   ; User variable: STATE_GAME_OVER (2 bytes)
-VAR_STATE_ALL_CLEAR  EQU $C880+$311   ; User variable: STATE_ALL_CLEAR (2 bytes)
-VAR_TITCHI_STATE_NORMAL EQU $C880+$313   ; User variable: TITCHI_STATE_NORMAL (2 bytes)
-VAR_TITCHI_STATE_SNOW1 EQU $C880+$315   ; User variable: TITCHI_STATE_SNOW1 (2 bytes)
-VAR_TITCHI_STATE_SNOW2 EQU $C880+$317   ; User variable: TITCHI_STATE_SNOW2 (2 bytes)
-VAR_TITCHI_STATE_BALL EQU $C880+$319   ; User variable: TITCHI_STATE_BALL (2 bytes)
-VAR_SNOW_HW          EQU $C880+$31B   ; User variable: SNOW_HW (2 bytes)
-VAR_SNOW_HH          EQU $C880+$31D   ; User variable: SNOW_HH (2 bytes)
-VAR_ENEMY_HW         EQU $C880+$31F   ; User variable: ENEMY_HW (2 bytes)
-VAR_ENEMY_HH         EQU $C880+$321   ; User variable: ENEMY_HH (2 bytes)
-VAR_GAME_STATE       EQU $C880+$323   ; User variable: game_state (2 bytes)
-VAR_SCORE            EQU $C880+$325   ; User variable: score (2 bytes)
-VAR_LIVES            EQU $C880+$327   ; User variable: lives (2 bytes)
-VAR_CURRENT_LEVEL    EQU $C880+$329   ; User variable: current_level (2 bytes)
-VAR_TIME_LEFT        EQU $C880+$32B   ; User variable: time_left (2 bytes)
-VAR_ENEMY_COUNT      EQU $C880+$32D   ; User variable: enemy_count (2 bytes)
-VAR_FRAME_TIMER      EQU $C880+$32F   ; User variable: frame_timer (2 bytes)
-VAR_NEXT_IS_BOSS     EQU $C880+$331   ; User variable: next_is_boss (2 bytes)
-VAR_PLAYER_X         EQU $C880+$333   ; User variable: player_x (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$335   ; User variable: player_y (2 bytes)
-VAR_PLAYER_VX        EQU $C880+$337   ; User variable: player_vx (2 bytes)
-VAR_PLAYER_VY        EQU $C880+$339   ; User variable: player_vy (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$33B   ; User variable: player_facing (2 bytes)
-VAR_PLAYER_ON_GROUND EQU $C880+$33D   ; User variable: player_on_ground (2 bytes)
-VAR_FLOOR_Y          EQU $C880+$33F   ; User variable: floor_y (2 bytes)
-VAR_PREV_Y           EQU $C880+$341   ; User variable: prev_y (2 bytes)
-VAR_GRAVITY          EQU $C880+$343   ; User variable: GRAVITY (2 bytes)
-VAR_JUMP_SPEED       EQU $C880+$345   ; User variable: JUMP_SPEED (2 bytes)
-VAR_MAX_FALL_SPEED   EQU $C880+$347   ; User variable: MAX_FALL_SPEED (2 bytes)
-VAR_PLAYER_HH        EQU $C880+$349   ; User variable: PLAYER_HH (2 bytes)
-VAR_WORLD_X_MIN      EQU $C880+$34B   ; User variable: WORLD_X_MIN (2 bytes)
-VAR_WORLD_X_MAX      EQU $C880+$34D   ; User variable: WORLD_X_MAX (2 bytes)
-VAR_WORLD_Y_MIN      EQU $C880+$34F   ; User variable: WORLD_Y_MIN (2 bytes)
-VAR_WORLD_Y_MAX      EQU $C880+$351   ; User variable: WORLD_Y_MAX (2 bytes)
-VAR_SNOW_SPEED       EQU $C880+$353   ; User variable: SNOW_SPEED (2 bytes)
-VAR_SNOW_LAUNCH_VY   EQU $C880+$355   ; User variable: SNOW_LAUNCH_VY (2 bytes)
-VAR_SNOW_LIFE_NORMAL EQU $C880+$357   ; User variable: SNOW_LIFE_NORMAL (2 bytes)
-VAR_SNOW_LIFE_POWER  EQU $C880+$359   ; User variable: SNOW_LIFE_POWER (2 bytes)
-VAR_SHOOT_COOLDOWN_MAX EQU $C880+$35B   ; User variable: SHOOT_COOLDOWN_MAX (2 bytes)
-VAR_SHOOT_COOLDOWN   EQU $C880+$35D   ; User variable: shoot_cooldown (2 bytes)
-VAR_PLAYER_HAS_POWER EQU $C880+$35F   ; User variable: player_has_power (2 bytes)
-VAR_SNOW_LIFE_MAX    EQU $C880+$361   ; User variable: snow_life_max (2 bytes)
-VAR_SNOW_SPAWN_VX    EQU $C880+$363   ; User variable: snow_spawn_vx (2 bytes)
-VAR_SNOW0_ACTIVE     EQU $C880+$365   ; User variable: snow0_active (2 bytes)
-VAR_SNOW0_X          EQU $C880+$367   ; User variable: snow0_x (2 bytes)
-VAR_SNOW0_Y          EQU $C880+$369   ; User variable: snow0_y (2 bytes)
-VAR_SNOW0_VX         EQU $C880+$36B   ; User variable: snow0_vx (2 bytes)
-VAR_SNOW0_VY         EQU $C880+$36D   ; User variable: snow0_vy (2 bytes)
-VAR_SNOW0_LIFE       EQU $C880+$36F   ; User variable: snow0_life (2 bytes)
-VAR_SNOW1_ACTIVE     EQU $C880+$371   ; User variable: snow1_active (2 bytes)
-VAR_SNOW1_X          EQU $C880+$373   ; User variable: snow1_x (2 bytes)
-VAR_SNOW1_Y          EQU $C880+$375   ; User variable: snow1_y (2 bytes)
-VAR_SNOW1_VX         EQU $C880+$377   ; User variable: snow1_vx (2 bytes)
-VAR_SNOW1_VY         EQU $C880+$379   ; User variable: snow1_vy (2 bytes)
-VAR_SNOW1_LIFE       EQU $C880+$37B   ; User variable: snow1_life (2 bytes)
-VAR_SNOW2_ACTIVE     EQU $C880+$37D   ; User variable: snow2_active (2 bytes)
-VAR_SNOW2_X          EQU $C880+$37F   ; User variable: snow2_x (2 bytes)
-VAR_SNOW2_Y          EQU $C880+$381   ; User variable: snow2_y (2 bytes)
-VAR_SNOW2_VX         EQU $C880+$383   ; User variable: snow2_vx (2 bytes)
-VAR_SNOW2_VY         EQU $C880+$385   ; User variable: snow2_vy (2 bytes)
-VAR_SNOW2_LIFE       EQU $C880+$387   ; User variable: snow2_life (2 bytes)
-VAR_LEVEL_TIME       EQU $C880+$389   ; User variable: LEVEL_TIME (2 bytes)
-VAR_LIVES_START      EQU $C880+$38B   ; User variable: LIVES_START (2 bytes)
-VAR_GAME_START_DELAY EQU $C880+$38D   ; User variable: GAME_START_DELAY (2 bytes)
-VAR_DEATH_DELAY      EQU $C880+$38F   ; User variable: DEATH_DELAY (2 bytes)
-VAR_LEVEL_CLEAR_DELAY EQU $C880+$391   ; User variable: LEVEL_CLEAR_DELAY (2 bytes)
-VAR_BOSS_INTRO_DELAY EQU $C880+$393   ; User variable: BOSS_INTRO_DELAY (2 bytes)
-VAR_ALL_CLEAR_DELAY  EQU $C880+$395   ; User variable: ALL_CLEAR_DELAY (2 bytes)
-VAR_I                EQU $C880+$397   ; User variable: i (2 bytes)
-VAR_EX               EQU $C880+$399   ; User variable: ex (2 bytes)
-VAR_EY               EQU $C880+$39B   ; User variable: ey (2 bytes)
-VAR_IDX              EQU $C880+$39D   ; User variable: idx (2 bytes)
-VAR_THW              EQU $C880+$39F   ; User variable: thw (2 bytes)
-VAR_THH              EQU $C880+$3A1   ; User variable: thh (2 bytes)
-VAR_DX               EQU $C880+$3A3   ; User variable: dx (2 bytes)
-VAR_DY               EQU $C880+$3A5   ; User variable: dy (2 bytes)
-VAR_ST               EQU $C880+$3A7   ; User variable: st (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$3A9   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$3AB   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$3AD   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$3AE   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$3AF   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$3B0   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$3B1   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$3B3   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$3B4   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$3B5   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$3B7   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$3B9   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$3BB   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$3BD   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$3BF   ; Current ROM bank ID (multibank tracking) (1 bytes)
+RAND_SEED            EQU $C880+$14   ; Random seed for RAND() (2 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$16   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$17   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$18   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$19   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$1A   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$1B   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$23   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_VEC_X_HI        EQU $C880+$24   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
+DRAW_VEC_X           EQU $C880+$25   ; Vector draw X offset (1 bytes)
+DRAW_VEC_Y           EQU $C880+$26   ; Vector draw Y offset (1 bytes)
+MIRROR_PAD           EQU $C880+$27   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
+MIRROR_X             EQU $C880+$37   ; X mirror flag (0=normal, 1=flip) (1 bytes)
+MIRROR_Y             EQU $C880+$38   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$39   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$43   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$45   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$47   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$48   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$49   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$4B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+LEVEL_PTR            EQU $C880+$4D   ; Pointer to currently loaded level header (2 bytes)
+LEVEL_LOADED         EQU $C880+$4F   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
+LEVEL_WIDTH          EQU $C880+$50   ; Level width (legacy tile API) (1 bytes)
+LEVEL_HEIGHT         EQU $C880+$51   ; Level height (legacy tile API) (1 bytes)
+LEVEL_TILE_SIZE      EQU $C880+$52   ; Tile size (legacy tile API) (1 bytes)
+LEVEL_Y_IDX          EQU $C880+$53   ; SHOW_LEVEL row counter (legacy) (1 bytes)
+LEVEL_X_IDX          EQU $C880+$54   ; SHOW_LEVEL column counter (legacy) (1 bytes)
+LEVEL_TEMP           EQU $C880+$55   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
+LEVEL_BG_COUNT       EQU $C880+$56   ; BG object count (1 bytes)
+LEVEL_GP_COUNT       EQU $C880+$57   ; GP object count (1 bytes)
+LEVEL_FG_COUNT       EQU $C880+$58   ; FG object count (1 bytes)
+CAMERA_X             EQU $C880+$59   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
+CAMERA_Y             EQU $C880+$5B   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
+SCROLL_LIMIT_LEFT    EQU $C880+$5D   ; Camera scroll limit: left world X (2 bytes)
+SCROLL_LIMIT_RIGHT   EQU $C880+$5F   ; Camera scroll limit: right world X (2 bytes)
+SCROLL_LIMIT_TOP     EQU $C880+$61   ; Camera scroll limit: top world Y (2 bytes)
+SCROLL_LIMIT_BOTTOM  EQU $C880+$63   ; Camera scroll limit: bottom world Y (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$65   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$67   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$69   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$6B   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$6D   ; Bank ID for current level (for multibank) (1 bytes)
+LEVEL_ENEMY_COUNT    EQU $C880+$6E   ; Enemy count from current level header (1 bytes)
+LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$6F   ; Ptr to enemy instances table in level bank (2 bytes)
+SLR_CUR_X            EQU $C880+$71   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
+DRAW_T1_SCALED       EQU $C880+$72   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$73   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$253   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$255   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$257   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$259   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$25A   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$25B   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$25C   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$25D   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$25E   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$25F   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$261   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$263   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$264   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$265   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$266   ; GP-FG |dy| (1 bytes)
+ENEMY_POOL           EQU $C880+$267   ; Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N) (136 bytes)
+ENEMY_LOOP_IDX       EQU $C880+$2EF   ; Enemy loop counter (1 bytes)
+ENEMY_COUNT          EQU $C880+$2F0   ; Active enemy count (1 bytes)
+ENEMY_SCRATCH_PTR    EQU $C880+$2F1   ; Scratch pointer for enemy iteration (2 bytes)
+ENEMY_SCRATCH_X      EQU $C880+$2F3   ; Enemy scratch X (2 bytes)
+ENEMY_SCRATCH_Y      EQU $C880+$2F5   ; Enemy scratch Y (2 bytes)
+ANIM_ENEMY_ENEMY1_WALK_STATE EQU $C880+$2F7   ; Enemy 'enemy1' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+ANIM_ENEMY_TITCHI_WALK_STATE EQU $C880+$2F9   ; Enemy 'titchi' action 'walk' animation state (frame_idx, ticks_left) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$2FB   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$2FC   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+ANIM_PLAYER_WALK_STATE EQU $C880+$2FD   ; DRAW_ANIM state for PLAYER_WALK (frame_idx, ticks_left) (2 bytes)
+DRAW_ANIM_MIRROR_X   EQU $C880+$2FF   ; DRAW_ANIM mirror X flag (0=normal, 1=flip) (1 bytes)
+DRAW_ANIM_SCALE      EQU $C880+$300   ; DRAW_ANIM T1 scale ($7F=normal) (1 bytes)
+DRAW_ANIM_SPEED_MUL  EQU $C880+$301   ; DRAW_ANIM tick multiplier (1=normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$302   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$303   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$305   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$307   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$309   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$30B   ; Function argument 4 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$30D   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_BALL_LAUNCHED    EQU $C880+$30E   ; User variable: ball_launched (2 bytes)
+VAR_GAME_STATE       EQU $C880+$310   ; User variable: game_state (2 bytes)
+VAR_SCORE            EQU $C880+$312   ; User variable: score (2 bytes)
+VAR_LIVES            EQU $C880+$314   ; User variable: lives (2 bytes)
+VAR_CURRENT_LEVEL    EQU $C880+$316   ; User variable: current_level (2 bytes)
+VAR_TIME_LEFT        EQU $C880+$318   ; User variable: time_left (2 bytes)
+VAR_ENEMY_COUNT      EQU $C880+$31A   ; User variable: enemy_count (2 bytes)
+VAR_FRAME_TIMER      EQU $C880+$31C   ; User variable: frame_timer (2 bytes)
+VAR_NEXT_IS_BOSS     EQU $C880+$31E   ; User variable: next_is_boss (2 bytes)
+VAR_PLAYER_X         EQU $C880+$320   ; User variable: player_x (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$322   ; User variable: player_y (2 bytes)
+VAR_PLAYER_VX        EQU $C880+$324   ; User variable: player_vx (2 bytes)
+VAR_PLAYER_VY        EQU $C880+$326   ; User variable: player_vy (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$328   ; User variable: player_facing (2 bytes)
+VAR_PLAYER_ON_GROUND EQU $C880+$32A   ; User variable: player_on_ground (2 bytes)
+VAR_FLOOR_Y          EQU $C880+$32C   ; User variable: floor_y (2 bytes)
+VAR_PREV_Y           EQU $C880+$32E   ; User variable: prev_y (2 bytes)
+VAR_CAMERA_Y         EQU $C880+$330   ; User variable: camera_y (2 bytes)
+VAR_SHOOT_COOLDOWN   EQU $C880+$332   ; User variable: shoot_cooldown (2 bytes)
+VAR_PLAYER_HAS_POWER EQU $C880+$334   ; User variable: player_has_power (2 bytes)
+VAR_SNOW_LIFE_MAX    EQU $C880+$336   ; User variable: snow_life_max (2 bytes)
+VAR_SNOW_SPAWN_VX    EQU $C880+$338   ; User variable: snow_spawn_vx (2 bytes)
+VAR_SNOW0_ACTIVE     EQU $C880+$33A   ; User variable: snow0_active (2 bytes)
+VAR_SNOW0_X          EQU $C880+$33C   ; User variable: snow0_x (2 bytes)
+VAR_SNOW0_Y          EQU $C880+$33E   ; User variable: snow0_y (2 bytes)
+VAR_SNOW0_VX         EQU $C880+$340   ; User variable: snow0_vx (2 bytes)
+VAR_SNOW0_VY         EQU $C880+$342   ; User variable: snow0_vy (2 bytes)
+VAR_SNOW0_LIFE       EQU $C880+$344   ; User variable: snow0_life (2 bytes)
+VAR_SNOW1_ACTIVE     EQU $C880+$346   ; User variable: snow1_active (2 bytes)
+VAR_SNOW1_X          EQU $C880+$348   ; User variable: snow1_x (2 bytes)
+VAR_SNOW1_Y          EQU $C880+$34A   ; User variable: snow1_y (2 bytes)
+VAR_SNOW1_VX         EQU $C880+$34C   ; User variable: snow1_vx (2 bytes)
+VAR_SNOW1_VY         EQU $C880+$34E   ; User variable: snow1_vy (2 bytes)
+VAR_SNOW1_LIFE       EQU $C880+$350   ; User variable: snow1_life (2 bytes)
+VAR_SNOW2_ACTIVE     EQU $C880+$352   ; User variable: snow2_active (2 bytes)
+VAR_SNOW2_X          EQU $C880+$354   ; User variable: snow2_x (2 bytes)
+VAR_SNOW2_Y          EQU $C880+$356   ; User variable: snow2_y (2 bytes)
+VAR_SNOW2_VX         EQU $C880+$358   ; User variable: snow2_vx (2 bytes)
+VAR_SNOW2_VY         EQU $C880+$35A   ; User variable: snow2_vy (2 bytes)
+VAR_SNOW2_LIFE       EQU $C880+$35C   ; User variable: snow2_life (2 bytes)
+VAR_ELAPSED          EQU $C880+$35E   ; User variable: elapsed (2 bytes)
+VAR_I                EQU $C880+$360   ; User variable: i (2 bytes)
+VAR_EX               EQU $C880+$362   ; User variable: ex (2 bytes)
+VAR_EY               EQU $C880+$364   ; User variable: ey (2 bytes)
+VAR_IDX              EQU $C880+$366   ; User variable: idx (2 bytes)
+VAR_THW              EQU $C880+$368   ; User variable: thw (2 bytes)
+VAR_THH              EQU $C880+$36A   ; User variable: thh (2 bytes)
+VAR_DX               EQU $C880+$36C   ; User variable: dx (2 bytes)
+VAR_DY               EQU $C880+$36E   ; User variable: dy (2 bytes)
+VAR_NEW_STATE        EQU $C880+$370   ; User variable: new_state (2 bytes)
+VAR_TICKS            EQU $C880+$372   ; User variable: ticks (2 bytes)
+VAR_THAW_TIMERS      EQU $C880+$374   ; User variable: thaw_timers (2 bytes)
+VAR_ST               EQU $C880+$376   ; User variable: st (2 bytes)
+VAR_BALL_ROLLING     EQU $C880+$378   ; User variable: ball_rolling (2 bytes)
+VAR_N                EQU $C880+$37A   ; User variable: n (2 bytes)
+VAR_BALL_VX_ARR      EQU $C880+$37C   ; User variable: ball_vx_arr (2 bytes)
+VAR_BALL_VY_ARR      EQU $C880+$37E   ; User variable: ball_vy_arr (2 bytes)
+VAR_BALL_BOUNCES     EQU $C880+$380   ; User variable: ball_bounces (2 bytes)
+VAR_BALL_COLLIDED    EQU $C880+$382   ; User variable: ball_collided (2 bytes)
+VAR_FOUND            EQU $C880+$384   ; User variable: found (2 bytes)
+VAR_PREV_BY          EQU $C880+$386   ; User variable: prev_by (2 bytes)
+VAR_BX               EQU $C880+$388   ; User variable: bx (2 bytes)
+VAR_BY               EQU $C880+$38A   ; User variable: by (2 bytes)
+VAR_FLOOR            EQU $C880+$38C   ; User variable: floor (2 bytes)
+VAR_K                EQU $C880+$38E   ; User variable: k (2 bytes)
+VAR_J                EQU $C880+$390   ; User variable: j (2 bytes)
+VAR_SKIP             EQU $C880+$392   ; User variable: skip (2 bytes)
+VAR_EJX              EQU $C880+$394   ; User variable: ejx (2 bytes)
+VAR_EJY              EQU $C880+$396   ; User variable: ejy (2 bytes)
+VAR_OLD_VX           EQU $C880+$398   ; User variable: old_vx (2 bytes)
+VAR_THAW_TIMERS_DATA EQU $C880+$39A   ; Mutable array 'thaw_timers' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_ROLLING_DATA EQU $C880+$3AA   ; Mutable array 'ball_rolling' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_VX_ARR_DATA EQU $C880+$3BA   ; Mutable array 'ball_vx_arr' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_VY_ARR_DATA EQU $C880+$3CA   ; Mutable array 'ball_vy_arr' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_BOUNCES_DATA EQU $C880+$3DA   ; Mutable array 'ball_bounces' data (8 elements x 2 bytes) (16 bytes)
+VAR_BALL_COLLIDED_DATA EQU $C880+$3EA   ; Mutable array 'ball_collided' data (8 elements x 2 bytes) (16 bytes)
+PSG_MUSIC_PTR        EQU $C880+$3FA   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$3FC   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$3FE   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$3FF   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$400   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$401   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$402   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$404   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$405   ; SFX bank ID (for multibank) (1 bytes)
+; Array length constants
+ARRAY_THAW_TIMERS_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_ROLLING_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_VX_ARR_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_VY_ARR_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_BOUNCES_LEN         EQU 8   ; 8 elements
+ARRAY_BALL_COLLIDED_LEN         EQU 8   ; 8 elements
 
 
 ; ================================================
     ORG $0000  ; Sequential bank model
 
+; Function: update_player (Bank #1)
+update_player:
+    ; CLAMP: Clamp value to range [min, max]
+    JSR J1X_BUILTIN
+    STD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #32
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR DIV16       ; D = X / D
+    STD TMPPTR     ; Save value
+    LDD #-4
+    STD TMPPTR+2   ; Save min
+    LDD #4
+    STD TMPPTR+4   ; Save max
+    LDD TMPPTR     ; Load value
+    CMPD TMPPTR+2  ; Compare with min
+    BGE .CLAMP_0_CHK_MAX ; Branch if value >= min
+    LDD TMPPTR+2
+    STD RESULT
+    BRA .CLAMP_0_END
+.CLAMP_0_CHK_MAX:
+    LDD TMPPTR     ; Load value again
+    CMPD TMPPTR+4  ; Compare with max
+    BLE .CLAMP_0_OK  ; Branch if value <= max
+    LDD TMPPTR+4
+    STD RESULT
+    BRA .CLAMP_0_END
+.CLAMP_0_OK:
+    LDD TMPPTR
+    STD RESULT
+.CLAMP_0_END:
+    STD VAR_PLAYER_VX
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VX
+    CMPD TMPVAL
+    LBGT .CMP_49_TRUE
+    LDD #0
+    LBRA .CMP_49_END
+.CMP_49_TRUE:
+    LDD #1
+.CMP_49_END:
+    LBEQ IF_NEXT_101
+    LDD #0
+    STD VAR_PLAYER_FACING
+    LBRA IF_END_100
+IF_NEXT_101:
+IF_END_100:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VX
+    CMPD TMPVAL
+    LBLT .CMP_50_TRUE
+    LDD #0
+    LBRA .CMP_50_END
+.CMP_50_TRUE:
+    LDD #1
+.CMP_50_END:
+    LBEQ IF_NEXT_103
+    LDD #1
+    STD VAR_PLAYER_FACING
+    LBRA IF_END_102
+IF_NEXT_103:
+IF_END_102:
+    ; CLAMP: Clamp value to range [min, max]
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPPTR     ; Save value
+    LDD #-96  ; const WORLD_X_MIN
+    STD TMPPTR+2   ; Save min
+    LDD #95  ; const WORLD_X_MAX
+    STD TMPPTR+4   ; Save max
+    LDD TMPPTR     ; Load value
+    CMPD TMPPTR+2  ; Compare with min
+    BGE .CLAMP_1_CHK_MAX ; Branch if value >= min
+    LDD TMPPTR+2
+    STD RESULT
+    BRA .CLAMP_1_END
+.CLAMP_1_CHK_MAX:
+    LDD TMPPTR     ; Load value again
+    CMPD TMPPTR+4  ; Compare with max
+    BLE .CLAMP_1_OK  ; Branch if value <= max
+    LDD TMPPTR+4
+    STD RESULT
+    BRA .CLAMP_1_END
+.CLAMP_1_OK:
+    LDD TMPPTR
+    STD RESULT
+.CLAMP_1_END:
+    STD VAR_PLAYER_X
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_ON_GROUND
+    CMPD TMPVAL
+    LBEQ .CMP_51_TRUE
+    LDD #0
+    LBRA .CMP_51_END
+.CMP_51_TRUE:
+    LDD #1
+.CMP_51_END:
+    LBEQ IF_NEXT_105
+    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
+    BITA #$01
+    BNE .J1B1_1_ON
+    LDD #0
+    BRA .J1B1_1_END
+.J1B1_1_ON:
+    LDD #1
+.J1B1_1_END:
+    STD RESULT
+    LBEQ IF_NEXT_107
+    LDD #11  ; const JUMP_SPEED
+    STD VAR_PLAYER_VY
+    LDD #0
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_106
+IF_NEXT_107:
+IF_END_106:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_ON_GROUND
+    CMPD TMPVAL
+    LBEQ .CMP_52_TRUE
+    LDD #0
+    LBRA .CMP_52_END
+.CMP_52_TRUE:
+    LDD #1
+.CMP_52_END:
+    LBEQ IF_NEXT_109
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_PLAYER_X
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #11  ; const PLAYER_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PLAYER_Y
+    ; Compute player_feet = player_y - player_hh (16-bit)
+    STD >TMPVAL          ; save player_y
+    LDB >LCOL_PHH        ; B = player_hh
+    CLRA
+    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
+    LDD >TMPVAL          ; D = player_y
+    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
+    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR_Y
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLOOR_Y
+    CMPD TMPVAL
+    LBLT .CMP_53_TRUE
+    LDD #0
+    LBRA .CMP_53_END
+.CMP_53_TRUE:
+    LDD #1
+.CMP_53_END:
+    LBEQ IF_NEXT_111
+    LDD #0
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_110
+IF_NEXT_111:
+IF_END_110:
+    LBRA IF_END_108
+IF_NEXT_109:
+IF_END_108:
+    LBRA IF_END_104
+IF_NEXT_105:
+IF_END_104:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_ON_GROUND
+    CMPD TMPVAL
+    LBEQ .CMP_54_TRUE
+    LDD #0
+    LBRA .CMP_54_END
+.CMP_54_TRUE:
+    LDD #1
+.CMP_54_END:
+    LBEQ IF_NEXT_113
+    LDD >VAR_PLAYER_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_PLAYER_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VY
+    CMPD TMPVAL
+    LBLT .CMP_55_TRUE
+    LDD #0
+    LBRA .CMP_55_END
+.CMP_55_TRUE:
+    LDD #1
+.CMP_55_END:
+    LBEQ IF_NEXT_115
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_PLAYER_VY
+    LBRA IF_END_114
+IF_NEXT_115:
+IF_END_114:
+    LDD >VAR_PLAYER_Y
+    STD VAR_PREV_Y
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VY
+    CMPD TMPVAL
+    LBLE .CMP_56_TRUE
+    LDD #0
+    LBRA .CMP_56_END
+.CMP_56_TRUE:
+    LDD #1
+.CMP_56_END:
+    LBEQ IF_NEXT_117
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_PLAYER_X
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #11  ; const PLAYER_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PREV_Y
+    ; Compute player_feet = player_y - player_hh (16-bit)
+    STD >TMPVAL          ; save player_y
+    LDB >LCOL_PHH        ; B = player_hh
+    CLRA
+    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
+    LDD >TMPVAL          ; D = player_y
+    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
+    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR_Y
+    LDD >VAR_FLOOR_Y
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBLE .CMP_57_TRUE
+    LDD #0
+    LBRA .CMP_57_END
+.CMP_57_TRUE:
+    LDD #1
+.CMP_57_END:
+    LBEQ IF_NEXT_119
+    LDD >VAR_FLOOR_Y
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD VAR_PLAYER_VY
+    LDD #1
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_118
+IF_NEXT_119:
+IF_END_118:
+    LBRA IF_END_116
+IF_NEXT_117:
+IF_END_116:
+    LBRA IF_END_112
+IF_NEXT_113:
+IF_END_112:
+    LDD #127  ; const WORLD_Y_MAX
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBGT .CMP_58_TRUE
+    LDD #0
+    LBRA .CMP_58_END
+.CMP_58_TRUE:
+    LDD #1
+.CMP_58_END:
+    LBEQ IF_NEXT_121
+    LDD #127  ; const WORLD_Y_MAX
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD VAR_PLAYER_VY
+    LBRA IF_END_120
+IF_NEXT_121:
+IF_END_120:
+    LDD #-2403  ; const WORLD_Y_MIN
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBLT .CMP_59_TRUE
+    LDD #0
+    LBRA .CMP_59_END
+.CMP_59_TRUE:
+    LDD #1
+.CMP_59_END:
+    LBEQ IF_NEXT_123
+    LDD #-2403  ; const WORLD_Y_MIN
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD VAR_PLAYER_VY
+    LDD #1
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_122
+IF_NEXT_123:
+IF_END_122:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SHOOT_COOLDOWN
+    CMPD TMPVAL
+    LBGT .CMP_60_TRUE
+    LDD #0
+    LBRA .CMP_60_END
+.CMP_60_TRUE:
+    LDD #1
+.CMP_60_END:
+    LBEQ IF_NEXT_125
+    LDD >VAR_SHOOT_COOLDOWN
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SHOOT_COOLDOWN
+    LBRA IF_END_124
+IF_NEXT_125:
+IF_END_124:
+    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
+    BITA #$02
+    BNE .J1B2_2_ON
+    LDD #0
+    BRA .J1B2_2_END
+.J1B2_2_ON:
+    LDD #1
+.J1B2_2_END:
+    STD RESULT
+    LBEQ IF_NEXT_127
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SHOOT_COOLDOWN
+    CMPD TMPVAL
+    LBEQ .CMP_61_TRUE
+    LDD #0
+    LBRA .CMP_61_END
+.CMP_61_TRUE:
+    LDD #1
+.CMP_61_END:
+    LBEQ IF_NEXT_129
+    LDD #0
+    STD VAR_BALL_LAUNCHED
+    JSR TRAMP_try_launch_ball  ; cross-bank trampoline (bank #1 -> bank #0)
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BALL_LAUNCHED
+    CMPD TMPVAL
+    LBEQ .CMP_62_TRUE
+    LDD #0
+    LBRA .CMP_62_END
+.CMP_62_TRUE:
+    LDD #1
+.CMP_62_END:
+    LBEQ IF_NEXT_131
+    LDD #5  ; const SNOW_SPEED
+    STD VAR_SNOW_SPAWN_VX
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_FACING
+    CMPD TMPVAL
+    LBEQ .CMP_63_TRUE
+    LDD #0
+    LBRA .CMP_63_END
+.CMP_63_TRUE:
+    LDD #1
+.CMP_63_END:
+    LBEQ IF_NEXT_133
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #5  ; const SNOW_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW_SPAWN_VX
+    LBRA IF_END_132
+IF_NEXT_133:
+IF_END_132:
+    JSR TRAMP_try_shoot  ; cross-bank trampoline (bank #1 -> bank #0)
+    LBRA IF_END_130
+IF_NEXT_131:
+IF_END_130:
+    LBRA IF_END_128
+IF_NEXT_129:
+IF_END_128:
+    LBRA IF_END_126
+IF_NEXT_127:
+IF_END_126:
+    RTS
+
+; Function: update_snowballs (Bank #1)
+update_snowballs:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_70_TRUE
+    LDD #0
+    LBRA .CMP_70_END
+.CMP_70_TRUE:
+    LDD #1
+.CMP_70_END:
+    LBEQ IF_NEXT_147
+    LDD >VAR_SNOW0_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW0_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_VY
+    CMPD TMPVAL
+    LBLT .CMP_71_TRUE
+    LDD #0
+    LBRA .CMP_71_END
+.CMP_71_TRUE:
+    LDD #1
+.CMP_71_END:
+    LBEQ IF_NEXT_149
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW0_VY
+    LBRA IF_END_148
+IF_NEXT_149:
+IF_END_148:
+    LDD >VAR_SNOW0_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW0_X
+    LDD >VAR_SNOW0_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW0_Y
+    LDD >VAR_SNOW0_LIFE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW0_LIFE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_LIFE
+    CMPD TMPVAL
+    LBLE .CMP_72_TRUE
+    LDD #0
+    LBRA .CMP_72_END
+.CMP_72_TRUE:
+    LDD #1
+.CMP_72_END:
+    LBEQ IF_NEXT_151
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_150
+IF_NEXT_151:
+IF_END_150:
+    LDD #-110
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_Y
+    CMPD TMPVAL
+    LBLT .CMP_73_TRUE
+    LDD #0
+    LBRA .CMP_73_END
+.CMP_73_TRUE:
+    LDD #1
+.CMP_73_END:
+    LBEQ IF_NEXT_153
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_152
+IF_NEXT_153:
+IF_END_152:
+    LDD #-127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_X
+    CMPD TMPVAL
+    LBLT .CMP_74_TRUE
+    LDD #0
+    LBRA .CMP_74_END
+.CMP_74_TRUE:
+    LDD #1
+.CMP_74_END:
+    LBEQ IF_NEXT_155
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_154
+IF_NEXT_155:
+IF_END_154:
+    LDD #127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_X
+    CMPD TMPVAL
+    LBGT .CMP_75_TRUE
+    LDD #0
+    LBRA .CMP_75_END
+.CMP_75_TRUE:
+    LDD #1
+.CMP_75_END:
+    LBEQ IF_NEXT_157
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_156
+IF_NEXT_157:
+IF_END_156:
+    LBRA IF_END_146
+IF_NEXT_147:
+IF_END_146:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_76_TRUE
+    LDD #0
+    LBRA .CMP_76_END
+.CMP_76_TRUE:
+    LDD #1
+.CMP_76_END:
+    LBEQ IF_NEXT_159
+    LDD >VAR_SNOW1_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW1_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_VY
+    CMPD TMPVAL
+    LBLT .CMP_77_TRUE
+    LDD #0
+    LBRA .CMP_77_END
+.CMP_77_TRUE:
+    LDD #1
+.CMP_77_END:
+    LBEQ IF_NEXT_161
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW1_VY
+    LBRA IF_END_160
+IF_NEXT_161:
+IF_END_160:
+    LDD >VAR_SNOW1_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW1_X
+    LDD >VAR_SNOW1_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW1_Y
+    LDD >VAR_SNOW1_LIFE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW1_LIFE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_LIFE
+    CMPD TMPVAL
+    LBLE .CMP_78_TRUE
+    LDD #0
+    LBRA .CMP_78_END
+.CMP_78_TRUE:
+    LDD #1
+.CMP_78_END:
+    LBEQ IF_NEXT_163
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_162
+IF_NEXT_163:
+IF_END_162:
+    LDD #-110
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_Y
+    CMPD TMPVAL
+    LBLT .CMP_79_TRUE
+    LDD #0
+    LBRA .CMP_79_END
+.CMP_79_TRUE:
+    LDD #1
+.CMP_79_END:
+    LBEQ IF_NEXT_165
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_164
+IF_NEXT_165:
+IF_END_164:
+    LDD #-127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_X
+    CMPD TMPVAL
+    LBLT .CMP_80_TRUE
+    LDD #0
+    LBRA .CMP_80_END
+.CMP_80_TRUE:
+    LDD #1
+.CMP_80_END:
+    LBEQ IF_NEXT_167
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_166
+IF_NEXT_167:
+IF_END_166:
+    LDD #127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_X
+    CMPD TMPVAL
+    LBGT .CMP_81_TRUE
+    LDD #0
+    LBRA .CMP_81_END
+.CMP_81_TRUE:
+    LDD #1
+.CMP_81_END:
+    LBEQ IF_NEXT_169
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_168
+IF_NEXT_169:
+IF_END_168:
+    LBRA IF_END_158
+IF_NEXT_159:
+IF_END_158:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_82_TRUE
+    LDD #0
+    LBRA .CMP_82_END
+.CMP_82_TRUE:
+    LDD #1
+.CMP_82_END:
+    LBEQ IF_NEXT_171
+    LDD >VAR_SNOW2_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW2_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_VY
+    CMPD TMPVAL
+    LBLT .CMP_83_TRUE
+    LDD #0
+    LBRA .CMP_83_END
+.CMP_83_TRUE:
+    LDD #1
+.CMP_83_END:
+    LBEQ IF_NEXT_173
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW2_VY
+    LBRA IF_END_172
+IF_NEXT_173:
+IF_END_172:
+    LDD >VAR_SNOW2_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW2_X
+    LDD >VAR_SNOW2_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW2_Y
+    LDD >VAR_SNOW2_LIFE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW2_LIFE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_LIFE
+    CMPD TMPVAL
+    LBLE .CMP_84_TRUE
+    LDD #0
+    LBRA .CMP_84_END
+.CMP_84_TRUE:
+    LDD #1
+.CMP_84_END:
+    LBEQ IF_NEXT_175
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_174
+IF_NEXT_175:
+IF_END_174:
+    LDD #-110
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_Y
+    CMPD TMPVAL
+    LBLT .CMP_85_TRUE
+    LDD #0
+    LBRA .CMP_85_END
+.CMP_85_TRUE:
+    LDD #1
+.CMP_85_END:
+    LBEQ IF_NEXT_177
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_176
+IF_NEXT_177:
+IF_END_176:
+    LDD #-127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_X
+    CMPD TMPVAL
+    LBLT .CMP_86_TRUE
+    LDD #0
+    LBRA .CMP_86_END
+.CMP_86_TRUE:
+    LDD #1
+.CMP_86_END:
+    LBEQ IF_NEXT_179
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_178
+IF_NEXT_179:
+IF_END_178:
+    LDD #127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_X
+    CMPD TMPVAL
+    LBGT .CMP_87_TRUE
+    LDD #0
+    LBRA .CMP_87_END
+.CMP_87_TRUE:
+    LDD #1
+.CMP_87_END:
+    LBEQ IF_NEXT_181
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_180
+IF_NEXT_181:
+IF_END_180:
+    LBRA IF_END_170
+IF_NEXT_171:
+IF_END_170:
+    RTS
+
 ;***************************************************************************
-; ASSETS IN BANK #1 (15 assets)
+; ASSETS IN BANK #1 (19 assets)
 ;***************************************************************************
 
 ; Generated from Yukidama-Ondo.vmus (internal name: Imported MIDI)
@@ -10930,6 +10908,1175 @@ _YUKIDAMA_ONDO_MUSIC:
     FDB     _YUKIDAMA_ONDO_MUSIC       ; Jump to start (absolute address)
 
 
+; ==== Level: WORLD_1_1 ====
+; Author: 
+; Difficulty: medium
+
+_WORLD_1_1_LEVEL:
+    FDB -96  ; World bounds: xMin (16-bit signed)
+    FDB 95  ; xMax (16-bit signed)
+    FDB -2432  ; yMin (16-bit signed)
+    FDB 127  ; yMax (16-bit signed)
+    FDB 0  ; Time limit (seconds)
+    FDB 0  ; Target score
+    FCB 0  ; Background object count
+    FCB 62  ; Gameplay object count
+    FCB 0  ; Foreground object count
+    FDB _WORLD_1_1_BG_OBJECTS
+    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
+    FDB _WORLD_1_1_FG_OBJECTS
+    FDB -96  ; scrollLimit left (camera left cannot go below this)
+    FDB 95  ; scrollLimit right (camera right cannot exceed this)
+    FDB 127  ; scrollLimit top
+    FDB -2432  ; scrollLimit bottom
+    FCB 5  ; enemy_count
+    FDB _WORLD_1_1_ENEMY_INSTANCES  ; enemy_instances_ptr (0 if none)
+
+_WORLD_1_1_BG_OBJECTS:
+
+_WORLD_1_1_GAMEPLAY_OBJECTS:
+; Object: obj_1777629435866 (obstacle)
+    FCB 2  ; type
+    FDB -71  ; x
+    FDB -2377  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629603657 (obstacle)
+    FCB 2  ; type
+    FDB 72  ; x
+    FDB -2377  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629716564 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2377  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629652016 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2331  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629837468 (obstacle)
+    FCB 2  ; type
+    FDB -54  ; x
+    FDB -2283  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629850372 (obstacle)
+    FCB 2  ; type
+    FDB 54  ; x
+    FDB -2282  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629612161 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2237  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM4_VECTORS  ; vector_ptr
+    FCB 70  ; half_width (1.00x, ROM+18)
+    FCB 18  ; half_height (1.00x, ROM+19)
+
+; Object: enemy_1778250201678 (enemy)
+    FCB 1  ; type
+    FDB -42  ; x
+    FDB -2201  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250209582 (enemy)
+    FCB 1  ; type
+    FDB 43  ; x
+    FDB -2201  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250211554 (enemy)
+    FCB 1  ; type
+    FDB -87  ; x
+    FDB -2261  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250212985 (enemy)
+    FCB 1  ; type
+    FDB 86  ; x
+    FDB -2261  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250214379 (enemy)
+    FCB 1  ; type
+    FDB -55  ; x
+    FDB -2309  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: plat_f2_1 (obstacle)
+    FCB 2  ; type
+    FDB -76  ; x
+    FDB -2121  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_2 (obstacle)
+    FCB 2  ; type
+    FDB 76  ; x
+    FDB -2121  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_3 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2075  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_4 (obstacle)
+    FCB 2  ; type
+    FDB -60  ; x
+    FDB -2027  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_5 (obstacle)
+    FCB 2  ; type
+    FDB 60  ; x
+    FDB -2027  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_6 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1981  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_1 (obstacle)
+    FCB 2  ; type
+    FDB -82  ; x
+    FDB -1865  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_2 (obstacle)
+    FCB 2  ; type
+    FDB -30  ; x
+    FDB -1819  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_3 (obstacle)
+    FCB 2  ; type
+    FDB 30  ; x
+    FDB -1771  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_4 (obstacle)
+    FCB 2  ; type
+    FDB 82  ; x
+    FDB -1725  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_1 (obstacle)
+    FCB 2  ; type
+    FDB -55  ; x
+    FDB -1609  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_2 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1609  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_3 (obstacle)
+    FCB 2  ; type
+    FDB 55  ; x
+    FDB -1609  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_4 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1515  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_5 (obstacle)
+    FCB 2  ; type
+    FDB -75  ; x
+    FDB -1469  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_6 (obstacle)
+    FCB 2  ; type
+    FDB 75  ; x
+    FDB -1469  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_1 (obstacle)
+    FCB 2  ; type
+    FDB -50  ; x
+    FDB -1353  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_2 (obstacle)
+    FCB 2  ; type
+    FDB 50  ; x
+    FDB -1353  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_3 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1307  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_4 (obstacle)
+    FCB 2  ; type
+    FDB -65  ; x
+    FDB -1259  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_5 (obstacle)
+    FCB 2  ; type
+    FDB 65  ; x
+    FDB -1259  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_1 (obstacle)
+    FCB 2  ; type
+    FDB -82  ; x
+    FDB -1097  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_2 (obstacle)
+    FCB 2  ; type
+    FDB 82  ; x
+    FDB -1097  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_3 (obstacle)
+    FCB 2  ; type
+    FDB -35  ; x
+    FDB -1051  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_4 (obstacle)
+    FCB 2  ; type
+    FDB 35  ; x
+    FDB -1051  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_5 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -957  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_1 (obstacle)
+    FCB 2  ; type
+    FDB 82  ; x
+    FDB -841  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_2 (obstacle)
+    FCB 2  ; type
+    FDB 30  ; x
+    FDB -795  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_3 (obstacle)
+    FCB 2  ; type
+    FDB -30  ; x
+    FDB -747  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_4 (obstacle)
+    FCB 2  ; type
+    FDB -82  ; x
+    FDB -701  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_1 (obstacle)
+    FCB 2  ; type
+    FDB -70  ; x
+    FDB -585  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_2 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -585  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_3 (obstacle)
+    FCB 2  ; type
+    FDB 70  ; x
+    FDB -585  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_4 (obstacle)
+    FCB 2  ; type
+    FDB -45  ; x
+    FDB -539  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_5 (obstacle)
+    FCB 2  ; type
+    FDB 45  ; x
+    FDB -539  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_6 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -491  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_7 (obstacle)
+    FCB 2  ; type
+    FDB -80  ; x
+    FDB -445  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_8 (obstacle)
+    FCB 2  ; type
+    FDB 80  ; x
+    FDB -445  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_1 (obstacle)
+    FCB 2  ; type
+    FDB -80  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_2 (obstacle)
+    FCB 2  ; type
+    FDB -30  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_3 (obstacle)
+    FCB 2  ; type
+    FDB 30  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_4 (obstacle)
+    FCB 2  ; type
+    FDB 80  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_5 (obstacle)
+    FCB 2  ; type
+    FDB -48  ; x
+    FDB -283  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_6 (obstacle)
+    FCB 2  ; type
+    FDB 48  ; x
+    FDB -283  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_7 (obstacle)
+    FCB 2  ; type
+    FDB -65  ; x
+    FDB -235  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_8 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -235  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_9 (obstacle)
+    FCB 2  ; type
+    FDB 65  ; x
+    FDB -235  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f10_1 (obstacle)
+    FCB 2  ; type
+    FDB -55  ; x
+    FDB -73  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f10_2 (obstacle)
+    FCB 2  ; type
+    FDB 55  ; x
+    FDB -73  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f10_3 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB 67  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+
+_WORLD_1_1_FG_OBJECTS:
+
+_WORLD_1_1_ENEMY_COUNT EQU 5
+
+; ---- Enemy instances for level WORLD_1_1 ----
+_WORLD_1_1_ENEMY_INSTANCES:
+    ; instance 0
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB -42                   ; spawn x
+    FDB -2201                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY0_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 1
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB 43                   ; spawn x
+    FDB -2201                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY1_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 2
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB -87                   ; spawn x
+    FDB -2261                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY2_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 3
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB 86                   ; spawn x
+    FDB -2261                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY3_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 4
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB -55                   ; spawn x
+    FDB -2309                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY4_WPS   ; ptr to waypoints (0 if none)
+
+_WORLD_1_1_ENEMY0_WPS:
+    FDB -3  ; wp x
+    FDB -2205  ; wp y
+    FDB -42  ; wp x
+    FDB -2205  ; wp y
+
+_WORLD_1_1_ENEMY1_WPS:
+    FDB 45  ; wp x
+    FDB -2205  ; wp y
+    FDB 3  ; wp x
+    FDB -2205  ; wp y
+
+_WORLD_1_1_ENEMY2_WPS:
+    FDB -91  ; wp x
+    FDB -2262  ; wp y
+    FDB -14  ; wp x
+    FDB -2262  ; wp y
+
+_WORLD_1_1_ENEMY3_WPS:
+    FDB 89  ; wp x
+    FDB -2261  ; wp y
+    FDB 14  ; wp x
+    FDB -2261  ; wp y
+
+_WORLD_1_1_ENEMY4_WPS:
+    FDB -55  ; wp x
+    FDB -2312  ; wp y
+    FDB 56  ; wp x
+    FDB -2312  ; wp y
+
+
 ; Generated from init_screen.vec (Malban Draw_Sync_List format)
 ; Total paths: 57, points: 257
 ; X bounds: min=-77, max=78, width=155
@@ -11487,325 +12634,6 @@ _INIT_SCREEN_PATH56:    ; Path 56
     FCB $FF,$0E,$FD          ; flag=-1, dy=14, dx=-3
     FCB $FF,$01,$F8          ; flag=-1, dy=1, dx=-8
     FCB 2                ; End marker (path complete)
-
-; ==== Level: WORLD_1_1 ====
-; Author: 
-; Difficulty: medium
-
-_WORLD_1_1_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 0  ; Background object count
-    FCB 12  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _WORLD_1_1_BG_OBJECTS
-    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
-    FDB _WORLD_1_1_FG_OBJECTS
-    FDB -96  ; scrollLimit left (camera left cannot go below this)
-    FDB 95  ; scrollLimit right (camera right cannot exceed this)
-    FDB 127  ; scrollLimit top
-    FDB -128  ; scrollLimit bottom
-    FCB 5  ; enemy_count
-    FDB _WORLD_1_1_ENEMY_INSTANCES  ; enemy_instances_ptr (0 if none)
-
-_WORLD_1_1_BG_OBJECTS:
-
-_WORLD_1_1_GAMEPLAY_OBJECTS:
-; Object: obj_1777629435866 (obstacle)
-    FCB 2  ; type
-    FDB -71  ; x
-    FDB -86  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629603657 (obstacle)
-    FCB 2  ; type
-    FDB 72  ; x
-    FDB -86  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629716564 (obstacle)
-    FCB 2  ; type
-    FDB 1  ; x
-    FDB -87  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629652016 (obstacle)
-    FCB 2  ; type
-    FDB 0  ; x
-    FDB -37  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM2_VECTORS  ; vector_ptr
-    FCB 57  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629837468 (obstacle)
-    FCB 2  ; type
-    FDB -54  ; x
-    FDB 13  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM3_VECTORS  ; vector_ptr
-    FCB 40  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629850372 (obstacle)
-    FCB 2  ; type
-    FDB 54  ; x
-    FDB 13  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM3_VECTORS  ; vector_ptr
-    FCB 40  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629612161 (obstacle)
-    FCB 2  ; type
-    FDB 0  ; x
-    FDB 67  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM4_VECTORS  ; vector_ptr
-    FCB 70  ; half_width (1.00x, ROM+18)
-    FCB 18  ; half_height (1.00x, ROM+19)
-
-; Object: enemy_1778250201678 (enemy)
-    FCB 1  ; type
-    FDB -42  ; x
-    FDB 95  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250209582 (enemy)
-    FCB 1  ; type
-    FDB 46  ; x
-    FDB 94  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250211554 (enemy)
-    FCB 1  ; type
-    FDB -92  ; x
-    FDB 32  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250212985 (enemy)
-    FCB 1  ; type
-    FDB 92  ; x
-    FDB 31  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250214379 (enemy)
-    FCB 1  ; type
-    FDB -55  ; x
-    FDB -21  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-
-_WORLD_1_1_FG_OBJECTS:
-
-_WORLD_1_1_ENEMY_COUNT EQU 5
-
-; ---- Enemy instances for level WORLD_1_1 ----
-_WORLD_1_1_ENEMY_INSTANCES:
-    ; instance 0
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB -42                   ; spawn x
-    FDB 95                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY0_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 1
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB 46                   ; spawn x
-    FDB 94                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY1_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 2
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB -92                   ; spawn x
-    FDB 32                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY2_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 3
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB 92                   ; spawn x
-    FDB 31                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY3_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 4
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB -55                   ; spawn x
-    FDB -21                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY4_WPS   ; ptr to waypoints (0 if none)
-
-_WORLD_1_1_ENEMY0_WPS:
-    FDB -5  ; wp x
-    FDB 90  ; wp y
-    FDB -42  ; wp x
-    FDB 90  ; wp y
-
-_WORLD_1_1_ENEMY1_WPS:
-    FDB 47  ; wp x
-    FDB 89  ; wp y
-    FDB 3  ; wp x
-    FDB 89  ; wp y
-
-_WORLD_1_1_ENEMY2_WPS:
-    FDB -92  ; wp x
-    FDB 27  ; wp y
-    FDB -15  ; wp x
-    FDB 27  ; wp y
-
-_WORLD_1_1_ENEMY3_WPS:
-    FDB 93  ; wp x
-    FDB 26  ; wp y
-    FDB 16  ; wp x
-    FDB 26  ; wp y
-
-_WORLD_1_1_ENEMY4_WPS:
-    FDB -57  ; wp x
-    FDB -21  ; wp y
-    FDB 56  ; wp x
-    FDB -21  ; wp y
-
 
 ; Generated from Game_Over.vmus (internal name: Imported MIDI)
 ; Tempo: 120 BPM, Total events: 19 (PSG Direct format)
@@ -12373,19 +13201,19 @@ _PLATFORM4_PATH8:    ; Path 8
     FCB 2                ; End marker (path complete)
 
 ; Generated from player_jump.vec (Malban Draw_Sync_List format)
-; Total paths: 14, points: 38
-; X bounds: min=-6, max=6, width=12
-; Center: (0, 0)
+; Total paths: 15, points: 40
+; X bounds: min=-6, max=7, width=13
+; Center: (0, -1)
 
-_PLAYER_JUMP_WIDTH EQU 12
+_PLAYER_JUMP_WIDTH EQU 13
 _PLAYER_JUMP_HALF_WIDTH EQU 6
-_PLAYER_JUMP_HEIGHT EQU 17
-_PLAYER_JUMP_HALF_HEIGHT EQU 8
+_PLAYER_JUMP_HEIGHT EQU 20
+_PLAYER_JUMP_HALF_HEIGHT EQU 10
 _PLAYER_JUMP_CENTER_X EQU 0
-_PLAYER_JUMP_CENTER_Y EQU 0
+_PLAYER_JUMP_CENTER_Y EQU -1
 
-_PLAYER_JUMP_VECTORS:  ; Main entry (header + 14 path(s))
-    FDB 14               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+_PLAYER_JUMP_VECTORS:  ; Main entry (header + 15 path(s))
+    FDB 15               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _PLAYER_JUMP_PATH0        ; pointer to path 0
     FDB _PLAYER_JUMP_PATH1        ; pointer to path 1
     FDB _PLAYER_JUMP_PATH2        ; pointer to path 2
@@ -12400,99 +13228,224 @@ _PLAYER_JUMP_VECTORS:  ; Main entry (header + 14 path(s))
     FDB _PLAYER_JUMP_PATH11        ; pointer to path 11
     FDB _PLAYER_JUMP_PATH12        ; pointer to path 12
     FDB _PLAYER_JUMP_PATH13        ; pointer to path 13
+    FDB _PLAYER_JUMP_PATH14        ; pointer to path 14
 
 _PLAYER_JUMP_PATH0:    ; Path 0
     FCB 65              ; path0: intensity
-    FCB $FF,$01,0,0        ; path0: header (y=-1, x=1)
+    FCB $00,$01,0,0        ; path0: header (y=0, x=1)
     FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH1:    ; Path 1
     FCB 65              ; path1: intensity
-    FCB $FE,$01,0,0        ; path1: header (y=-2, x=1)
+    FCB $FF,$01,0,0        ; path1: header (y=-1, x=1)
     FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH2:    ; Path 2
     FCB 65              ; path2: intensity
-    FCB $FF,$03,0,0        ; path2: header (y=-1, x=3)
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $00,$03,0,0        ; path2: header (y=0, x=3)
+    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
+    FCB $FF,$FA,$FC          ; flag=-1, dy=-6, dx=-4
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH3:    ; Path 3
     FCB 65              ; path3: intensity
-    FCB $FD,$04,0,0        ; path3: header (y=-3, x=4)
+    FCB $FE,$04,0,0        ; path3: header (y=-2, x=4)
     FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH4:    ; Path 4
     FCB 65              ; path4: intensity
-    FCB $FA,$03,0,0        ; path4: header (y=-6, x=3)
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
+    FCB $FB,$03,0,0        ; path4: header (y=-5, x=3)
+    FCB $FF,$FB,$02          ; flag=-1, dy=-5, dx=2
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
     FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
-    FCB $FD,$04,0,0        ; path5: header (y=-3, x=4)
+    FCB $FE,$04,0,0        ; path5: header (y=-2, x=4)
     FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH6:    ; Path 6
     FCB 65              ; path6: intensity
-    FCB $02,$01,0,0        ; path6: header (y=2, x=1)
+    FCB $03,$01,0,0        ; path6: header (y=3, x=1)
     FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH7:    ; Path 7
     FCB 65              ; path7: intensity
-    FCB $01,$FE,0,0        ; path7: header (y=1, x=-2)
+    FCB $02,$FE,0,0        ; path7: header (y=2, x=-2)
     FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
     FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH8:    ; Path 8
     FCB 65              ; path8: intensity
-    FCB $FE,$FD,0,0        ; path8: header (y=-2, x=-3)
+    FCB $FF,$FD,0,0        ; path8: header (y=-1, x=-3)
     FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH9:    ; Path 9
     FCB 65              ; path9: intensity
-    FCB $FC,$FD,0,0        ; path9: header (y=-4, x=-3)
+    FCB $FD,$FD,0,0        ; path9: header (y=-3, x=-3)
     FCB $FF,$FB,$04          ; flag=-1, dy=-5, dx=4
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH10:    ; Path 10
     FCB 65              ; path10: intensity
-    FCB $F9,$FF,0,0        ; path10: header (y=-7, x=-1)
-    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
-    FCB $FF,$04,$03          ; flag=-1, dy=4, dx=3
+    FCB $FA,$FF,0,0        ; path10: header (y=-6, x=-1)
+    FCB $FF,$FD,$FB          ; flag=-1, dy=-3, dx=-5
+    FCB $FF,$06,$03          ; flag=-1, dy=6, dx=3
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH11:    ; Path 11
     FCB 65              ; path11: intensity
-    FCB $F9,$FE,0,0        ; path11: header (y=-7, x=-2)
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FA,$FE,0,0        ; path11: header (y=-6, x=-2)
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH12:    ; Path 12
     FCB 65              ; path12: intensity
-    FCB $06,$FE,0,0        ; path12: header (y=6, x=-2)
-    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
-    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
-    FCB $FF,$05,$03          ; flag=-1, dy=5, dx=3
-    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $07,$FE,0,0        ; path12: header (y=7, x=-2)
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH13:    ; Path 13
     FCB 65              ; path13: intensity
-    FCB $08,$FD,0,0        ; path13: header (y=8, x=-3)
+    FCB $08,$01,0,0        ; path13: header (y=8, x=1)
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FB,$FD          ; flag=-1, dy=-5, dx=-3
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_JUMP_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $07,$FE,0,0        ; path14: header (y=7, x=-2)
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_die1.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 38
+; X bounds: min=-6, max=9, width=15
+; Center: (1, 0)
+
+_PLAYER_DIE1_WIDTH EQU 15
+_PLAYER_DIE1_HALF_WIDTH EQU 7
+_PLAYER_DIE1_HEIGHT EQU 18
+_PLAYER_DIE1_HALF_HEIGHT EQU 9
+_PLAYER_DIE1_CENTER_X EQU 1
+_PLAYER_DIE1_CENTER_Y EQU 0
+
+_PLAYER_DIE1_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE1_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE1_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE1_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE1_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE1_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE1_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE1_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE1_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE1_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE1_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE1_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE1_PATH11        ; pointer to path 11
+    FDB _PLAYER_DIE1_PATH12        ; pointer to path 12
+
+_PLAYER_DIE1_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
+    FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $F8,$FD,0,0        ; path1: header (y=-8, x=-3)
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $F9,$FD,0,0        ; path2: header (y=-7, x=-3)
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $FF,$01,0,0        ; path3: header (y=-1, x=1)
+    FCB $FF,$FC,$02          ; flag=-1, dy=-4, dx=2
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $F7,$06,0,0        ; path4: header (y=-9, x=6)
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $00,$07,0,0        ; path5: header (y=0, x=7)
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $02,$07,0,0        ; path6: header (y=2, x=7)
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $03,$00,0,0        ; path7: header (y=3, x=0)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $04,$FE,0,0        ; path8: header (y=4, x=-2)
+    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $09,$FD,0,0        ; path9: header (y=9, x=-3)
     FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
     FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $08,$FE,0,0        ; path10: header (y=8, x=-2)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $08,$00,0,0        ; path11: header (y=8, x=0)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $07,$01,0,0        ; path12: header (y=7, x=1)
+    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
+    FCB $FF,$FB,$FD          ; flag=-1, dy=-5, dx=-3
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Generated from titchi_snow2.vec (Malban Draw_Sync_List format)
@@ -12590,6 +13543,118 @@ _TITCHI_SNOW2_PATH7:    ; Path 7
     FCB $FA,$03,0,0        ; path7: header (y=-6, x=3)
     FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_die2.vec (Malban Draw_Sync_List format)
+; Total paths: 12, points: 37
+; X bounds: min=-8, max=10, width=18
+; Center: (1, 0)
+
+_PLAYER_DIE2_WIDTH EQU 18
+_PLAYER_DIE2_HALF_WIDTH EQU 9
+_PLAYER_DIE2_HEIGHT EQU 20
+_PLAYER_DIE2_HALF_HEIGHT EQU 10
+_PLAYER_DIE2_CENTER_X EQU 1
+_PLAYER_DIE2_CENTER_Y EQU 0
+
+_PLAYER_DIE2_VECTORS:  ; Main entry (header + 12 path(s))
+    FDB 12               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE2_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE2_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE2_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE2_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE2_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE2_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE2_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE2_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE2_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE2_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE2_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE2_PATH11        ; pointer to path 11
+
+_PLAYER_DIE2_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $FD,$FD,0,0        ; path0: header (y=-3, x=-3)
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $F9,$FA,0,0        ; path1: header (y=-7, x=-6)
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FC,$FD,0,0        ; path2: header (y=-4, x=-3)
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $06,$03,0,0        ; path3: header (y=6, x=3)
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $0A,$FE,0,0        ; path4: header (y=10, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $04,$01,0,0        ; path5: header (y=4, x=1)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $07,$03,0,0        ; path6: header (y=7, x=3)
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $06,$04,0,0        ; path7: header (y=6, x=4)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $03,$05,0,0        ; path8: header (y=3, x=5)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB $FF,$FD,$FD          ; flag=-1, dy=-3, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $FB,$FF,0,0        ; path9: header (y=-5, x=-1)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $F7,$02,0,0        ; path10: header (y=-9, x=2)
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $01,$04,0,0        ; path11: header (y=1, x=4)
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Generated from titchi_idle.vec (Malban Draw_Sync_List format)
@@ -12699,6 +13764,244 @@ _TITCHI_IDLE_PATH10:    ; Path 10
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB 2                ; End marker (path complete)
 
+; Generated from player_die3.vec (Malban Draw_Sync_List format)
+; Total paths: 12, points: 36
+; X bounds: min=-8, max=8, width=16
+; Center: (0, 0)
+
+_PLAYER_DIE3_WIDTH EQU 16
+_PLAYER_DIE3_HALF_WIDTH EQU 8
+_PLAYER_DIE3_HEIGHT EQU 17
+_PLAYER_DIE3_HALF_HEIGHT EQU 8
+_PLAYER_DIE3_CENTER_X EQU 0
+_PLAYER_DIE3_CENTER_Y EQU 0
+
+_PLAYER_DIE3_VECTORS:  ; Main entry (header + 12 path(s))
+    FDB 12               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE3_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE3_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE3_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE3_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE3_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE3_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE3_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE3_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE3_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE3_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE3_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE3_PATH11        ; pointer to path 11
+
+_PLAYER_DIE3_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $FE,$01,0,0        ; path0: header (y=-2, x=1)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $00,$03,0,0        ; path1: header (y=0, x=3)
+    FCB $FF,$04,$04          ; flag=-1, dy=4, dx=4
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $06,$04,0,0        ; path2: header (y=6, x=4)
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $09,$05,0,0        ; path3: header (y=9, x=5)
+    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
+    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $01,$FE,0,0        ; path4: header (y=1, x=-2)
+    FCB $FF,$05,$FF          ; flag=-1, dy=5, dx=-1
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $09,$FE,0,0        ; path5: header (y=9, x=-2)
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $08,$FC,0,0        ; path6: header (y=8, x=-4)
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $03,$F8,0,0        ; path7: header (y=3, x=-8)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$FC,$04          ; flag=-1, dy=-4, dx=4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $FB,$FE,0,0        ; path8: header (y=-5, x=-2)
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $FA,$01,0,0        ; path9: header (y=-6, x=1)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $F9,$00,0,0        ; path10: header (y=-7, x=0)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $F9,$FF,0,0        ; path11: header (y=-7, x=-1)
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_die4.vec (Malban Draw_Sync_List format)
+; Total paths: 16, points: 32
+; X bounds: min=-8, max=9, width=17
+; Center: (0, 0)
+
+_PLAYER_DIE4_WIDTH EQU 17
+_PLAYER_DIE4_HALF_WIDTH EQU 8
+_PLAYER_DIE4_HEIGHT EQU 14
+_PLAYER_DIE4_HALF_HEIGHT EQU 7
+_PLAYER_DIE4_CENTER_X EQU 0
+_PLAYER_DIE4_CENTER_Y EQU 0
+
+_PLAYER_DIE4_VECTORS:  ; Main entry (header + 16 path(s))
+    FDB 16               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE4_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE4_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE4_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE4_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE4_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE4_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE4_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE4_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE4_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE4_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE4_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE4_PATH11        ; pointer to path 11
+    FDB _PLAYER_DIE4_PATH12        ; pointer to path 12
+    FDB _PLAYER_DIE4_PATH13        ; pointer to path 13
+    FDB _PLAYER_DIE4_PATH14        ; pointer to path 14
+    FDB _PLAYER_DIE4_PATH15        ; pointer to path 15
+
+_PLAYER_DIE4_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $01,$00,0,0        ; path0: header (y=1, x=0)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $FE,$02,0,0        ; path1: header (y=-2, x=2)
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FB,$FC,0,0        ; path2: header (y=-5, x=-4)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $F9,$FC,0,0        ; path3: header (y=-7, x=-4)
+    FCB $FF,$04,$FD          ; flag=-1, dy=4, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $FB,$FA,0,0        ; path4: header (y=-5, x=-6)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $FF,$00,0,0        ; path5: header (y=-1, x=0)
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $05,$01,0,0        ; path6: header (y=5, x=1)
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $05,$FB,0,0        ; path7: header (y=5, x=-5)
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $07,$FB,0,0        ; path8: header (y=7, x=-5)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $03,$F8,0,0        ; path9: header (y=3, x=-8)
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $07,$04,0,0        ; path10: header (y=7, x=4)
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $05,$08,0,0        ; path11: header (y=5, x=8)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$06,0,0        ; path12: header (y=5, x=6)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $FC,$08,0,0        ; path13: header (y=-4, x=8)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $FC,$06,0,0        ; path14: header (y=-4, x=6)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $FA,$09,0,0        ; path15: header (y=-6, x=9)
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
+    FCB 2                ; End marker (path complete)
+
 ; Generated from player_idle.vec (Malban Draw_Sync_List format)
 ; Total paths: 9, points: 35
 ; X bounds: min=-6, max=6, width=12
@@ -12796,15 +14099,15 @@ _PLAYER_IDLE_PATH8:    ; Path 8
 
 ; Generated from titchi_ball.vec (Malban Draw_Sync_List format)
 ; Total paths: 7, points: 26
-; X bounds: min=-7, max=5, width=12
-; Center: (-1, 3)
+; X bounds: min=-6, max=6, width=12
+; Center: (0, 0)
 
 _TITCHI_BALL_WIDTH EQU 12
 _TITCHI_BALL_HALF_WIDTH EQU 6
 _TITCHI_BALL_HEIGHT EQU 8
 _TITCHI_BALL_HALF_HEIGHT EQU 4
-_TITCHI_BALL_CENTER_X EQU -1
-_TITCHI_BALL_CENTER_Y EQU 3
+_TITCHI_BALL_CENTER_X EQU 0
+_TITCHI_BALL_CENTER_Y EQU 0
 
 _TITCHI_BALL_VECTORS:  ; Main entry (header + 7 path(s))
     FDB 7               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
@@ -12830,7 +14133,7 @@ _TITCHI_BALL_PATH1:    ; Path 1
     FCB 2                ; End marker (path complete)
 
 _TITCHI_BALL_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
+    FCB 85              ; path2: intensity
     FCB $FD,$FD,0,0        ; path2: header (y=-3, x=-3)
     FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
     FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
@@ -13021,6 +14324,117 @@ _BOSS_INTRO_MUSIC:
     FDB     _BOSS_INTRO_MUSIC       ; Jump to start (absolute address)
 
 
+; Generated from intro.vmus (internal name: Imported MIDI)
+; Tempo: 120 BPM, Total events: 4 (PSG Direct format)
+; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
+
+_INTRO_MUSIC:
+    ; Frame-based PSG register writes
+    FCB     0              ; Delay 0 frames (maintain previous state)
+    FCB     6              ; Frame 0 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $7E             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     4              ; Frame 4 - 4 register writes
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     6              ; Frame 8 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $8D             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     4              ; Frame 12 - 4 register writes
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     5              ; Delay 5 frames (maintain previous state)
+    FCB     6              ; Frame 17 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $7E             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     4              ; Frame 21 - 4 register writes
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     6              ; Delay 6 frames (maintain previous state)
+    FCB     6              ; Frame 27 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $8D             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     254             ; Delay 254 frames (filler chunk)
+    FCB     6              ; 6 register writes (repeat state)
+    FCB     0               ; Reg 0 number
+    FCB     $8D             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     119              ; Delay 119 frames before loop
+    FCB     $FF             ; Loop command ($FF never valid as count)
+    FDB     _INTRO_MUSIC       ; Jump to start (absolute address)
+
+
 ; Generated from platform2.vec (Malban Draw_Sync_List format)
 ; Total paths: 3, points: 13
 ; X bounds: min=-58, max=57, width=115
@@ -13028,8 +14442,8 @@ _BOSS_INTRO_MUSIC:
 
 _PLATFORM2_WIDTH EQU 115
 _PLATFORM2_HALF_WIDTH EQU 57
-_PLATFORM2_HEIGHT EQU 18
-_PLATFORM2_HALF_HEIGHT EQU 9
+_PLATFORM2_HEIGHT EQU 9
+_PLATFORM2_HALF_HEIGHT EQU 4
 _PLATFORM2_CENTER_X EQU 0
 _PLATFORM2_CENTER_Y EQU 0
 
@@ -13041,110 +14455,48 @@ _PLATFORM2_VECTORS:  ; Main entry (header + 3 path(s))
 
 _PLATFORM2_PATH0:    ; Path 0
     FCB 85              ; path0: intensity
-    FCB $F7,$38,0,0        ; path0: header (y=-9, x=56)
-    FCB $FF,$12,$EC          ; flag=-1, dy=18, dx=-20
-    FCB $FF,$EE,$EE          ; flag=-1, dy=-18, dx=-18
-    FCB $FF,$12,$EE          ; flag=-1, dy=18, dx=-18
-    FCB $FF,$EE,$EC          ; flag=-1, dy=-18, dx=-20
-    FCB $FF,$12,$EE          ; flag=-1, dy=18, dx=-18
-    FCB $FF,$EE,$EC          ; flag=-1, dy=-18, dx=-20
+    FCB $00,$39,0,0        ; path0: header (y=0, x=57)
     FCB 2                ; End marker (path complete)
 
 _PLATFORM2_PATH1:    ; Path 1
     FCB 85              ; path1: intensity
-    FCB $09,$C6,0,0        ; path1: header (y=9, x=-58)
-    FCB $FF,$00,$73          ; flag=-1, dy=0, dx=115
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$8D          ; flag=-1, dy=0, dx=-115
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
+    FCB $FB,$39,0,0        ; path1: header (y=-5, x=57)
+    FCB $FF,$09,$EB          ; flag=-1, dy=9, dx=-21
+    FCB $FF,$F7,$EE          ; flag=-1, dy=-9, dx=-18
+    FCB $FF,$09,$EE          ; flag=-1, dy=9, dx=-18
+    FCB $FF,$F7,$EC          ; flag=-1, dy=-9, dx=-20
+    FCB $FF,$09,$EE          ; flag=-1, dy=9, dx=-18
+    FCB $FF,$F7,$EC          ; flag=-1, dy=-9, dx=-20
     FCB 2                ; End marker (path complete)
 
 _PLATFORM2_PATH2:    ; Path 2
     FCB 85              ; path2: intensity
-    FCB $05,$39,0,0        ; path2: header (y=5, x=57)
+    FCB $04,$C6,0,0        ; path2: header (y=4, x=-58)
+    FCB $FF,$00,$73          ; flag=-1, dy=0, dx=115
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$8D          ; flag=-1, dy=0, dx=-115
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
     FCB 2                ; End marker (path complete)
 
-; Generated from platform1.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 11
-; X bounds: min=-24, max=23, width=47
-; Center: (0, 0)
+_SHOT_NORMAL_SFX:
+    ; SFX: shot_normal (laser)
+    ; Duration: 150ms (7fr), Freq: 199Hz, Channel: 0
+    FCB $AA         ; Frame 0 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $DE  ; Tone period = 222 (big-endian)
+    FCB $AA         ; Frame 1 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $FD  ; Tone period = 253 (big-endian)
+    FCB $AA         ; Frame 2 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $01, $27  ; Tone period = 295 (big-endian)
+    FCB $AA         ; Frame 3 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $01, $63  ; Tone period = 355 (big-endian)
+    FCB $AA         ; Frame 4 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $01, $BB  ; Tone period = 443 (big-endian)
+    FCB $AC         ; Frame 5 - flags (vol=12, noisevol=0, tone=Y, noise=N)
+    FCB $02, $4F  ; Tone period = 591 (big-endian)
+    FCB $A6         ; Frame 6 - flags (vol=6, noisevol=0, tone=Y, noise=N)
+    FCB $03, $76  ; Tone period = 886 (big-endian)
+    FCB $D0, $20    ; End of effect marker
 
-_PLATFORM1_WIDTH EQU 47
-_PLATFORM1_HALF_WIDTH EQU 23
-_PLATFORM1_HEIGHT EQU 19
-_PLATFORM1_HALF_HEIGHT EQU 9
-_PLATFORM1_CENTER_X EQU 0
-_PLATFORM1_CENTER_Y EQU 0
-
-_PLATFORM1_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLATFORM1_PATH0        ; pointer to path 0
-    FDB _PLATFORM1_PATH1        ; pointer to path 1
-    FDB _PLATFORM1_PATH2        ; pointer to path 2
-
-_PLATFORM1_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $04,$17,0,0        ; path0: header (y=4, x=23)
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM1_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $F6,$17,0,0        ; path1: header (y=-10, x=23)
-    FCB $FF,$13,$F4          ; flag=-1, dy=19, dx=-12
-    FCB $FF,$ED,$F5          ; flag=-1, dy=-19, dx=-11
-    FCB $FF,$13,$F4          ; flag=-1, dy=19, dx=-12
-    FCB $FF,$ED,$F4          ; flag=-1, dy=-19, dx=-12
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM1_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $09,$E8,0,0        ; path2: header (y=9, x=-24)
-    FCB $FF,$00,$2F          ; flag=-1, dy=0, dx=47
-    FCB $FF,$ED,$00          ; flag=-1, dy=-19, dx=0
-    FCB $FF,$00,$D1          ; flag=-1, dy=0, dx=-47
-    FCB $FF,$13,$00          ; flag=-1, dy=19, dx=0
-    FCB 2                ; End marker (path complete)
-
-; Generated from platform3.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 11
-; X bounds: min=-41, max=40, width=81
-; Center: (0, 0)
-
-_PLATFORM3_WIDTH EQU 81
-_PLATFORM3_HALF_WIDTH EQU 40
-_PLATFORM3_HEIGHT EQU 18
-_PLATFORM3_HALF_HEIGHT EQU 9
-_PLATFORM3_CENTER_X EQU 0
-_PLATFORM3_CENTER_Y EQU 0
-
-_PLATFORM3_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLATFORM3_PATH0        ; pointer to path 0
-    FDB _PLATFORM3_PATH1        ; pointer to path 1
-    FDB _PLATFORM3_PATH2        ; pointer to path 2
-
-_PLATFORM3_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $05,$28,0,0        ; path0: header (y=5, x=40)
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM3_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $F7,$28,0,0        ; path1: header (y=-9, x=40)
-    FCB $FF,$12,$EC          ; flag=-1, dy=18, dx=-20
-    FCB $FF,$EE,$EC          ; flag=-1, dy=-18, dx=-20
-    FCB $FF,$12,$EC          ; flag=-1, dy=18, dx=-20
-    FCB $FF,$EE,$EB          ; flag=-1, dy=-18, dx=-21
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM3_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $09,$D7,0,0        ; path2: header (y=9, x=-41)
-    FCB $FF,$00,$51          ; flag=-1, dy=0, dx=81
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$AF          ; flag=-1, dy=0, dx=-81
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
-    FCB 2                ; End marker (path complete)
 
 
 ; ================================================

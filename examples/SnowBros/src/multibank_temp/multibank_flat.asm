@@ -63,6 +63,11 @@ START:
     CLR >PSG_DELAY_FRAMES   ; Clear delay counter
     STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)
     STD >PSG_MUSIC_START    ; Clear loop pointer
+    CLR >ENEMY_COUNT        ; No enemies until SPAWN_ENEMIES runs
+    CLR >ANIM_ENEMY_ENEMY1_WALK_STATE
+    CLR >ANIM_ENEMY_ENEMY1_WALK_STATE+1
+    CLR >ANIM_ENEMY_TITCHI_WALK_STATE
+    CLR >ANIM_ENEMY_TITCHI_WALK_STATE+1
 ; Bank 0 ($0000) is active; fixed bank 3 ($4000-$7FFF) always visible
     JMP MAIN
 
@@ -82,40 +87,74 @@ MAIN:
     CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)
     CLR ANIM_PLAYER_WALK_STATE     ; frame_idx = 0
     CLR ANIM_PLAYER_WALK_STATE+1   ; ticks_left = 0 (forces DAR_INIT)
+    ; Copy array 'thaw_timers' from ROM to RAM (8 elements)
+    LDX #ARRAY_THAW_TIMERS_DATA       ; Source: ROM array data
+    LDU #VAR_THAW_TIMERS_DATA       ; Dest: RAM array space
+    LDD #8        ; Number of elements
+.COPY_LOOP_0:
+    LDY ,X++        ; Load word from ROM, increment source
+    STY ,U++        ; Store word to RAM, increment dest
+    SUBD #1         ; Decrement counter
+    LBNE .COPY_LOOP_0 ; Loop until done (LBNE for long branch)
+    LDX #VAR_THAW_TIMERS_DATA    ; Array now in RAM
+    STX VAR_THAW_TIMERS
+    ; Copy array 'ball_rolling' from ROM to RAM (8 elements)
+    LDX #ARRAY_BALL_ROLLING_DATA       ; Source: ROM array data
+    LDU #VAR_BALL_ROLLING_DATA       ; Dest: RAM array space
+    LDD #8        ; Number of elements
+.COPY_LOOP_1:
+    LDY ,X++        ; Load word from ROM, increment source
+    STY ,U++        ; Store word to RAM, increment dest
+    SUBD #1         ; Decrement counter
+    LBNE .COPY_LOOP_1 ; Loop until done (LBNE for long branch)
+    LDX #VAR_BALL_ROLLING_DATA    ; Array now in RAM
+    STX VAR_BALL_ROLLING
+    ; Copy array 'ball_vx_arr' from ROM to RAM (8 elements)
+    LDX #ARRAY_BALL_VX_ARR_DATA       ; Source: ROM array data
+    LDU #VAR_BALL_VX_ARR_DATA       ; Dest: RAM array space
+    LDD #8        ; Number of elements
+.COPY_LOOP_2:
+    LDY ,X++        ; Load word from ROM, increment source
+    STY ,U++        ; Store word to RAM, increment dest
+    SUBD #1         ; Decrement counter
+    LBNE .COPY_LOOP_2 ; Loop until done (LBNE for long branch)
+    LDX #VAR_BALL_VX_ARR_DATA    ; Array now in RAM
+    STX VAR_BALL_VX_ARR
+    ; Copy array 'ball_vy_arr' from ROM to RAM (8 elements)
+    LDX #ARRAY_BALL_VY_ARR_DATA       ; Source: ROM array data
+    LDU #VAR_BALL_VY_ARR_DATA       ; Dest: RAM array space
+    LDD #8        ; Number of elements
+.COPY_LOOP_3:
+    LDY ,X++        ; Load word from ROM, increment source
+    STY ,U++        ; Store word to RAM, increment dest
+    SUBD #1         ; Decrement counter
+    LBNE .COPY_LOOP_3 ; Loop until done (LBNE for long branch)
+    LDX #VAR_BALL_VY_ARR_DATA    ; Array now in RAM
+    STX VAR_BALL_VY_ARR
+    ; Copy array 'ball_bounces' from ROM to RAM (8 elements)
+    LDX #ARRAY_BALL_BOUNCES_DATA       ; Source: ROM array data
+    LDU #VAR_BALL_BOUNCES_DATA       ; Dest: RAM array space
+    LDD #8        ; Number of elements
+.COPY_LOOP_4:
+    LDY ,X++        ; Load word from ROM, increment source
+    STY ,U++        ; Store word to RAM, increment dest
+    SUBD #1         ; Decrement counter
+    LBNE .COPY_LOOP_4 ; Loop until done (LBNE for long branch)
+    LDX #VAR_BALL_BOUNCES_DATA    ; Array now in RAM
+    STX VAR_BALL_BOUNCES
+    ; Copy array 'ball_collided' from ROM to RAM (8 elements)
+    LDX #ARRAY_BALL_COLLIDED_DATA       ; Source: ROM array data
+    LDU #VAR_BALL_COLLIDED_DATA       ; Dest: RAM array space
+    LDD #8        ; Number of elements
+.COPY_LOOP_5:
+    LDY ,X++        ; Load word from ROM, increment source
+    STY ,U++        ; Store word to RAM, increment dest
+    SUBD #1         ; Decrement counter
+    LBNE .COPY_LOOP_5 ; Loop until done (LBNE for long branch)
+    LDX #VAR_BALL_COLLIDED_DATA    ; Array now in RAM
+    STX VAR_BALL_COLLIDED
     LDD #0
-    STD VAR_STATE_TITLE
-    LDD #1
-    STD VAR_STATE_GAME_START
-    LDD #2
-    STD VAR_STATE_PLAYING
-    LDD #3
-    STD VAR_STATE_PLAYER_DEAD
-    LDD #4
-    STD VAR_STATE_LEVEL_CLEAR
-    LDD #5
-    STD VAR_STATE_BOSS_INTRO
-    LDD #6
-    STD VAR_STATE_BOSS
-    LDD #7
-    STD VAR_STATE_GAME_OVER
-    LDD #8
-    STD VAR_STATE_ALL_CLEAR
-    LDD #0
-    STD VAR_TITCHI_STATE_NORMAL
-    LDD #1
-    STD VAR_TITCHI_STATE_SNOW1
-    LDD #2
-    STD VAR_TITCHI_STATE_SNOW2
-    LDD #3
-    STD VAR_TITCHI_STATE_BALL
-    LDD #6
-    STD VAR_SNOW_HW
-    LDD #6
-    STD VAR_SNOW_HH
-    LDD #10
-    STD VAR_ENEMY_HW
-    LDD #14
-    STD VAR_ENEMY_HH
+    STD VAR_BALL_LAUNCHED
     LDD #0
     STD VAR_GAME_STATE
     LDD #0
@@ -134,7 +173,7 @@ MAIN:
     STD VAR_NEXT_IS_BOSS
     LDD #0
     STD VAR_PLAYER_X
-    LDD #-120
+    LDD #-2424
     STD VAR_PLAYER_Y
     LDD #0
     STD VAR_PLAYER_VX
@@ -148,32 +187,8 @@ MAIN:
     STD VAR_FLOOR_Y
     LDD #0
     STD VAR_PREV_Y
-    LDD #1
-    STD VAR_GRAVITY
-    LDD #12
-    STD VAR_JUMP_SPEED
-    LDD #12
-    STD VAR_MAX_FALL_SPEED
-    LDD #14
-    STD VAR_PLAYER_HH
-    LDD #-96
-    STD VAR_WORLD_X_MIN
-    LDD #95
-    STD VAR_WORLD_X_MAX
-    LDD #-110
-    STD VAR_WORLD_Y_MIN
-    LDD #127
-    STD VAR_WORLD_Y_MAX
-    LDD #5
-    STD VAR_SNOW_SPEED
-    LDD #3
-    STD VAR_SNOW_LAUNCH_VY
-    LDD #14
-    STD VAR_SNOW_LIFE_NORMAL
-    LDD #30
-    STD VAR_SNOW_LIFE_POWER
-    LDD #15
-    STD VAR_SHOOT_COOLDOWN_MAX
+    LDD #-2304
+    STD VAR_CAMERA_Y
     LDD #0
     STD VAR_SHOOT_COOLDOWN
     LDD #0
@@ -218,20 +233,6 @@ MAIN:
     STD VAR_SNOW2_VY
     LDD #0
     STD VAR_SNOW2_LIFE
-    LDD #3600
-    STD VAR_LEVEL_TIME
-    LDD #3
-    STD VAR_LIVES_START
-    LDD #120
-    STD VAR_GAME_START_DELAY
-    LDD #120
-    STD VAR_DEATH_DELAY
-    LDD #150
-    STD VAR_LEVEL_CLEAR_DELAY
-    LDD #180
-    STD VAR_BOSS_INTRO_DELAY
-    LDD #300
-    STD VAR_ALL_CLEAR_DELAY
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -253,7 +254,7 @@ MAIN:
     STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
-    LDD >VAR_STATE_TITLE
+    LDD #0  ; const STATE_TITLE
     STD VAR_GAME_STATE
 
 .MAIN_LOOP:
@@ -263,7 +264,7 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    LDD >VAR_STATE_TITLE
+    LDD #0  ; const STATE_TITLE
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -278,7 +279,7 @@ LOOP_BODY:
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
-    LDD >VAR_STATE_GAME_START
+    LDD #1  ; const STATE_GAME_START
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -293,7 +294,7 @@ IF_END_0:
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
-    LDD >VAR_STATE_PLAYING
+    LDD #2  ; const STATE_PLAYING
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -308,7 +309,7 @@ IF_END_2:
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
-    LDD >VAR_STATE_PLAYER_DEAD
+    LDD #3  ; const STATE_PLAYER_DEAD
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -323,7 +324,7 @@ IF_END_4:
     LBRA IF_END_6
 IF_NEXT_7:
 IF_END_6:
-    LDD >VAR_STATE_LEVEL_CLEAR
+    LDD #4  ; const STATE_LEVEL_CLEAR
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -338,7 +339,7 @@ IF_END_6:
     LBRA IF_END_8
 IF_NEXT_9:
 IF_END_8:
-    LDD >VAR_STATE_BOSS_INTRO
+    LDD #5  ; const STATE_BOSS_INTRO
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -353,7 +354,7 @@ IF_END_8:
     LBRA IF_END_10
 IF_NEXT_11:
 IF_END_10:
-    LDD >VAR_STATE_BOSS
+    LDD #6  ; const STATE_BOSS
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -368,7 +369,7 @@ IF_END_10:
     LBRA IF_END_12
 IF_NEXT_13:
 IF_END_12:
-    LDD >VAR_STATE_GAME_OVER
+    LDD #7  ; const STATE_GAME_OVER
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -383,7 +384,7 @@ IF_END_12:
     LBRA IF_END_14
 IF_NEXT_15:
 IF_END_14:
-    LDD >VAR_STATE_ALL_CLEAR
+    LDD #8  ; const STATE_ALL_CLEAR
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_GAME_STATE
     CMPD TMPVAL
@@ -408,7 +409,7 @@ state_title:
     LDD #0
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
-    LDD #0
+    LDD #40
     TFR B,A       ; Y position (low byte) — B already holds it
     STA TMPPTR+1  ; Save Y to temporary storage
     LDA TMPPTR    ; X position
@@ -423,12 +424,12 @@ state_title:
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
-    LDD #-50
-    STD VAR_ARG0
-    LDD #-90
-    STD VAR_ARG1
+    LDD #-70
+    STD >VAR_ARG0
+    LDD #-40
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_9120385685437879118      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
@@ -444,7 +445,7 @@ state_title:
     LBEQ IF_NEXT_19
     LDD #0
     STD VAR_SCORE
-    LDD >VAR_LIVES_START
+    LDD #3  ; const LIVES_START
     STD VAR_LIVES
     LDD #1
     STD VAR_CURRENT_LEVEL
@@ -458,22 +459,27 @@ IF_END_18:
 state_game_start:
     ; PRINT_TEXT: Print text at position
     LDD #-30
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #20
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_78166382      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
+    LDD #30
+    STD >VAR_ARG0    ; X position
     LDD #20
-    STD VAR_ARG0    ; X position
-    LDD #20
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_CURRENT_LEVEL
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
+    ; PLAY_MUSIC("intro") - play music asset (index=4)
+    LDX #4        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
     LDD >VAR_FRAME_TIMER
@@ -495,7 +501,7 @@ state_game_start:
 .CMP_9_END:
     LBEQ IF_NEXT_21
     JSR load_current_level
-    LDD >VAR_STATE_PLAYING
+    LDD #2  ; const STATE_PLAYING
     STD VAR_GAME_STATE
     LBRA IF_END_20
 IF_NEXT_21:
@@ -526,14 +532,57 @@ state_playing:
     LBRA IF_END_22
 IF_NEXT_23:
 IF_END_22:
-    JSR update_player
-    JSR update_snowballs
+    JSR TRAMP_update_player  ; cross-bank trampoline (bank #0 -> bank #1)
+    JSR TRAMP_update_snowballs  ; cross-bank trampoline (bank #0 -> bank #1)
     ; UPDATE_ENEMIES: advance enemy AI and movement
     JSR UPDATE_ENEMIES_RUNTIME
+    JSR update_thaw
+    JSR update_balls
+    JSR ball_ball_collision
     JSR check_snowball_enemy_collision
     JSR check_player_enemy_collision
-    ; ===== SHOW_LEVEL builtin =====
-    JSR SHOW_LEVEL_RUNTIME
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #30
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_CAMERA_Y
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CAMERA_Y
+    CMPD TMPVAL
+    LBGT .CMP_11_TRUE
+    LDD #0
+    LBRA .CMP_11_END
+.CMP_11_TRUE:
+    LDD #1
+.CMP_11_END:
+    LBEQ IF_NEXT_25
+    LDD #0
+    STD VAR_CAMERA_Y
+    LBRA IF_END_24
+IF_NEXT_25:
+IF_END_24:
+    LDD #-2304  ; const CAMERA_Y_MIN
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CAMERA_Y
+    CMPD TMPVAL
+    LBLT .CMP_12_TRUE
+    LDD #0
+    LBRA .CMP_12_END
+.CMP_12_TRUE:
+    LDD #1
+.CMP_12_END:
+    LBEQ IF_NEXT_27
+    LDD #-2304  ; const CAMERA_Y_MIN
+    STD VAR_CAMERA_Y
+    LBRA IF_END_26
+IF_NEXT_27:
+IF_END_26:
+    ; ===== SET_CAMERA_Y builtin =====
+    LDD >VAR_CAMERA_Y
+    STD >CAMERA_Y    ; Store 16-bit camera Y scroll offset
     LDD #0
     STD RESULT
     JSR draw_player
@@ -541,21 +590,27 @@ IF_END_22:
     ; DRAW_ENEMIES: render all active enemies
     JSR DRAW_ENEMIES_RUNTIME
     JSR draw_hud
+    JSR count_active_enemies
+    STD VAR_ENEMY_COUNT
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ENEMY_COUNT
     CMPD TMPVAL
-    LBLE .CMP_11_TRUE
+    LBLE .CMP_13_TRUE
     LDD #0
-    LBRA .CMP_11_END
-.CMP_11_TRUE:
+    LBRA .CMP_13_END
+.CMP_13_TRUE:
     LDD #1
-.CMP_11_END:
-    LBEQ IF_NEXT_25
+.CMP_13_END:
+    LBEQ IF_NEXT_29
     JSR enter_level_clear
-    LBRA IF_END_24
-IF_NEXT_25:
-IF_END_24:
+    LBRA IF_END_28
+IF_NEXT_29:
+IF_END_28:
+    ; ===== SHOW_LEVEL builtin =====
+    JSR SHOW_LEVEL_RUNTIME
+    LDD #0
+    STD RESULT
     RTS
 
 ; Function: state_player_dead (Bank #0)
@@ -565,6 +620,7 @@ state_player_dead:
     LDD #0
     STD RESULT
     JSR draw_hud
+    JSR draw_player_death
     LDD >VAR_FRAME_TIMER
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
@@ -576,52 +632,201 @@ state_player_dead:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_FRAME_TIMER
     CMPD TMPVAL
-    LBLE .CMP_12_TRUE
-    LDD #0
-    LBRA .CMP_12_END
-.CMP_12_TRUE:
-    LDD #1
-.CMP_12_END:
-    LBEQ IF_NEXT_27
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_LIVES
-    CMPD TMPVAL
-    LBLE .CMP_13_TRUE
-    LDD #0
-    LBRA .CMP_13_END
-.CMP_13_TRUE:
-    LDD #1
-.CMP_13_END:
-    LBEQ IF_NEXT_29
-    ; PLAY_MUSIC("Game_Over") - play music asset (index=1)
-    LDX #1        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LDD >VAR_STATE_GAME_OVER
-    STD VAR_GAME_STATE
-    LBRA IF_END_28
-IF_NEXT_29:
-IF_END_28:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_LIVES
-    CMPD TMPVAL
-    LBGT .CMP_14_TRUE
+    LBLE .CMP_14_TRUE
     LDD #0
     LBRA .CMP_14_END
 .CMP_14_TRUE:
     LDD #1
 .CMP_14_END:
     LBEQ IF_NEXT_31
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_LIVES
+    CMPD TMPVAL
+    LBLE .CMP_15_TRUE
+    LDD #0
+    LBRA .CMP_15_END
+.CMP_15_TRUE:
+    LDD #1
+.CMP_15_END:
+    LBEQ IF_NEXT_33
+    ; PLAY_MUSIC("Game_Over") - play music asset (index=1)
+    LDX #1        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LDD #300  ; const GAME_OVER_DELAY
+    STD VAR_FRAME_TIMER
+    LDD #7  ; const STATE_GAME_OVER
+    STD VAR_GAME_STATE
+    LBRA IF_END_32
+IF_NEXT_33:
+IF_END_32:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_LIVES
+    CMPD TMPVAL
+    LBGT .CMP_16_TRUE
+    LDD #0
+    LBRA .CMP_16_END
+.CMP_16_TRUE:
+    LDD #1
+.CMP_16_END:
+    LBEQ IF_NEXT_35
     JSR enter_game_start
+    LBRA IF_END_34
+IF_NEXT_35:
+IF_END_34:
     LBRA IF_END_30
 IF_NEXT_31:
 IF_END_30:
-    LBRA IF_END_26
-IF_NEXT_27:
-IF_END_26:
+    RTS
+
+; Function: draw_player_death (Bank #0)
+draw_player_death:
+    ; SET_INTENSITY: Set drawing intensity
+    LDD #65
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
+    LDD #0
+    STD RESULT
+    ; STOP_MUSIC: Stop music playback
+    JSR STOP_MUSIC_RUNTIME
+    LDD #0
+    STD RESULT
+    LDD #120  ; const DEATH_DELAY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FRAME_TIMER
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ELAPSED
+    LDD #12
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ELAPSED
+    CMPD TMPVAL
+    LBLT .CMP_17_TRUE
+    LDD #0
+    LBRA .CMP_17_END
+.CMP_17_TRUE:
+    LDD #1
+.CMP_17_END:
+    LBEQ IF_NEXT_37
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: player_die1 (index=5, 13 paths)
+    LDD >VAR_PLAYER_X
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD >VAR_PLAYER_Y
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    LDD >VAR_PLAYER_FACING
+    TFR B,A
+    STA MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
+    LDX #5        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_36
+IF_NEXT_37:
+    LDD #22
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ELAPSED
+    CMPD TMPVAL
+    LBLT .CMP_18_TRUE
+    LDD #0
+    LBRA .CMP_18_END
+.CMP_18_TRUE:
+    LDD #1
+.CMP_18_END:
+    LBEQ IF_NEXT_39
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: player_die2 (index=6, 12 paths)
+    LDD >VAR_PLAYER_X
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD >VAR_PLAYER_Y
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    LDD >VAR_PLAYER_FACING
+    TFR B,A
+    STA MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
+    LDX #6        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_38
+IF_NEXT_39:
+    LDD #32
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ELAPSED
+    CMPD TMPVAL
+    LBLT .CMP_19_TRUE
+    LDD #0
+    LBRA .CMP_19_END
+.CMP_19_TRUE:
+    LDD #1
+.CMP_19_END:
+    LBEQ IF_NEXT_41
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: player_die3 (index=7, 12 paths)
+    LDD >VAR_PLAYER_X
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD >VAR_PLAYER_Y
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    LDD >VAR_PLAYER_FACING
+    TFR B,A
+    STA MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
+    LDX #7        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_40
+IF_NEXT_41:
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: player_die4 (index=8, 16 paths)
+    LDD >VAR_PLAYER_X
+    TFR B,A       ; X position (low byte) — B already holds it
+    STA TMPPTR    ; Save X to temporary storage
+    LDD >VAR_PLAYER_Y
+    TFR B,A       ; Y position (low byte) — B already holds it
+    STA TMPPTR+1  ; Save Y to temporary storage
+    LDA TMPPTR    ; X position
+    STA DRAW_VEC_X
+    LDA TMPPTR+1  ; Y position
+    STA DRAW_VEC_Y
+    LDD >VAR_PLAYER_FACING
+    TFR B,A
+    STA MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
+    LDX #8        ; Asset index for lookup
+    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
+    LDD #0
+    STD RESULT
+IF_END_40:
+IF_END_38:
+IF_END_36:
     RTS
 
 ; Function: state_level_clear (Bank #0)
@@ -633,128 +838,11 @@ state_level_clear:
     JSR draw_hud
     ; PRINT_TEXT: Print text at position
     LDD #-35
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #0
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1989933374265095120      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LDD >VAR_FRAME_TIMER
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_FRAME_TIMER
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FRAME_TIMER
-    CMPD TMPVAL
-    LBLE .CMP_15_TRUE
-    LDD #0
-    LBRA .CMP_15_END
-.CMP_15_TRUE:
-    LDD #1
-.CMP_15_END:
-    LBEQ IF_NEXT_33
-    LDD >VAR_CURRENT_LEVEL
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_CURRENT_LEVEL
-    LDD #50
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBGT .CMP_16_TRUE
-    LDD #0
-    LBRA .CMP_16_END
-.CMP_16_TRUE:
-    LDD #1
-.CMP_16_END:
-    LBEQ IF_NEXT_35
-    LDD >VAR_ALL_CLEAR_DELAY
-    STD VAR_FRAME_TIMER
-    ; STOP_MUSIC: Stop music playback
-    JSR STOP_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
-    LDD >VAR_STATE_ALL_CLEAR
-    STD VAR_GAME_STATE
-    LBRA IF_END_34
-IF_NEXT_35:
-IF_END_34:
-    LDD #50
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBLE .CMP_17_TRUE
-    LDD #0
-    LBRA .CMP_17_END
-.CMP_17_TRUE:
-    LDD #1
-.CMP_17_END:
-    LBEQ IF_NEXT_37
-    JSR check_if_boss_level
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_NEXT_IS_BOSS
-    CMPD TMPVAL
-    LBEQ .CMP_18_TRUE
-    LDD #0
-    LBRA .CMP_18_END
-.CMP_18_TRUE:
-    LDD #1
-.CMP_18_END:
-    LBEQ IF_NEXT_39
-    JSR enter_boss_intro
-    LBRA IF_END_38
-IF_NEXT_39:
-IF_END_38:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_NEXT_IS_BOSS
-    CMPD TMPVAL
-    LBEQ .CMP_19_TRUE
-    LDD #0
-    LBRA .CMP_19_END
-.CMP_19_TRUE:
-    LDD #1
-.CMP_19_END:
-    LBEQ IF_NEXT_41
-    JSR enter_game_start
-    LBRA IF_END_40
-IF_NEXT_41:
-IF_END_40:
-    LBRA IF_END_36
-IF_NEXT_37:
-IF_END_36:
-    LBRA IF_END_32
-IF_NEXT_33:
-IF_END_32:
-    RTS
-
-; Function: state_boss_intro (Bank #0)
-state_boss_intro:
-    ; PRINT_TEXT: Print text at position
-    LDD #-30
-    STD VAR_ARG0
-    LDD #20
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2453707043877      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-50
-    STD VAR_ARG0
-    LDD #0
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_17169778266052697977      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
@@ -776,19 +864,136 @@ state_boss_intro:
     LDD #1
 .CMP_20_END:
     LBEQ IF_NEXT_43
-    JSR load_current_level
-    JSR play_boss_music
-    LDD >VAR_STATE_BOSS
+    LDD >VAR_CURRENT_LEVEL
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_CURRENT_LEVEL
+    LDD #50
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBGT .CMP_21_TRUE
+    LDD #0
+    LBRA .CMP_21_END
+.CMP_21_TRUE:
+    LDD #1
+.CMP_21_END:
+    LBEQ IF_NEXT_45
+    LDD #300  ; const ALL_CLEAR_DELAY
+    STD VAR_FRAME_TIMER
+    ; STOP_MUSIC: Stop music playback
+    JSR STOP_MUSIC_RUNTIME
+    LDD #0
+    STD RESULT
+    LDD #8  ; const STATE_ALL_CLEAR
     STD VAR_GAME_STATE
+    LBRA IF_END_44
+IF_NEXT_45:
+IF_END_44:
+    LDD #50
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBLE .CMP_22_TRUE
+    LDD #0
+    LBRA .CMP_22_END
+.CMP_22_TRUE:
+    LDD #1
+.CMP_22_END:
+    LBEQ IF_NEXT_47
+    JSR check_if_boss_level
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_NEXT_IS_BOSS
+    CMPD TMPVAL
+    LBEQ .CMP_23_TRUE
+    LDD #0
+    LBRA .CMP_23_END
+.CMP_23_TRUE:
+    LDD #1
+.CMP_23_END:
+    LBEQ IF_NEXT_49
+    JSR enter_boss_intro
+    LBRA IF_END_48
+IF_NEXT_49:
+IF_END_48:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_NEXT_IS_BOSS
+    CMPD TMPVAL
+    LBEQ .CMP_24_TRUE
+    LDD #0
+    LBRA .CMP_24_END
+.CMP_24_TRUE:
+    LDD #1
+.CMP_24_END:
+    LBEQ IF_NEXT_51
+    JSR enter_game_start
+    LBRA IF_END_50
+IF_NEXT_51:
+IF_END_50:
+    LBRA IF_END_46
+IF_NEXT_47:
+IF_END_46:
     LBRA IF_END_42
 IF_NEXT_43:
 IF_END_42:
     RTS
 
+; Function: state_boss_intro (Bank #0)
+state_boss_intro:
+    ; PRINT_TEXT: Print text at position
+    LDD #-30
+    STD >VAR_ARG0
+    LDD #20
+    STD >VAR_ARG1
+    LDX #PRINT_TEXT_STR_2453707043877      ; Pointer to string in helpers bank
+    STX >VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-50
+    STD >VAR_ARG0
+    LDD #0
+    STD >VAR_ARG1
+    LDX #PRINT_TEXT_STR_17169778266052697977      ; Pointer to string in helpers bank
+    STX >VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    LDD >VAR_FRAME_TIMER
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_FRAME_TIMER
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FRAME_TIMER
+    CMPD TMPVAL
+    LBLE .CMP_25_TRUE
+    LDD #0
+    LBRA .CMP_25_END
+.CMP_25_TRUE:
+    LDD #1
+.CMP_25_END:
+    LBEQ IF_NEXT_53
+    JSR load_current_level
+    JSR play_boss_music
+    LDD #6  ; const STATE_BOSS
+    STD VAR_GAME_STATE
+    LBRA IF_END_52
+IF_NEXT_53:
+IF_END_52:
+    RTS
+
 ; Function: state_boss (Bank #0)
 state_boss:
-    JSR update_player
-    JSR update_snowballs
+    JSR TRAMP_update_player  ; cross-bank trampoline (bank #0 -> bank #1)
+    JSR TRAMP_update_snowballs  ; cross-bank trampoline (bank #0 -> bank #1)
     ; UPDATE_ENEMIES: advance enemy AI and movement
     JSR UPDATE_ENEMIES_RUNTIME
     JSR check_snowball_enemy_collision
@@ -801,86 +1006,37 @@ state_boss:
     ; DRAW_ENEMIES: render all active enemies
     JSR DRAW_ENEMIES_RUNTIME
     JSR draw_hud
-    ; PRINT_TEXT: Print text at position
-    LDD #-35
-    STD VAR_ARG0
-    LDD #20
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_62413928761410      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-25
-    STD VAR_ARG0
-    LDD #-10
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_78726770      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; PRINT_NUMBER(x, y, num)
-    LDD #30
-    STD VAR_ARG0    ; X position
-    LDD #-10
-    STD VAR_ARG1    ; Y position
-    LDD >VAR_SCORE
-    STD VAR_ARG2    ; Number value
-    JSR VECTREX_PRINT_NUMBER
-    LDD #0
-    STD RESULT
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_1_ON
-    LDD #0
-    BRA .J1B1_1_END
-.J1B1_1_ON:
-    LDD #1
-.J1B1_1_END:
-    STD RESULT
-    LBEQ IF_NEXT_45
-    ; STOP_MUSIC: Stop music playback
-    JSR STOP_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
-    LDD >VAR_STATE_TITLE
-    STD VAR_GAME_STATE
-    LBRA IF_END_44
-IF_NEXT_45:
-IF_END_44:
     RTS
 
 ; Function: state_game_over (Bank #0)
 state_game_over:
     ; PRINT_TEXT: Print text at position
     LDD #-30
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #20
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_62413928761410      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-30
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #0
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_78726770      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #30
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #0
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_SCORE
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
@@ -895,59 +1051,63 @@ state_game_over:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_FRAME_TIMER
     CMPD TMPVAL
-    LBLE .CMP_21_TRUE
+    LBLE .CMP_26_TRUE
     LDD #0
-    LBRA .CMP_21_END
-.CMP_21_TRUE:
+    LBRA .CMP_26_END
+.CMP_26_TRUE:
     LDD #1
-.CMP_21_END:
-    LBEQ IF_NEXT_47
-    LDD >VAR_STATE_TITLE
+.CMP_26_END:
+    LBEQ IF_NEXT_55
+    ; STOP_MUSIC: Stop music playback
+    JSR STOP_MUSIC_RUNTIME
+    LDD #0
+    STD RESULT
+    LDD #0  ; const STATE_TITLE
     STD VAR_GAME_STATE
-    LBRA IF_END_46
-IF_NEXT_47:
-IF_END_46:
+    LBRA IF_END_54
+IF_NEXT_55:
+IF_END_54:
     RTS
 
 ; Function: state_all_clear (Bank #0)
 state_all_clear:
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #30
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_13399742582312315532      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-30
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #5
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1785516508540691      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-25
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-20
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_78726770      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #30
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #-20
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_SCORE
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
@@ -962,33 +1122,40 @@ state_all_clear:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_FRAME_TIMER
     CMPD TMPVAL
-    LBLE .CMP_22_TRUE
+    LBLE .CMP_27_TRUE
     LDD #0
-    LBRA .CMP_22_END
-.CMP_22_TRUE:
+    LBRA .CMP_27_END
+.CMP_27_TRUE:
     LDD #1
-.CMP_22_END:
-    LBEQ IF_NEXT_49
-    LDD >VAR_STATE_TITLE
+.CMP_27_END:
+    LBEQ IF_NEXT_57
+    LDD #0  ; const STATE_TITLE
     STD VAR_GAME_STATE
-    LBRA IF_END_48
-IF_NEXT_49:
-IF_END_48:
+    LBRA IF_END_56
+IF_NEXT_57:
+IF_END_56:
     RTS
 
 ; Function: enter_game_start (Bank #0)
 enter_game_start:
-    LDD >VAR_GAME_START_DELAY
+    LDD #120  ; const GAME_START_DELAY
     STD VAR_FRAME_TIMER
-    LDD >VAR_STATE_GAME_START
+    LDD #1  ; const STATE_GAME_START
     STD VAR_GAME_STATE
     RTS
 
 ; Function: enter_level_clear (Bank #0)
 enter_level_clear:
-    LDD >VAR_LEVEL_CLEAR_DELAY
+    LDD #150  ; const LEVEL_CLEAR_DELAY
     STD VAR_FRAME_TIMER
-    LDD >VAR_STATE_LEVEL_CLEAR
+    LDD #-2304  ; const CAMERA_Y_MIN
+    STD VAR_CAMERA_Y
+    ; ===== SET_CAMERA_Y builtin =====
+    LDD >VAR_CAMERA_Y
+    STD >CAMERA_Y    ; Store 16-bit camera Y scroll offset
+    LDD #0
+    STD RESULT
+    LDD #4  ; const STATE_LEVEL_CLEAR
     STD VAR_GAME_STATE
     RTS
 
@@ -999,9 +1166,9 @@ enter_boss_intro:
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
-    LDD >VAR_BOSS_INTRO_DELAY
+    LDD #180  ; const BOSS_INTRO_DELAY
     STD VAR_FRAME_TIMER
-    LDD >VAR_STATE_BOSS_INTRO
+    LDD #5  ; const STATE_BOSS_INTRO
     STD VAR_GAME_STATE
     RTS
 
@@ -1014,9 +1181,16 @@ on_player_death:
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
     STD VAR_LIVES
-    LDD >VAR_DEATH_DELAY
+    LDD #120  ; const DEATH_DELAY
     STD VAR_FRAME_TIMER
-    LDD >VAR_STATE_PLAYER_DEAD
+    LDD #-2304  ; const CAMERA_Y_MIN
+    STD VAR_CAMERA_Y
+    ; ===== SET_CAMERA_Y builtin =====
+    LDD >VAR_CAMERA_Y
+    STD >CAMERA_Y    ; Store 16-bit camera Y scroll offset
+    LDD #0
+    STD RESULT
+    LDD #3  ; const STATE_PLAYER_DEAD
     STD VAR_GAME_STATE
     RTS
 
@@ -1028,93 +1202,93 @@ check_if_boss_level:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
-    LBEQ .CMP_23_TRUE
+    LBEQ .CMP_28_TRUE
     LDD #0
-    LBRA .CMP_23_END
-.CMP_23_TRUE:
+    LBRA .CMP_28_END
+.CMP_28_TRUE:
     LDD #1
-.CMP_23_END:
-    LBEQ IF_NEXT_51
-    LDD #1
-    STD VAR_NEXT_IS_BOSS
-    LBRA IF_END_50
-IF_NEXT_51:
-IF_END_50:
-    LDD #20
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_24_TRUE
-    LDD #0
-    LBRA .CMP_24_END
-.CMP_24_TRUE:
-    LDD #1
-.CMP_24_END:
-    LBEQ IF_NEXT_53
-    LDD #1
-    STD VAR_NEXT_IS_BOSS
-    LBRA IF_END_52
-IF_NEXT_53:
-IF_END_52:
-    LDD #30
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_25_TRUE
-    LDD #0
-    LBRA .CMP_25_END
-.CMP_25_TRUE:
-    LDD #1
-.CMP_25_END:
-    LBEQ IF_NEXT_55
-    LDD #1
-    STD VAR_NEXT_IS_BOSS
-    LBRA IF_END_54
-IF_NEXT_55:
-IF_END_54:
-    LDD #40
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_26_TRUE
-    LDD #0
-    LBRA .CMP_26_END
-.CMP_26_TRUE:
-    LDD #1
-.CMP_26_END:
-    LBEQ IF_NEXT_57
-    LDD #1
-    STD VAR_NEXT_IS_BOSS
-    LBRA IF_END_56
-IF_NEXT_57:
-IF_END_56:
-    LDD #50
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_27_TRUE
-    LDD #0
-    LBRA .CMP_27_END
-.CMP_27_TRUE:
-    LDD #1
-.CMP_27_END:
+.CMP_28_END:
     LBEQ IF_NEXT_59
     LDD #1
     STD VAR_NEXT_IS_BOSS
     LBRA IF_END_58
 IF_NEXT_59:
 IF_END_58:
+    LDD #20
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_29_TRUE
+    LDD #0
+    LBRA .CMP_29_END
+.CMP_29_TRUE:
+    LDD #1
+.CMP_29_END:
+    LBEQ IF_NEXT_61
+    LDD #1
+    STD VAR_NEXT_IS_BOSS
+    LBRA IF_END_60
+IF_NEXT_61:
+IF_END_60:
+    LDD #30
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_30_TRUE
+    LDD #0
+    LBRA .CMP_30_END
+.CMP_30_TRUE:
+    LDD #1
+.CMP_30_END:
+    LBEQ IF_NEXT_63
+    LDD #1
+    STD VAR_NEXT_IS_BOSS
+    LBRA IF_END_62
+IF_NEXT_63:
+IF_END_62:
+    LDD #40
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_31_TRUE
+    LDD #0
+    LBRA .CMP_31_END
+.CMP_31_TRUE:
+    LDD #1
+.CMP_31_END:
+    LBEQ IF_NEXT_65
+    LDD #1
+    STD VAR_NEXT_IS_BOSS
+    LBRA IF_END_64
+IF_NEXT_65:
+IF_END_64:
+    LDD #50
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_32_TRUE
+    LDD #0
+    LBRA .CMP_32_END
+.CMP_32_TRUE:
+    LDD #1
+.CMP_32_END:
+    LBEQ IF_NEXT_67
+    LDD #1
+    STD VAR_NEXT_IS_BOSS
+    LBRA IF_END_66
+IF_NEXT_67:
+IF_END_66:
     RTS
 
 ; Function: load_current_level (Bank #0)
 load_current_level:
-    LDD >VAR_LEVEL_TIME
+    LDD #3600  ; const LEVEL_TIME
     STD VAR_TIME_LEFT
     LDD #2
     STD VAR_ENEMY_COUNT
     LDD #0
     STD VAR_PLAYER_X
-    LDD #-114
+    LDD #-2418
     STD VAR_PLAYER_Y
     LDD #0
     STD VAR_PLAYER_VY
@@ -1128,124 +1302,28 @@ load_current_level:
     STD VAR_SNOW1_ACTIVE
     LDD #0
     STD VAR_SNOW2_ACTIVE
-    LDD >VAR_SNOW_LIFE_NORMAL
+    LDD #14  ; const SNOW_LIFE_NORMAL
     STD VAR_SNOW_LIFE_MAX
     LDD #0
     STD VAR_PLAYER_HAS_POWER
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_28_TRUE
-    LDD #0
-    LBRA .CMP_28_END
-.CMP_28_TRUE:
-    LDD #1
-.CMP_28_END:
-    LBEQ IF_NEXT_61
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    ; Level asset index: 0 (multibank)
-    LDX #0
-    JSR LOAD_LEVEL_BANKED
-    ; SPAWN_ENEMIES("world_1_1")
-    JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
-    LDX #3        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #-2304  ; const CAMERA_Y_MIN
+    STD VAR_CAMERA_Y
+    ; ===== SET_CAMERA_Y builtin =====
+    LDD >VAR_CAMERA_Y
+    STD >CAMERA_Y    ; Store 16-bit camera Y scroll offset
     LDD #0
     STD RESULT
-    LBRA IF_END_60
-IF_NEXT_61:
-IF_END_60:
-    LDD #2
+    JSR reset_balls
+    LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
-    LBEQ .CMP_29_TRUE
+    LBEQ .CMP_33_TRUE
     LDD #0
-    LBRA .CMP_29_END
-.CMP_29_TRUE:
+    LBRA .CMP_33_END
+.CMP_33_TRUE:
     LDD #1
-.CMP_29_END:
-    LBEQ IF_NEXT_63
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    ; Level asset index: 0 (multibank)
-    LDX #0
-    JSR LOAD_LEVEL_BANKED
-    ; SPAWN_ENEMIES("world_1_1")
-    JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
-    LDX #3        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_62
-IF_NEXT_63:
-IF_END_62:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_30_TRUE
-    LDD #0
-    LBRA .CMP_30_END
-.CMP_30_TRUE:
-    LDD #1
-.CMP_30_END:
-    LBEQ IF_NEXT_65
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    ; Level asset index: 0 (multibank)
-    LDX #0
-    JSR LOAD_LEVEL_BANKED
-    ; SPAWN_ENEMIES("world_1_1")
-    JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
-    LDX #3        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_64
-IF_NEXT_65:
-IF_END_64:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_31_TRUE
-    LDD #0
-    LBRA .CMP_31_END
-.CMP_31_TRUE:
-    LDD #1
-.CMP_31_END:
-    LBEQ IF_NEXT_67
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    ; Level asset index: 0 (multibank)
-    LDX #0
-    JSR LOAD_LEVEL_BANKED
-    ; SPAWN_ENEMIES("world_1_1")
-    JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
-    LDX #3        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_66
-IF_NEXT_67:
-IF_END_66:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_32_TRUE
-    LDD #0
-    LBRA .CMP_32_END
-.CMP_32_TRUE:
-    LDD #1
-.CMP_32_END:
+.CMP_33_END:
     LBEQ IF_NEXT_69
     ; ===== LOAD_LEVEL builtin =====
     ; Load level: 'world_1_1'
@@ -1262,33 +1340,7 @@ IF_END_66:
     LBRA IF_END_68
 IF_NEXT_69:
 IF_END_68:
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_33_TRUE
-    LDD #0
-    LBRA .CMP_33_END
-.CMP_33_TRUE:
-    LDD #1
-.CMP_33_END:
-    LBEQ IF_NEXT_71
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    ; Level asset index: 0 (multibank)
-    LDX #0
-    JSR LOAD_LEVEL_BANKED
-    ; SPAWN_ENEMIES("world_1_1")
-    JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Henshoku") - play music asset (index=2)
-    LDX #2        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_70
-IF_NEXT_71:
-IF_END_70:
-    LDD #7
+    LDD #2
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
@@ -1298,7 +1350,7 @@ IF_END_70:
 .CMP_34_TRUE:
     LDD #1
 .CMP_34_END:
-    LBEQ IF_NEXT_73
+    LBEQ IF_NEXT_71
     ; ===== LOAD_LEVEL builtin =====
     ; Load level: 'world_1_1'
     ; Level asset index: 0 (multibank)
@@ -1306,15 +1358,15 @@ IF_END_70:
     JSR LOAD_LEVEL_BANKED
     ; SPAWN_ENEMIES("world_1_1")
     JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Henshoku") - play music asset (index=2)
-    LDX #2        ; Music asset index for lookup
+    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
+    LDX #3        ; Music asset index for lookup
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
-    LBRA IF_END_72
-IF_NEXT_73:
-IF_END_72:
-    LDD #8
+    LBRA IF_END_70
+IF_NEXT_71:
+IF_END_70:
+    LDD #3
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
@@ -1324,6 +1376,32 @@ IF_END_72:
 .CMP_35_TRUE:
     LDD #1
 .CMP_35_END:
+    LBEQ IF_NEXT_73
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'world_1_1'
+    ; Level asset index: 0 (multibank)
+    LDX #0
+    JSR LOAD_LEVEL_BANKED
+    ; SPAWN_ENEMIES("world_1_1")
+    JSR SPAWN_ENEMIES_BANKED
+    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
+    LDX #3        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_72
+IF_NEXT_73:
+IF_END_72:
+    LDD #4
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_36_TRUE
+    LDD #0
+    LBRA .CMP_36_END
+.CMP_36_TRUE:
+    LDD #1
+.CMP_36_END:
     LBEQ IF_NEXT_75
     ; ===== LOAD_LEVEL builtin =====
     ; Load level: 'world_1_1'
@@ -1340,16 +1418,16 @@ IF_END_72:
     LBRA IF_END_74
 IF_NEXT_75:
 IF_END_74:
-    LDD #9
+    LDD #5
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
-    LBEQ .CMP_36_TRUE
+    LBEQ .CMP_37_TRUE
     LDD #0
-    LBRA .CMP_36_END
-.CMP_36_TRUE:
+    LBRA .CMP_37_END
+.CMP_37_TRUE:
     LDD #1
-.CMP_36_END:
+.CMP_37_END:
     LBEQ IF_NEXT_77
     ; ===== LOAD_LEVEL builtin =====
     ; Load level: 'world_1_1'
@@ -1366,33 +1444,7 @@ IF_END_74:
     LBRA IF_END_76
 IF_NEXT_77:
 IF_END_76:
-    LDD #11
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_37_TRUE
-    LDD #0
-    LBRA .CMP_37_END
-.CMP_37_TRUE:
-    LDD #1
-.CMP_37_END:
-    LBEQ IF_NEXT_79
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    ; Level asset index: 0 (multibank)
-    LDX #0
-    JSR LOAD_LEVEL_BANKED
-    ; SPAWN_ENEMIES("world_1_1")
-    JSR SPAWN_ENEMIES_BANKED
-    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
-    LDX #3        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_78
-IF_NEXT_79:
-IF_END_78:
-    LDD #12
+    LDD #6
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
@@ -1402,7 +1454,59 @@ IF_END_78:
 .CMP_38_TRUE:
     LDD #1
 .CMP_38_END:
+    LBEQ IF_NEXT_79
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'world_1_1'
+    ; Level asset index: 0 (multibank)
+    LDX #0
+    JSR LOAD_LEVEL_BANKED
+    ; SPAWN_ENEMIES("world_1_1")
+    JSR SPAWN_ENEMIES_BANKED
+    ; PLAY_MUSIC("Henshoku") - play music asset (index=2)
+    LDX #2        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_78
+IF_NEXT_79:
+IF_END_78:
+    LDD #7
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_39_TRUE
+    LDD #0
+    LBRA .CMP_39_END
+.CMP_39_TRUE:
+    LDD #1
+.CMP_39_END:
     LBEQ IF_NEXT_81
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'world_1_1'
+    ; Level asset index: 0 (multibank)
+    LDX #0
+    JSR LOAD_LEVEL_BANKED
+    ; SPAWN_ENEMIES("world_1_1")
+    JSR SPAWN_ENEMIES_BANKED
+    ; PLAY_MUSIC("Henshoku") - play music asset (index=2)
+    LDX #2        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_80
+IF_NEXT_81:
+IF_END_80:
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_40_TRUE
+    LDD #0
+    LBRA .CMP_40_END
+.CMP_40_TRUE:
+    LDD #1
+.CMP_40_END:
+    LBEQ IF_NEXT_83
     ; ===== LOAD_LEVEL builtin =====
     ; Load level: 'world_1_1'
     ; Level asset index: 0 (multibank)
@@ -1415,52 +1519,10 @@ IF_END_78:
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
-    LBRA IF_END_80
-IF_NEXT_81:
-IF_END_80:
-    RTS
-
-; Function: play_boss_music (Bank #0)
-play_boss_music:
-    LDD #10
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_39_TRUE
-    LDD #0
-    LBRA .CMP_39_END
-.CMP_39_TRUE:
-    LDD #1
-.CMP_39_END:
-    LBEQ IF_NEXT_83
-    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
-    LDX #0        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
     LBRA IF_END_82
 IF_NEXT_83:
 IF_END_82:
-    LDD #20
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURRENT_LEVEL
-    CMPD TMPVAL
-    LBEQ .CMP_40_TRUE
-    LDD #0
-    LBRA .CMP_40_END
-.CMP_40_TRUE:
-    LDD #1
-.CMP_40_END:
-    LBEQ IF_NEXT_85
-    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
-    LDX #0        ; Music asset index for lookup
-    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
-    LBRA IF_END_84
-IF_NEXT_85:
-IF_END_84:
-    LDD #30
+    LDD #9
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
@@ -1470,16 +1532,23 @@ IF_END_84:
 .CMP_41_TRUE:
     LDD #1
 .CMP_41_END:
-    LBEQ IF_NEXT_87
-    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
-    LDX #0        ; Music asset index for lookup
+    LBEQ IF_NEXT_85
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'world_1_1'
+    ; Level asset index: 0 (multibank)
+    LDX #0
+    JSR LOAD_LEVEL_BANKED
+    ; SPAWN_ENEMIES("world_1_1")
+    JSR SPAWN_ENEMIES_BANKED
+    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
+    LDX #3        ; Music asset index for lookup
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
-    LBRA IF_END_86
-IF_NEXT_87:
-IF_END_86:
-    LDD #40
+    LBRA IF_END_84
+IF_NEXT_85:
+IF_END_84:
+    LDD #11
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
@@ -1489,16 +1558,23 @@ IF_END_86:
 .CMP_42_TRUE:
     LDD #1
 .CMP_42_END:
-    LBEQ IF_NEXT_89
-    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
-    LDX #0        ; Music asset index for lookup
+    LBEQ IF_NEXT_87
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'world_1_1'
+    ; Level asset index: 0 (multibank)
+    LDX #0
+    JSR LOAD_LEVEL_BANKED
+    ; SPAWN_ENEMIES("world_1_1")
+    JSR SPAWN_ENEMIES_BANKED
+    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
+    LDX #3        ; Music asset index for lookup
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
-    LBRA IF_END_88
-IF_NEXT_89:
-IF_END_88:
-    LDD #50
+    LBRA IF_END_86
+IF_NEXT_87:
+IF_END_86:
+    LDD #12
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
@@ -1508,6 +1584,36 @@ IF_END_88:
 .CMP_43_TRUE:
     LDD #1
 .CMP_43_END:
+    LBEQ IF_NEXT_89
+    ; ===== LOAD_LEVEL builtin =====
+    ; Load level: 'world_1_1'
+    ; Level asset index: 0 (multibank)
+    LDX #0
+    JSR LOAD_LEVEL_BANKED
+    ; SPAWN_ENEMIES("world_1_1")
+    JSR SPAWN_ENEMIES_BANKED
+    ; PLAY_MUSIC("Yukidama-Ondo") - play music asset (index=3)
+    LDX #3        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_88
+IF_NEXT_89:
+IF_END_88:
+    RTS
+
+; Function: play_boss_music (Bank #0)
+play_boss_music:
+    LDD #10
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_CURRENT_LEVEL
+    CMPD TMPVAL
+    LBEQ .CMP_44_TRUE
+    LDD #0
+    LBRA .CMP_44_END
+.CMP_44_TRUE:
+    LDD #1
+.CMP_44_END:
     LBEQ IF_NEXT_91
     ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
     LDX #0        ; Music asset index for lookup
@@ -1517,103 +1623,28 @@ IF_END_88:
     LBRA IF_END_90
 IF_NEXT_91:
 IF_END_90:
-    RTS
-
-; Function: update_player (Bank #0)
-update_player:
-    ; CLAMP: Clamp value to range [min, max]
-    JSR J1X_BUILTIN
-    STD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #32
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD TMPPTR     ; Save value
-    LDD #-4
-    STD TMPPTR+2   ; Save min
-    LDD #4
-    STD TMPPTR+4   ; Save max
-    LDD TMPPTR     ; Load value
-    CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_0_CHK_MAX ; Branch if value >= min
-    LDD TMPPTR+2
-    STD RESULT
-    BRA .CLAMP_0_END
-.CLAMP_0_CHK_MAX:
-    LDD TMPPTR     ; Load value again
-    CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_0_OK  ; Branch if value <= max
-    LDD TMPPTR+4
-    STD RESULT
-    BRA .CLAMP_0_END
-.CLAMP_0_OK:
-    LDD TMPPTR
-    STD RESULT
-.CLAMP_0_END:
-    STD VAR_PLAYER_VX
-    LDD #0
+    LDD #20
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_VX
+    LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
-    LBGT .CMP_44_TRUE
-    LDD #0
-    LBRA .CMP_44_END
-.CMP_44_TRUE:
-    LDD #1
-.CMP_44_END:
-    LBEQ IF_NEXT_93
-    LDD #0
-    STD VAR_PLAYER_FACING
-    LBRA IF_END_92
-IF_NEXT_93:
-IF_END_92:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_VX
-    CMPD TMPVAL
-    LBLT .CMP_45_TRUE
+    LBEQ .CMP_45_TRUE
     LDD #0
     LBRA .CMP_45_END
 .CMP_45_TRUE:
     LDD #1
 .CMP_45_END:
-    LBEQ IF_NEXT_95
-    LDD #1
-    STD VAR_PLAYER_FACING
-    LBRA IF_END_94
-IF_NEXT_95:
-IF_END_94:
-    ; CLAMP: Clamp value to range [min, max]
-    LDD >VAR_PLAYER_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_VX
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD TMPPTR     ; Save value
-    LDD >VAR_WORLD_X_MIN
-    STD TMPPTR+2   ; Save min
-    LDD >VAR_WORLD_X_MAX
-    STD TMPPTR+4   ; Save max
-    LDD TMPPTR     ; Load value
-    CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_1_CHK_MAX ; Branch if value >= min
-    LDD TMPPTR+2
+    LBEQ IF_NEXT_93
+    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
+    LDX #0        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
     STD RESULT
-    BRA .CLAMP_1_END
-.CLAMP_1_CHK_MAX:
-    LDD TMPPTR     ; Load value again
-    CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_1_OK  ; Branch if value <= max
-    LDD TMPPTR+4
-    STD RESULT
-    BRA .CLAMP_1_END
-.CLAMP_1_OK:
-    LDD TMPPTR
-    STD RESULT
-.CLAMP_1_END:
-    STD VAR_PLAYER_X
-    LDD #1
+    LBRA IF_END_92
+IF_NEXT_93:
+IF_END_92:
+    LDD #30
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_ON_GROUND
+    LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
     LBEQ .CMP_46_TRUE
     LDD #0
@@ -1621,27 +1652,18 @@ IF_END_94:
 .CMP_46_TRUE:
     LDD #1
 .CMP_46_END:
-    LBEQ IF_NEXT_97
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_2_ON
+    LBEQ IF_NEXT_95
+    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
+    LDX #0        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
-    BRA .J1B1_2_END
-.J1B1_2_ON:
-    LDD #1
-.J1B1_2_END:
     STD RESULT
-    LBEQ IF_NEXT_99
-    LDD >VAR_JUMP_SPEED
-    STD VAR_PLAYER_VY
-    LDD #0
-    STD VAR_PLAYER_ON_GROUND
-    LBRA IF_END_98
-IF_NEXT_99:
-IF_END_98:
-    LDD #1
+    LBRA IF_END_94
+IF_NEXT_95:
+IF_END_94:
+    LDD #40
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_ON_GROUND
+    LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
     LBEQ .CMP_47_TRUE
     LDD #0
@@ -1649,248 +1671,34 @@ IF_END_98:
 .CMP_47_TRUE:
     LDD #1
 .CMP_47_END:
-    LBEQ IF_NEXT_101
-    ; ===== LEVEL_COLLISION_Y builtin =====
-    LDD >VAR_PLAYER_X
-    STD >LCOL_PX         ; store player world_x (16-bit)
-    LDD >VAR_PLAYER_HH
-    STB >LCOL_PHH        ; store player half_height
-    LDD >VAR_PLAYER_Y
-    ; Compute player_top = player_y + player_hh (16-bit)
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
-    ADCA #0              ; propagate carry to high byte
-    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
-    JSR LEVEL_COLLISION_Y_RUNTIME
-    STD VAR_FLOOR_Y
-    LDD >VAR_PLAYER_Y
+    LBEQ IF_NEXT_97
+    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
+    LDX #0        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_96
+IF_NEXT_97:
+IF_END_96:
+    LDD #50
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FLOOR_Y
+    LDD >VAR_CURRENT_LEVEL
     CMPD TMPVAL
-    LBLT .CMP_48_TRUE
+    LBEQ .CMP_48_TRUE
     LDD #0
     LBRA .CMP_48_END
 .CMP_48_TRUE:
     LDD #1
 .CMP_48_END:
-    LBEQ IF_NEXT_103
+    LBEQ IF_NEXT_99
+    ; PLAY_MUSIC("Boss_Intro") - play music asset (index=0)
+    LDX #0        ; Music asset index for lookup
+    JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
-    STD VAR_PLAYER_ON_GROUND
-    LBRA IF_END_102
-IF_NEXT_103:
-IF_END_102:
-    LBRA IF_END_100
-IF_NEXT_101:
-IF_END_100:
-    LBRA IF_END_96
-IF_NEXT_97:
-IF_END_96:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_ON_GROUND
-    CMPD TMPVAL
-    LBEQ .CMP_49_TRUE
-    LDD #0
-    LBRA .CMP_49_END
-.CMP_49_TRUE:
-    LDD #1
-.CMP_49_END:
-    LBEQ IF_NEXT_105
-    LDD >VAR_PLAYER_VY
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_GRAVITY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_PLAYER_VY
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_VY
-    CMPD TMPVAL
-    LBLT .CMP_50_TRUE
-    LDD #0
-    LBRA .CMP_50_END
-.CMP_50_TRUE:
-    LDD #1
-.CMP_50_END:
-    LBEQ IF_NEXT_107
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_PLAYER_VY
-    LBRA IF_END_106
-IF_NEXT_107:
-IF_END_106:
-    LDD >VAR_PLAYER_Y
-    STD VAR_PREV_Y
-    LDD >VAR_PLAYER_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_VY
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_PLAYER_Y
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_VY
-    CMPD TMPVAL
-    LBLE .CMP_51_TRUE
-    LDD #0
-    LBRA .CMP_51_END
-.CMP_51_TRUE:
-    LDD #1
-.CMP_51_END:
-    LBEQ IF_NEXT_109
-    ; ===== LEVEL_COLLISION_Y builtin =====
-    LDD >VAR_PLAYER_X
-    STD >LCOL_PX         ; store player world_x (16-bit)
-    LDD >VAR_PLAYER_HH
-    STB >LCOL_PHH        ; store player half_height
-    LDD >VAR_PREV_Y
-    ; Compute player_top = player_y + player_hh (16-bit)
-    ADDB >LCOL_PHH       ; B = player_y_lo + player_hh
-    ADCA #0              ; propagate carry to high byte
-    STD >LCOL_PY         ; store player_top Y (16-bit) for surface filter
-    JSR LEVEL_COLLISION_Y_RUNTIME
-    STD VAR_FLOOR_Y
-    LDD >VAR_FLOOR_Y
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_Y
-    CMPD TMPVAL
-    LBLE .CMP_52_TRUE
-    LDD #0
-    LBRA .CMP_52_END
-.CMP_52_TRUE:
-    LDD #1
-.CMP_52_END:
-    LBEQ IF_NEXT_111
-    LDD >VAR_FLOOR_Y
-    STD VAR_PLAYER_Y
-    LDD #0
-    STD VAR_PLAYER_VY
-    LDD #1
-    STD VAR_PLAYER_ON_GROUND
-    LBRA IF_END_110
-IF_NEXT_111:
-IF_END_110:
-    LBRA IF_END_108
-IF_NEXT_109:
-IF_END_108:
-    LBRA IF_END_104
-IF_NEXT_105:
-IF_END_104:
-    LDD >VAR_WORLD_Y_MAX
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_Y
-    CMPD TMPVAL
-    LBGT .CMP_53_TRUE
-    LDD #0
-    LBRA .CMP_53_END
-.CMP_53_TRUE:
-    LDD #1
-.CMP_53_END:
-    LBEQ IF_NEXT_113
-    LDD >VAR_WORLD_Y_MAX
-    STD VAR_PLAYER_Y
-    LDD #0
-    STD VAR_PLAYER_VY
-    LBRA IF_END_112
-IF_NEXT_113:
-IF_END_112:
-    LDD >VAR_WORLD_Y_MIN
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_Y
-    CMPD TMPVAL
-    LBLT .CMP_54_TRUE
-    LDD #0
-    LBRA .CMP_54_END
-.CMP_54_TRUE:
-    LDD #1
-.CMP_54_END:
-    LBEQ IF_NEXT_115
-    LDD >VAR_WORLD_Y_MIN
-    STD VAR_PLAYER_Y
-    LDD #0
-    STD VAR_PLAYER_VY
-    LDD #1
-    STD VAR_PLAYER_ON_GROUND
-    LBRA IF_END_114
-IF_NEXT_115:
-IF_END_114:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SHOOT_COOLDOWN
-    CMPD TMPVAL
-    LBGT .CMP_55_TRUE
-    LDD #0
-    LBRA .CMP_55_END
-.CMP_55_TRUE:
-    LDD #1
-.CMP_55_END:
-    LBEQ IF_NEXT_117
-    LDD >VAR_SHOOT_COOLDOWN
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SHOOT_COOLDOWN
-    LBRA IF_END_116
-IF_NEXT_117:
-IF_END_116:
-    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
-    BITA #$02
-    BNE .J1B2_3_ON
-    LDD #0
-    BRA .J1B2_3_END
-.J1B2_3_ON:
-    LDD #1
-.J1B2_3_END:
     STD RESULT
-    LBEQ IF_NEXT_119
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SHOOT_COOLDOWN
-    CMPD TMPVAL
-    LBEQ .CMP_56_TRUE
-    LDD #0
-    LBRA .CMP_56_END
-.CMP_56_TRUE:
-    LDD #1
-.CMP_56_END:
-    LBEQ IF_NEXT_121
-    LDD >VAR_SNOW_SPEED
-    STD VAR_SNOW_SPAWN_VX
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_FACING
-    CMPD TMPVAL
-    LBEQ .CMP_57_TRUE
-    LDD #0
-    LBRA .CMP_57_END
-.CMP_57_TRUE:
-    LDD #1
-.CMP_57_END:
-    LBEQ IF_NEXT_123
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_SNOW_SPAWN_VX
-    LBRA IF_END_122
-IF_NEXT_123:
-IF_END_122:
-    JSR try_shoot
-    LBRA IF_END_120
-IF_NEXT_121:
-IF_END_120:
-    LBRA IF_END_118
-IF_NEXT_119:
-IF_END_118:
+    LBRA IF_END_98
+IF_NEXT_99:
+IF_END_98:
     RTS
 
 ; Function: draw_player (Bank #0)
@@ -1905,15 +1713,15 @@ draw_player:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_ON_GROUND
     CMPD TMPVAL
-    LBEQ .CMP_58_TRUE
+    LBEQ .CMP_64_TRUE
     LDD #0
-    LBRA .CMP_58_END
-.CMP_58_TRUE:
+    LBRA .CMP_64_END
+.CMP_64_TRUE:
     LDD #1
-.CMP_58_END:
-    LBEQ IF_NEXT_125
+.CMP_64_END:
+    LBEQ IF_NEXT_135
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: player_jump (index=6, 14 paths)
+    ; Asset: player_jump (index=10, 15 paths)
     LDD >VAR_PLAYER_X
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
@@ -1929,37 +1737,37 @@ draw_player:
     STA MIRROR_X
     CLR MIRROR_Y
     CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
-    LDX #6        ; Asset index for lookup
+    LDX #10        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
     LDD #0
     STD RESULT
-    LBRA IF_END_124
-IF_NEXT_125:
-IF_END_124:
+    LBRA IF_END_134
+IF_NEXT_135:
+IF_END_134:
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_ON_GROUND
     CMPD TMPVAL
-    LBEQ .CMP_59_TRUE
+    LBEQ .CMP_65_TRUE
     LDD #0
-    LBRA .CMP_59_END
-.CMP_59_TRUE:
+    LBRA .CMP_65_END
+.CMP_65_TRUE:
     LDD #1
-.CMP_59_END:
-    LBEQ IF_NEXT_127
+.CMP_65_END:
+    LBEQ IF_NEXT_137
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_PLAYER_VX
     CMPD TMPVAL
-    LBEQ .CMP_60_TRUE
+    LBEQ .CMP_66_TRUE
     LDD #0
-    LBRA .CMP_60_END
-.CMP_60_TRUE:
+    LBRA .CMP_66_END
+.CMP_66_TRUE:
     LDD #1
-.CMP_60_END:
-    LBEQ IF_NEXT_129
+.CMP_66_END:
+    LBEQ IF_NEXT_139
     ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: player_idle (index=5, 9 paths)
+    ; Asset: player_idle (index=9, 9 paths)
     LDD >VAR_PLAYER_X
     TFR B,A       ; X position (low byte) — B already holds it
     STA TMPPTR    ; Save X to temporary storage
@@ -1975,12 +1783,12 @@ IF_END_124:
     STA MIRROR_X
     CLR MIRROR_Y
     CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
-    LDX #5        ; Asset index for lookup
+    LDX #9        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
     LDD #0
     STD RESULT
-    LBRA IF_END_128
-IF_NEXT_129:
+    LBRA IF_END_138
+IF_NEXT_139:
     ; DRAW_ANIM: draw animation 'player_walk'
     LDD >VAR_PLAYER_X
     TFR B,A
@@ -2001,10 +1809,10 @@ IF_NEXT_129:
     JSR DRAW_ANIM_RUNTIME
     LDD #0
     STD RESULT
-IF_END_128:
-    LBRA IF_END_126
-IF_NEXT_127:
-IF_END_126:
+IF_END_138:
+    LBRA IF_END_136
+IF_NEXT_137:
+IF_END_136:
     RTS
 
 ; Function: try_shoot (Bank #0)
@@ -2013,468 +1821,101 @@ try_shoot:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW0_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_61_TRUE
+    LBEQ .CMP_67_TRUE
     LDD #0
-    LBRA .CMP_61_END
-.CMP_61_TRUE:
+    LBRA .CMP_67_END
+.CMP_67_TRUE:
     LDD #1
-.CMP_61_END:
-    LBEQ IF_NEXT_131
+.CMP_67_END:
+    LBEQ IF_NEXT_141
     LDD >VAR_PLAYER_X
     STD VAR_SNOW0_X
     LDD >VAR_PLAYER_Y
     STD VAR_SNOW0_Y
     LDD >VAR_SNOW_SPAWN_VX
     STD VAR_SNOW0_VX
-    LDD >VAR_SNOW_LAUNCH_VY
+    LDD #3  ; const SNOW_LAUNCH_VY
     STD VAR_SNOW0_VY
     LDD >VAR_SNOW_LIFE_MAX
     STD VAR_SNOW0_LIFE
     LDD #1
     STD VAR_SNOW0_ACTIVE
-    LDD >VAR_SHOOT_COOLDOWN_MAX
+    LDD #15  ; const SHOOT_COOLDOWN_MAX
     STD VAR_SHOOT_COOLDOWN
-    LBRA IF_END_130
-IF_NEXT_131:
+    ; PLAY_SFX("shot_normal") - play SFX asset (index=0)
+    LDX #0        ; SFX asset index for lookup
+    JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_140
+IF_NEXT_141:
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW1_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_62_TRUE
+    LBEQ .CMP_68_TRUE
     LDD #0
-    LBRA .CMP_62_END
-.CMP_62_TRUE:
+    LBRA .CMP_68_END
+.CMP_68_TRUE:
     LDD #1
-.CMP_62_END:
-    LBEQ IF_NEXT_133
+.CMP_68_END:
+    LBEQ IF_NEXT_143
     LDD >VAR_PLAYER_X
     STD VAR_SNOW1_X
     LDD >VAR_PLAYER_Y
     STD VAR_SNOW1_Y
     LDD >VAR_SNOW_SPAWN_VX
     STD VAR_SNOW1_VX
-    LDD >VAR_SNOW_LAUNCH_VY
+    LDD #3  ; const SNOW_LAUNCH_VY
     STD VAR_SNOW1_VY
     LDD >VAR_SNOW_LIFE_MAX
     STD VAR_SNOW1_LIFE
     LDD #1
     STD VAR_SNOW1_ACTIVE
-    LDD >VAR_SHOOT_COOLDOWN_MAX
+    LDD #15  ; const SHOOT_COOLDOWN_MAX
     STD VAR_SHOOT_COOLDOWN
-    LBRA IF_END_132
-IF_NEXT_133:
+    ; PLAY_SFX("shot_normal") - play SFX asset (index=0)
+    LDX #0        ; SFX asset index for lookup
+    JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+    LBRA IF_END_142
+IF_NEXT_143:
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW2_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_63_TRUE
+    LBEQ .CMP_69_TRUE
     LDD #0
-    LBRA .CMP_63_END
-.CMP_63_TRUE:
+    LBRA .CMP_69_END
+.CMP_69_TRUE:
     LDD #1
-.CMP_63_END:
-    LBEQ IF_NEXT_135
+.CMP_69_END:
+    LBEQ IF_NEXT_145
     LDD >VAR_PLAYER_X
     STD VAR_SNOW2_X
     LDD >VAR_PLAYER_Y
     STD VAR_SNOW2_Y
     LDD >VAR_SNOW_SPAWN_VX
     STD VAR_SNOW2_VX
-    LDD >VAR_SNOW_LAUNCH_VY
+    LDD #3  ; const SNOW_LAUNCH_VY
     STD VAR_SNOW2_VY
     LDD >VAR_SNOW_LIFE_MAX
     STD VAR_SNOW2_LIFE
     LDD #1
     STD VAR_SNOW2_ACTIVE
-    LDD >VAR_SHOOT_COOLDOWN_MAX
+    LDD #15  ; const SHOOT_COOLDOWN_MAX
     STD VAR_SHOOT_COOLDOWN
-    LBRA IF_END_134
-IF_NEXT_135:
-IF_END_134:
-IF_END_132:
-IF_END_130:
-    RTS
-
-; Function: update_snowballs (Bank #0)
-update_snowballs:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_ACTIVE
-    CMPD TMPVAL
-    LBEQ .CMP_64_TRUE
+    ; PLAY_SFX("shot_normal") - play SFX asset (index=0)
+    LDX #0        ; SFX asset index for lookup
+    JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
     LDD #0
-    LBRA .CMP_64_END
-.CMP_64_TRUE:
-    LDD #1
-.CMP_64_END:
-    LBEQ IF_NEXT_137
-    LDD >VAR_SNOW0_VY
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_GRAVITY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SNOW0_VY
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_VY
-    CMPD TMPVAL
-    LBLT .CMP_65_TRUE
-    LDD #0
-    LBRA .CMP_65_END
-.CMP_65_TRUE:
-    LDD #1
-.CMP_65_END:
-    LBEQ IF_NEXT_139
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_SNOW0_VY
-    LBRA IF_END_138
-IF_NEXT_139:
-IF_END_138:
-    LDD >VAR_SNOW0_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_VX
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SNOW0_X
-    LDD >VAR_SNOW0_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_VY
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SNOW0_Y
-    LDD >VAR_SNOW0_LIFE
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SNOW0_LIFE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_LIFE
-    CMPD TMPVAL
-    LBLE .CMP_66_TRUE
-    LDD #0
-    LBRA .CMP_66_END
-.CMP_66_TRUE:
-    LDD #1
-.CMP_66_END:
-    LBEQ IF_NEXT_141
-    LDD #0
-    STD VAR_SNOW0_ACTIVE
-    LBRA IF_END_140
-IF_NEXT_141:
-IF_END_140:
-    LDD #-110
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_Y
-    CMPD TMPVAL
-    LBLT .CMP_67_TRUE
-    LDD #0
-    LBRA .CMP_67_END
-.CMP_67_TRUE:
-    LDD #1
-.CMP_67_END:
-    LBEQ IF_NEXT_143
-    LDD #0
-    STD VAR_SNOW0_ACTIVE
-    LBRA IF_END_142
-IF_NEXT_143:
-IF_END_142:
-    LDD #-127
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_X
-    CMPD TMPVAL
-    LBLT .CMP_68_TRUE
-    LDD #0
-    LBRA .CMP_68_END
-.CMP_68_TRUE:
-    LDD #1
-.CMP_68_END:
-    LBEQ IF_NEXT_145
-    LDD #0
-    STD VAR_SNOW0_ACTIVE
+    STD RESULT
     LBRA IF_END_144
 IF_NEXT_145:
 IF_END_144:
-    LDD #127
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW0_X
-    CMPD TMPVAL
-    LBGT .CMP_69_TRUE
-    LDD #0
-    LBRA .CMP_69_END
-.CMP_69_TRUE:
-    LDD #1
-.CMP_69_END:
-    LBEQ IF_NEXT_147
-    LDD #0
-    STD VAR_SNOW0_ACTIVE
-    LBRA IF_END_146
-IF_NEXT_147:
-IF_END_146:
-    LBRA IF_END_136
-IF_NEXT_137:
-IF_END_136:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_ACTIVE
-    CMPD TMPVAL
-    LBEQ .CMP_70_TRUE
-    LDD #0
-    LBRA .CMP_70_END
-.CMP_70_TRUE:
-    LDD #1
-.CMP_70_END:
-    LBEQ IF_NEXT_149
-    LDD >VAR_SNOW1_VY
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_GRAVITY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SNOW1_VY
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_VY
-    CMPD TMPVAL
-    LBLT .CMP_71_TRUE
-    LDD #0
-    LBRA .CMP_71_END
-.CMP_71_TRUE:
-    LDD #1
-.CMP_71_END:
-    LBEQ IF_NEXT_151
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_SNOW1_VY
-    LBRA IF_END_150
-IF_NEXT_151:
-IF_END_150:
-    LDD >VAR_SNOW1_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_VX
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SNOW1_X
-    LDD >VAR_SNOW1_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_VY
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SNOW1_Y
-    LDD >VAR_SNOW1_LIFE
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SNOW1_LIFE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_LIFE
-    CMPD TMPVAL
-    LBLE .CMP_72_TRUE
-    LDD #0
-    LBRA .CMP_72_END
-.CMP_72_TRUE:
-    LDD #1
-.CMP_72_END:
-    LBEQ IF_NEXT_153
-    LDD #0
-    STD VAR_SNOW1_ACTIVE
-    LBRA IF_END_152
-IF_NEXT_153:
-IF_END_152:
-    LDD #-110
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_Y
-    CMPD TMPVAL
-    LBLT .CMP_73_TRUE
-    LDD #0
-    LBRA .CMP_73_END
-.CMP_73_TRUE:
-    LDD #1
-.CMP_73_END:
-    LBEQ IF_NEXT_155
-    LDD #0
-    STD VAR_SNOW1_ACTIVE
-    LBRA IF_END_154
-IF_NEXT_155:
-IF_END_154:
-    LDD #-127
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_X
-    CMPD TMPVAL
-    LBLT .CMP_74_TRUE
-    LDD #0
-    LBRA .CMP_74_END
-.CMP_74_TRUE:
-    LDD #1
-.CMP_74_END:
-    LBEQ IF_NEXT_157
-    LDD #0
-    STD VAR_SNOW1_ACTIVE
-    LBRA IF_END_156
-IF_NEXT_157:
-IF_END_156:
-    LDD #127
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_X
-    CMPD TMPVAL
-    LBGT .CMP_75_TRUE
-    LDD #0
-    LBRA .CMP_75_END
-.CMP_75_TRUE:
-    LDD #1
-.CMP_75_END:
-    LBEQ IF_NEXT_159
-    LDD #0
-    STD VAR_SNOW1_ACTIVE
-    LBRA IF_END_158
-IF_NEXT_159:
-IF_END_158:
-    LBRA IF_END_148
-IF_NEXT_149:
-IF_END_148:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_ACTIVE
-    CMPD TMPVAL
-    LBEQ .CMP_76_TRUE
-    LDD #0
-    LBRA .CMP_76_END
-.CMP_76_TRUE:
-    LDD #1
-.CMP_76_END:
-    LBEQ IF_NEXT_161
-    LDD >VAR_SNOW2_VY
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_GRAVITY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SNOW2_VY
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_VY
-    CMPD TMPVAL
-    LBLT .CMP_77_TRUE
-    LDD #0
-    LBRA .CMP_77_END
-.CMP_77_TRUE:
-    LDD #1
-.CMP_77_END:
-    LBEQ IF_NEXT_163
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_MAX_FALL_SPEED
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_SNOW2_VY
-    LBRA IF_END_162
-IF_NEXT_163:
-IF_END_162:
-    LDD >VAR_SNOW2_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_VX
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SNOW2_X
-    LDD >VAR_SNOW2_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_VY
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SNOW2_Y
-    LDD >VAR_SNOW2_LIFE
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SNOW2_LIFE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_LIFE
-    CMPD TMPVAL
-    LBLE .CMP_78_TRUE
-    LDD #0
-    LBRA .CMP_78_END
-.CMP_78_TRUE:
-    LDD #1
-.CMP_78_END:
-    LBEQ IF_NEXT_165
-    LDD #0
-    STD VAR_SNOW2_ACTIVE
-    LBRA IF_END_164
-IF_NEXT_165:
-IF_END_164:
-    LDD #-110
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_Y
-    CMPD TMPVAL
-    LBLT .CMP_79_TRUE
-    LDD #0
-    LBRA .CMP_79_END
-.CMP_79_TRUE:
-    LDD #1
-.CMP_79_END:
-    LBEQ IF_NEXT_167
-    LDD #0
-    STD VAR_SNOW2_ACTIVE
-    LBRA IF_END_166
-IF_NEXT_167:
-IF_END_166:
-    LDD #-127
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_X
-    CMPD TMPVAL
-    LBLT .CMP_80_TRUE
-    LDD #0
-    LBRA .CMP_80_END
-.CMP_80_TRUE:
-    LDD #1
-.CMP_80_END:
-    LBEQ IF_NEXT_169
-    LDD #0
-    STD VAR_SNOW2_ACTIVE
-    LBRA IF_END_168
-IF_NEXT_169:
-IF_END_168:
-    LDD #127
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_X
-    CMPD TMPVAL
-    LBGT .CMP_81_TRUE
-    LDD #0
-    LBRA .CMP_81_END
-.CMP_81_TRUE:
-    LDD #1
-.CMP_81_END:
-    LBEQ IF_NEXT_171
-    LDD #0
-    STD VAR_SNOW2_ACTIVE
-    LBRA IF_END_170
-IF_NEXT_171:
-IF_END_170:
-    LBRA IF_END_160
-IF_NEXT_161:
-IF_END_160:
+IF_END_142:
+IF_END_140:
     RTS
 
 ; Function: draw_snowballs (Bank #0)
@@ -2483,13 +1924,13 @@ draw_snowballs:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW0_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_82_TRUE
+    LBEQ .CMP_88_TRUE
     LDD #0
-    LBRA .CMP_82_END
-.CMP_82_TRUE:
+    LBRA .CMP_88_END
+.CMP_88_TRUE:
     LDD #1
-.CMP_82_END:
-    LBEQ IF_NEXT_173
+.CMP_88_END:
+    LBEQ IF_NEXT_183
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_SNOW0_X
     TFR B,A
@@ -2506,20 +1947,20 @@ draw_snowballs:
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
-    LBRA IF_END_172
-IF_NEXT_173:
-IF_END_172:
+    LBRA IF_END_182
+IF_NEXT_183:
+IF_END_182:
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW1_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_83_TRUE
+    LBEQ .CMP_89_TRUE
     LDD #0
-    LBRA .CMP_83_END
-.CMP_83_TRUE:
+    LBRA .CMP_89_END
+.CMP_89_TRUE:
     LDD #1
-.CMP_83_END:
-    LBEQ IF_NEXT_175
+.CMP_89_END:
+    LBEQ IF_NEXT_185
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_SNOW1_X
     TFR B,A
@@ -2536,20 +1977,20 @@ IF_END_172:
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
-    LBRA IF_END_174
-IF_NEXT_175:
-IF_END_174:
+    LBRA IF_END_184
+IF_NEXT_185:
+IF_END_184:
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW2_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_84_TRUE
+    LBEQ .CMP_90_TRUE
     LDD #0
-    LBRA .CMP_84_END
-.CMP_84_TRUE:
+    LBRA .CMP_90_END
+.CMP_90_TRUE:
     LDD #1
-.CMP_84_END:
-    LBEQ IF_NEXT_177
+.CMP_90_END:
+    LBEQ IF_NEXT_187
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_SNOW2_X
     TFR B,A
@@ -2566,44 +2007,64 @@ IF_END_174:
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
-    LBRA IF_END_176
-IF_NEXT_177:
-IF_END_176:
+    LBRA IF_END_186
+IF_NEXT_187:
+IF_END_186:
     RTS
 
 ; Function: draw_hud (Bank #0)
 draw_hud:
     ; PRINT_NUMBER(x, y, num)
-    LDD #-80
-    STD VAR_ARG0    ; X position
-    LDD #106
-    STD VAR_ARG1    ; Y position
+    LDD #-10
+    STD >VAR_ARG0    ; X position
+    LDD #127
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_SCORE
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #-60
-    STD VAR_ARG0    ; X position
-    LDD #93
-    STD VAR_ARG1    ; Y position
+    LDD #-78
+    STD >VAR_ARG0    ; X position
+    LDD #116
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_LIVES
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
-    LDD #48
-    STD VAR_ARG0    ; X position
-    LDD #102
-    STD VAR_ARG1    ; Y position
+    LDD #58
+    STD >VAR_ARG0    ; X position
+    LDD #127
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_TIME_LEFT
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #60
     LDX TMPVAL      ; Get left into X from TMPVAL
     JSR DIV16       ; D = X / D
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
+    JSR VECTREX_PRINT_NUMBER
+    LDD #0
+    STD RESULT
+    ; PRINT_TEXT: Print text at position
+    LDD #-98
+    STD >VAR_ARG0
+    LDD #-110
+    STD >VAR_ARG1
+    LDX #PRINT_TEXT_STR_67      ; Pointer to string in helpers bank
+    STX >VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
+    LDD #0
+    STD RESULT
+    ; PRINT_NUMBER(x, y, num)
+    LDD #-85
+    STD >VAR_ARG0    ; X position
+    LDD #-110
+    STD >VAR_ARG1    ; Y position
+    LDD >VAR_ENEMY_COUNT
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
@@ -2613,18 +2074,18 @@ draw_hud:
 check_snowball_enemy_collision:
     LDD #0
     STD VAR_I
-WH_178: ; while start
+WH_188: ; while start
     LDD #8
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_I
     CMPD TMPVAL
-    LBLT .CMP_85_TRUE
+    LBLT .CMP_91_TRUE
     LDD #0
-    LBRA .CMP_85_END
-.CMP_85_TRUE:
+    LBRA .CMP_91_END
+.CMP_91_TRUE:
     LDD #1
-.CMP_85_END:
-    LBEQ WH_END_179
+.CMP_91_END:
+    LBEQ WH_END_189
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_I
@@ -2637,13 +2098,13 @@ WH_178: ; while start
     LDB ,X              ; active byte
     STD RESULT
     CMPD TMPVAL
-    LBEQ .CMP_86_TRUE
+    LBEQ .CMP_92_TRUE
     LDD #0
-    LBRA .CMP_86_END
-.CMP_86_TRUE:
+    LBRA .CMP_92_END
+.CMP_92_TRUE:
     LDD #1
-.CMP_86_END:
-    LBEQ IF_NEXT_181
+.CMP_92_END:
+    LBEQ IF_NEXT_191
     LDD >VAR_I
     TFR B,A             ; A = enemy index (low byte)
     LDB #16             ; ENEMY_POOL_STRIDE
@@ -2671,41 +2132,41 @@ WH_178: ; while start
     LDD >VAR_EY
     STD VAR_ARG2
     JSR check_snow_vs_enemy
-    LBRA IF_END_180
-IF_NEXT_181:
-IF_END_180:
+    LBRA IF_END_190
+IF_NEXT_191:
+IF_END_190:
     LDD >VAR_I
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_I
-    LBRA WH_178
-WH_END_179: ; while end
+    LBRA WH_188
+WH_END_189: ; while end
     RTS
 
 ; Function: check_snow_vs_enemy (Bank #0)
 check_snow_vs_enemy:
-    LDD >VAR_SNOW_HW
+    LDD #6  ; const SNOW_HW
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ENEMY_HW
+    LDD #12  ; const ENEMY_HW
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_THW
-    LDD >VAR_SNOW_HH
+    LDD #16  ; const SNOW_HH
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ENEMY_HH
+    LDD #8  ; const ENEMY_HH
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_THH
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SNOW0_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_87_TRUE
+    LBEQ .CMP_93_TRUE
     LDD #0
-    LBRA .CMP_87_END
-.CMP_87_TRUE:
+    LBRA .CMP_93_END
+.CMP_93_TRUE:
     LDD #1
-.CMP_87_END:
-    LBEQ IF_NEXT_183
+.CMP_93_END:
+    LBEQ IF_NEXT_193
     LDD >VAR_SNOW0_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG1
@@ -2717,22 +2178,22 @@ check_snow_vs_enemy:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     CMPD TMPVAL
-    LBLT .CMP_88_TRUE
+    LBLT .CMP_94_TRUE
     LDD #0
-    LBRA .CMP_88_END
-.CMP_88_TRUE:
+    LBRA .CMP_94_END
+.CMP_94_TRUE:
     LDD #1
-.CMP_88_END:
-    LBEQ IF_NEXT_185
+.CMP_94_END:
+    LBEQ IF_NEXT_195
     LDD #-1
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     LDX TMPVAL      ; Get left into X from TMPVAL
     JSR MUL16       ; D = X * D
     STD VAR_DX
-    LBRA IF_END_184
-IF_NEXT_185:
-IF_END_184:
+    LBRA IF_END_194
+IF_NEXT_195:
+IF_END_194:
     LDD >VAR_SNOW0_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
@@ -2744,113 +2205,12 @@ IF_END_184:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DY
     CMPD TMPVAL
-    LBLT .CMP_89_TRUE
+    LBLT .CMP_95_TRUE
     LDD #0
-    LBRA .CMP_89_END
-.CMP_89_TRUE:
+    LBRA .CMP_95_END
+.CMP_95_TRUE:
     LDD #1
-.CMP_89_END:
-    LBEQ IF_NEXT_187
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_DY
-    LBRA IF_END_186
-IF_NEXT_187:
-IF_END_186:
-    LDD >VAR_THW
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DX
-    CMPD TMPVAL
-    LBLT .CMP_90_TRUE
-    LDD #0
-    LBRA .CMP_90_END
-.CMP_90_TRUE:
-    LDD #1
-.CMP_90_END:
-    LBEQ IF_NEXT_189
-    LDD >VAR_THH
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DY
-    CMPD TMPVAL
-    LBLT .CMP_91_TRUE
-    LDD #0
-    LBRA .CMP_91_END
-.CMP_91_TRUE:
-    LDD #1
-.CMP_91_END:
-    LBEQ IF_NEXT_191
-    LDD #0
-    STD VAR_SNOW0_ACTIVE
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    JSR on_snow_hit_enemy
-    LBRA IF_END_190
-IF_NEXT_191:
-IF_END_190:
-    LBRA IF_END_188
-IF_NEXT_189:
-IF_END_188:
-    LBRA IF_END_182
-IF_NEXT_183:
-IF_END_182:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW1_ACTIVE
-    CMPD TMPVAL
-    LBEQ .CMP_92_TRUE
-    LDD #0
-    LBRA .CMP_92_END
-.CMP_92_TRUE:
-    LDD #1
-.CMP_92_END:
-    LBEQ IF_NEXT_193
-    LDD >VAR_SNOW1_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DX
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DX
-    CMPD TMPVAL
-    LBLT .CMP_93_TRUE
-    LDD #0
-    LBRA .CMP_93_END
-.CMP_93_TRUE:
-    LDD #1
-.CMP_93_END:
-    LBEQ IF_NEXT_195
-    LDD #-1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DX
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD VAR_DX
-    LBRA IF_END_194
-IF_NEXT_195:
-IF_END_194:
-    LDD >VAR_SNOW1_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_DY
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DY
-    CMPD TMPVAL
-    LBLT .CMP_94_TRUE
-    LDD #0
-    LBRA .CMP_94_END
-.CMP_94_TRUE:
-    LDD #1
-.CMP_94_END:
+.CMP_95_END:
     LBEQ IF_NEXT_197
     LDD #-1
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -2865,26 +2225,26 @@ IF_END_196:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     CMPD TMPVAL
-    LBLT .CMP_95_TRUE
-    LDD #0
-    LBRA .CMP_95_END
-.CMP_95_TRUE:
-    LDD #1
-.CMP_95_END:
-    LBEQ IF_NEXT_199
-    LDD >VAR_THH
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DY
-    CMPD TMPVAL
     LBLT .CMP_96_TRUE
     LDD #0
     LBRA .CMP_96_END
 .CMP_96_TRUE:
     LDD #1
 .CMP_96_END:
+    LBEQ IF_NEXT_199
+    LDD >VAR_THH
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_97_TRUE
+    LDD #0
+    LBRA .CMP_97_END
+.CMP_97_TRUE:
+    LDD #1
+.CMP_97_END:
     LBEQ IF_NEXT_201
     LDD #0
-    STD VAR_SNOW1_ACTIVE
+    STD VAR_SNOW0_ACTIVE
     LDD >VAR_ARG0
     STD VAR_ARG0
     JSR on_snow_hit_enemy
@@ -2899,16 +2259,16 @@ IF_NEXT_193:
 IF_END_192:
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SNOW2_ACTIVE
+    LDD >VAR_SNOW1_ACTIVE
     CMPD TMPVAL
-    LBEQ .CMP_97_TRUE
+    LBEQ .CMP_98_TRUE
     LDD #0
-    LBRA .CMP_97_END
-.CMP_97_TRUE:
+    LBRA .CMP_98_END
+.CMP_98_TRUE:
     LDD #1
-.CMP_97_END:
+.CMP_98_END:
     LBEQ IF_NEXT_203
-    LDD >VAR_SNOW2_X
+    LDD >VAR_SNOW1_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG1
     STD TMPPTR      ; Save right operand to TMPPTR
@@ -2919,12 +2279,12 @@ IF_END_192:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     CMPD TMPVAL
-    LBLT .CMP_98_TRUE
+    LBLT .CMP_99_TRUE
     LDD #0
-    LBRA .CMP_98_END
-.CMP_98_TRUE:
+    LBRA .CMP_99_END
+.CMP_99_TRUE:
     LDD #1
-.CMP_98_END:
+.CMP_99_END:
     LBEQ IF_NEXT_205
     LDD #-1
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -2935,7 +2295,7 @@ IF_END_192:
     LBRA IF_END_204
 IF_NEXT_205:
 IF_END_204:
-    LDD >VAR_SNOW2_Y
+    LDD >VAR_SNOW1_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_ARG2
     STD TMPPTR      ; Save right operand to TMPPTR
@@ -2946,12 +2306,12 @@ IF_END_204:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DY
     CMPD TMPVAL
-    LBLT .CMP_99_TRUE
+    LBLT .CMP_100_TRUE
     LDD #0
-    LBRA .CMP_99_END
-.CMP_99_TRUE:
+    LBRA .CMP_100_END
+.CMP_100_TRUE:
     LDD #1
-.CMP_99_END:
+.CMP_100_END:
     LBEQ IF_NEXT_207
     LDD #-1
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
@@ -2966,26 +2326,26 @@ IF_END_206:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     CMPD TMPVAL
-    LBLT .CMP_100_TRUE
-    LDD #0
-    LBRA .CMP_100_END
-.CMP_100_TRUE:
-    LDD #1
-.CMP_100_END:
-    LBEQ IF_NEXT_209
-    LDD >VAR_THH
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DY
-    CMPD TMPVAL
     LBLT .CMP_101_TRUE
     LDD #0
     LBRA .CMP_101_END
 .CMP_101_TRUE:
     LDD #1
 .CMP_101_END:
+    LBEQ IF_NEXT_209
+    LDD >VAR_THH
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_102_TRUE
+    LDD #0
+    LBRA .CMP_102_END
+.CMP_102_TRUE:
+    LDD #1
+.CMP_102_END:
     LBEQ IF_NEXT_211
     LDD #0
-    STD VAR_SNOW2_ACTIVE
+    STD VAR_SNOW1_ACTIVE
     LDD >VAR_ARG0
     STD VAR_ARG0
     JSR on_snow_hit_enemy
@@ -2998,6 +2358,107 @@ IF_END_208:
     LBRA IF_END_202
 IF_NEXT_203:
 IF_END_202:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_103_TRUE
+    LDD #0
+    LBRA .CMP_103_END
+.CMP_103_TRUE:
+    LDD #1
+.CMP_103_END:
+    LBEQ IF_NEXT_213
+    LDD >VAR_SNOW2_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_104_TRUE
+    LDD #0
+    LBRA .CMP_104_END
+.CMP_104_TRUE:
+    LDD #1
+.CMP_104_END:
+    LBEQ IF_NEXT_215
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DX
+    LBRA IF_END_214
+IF_NEXT_215:
+IF_END_214:
+    LDD >VAR_SNOW2_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ARG2
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_105_TRUE
+    LDD #0
+    LBRA .CMP_105_END
+.CMP_105_TRUE:
+    LDD #1
+.CMP_105_END:
+    LBEQ IF_NEXT_217
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DY
+    LBRA IF_END_216
+IF_NEXT_217:
+IF_END_216:
+    LDD >VAR_THW
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_106_TRUE
+    LDD #0
+    LBRA .CMP_106_END
+.CMP_106_TRUE:
+    LDD #1
+.CMP_106_END:
+    LBEQ IF_NEXT_219
+    LDD >VAR_THH
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_107_TRUE
+    LDD #0
+    LBRA .CMP_107_END
+.CMP_107_TRUE:
+    LDD #1
+.CMP_107_END:
+    LBEQ IF_NEXT_221
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LDD >VAR_ARG0
+    STD VAR_ARG0
+    JSR on_snow_hit_enemy
+    LBRA IF_END_220
+IF_NEXT_221:
+IF_END_220:
+    LBRA IF_END_218
+IF_NEXT_219:
+IF_END_218:
+    LBRA IF_END_212
+IF_NEXT_213:
+IF_END_212:
     RTS
 
 ; Function: on_snow_hit_enemy (Bank #0)
@@ -3006,24 +2467,219 @@ on_snow_hit_enemy:
     TFR B,A             ; A = enemy index
     LDB #$1C              ; event hash 'onSnowHit'
     JSR ENEMY_FIRE_EVENT_RUNTIME
+    LDD >VAR_ARG0
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB 13,X            ; sm_state byte
+    STD RESULT
+    STD VAR_NEW_STATE
+    LDD #180  ; const THAW_TICKS_SNOW
+    STD VAR_TICKS
+    LDD #3  ; const TITCHI_STATE_BALL
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_NEW_STATE
+    CMPD TMPVAL
+    LBEQ .CMP_108_TRUE
+    LDD #0
+    LBRA .CMP_108_END
+.CMP_108_TRUE:
+    LDD #1
+.CMP_108_END:
+    LBEQ IF_NEXT_223
+    LDD #300  ; const THAW_TICKS_BALL
+    STD VAR_TICKS
+    LBRA IF_END_222
+IF_NEXT_223:
+IF_END_222:
+    LDD >VAR_ARG0
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_THAW_TIMERS_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD >VAR_TICKS
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
     RTS
 
-; Function: check_player_enemy_collision (Bank #0)
-check_player_enemy_collision:
+; Function: update_thaw (Bank #0)
+update_thaw:
     LDD #0
     STD VAR_I
-WH_212: ; while start
+WH_224: ; while start
     LDD #8
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_I
     CMPD TMPVAL
-    LBLT .CMP_102_TRUE
+    LBLT .CMP_109_TRUE
     LDD #0
-    LBRA .CMP_102_END
-.CMP_102_TRUE:
+    LBRA .CMP_109_END
+.CMP_109_TRUE:
     LDD #1
-.CMP_102_END:
-    LBEQ WH_END_213
+.CMP_109_END:
+    LBEQ WH_END_225
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB 13,X            ; sm_state byte
+    STD RESULT
+    STD VAR_ST
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ST
+    CMPD TMPVAL
+    LBGT .CMP_110_TRUE
+    LDD #0
+    LBRA .CMP_110_END
+.CMP_110_TRUE:
+    LDD #1
+.CMP_110_END:
+    LBEQ IF_NEXT_227
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_ROLLING_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_111_TRUE
+    LDD #0
+    LBRA .CMP_111_END
+.CMP_111_TRUE:
+    LDD #1
+.CMP_111_END:
+    LBEQ IF_NEXT_229
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_THAW_TIMERS_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_THAW_TIMERS_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_THAW_TIMERS_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLE .CMP_112_TRUE
+    LDD #0
+    LBRA .CMP_112_END
+.CMP_112_TRUE:
+    LDD #1
+.CMP_112_END:
+    LBEQ IF_NEXT_231
+    LDD >VAR_ST
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_ST
+    LDD >VAR_I
+    STD VAR_ARG0
+    LDD >VAR_ST
+    STD VAR_ARG1
+    JSR SET_ENEMY_STATE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ST
+    CMPD TMPVAL
+    LBGT .CMP_113_TRUE
+    LDD #0
+    LBRA .CMP_113_END
+.CMP_113_TRUE:
+    LDD #1
+.CMP_113_END:
+    LBEQ IF_NEXT_233
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_THAW_TIMERS_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #180  ; const THAW_TICKS_SNOW
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_232
+IF_NEXT_233:
+IF_END_232:
+    LBRA IF_END_230
+IF_NEXT_231:
+IF_END_230:
+    LBRA IF_END_228
+IF_NEXT_229:
+IF_END_228:
+    LBRA IF_END_226
+IF_NEXT_227:
+IF_END_226:
+    LDD >VAR_I
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_I
+    LBRA WH_224
+WH_END_225: ; while end
+    RTS
+
+; Function: count_active_enemies (Bank #0)
+count_active_enemies:
+    LDD #0
+    STD VAR_N
+    LDD #0
+    STD VAR_I
+WH_234: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBLT .CMP_114_TRUE
+    LDD #0
+    LBRA .CMP_114_END
+.CMP_114_TRUE:
+    LDD #1
+.CMP_114_END:
+    LBEQ WH_END_235
     LDD #1
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_I
@@ -3036,13 +2692,1536 @@ WH_212: ; while start
     LDB ,X              ; active byte
     STD RESULT
     CMPD TMPVAL
-    LBEQ .CMP_103_TRUE
+    LBEQ .CMP_115_TRUE
     LDD #0
-    LBRA .CMP_103_END
-.CMP_103_TRUE:
+    LBRA .CMP_115_END
+.CMP_115_TRUE:
     LDD #1
-.CMP_103_END:
-    LBEQ IF_NEXT_215
+.CMP_115_END:
+    LBEQ IF_NEXT_237
+    LDD >VAR_N
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_N
+    LBRA IF_END_236
+IF_NEXT_237:
+IF_END_236:
+    LDD >VAR_I
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_I
+    LBRA WH_234
+WH_END_235: ; while end
+    LDD >VAR_N
+    STD VAR_ENEMY_COUNT
+    RTS
+
+; Function: reset_balls (Bank #0)
+reset_balls:
+    LDD #0
+    STD VAR_I
+WH_238: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBLT .CMP_116_TRUE
+    LDD #0
+    LBRA .CMP_116_END
+.CMP_116_TRUE:
+    LDD #1
+.CMP_116_END:
+    LBEQ WH_END_239
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_ROLLING_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VY_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_BOUNCES_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_COLLIDED_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_I
+    LBRA WH_238
+WH_END_239: ; while end
+    RTS
+
+; Function: try_launch_ball (Bank #0)
+try_launch_ball:
+    LDD #0
+    STD VAR_I
+    LDD #0
+    STD VAR_FOUND
+WH_240: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBLT .CMP_117_TRUE
+    LDD #0
+    LBRA .CMP_117_END
+.CMP_117_TRUE:
+    LDD #1
+.CMP_117_END:
+    LBEQ WH_END_241
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FOUND
+    CMPD TMPVAL
+    LBEQ .CMP_118_TRUE
+    LDD #0
+    LBRA .CMP_118_END
+.CMP_118_TRUE:
+    LDD #1
+.CMP_118_END:
+    LBEQ IF_NEXT_243
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB ,X              ; active byte
+    STD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_119_TRUE
+    LDD #0
+    LBRA .CMP_119_END
+.CMP_119_TRUE:
+    LDD #1
+.CMP_119_END:
+    LBEQ IF_NEXT_245
+    LDD #3  ; const TITCHI_STATE_BALL
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB 13,X            ; sm_state byte
+    STD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_120_TRUE
+    LDD #0
+    LBRA .CMP_120_END
+.CMP_120_TRUE:
+    LDD #1
+.CMP_120_END:
+    LBEQ IF_NEXT_247
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_ROLLING_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_121_TRUE
+    LDD #0
+    LBRA .CMP_121_END
+.CMP_121_TRUE:
+    LDD #1
+.CMP_121_END:
+    LBEQ IF_NEXT_249
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 1,X             ; x hi
+    LDB 2,X             ; x lo
+    STD RESULT
+    STD VAR_EX
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 3,X             ; y hi
+    LDB 4,X             ; y lo
+    STD RESULT
+    STD VAR_EY
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EX
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_122_TRUE
+    LDD #0
+    LBRA .CMP_122_END
+.CMP_122_TRUE:
+    LDD #1
+.CMP_122_END:
+    LBEQ IF_NEXT_251
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DX
+    LBRA IF_END_250
+IF_NEXT_251:
+IF_END_250:
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_123_TRUE
+    LDD #0
+    LBRA .CMP_123_END
+.CMP_123_TRUE:
+    LDD #1
+.CMP_123_END:
+    LBEQ IF_NEXT_253
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DY
+    LBRA IF_END_252
+IF_NEXT_253:
+IF_END_252:
+    LDD #25
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_124_TRUE
+    LDD #0
+    LBRA .CMP_124_END
+.CMP_124_TRUE:
+    LDD #1
+.CMP_124_END:
+    LBEQ IF_NEXT_255
+    LDD #25
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_125_TRUE
+    LDD #0
+    LBRA .CMP_125_END
+.CMP_125_TRUE:
+    LDD #1
+.CMP_125_END:
+    LBEQ IF_NEXT_257
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_ROLLING_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #1
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #4  ; const BALL_SPEED
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_FACING
+    CMPD TMPVAL
+    LBEQ .CMP_126_TRUE
+    LDD #0
+    LBRA .CMP_126_END
+.CMP_126_TRUE:
+    LDD #1
+.CMP_126_END:
+    LBEQ IF_NEXT_259
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #4  ; const BALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_258
+IF_NEXT_259:
+IF_END_258:
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VY_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_BOUNCES_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #3
+    STD TMPPTR     ; Save min
+    LDD #5
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_THAW_TIMERS_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #15  ; const SHOOT_COOLDOWN_MAX
+    STD VAR_SHOOT_COOLDOWN
+    LDD #1
+    STD VAR_BALL_LAUNCHED
+    LDD #1
+    STD VAR_FOUND
+    LBRA IF_END_256
+IF_NEXT_257:
+IF_END_256:
+    LBRA IF_END_254
+IF_NEXT_255:
+IF_END_254:
+    LBRA IF_END_248
+IF_NEXT_249:
+IF_END_248:
+    LBRA IF_END_246
+IF_NEXT_247:
+IF_END_246:
+    LBRA IF_END_244
+IF_NEXT_245:
+IF_END_244:
+    LBRA IF_END_242
+IF_NEXT_243:
+IF_END_242:
+    LDD >VAR_I
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_I
+    LBRA WH_240
+WH_END_241: ; while end
+    RTS
+
+; Function: update_balls (Bank #0)
+update_balls:
+    LDD #0
+    STD VAR_I
+WH_260: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBLT .CMP_127_TRUE
+    LDD #0
+    LBRA .CMP_127_END
+.CMP_127_TRUE:
+    LDD #1
+.CMP_127_END:
+    LBEQ WH_END_261
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_ROLLING_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_128_TRUE
+    LDD #0
+    LBRA .CMP_128_END
+.CMP_128_TRUE:
+    LDD #1
+.CMP_128_END:
+    LBEQ IF_NEXT_263
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VY_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_BALL_VY_ARR_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const BALL_GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #8  ; const BALL_MAX_FALL
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_VY_ARR_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLT .CMP_129_TRUE
+    LDD #0
+    LBRA .CMP_129_END
+.CMP_129_TRUE:
+    LDD #1
+.CMP_129_END:
+    LBEQ IF_NEXT_265
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VY_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #8  ; const BALL_MAX_FALL
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_264
+IF_NEXT_265:
+IF_END_264:
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 3,X             ; y hi
+    LDB 4,X             ; y lo
+    STD RESULT
+    STD VAR_PREV_BY
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 1,X             ; x hi
+    LDB 2,X             ; x lo
+    STD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_VX_ARR_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_BX
+    LDD >VAR_PREV_BY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_VY_ARR_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_BY
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_VY_ARR_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLE .CMP_130_TRUE
+    LDD #0
+    LBRA .CMP_130_END
+.CMP_130_TRUE:
+    LDD #1
+.CMP_130_END:
+    LBEQ IF_NEXT_267
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_BX
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #8  ; const ENEMY_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PREV_BY
+    ; Compute player_feet = player_y - player_hh (16-bit)
+    STD >TMPVAL          ; save player_y
+    LDB >LCOL_PHH        ; B = player_hh
+    CLRA
+    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
+    LDD >TMPVAL          ; D = player_y
+    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
+    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR
+    LDD #-100
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLOOR
+    CMPD TMPVAL
+    LBGT .CMP_131_TRUE
+    LDD #0
+    LBRA .CMP_131_END
+.CMP_131_TRUE:
+    LDD #1
+.CMP_131_END:
+    LBEQ IF_NEXT_269
+    LDD >VAR_FLOOR
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BY
+    CMPD TMPVAL
+    LBLE .CMP_132_TRUE
+    LDD #0
+    LBRA .CMP_132_END
+.CMP_132_TRUE:
+    LDD #1
+.CMP_132_END:
+    LBEQ IF_NEXT_271
+    LDD >VAR_FLOOR
+    STD VAR_BY
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VY_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_270
+IF_NEXT_271:
+IF_END_270:
+    LBRA IF_END_268
+IF_NEXT_269:
+IF_END_268:
+    LBRA IF_END_266
+IF_NEXT_267:
+IF_END_266:
+    LDD #-2403  ; const WORLD_Y_MIN
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BY
+    CMPD TMPVAL
+    LBLT .CMP_133_TRUE
+    LDD #0
+    LBRA .CMP_133_END
+.CMP_133_TRUE:
+    LDD #1
+.CMP_133_END:
+    LBEQ IF_NEXT_273
+    LDD #-2403  ; const WORLD_Y_MIN
+    STD VAR_BY
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VY_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_272
+IF_NEXT_273:
+IF_END_272:
+    LDD #-96  ; const WORLD_X_MIN
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BX
+    CMPD TMPVAL
+    LBLT .CMP_134_TRUE
+    LDD #0
+    LBRA .CMP_134_END
+.CMP_134_TRUE:
+    LDD #1
+.CMP_134_END:
+    LBEQ IF_NEXT_275
+    LDD #-96  ; const WORLD_X_MIN
+    STD VAR_BX
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #4  ; const BALL_SPEED
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_BOUNCES_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_BALL_BOUNCES_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_274
+IF_NEXT_275:
+IF_END_274:
+    LDD #95  ; const WORLD_X_MAX
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BX
+    CMPD TMPVAL
+    LBGT .CMP_135_TRUE
+    LDD #0
+    LBRA .CMP_135_END
+.CMP_135_TRUE:
+    LDD #1
+.CMP_135_END:
+    LBEQ IF_NEXT_277
+    LDD #95  ; const WORLD_X_MAX
+    STD VAR_BX
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #4  ; const BALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_BOUNCES_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDX #VAR_BALL_BOUNCES_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_276
+IF_NEXT_277:
+IF_END_276:
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE (mirrors GET_ENEMY_X)
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    STX >TMPPTR         ; save pool entry ptr across value eval
+    LDD >VAR_BX
+    LDX >TMPPTR         ; restore pool entry ptr
+    STD 1,X             ; x hi @+1, x lo @+2
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE (mirrors GET_ENEMY_X)
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    STX >TMPPTR         ; save pool entry ptr across value eval
+    LDD >VAR_BY
+    LDX >TMPPTR         ; restore pool entry ptr
+    STD 3,X             ; y hi @+3, y lo @+4
+    LDD >VAR_BX
+    STD VAR_ARG0
+    LDD >VAR_BY
+    STD VAR_ARG1
+    JSR ball_kill_enemies
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_BOUNCES_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLE .CMP_136_TRUE
+    LDD #0
+    LBRA .CMP_136_END
+.CMP_136_TRUE:
+    LDD #1
+.CMP_136_END:
+    LBEQ IF_NEXT_279
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_ROLLING_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index
+    JSR KILL_ENEMY_RUNTIME
+    LBRA IF_END_278
+IF_NEXT_279:
+IF_END_278:
+    LBRA IF_END_262
+IF_NEXT_263:
+IF_END_262:
+    LDD >VAR_I
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_I
+    LBRA WH_260
+WH_END_261: ; while end
+    RTS
+
+; Function: ball_ball_collision (Bank #0)
+ball_ball_collision:
+    LDD #0
+    STD VAR_K
+WH_280: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_K
+    CMPD TMPVAL
+    LBLT .CMP_137_TRUE
+    LDD #0
+    LBRA .CMP_137_END
+.CMP_137_TRUE:
+    LDD #1
+.CMP_137_END:
+    LBEQ WH_END_281
+    LDD >VAR_K
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_COLLIDED_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_K
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_K
+    LBRA WH_280
+WH_END_281: ; while end
+    LDD #0
+    STD VAR_I
+WH_282: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBLT .CMP_138_TRUE
+    LDD #0
+    LBRA .CMP_138_END
+.CMP_138_TRUE:
+    LDD #1
+.CMP_138_END:
+    LBEQ WH_END_283
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_ROLLING_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_139_TRUE
+    LDD #0
+    LBRA .CMP_139_END
+.CMP_139_TRUE:
+    LDD #1
+.CMP_139_END:
+    LBEQ IF_NEXT_285
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_COLLIDED_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_140_TRUE
+    LDD #0
+    LBRA .CMP_140_END
+.CMP_140_TRUE:
+    LDD #1
+.CMP_140_END:
+    LBEQ IF_NEXT_287
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 1,X             ; x hi
+    LDB 2,X             ; x lo
+    STD RESULT
+    STD VAR_BX
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 3,X             ; y hi
+    LDB 4,X             ; y lo
+    STD RESULT
+    STD VAR_BY
+    LDD #0
+    STD VAR_J
+WH_288: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_J
+    CMPD TMPVAL
+    LBLT .CMP_141_TRUE
+    LDD #0
+    LBRA .CMP_141_END
+.CMP_141_TRUE:
+    LDD #1
+.CMP_141_END:
+    LBEQ WH_END_289
+    LDD #0
+    STD VAR_SKIP
+    LDD >VAR_J
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBEQ .CMP_142_TRUE
+    LDD #0
+    LBRA .CMP_142_END
+.CMP_142_TRUE:
+    LDD #1
+.CMP_142_END:
+    LBEQ IF_NEXT_291
+    LDD #1
+    STD VAR_SKIP
+    LBRA IF_END_290
+IF_NEXT_291:
+IF_END_290:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SKIP
+    CMPD TMPVAL
+    LBEQ .CMP_143_TRUE
+    LDD #0
+    LBRA .CMP_143_END
+.CMP_143_TRUE:
+    LDD #1
+.CMP_143_END:
+    LBEQ IF_NEXT_293
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_COLLIDED_DATA  ; Array base
+    LDD >VAR_J
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBEQ .CMP_144_TRUE
+    LDD #0
+    LBRA .CMP_144_END
+.CMP_144_TRUE:
+    LDD #1
+.CMP_144_END:
+    LBEQ IF_NEXT_295
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB ,X              ; active byte
+    STD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_145_TRUE
+    LDD #0
+    LBRA .CMP_145_END
+.CMP_145_TRUE:
+    LDD #1
+.CMP_145_END:
+    LBEQ IF_NEXT_297
+    LDD #3  ; const TITCHI_STATE_BALL
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB 13,X            ; sm_state byte
+    STD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_146_TRUE
+    LDD #0
+    LBRA .CMP_146_END
+.CMP_146_TRUE:
+    LDD #1
+.CMP_146_END:
+    LBEQ IF_NEXT_299
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 1,X             ; x hi
+    LDB 2,X             ; x lo
+    STD RESULT
+    STD VAR_EJX
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 3,X             ; y hi
+    LDB 4,X             ; y lo
+    STD RESULT
+    STD VAR_EJY
+    LDD >VAR_BX
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EJX
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_147_TRUE
+    LDD #0
+    LBRA .CMP_147_END
+.CMP_147_TRUE:
+    LDD #1
+.CMP_147_END:
+    LBEQ IF_NEXT_301
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DX
+    LBRA IF_END_300
+IF_NEXT_301:
+IF_END_300:
+    LDD >VAR_BY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EJY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_148_TRUE
+    LDD #0
+    LBRA .CMP_148_END
+.CMP_148_TRUE:
+    LDD #1
+.CMP_148_END:
+    LBEQ IF_NEXT_303
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DY
+    LBRA IF_END_302
+IF_NEXT_303:
+IF_END_302:
+    LDD #20
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_149_TRUE
+    LDD #0
+    LBRA .CMP_149_END
+.CMP_149_TRUE:
+    LDD #1
+.CMP_149_END:
+    LBEQ IF_NEXT_305
+    LDD #20
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_150_TRUE
+    LDD #0
+    LBRA .CMP_150_END
+.CMP_150_TRUE:
+    LDD #1
+.CMP_150_END:
+    LBEQ IF_NEXT_307
+    LDX #VAR_BALL_VX_ARR_DATA  ; Array base
+    LDD >VAR_I
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    STD VAR_OLD_VX
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_OLD_VX
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_J
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_VX_ARR_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD >VAR_OLD_VX
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_J
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_ROLLING_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #1
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_J
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_THAW_TIMERS_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #0
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDX #VAR_BALL_BOUNCES_DATA  ; Array base
+    LDD >VAR_J
+    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
+    LDD TMPPTR  ; Load index
+    ASLB        ; Multiply by 2 (16-bit elements)
+    ROLA
+    LEAX D,X    ; X = base + (index * element_size)
+    LDD ,X      ; Load 16-bit value
+    CMPD TMPVAL
+    LBLE .CMP_151_TRUE
+    LDD #0
+    LBRA .CMP_151_END
+.CMP_151_TRUE:
+    LDD #1
+.CMP_151_END:
+    LBEQ IF_NEXT_309
+    LDD >VAR_J
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_BOUNCES_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    ; RAND_RANGE: Random in range [min, max]
+    LDD #3
+    STD TMPPTR     ; Save min
+    LDD #5
+    STD TMPPTR2    ; Save max
+    JSR RAND_RANGE_HELPER
+    STD RESULT
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_308
+IF_NEXT_309:
+IF_END_308:
+    LDD >VAR_I
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_COLLIDED_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #1
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LDD >VAR_J
+    ASLB            ; Multiply index by 2 (16-bit elements)
+    ROLA
+    STD TMPPTR      ; Save offset temporarily
+    LDD #VAR_BALL_COLLIDED_DATA  ; Array data address
+    TFR D,X         ; X = array base pointer
+    LDD TMPPTR      ; D = offset
+    LEAX D,X        ; X = base + offset
+    STX TMPPTR2     ; Save computed address
+    LDD #1
+    LDX TMPPTR2     ; Load computed address
+    STD ,X          ; Store 16-bit value
+    LBRA IF_END_306
+IF_NEXT_307:
+IF_END_306:
+    LBRA IF_END_304
+IF_NEXT_305:
+IF_END_304:
+    LBRA IF_END_298
+IF_NEXT_299:
+IF_END_298:
+    LBRA IF_END_296
+IF_NEXT_297:
+IF_END_296:
+    LBRA IF_END_294
+IF_NEXT_295:
+IF_END_294:
+    LBRA IF_END_292
+IF_NEXT_293:
+IF_END_292:
+    LDD >VAR_J
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_J
+    LBRA WH_288
+WH_END_289: ; while end
+    LBRA IF_END_286
+IF_NEXT_287:
+IF_END_286:
+    LBRA IF_END_284
+IF_NEXT_285:
+IF_END_284:
+    LDD >VAR_I
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_I
+    LBRA WH_282
+WH_END_283: ; while end
+    RTS
+
+; Function: ball_kill_enemies (Bank #0)
+ball_kill_enemies:
+    LDD #0
+    STD VAR_J
+WH_310: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_J
+    CMPD TMPVAL
+    LBLT .CMP_152_TRUE
+    LDD #0
+    LBRA .CMP_152_END
+.CMP_152_TRUE:
+    LDD #1
+.CMP_152_END:
+    LBEQ WH_END_311
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB ,X              ; active byte
+    STD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_153_TRUE
+    LDD #0
+    LBRA .CMP_153_END
+.CMP_153_TRUE:
+    LDD #1
+.CMP_153_END:
+    LBEQ IF_NEXT_313
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB 13,X            ; sm_state byte
+    STD RESULT
+    STD VAR_ST
+    LDD #3  ; const TITCHI_STATE_BALL
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ST
+    CMPD TMPVAL
+    LBLT .CMP_154_TRUE
+    LDD #0
+    LBRA .CMP_154_END
+.CMP_154_TRUE:
+    LDD #1
+.CMP_154_END:
+    LBEQ IF_NEXT_315
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 1,X             ; x hi
+    LDB 2,X             ; x lo
+    STD RESULT
+    STD VAR_EJX
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    LDA 3,X             ; y hi
+    LDB 4,X             ; y lo
+    STD RESULT
+    STD VAR_EJY
+    LDD >VAR_ARG0
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EJX
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DX
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_155_TRUE
+    LDD #0
+    LBRA .CMP_155_END
+.CMP_155_TRUE:
+    LDD #1
+.CMP_155_END:
+    LBEQ IF_NEXT_317
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DX
+    LBRA IF_END_316
+IF_NEXT_317:
+IF_END_316:
+    LDD >VAR_ARG1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EJY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_DY
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_156_TRUE
+    LDD #0
+    LBRA .CMP_156_END
+.CMP_156_TRUE:
+    LDD #1
+.CMP_156_END:
+    LBEQ IF_NEXT_319
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_DY
+    LBRA IF_END_318
+IF_NEXT_319:
+IF_END_318:
+    LDD #24
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DX
+    CMPD TMPVAL
+    LBLT .CMP_157_TRUE
+    LDD #0
+    LBRA .CMP_157_END
+.CMP_157_TRUE:
+    LDD #1
+.CMP_157_END:
+    LBEQ IF_NEXT_321
+    LDD #24
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_DY
+    CMPD TMPVAL
+    LBLT .CMP_158_TRUE
+    LDD #0
+    LBRA .CMP_158_END
+.CMP_158_TRUE:
+    LDD #1
+.CMP_158_END:
+    LBEQ IF_NEXT_323
+    LDD >VAR_J
+    TFR B,A             ; A = enemy index
+    JSR KILL_ENEMY_RUNTIME
+    LDD >VAR_SCORE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #200
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SCORE
+    LBRA IF_END_322
+IF_NEXT_323:
+IF_END_322:
+    LBRA IF_END_320
+IF_NEXT_321:
+IF_END_320:
+    LBRA IF_END_314
+IF_NEXT_315:
+IF_END_314:
+    LBRA IF_END_312
+IF_NEXT_313:
+IF_END_312:
+    LDD >VAR_J
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_J
+    LBRA WH_310
+WH_END_311: ; while end
+    RTS
+
+; Function: check_player_enemy_collision (Bank #0)
+check_player_enemy_collision:
+    LDD #0
+    STD VAR_I
+WH_324: ; while start
+    LDD #8
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    CMPD TMPVAL
+    LBLT .CMP_159_TRUE
+    LDD #0
+    LBRA .CMP_159_END
+.CMP_159_TRUE:
+    LDD #1
+.CMP_159_END:
+    LBEQ WH_END_325
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    CLRA
+    LDB ,X              ; active byte
+    STD RESULT
+    CMPD TMPVAL
+    LBEQ .CMP_160_TRUE
+    LDD #0
+    LBRA .CMP_160_END
+.CMP_160_TRUE:
+    LDD #1
+.CMP_160_END:
+    LBEQ IF_NEXT_327
     LDD >VAR_I
     TFR B,A             ; A = enemy index (low byte)
     LDB #16             ; ENEMY_POOL_STRIDE
@@ -3084,22 +4263,22 @@ WH_212: ; while start
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     CMPD TMPVAL
-    LBLT .CMP_104_TRUE
+    LBLT .CMP_161_TRUE
     LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
+    LBRA .CMP_161_END
+.CMP_161_TRUE:
     LDD #1
-.CMP_104_END:
-    LBEQ IF_NEXT_217
+.CMP_161_END:
+    LBEQ IF_NEXT_329
     LDD #-1
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     LDX TMPVAL      ; Get left into X from TMPVAL
     JSR MUL16       ; D = X * D
     STD VAR_DX
-    LBRA IF_END_216
-IF_NEXT_217:
-IF_END_216:
+    LBRA IF_END_328
+IF_NEXT_329:
+IF_END_328:
     LDD >VAR_PLAYER_Y
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_EY
@@ -3111,104 +4290,157 @@ IF_END_216:
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DY
     CMPD TMPVAL
-    LBLT .CMP_105_TRUE
+    LBLT .CMP_162_TRUE
     LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
+    LBRA .CMP_162_END
+.CMP_162_TRUE:
     LDD #1
-.CMP_105_END:
-    LBEQ IF_NEXT_219
+.CMP_162_END:
+    LBEQ IF_NEXT_331
     LDD #-1
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_DY
     LDX TMPVAL      ; Get left into X from TMPVAL
     JSR MUL16       ; D = X * D
     STD VAR_DY
-    LBRA IF_END_218
-IF_NEXT_219:
-IF_END_218:
+    LBRA IF_END_330
+IF_NEXT_331:
+IF_END_330:
     LDD #20
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DX
     CMPD TMPVAL
-    LBLT .CMP_106_TRUE
+    LBLT .CMP_163_TRUE
     LDD #0
-    LBRA .CMP_106_END
-.CMP_106_TRUE:
+    LBRA .CMP_163_END
+.CMP_163_TRUE:
     LDD #1
-.CMP_106_END:
-    LBEQ IF_NEXT_221
+.CMP_163_END:
+    LBEQ IF_NEXT_333
     LDD #20
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_DY
     CMPD TMPVAL
-    LBLT .CMP_107_TRUE
+    LBLT .CMP_164_TRUE
     LDD #0
-    LBRA .CMP_107_END
-.CMP_107_TRUE:
+    LBRA .CMP_164_END
+.CMP_164_TRUE:
     LDD #1
-.CMP_107_END:
-    LBEQ IF_NEXT_223
-    LDD >VAR_TITCHI_STATE_BALL
+.CMP_164_END:
+    LBEQ IF_NEXT_335
+    LDD #0  ; const TITCHI_STATE_NORMAL
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ST
     CMPD TMPVAL
-    LBEQ .CMP_108_TRUE
+    LBEQ .CMP_165_TRUE
     LDD #0
-    LBRA .CMP_108_END
-.CMP_108_TRUE:
+    LBRA .CMP_165_END
+.CMP_165_TRUE:
     LDD #1
-.CMP_108_END:
-    LBEQ IF_NEXT_225
+.CMP_165_END:
+    LBEQ IF_NEXT_337
+    JSR on_player_death
+    LBRA IF_END_336
+IF_NEXT_337:
+IF_END_336:
+    LDD #0  ; const TITCHI_STATE_NORMAL
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_ST
+    CMPD TMPVAL
+    LBNE .CMP_166_TRUE
+    LDD #0
+    LBRA .CMP_166_END
+.CMP_166_TRUE:
+    LDD #1
+.CMP_166_END:
+    LBEQ IF_NEXT_339
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_EX
+    CMPD TMPVAL
+    LBGE .CMP_167_TRUE
+    LDD #0
+    LBRA .CMP_167_END
+.CMP_167_TRUE:
+    LDD #1
+.CMP_167_END:
+    LBEQ IF_NEXT_341
     LDD >VAR_I
-    TFR B,A             ; A = enemy index
-    JSR KILL_ENEMY_RUNTIME
-    LDD >VAR_ENEMY_COUNT
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE (mirrors GET_ENEMY_X)
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    STX >TMPPTR         ; save pool entry ptr across value eval
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #20
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    LDX >TMPPTR         ; restore pool entry ptr
+    STD 1,X             ; x hi @+1, x lo @+2
+    LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     STD TMPPTR      ; Save right operand to TMPPTR
     LDD TMPVAL      ; Get left operand from TMPVAL
     SUBD TMPPTR     ; Left - Right
-    STD VAR_ENEMY_COUNT
-    LDD >VAR_SCORE
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #100
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SCORE
-    LBRA IF_END_224
-IF_NEXT_225:
-IF_END_224:
-    LDD >VAR_TITCHI_STATE_BALL
+    STD VAR_PLAYER_X
+    LBRA IF_END_340
+IF_NEXT_341:
+IF_END_340:
+    LDD >VAR_PLAYER_X
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ST
+    LDD >VAR_EX
     CMPD TMPVAL
-    LBNE .CMP_109_TRUE
+    LBLT .CMP_168_TRUE
     LDD #0
-    LBRA .CMP_109_END
-.CMP_109_TRUE:
+    LBRA .CMP_168_END
+.CMP_168_TRUE:
     LDD #1
-.CMP_109_END:
-    LBEQ IF_NEXT_227
-    JSR on_player_death
-    LBRA IF_END_226
-IF_NEXT_227:
-IF_END_226:
-    LBRA IF_END_222
-IF_NEXT_223:
-IF_END_222:
-    LBRA IF_END_220
-IF_NEXT_221:
-IF_END_220:
-    LBRA IF_END_214
-IF_NEXT_215:
-IF_END_214:
+.CMP_168_END:
+    LBEQ IF_NEXT_343
+    LDD >VAR_I
+    TFR B,A             ; A = enemy index (low byte)
+    LDB #16             ; ENEMY_POOL_STRIDE (mirrors GET_ENEMY_X)
+    MUL                 ; D = A * stride
+    LDX #ENEMY_POOL
+    LEAX D,X            ; X = &pool[i]
+    STX >TMPPTR         ; save pool entry ptr across value eval
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #20
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    LDX >TMPPTR         ; restore pool entry ptr
+    STD 1,X             ; x hi @+1, x lo @+2
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_PLAYER_X
+    LBRA IF_END_342
+IF_NEXT_343:
+IF_END_342:
+    LBRA IF_END_338
+IF_NEXT_339:
+IF_END_338:
+    LBRA IF_END_334
+IF_NEXT_335:
+IF_END_334:
+    LBRA IF_END_332
+IF_NEXT_333:
+IF_END_332:
+    LBRA IF_END_326
+IF_NEXT_327:
+IF_END_326:
     LDD >VAR_I
     STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
     ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
     STD VAR_I
-    LBRA WH_212
-WH_END_213: ; while end
+    LBRA WH_324
+WH_END_325: ; while end
     RTS
 
 
@@ -3219,8 +4451,789 @@ WH_END_213: ; while end
 
     ORG $0000  ; Sequential bank model
 
+; Function: update_player (Bank #1)
+update_player:
+    ; CLAMP: Clamp value to range [min, max]
+    JSR J1X_BUILTIN
+    STD RESULT
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #32
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR DIV16       ; D = X / D
+    STD TMPPTR     ; Save value
+    LDD #-4
+    STD TMPPTR+2   ; Save min
+    LDD #4
+    STD TMPPTR+4   ; Save max
+    LDD TMPPTR     ; Load value
+    CMPD TMPPTR+2  ; Compare with min
+    BGE .CLAMP_0_CHK_MAX ; Branch if value >= min
+    LDD TMPPTR+2
+    STD RESULT
+    BRA .CLAMP_0_END
+.CLAMP_0_CHK_MAX:
+    LDD TMPPTR     ; Load value again
+    CMPD TMPPTR+4  ; Compare with max
+    BLE .CLAMP_0_OK  ; Branch if value <= max
+    LDD TMPPTR+4
+    STD RESULT
+    BRA .CLAMP_0_END
+.CLAMP_0_OK:
+    LDD TMPPTR
+    STD RESULT
+.CLAMP_0_END:
+    STD VAR_PLAYER_VX
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VX
+    CMPD TMPVAL
+    LBGT .CMP_49_TRUE
+    LDD #0
+    LBRA .CMP_49_END
+.CMP_49_TRUE:
+    LDD #1
+.CMP_49_END:
+    LBEQ IF_NEXT_101
+    LDD #0
+    STD VAR_PLAYER_FACING
+    LBRA IF_END_100
+IF_NEXT_101:
+IF_END_100:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VX
+    CMPD TMPVAL
+    LBLT .CMP_50_TRUE
+    LDD #0
+    LBRA .CMP_50_END
+.CMP_50_TRUE:
+    LDD #1
+.CMP_50_END:
+    LBEQ IF_NEXT_103
+    LDD #1
+    STD VAR_PLAYER_FACING
+    LBRA IF_END_102
+IF_NEXT_103:
+IF_END_102:
+    ; CLAMP: Clamp value to range [min, max]
+    LDD >VAR_PLAYER_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPPTR     ; Save value
+    LDD #-96  ; const WORLD_X_MIN
+    STD TMPPTR+2   ; Save min
+    LDD #95  ; const WORLD_X_MAX
+    STD TMPPTR+4   ; Save max
+    LDD TMPPTR     ; Load value
+    CMPD TMPPTR+2  ; Compare with min
+    BGE .CLAMP_1_CHK_MAX ; Branch if value >= min
+    LDD TMPPTR+2
+    STD RESULT
+    BRA .CLAMP_1_END
+.CLAMP_1_CHK_MAX:
+    LDD TMPPTR     ; Load value again
+    CMPD TMPPTR+4  ; Compare with max
+    BLE .CLAMP_1_OK  ; Branch if value <= max
+    LDD TMPPTR+4
+    STD RESULT
+    BRA .CLAMP_1_END
+.CLAMP_1_OK:
+    LDD TMPPTR
+    STD RESULT
+.CLAMP_1_END:
+    STD VAR_PLAYER_X
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_ON_GROUND
+    CMPD TMPVAL
+    LBEQ .CMP_51_TRUE
+    LDD #0
+    LBRA .CMP_51_END
+.CMP_51_TRUE:
+    LDD #1
+.CMP_51_END:
+    LBEQ IF_NEXT_105
+    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
+    BITA #$01
+    BNE .J1B1_1_ON
+    LDD #0
+    BRA .J1B1_1_END
+.J1B1_1_ON:
+    LDD #1
+.J1B1_1_END:
+    STD RESULT
+    LBEQ IF_NEXT_107
+    LDD #11  ; const JUMP_SPEED
+    STD VAR_PLAYER_VY
+    LDD #0
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_106
+IF_NEXT_107:
+IF_END_106:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_ON_GROUND
+    CMPD TMPVAL
+    LBEQ .CMP_52_TRUE
+    LDD #0
+    LBRA .CMP_52_END
+.CMP_52_TRUE:
+    LDD #1
+.CMP_52_END:
+    LBEQ IF_NEXT_109
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_PLAYER_X
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #11  ; const PLAYER_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PLAYER_Y
+    ; Compute player_feet = player_y - player_hh (16-bit)
+    STD >TMPVAL          ; save player_y
+    LDB >LCOL_PHH        ; B = player_hh
+    CLRA
+    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
+    LDD >TMPVAL          ; D = player_y
+    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
+    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR_Y
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_FLOOR_Y
+    CMPD TMPVAL
+    LBLT .CMP_53_TRUE
+    LDD #0
+    LBRA .CMP_53_END
+.CMP_53_TRUE:
+    LDD #1
+.CMP_53_END:
+    LBEQ IF_NEXT_111
+    LDD #0
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_110
+IF_NEXT_111:
+IF_END_110:
+    LBRA IF_END_108
+IF_NEXT_109:
+IF_END_108:
+    LBRA IF_END_104
+IF_NEXT_105:
+IF_END_104:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_ON_GROUND
+    CMPD TMPVAL
+    LBEQ .CMP_54_TRUE
+    LDD #0
+    LBRA .CMP_54_END
+.CMP_54_TRUE:
+    LDD #1
+.CMP_54_END:
+    LBEQ IF_NEXT_113
+    LDD >VAR_PLAYER_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_PLAYER_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VY
+    CMPD TMPVAL
+    LBLT .CMP_55_TRUE
+    LDD #0
+    LBRA .CMP_55_END
+.CMP_55_TRUE:
+    LDD #1
+.CMP_55_END:
+    LBEQ IF_NEXT_115
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_PLAYER_VY
+    LBRA IF_END_114
+IF_NEXT_115:
+IF_END_114:
+    LDD >VAR_PLAYER_Y
+    STD VAR_PREV_Y
+    LDD >VAR_PLAYER_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_VY
+    CMPD TMPVAL
+    LBLE .CMP_56_TRUE
+    LDD #0
+    LBRA .CMP_56_END
+.CMP_56_TRUE:
+    LDD #1
+.CMP_56_END:
+    LBEQ IF_NEXT_117
+    ; ===== LEVEL_COLLISION_Y builtin =====
+    LDD >VAR_PLAYER_X
+    STD >LCOL_PX         ; store player world_x (16-bit)
+    LDD #11  ; const PLAYER_HH
+    STB >LCOL_PHH        ; store player half_height
+    LDD >VAR_PREV_Y
+    ; Compute player_feet = player_y - player_hh (16-bit)
+    STD >TMPVAL          ; save player_y
+    LDB >LCOL_PHH        ; B = player_hh
+    CLRA
+    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
+    LDD >TMPVAL          ; D = player_y
+    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
+    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
+    JSR LEVEL_COLLISION_Y_RUNTIME
+    STD VAR_FLOOR_Y
+    LDD >VAR_FLOOR_Y
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBLE .CMP_57_TRUE
+    LDD #0
+    LBRA .CMP_57_END
+.CMP_57_TRUE:
+    LDD #1
+.CMP_57_END:
+    LBEQ IF_NEXT_119
+    LDD >VAR_FLOOR_Y
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD VAR_PLAYER_VY
+    LDD #1
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_118
+IF_NEXT_119:
+IF_END_118:
+    LBRA IF_END_116
+IF_NEXT_117:
+IF_END_116:
+    LBRA IF_END_112
+IF_NEXT_113:
+IF_END_112:
+    LDD #127  ; const WORLD_Y_MAX
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBGT .CMP_58_TRUE
+    LDD #0
+    LBRA .CMP_58_END
+.CMP_58_TRUE:
+    LDD #1
+.CMP_58_END:
+    LBEQ IF_NEXT_121
+    LDD #127  ; const WORLD_Y_MAX
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD VAR_PLAYER_VY
+    LBRA IF_END_120
+IF_NEXT_121:
+IF_END_120:
+    LDD #-2403  ; const WORLD_Y_MIN
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_Y
+    CMPD TMPVAL
+    LBLT .CMP_59_TRUE
+    LDD #0
+    LBRA .CMP_59_END
+.CMP_59_TRUE:
+    LDD #1
+.CMP_59_END:
+    LBEQ IF_NEXT_123
+    LDD #-2403  ; const WORLD_Y_MIN
+    STD VAR_PLAYER_Y
+    LDD #0
+    STD VAR_PLAYER_VY
+    LDD #1
+    STD VAR_PLAYER_ON_GROUND
+    LBRA IF_END_122
+IF_NEXT_123:
+IF_END_122:
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SHOOT_COOLDOWN
+    CMPD TMPVAL
+    LBGT .CMP_60_TRUE
+    LDD #0
+    LBRA .CMP_60_END
+.CMP_60_TRUE:
+    LDD #1
+.CMP_60_END:
+    LBEQ IF_NEXT_125
+    LDD >VAR_SHOOT_COOLDOWN
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SHOOT_COOLDOWN
+    LBRA IF_END_124
+IF_NEXT_125:
+IF_END_124:
+    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
+    BITA #$02
+    BNE .J1B2_2_ON
+    LDD #0
+    BRA .J1B2_2_END
+.J1B2_2_ON:
+    LDD #1
+.J1B2_2_END:
+    STD RESULT
+    LBEQ IF_NEXT_127
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SHOOT_COOLDOWN
+    CMPD TMPVAL
+    LBEQ .CMP_61_TRUE
+    LDD #0
+    LBRA .CMP_61_END
+.CMP_61_TRUE:
+    LDD #1
+.CMP_61_END:
+    LBEQ IF_NEXT_129
+    LDD #0
+    STD VAR_BALL_LAUNCHED
+    JSR TRAMP_try_launch_ball  ; cross-bank trampoline (bank #1 -> bank #0)
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_BALL_LAUNCHED
+    CMPD TMPVAL
+    LBEQ .CMP_62_TRUE
+    LDD #0
+    LBRA .CMP_62_END
+.CMP_62_TRUE:
+    LDD #1
+.CMP_62_END:
+    LBEQ IF_NEXT_131
+    LDD #5  ; const SNOW_SPEED
+    STD VAR_SNOW_SPAWN_VX
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_PLAYER_FACING
+    CMPD TMPVAL
+    LBEQ .CMP_63_TRUE
+    LDD #0
+    LBRA .CMP_63_END
+.CMP_63_TRUE:
+    LDD #1
+.CMP_63_END:
+    LBEQ IF_NEXT_133
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #5  ; const SNOW_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW_SPAWN_VX
+    LBRA IF_END_132
+IF_NEXT_133:
+IF_END_132:
+    JSR TRAMP_try_shoot  ; cross-bank trampoline (bank #1 -> bank #0)
+    LBRA IF_END_130
+IF_NEXT_131:
+IF_END_130:
+    LBRA IF_END_128
+IF_NEXT_129:
+IF_END_128:
+    LBRA IF_END_126
+IF_NEXT_127:
+IF_END_126:
+    RTS
+
+; Function: update_snowballs (Bank #1)
+update_snowballs:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_70_TRUE
+    LDD #0
+    LBRA .CMP_70_END
+.CMP_70_TRUE:
+    LDD #1
+.CMP_70_END:
+    LBEQ IF_NEXT_147
+    LDD >VAR_SNOW0_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW0_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_VY
+    CMPD TMPVAL
+    LBLT .CMP_71_TRUE
+    LDD #0
+    LBRA .CMP_71_END
+.CMP_71_TRUE:
+    LDD #1
+.CMP_71_END:
+    LBEQ IF_NEXT_149
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW0_VY
+    LBRA IF_END_148
+IF_NEXT_149:
+IF_END_148:
+    LDD >VAR_SNOW0_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW0_X
+    LDD >VAR_SNOW0_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW0_Y
+    LDD >VAR_SNOW0_LIFE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW0_LIFE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_LIFE
+    CMPD TMPVAL
+    LBLE .CMP_72_TRUE
+    LDD #0
+    LBRA .CMP_72_END
+.CMP_72_TRUE:
+    LDD #1
+.CMP_72_END:
+    LBEQ IF_NEXT_151
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_150
+IF_NEXT_151:
+IF_END_150:
+    LDD #-110
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_Y
+    CMPD TMPVAL
+    LBLT .CMP_73_TRUE
+    LDD #0
+    LBRA .CMP_73_END
+.CMP_73_TRUE:
+    LDD #1
+.CMP_73_END:
+    LBEQ IF_NEXT_153
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_152
+IF_NEXT_153:
+IF_END_152:
+    LDD #-127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_X
+    CMPD TMPVAL
+    LBLT .CMP_74_TRUE
+    LDD #0
+    LBRA .CMP_74_END
+.CMP_74_TRUE:
+    LDD #1
+.CMP_74_END:
+    LBEQ IF_NEXT_155
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_154
+IF_NEXT_155:
+IF_END_154:
+    LDD #127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW0_X
+    CMPD TMPVAL
+    LBGT .CMP_75_TRUE
+    LDD #0
+    LBRA .CMP_75_END
+.CMP_75_TRUE:
+    LDD #1
+.CMP_75_END:
+    LBEQ IF_NEXT_157
+    LDD #0
+    STD VAR_SNOW0_ACTIVE
+    LBRA IF_END_156
+IF_NEXT_157:
+IF_END_156:
+    LBRA IF_END_146
+IF_NEXT_147:
+IF_END_146:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_76_TRUE
+    LDD #0
+    LBRA .CMP_76_END
+.CMP_76_TRUE:
+    LDD #1
+.CMP_76_END:
+    LBEQ IF_NEXT_159
+    LDD >VAR_SNOW1_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW1_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_VY
+    CMPD TMPVAL
+    LBLT .CMP_77_TRUE
+    LDD #0
+    LBRA .CMP_77_END
+.CMP_77_TRUE:
+    LDD #1
+.CMP_77_END:
+    LBEQ IF_NEXT_161
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW1_VY
+    LBRA IF_END_160
+IF_NEXT_161:
+IF_END_160:
+    LDD >VAR_SNOW1_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW1_X
+    LDD >VAR_SNOW1_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW1_Y
+    LDD >VAR_SNOW1_LIFE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW1_LIFE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_LIFE
+    CMPD TMPVAL
+    LBLE .CMP_78_TRUE
+    LDD #0
+    LBRA .CMP_78_END
+.CMP_78_TRUE:
+    LDD #1
+.CMP_78_END:
+    LBEQ IF_NEXT_163
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_162
+IF_NEXT_163:
+IF_END_162:
+    LDD #-110
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_Y
+    CMPD TMPVAL
+    LBLT .CMP_79_TRUE
+    LDD #0
+    LBRA .CMP_79_END
+.CMP_79_TRUE:
+    LDD #1
+.CMP_79_END:
+    LBEQ IF_NEXT_165
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_164
+IF_NEXT_165:
+IF_END_164:
+    LDD #-127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_X
+    CMPD TMPVAL
+    LBLT .CMP_80_TRUE
+    LDD #0
+    LBRA .CMP_80_END
+.CMP_80_TRUE:
+    LDD #1
+.CMP_80_END:
+    LBEQ IF_NEXT_167
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_166
+IF_NEXT_167:
+IF_END_166:
+    LDD #127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW1_X
+    CMPD TMPVAL
+    LBGT .CMP_81_TRUE
+    LDD #0
+    LBRA .CMP_81_END
+.CMP_81_TRUE:
+    LDD #1
+.CMP_81_END:
+    LBEQ IF_NEXT_169
+    LDD #0
+    STD VAR_SNOW1_ACTIVE
+    LBRA IF_END_168
+IF_NEXT_169:
+IF_END_168:
+    LBRA IF_END_158
+IF_NEXT_159:
+IF_END_158:
+    LDD #1
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_ACTIVE
+    CMPD TMPVAL
+    LBEQ .CMP_82_TRUE
+    LDD #0
+    LBRA .CMP_82_END
+.CMP_82_TRUE:
+    LDD #1
+.CMP_82_END:
+    LBEQ IF_NEXT_171
+    LDD >VAR_SNOW2_VY
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1  ; const GRAVITY
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW2_VY
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_VY
+    CMPD TMPVAL
+    LBLT .CMP_83_TRUE
+    LDD #0
+    LBRA .CMP_83_END
+.CMP_83_TRUE:
+    LDD #1
+.CMP_83_END:
+    LBEQ IF_NEXT_173
+    LDD #-1
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #12  ; const MAX_FALL_SPEED
+    LDX TMPVAL      ; Get left into X from TMPVAL
+    JSR MUL16       ; D = X * D
+    STD VAR_SNOW2_VY
+    LBRA IF_END_172
+IF_NEXT_173:
+IF_END_172:
+    LDD >VAR_SNOW2_X
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_VX
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW2_X
+    LDD >VAR_SNOW2_Y
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_VY
+    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD VAR_SNOW2_Y
+    LDD >VAR_SNOW2_LIFE
+    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    LDD #1
+    STD TMPPTR      ; Save right operand to TMPPTR
+    LDD TMPVAL      ; Get left operand from TMPVAL
+    SUBD TMPPTR     ; Left - Right
+    STD VAR_SNOW2_LIFE
+    LDD #0
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_LIFE
+    CMPD TMPVAL
+    LBLE .CMP_84_TRUE
+    LDD #0
+    LBRA .CMP_84_END
+.CMP_84_TRUE:
+    LDD #1
+.CMP_84_END:
+    LBEQ IF_NEXT_175
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_174
+IF_NEXT_175:
+IF_END_174:
+    LDD #-110
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_Y
+    CMPD TMPVAL
+    LBLT .CMP_85_TRUE
+    LDD #0
+    LBRA .CMP_85_END
+.CMP_85_TRUE:
+    LDD #1
+.CMP_85_END:
+    LBEQ IF_NEXT_177
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_176
+IF_NEXT_177:
+IF_END_176:
+    LDD #-127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_X
+    CMPD TMPVAL
+    LBLT .CMP_86_TRUE
+    LDD #0
+    LBRA .CMP_86_END
+.CMP_86_TRUE:
+    LDD #1
+.CMP_86_END:
+    LBEQ IF_NEXT_179
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_178
+IF_NEXT_179:
+IF_END_178:
+    LDD #127
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_SNOW2_X
+    CMPD TMPVAL
+    LBGT .CMP_87_TRUE
+    LDD #0
+    LBRA .CMP_87_END
+.CMP_87_TRUE:
+    LDD #1
+.CMP_87_END:
+    LBEQ IF_NEXT_181
+    LDD #0
+    STD VAR_SNOW2_ACTIVE
+    LBRA IF_END_180
+IF_NEXT_181:
+IF_END_180:
+    LBRA IF_END_170
+IF_NEXT_171:
+IF_END_170:
+    RTS
+
 ;***************************************************************************
-; ASSETS IN BANK #1 (15 assets)
+; ASSETS IN BANK #1 (19 assets)
 ;***************************************************************************
 
 ; Generated from Yukidama-Ondo.vmus (internal name: Imported MIDI)
@@ -13154,6 +15167,1175 @@ _YUKIDAMA_ONDO_MUSIC:
     FDB     _YUKIDAMA_ONDO_MUSIC       ; Jump to start (absolute address)
 
 
+; ==== Level: WORLD_1_1 ====
+; Author: 
+; Difficulty: medium
+
+_WORLD_1_1_LEVEL:
+    FDB -96  ; World bounds: xMin (16-bit signed)
+    FDB 95  ; xMax (16-bit signed)
+    FDB -2432  ; yMin (16-bit signed)
+    FDB 127  ; yMax (16-bit signed)
+    FDB 0  ; Time limit (seconds)
+    FDB 0  ; Target score
+    FCB 0  ; Background object count
+    FCB 62  ; Gameplay object count
+    FCB 0  ; Foreground object count
+    FDB _WORLD_1_1_BG_OBJECTS
+    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
+    FDB _WORLD_1_1_FG_OBJECTS
+    FDB -96  ; scrollLimit left (camera left cannot go below this)
+    FDB 95  ; scrollLimit right (camera right cannot exceed this)
+    FDB 127  ; scrollLimit top
+    FDB -2432  ; scrollLimit bottom
+    FCB 5  ; enemy_count
+    FDB _WORLD_1_1_ENEMY_INSTANCES  ; enemy_instances_ptr (0 if none)
+
+_WORLD_1_1_BG_OBJECTS:
+
+_WORLD_1_1_GAMEPLAY_OBJECTS:
+; Object: obj_1777629435866 (obstacle)
+    FCB 2  ; type
+    FDB -71  ; x
+    FDB -2377  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629603657 (obstacle)
+    FCB 2  ; type
+    FDB 72  ; x
+    FDB -2377  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629716564 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2377  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629652016 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2331  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629837468 (obstacle)
+    FCB 2  ; type
+    FDB -54  ; x
+    FDB -2283  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629850372 (obstacle)
+    FCB 2  ; type
+    FDB 54  ; x
+    FDB -2282  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1777629612161 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2237  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM4_VECTORS  ; vector_ptr
+    FCB 70  ; half_width (1.00x, ROM+18)
+    FCB 18  ; half_height (1.00x, ROM+19)
+
+; Object: enemy_1778250201678 (enemy)
+    FCB 1  ; type
+    FDB -42  ; x
+    FDB -2201  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250209582 (enemy)
+    FCB 1  ; type
+    FDB 43  ; x
+    FDB -2201  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250211554 (enemy)
+    FCB 1  ; type
+    FDB -87  ; x
+    FDB -2261  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250212985 (enemy)
+    FCB 1  ; type
+    FDB 86  ; x
+    FDB -2261  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: enemy_1778250214379 (enemy)
+    FCB 1  ; type
+    FDB -55  ; x
+    FDB -2309  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 0  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB 0  ; vector_ptr (no visual for this object)
+    FCB 8  ; half_width (default, ROM+18)
+    FCB 8  ; half_height (default, ROM+19)
+
+; Object: plat_f2_1 (obstacle)
+    FCB 2  ; type
+    FDB -76  ; x
+    FDB -2121  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_2 (obstacle)
+    FCB 2  ; type
+    FDB 76  ; x
+    FDB -2121  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_3 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -2075  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_4 (obstacle)
+    FCB 2  ; type
+    FDB -60  ; x
+    FDB -2027  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_5 (obstacle)
+    FCB 2  ; type
+    FDB 60  ; x
+    FDB -2027  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f2_6 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1981  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_1 (obstacle)
+    FCB 2  ; type
+    FDB -82  ; x
+    FDB -1865  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_2 (obstacle)
+    FCB 2  ; type
+    FDB -30  ; x
+    FDB -1819  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_3 (obstacle)
+    FCB 2  ; type
+    FDB 30  ; x
+    FDB -1771  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f3_4 (obstacle)
+    FCB 2  ; type
+    FDB 82  ; x
+    FDB -1725  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_1 (obstacle)
+    FCB 2  ; type
+    FDB -55  ; x
+    FDB -1609  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_2 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1609  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_3 (obstacle)
+    FCB 2  ; type
+    FDB 55  ; x
+    FDB -1609  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_4 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1515  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_5 (obstacle)
+    FCB 2  ; type
+    FDB -75  ; x
+    FDB -1469  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f4_6 (obstacle)
+    FCB 2  ; type
+    FDB 75  ; x
+    FDB -1469  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_1 (obstacle)
+    FCB 2  ; type
+    FDB -50  ; x
+    FDB -1353  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_2 (obstacle)
+    FCB 2  ; type
+    FDB 50  ; x
+    FDB -1353  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_3 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -1307  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_4 (obstacle)
+    FCB 2  ; type
+    FDB -65  ; x
+    FDB -1259  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f5_5 (obstacle)
+    FCB 2  ; type
+    FDB 65  ; x
+    FDB -1259  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_1 (obstacle)
+    FCB 2  ; type
+    FDB -82  ; x
+    FDB -1097  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_2 (obstacle)
+    FCB 2  ; type
+    FDB 82  ; x
+    FDB -1097  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_3 (obstacle)
+    FCB 2  ; type
+    FDB -35  ; x
+    FDB -1051  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_4 (obstacle)
+    FCB 2  ; type
+    FDB 35  ; x
+    FDB -1051  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f6_5 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -957  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_1 (obstacle)
+    FCB 2  ; type
+    FDB 82  ; x
+    FDB -841  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_2 (obstacle)
+    FCB 2  ; type
+    FDB 30  ; x
+    FDB -795  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_3 (obstacle)
+    FCB 2  ; type
+    FDB -30  ; x
+    FDB -747  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f7_4 (obstacle)
+    FCB 2  ; type
+    FDB -82  ; x
+    FDB -701  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_1 (obstacle)
+    FCB 2  ; type
+    FDB -70  ; x
+    FDB -585  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_2 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -585  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_3 (obstacle)
+    FCB 2  ; type
+    FDB 70  ; x
+    FDB -585  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_4 (obstacle)
+    FCB 2  ; type
+    FDB -45  ; x
+    FDB -539  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_5 (obstacle)
+    FCB 2  ; type
+    FDB 45  ; x
+    FDB -539  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_6 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -491  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_7 (obstacle)
+    FCB 2  ; type
+    FDB -80  ; x
+    FDB -445  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f8_8 (obstacle)
+    FCB 2  ; type
+    FDB 80  ; x
+    FDB -445  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_1 (obstacle)
+    FCB 2  ; type
+    FDB -80  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_2 (obstacle)
+    FCB 2  ; type
+    FDB -30  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_3 (obstacle)
+    FCB 2  ; type
+    FDB 30  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_4 (obstacle)
+    FCB 2  ; type
+    FDB 80  ; x
+    FDB -329  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_5 (obstacle)
+    FCB 2  ; type
+    FDB -48  ; x
+    FDB -283  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_6 (obstacle)
+    FCB 2  ; type
+    FDB 48  ; x
+    FDB -283  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_7 (obstacle)
+    FCB 2  ; type
+    FDB -65  ; x
+    FDB -235  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_8 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB -235  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f9_9 (obstacle)
+    FCB 2  ; type
+    FDB 65  ; x
+    FDB -235  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM1_VECTORS  ; vector_ptr
+    FCB 23  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f10_1 (obstacle)
+    FCB 2  ; type
+    FDB -55  ; x
+    FDB -73  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f10_2 (obstacle)
+    FCB 2  ; type
+    FDB 55  ; x
+    FDB -73  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM3_VECTORS  ; vector_ptr
+    FCB 40  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+; Object: plat_f10_3 (obstacle)
+    FCB 2  ; type
+    FDB 0  ; x
+    FDB 67  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _PLATFORM2_VECTORS  ; vector_ptr
+    FCB 57  ; half_width (1.00x, ROM+18)
+    FCB 4  ; half_height (1.00x, ROM+19)
+
+
+_WORLD_1_1_FG_OBJECTS:
+
+_WORLD_1_1_ENEMY_COUNT EQU 5
+
+; ---- Enemy instances for level WORLD_1_1 ----
+_WORLD_1_1_ENEMY_INSTANCES:
+    ; instance 0
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB -42                   ; spawn x
+    FDB -2201                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY0_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 1
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB 43                   ; spawn x
+    FDB -2201                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY1_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 2
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB -87                   ; spawn x
+    FDB -2261                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY2_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 3
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB 86                   ; spawn x
+    FDB -2261                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY3_WPS   ; ptr to waypoints (0 if none)
+
+    ; instance 4
+    FDB _TITCHI_ENEMY   ; enemy type ptr
+    FDB -55                   ; spawn x
+    FDB -2309                   ; spawn y
+    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
+    FCB 0                    ; wave (0=always present)
+    FCB 0                    ; respawn: 0=no, 1=yes
+    FCB 2                    ; waypoint_count
+    FDB _WORLD_1_1_ENEMY4_WPS   ; ptr to waypoints (0 if none)
+
+_WORLD_1_1_ENEMY0_WPS:
+    FDB -3  ; wp x
+    FDB -2205  ; wp y
+    FDB -42  ; wp x
+    FDB -2205  ; wp y
+
+_WORLD_1_1_ENEMY1_WPS:
+    FDB 45  ; wp x
+    FDB -2205  ; wp y
+    FDB 3  ; wp x
+    FDB -2205  ; wp y
+
+_WORLD_1_1_ENEMY2_WPS:
+    FDB -91  ; wp x
+    FDB -2262  ; wp y
+    FDB -14  ; wp x
+    FDB -2262  ; wp y
+
+_WORLD_1_1_ENEMY3_WPS:
+    FDB 89  ; wp x
+    FDB -2261  ; wp y
+    FDB 14  ; wp x
+    FDB -2261  ; wp y
+
+_WORLD_1_1_ENEMY4_WPS:
+    FDB -55  ; wp x
+    FDB -2312  ; wp y
+    FDB 56  ; wp x
+    FDB -2312  ; wp y
+
+
 ; Generated from init_screen.vec (Malban Draw_Sync_List format)
 ; Total paths: 57, points: 257
 ; X bounds: min=-77, max=78, width=155
@@ -13711,325 +16893,6 @@ _INIT_SCREEN_PATH56:    ; Path 56
     FCB $FF,$0E,$FD          ; flag=-1, dy=14, dx=-3
     FCB $FF,$01,$F8          ; flag=-1, dy=1, dx=-8
     FCB 2                ; End marker (path complete)
-
-; ==== Level: WORLD_1_1 ====
-; Author: 
-; Difficulty: medium
-
-_WORLD_1_1_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 95  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 0  ; Background object count
-    FCB 12  ; Gameplay object count
-    FCB 0  ; Foreground object count
-    FDB _WORLD_1_1_BG_OBJECTS
-    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
-    FDB _WORLD_1_1_FG_OBJECTS
-    FDB -96  ; scrollLimit left (camera left cannot go below this)
-    FDB 95  ; scrollLimit right (camera right cannot exceed this)
-    FDB 127  ; scrollLimit top
-    FDB -128  ; scrollLimit bottom
-    FCB 5  ; enemy_count
-    FDB _WORLD_1_1_ENEMY_INSTANCES  ; enemy_instances_ptr (0 if none)
-
-_WORLD_1_1_BG_OBJECTS:
-
-_WORLD_1_1_GAMEPLAY_OBJECTS:
-; Object: obj_1777629435866 (obstacle)
-    FCB 2  ; type
-    FDB -71  ; x
-    FDB -86  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629603657 (obstacle)
-    FCB 2  ; type
-    FDB 72  ; x
-    FDB -86  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629716564 (obstacle)
-    FCB 2  ; type
-    FDB 1  ; x
-    FDB -87  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM1_VECTORS  ; vector_ptr
-    FCB 23  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629652016 (obstacle)
-    FCB 2  ; type
-    FDB 0  ; x
-    FDB -37  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM2_VECTORS  ; vector_ptr
-    FCB 57  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629837468 (obstacle)
-    FCB 2  ; type
-    FDB -54  ; x
-    FDB 13  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM3_VECTORS  ; vector_ptr
-    FCB 40  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629850372 (obstacle)
-    FCB 2  ; type
-    FDB 54  ; x
-    FDB 13  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM3_VECTORS  ; vector_ptr
-    FCB 40  ; half_width (1.00x, ROM+18)
-    FCB 9  ; half_height (1.00x, ROM+19)
-
-; Object: obj_1777629612161 (obstacle)
-    FCB 2  ; type
-    FDB 0  ; x
-    FDB 67  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _PLATFORM4_VECTORS  ; vector_ptr
-    FCB 70  ; half_width (1.00x, ROM+18)
-    FCB 18  ; half_height (1.00x, ROM+19)
-
-; Object: enemy_1778250201678 (enemy)
-    FCB 1  ; type
-    FDB -42  ; x
-    FDB 95  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250209582 (enemy)
-    FCB 1  ; type
-    FDB 46  ; x
-    FDB 94  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250211554 (enemy)
-    FCB 1  ; type
-    FDB -92  ; x
-    FDB 32  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250212985 (enemy)
-    FCB 1  ; type
-    FDB 92  ; x
-    FDB 31  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-; Object: enemy_1778250214379 (enemy)
-    FCB 1  ; type
-    FDB -55  ; x
-    FDB -21  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB 0  ; vector_ptr (no visual for this object)
-    FCB 8  ; half_width (default, ROM+18)
-    FCB 8  ; half_height (default, ROM+19)
-
-
-_WORLD_1_1_FG_OBJECTS:
-
-_WORLD_1_1_ENEMY_COUNT EQU 5
-
-; ---- Enemy instances for level WORLD_1_1 ----
-_WORLD_1_1_ENEMY_INSTANCES:
-    ; instance 0
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB -42                   ; spawn x
-    FDB 95                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY0_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 1
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB 46                   ; spawn x
-    FDB 94                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY1_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 2
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB -92                   ; spawn x
-    FDB 32                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY2_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 3
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB 92                   ; spawn x
-    FDB 31                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY3_WPS   ; ptr to waypoints (0 if none)
-
-    ; instance 4
-    FDB _TITCHI_ENEMY   ; enemy type ptr
-    FDB -55                   ; spawn x
-    FDB -21                   ; spawn y
-    FCB 1                    ; ai_type: 0=static,1=patrol,2=chase,3=flee
-    FCB 0                    ; wave (0=always present)
-    FCB 0                    ; respawn: 0=no, 1=yes
-    FCB 2                    ; waypoint_count
-    FDB _WORLD_1_1_ENEMY4_WPS   ; ptr to waypoints (0 if none)
-
-_WORLD_1_1_ENEMY0_WPS:
-    FDB -5  ; wp x
-    FDB 90  ; wp y
-    FDB -42  ; wp x
-    FDB 90  ; wp y
-
-_WORLD_1_1_ENEMY1_WPS:
-    FDB 47  ; wp x
-    FDB 89  ; wp y
-    FDB 3  ; wp x
-    FDB 89  ; wp y
-
-_WORLD_1_1_ENEMY2_WPS:
-    FDB -92  ; wp x
-    FDB 27  ; wp y
-    FDB -15  ; wp x
-    FDB 27  ; wp y
-
-_WORLD_1_1_ENEMY3_WPS:
-    FDB 93  ; wp x
-    FDB 26  ; wp y
-    FDB 16  ; wp x
-    FDB 26  ; wp y
-
-_WORLD_1_1_ENEMY4_WPS:
-    FDB -57  ; wp x
-    FDB -21  ; wp y
-    FDB 56  ; wp x
-    FDB -21  ; wp y
-
 
 ; Generated from Game_Over.vmus (internal name: Imported MIDI)
 ; Tempo: 120 BPM, Total events: 19 (PSG Direct format)
@@ -14597,19 +17460,19 @@ _PLATFORM4_PATH8:    ; Path 8
     FCB 2                ; End marker (path complete)
 
 ; Generated from player_jump.vec (Malban Draw_Sync_List format)
-; Total paths: 14, points: 38
-; X bounds: min=-6, max=6, width=12
-; Center: (0, 0)
+; Total paths: 15, points: 40
+; X bounds: min=-6, max=7, width=13
+; Center: (0, -1)
 
-_PLAYER_JUMP_WIDTH EQU 12
+_PLAYER_JUMP_WIDTH EQU 13
 _PLAYER_JUMP_HALF_WIDTH EQU 6
-_PLAYER_JUMP_HEIGHT EQU 17
-_PLAYER_JUMP_HALF_HEIGHT EQU 8
+_PLAYER_JUMP_HEIGHT EQU 20
+_PLAYER_JUMP_HALF_HEIGHT EQU 10
 _PLAYER_JUMP_CENTER_X EQU 0
-_PLAYER_JUMP_CENTER_Y EQU 0
+_PLAYER_JUMP_CENTER_Y EQU -1
 
-_PLAYER_JUMP_VECTORS:  ; Main entry (header + 14 path(s))
-    FDB 14               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+_PLAYER_JUMP_VECTORS:  ; Main entry (header + 15 path(s))
+    FDB 15               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _PLAYER_JUMP_PATH0        ; pointer to path 0
     FDB _PLAYER_JUMP_PATH1        ; pointer to path 1
     FDB _PLAYER_JUMP_PATH2        ; pointer to path 2
@@ -14624,99 +17487,224 @@ _PLAYER_JUMP_VECTORS:  ; Main entry (header + 14 path(s))
     FDB _PLAYER_JUMP_PATH11        ; pointer to path 11
     FDB _PLAYER_JUMP_PATH12        ; pointer to path 12
     FDB _PLAYER_JUMP_PATH13        ; pointer to path 13
+    FDB _PLAYER_JUMP_PATH14        ; pointer to path 14
 
 _PLAYER_JUMP_PATH0:    ; Path 0
     FCB 65              ; path0: intensity
-    FCB $FF,$01,0,0        ; path0: header (y=-1, x=1)
+    FCB $00,$01,0,0        ; path0: header (y=0, x=1)
     FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH1:    ; Path 1
     FCB 65              ; path1: intensity
-    FCB $FE,$01,0,0        ; path1: header (y=-2, x=1)
+    FCB $FF,$01,0,0        ; path1: header (y=-1, x=1)
     FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH2:    ; Path 2
     FCB 65              ; path2: intensity
-    FCB $FF,$03,0,0        ; path2: header (y=-1, x=3)
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $00,$03,0,0        ; path2: header (y=0, x=3)
+    FCB $FF,$03,$04          ; flag=-1, dy=3, dx=4
+    FCB $FF,$FA,$FC          ; flag=-1, dy=-6, dx=-4
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH3:    ; Path 3
     FCB 65              ; path3: intensity
-    FCB $FD,$04,0,0        ; path3: header (y=-3, x=4)
+    FCB $FE,$04,0,0        ; path3: header (y=-2, x=4)
     FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH4:    ; Path 4
     FCB 65              ; path4: intensity
-    FCB $FA,$03,0,0        ; path4: header (y=-6, x=3)
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$FE,$FB          ; flag=-1, dy=-2, dx=-5
+    FCB $FB,$03,0,0        ; path4: header (y=-5, x=3)
+    FCB $FF,$FB,$02          ; flag=-1, dy=-5, dx=2
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
     FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
-    FCB $FD,$04,0,0        ; path5: header (y=-3, x=4)
+    FCB $FE,$04,0,0        ; path5: header (y=-2, x=4)
     FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH6:    ; Path 6
     FCB 65              ; path6: intensity
-    FCB $02,$01,0,0        ; path6: header (y=2, x=1)
+    FCB $03,$01,0,0        ; path6: header (y=3, x=1)
     FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH7:    ; Path 7
     FCB 65              ; path7: intensity
-    FCB $01,$FE,0,0        ; path7: header (y=1, x=-2)
+    FCB $02,$FE,0,0        ; path7: header (y=2, x=-2)
     FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
     FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH8:    ; Path 8
     FCB 65              ; path8: intensity
-    FCB $FE,$FD,0,0        ; path8: header (y=-2, x=-3)
+    FCB $FF,$FD,0,0        ; path8: header (y=-1, x=-3)
     FCB $FF,$FF,$00          ; flag=-1, dy=-1, dx=0
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH9:    ; Path 9
     FCB 65              ; path9: intensity
-    FCB $FC,$FD,0,0        ; path9: header (y=-4, x=-3)
+    FCB $FD,$FD,0,0        ; path9: header (y=-3, x=-3)
     FCB $FF,$FB,$04          ; flag=-1, dy=-5, dx=4
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH10:    ; Path 10
     FCB 65              ; path10: intensity
-    FCB $F9,$FF,0,0        ; path10: header (y=-7, x=-1)
-    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
-    FCB $FF,$04,$03          ; flag=-1, dy=4, dx=3
+    FCB $FA,$FF,0,0        ; path10: header (y=-6, x=-1)
+    FCB $FF,$FD,$FB          ; flag=-1, dy=-3, dx=-5
+    FCB $FF,$06,$03          ; flag=-1, dy=6, dx=3
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH11:    ; Path 11
     FCB 65              ; path11: intensity
-    FCB $F9,$FE,0,0        ; path11: header (y=-7, x=-2)
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FA,$FE,0,0        ; path11: header (y=-6, x=-2)
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH12:    ; Path 12
     FCB 65              ; path12: intensity
-    FCB $06,$FE,0,0        ; path12: header (y=6, x=-2)
-    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
-    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
-    FCB $FF,$05,$03          ; flag=-1, dy=5, dx=3
-    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $07,$FE,0,0        ; path12: header (y=7, x=-2)
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
     FCB 2                ; End marker (path complete)
 
 _PLAYER_JUMP_PATH13:    ; Path 13
     FCB 65              ; path13: intensity
-    FCB $08,$FD,0,0        ; path13: header (y=8, x=-3)
+    FCB $08,$01,0,0        ; path13: header (y=8, x=1)
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FB,$FD          ; flag=-1, dy=-5, dx=-3
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_JUMP_PATH14:    ; Path 14
+    FCB 127              ; path14: intensity
+    FCB $07,$FE,0,0        ; path14: header (y=7, x=-2)
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$01,$02          ; flag=-1, dy=1, dx=2
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_die1.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 38
+; X bounds: min=-6, max=9, width=15
+; Center: (1, 0)
+
+_PLAYER_DIE1_WIDTH EQU 15
+_PLAYER_DIE1_HALF_WIDTH EQU 7
+_PLAYER_DIE1_HEIGHT EQU 18
+_PLAYER_DIE1_HALF_HEIGHT EQU 9
+_PLAYER_DIE1_CENTER_X EQU 1
+_PLAYER_DIE1_CENTER_Y EQU 0
+
+_PLAYER_DIE1_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE1_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE1_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE1_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE1_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE1_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE1_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE1_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE1_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE1_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE1_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE1_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE1_PATH11        ; pointer to path 11
+    FDB _PLAYER_DIE1_PATH12        ; pointer to path 12
+
+_PLAYER_DIE1_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
+    FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
+    FCB $FF,$FC,$01          ; flag=-1, dy=-4, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $F8,$FD,0,0        ; path1: header (y=-8, x=-3)
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $F9,$FD,0,0        ; path2: header (y=-7, x=-3)
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $FF,$01,0,0        ; path3: header (y=-1, x=1)
+    FCB $FF,$FC,$02          ; flag=-1, dy=-4, dx=2
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $F7,$06,0,0        ; path4: header (y=-9, x=6)
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $00,$07,0,0        ; path5: header (y=0, x=7)
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $02,$07,0,0        ; path6: header (y=2, x=7)
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $03,$00,0,0        ; path7: header (y=3, x=0)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $04,$FE,0,0        ; path8: header (y=4, x=-2)
+    FCB $FF,$03,$FC          ; flag=-1, dy=3, dx=-4
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $09,$FD,0,0        ; path9: header (y=9, x=-3)
     FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
     FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $08,$FE,0,0        ; path10: header (y=8, x=-2)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $08,$00,0,0        ; path11: header (y=8, x=0)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE1_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $07,$01,0,0        ; path12: header (y=7, x=1)
+    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
+    FCB $FF,$FB,$FD          ; flag=-1, dy=-5, dx=-3
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
     FCB 2                ; End marker (path complete)
 
 ; Generated from titchi_snow2.vec (Malban Draw_Sync_List format)
@@ -14814,6 +17802,118 @@ _TITCHI_SNOW2_PATH7:    ; Path 7
     FCB $FA,$03,0,0        ; path7: header (y=-6, x=3)
     FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_die2.vec (Malban Draw_Sync_List format)
+; Total paths: 12, points: 37
+; X bounds: min=-8, max=10, width=18
+; Center: (1, 0)
+
+_PLAYER_DIE2_WIDTH EQU 18
+_PLAYER_DIE2_HALF_WIDTH EQU 9
+_PLAYER_DIE2_HEIGHT EQU 20
+_PLAYER_DIE2_HALF_HEIGHT EQU 10
+_PLAYER_DIE2_CENTER_X EQU 1
+_PLAYER_DIE2_CENTER_Y EQU 0
+
+_PLAYER_DIE2_VECTORS:  ; Main entry (header + 12 path(s))
+    FDB 12               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE2_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE2_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE2_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE2_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE2_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE2_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE2_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE2_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE2_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE2_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE2_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE2_PATH11        ; pointer to path 11
+
+_PLAYER_DIE2_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $FD,$FD,0,0        ; path0: header (y=-3, x=-3)
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $F9,$FA,0,0        ; path1: header (y=-7, x=-6)
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FC,$FD,0,0        ; path2: header (y=-4, x=-3)
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $06,$03,0,0        ; path3: header (y=6, x=3)
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$01,$FE          ; flag=-1, dy=1, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $0A,$FE,0,0        ; path4: header (y=10, x=-2)
+    FCB $FF,$FF,$FF          ; flag=-1, dy=-1, dx=-1
+    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $04,$01,0,0        ; path5: header (y=4, x=1)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $07,$03,0,0        ; path6: header (y=7, x=3)
+    FCB $FF,$FE,$03          ; flag=-1, dy=-2, dx=3
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $06,$04,0,0        ; path7: header (y=6, x=4)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $03,$05,0,0        ; path8: header (y=3, x=5)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB $FF,$FD,$FD          ; flag=-1, dy=-3, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $FB,$FF,0,0        ; path9: header (y=-5, x=-1)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$FF,$02          ; flag=-1, dy=-1, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $F7,$02,0,0        ; path10: header (y=-9, x=2)
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE2_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $01,$04,0,0        ; path11: header (y=1, x=4)
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
     FCB 2                ; End marker (path complete)
 
 ; Generated from titchi_idle.vec (Malban Draw_Sync_List format)
@@ -14923,6 +18023,244 @@ _TITCHI_IDLE_PATH10:    ; Path 10
     FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
     FCB 2                ; End marker (path complete)
 
+; Generated from player_die3.vec (Malban Draw_Sync_List format)
+; Total paths: 12, points: 36
+; X bounds: min=-8, max=8, width=16
+; Center: (0, 0)
+
+_PLAYER_DIE3_WIDTH EQU 16
+_PLAYER_DIE3_HALF_WIDTH EQU 8
+_PLAYER_DIE3_HEIGHT EQU 17
+_PLAYER_DIE3_HALF_HEIGHT EQU 8
+_PLAYER_DIE3_CENTER_X EQU 0
+_PLAYER_DIE3_CENTER_Y EQU 0
+
+_PLAYER_DIE3_VECTORS:  ; Main entry (header + 12 path(s))
+    FDB 12               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE3_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE3_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE3_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE3_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE3_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE3_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE3_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE3_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE3_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE3_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE3_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE3_PATH11        ; pointer to path 11
+
+_PLAYER_DIE3_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $FE,$01,0,0        ; path0: header (y=-2, x=1)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $00,$03,0,0        ; path1: header (y=0, x=3)
+    FCB $FF,$04,$04          ; flag=-1, dy=4, dx=4
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $06,$04,0,0        ; path2: header (y=6, x=4)
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $09,$05,0,0        ; path3: header (y=9, x=5)
+    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
+    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $01,$FE,0,0        ; path4: header (y=1, x=-2)
+    FCB $FF,$05,$FF          ; flag=-1, dy=5, dx=-1
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $09,$FE,0,0        ; path5: header (y=9, x=-2)
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $08,$FC,0,0        ; path6: header (y=8, x=-4)
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $03,$F8,0,0        ; path7: header (y=3, x=-8)
+    FCB $FF,$01,$01          ; flag=-1, dy=1, dx=1
+    FCB $FF,$FC,$04          ; flag=-1, dy=-4, dx=4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $FB,$FE,0,0        ; path8: header (y=-5, x=-2)
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$01,$04          ; flag=-1, dy=1, dx=4
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $FA,$01,0,0        ; path9: header (y=-6, x=1)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB $FF,$01,$FF          ; flag=-1, dy=1, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $F9,$00,0,0        ; path10: header (y=-7, x=0)
+    FCB $FF,$FF,$01          ; flag=-1, dy=-1, dx=1
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE3_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $F9,$FF,0,0        ; path11: header (y=-7, x=-1)
+    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_die4.vec (Malban Draw_Sync_List format)
+; Total paths: 16, points: 32
+; X bounds: min=-8, max=9, width=17
+; Center: (0, 0)
+
+_PLAYER_DIE4_WIDTH EQU 17
+_PLAYER_DIE4_HALF_WIDTH EQU 8
+_PLAYER_DIE4_HEIGHT EQU 14
+_PLAYER_DIE4_HALF_HEIGHT EQU 7
+_PLAYER_DIE4_CENTER_X EQU 0
+_PLAYER_DIE4_CENTER_Y EQU 0
+
+_PLAYER_DIE4_VECTORS:  ; Main entry (header + 16 path(s))
+    FDB 16               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_DIE4_PATH0        ; pointer to path 0
+    FDB _PLAYER_DIE4_PATH1        ; pointer to path 1
+    FDB _PLAYER_DIE4_PATH2        ; pointer to path 2
+    FDB _PLAYER_DIE4_PATH3        ; pointer to path 3
+    FDB _PLAYER_DIE4_PATH4        ; pointer to path 4
+    FDB _PLAYER_DIE4_PATH5        ; pointer to path 5
+    FDB _PLAYER_DIE4_PATH6        ; pointer to path 6
+    FDB _PLAYER_DIE4_PATH7        ; pointer to path 7
+    FDB _PLAYER_DIE4_PATH8        ; pointer to path 8
+    FDB _PLAYER_DIE4_PATH9        ; pointer to path 9
+    FDB _PLAYER_DIE4_PATH10        ; pointer to path 10
+    FDB _PLAYER_DIE4_PATH11        ; pointer to path 11
+    FDB _PLAYER_DIE4_PATH12        ; pointer to path 12
+    FDB _PLAYER_DIE4_PATH13        ; pointer to path 13
+    FDB _PLAYER_DIE4_PATH14        ; pointer to path 14
+    FDB _PLAYER_DIE4_PATH15        ; pointer to path 15
+
+_PLAYER_DIE4_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $01,$00,0,0        ; path0: header (y=1, x=0)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $FE,$02,0,0        ; path1: header (y=-2, x=2)
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FB,$FC,0,0        ; path2: header (y=-5, x=-4)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $F9,$FC,0,0        ; path3: header (y=-7, x=-4)
+    FCB $FF,$04,$FD          ; flag=-1, dy=4, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $FB,$FA,0,0        ; path4: header (y=-5, x=-6)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH5:    ; Path 5
+    FCB 65              ; path5: intensity
+    FCB $FF,$00,0,0        ; path5: header (y=-1, x=0)
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH6:    ; Path 6
+    FCB 65              ; path6: intensity
+    FCB $05,$01,0,0        ; path6: header (y=5, x=1)
+    FCB $FF,$FD,$FC          ; flag=-1, dy=-3, dx=-4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH7:    ; Path 7
+    FCB 65              ; path7: intensity
+    FCB $05,$FB,0,0        ; path7: header (y=5, x=-5)
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH8:    ; Path 8
+    FCB 65              ; path8: intensity
+    FCB $07,$FB,0,0        ; path8: header (y=7, x=-5)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH9:    ; Path 9
+    FCB 65              ; path9: intensity
+    FCB $03,$F8,0,0        ; path9: header (y=3, x=-8)
+    FCB $FF,$03,$03          ; flag=-1, dy=3, dx=3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH10:    ; Path 10
+    FCB 65              ; path10: intensity
+    FCB $07,$04,0,0        ; path10: header (y=7, x=4)
+    FCB $FF,$FE,$04          ; flag=-1, dy=-2, dx=4
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH11:    ; Path 11
+    FCB 65              ; path11: intensity
+    FCB $05,$08,0,0        ; path11: header (y=5, x=8)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH12:    ; Path 12
+    FCB 65              ; path12: intensity
+    FCB $05,$06,0,0        ; path12: header (y=5, x=6)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH13:    ; Path 13
+    FCB 65              ; path13: intensity
+    FCB $FC,$08,0,0        ; path13: header (y=-4, x=8)
+    FCB $FF,$FE,$FE          ; flag=-1, dy=-2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH14:    ; Path 14
+    FCB 65              ; path14: intensity
+    FCB $FC,$06,0,0        ; path14: header (y=-4, x=6)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_DIE4_PATH15:    ; Path 15
+    FCB 65              ; path15: intensity
+    FCB $FA,$09,0,0        ; path15: header (y=-6, x=9)
+    FCB $FF,$02,$FC          ; flag=-1, dy=2, dx=-4
+    FCB 2                ; End marker (path complete)
+
 ; Generated from player_idle.vec (Malban Draw_Sync_List format)
 ; Total paths: 9, points: 35
 ; X bounds: min=-6, max=6, width=12
@@ -15020,15 +18358,15 @@ _PLAYER_IDLE_PATH8:    ; Path 8
 
 ; Generated from titchi_ball.vec (Malban Draw_Sync_List format)
 ; Total paths: 7, points: 26
-; X bounds: min=-7, max=5, width=12
-; Center: (-1, 3)
+; X bounds: min=-6, max=6, width=12
+; Center: (0, 0)
 
 _TITCHI_BALL_WIDTH EQU 12
 _TITCHI_BALL_HALF_WIDTH EQU 6
 _TITCHI_BALL_HEIGHT EQU 8
 _TITCHI_BALL_HALF_HEIGHT EQU 4
-_TITCHI_BALL_CENTER_X EQU -1
-_TITCHI_BALL_CENTER_Y EQU 3
+_TITCHI_BALL_CENTER_X EQU 0
+_TITCHI_BALL_CENTER_Y EQU 0
 
 _TITCHI_BALL_VECTORS:  ; Main entry (header + 7 path(s))
     FDB 7               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
@@ -15054,7 +18392,7 @@ _TITCHI_BALL_PATH1:    ; Path 1
     FCB 2                ; End marker (path complete)
 
 _TITCHI_BALL_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
+    FCB 85              ; path2: intensity
     FCB $FD,$FD,0,0        ; path2: header (y=-3, x=-3)
     FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
     FCB $FF,$02,$00          ; flag=-1, dy=2, dx=0
@@ -15245,6 +18583,117 @@ _BOSS_INTRO_MUSIC:
     FDB     _BOSS_INTRO_MUSIC       ; Jump to start (absolute address)
 
 
+; Generated from intro.vmus (internal name: Imported MIDI)
+; Tempo: 120 BPM, Total events: 4 (PSG Direct format)
+; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
+
+_INTRO_MUSIC:
+    ; Frame-based PSG register writes
+    FCB     0              ; Delay 0 frames (maintain previous state)
+    FCB     6              ; Frame 0 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $7E             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     4              ; Frame 4 - 4 register writes
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     6              ; Frame 8 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $8D             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     4              ; Frame 12 - 4 register writes
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     5              ; Delay 5 frames (maintain previous state)
+    FCB     6              ; Frame 17 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $7E             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     4              ; Delay 4 frames (maintain previous state)
+    FCB     4              ; Frame 21 - 4 register writes
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     6              ; Delay 6 frames (maintain previous state)
+    FCB     6              ; Frame 27 - 6 register writes
+    FCB     0               ; Reg 0 number
+    FCB     $8D             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     254             ; Delay 254 frames (filler chunk)
+    FCB     6              ; 6 register writes (repeat state)
+    FCB     0               ; Reg 0 number
+    FCB     $8D             ; Reg 0 value
+    FCB     1               ; Reg 1 number
+    FCB     $00             ; Reg 1 value
+    FCB     8               ; Reg 8 number
+    FCB     $0D             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3E             ; Reg 7 value
+    FCB     119              ; Delay 119 frames before loop
+    FCB     $FF             ; Loop command ($FF never valid as count)
+    FDB     _INTRO_MUSIC       ; Jump to start (absolute address)
+
+
 ; Generated from platform2.vec (Malban Draw_Sync_List format)
 ; Total paths: 3, points: 13
 ; X bounds: min=-58, max=57, width=115
@@ -15252,8 +18701,8 @@ _BOSS_INTRO_MUSIC:
 
 _PLATFORM2_WIDTH EQU 115
 _PLATFORM2_HALF_WIDTH EQU 57
-_PLATFORM2_HEIGHT EQU 18
-_PLATFORM2_HALF_HEIGHT EQU 9
+_PLATFORM2_HEIGHT EQU 9
+_PLATFORM2_HALF_HEIGHT EQU 4
 _PLATFORM2_CENTER_X EQU 0
 _PLATFORM2_CENTER_Y EQU 0
 
@@ -15265,110 +18714,48 @@ _PLATFORM2_VECTORS:  ; Main entry (header + 3 path(s))
 
 _PLATFORM2_PATH0:    ; Path 0
     FCB 85              ; path0: intensity
-    FCB $F7,$38,0,0        ; path0: header (y=-9, x=56)
-    FCB $FF,$12,$EC          ; flag=-1, dy=18, dx=-20
-    FCB $FF,$EE,$EE          ; flag=-1, dy=-18, dx=-18
-    FCB $FF,$12,$EE          ; flag=-1, dy=18, dx=-18
-    FCB $FF,$EE,$EC          ; flag=-1, dy=-18, dx=-20
-    FCB $FF,$12,$EE          ; flag=-1, dy=18, dx=-18
-    FCB $FF,$EE,$EC          ; flag=-1, dy=-18, dx=-20
+    FCB $00,$39,0,0        ; path0: header (y=0, x=57)
     FCB 2                ; End marker (path complete)
 
 _PLATFORM2_PATH1:    ; Path 1
     FCB 85              ; path1: intensity
-    FCB $09,$C6,0,0        ; path1: header (y=9, x=-58)
-    FCB $FF,$00,$73          ; flag=-1, dy=0, dx=115
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$8D          ; flag=-1, dy=0, dx=-115
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
+    FCB $FB,$39,0,0        ; path1: header (y=-5, x=57)
+    FCB $FF,$09,$EB          ; flag=-1, dy=9, dx=-21
+    FCB $FF,$F7,$EE          ; flag=-1, dy=-9, dx=-18
+    FCB $FF,$09,$EE          ; flag=-1, dy=9, dx=-18
+    FCB $FF,$F7,$EC          ; flag=-1, dy=-9, dx=-20
+    FCB $FF,$09,$EE          ; flag=-1, dy=9, dx=-18
+    FCB $FF,$F7,$EC          ; flag=-1, dy=-9, dx=-20
     FCB 2                ; End marker (path complete)
 
 _PLATFORM2_PATH2:    ; Path 2
     FCB 85              ; path2: intensity
-    FCB $05,$39,0,0        ; path2: header (y=5, x=57)
+    FCB $04,$C6,0,0        ; path2: header (y=4, x=-58)
+    FCB $FF,$00,$73          ; flag=-1, dy=0, dx=115
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$8D          ; flag=-1, dy=0, dx=-115
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
     FCB 2                ; End marker (path complete)
 
-; Generated from platform1.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 11
-; X bounds: min=-24, max=23, width=47
-; Center: (0, 0)
+_SHOT_NORMAL_SFX:
+    ; SFX: shot_normal (laser)
+    ; Duration: 150ms (7fr), Freq: 199Hz, Channel: 0
+    FCB $AA         ; Frame 0 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $DE  ; Tone period = 222 (big-endian)
+    FCB $AA         ; Frame 1 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $FD  ; Tone period = 253 (big-endian)
+    FCB $AA         ; Frame 2 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $01, $27  ; Tone period = 295 (big-endian)
+    FCB $AA         ; Frame 3 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $01, $63  ; Tone period = 355 (big-endian)
+    FCB $AA         ; Frame 4 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $01, $BB  ; Tone period = 443 (big-endian)
+    FCB $AC         ; Frame 5 - flags (vol=12, noisevol=0, tone=Y, noise=N)
+    FCB $02, $4F  ; Tone period = 591 (big-endian)
+    FCB $A6         ; Frame 6 - flags (vol=6, noisevol=0, tone=Y, noise=N)
+    FCB $03, $76  ; Tone period = 886 (big-endian)
+    FCB $D0, $20    ; End of effect marker
 
-_PLATFORM1_WIDTH EQU 47
-_PLATFORM1_HALF_WIDTH EQU 23
-_PLATFORM1_HEIGHT EQU 19
-_PLATFORM1_HALF_HEIGHT EQU 9
-_PLATFORM1_CENTER_X EQU 0
-_PLATFORM1_CENTER_Y EQU 0
-
-_PLATFORM1_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLATFORM1_PATH0        ; pointer to path 0
-    FDB _PLATFORM1_PATH1        ; pointer to path 1
-    FDB _PLATFORM1_PATH2        ; pointer to path 2
-
-_PLATFORM1_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $04,$17,0,0        ; path0: header (y=4, x=23)
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM1_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $F6,$17,0,0        ; path1: header (y=-10, x=23)
-    FCB $FF,$13,$F4          ; flag=-1, dy=19, dx=-12
-    FCB $FF,$ED,$F5          ; flag=-1, dy=-19, dx=-11
-    FCB $FF,$13,$F4          ; flag=-1, dy=19, dx=-12
-    FCB $FF,$ED,$F4          ; flag=-1, dy=-19, dx=-12
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM1_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $09,$E8,0,0        ; path2: header (y=9, x=-24)
-    FCB $FF,$00,$2F          ; flag=-1, dy=0, dx=47
-    FCB $FF,$ED,$00          ; flag=-1, dy=-19, dx=0
-    FCB $FF,$00,$D1          ; flag=-1, dy=0, dx=-47
-    FCB $FF,$13,$00          ; flag=-1, dy=19, dx=0
-    FCB 2                ; End marker (path complete)
-
-; Generated from platform3.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 11
-; X bounds: min=-41, max=40, width=81
-; Center: (0, 0)
-
-_PLATFORM3_WIDTH EQU 81
-_PLATFORM3_HALF_WIDTH EQU 40
-_PLATFORM3_HEIGHT EQU 18
-_PLATFORM3_HALF_HEIGHT EQU 9
-_PLATFORM3_CENTER_X EQU 0
-_PLATFORM3_CENTER_Y EQU 0
-
-_PLATFORM3_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLATFORM3_PATH0        ; pointer to path 0
-    FDB _PLATFORM3_PATH1        ; pointer to path 1
-    FDB _PLATFORM3_PATH2        ; pointer to path 2
-
-_PLATFORM3_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $05,$28,0,0        ; path0: header (y=5, x=40)
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM3_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $F7,$28,0,0        ; path1: header (y=-9, x=40)
-    FCB $FF,$12,$EC          ; flag=-1, dy=18, dx=-20
-    FCB $FF,$EE,$EC          ; flag=-1, dy=-18, dx=-20
-    FCB $FF,$12,$EC          ; flag=-1, dy=18, dx=-20
-    FCB $FF,$EE,$EB          ; flag=-1, dy=-18, dx=-21
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM3_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $09,$D7,0,0        ; path2: header (y=9, x=-41)
-    FCB $FF,$00,$51          ; flag=-1, dy=0, dx=81
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$AF          ; flag=-1, dy=0, dx=-81
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
-    FCB 2                ; End marker (path complete)
 
 
 ; ================================================
@@ -15379,7 +18766,7 @@ _PLATFORM3_PATH2:    ; Path 2
     ORG $0000  ; Sequential bank model
 
 ;***************************************************************************
-; ASSETS IN BANK #2 (1 assets)
+; ASSETS IN BANK #2 (3 assets)
 ;***************************************************************************
 
 ; Generated from Henshoku.vmus (internal name: Imported MIDI)
@@ -24365,6 +27752,88 @@ _HENSHOKU_MUSIC:
     FDB     _HENSHOKU_MUSIC       ; Jump to start (absolute address)
 
 
+; Generated from platform1.vec (Malban Draw_Sync_List format)
+; Total paths: 3, points: 11
+; X bounds: min=-24, max=23, width=47
+; Center: (0, 0)
+
+_PLATFORM1_WIDTH EQU 47
+_PLATFORM1_HALF_WIDTH EQU 23
+_PLATFORM1_HEIGHT EQU 9
+_PLATFORM1_HALF_HEIGHT EQU 4
+_PLATFORM1_CENTER_X EQU 0
+_PLATFORM1_CENTER_Y EQU 0
+
+_PLATFORM1_VECTORS:  ; Main entry (header + 3 path(s))
+    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLATFORM1_PATH0        ; pointer to path 0
+    FDB _PLATFORM1_PATH1        ; pointer to path 1
+    FDB _PLATFORM1_PATH2        ; pointer to path 2
+
+_PLATFORM1_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $FB,$16,0,0        ; path0: header (y=-5, x=22)
+    FCB $FF,$09,$F5          ; flag=-1, dy=9, dx=-11
+    FCB $FF,$F7,$F5          ; flag=-1, dy=-9, dx=-11
+    FCB $FF,$09,$F4          ; flag=-1, dy=9, dx=-12
+    FCB $FF,$F7,$F5          ; flag=-1, dy=-9, dx=-11
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM1_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $04,$E8,0,0        ; path1: header (y=4, x=-24)
+    FCB $FF,$00,$2F          ; flag=-1, dy=0, dx=47
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$D1          ; flag=-1, dy=0, dx=-47
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM1_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $FF,$17,0,0        ; path2: header (y=-1, x=23)
+    FCB 2                ; End marker (path complete)
+
+; Generated from platform3.vec (Malban Draw_Sync_List format)
+; Total paths: 3, points: 11
+; X bounds: min=-41, max=40, width=81
+; Center: (0, 0)
+
+_PLATFORM3_WIDTH EQU 81
+_PLATFORM3_HALF_WIDTH EQU 40
+_PLATFORM3_HEIGHT EQU 9
+_PLATFORM3_HALF_HEIGHT EQU 4
+_PLATFORM3_CENTER_X EQU 0
+_PLATFORM3_CENTER_Y EQU 0
+
+_PLATFORM3_VECTORS:  ; Main entry (header + 3 path(s))
+    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLATFORM3_PATH0        ; pointer to path 0
+    FDB _PLATFORM3_PATH1        ; pointer to path 1
+    FDB _PLATFORM3_PATH2        ; pointer to path 2
+
+_PLATFORM3_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $00,$28,0,0        ; path0: header (y=0, x=40)
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM3_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $FB,$28,0,0        ; path1: header (y=-5, x=40)
+    FCB $FF,$09,$EC          ; flag=-1, dy=9, dx=-20
+    FCB $FF,$F7,$EC          ; flag=-1, dy=-9, dx=-20
+    FCB $FF,$09,$EC          ; flag=-1, dy=9, dx=-20
+    FCB $FF,$F7,$EB          ; flag=-1, dy=-9, dx=-21
+    FCB 2                ; End marker (path complete)
+
+_PLATFORM3_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $04,$D7,0,0        ; path2: header (y=4, x=-41)
+    FCB $FF,$00,$51          ; flag=-1, dy=0, dx=81
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$AF          ; flag=-1, dy=0, dx=-81
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB 2                ; End marker (path complete)
+
 
 ; ================================================
 
@@ -24374,6 +27843,10 @@ _HENSHOKU_MUSIC:
 
 
 VECTOR_BANK_TABLE:
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
@@ -24392,6 +27865,10 @@ VECTOR_ADDR_TABLE:
     FDB _PLATFORM2_VECTORS    ; platform2
     FDB _PLATFORM3_VECTORS    ; platform3
     FDB _PLATFORM4_VECTORS    ; platform4
+    FDB _PLAYER_DIE1_VECTORS    ; player_die1
+    FDB _PLAYER_DIE2_VECTORS    ; player_die2
+    FDB _PLAYER_DIE3_VECTORS    ; player_die3
+    FDB _PLAYER_DIE4_VECTORS    ; player_die4
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
     FDB _PLAYER_JUMP_VECTORS    ; player_jump
     FDB _TITCHI_BALL_VECTORS    ; titchi_ball
@@ -24404,11 +27881,13 @@ VECTOR_ADDR_TABLE:
 ;   1 = Game_Over (Bank #1)
 ;   2 = Henshoku (Bank #2)
 ;   3 = Yukidama-Ondo (Bank #1)
+;   4 = intro (Bank #1)
 
 MUSIC_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
     FCB 1              ; Bank ID
 
 MUSIC_ADDR_TABLE:
@@ -24416,6 +27895,16 @@ MUSIC_ADDR_TABLE:
     FDB _GAME_OVER_MUSIC    ; Game_Over
     FDB _HENSHOKU_MUSIC    ; Henshoku
     FDB _YUKIDAMA_ONDO_MUSIC    ; Yukidama-Ondo
+    FDB _INTRO_MUSIC    ; intro
+
+; SFX Asset Index Mapping:
+;   0 = shot_normal (Bank #1)
+
+SFX_BANK_TABLE:
+    FCB 1              ; Bank ID
+
+SFX_ADDR_TABLE:
+    FDB _SHOT_NORMAL_SFX    ; shot_normal
 
 ; Level Asset Index Mapping:
 ;   0 = world_1_1 (Bank #1)
@@ -24466,7 +27955,7 @@ _ENEMY1_ENEMY:
     FDB 0           ; [5-6] no state machine
 
 _ENEMY1_ENEMY_ACTIONS:
-    FCB $05   ; action 0 (idle) sprite_idx ($FF=none)
+    FCB $09   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 0                   ; loop=false
     FCB 0                    ; pad (entry byte [3])
@@ -24486,13 +27975,13 @@ _TITCHI_ACTION_BALL EQU 4
 
 _TITCHI_ENEMY:
     FCB 3          ; [0] hp
-    FCB 40          ; [1] speed
+    FCB 30          ; [1] speed
     FDB 180          ; [2-3] action_duration
     FCB 5          ; [4] action_count
     FDB _TITCHI_SM      ; [5-6] state machine ptr
 
 _TITCHI_ENEMY_ACTIONS:
-    FCB $08   ; action 0 (idle) sprite_idx ($FF=none)
+    FCB $0C   ; action 0 (idle) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
@@ -24502,17 +27991,17 @@ _TITCHI_ENEMY_ACTIONS:
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
     FDB ANIM_ENEMY_TITCHI_WALK_STATE    ; [4-5] anim state RAM ptr (frame_idx, ticks_left)
-    FCB $09   ; action 2 (snow1) sprite_idx ($FF=none)
+    FCB $0D   ; action 2 (snow1) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
     FDB 0                    ; [4-5] no anim state (vec action)
-    FCB $0A   ; action 3 (snow2) sprite_idx ($FF=none)
+    FCB $0E   ; action 3 (snow2) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
     FDB 0                    ; [4-5] no anim state (vec action)
-    FCB $07   ; action 4 (ball) sprite_idx ($FF=none)
+    FCB $0B   ; action 4 (ball) sprite_idx ($FF=none)
     FCB 0                   ; sprite_type: 0=vec, 1=vanim
     FCB 1                   ; loop=true
     FCB 0                    ; pad (entry byte [3])
@@ -24594,25 +28083,37 @@ ASSET_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 2              ; Bank ID
 
 ASSET_ADDR_TABLE:
     FDB _YUKIDAMA_ONDO_MUSIC    ; Yukidama-Ondo
-    FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _WORLD_1_1_LEVEL    ; world_1_1
+    FDB _INIT_SCREEN_VECTORS    ; init_screen
     FDB _GAME_OVER_MUSIC    ; Game_Over
     FDB _TITCHI_SNOW1_VECTORS    ; titchi_snow1
     FDB _PLATFORM4_VECTORS    ; platform4
     FDB _PLAYER_JUMP_VECTORS    ; player_jump
+    FDB _PLAYER_DIE1_VECTORS    ; player_die1
     FDB _TITCHI_SNOW2_VECTORS    ; titchi_snow2
+    FDB _PLAYER_DIE2_VECTORS    ; player_die2
     FDB _TITCHI_IDLE_VECTORS    ; titchi_idle
+    FDB _PLAYER_DIE3_VECTORS    ; player_die3
+    FDB _PLAYER_DIE4_VECTORS    ; player_die4
     FDB _PLAYER_IDLE_VECTORS    ; player_idle
     FDB _TITCHI_BALL_VECTORS    ; titchi_ball
     FDB _BOSS_INTRO_MUSIC    ; Boss_Intro
+    FDB _INTRO_MUSIC    ; intro
     FDB _PLATFORM2_VECTORS    ; platform2
+    FDB _SHOT_NORMAL_SFX    ; shot_normal
+    FDB _HENSHOKU_MUSIC    ; Henshoku
     FDB _PLATFORM1_VECTORS    ; platform1
     FDB _PLATFORM3_VECTORS    ; platform3
-    FDB _HENSHOKU_MUSIC    ; Henshoku
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
@@ -24714,6 +28215,44 @@ PLAY_MUSIC_BANKED:
 
     ; Call PLAY_MUSIC_RUNTIME with X pointing to music data
     JSR PLAY_MUSIC_RUNTIME
+
+    ; Restore original bank from stack
+    PULS A               ; A = original bank
+    STA CURRENT_ROM_BANK
+    STA $DF00            ; Restore bank
+
+    RTS
+
+;***************************************************************************
+; PLAY_SFX_BANKED - Play SFX asset with automatic bank switching
+; Input: X = SFX asset index (0-based)
+; Uses: A, B, X
+;***************************************************************************
+PLAY_SFX_BANKED:
+    ; Save index to U register (avoid stack order issues)
+    TFR X,U              ; U = SFX index
+    ; Save context: original bank on stack
+    LDA CURRENT_ROM_BANK
+    PSHS A               ; Stack: [A]
+
+    ; Get SFX's bank from lookup table
+    TFR U,D              ; D = SFX index (from U)
+    LDX #SFX_BANK_TABLE
+    LDA D,X              ; A = bank ID for this SFX
+    STA CURRENT_ROM_BANK ; Update RAM tracker
+    STA >SFX_BANK        ; Save SFX bank for AUDIO_UPDATE
+    STA $DF00            ; Switch bank hardware register
+
+    ; Get SFX's address from lookup table (2 bytes per entry)
+    TFR U,D              ; Reload SFX index from U
+    ASLB                 ; *2 for FDB entries
+    ROLA
+    LDX #SFX_ADDR_TABLE
+    LEAX D,X             ; X points to address entry
+    LDX ,X               ; X = actual SFX address in banked ROM
+
+    ; Call PLAY_SFX_RUNTIME with X pointing to SFX data
+    JSR PLAY_SFX_RUNTIME
 
     ; Restore original bank from stack
     PULS A               ; A = original bank
@@ -24898,191 +28437,6 @@ _ANIM_TITCHI_WALK_F2:
 
 ; Vec files referenced by animations (helpers bank for cross-bank safety)
 
-; Generated from player_walk3.vec (Malban Draw_Sync_List format)
-; Total paths: 5, points: 26
-; X bounds: min=-7, max=6, width=13
-; Center: (0, 0)
-
-_PLAYER_WALK3_WIDTH EQU 13
-_PLAYER_WALK3_HALF_WIDTH EQU 6
-_PLAYER_WALK3_HEIGHT EQU 19
-_PLAYER_WALK3_HALF_HEIGHT EQU 9
-_PLAYER_WALK3_CENTER_X EQU 0
-_PLAYER_WALK3_CENTER_Y EQU 0
-
-_PLAYER_WALK3_VECTORS:  ; Main entry (header + 5 path(s))
-    FDB 5               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
-    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
-    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
-    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
-    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
-
-_PLAYER_WALK3_PATH0:    ; Path 0
-    FCB 65              ; path0: intensity
-    FCB $02,$00,0,0        ; path0: header (y=2, x=0)
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH1:    ; Path 1
-    FCB 65              ; path1: intensity
-    FCB $FF,$03,0,0        ; path1: header (y=-1, x=3)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH2:    ; Path 2
-    FCB 65              ; path2: intensity
-    FCB $FE,$FE,0,0        ; path2: header (y=-2, x=-2)
-    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
-    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
-    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
-    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$02,$FA          ; flag=-1, dy=2, dx=-6
-    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH3:    ; Path 3
-    FCB 65              ; path3: intensity
-    FCB $06,$FE,0,0        ; path3: header (y=6, x=-2)
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB 2                ; End marker (path complete)
-
-_PLAYER_WALK3_PATH4:    ; Path 4
-    FCB 65              ; path4: intensity
-    FCB $07,$01,0,0        ; path4: header (y=7, x=1)
-    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB 2                ; End marker (path complete)
-
-; Generated from titchi_walk2.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 39
-; X bounds: min=-7, max=7, width=14
-; Center: (0, 0)
-
-_TITCHI_WALK2_WIDTH EQU 14
-_TITCHI_WALK2_HALF_WIDTH EQU 7
-_TITCHI_WALK2_HEIGHT EQU 13
-_TITCHI_WALK2_HALF_HEIGHT EQU 6
-_TITCHI_WALK2_CENTER_X EQU 0
-_TITCHI_WALK2_CENTER_Y EQU 0
-
-_TITCHI_WALK2_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _TITCHI_WALK2_PATH0        ; pointer to path 0
-    FDB _TITCHI_WALK2_PATH1        ; pointer to path 1
-    FDB _TITCHI_WALK2_PATH2        ; pointer to path 2
-    FDB _TITCHI_WALK2_PATH3        ; pointer to path 3
-    FDB _TITCHI_WALK2_PATH4        ; pointer to path 4
-    FDB _TITCHI_WALK2_PATH5        ; pointer to path 5
-    FDB _TITCHI_WALK2_PATH6        ; pointer to path 6
-    FDB _TITCHI_WALK2_PATH7        ; pointer to path 7
-    FDB _TITCHI_WALK2_PATH8        ; pointer to path 8
-    FDB _TITCHI_WALK2_PATH9        ; pointer to path 9
-    FDB _TITCHI_WALK2_PATH10        ; pointer to path 10
-    FDB _TITCHI_WALK2_PATH11        ; pointer to path 11
-    FDB _TITCHI_WALK2_PATH12        ; pointer to path 12
-
-_TITCHI_WALK2_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $FC,$FC,0,0        ; path1: header (y=-4, x=-4)
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $F9,$FB,0,0        ; path2: header (y=-7, x=-5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $F9,$01,0,0        ; path3: header (y=-7, x=1)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $FD,$05,0,0        ; path4: header (y=-3, x=5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $FF,$05,0,0        ; path5: header (y=-1, x=5)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $03,$FE,0,0        ; path6: header (y=3, x=-2)
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $05,$FF,0,0        ; path7: header (y=5, x=-1)
-    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $03,$04,0,0        ; path8: header (y=3, x=4)
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $03,$02,0,0        ; path9: header (y=3, x=2)
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $03,$04,0,0        ; path10: header (y=3, x=4)
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $01,$05,0,0        ; path11: header (y=1, x=5)
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK2_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $F9,$01,0,0        ; path12: header (y=-7, x=1)
-    FCB 2                ; End marker (path complete)
-
 ; Generated from player_walk1.vec (Malban Draw_Sync_List format)
 ; Total paths: 8, points: 25
 ; X bounds: min=-5, max=5, width=10
@@ -25161,6 +28515,191 @@ _PLAYER_WALK1_PATH7:    ; Path 7
     FCB $08,$FD,0,0        ; path7: header (y=8, x=-3)
     FCB $FF,$FF,$04          ; flag=-1, dy=-1, dx=4
     FCB $FF,$01,$FC          ; flag=-1, dy=1, dx=-4
+    FCB 2                ; End marker (path complete)
+
+; Generated from player_walk3.vec (Malban Draw_Sync_List format)
+; Total paths: 5, points: 26
+; X bounds: min=-7, max=6, width=13
+; Center: (0, 0)
+
+_PLAYER_WALK3_WIDTH EQU 13
+_PLAYER_WALK3_HALF_WIDTH EQU 6
+_PLAYER_WALK3_HEIGHT EQU 19
+_PLAYER_WALK3_HALF_HEIGHT EQU 9
+_PLAYER_WALK3_CENTER_X EQU 0
+_PLAYER_WALK3_CENTER_Y EQU 0
+
+_PLAYER_WALK3_VECTORS:  ; Main entry (header + 5 path(s))
+    FDB 5               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _PLAYER_WALK3_PATH0        ; pointer to path 0
+    FDB _PLAYER_WALK3_PATH1        ; pointer to path 1
+    FDB _PLAYER_WALK3_PATH2        ; pointer to path 2
+    FDB _PLAYER_WALK3_PATH3        ; pointer to path 3
+    FDB _PLAYER_WALK3_PATH4        ; pointer to path 4
+
+_PLAYER_WALK3_PATH0:    ; Path 0
+    FCB 65              ; path0: intensity
+    FCB $02,$00,0,0        ; path0: header (y=2, x=0)
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH1:    ; Path 1
+    FCB 65              ; path1: intensity
+    FCB $FF,$03,0,0        ; path1: header (y=-1, x=3)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH2:    ; Path 2
+    FCB 65              ; path2: intensity
+    FCB $FE,$FE,0,0        ; path2: header (y=-2, x=-2)
+    FCB $FF,$00,$FC          ; flag=-1, dy=0, dx=-4
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB $FF,$FF,$06          ; flag=-1, dy=-1, dx=6
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$FF,$FB          ; flag=-1, dy=-1, dx=-5
+    FCB $FF,$04,$FF          ; flag=-1, dy=4, dx=-1
+    FCB $FF,$FE,$FD          ; flag=-1, dy=-2, dx=-3
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$02,$FA          ; flag=-1, dy=2, dx=-6
+    FCB $FF,$05,$02          ; flag=-1, dy=5, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH3:    ; Path 3
+    FCB 65              ; path3: intensity
+    FCB $06,$FE,0,0        ; path3: header (y=6, x=-2)
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB 2                ; End marker (path complete)
+
+_PLAYER_WALK3_PATH4:    ; Path 4
+    FCB 65              ; path4: intensity
+    FCB $07,$01,0,0        ; path4: header (y=7, x=1)
+    FCB $FF,$FE,$FC          ; flag=-1, dy=-2, dx=-4
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$04,$01          ; flag=-1, dy=4, dx=1
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB 2                ; End marker (path complete)
+
+; Generated from titchi_walk3.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 39
+; X bounds: min=-7, max=7, width=14
+; Center: (0, -1)
+
+_TITCHI_WALK3_WIDTH EQU 14
+_TITCHI_WALK3_HALF_WIDTH EQU 7
+_TITCHI_WALK3_HEIGHT EQU 15
+_TITCHI_WALK3_HALF_HEIGHT EQU 7
+_TITCHI_WALK3_CENTER_X EQU 0
+_TITCHI_WALK3_CENTER_Y EQU -1
+
+_TITCHI_WALK3_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _TITCHI_WALK3_PATH0        ; pointer to path 0
+    FDB _TITCHI_WALK3_PATH1        ; pointer to path 1
+    FDB _TITCHI_WALK3_PATH2        ; pointer to path 2
+    FDB _TITCHI_WALK3_PATH3        ; pointer to path 3
+    FDB _TITCHI_WALK3_PATH4        ; pointer to path 4
+    FDB _TITCHI_WALK3_PATH5        ; pointer to path 5
+    FDB _TITCHI_WALK3_PATH6        ; pointer to path 6
+    FDB _TITCHI_WALK3_PATH7        ; pointer to path 7
+    FDB _TITCHI_WALK3_PATH8        ; pointer to path 8
+    FDB _TITCHI_WALK3_PATH9        ; pointer to path 9
+    FDB _TITCHI_WALK3_PATH10        ; pointer to path 10
+    FDB _TITCHI_WALK3_PATH11        ; pointer to path 11
+    FDB _TITCHI_WALK3_PATH12        ; pointer to path 12
+
+_TITCHI_WALK3_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $00,$FE,0,0        ; path0: header (y=0, x=-2)
+    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $FD,$FC,0,0        ; path1: header (y=-3, x=-4)
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $F8,$FD,0,0        ; path2: header (y=-8, x=-3)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $FA,$00,0,0        ; path3: header (y=-6, x=0)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH4:    ; Path 4
+    FCB 85              ; path4: intensity
+    FCB $FA,$01,0,0        ; path4: header (y=-6, x=1)
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH5:    ; Path 5
+    FCB 85              ; path5: intensity
+    FCB $FE,$05,0,0        ; path5: header (y=-2, x=5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH6:    ; Path 6
+    FCB 85              ; path6: intensity
+    FCB $00,$05,0,0        ; path6: header (y=0, x=5)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
+    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
+    FCB $FF,$FE,$FA          ; flag=-1, dy=-2, dx=-6
+    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH7:    ; Path 7
+    FCB 85              ; path7: intensity
+    FCB $04,$FE,0,0        ; path7: header (y=4, x=-2)
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH8:    ; Path 8
+    FCB 85              ; path8: intensity
+    FCB $06,$FF,0,0        ; path8: header (y=6, x=-1)
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH9:    ; Path 9
+    FCB 85              ; path9: intensity
+    FCB $04,$04,0,0        ; path9: header (y=4, x=4)
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH10:    ; Path 10
+    FCB 85              ; path10: intensity
+    FCB $04,$02,0,0        ; path10: header (y=4, x=2)
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH11:    ; Path 11
+    FCB 85              ; path11: intensity
+    FCB $04,$04,0,0        ; path11: header (y=4, x=4)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK3_PATH12:    ; Path 12
+    FCB 85              ; path12: intensity
+    FCB $02,$05,0,0        ; path12: header (y=2, x=5)
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 ; Generated from player_walk2.vec (Malban Draw_Sync_List format)
@@ -25363,6 +28902,125 @@ _TITCHI_WALK1_PATH12:    ; Path 12
     FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
+; Generated from titchi_walk2.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 39
+; X bounds: min=-7, max=7, width=14
+; Center: (0, 0)
+
+_TITCHI_WALK2_WIDTH EQU 14
+_TITCHI_WALK2_HALF_WIDTH EQU 7
+_TITCHI_WALK2_HEIGHT EQU 13
+_TITCHI_WALK2_HALF_HEIGHT EQU 6
+_TITCHI_WALK2_CENTER_X EQU 0
+_TITCHI_WALK2_CENTER_Y EQU 0
+
+_TITCHI_WALK2_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _TITCHI_WALK2_PATH0        ; pointer to path 0
+    FDB _TITCHI_WALK2_PATH1        ; pointer to path 1
+    FDB _TITCHI_WALK2_PATH2        ; pointer to path 2
+    FDB _TITCHI_WALK2_PATH3        ; pointer to path 3
+    FDB _TITCHI_WALK2_PATH4        ; pointer to path 4
+    FDB _TITCHI_WALK2_PATH5        ; pointer to path 5
+    FDB _TITCHI_WALK2_PATH6        ; pointer to path 6
+    FDB _TITCHI_WALK2_PATH7        ; pointer to path 7
+    FDB _TITCHI_WALK2_PATH8        ; pointer to path 8
+    FDB _TITCHI_WALK2_PATH9        ; pointer to path 9
+    FDB _TITCHI_WALK2_PATH10        ; pointer to path 10
+    FDB _TITCHI_WALK2_PATH11        ; pointer to path 11
+    FDB _TITCHI_WALK2_PATH12        ; pointer to path 12
+
+_TITCHI_WALK2_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $FF,$FE,0,0        ; path0: header (y=-1, x=-2)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $FC,$FC,0,0        ; path1: header (y=-4, x=-4)
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $F9,$FB,0,0        ; path2: header (y=-7, x=-5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $F9,$01,0,0        ; path3: header (y=-7, x=1)
+    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH4:    ; Path 4
+    FCB 85              ; path4: intensity
+    FCB $FD,$05,0,0        ; path4: header (y=-3, x=5)
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH5:    ; Path 5
+    FCB 85              ; path5: intensity
+    FCB $FF,$05,0,0        ; path5: header (y=-1, x=5)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
+    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$02,$02          ; flag=-1, dy=2, dx=2
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH6:    ; Path 6
+    FCB 85              ; path6: intensity
+    FCB $03,$FE,0,0        ; path6: header (y=3, x=-2)
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH7:    ; Path 7
+    FCB 85              ; path7: intensity
+    FCB $05,$FF,0,0        ; path7: header (y=5, x=-1)
+    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH8:    ; Path 8
+    FCB 85              ; path8: intensity
+    FCB $03,$04,0,0        ; path8: header (y=3, x=4)
+    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
+    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH9:    ; Path 9
+    FCB 85              ; path9: intensity
+    FCB $03,$02,0,0        ; path9: header (y=3, x=2)
+    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
+    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH10:    ; Path 10
+    FCB 85              ; path10: intensity
+    FCB $03,$04,0,0        ; path10: header (y=3, x=4)
+    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
+    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH11:    ; Path 11
+    FCB 85              ; path11: intensity
+    FCB $01,$05,0,0        ; path11: header (y=1, x=5)
+    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
+    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_TITCHI_WALK2_PATH12:    ; Path 12
+    FCB 85              ; path12: intensity
+    FCB $F9,$01,0,0        ; path12: header (y=-7, x=1)
+    FCB 2                ; End marker (path complete)
+
 ; Generated from player_walk4.vec (Malban Draw_Sync_List format)
 ; Total paths: 6, points: 26
 ; X bounds: min=-7, max=6, width=13
@@ -25432,125 +29090,6 @@ _PLAYER_WALK4_PATH5:    ; Path 5
     FCB 65              ; path5: intensity
     FCB $FF,$03,0,0        ; path5: header (y=-1, x=3)
     FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-; Generated from titchi_walk3.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 39
-; X bounds: min=-7, max=7, width=14
-; Center: (0, -1)
-
-_TITCHI_WALK3_WIDTH EQU 14
-_TITCHI_WALK3_HALF_WIDTH EQU 7
-_TITCHI_WALK3_HEIGHT EQU 15
-_TITCHI_WALK3_HALF_HEIGHT EQU 7
-_TITCHI_WALK3_CENTER_X EQU 0
-_TITCHI_WALK3_CENTER_Y EQU -1
-
-_TITCHI_WALK3_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _TITCHI_WALK3_PATH0        ; pointer to path 0
-    FDB _TITCHI_WALK3_PATH1        ; pointer to path 1
-    FDB _TITCHI_WALK3_PATH2        ; pointer to path 2
-    FDB _TITCHI_WALK3_PATH3        ; pointer to path 3
-    FDB _TITCHI_WALK3_PATH4        ; pointer to path 4
-    FDB _TITCHI_WALK3_PATH5        ; pointer to path 5
-    FDB _TITCHI_WALK3_PATH6        ; pointer to path 6
-    FDB _TITCHI_WALK3_PATH7        ; pointer to path 7
-    FDB _TITCHI_WALK3_PATH8        ; pointer to path 8
-    FDB _TITCHI_WALK3_PATH9        ; pointer to path 9
-    FDB _TITCHI_WALK3_PATH10        ; pointer to path 10
-    FDB _TITCHI_WALK3_PATH11        ; pointer to path 11
-    FDB _TITCHI_WALK3_PATH12        ; pointer to path 12
-
-_TITCHI_WALK3_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $00,$FE,0,0        ; path0: header (y=0, x=-2)
-    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $FD,$FC,0,0        ; path1: header (y=-3, x=-4)
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $F8,$FD,0,0        ; path2: header (y=-8, x=-3)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $FA,$00,0,0        ; path3: header (y=-6, x=0)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $FA,$01,0,0        ; path4: header (y=-6, x=1)
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$02,$FE          ; flag=-1, dy=2, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $FE,$05,0,0        ; path5: header (y=-2, x=5)
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $00,$05,0,0        ; path6: header (y=0, x=5)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$FF,$FA          ; flag=-1, dy=-1, dx=-6
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$FE,$FA          ; flag=-1, dy=-2, dx=-6
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$03,$02          ; flag=-1, dy=3, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $04,$FE,0,0        ; path7: header (y=4, x=-2)
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$FD,$02          ; flag=-1, dy=-3, dx=2
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $06,$FF,0,0        ; path8: header (y=6, x=-1)
-    FCB $FF,$FE,$05          ; flag=-1, dy=-2, dx=5
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $04,$04,0,0        ; path9: header (y=4, x=4)
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$FE,$00          ; flag=-1, dy=-2, dx=0
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $04,$02,0,0        ; path10: header (y=4, x=2)
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $04,$04,0,0        ; path11: header (y=4, x=4)
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_TITCHI_WALK3_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $02,$05,0,0        ; path12: header (y=2, x=5)
-    FCB $FF,$FE,$02          ; flag=-1, dy=-2, dx=2
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
     FCB 2                ; End marker (path complete)
 
 ;***************************************************************************
@@ -25658,9 +29197,9 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
     LDU #NUM_STR     ; String pointer
     LDA >TEXT_SCALE_H ; height (signed byte)
@@ -25800,6 +29339,43 @@ MOD16:
     COMB
     ADDD #1             ; negate (same sign as dividend)
 .M16_DONE:
+    RTS
+
+RAND_HELPER:
+    ; LCG: seed = (seed * 1103515245 + 12345) & 0x7FFF
+    ; Simplified for 6809: seed = (seed * 25 + 13) & 0x7FFF
+    LDD RAND_SEED
+    LDX #26
+    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)
+    PSHS D
+    LDD #0
+RAND_MUL_LOOP:
+    LEAX -1,X
+    BEQ RAND_MUL_DONE
+    ADDD ,S
+    BRA RAND_MUL_LOOP
+RAND_MUL_DONE:
+    LEAS 2,S
+    ADDD #13       ; Add constant c=13 (odd, Hull-Dobell ok)
+    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output
+    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)
+    RTS
+
+RAND_RANGE_HELPER:
+    ; Input: TMPPTR = min (i16), TMPPTR2 = max (i16)
+    ; Returns: D = min + (rand % (max - min + 1))
+    JSR RAND_HELPER        ; D = rand (0..$7FFF)
+    PSHS D                 ; Save rand
+    LDD TMPPTR2            ; max
+    SUBD TMPPTR            ; D = max - min
+    ADDD #1                ; D = inclusive range
+    STD TMPPTR2            ; TMPPTR2 = range
+    PULS D                 ; Restore rand
+RRH_MOD:
+    SUBD TMPPTR2           ; D -= range
+    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting
+    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range
+    ADDD TMPPTR            ; Add min -> D in [min, max]
     RTS
 
 ; === JOYSTICK BUILTIN SUBROUTINES ===
@@ -26734,7 +30310,7 @@ SDCP_DONE:
 ; === LEVEL_COLLISION_Y_RUNTIME ===
 ; Find the highest collidable floor Y at player_x in the GP layer.
 ; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (16-bit) = player_top (player_y + player_hh)
+;         LCOL_PY (16-bit) = player_feet (player_y - player_hh)
 ; Output: RESULT = highest floor landing Y (i16)
 ;         Returns $FF80 (-128) if no collidable surface found at that X.
 ; Algorithm: for each collidable GP object, check X AABB overlap,
@@ -26743,6 +30319,12 @@ SDCP_DONE:
 ;   +18=half_width, +19=half_height. Stride=20.
 LEVEL_COLLISION_Y_RUNTIME:
     PSHS X,Y,U       ; Save regs (NOT D - result returns in D)
+    ; MULTIBANK: Switch to level bank so ROM GP pointer dereferences land in the right bank
+    LDA >CURRENT_ROM_BANK
+    PSHS A              ; Save current bank
+    LDA >LEVEL_BANK
+    STA >CURRENT_ROM_BANK
+    STA $DF00           ; Switch to level bank
     
     ; Initialize best_floor = -32768 ($8000, no floor found)
     LDD #$8000
@@ -26794,9 +30376,10 @@ LCOL_Y_LOOP:
     ADDB 19,X        ; B = world_y_lo + half_height
     ADCA #0          ; propagate carry to high byte
     STD >TMPVAL      ; TMPVAL = surface_top (16-bit)
-    ; Filter: skip surfaces above the player's head (surface_top > player_top)
-    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_top
-    BGT LCOL_Y_NEXT  ; surface_top > player_top → above player's head → skip
+    ; Filter: skip surfaces above the player's feet (surface_top > player_feet)
+    ;   — player can only land on surfaces at or below their feet level.
+    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_feet
+    LBGT LCOL_Y_NEXT ; surface_top > player_feet → already passed below → skip
     ; Compute landing Y = surface_top + player_half_height (16-bit)
     LDD >TMPVAL      ; reload surface_top
     ADDB >LCOL_PHH   ; add player_hh to low byte
@@ -26821,6 +30404,11 @@ LCOL_Y_DONE:
     LDD #$FF80       ; -128
 LCOL_Y_RET:
     STD RESULT
+    ; MULTIBANK: Restore original bank (result is in RESULT, will reload after)
+    PULS A              ; A = saved bank
+    STA >CURRENT_ROM_BANK
+    STA $DF00           ; Restore bank
+    LDD RESULT          ; Reload return value into D
     
     PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)
 
@@ -27257,10 +30845,9 @@ PSHS B,X,Y
 LDX ,Y              ; X = _VECNAME_VECTORS header
 CLR >MIRROR_Y
 JSR $F1AA           ; DP_to_D0
-CLRA                ; path_count is 1 byte (FCB), high byte = 0
-LDB ,X              ; B = path_count (8-bit FCB)
+LDD ,X              ; D = path_count (FDB, 2 bytes)
 BEQ DAR_BASE_SKIP
-LEAY 1,X            ; Y = first path FDB in vec table (skip 1-byte count)
+LEAY 2,X            ; Y = first path FDB in vec table (skip 2-byte count)
 DAR_BASE_PATH_LOOP:
 PSHS D,Y
 LDX ,Y
@@ -27363,10 +30950,9 @@ DAR_VEC_LOOP:
 PSHS B,Y
 LDX ,Y
 JSR $F1AA           ; DP_to_D0
-CLRA                ; path_count is 1 byte (FCB), high byte = 0
-LDB ,X              ; B = path_count (8-bit FCB)
+LDD ,X              ; D = path_count (FDB, 2 bytes)
 BEQ DAR_VEC_DONE
-LEAY 1,X            ; Y = first path FDB (skip 1-byte count)
+LEAY 2,X            ; Y = first path FDB (skip 2-byte count)
 DAR_VEC_PATH_LOOP:
 PSHS D,Y
 LDX ,Y
@@ -27810,12 +31396,20 @@ FIRE_EVT_RTS:
 RTS
 
 ;**** PRINT_TEXT String Data ****
+PRINT_TEXT_STR_67:
+    FCC "C"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_78166382:
     FCC "ROUND"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_78726770:
     FCC "SCORE"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_100361836:
+    FCC "intro"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_2073804707667:
@@ -27854,6 +31448,22 @@ PRINT_TEXT_STR_89062161292953211:
     FCC "init_screen"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_94739999784554063:
+    FCC "player_die1"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94739999784554064:
+    FCC "player_die2"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94739999784554065:
+    FCC "player_die3"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_94739999784554066:
+    FCC "player_die4"
+    FCB $80          ; Vectrex string terminator
+
 PRINT_TEXT_STR_94739999784698482:
     FCC "player_idle"
     FCB $80          ; Vectrex string terminator
@@ -27864,6 +31474,10 @@ PRINT_TEXT_STR_94739999784744652:
 
 PRINT_TEXT_STR_94739999785112679:
     FCC "player_walk"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_97104923643965900:
+    FCC "shot_normal"
     FCB $80          ; Vectrex string terminator
 
 PRINT_TEXT_STR_1989933374265095120:
@@ -27885,6 +31499,124 @@ PRINT_TEXT_STR_17169778266052697977:
 PRINT_TEXT_STR_17825111777351717868:
     FCC "Yukidama-Ondo"
     FCB $80          ; Vectrex string terminator
+
+; === CROSS-BANK USER FUNCTION TRAMPOLINES ===
+TRAMP_try_launch_ball:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$00  ; switch to bank #0
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR try_launch_ball
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_try_shoot:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$00  ; switch to bank #0
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR try_shoot
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_update_player:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR update_player
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_update_snowballs:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR update_snowballs
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+
+; === CONST ARRAY DATA (relocated to fixed bank - accessible from any bank) ===
+ARRAY_THAW_TIMERS_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_rolling' (8 elements, 2 bytes each)
+ARRAY_BALL_ROLLING_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_vx_arr' (8 elements, 2 bytes each)
+ARRAY_BALL_VX_ARR_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_vy_arr' (8 elements, 2 bytes each)
+ARRAY_BALL_VY_ARR_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_bounces' (8 elements, 2 bytes each)
+ARRAY_BALL_BOUNCES_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+; Array literal for variable 'ball_collided' (8 elements, 2 bytes each)
+ARRAY_BALL_COLLIDED_DATA:
+    FDB 0   ; Element 0
+    FDB 0   ; Element 1
+    FDB 0   ; Element 2
+    FDB 0   ; Element 3
+    FDB 0   ; Element 4
+    FDB 0   ; Element 5
+    FDB 0   ; Element 6
+    FDB 0   ; Element 7
+
+
+;***************************************************************************
+; MAIN PROGRAM (Bank #0)
+;***************************************************************************
+
 
 
 

@@ -3432,6 +3432,7 @@ pitrex_spawn_enemies:
     strb    r6, [r7, #26]   @ pool.dir = 1 (right, initial)
     mov     r6, #0
     strb    r6, [r7, #14]   @ pool.cur_target = 0
+    strb    r6, [r7, #18]   @ pool.sm_state = 0
     add     r6, r4, #12     @ ROM waypoints base (ROM entry + 12)
     str     r6, [r7, #28]   @ pool.wp_base = ptr to ROM waypoints
     ldrb    r6, [r4, #9]    @ wp_count (re-read for is_anim offset)
@@ -3439,17 +3440,25 @@ pitrex_spawn_enemies:
     add     r6, r6, #12     @ offset = 12 + wp_count*4
     ldrb    r8, [r4, r6]    @ ROM is_anim flag
     strb    r8, [r7, #27]   @ pool.is_anim
+    ldrb    r6, [r4, #9]    @ wp_count
+    lsl     r6, r6, #2      @ wp_count * 4
+    add     r6, r6, #16     @ offset = 16 + wp_count*4 (after is_anim+3 pad)
+    ldr     r6, [r4, r6]    @ type_data_ptr (4-byte ROM ptr)
+    str     r6, [r7, #20]   @ pool.type_data_ptr
+    ldrb    r8, [r7, #27]   @ reload is_anim for branch below
     cmp     r8, #0
     beq     .Lspe_novam
     ldr     r6, [r4]        @ sprite_ptr (anim header)
     ldrb    r8, [r6, #3]    @ frame_table_offset (byte3 of header)
     ldr     r8, [r6, r8]    @ frame0_ptr = anim_header[frame_table_offset]
     ldrb    r8, [r8]        @ frame0 duration_ticks
-    strb    r8, [r7, #29]   @ pool.anim_ticks_left = frame0.duration
+    mov     r6, #0
+    strb    r6, [r7, #16]   @ pool.anim_frame_idx = 0
+    strb    r8, [r7, #17]   @ pool.anim_ticks_left = frame0.duration
 .Lspe_novam:
     ldrb    r6, [r4, #9]    @ wp_count for stride
     lsl     r6, r6, #2      @ wp_count * 4
-    add     r6, r6, #16     @ stride = 16 + wp_count*4
+    add     r6, r6, #20     @ stride = 20 + wp_count*4
     add     r4, r4, r6      @ advance ROM ptr
     add     r7, r7, #32
     subs    r5, r5, #1
@@ -3473,6 +3482,9 @@ pitrex_update_enemies:
     ldrb    r6, [r5, #12]       @ active
     cmp     r6, #0
     beq     .Lpue_skip
+    ldrb    r6, [r5, #18]       @ sm_state
+    cmp     r6, #0
+    bne     .Lpue_skip          @ frozen: do not patrol
     ldrb    r6, [r5, #13]       @ ai_type
     cmp     r6, #1
     bne     .Lpue_skip
@@ -3564,7 +3576,25 @@ pitrex_draw_enemies:
     ldrb    r6, [r5, #12]       @ active
     cmp     r6, #0
     beq     .Lpde_skip
-    ldr     r6, [r5]            @ sprite_ptr
+    ldrb    r0, [r5, #18]       @ sm_state
+    cmp     r0, #0
+    beq     .Lpde_default_sprite
+    ldr     r1, [r5, #20]       @ type_data_ptr
+    cmp     r1, #0
+    beq     .Lpde_default_sprite @ no per-type data → fall back
+    lsl     r2, r0, #2          @ sm_state * 4
+    ldr     r6, [r1, r2]        @ state-specific sprite_ptr
+    cmp     r6, #0
+    beq     .Lpde_default_sprite @ slot empty → fall back
+    add     r2, r1, #16         @ &is_anim_table[0]
+    ldrb    r2, [r2, r0]        @ state-specific is_anim flag
+    strb    r2, [r5, #19]       @ stash temp is_anim at pool+19 (free byte)
+    b       .Lpde_check_sprite
+.Lpde_default_sprite:
+    ldr     r6, [r5]            @ default sprite_ptr (pool+0)
+    ldrb    r2, [r5, #27]       @ default is_anim (pool+27)
+    strb    r2, [r5, #19]       @ stash temp is_anim at pool+19
+.Lpde_check_sprite:
     cmp     r6, #0
     beq     .Lpde_skip
     ldrsh   r7, [r5, #4]        @ pool.x
@@ -3580,7 +3610,7 @@ pitrex_draw_enemies:
 .Lpde_no_mirror:
     mov     r3, #0              @ mirror=0
 .Lpde_do_draw:
-    ldrb    r10, [r5, #27]      @ is_anim
+    ldrb    r10, [r5, #19]      @ temp is_anim (state-aware)
     cmp     r10, #0
     bne     .Lpde_anim
     push    {r4, r5, r8, r9}    @ save loop state
@@ -3596,8 +3626,8 @@ pitrex_draw_enemies:
     pop     {r4, r5, r8, r9}
     b       .Lpde_skip
 .Lpde_anim:
-    ldrb    r11, [r5, #28]      @ anim_frame_idx
-    ldrb    r12, [r5, #29]      @ anim_ticks_left
+    ldrb    r11, [r5, #16]      @ anim_frame_idx
+    ldrb    r12, [r5, #17]      @ anim_ticks_left
     subs    r12, r12, #1        @ ticks--; set flags
     bgt     .Lpde_anim_sf       @ ticks > 0: keep frame
     ldrb    r10, [r6]           @ frame_count (anim_header[0])
@@ -3606,17 +3636,17 @@ pitrex_draw_enemies:
     blt     .Lpde_no_wrap
     mov     r11, #0             @ wrap to 0
 .Lpde_no_wrap:
-    strb    r11, [r5, #28]      @ store frame_idx
+    strb    r11, [r5, #16]      @ store frame_idx
     ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)
     lsl     r9, r11, #2         @ frame_idx * 4  (use r9; r10 = offset)
     add     r10, r10, r9        @ frame_table_offset + frame_idx*4
     ldr     r10, [r6, r10]      @ frame_ptr
     ldrb    r12, [r10]          @ new duration_ticks
-    strb    r12, [r5, #29]      @ store ticks_left
+    strb    r12, [r5, #17]      @ store ticks_left
     ldr     r0, [r10, #4]       @ vec_ref
     b       .Lpde_anim_draw
 .Lpde_anim_sf:
-    strb    r12, [r5, #29]      @ store decremented ticks
+    strb    r12, [r5, #17]      @ store decremented ticks
     ldrb    r10, [r6, #3]       @ frame_table_offset (hdr byte 3)
     lsl     r9, r11, #2         @ frame_idx * 4
     add     r10, r10, r9        @ frame_table_offset + frame_idx*4
@@ -3664,11 +3694,11 @@ pitrex_enemy_fire_event:
     mul     r2, r0, r2
     ldr     r3, =PITREX_ENEMY_POOL
     add     r2, r3, r2
-    ldrb    r0, [r2, #28]   @ sm_state
+    ldrb    r0, [r2, #18]   @ sm_state
     add     r0, r0, #1
     cmp     r0, #3
     movgt   r0, #3
-    strb    r0, [r2, #28]   @ store new sm_state
+    strb    r0, [r2, #18]   @ store new sm_state
     pop     {r2, r3, pc}
     .ltorg
 
@@ -14077,6 +14107,7 @@ _FUJI_BG_3D_DATA:
     .byte   59
 
 @ ==== ARM Level: FUJI_LEVEL1_V2 ====
+    .balign 4
 .global _FUJI_LEVEL1_V2_LEVEL
 _FUJI_LEVEL1_V2_LEVEL:
     .hword -96  @ xMin
@@ -14095,6 +14126,7 @@ _FUJI_LEVEL1_V2_LEVEL:
     .hword 127  @ scrollLimit top
     .hword -128  @ scrollLimit bottom
 
+    .balign 4
 _FUJI_LEVEL1_V2_BG_OBJECTS:
     @ obj_1767470884207 (enemy)
     .hword 0  @ x
@@ -14111,6 +14143,7 @@ _FUJI_LEVEL1_V2_BG_OBJECTS:
     .word 0  @ coll_mesh_ptr (AABB fallback)
 
 
+    .balign 4
 _FUJI_LEVEL1_V2_GP_OBJECTS:
     @ enemy_1 (enemy)
     .hword -40  @ x
@@ -14141,6 +14174,7 @@ _FUJI_LEVEL1_V2_GP_OBJECTS:
     .word 0  @ coll_mesh_ptr (AABB fallback)
 
 
+    .balign 4
 _FUJI_LEVEL1_V2_FG_OBJECTS:
 
 @ ARM enemy spawn table for FUJI_LEVEL1_V2
