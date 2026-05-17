@@ -218,15 +218,15 @@ def draw_player_death():
     stop_music()
     elapsed = DEATH_DELAY - frame_timer
     if elapsed < 12:
-        DRAW_VECTOR("player_die1", player_x, player_y, player_facing)
+        DRAW_VECTOR("player_die1", player_x, player_y - camera_y, player_facing)
     else:
         if elapsed < 22:
-            DRAW_VECTOR("player_die2", player_x, player_y, player_facing)
+            DRAW_VECTOR("player_die2", player_x, player_y - camera_y, player_facing)
         else:
             if elapsed < 32:
-                DRAW_VECTOR("player_die3", player_x, player_y, player_facing)
+                DRAW_VECTOR("player_die3", player_x, player_y - camera_y, player_facing)
             else:
-                DRAW_VECTOR("player_die4", player_x, player_y, player_facing)
+                DRAW_VECTOR("player_die4", player_x, player_y - camera_y, player_facing)
 
 # ── Estado: nivel completado ─────────────────────────────────────────────────
 def state_level_clear():
@@ -467,12 +467,12 @@ def update_player():
 def draw_player():
     SET_INTENSITY(65)
     if player_on_ground == 0:
-        DRAW_VECTOR("player_jump", player_x, player_y, player_facing)
+        DRAW_VECTOR("player_jump", player_x, player_y - camera_y, player_facing)
     if player_on_ground == 1:
         if player_vx == 0:
-            DRAW_VECTOR("player_idle", player_x, player_y, player_facing)
+            DRAW_VECTOR("player_idle", player_x, player_y - camera_y, player_facing)
         else:
-            DRAW_ANIM("player_walk", player_x, player_y, player_facing)
+            DRAW_ANIM("player_walk", player_x, player_y - camera_y, player_facing)
 
 # ── Snowballs ────────────────────────────────────────────────────────────────
 def try_shoot():
@@ -516,7 +516,7 @@ def update_snowballs():
         snow0_life = snow0_life - 1
         if snow0_life <= 0:
             snow0_active = 0
-        if snow0_y < -110:
+        if snow0_y - camera_y < -110:
             snow0_active = 0
         if snow0_x < -127:
             snow0_active = 0
@@ -531,7 +531,7 @@ def update_snowballs():
         snow1_life = snow1_life - 1
         if snow1_life <= 0:
             snow1_active = 0
-        if snow1_y < -110:
+        if snow1_y - camera_y < -110:
             snow1_active = 0
         if snow1_x < -127:
             snow1_active = 0
@@ -546,7 +546,7 @@ def update_snowballs():
         snow2_life = snow2_life - 1
         if snow2_life <= 0:
             snow2_active = 0
-        if snow2_y < -110:
+        if snow2_y - camera_y < -110:
             snow2_active = 0
         if snow2_x < -127:
             snow2_active = 0
@@ -555,11 +555,11 @@ def update_snowballs():
 
 def draw_snowballs():
     if snow0_active == 1:
-        DRAW_CIRCLE(snow0_x, snow0_y, 5, 120)
+        DRAW_CIRCLE(snow0_x, snow0_y - camera_y, 5, 120)
     if snow1_active == 1:
-        DRAW_CIRCLE(snow1_x, snow1_y, 5, 120)
+        DRAW_CIRCLE(snow1_x, snow1_y - camera_y, 5, 120)
     if snow2_active == 1:
-        DRAW_CIRCLE(snow2_x, snow2_y, 5, 120)
+        DRAW_CIRCLE(snow2_x, snow2_y - camera_y, 5, 120)
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
