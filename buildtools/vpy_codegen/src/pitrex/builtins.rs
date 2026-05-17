@@ -1486,10 +1486,10 @@ fn emit_pitrex_music_helpers() -> String {
     // Store LEVEL_DATA_PTR
     s.push_str("    ldr     r1, =LEVEL_DATA_PTR\n");
     s.push_str("    str     r4, [r1]\n");
-    // Read and store GP count (byte offset 9), clamped to 32
+    // Read and store GP count (byte offset 9), clamped to 64
     s.push_str("    ldrb    r5, [r4, #9]        @ r5 = gpCount\n");
-    s.push_str("    cmp     r5, #32\n");
-    s.push_str("    movgt   r5, #32\n");
+    s.push_str("    cmp     r5, #64\n");
+    s.push_str("    movgt   r5, #64\n");
     s.push_str("    ldr     r1, =LEVEL_GP_COUNT\n");
     s.push_str("    str     r5, [r1]\n");
     // Copy GP objects to LEVEL_GP_BUF (x,y,vx,vy per entry)

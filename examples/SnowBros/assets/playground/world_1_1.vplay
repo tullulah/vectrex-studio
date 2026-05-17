@@ -315,120 +315,6 @@
         }
       },
       {
-        "id": "plat_f2_1",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -76,
-        "y": -2121,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f2_2",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 76,
-        "y": -2121,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f2_3",
-        "type": "obstacle",
-        "vectorName": "platform2",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -2075,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f2_4",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -60,
-        "y": -2027,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f2_5",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 60,
-        "y": -2027,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f2_6",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -1981,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
         "id": "plat_f3_1",
         "type": "obstacle",
         "vectorName": "platform1",
@@ -1265,30 +1151,106 @@
         "physicsType": "static"
       },
       {
-        "id": "enemy_1779034959450",
-        "type": "enemy",
-        "vectorName": "titchi_walk",
+        "id": "obj_1779039156770",
+        "type": "background",
+        "vectorName": "platform5",
         "layer": "gameplay",
-        "x": -36,
-        "y": -1960,
+        "x": -5,
+        "y": -2119,
         "rotation": 0,
         "scale": 1,
-        "enemyType": "titchi",
-        "aiType": "patrol",
-        "patrolWaypoints": [],
-        "wave": 0,
-        "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
       },
       {
-        "id": "enemy_1779034961460",
+        "id": "obj_1779039588976",
+        "type": "background",
+        "vectorName": "platform6",
+        "layer": "gameplay",
+        "x": 24,
+        "y": -2083,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779039595209",
+        "type": "background",
+        "vectorName": "platform7",
+        "layer": "gameplay",
+        "x": -22,
+        "y": -2051,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779039600860",
+        "type": "background",
+        "vectorName": "platform6",
+        "layer": "gameplay",
+        "x": 23,
+        "y": -2013,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779039612850",
+        "type": "background",
+        "vectorName": "platform3",
+        "layer": "gameplay",
+        "x": -18,
+        "y": -1985,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "enemy_1779039990874",
         "type": "enemy",
         "vectorName": "titchi_walk",
         "layer": "gameplay",
-        "x": 27,
+        "x": -53,
         "y": -1959,
         "rotation": 0,
         "scale": 1,
@@ -1311,5 +1273,17 @@
       "y": -100
     }
   },
-  "hotspots": []
+  "hotspots": [],
+  "_editorMeta": {
+    "screenBackgrounds": [
+      {
+        "screenIndex": 0,
+        "imagePath": "assets/backgrounds/floor1.png"
+      },
+      {
+        "screenIndex": 1,
+        "imagePath": "assets/backgrounds/floor2.png"
+      }
+    ]
+  }
 }

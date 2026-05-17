@@ -2,6 +2,10 @@ META TITLE = "SNOW BROS"
 META TARGET = pitrex
 META MAX_ENEMIES = 8
 
+# ── Debug ────────────────────────────────────────────────────────────────────
+const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
+const START_FLOOR = 1   # piso inicial al pulsar start (1 = abajo)
+
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE = 0        # título + "press a button"
 const STATE_GAME_START = 1   # "ROUND N" antes de empezar
@@ -156,7 +160,7 @@ def state_title():
     if J1_BUTTON_1():
         score = 0
         lives = LIVES_START
-        current_level = 1
+        current_level = START_FLOOR
         enter_game_start()
 
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
@@ -173,7 +177,8 @@ def state_game_start():
 def state_playing():
     time_left = time_left - 1
     if time_left <= 0:
-        on_player_death()
+        if INVINCIBLE == 0:
+            on_player_death()
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
@@ -855,8 +860,8 @@ def check_player_enemy_collision():
             if dx < 20:
                 if dy < 20:
                     if st == TITCHI_STATE_NORMAL:
-                        # Sólo muere el jugador al tocar un TITCHI patrullando
-                        on_player_death()
+                        if INVINCIBLE == 0:
+                            on_player_death()
                     if st != TITCHI_STATE_NORMAL:
                         # Empujar bola/snow lejos del jugador, bloquear al jugador
                         if ex >= player_x:

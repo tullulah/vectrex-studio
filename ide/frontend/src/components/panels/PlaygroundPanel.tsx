@@ -91,6 +91,9 @@ export function PlaygroundPanel() {
   const [draggingLimit, setDraggingLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [selectedLimit, setSelectedLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [draggingWaypointInfo, setDraggingWaypointInfo] = useState<{ enemyId: string; wpIdx: number } | null>(null);
+  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string }[]>([]);
+  const [availableImages, setAvailableImages] = useState<string[]>([]);
+  const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -196,6 +199,33 @@ export function PlaygroundPanel() {
         
         setLoadedVectors(vectors);
         console.log('[Playground] Loaded', vectors.size, 'vectors');
+
+        // Scan for background images (PNG/JPG) in assets/ and load as data URLs
+        const imageFiles: string[] = [];
+        const imgDataMap = new Map<string, string>();
+        const imgExtensions = ['.png', '.jpg', '.jpeg'];
+        const imgDirs = ['assets', 'assets/overlay', 'assets/backgrounds', 'assets/images'];
+        for (const dir of imgDirs) {
+          const fullDir = `${projectPath}/${dir}`;
+          const dirResult = await filesAPI.readDirectory(fullDir).catch(() => ({ error: true }));
+          if (!dirResult.error && dirResult.files) {
+            for (const f of dirResult.files) {
+              const lname = f.name.toLowerCase();
+              if (!f.isDir && imgExtensions.some((ext: string) => lname.endsWith(ext))) {
+                const key = `${dir}/${f.name}`;
+                const absPath = `${fullDir}/${f.name}`;
+                const binResult = await filesAPI.readFileBin(absPath).catch(() => null);
+                if (binResult && !binResult.error && binResult.base64) {
+                  const mime = lname.endsWith('.png') ? 'image/png' : 'image/jpeg';
+                  imgDataMap.set(key, `data:${mime};base64,${binResult.base64}`);
+                  imageFiles.push(key);
+                }
+              }
+            }
+          }
+        }
+        setAvailableImages(imageFiles);
+        setImageDataUrls(imgDataMap);
       } catch (error) {
         console.error('[Playground] Error:', error);
       }
@@ -544,6 +574,7 @@ export function PlaygroundPanel() {
         ...(Object.keys(scrollLimits).some(k => (scrollLimits as any)[k] !== undefined)
           ? { scrollLimits }
           : {}),
+        ...(screenBackgrounds.length > 0 ? { _editorMeta: { screenBackgrounds } } : {}),
       };
 
       // Validate before saving
@@ -626,6 +657,7 @@ export function PlaygroundPanel() {
       setObjects(loadedObjects);
       setHotspots(sceneData.hotspots || []);
       setScrollLimits(sceneData.scrollLimits || {});
+      setScreenBackgrounds(((sceneData as any)._editorMeta?.screenBackgrounds) || []);
       setSelectedHotspotId(null);
       setSelectedLimit(null);
       setSelectedId(null);
@@ -1542,6 +1574,7 @@ export function PlaygroundPanel() {
             setSelectedHotspotId(null);
             setScrollLimits({});
             setSelectedLimit(null);
+            setScreenBackgrounds([]);
           }}
           style={{
             padding: '4px 12px',
@@ -1692,6 +1725,36 @@ export function PlaygroundPanel() {
               <line key={`hb-${i}`} x1={0} y1={(i + 1) * 256} x2={192 * widthScreens} y2={(i + 1) * 256}
                 stroke="#334433" strokeWidth="1" strokeDasharray="4 4" />
             ))}
+
+            {/* Screen index labels */}
+            {Array.from({ length: heightScreens }, (_, svgI) => {
+              const gameScreenNum = heightScreens - svgI; // S1=bottom, SN=top
+              return (
+                <text key={`slabel-${svgI}`} x="4" y={svgI * 256 + 10} fill="#334433" fontSize="8" fontFamily="monospace" opacity="0.7">
+                  S{gameScreenNum}
+                </text>
+              );
+            })}
+
+            {/* Screen background image guides (editor-only) */}
+            {screenBackgrounds.map(sb => {
+              const dataUrl = imageDataUrls.get(sb.imagePath);
+              if (!dataUrl) return null;
+              const svgScreenIdx = heightScreens - 1 - sb.screenIndex;
+              return (
+                <image
+                  key={`sbg_${sb.screenIndex}`}
+                  href={dataUrl}
+                  x={0}
+                  y={svgScreenIdx * 256}
+                  width={192 * widthScreens}
+                  height={256}
+                  opacity={0.25}
+                  preserveAspectRatio="none"
+                  style={{ pointerEvents: 'none' }}
+                />
+              );
+            })}
 
             {/* Render hotspots below objects */}
             {hotspots.map(hs => renderHotspot(hs))}
@@ -2341,8 +2404,53 @@ export function PlaygroundPanel() {
               })()}
             </div>
           ) : (
-            <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic' }}>
-              No object selected
+            <div>
+              <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic', marginBottom: heightScreens > 1 ? '12px' : '0' }}>
+                No object selected
+              </div>
+              {heightScreens > 1 && (
+                <div>
+                  <div style={{ fontSize: '11px', color: '#888', fontWeight: 600, borderTop: '1px solid #3e3e3e', paddingTop: '10px', marginBottom: '6px' }}>
+                    SCREEN BACKGROUNDS
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#555', marginBottom: '8px' }}>
+                    Image overlay per screen (editor-only)
+                  </div>
+                  {Array.from({ length: heightScreens }, (_, i) => {
+                    const sb = screenBackgrounds.find(s => s.screenIndex === i);
+                    return (
+                      <div key={i} style={{ marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ color: '#556655', fontSize: '10px', width: '48px', flexShrink: 0, fontFamily: 'monospace' }}>
+                          S{i + 1}
+                        </span>
+                        <select
+                          value={sb?.imagePath || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setScreenBackgrounds(prev => {
+                              const next = prev.filter(s => s.screenIndex !== i);
+                              if (val) next.push({ screenIndex: i, imagePath: val });
+                              return [...next];
+                            });
+                          }}
+                          style={{
+                            flex: 1,
+                            background: '#1a1a1a',
+                            color: sb ? '#88bb88' : '#555',
+                            border: `1px solid ${sb ? '#446644' : '#333'}`,
+                            padding: '2px 3px',
+                            fontSize: '10px',
+                            borderRadius: '2px',
+                          }}
+                        >
+                          <option value="">— none —</option>
+                          {availableImages.map(img => <option key={img} value={img}>{img.split('/').pop()}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
