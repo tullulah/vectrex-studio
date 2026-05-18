@@ -43,7 +43,7 @@ ball_launched: i16 = 0                       # flag: try_launch_ball encontró b
 # Half-sizes for AABB collision (approx from vec files)
 const SNOW_HW = 6    # snowball half-width
 const SNOW_HH = 16    # snowball half-height
-const ENEMY_HW = 12  # enemy half-width
+const ENEMY_HW = 6   # enemy half-width
 const ENEMY_HH = 8  # enemy half-height
 
 # ── Globals de partida ──────────────────────────────────────────────────────
@@ -460,7 +460,7 @@ def update_player():
         player_y = player_y + player_vy
 
         # Colisión con plataformas al caer (usa prev_y para evitar tunneling)
-        if player_vy <= 0:
+        if player_vy < 0:
             floor_y = LEVEL_COLLISION_Y(player_x, prev_y, PLAYER_HH)
             screen_bottom = camera_y - 127
             if floor_y < screen_bottom:
@@ -597,8 +597,11 @@ def draw_hud():
     PRINT_NUMBER(-78, 116, lives)           # vidas, debajo del score
     PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha
     # DEBUG: titchi superior (idx 1) — waypoints (y=99,y=99): Y debe ser constante
-    PRINT_TEXT(-98, -110, "C")
-    PRINT_NUMBER(-85, -110, enemy_count)
+    PRINT_TEXT(-98, -110, "x")
+    PRINT_NUMBER(-85, -110, player_x)
+
+    PRINT_TEXT(48, -110, "y")
+    PRINT_NUMBER(55, -110,player_y)
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():
@@ -750,12 +753,14 @@ def update_balls():
             by = prev_by + ball_vy_arr[i]
             # Colisión con plataforma: raycast desde posición ANTERIOR
             # (igual que el player: prev_y → evita tunneling a través de plataformas)
-            if ball_vy_arr[i] <= 0:
+            if ball_vy_arr[i] < 0:
                 floor = LEVEL_COLLISION_Y(bx, prev_by, ENEMY_HH)
-                if floor > -100:
-                    if by <= floor:
-                        by = floor
-                        ball_vy_arr[i] = 0
+                screen_bottom = camera_y - 127
+                if floor < screen_bottom:
+                    floor = camera_y - 86
+                if by <= floor:
+                    by = floor
+                    ball_vy_arr[i] = 0
             # Fallback: fondo del mundo
             if by < WORLD_Y_MIN:
                 by = WORLD_Y_MIN

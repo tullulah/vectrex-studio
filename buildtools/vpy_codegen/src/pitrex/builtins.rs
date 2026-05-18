@@ -1286,7 +1286,8 @@ fn emit_pitrex_level_collision() -> String {
     s.push_str("    ldrsh   r2, [r7, #2]        @ obj world_y (buf)\n");
     s.push_str("    ldrb    r3, [r9, #13]       @ half_h\n");
     s.push_str("    add     r2, r2, r3          @ obj_top = world_y + half_h\n");
-    s.push_str("    cmp     r2, r5\n    bgt     plcy_next   @ above player feet: skip\n");
+    s.push_str("    add     r3, r5, r6          @ r3 = player_center = player_feet + player_hh\n");
+    s.push_str("    cmp     r2, r3\n    bgt     plcy_next   @ above player center: skip\n");
     s.push_str("    cmp     r2, r10\n    ble     plcy_next\n    mov     r10, r2\n");
     // advance to next object
     s.push_str("plcy_next:\n    add     r7, r7, #8\n    add     r9, r9, #20         @ ROM obj stride = 20 bytes\n");
