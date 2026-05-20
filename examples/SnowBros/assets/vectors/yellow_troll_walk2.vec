@@ -1,0 +1,323 @@
+{
+  "version": "1.0",
+  "name": "yellow_troll_walk2",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "path_1779307832783_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -1,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": -1,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 7,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 7,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 9,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": 9,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": -4,
+              "z": 0
+            },
+            {
+              "x": 9,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": -7,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": -7,
+              "z": 0
+            },
+            {
+              "x": -2,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": -1,
+              "y": -1,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307843722_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": -1,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -5,
+              "y": -2,
+              "z": 0
+            },
+            {
+              "x": -6,
+              "y": -7,
+              "z": 0
+            },
+            {
+              "x": -5,
+              "y": -5,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307848342_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -5,
+              "y": -7,
+              "z": 0
+            },
+            {
+              "x": -4,
+              "y": -8,
+              "z": 0
+            },
+            {
+              "x": -1,
+              "y": -5,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307855347_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -5,
+              "y": -8,
+              "z": 0
+            },
+            {
+              "x": -6,
+              "y": -11,
+              "z": 0
+            },
+            {
+              "x": -2,
+              "y": -11,
+              "z": 0
+            },
+            {
+              "x": -4,
+              "y": -9,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307862720_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": -7,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": -11,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": -10,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": -7,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307873376_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 3,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 1,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307878879_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 7,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": -1,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": 9,
+              "y": -2,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307890053_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": -3,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": -5,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779307919539_copy",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 2,
+  "center_y": -2,
+  "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABkAAAAgCAYAAADnnNMGAAAAAXNSR0IB2cksfwAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAAOwgAADsIBFShKgAAAAAd0SU1FB+oFFBQJGywYpPUAAAF9SURBVEjH7Va7scMgEDwxBIQqSKGKcEABKkNluAACilCoghQ6ey+wDy/nwwI8ftG7Gc0Yg3Zv7ycGWuknrIG+aYb+wP5Jvk/iyWe/ca2Z7SE4tonG+Q58bBMRUVoHCp+TsD3B9xcySWR6wsTA47zTsU2JgMlk+ExrmPgZ550ut2silCqRqJokUFABkUjbb1bCQKxCU4A54ndsS7lisqNbMiKpAte2hgATKz3mkCHp6JasnE0rAXoZH2BMEN2SkVWFSyNA70sW3ZL1jTnLQ43JcMm+MT0qMFRn/6k5KanARJccSImHs+O860o0EK4oBEDPOWQIzmdNz1CsCSdOiq7vyTs1/JyOldIMkmdYDfeHzM/ldiVPvk2JNjpw1Euy6BYKFGjge5c2ozQC/CBpUwEdycYKHy51sUaA67NRb9+NCc0rrXo8+XQWcbzzz3DRmm/KJJYISk0ssRIJbkYxqnuvS4xnUXKpe1ssKwx3xxzwVi8LgEvwU7NaEntVlOwXrrfu5xLh/q0AAAAASUVORK5CYII="
+}

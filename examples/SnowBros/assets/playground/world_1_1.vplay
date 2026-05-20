@@ -1188,6 +1188,121 @@
         "gravity": 1,
         "bounceDamping": 0.85,
         "physicsType": "gravity"
+      },
+      {
+        "id": "enemy_1779308540741",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": 48,
+        "y": -1975,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": 1,
+            "y": -1976
+          },
+          {
+            "x": 56,
+            "y": -1977
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "defaultFacing": "left"
+      },
+      {
+        "id": "enemy_1779308542591",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": -49,
+        "y": -2016,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -57,
+            "y": -2015
+          },
+          {
+            "x": 4,
+            "y": -2015
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779308666915",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": 51,
+        "y": -2055,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -5,
+            "y": -2054
+          },
+          {
+            "x": 54,
+            "y": -2054
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
+        "defaultFacing": "left",
+        "mirrorOnPatrol": true,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779308709158",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": -44,
+        "y": -2097,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -55,
+            "y": -2097
+          },
+          {
+            "x": 4,
+            "y": -2097
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       }
     ],
     "foreground": []

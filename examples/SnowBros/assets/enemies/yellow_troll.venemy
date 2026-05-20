@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "name": "yellow_troll",
+  "actions": [
+    {
+      "name": "idle",
+      "sprite": "assets/vectors/yellow_troll_idle.vec",
+      "loop": true
+    },
+    {
+      "name": "walk",
+      "sprite": "assets/animations/yellow_troll_walk.vanim",
+      "loop": true
+    }
+  ],
+  "stats": {
+    "hp": 3,
+    "speed": 20,
+    "action_duration": 240
+  },
+  "behavior": {
+    "type": "patrol",
+    "patrol": {
+      "waypoints": [],
+      "loop": false,
+      "mirrorOnPatrol": true,
+      "defaultFacing": "right",
+      "patrolAction": "walk"
+    },
+    "chase_range": 80,
+    "respawn": false,
+    "wave": 0
+  }
+}
