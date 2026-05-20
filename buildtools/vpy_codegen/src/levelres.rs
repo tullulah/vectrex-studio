@@ -29,6 +29,17 @@ pub struct VPlayLevel {
     /// Scroll limits (optional; defaults to worldBounds when absent)
     #[serde(default, rename = "scrollLimits")]
     pub scroll_limits: VPlayScrollLimits,
+    /// Editor metadata (groundBottomOffset, screen backgrounds, etc.)
+    #[serde(default, rename = "_editorMeta")]
+    pub editor_meta: VPlayEditorMeta,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VPlayEditorMeta {
+    /// Units from the bottom of each screen to the floor ground line.
+    /// floor_surface_world_y = camera_y - 128 + ground_bottom_offset
+    #[serde(default, rename = "groundBottomOffset")]
+    pub ground_bottom_offset: i16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -396,9 +407,12 @@ impl VPlayLevel {
     ///   +16 coll_mesh_ptr (u32, 0 = use AABB fallback)
     ///
     /// Collision mesh format at coll_mesh_ptr:
-    ///   .word  seg_count
-    ///   .hword x1, y1, x2, y2   @ segment 0 (local coords, i16 each)
-    ///   ...                      @ segment N-1
+    ///   .word  floor_count
+    ///   .hword x1, y1, x2, y2   @ floor segment 0 (horizontal top-edges, local coords)
+    ///   ...                      @ floor segment N-1
+    ///   .word  wall_count
+    ///   .hword x, y_min, x, y_max  @ wall segment 0 (vertical, local coords)
+    ///   ...                         @ wall segment M-1
     ///
     /// Header layout (24 bytes):
     ///   +0  xMin (i16)
@@ -463,6 +477,15 @@ impl VPlayLevel {
     }
 
     pub fn compile_to_arm_asm_with_venemy(&self, dims: &HashMap<String, (i32, i32)>, venemy_dir: Option<&Path>) -> String {
+        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new())
+    }
+
+    pub fn compile_to_arm_asm_with_venemy_and_meshes(
+        &self,
+        dims: &HashMap<String, (i32, i32)>,
+        venemy_dir: Option<&Path>,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+    ) -> String {
         let mut out = String::new();
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
 
@@ -495,23 +518,27 @@ impl VPlayLevel {
         out.push_str(&format!("    .hword {}  @ scrollLimit right\n", sl_right));
         out.push_str(&format!("    .hword {}  @ scrollLimit top\n", sl_top));
         out.push_str(&format!("    .hword {}  @ scrollLimit bottom\n", sl_bottom));
+        // +32: groundBottomOffset — units from bottom of each screen to the floor ground line.
+        //   floor_surface_world_y = camera_y - 128 + groundBottomOffset
+        out.push_str(&format!("    .hword {}  @ groundBottomOffset\n", self.editor_meta.ground_bottom_offset));
+        out.push_str("    .hword 0  @ pad\n");
         out.push_str("\n");
 
         // Two-pass: first collect all mesh data (so it precedes struct arrays in the binary),
         // then emit contiguous 20-byte struct arrays per layer.
         let mut bg_meshes = String::new(); let mut bg_structs = String::new();
         for obj in &self.layers.background {
-            let (m, s) = self.compile_arm_object(obj, dims, &name);
+            let (m, s) = self.compile_arm_object(obj, dims, &name, vec_meshes);
             bg_meshes.push_str(&m); bg_structs.push_str(&s);
         }
         let mut gp_meshes = String::new(); let mut gp_structs = String::new();
         for obj in &self.layers.gameplay {
-            let (m, s) = self.compile_arm_object(obj, dims, &name);
+            let (m, s) = self.compile_arm_object(obj, dims, &name, vec_meshes);
             gp_meshes.push_str(&m); gp_structs.push_str(&s);
         }
         let mut fg_meshes = String::new(); let mut fg_structs = String::new();
         for obj in &self.layers.foreground {
-            let (m, s) = self.compile_arm_object(obj, dims, &name);
+            let (m, s) = self.compile_arm_object(obj, dims, &name, vec_meshes);
             fg_meshes.push_str(&m); fg_structs.push_str(&s);
         }
 
@@ -619,7 +646,7 @@ impl VPlayLevel {
     /// Compile a single object for the ARM binary format (20 bytes).
     /// Returns (mesh_data, struct_data). mesh_data contains the _COLMESH_* label + segments
     /// (empty string if no segments defined). struct_data is the 20-byte object struct.
-    fn compile_arm_object(&self, obj: &VPlayObject, dims: &HashMap<String, (i32, i32)>, level_name: &str) -> (String, String) {
+    fn compile_arm_object(&self, obj: &VPlayObject, dims: &HashMap<String, (i32, i32)>, level_name: &str, vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>) -> (String, String) {
         let mut mesh = String::new();
         let mut out = String::new();
         out.push_str(&format!("    @ {} ({})\n", obj.id, obj.obj_type));
@@ -708,6 +735,22 @@ impl VPlayLevel {
         let segs_opt = obj.collision.as_ref()
             .and_then(|c| c.segments.as_ref())
             .filter(|v| !v.is_empty());
+
+        // Fallback: if no level-side segments, use the .vec file's own collision mesh
+        let vec_segs_converted: Vec<CollisionSegment>;
+        let segs_opt = if segs_opt.is_some() {
+            segs_opt
+        } else if let Some(vm) = vec_meshes.get(&obj.vector_name.to_lowercase()) {
+            if !vm.is_empty() {
+                vec_segs_converted = vm.iter().map(|s| CollisionSegment { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 }).collect();
+                Some(&vec_segs_converted)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         if let Some(segs) = segs_opt {
             // Optimization: only emit "top edge" horizontal segments — those whose
             // X-range has no other horizontal segment with a strictly greater Y above
@@ -748,10 +791,21 @@ impl VPlayLevel {
             mesh.push_str("    .balign 4\n");
             mesh.push_str(&format!("{}:  @ {} top-edge collision segments (filtered from {} original)\n",
                 mesh_label, emitted.len(), segs.len()));
-            mesh.push_str(&format!("    .word {}  @ segment count\n", emitted.len()));
+            mesh.push_str(&format!("    .word {}  @ floor segment count\n", emitted.len()));
             for (xa, xb, y) in &emitted {
                 mesh.push_str(&format!("    .hword {}, {}, {}, {}  @ x1={} y1={} x2={} y2={}\n",
                     xa, y, xb, y, xa, y, xb, y));
+            }
+            // Extract vertical wall segments (x1==x2, y1!=y2) for horizontal collision
+            let mut wall_segs: Vec<(i16, i16, i16)> = Vec::new(); // (x, y_min, y_max)
+            for seg in segs {
+                if seg.x1 == seg.x2 && seg.y1 != seg.y2 {
+                    wall_segs.push((seg.x1, seg.y1.min(seg.y2), seg.y1.max(seg.y2)));
+                }
+            }
+            mesh.push_str(&format!("    .word {}  @ wall segment count\n", wall_segs.len()));
+            for (x, ya, yb) in &wall_segs {
+                mesh.push_str(&format!("    .hword {}, {}, {}, {}  @ x={} ymin={} ymax={}\n", x, ya, x, yb, x, ya, yb));
             }
             out.push_str(&format!("    .word {}  @ coll_mesh_ptr\n\n", mesh_label));
         } else {

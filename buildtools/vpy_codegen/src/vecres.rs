@@ -11,6 +11,22 @@ use anyhow::Result;
 #[allow(dead_code)]
 pub const VEC_EXTENSION: &str = "vec";
 
+/// A single collision mesh segment in local .vec coordinates
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VecMeshSegment {
+    pub x1: i16,
+    pub y1: i16,
+    pub x2: i16,
+    pub y2: i16,
+}
+
+/// Top-level collision mesh stored directly in the .vec file
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct VecCollisionMesh {
+    #[serde(default)]
+    pub segments: Vec<VecMeshSegment>,
+}
+
 /// Root structure of a .vec file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecResource {
@@ -43,6 +59,11 @@ pub struct VecResource {
     /// Center Y coordinate (calculated in design time, used as mirror/rotation axis)
     #[serde(default)]
     pub center_y: Option<i16>,
+    /// Collision mesh stored in the .vec file itself (reusable across levels).
+    /// When present and a .vplay object references this vec without its own segments,
+    /// the compiler uses this mesh instead of falling back to AABB.
+    #[serde(default, rename = "collisionMesh")]
+    pub collision_mesh: Option<VecCollisionMesh>,
 }
 
 fn default_version() -> String {
@@ -214,6 +235,7 @@ impl VecResource {
             metadata: Metadata::default(),
             center_x: None,
             center_y: None,
+            collision_mesh: None,
         }
     }
     
@@ -451,7 +473,12 @@ impl VecResource {
         }
         
         // Reorder paths to minimise beam-off (dark) travel — greedy nearest-neighbour.
-        let paths = self.optimized_paths();
+        // Filter out degenerate paths (< 2 points = 0 segments) before counting — they would
+        // still emit a full v_directMove32 + v_setScale call on PiTrex with nothing drawn.
+        let paths: Vec<VecPath> = self.optimized_paths()
+            .into_iter()
+            .filter(|p| p.points.len() >= 2)
+            .collect();
         let path_count = paths.len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));

@@ -466,6 +466,7 @@ pub fn emit_call(
         "debug_print" | "DEBUG_PRINT" => "pitrex_debug_print",
         "debug_print_labeled" | "DEBUG_PRINT_LABELED" => "pitrex_debug_print_labeled",
         "DEBUG_PRINT_STR"   => "pitrex_debug_print_str",
+        "GET_FRAME_US"      => "pitrex_get_frame_us",
         // Level system
         "LEVEL_COLLISION_Y" => "pitrex_level_collision_y",
         "LEVEL_COLLISION_X" => "pitrex_level_collision_x",
@@ -473,6 +474,7 @@ pub fn emit_call(
         "SET_CAMERA_Y"      => "pitrex_set_camera_y",
         "GET_CAMERA_X"           => "pitrex_get_camera_x",
         "GET_CAMERA_Y"           => "pitrex_get_camera_y",
+        "GET_LEVEL_FLOOR_Y"      => "pitrex_get_level_floor_y",
         "GET_SCROLL_LIMIT_LEFT"  => "pitrex_get_scroll_limit_left",
         "GET_SCROLL_LIMIT_RIGHT" => "pitrex_get_scroll_limit_right",
         "GET_SCROLL_LIMIT_TOP"   => "pitrex_get_scroll_limit_top",

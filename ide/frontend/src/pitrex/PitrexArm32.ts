@@ -74,8 +74,17 @@ export interface PitrexArm32State {
 // Memory helpers
 // ---------------------------------------------------------------------------
 
+// BCM system timer struct (Pi Zero hardware register, simulated)
+// bcm2835_st points to this struct; offset +4 is the CLO (free-running µs counter).
+const BCM_TIMER_ADDR = 0x20003000;
+
 function memRead32(s: PitrexArm32State, addr: number): number {
-  return s.mem.get(addr & ~3) ?? 0;
+  const aligned = addr & ~3;
+  // Intercept BCM CLO register read — return a real microsecond timestamp
+  if (aligned === BCM_TIMER_ADDR + 4) {
+    return (performance.now() * 1000) >>> 0;
+  }
+  return s.mem.get(aligned) ?? 0;
 }
 function memWrite32(s: PitrexArm32State, addr: number, val: number): void {
   s.mem.set(addr & ~3, val | 0);
@@ -1240,6 +1249,14 @@ export function createState(parsed: ParsedAsm): PitrexArm32State {
 
   // Initialize extern symbol addresses in memory to 0 (neutral joystick etc.)
   // They will be updated by v_readButtons / v_readJoystick1Analog stubs
+
+  // Set up BCM system timer: bcm2835_st is a pointer variable; write BCM_TIMER_ADDR into it.
+  // pitrex_music_update does: ldr r,[bcm2835_st]; ldr r,[r,#4] to read CLO.
+  // memRead32 intercepts [BCM_TIMER_ADDR+4] and returns a real µs timestamp.
+  const bcmSym = parsed.symbols.get('bcm2835_st');
+  if (bcmSym) {
+    memWrite32(s, bcmSym.value, BCM_TIMER_ADDR);
+  }
 
   return s;
 }

@@ -36,6 +36,13 @@ interface Layer {
   paths: VecPath[];
 }
 
+interface CollisionSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 interface VecResource {
   version: string;
   name: string;
@@ -60,6 +67,9 @@ interface VecResource {
   backgroundImage?: string;
   // Background image offset in canvas pixels
   backgroundOffset?: { x: number; y: number };
+  collisionMesh?: {
+    segments: CollisionSegment[];
+  };
 }
 
 interface VectorEditorProps {
@@ -534,6 +544,43 @@ function detectEdgesFromImage(
 }
 
 // ============================================
+// Collision Mesh Helpers
+// ============================================
+
+function filterTopEdges(segs: CollisionSegment[]): CollisionSegment[] {
+  return segs.filter(seg => {
+    const xa = Math.min(seg.x1, seg.x2);
+    const xb = Math.max(seg.x1, seg.x2);
+    return !segs.some(t =>
+      t !== seg &&
+      t.y1 > seg.y1 &&
+      Math.min(t.x1, t.x2) < xb &&
+      Math.max(t.x1, t.x2) > xa
+    );
+  });
+}
+
+function generateMeshFromPath(path: VecPath): CollisionSegment[] {
+  const pts = path.points;
+  if (pts.length < 2) return [];
+  const horiz: CollisionSegment[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i], p2 = pts[i + 1];
+    if (!p1 || !p2) continue;
+    if (p1.y === p2.y) {
+      horiz.push({ x1: Math.min(p1.x, p2.x), y1: p1.y, x2: Math.max(p1.x, p2.x), y2: p2.y });
+    }
+  }
+  if (path.closed && pts.length >= 2) {
+    const p1 = pts[pts.length - 1], p2 = pts[0];
+    if (p1 && p2 && p1.y === p2.y) {
+      horiz.push({ x1: Math.min(p1.x, p2.x), y1: p1.y, x2: Math.max(p1.x, p2.x), y2: p2.y });
+    }
+  }
+  return filterTopEdges(horiz);
+}
+
+// ============================================
 // Main VectorEditor Component
 // ============================================
 
@@ -643,6 +690,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [rotation3D, setRotation3D] = useState({ pitch: 30, yaw: 45 }); // degrees
   const [isDrawing, setIsDrawing] = useState(false);
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
+  const [showCollisionMesh, setShowCollisionMesh] = useState(false);
+  const [selectedEdge, setSelectedEdge] = useState<{ pathIdx: number; edgeIdx: number } | null>(null);
 
   // Tracks the mousedown position for bezier anchor drag detection
   const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
@@ -1229,19 +1278,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const rectW = screenR.x - screenL.x;
       const rectH = screenB.y - screenT.y;
 
-      // Scale image to fit inside rect while preserving aspect ratio
-      const imgAspect = backgroundImage.naturalWidth / backgroundImage.naturalHeight;
-      const rectAspect = rectW / rectH;
-      let drawWidth: number, drawHeight: number;
-      if (imgAspect > rectAspect) {
-        drawWidth = rectW;
-        drawHeight = rectW / imgAspect;
-      } else {
-        drawHeight = rectH;
-        drawWidth = rectH * imgAspect;
-      }
-      const drawX = rectX + (rectW - drawWidth) / 2;
-      const drawY = rectY + (rectH - drawHeight) / 2;
+      // Stretch image to fill the Vectrex screen rect (same as vplay editor)
+      const drawWidth = rectW;
+      const drawHeight = rectH;
+      const drawX = rectX;
+      const drawY = rectY;
 
       ctx.drawImage(backgroundImage, drawX, drawY, drawWidth, drawHeight);
 
@@ -1429,6 +1470,58 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           }
         }
       }
+    }
+
+    // Draw selected edge highlight (for collision mesh edge selection)
+    if (selectedEdge !== null) {
+      const layer = resource.layers[currentLayerIndex];
+      const path = layer?.paths[selectedEdge.pathIdx];
+      if (path) {
+        const p1r = path.points[selectedEdge.edgeIdx];
+        const p2r = path.points[selectedEdge.edgeIdx + 1];
+        if (p1r && p2r) {
+          const p1 = resourceToCanvas(p1r);
+          const p2 = resourceToCanvas(p2r);
+          ctx.save();
+          ctx.strokeStyle = '#ffaa00';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.fillStyle = '#ffaa00';
+          ctx.beginPath(); ctx.arc(p1.x, p1.y, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(p2.x, p2.y, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    // Draw collision mesh overlay
+    if (showCollisionMesh && resource.collisionMesh?.segments?.length) {
+      ctx.save();
+      ctx.strokeStyle = '#ff44ff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      for (const seg of resource.collisionMesh.segments) {
+        const p1 = resourceToCanvas({ x: seg.x1, y: seg.y1 });
+        const p2 = resourceToCanvas({ x: seg.x2, y: seg.y2 });
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        // Small tick marks at endpoints
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(p1.x, p1.y, 3, 0, Math.PI * 2);
+        ctx.arc(p2.x, p2.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff44ff';
+        ctx.fill();
+        ctx.setLineDash([4, 3]);
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
     }
 
     // Draw temporary points while drawing
@@ -1731,7 +1824,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge]);
 
   useEffect(() => {
     draw();
@@ -2180,11 +2273,18 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             if (pt) startPositions.set(k, { x: pt.x, y: pt.y });
           }
           dragStartPositionsRef.current = startPositions;
+          setSelectedEdge(null); // point selected, not an edge
         } else {
-          // Clicked on path line but not a point - just select the path
+          // Clicked on path line but not a point - select the path and remember which edge
           setSelectedPointIndex(-1);
           if (!e.shiftKey) {
             setSelectedPoints(new Set());
+          }
+          const seg = hoveredSegmentRef.current;
+          if (seg && seg.pathIdx === closestPath) {
+            setSelectedEdge({ pathIdx: closestPath, edgeIdx: seg.segIdx });
+          } else {
+            setSelectedEdge(null);
           }
         }
         setIsDrawing(true); // Enable dragging
@@ -4018,6 +4118,143 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               +10
             </button>
           </div>
+        </div>
+
+        {/* Collision Mesh section */}
+        <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '8px' }}>
+          <div style={{ color: '#c8a', marginBottom: '6px', fontSize: '12px', fontWeight: 'bold' }}>
+            Collision Mesh
+          </div>
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                const segs = generateMeshFromPath(path);
+                const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                newResource.collisionMesh = { segments: segs };
+                updateResource(resource, newResource);
+                setShowCollisionMesh(true);
+              }}
+              style={{
+                flex: 1,
+                padding: '5px 4px',
+                background: '#3a3a6a',
+                border: '1px solid #6060aa',
+                color: '#ccf',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px',
+              }}
+              title="Auto-generate collision mesh from horizontal edges of selected path"
+            >
+              Auto-generate
+            </button>
+            <button
+              onClick={() => {
+                if (!selectedEdge) return;
+                const selPath = resource.layers[currentLayerIndex]?.paths[selectedEdge.pathIdx];
+                if (!selPath) return;
+                const p1 = selPath.points[selectedEdge.edgeIdx];
+                const p2 = selPath.points[selectedEdge.edgeIdx + 1];
+                if (!p1 || !p2) return;
+                const newSeg: CollisionSegment = {
+                  x1: Math.round(p1.x), y1: Math.round(p1.y),
+                  x2: Math.round(p2.x), y2: Math.round(p2.y),
+                };
+                const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                if (!newResource.collisionMesh) newResource.collisionMesh = { segments: [] };
+                newResource.collisionMesh.segments.push(newSeg);
+                updateResource(resource, newResource);
+                setShowCollisionMesh(true);
+              }}
+              disabled={!selectedEdge}
+              style={{
+                flex: 1,
+                padding: '5px 4px',
+                background: selectedEdge ? '#3a5a3a' : '#2a2a2a',
+                border: selectedEdge ? '1px solid #5a9a5a' : '1px solid #444',
+                color: selectedEdge ? '#afa' : '#666',
+                borderRadius: '3px',
+                cursor: selectedEdge ? 'pointer' : 'default',
+                fontSize: '10px',
+              }}
+              title="Add the selected edge (orange) to the collision mesh"
+            >
+              + Edge
+            </button>
+            <button
+              onClick={() => {
+                const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                newResource.collisionMesh = { segments: [] };
+                updateResource(resource, newResource);
+              }}
+              disabled={!resource.collisionMesh?.segments?.length}
+              style={{
+                padding: '5px 6px',
+                background: '#4a2a2a',
+                border: '1px solid #8a4a4a',
+                color: '#faa',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px',
+                opacity: resource.collisionMesh?.segments?.length ? 1 : 0.4,
+              }}
+              title="Clear collision mesh"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => setShowCollisionMesh(v => !v)}
+              style={{
+                padding: '5px 6px',
+                background: showCollisionMesh ? '#3a5a3a' : '#2a2a2a',
+                border: showCollisionMesh ? '1px solid #5a9a5a' : '1px solid #555',
+                color: showCollisionMesh ? '#afa' : '#888',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px',
+              }}
+              title="Toggle collision mesh overlay on canvas"
+            >
+              {showCollisionMesh ? '👁 On' : '👁 Off'}
+            </button>
+          </div>
+          {selectedEdge !== null && (() => {
+            const selPath = resource.layers[currentLayerIndex]?.paths[selectedEdge.pathIdx];
+            const p1 = selPath?.points[selectedEdge.edgeIdx];
+            const p2 = selPath?.points[selectedEdge.edgeIdx + 1];
+            return p1 && p2 ? (
+              <div style={{ fontSize: '9px', color: '#ffaa00', fontFamily: 'monospace', marginBottom: '4px' }}>
+                Edge: ({Math.round(p1.x)},{Math.round(p1.y)})→({Math.round(p2.x)},{Math.round(p2.y)})
+              </div>
+            ) : null;
+          })()}
+          <div style={{ fontSize: '10px', color: '#999' }}>
+            {resource.collisionMesh?.segments?.length
+              ? `${resource.collisionMesh.segments.length} segment${resource.collisionMesh.segments.length !== 1 ? 's' : ''}`
+              : 'No mesh — click Auto-generate or select an edge'}
+          </div>
+          {resource.collisionMesh?.segments?.map((seg, idx) => (
+            <div key={idx} style={{
+              fontSize: '9px', color: '#c8a', fontFamily: 'monospace',
+              marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
+            }}>
+              <span style={{ flex: 1 }}>
+                ({seg.x1},{seg.y1})→({seg.x2},{seg.y2})
+              </span>
+              <button
+                onClick={() => {
+                  const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                  newResource.collisionMesh!.segments.splice(idx, 1);
+                  updateResource(resource, newResource);
+                }}
+                style={{
+                  padding: '1px 4px', background: 'transparent',
+                  border: '1px solid #666', color: '#f88', borderRadius: '2px',
+                  cursor: 'pointer', fontSize: '9px',
+                }}
+              >x</button>
+            </div>
+          ))}
         </div>
 
         <div style={{ fontSize: '11px', color: '#888' }}>

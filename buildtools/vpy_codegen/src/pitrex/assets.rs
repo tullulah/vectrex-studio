@@ -415,6 +415,16 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
         }
     }
 
+    // Build vec_meshes: lowercase vector name → collision mesh segments from .vec file
+    let mut vec_meshes: HashMap<String, Vec<crate::vecres::VecMeshSegment>> = HashMap::new();
+    for (name, res) in &vec_cache {
+        if let Some(mesh) = &res.collision_mesh {
+            if !mesh.segments.is_empty() {
+                vec_meshes.insert(name.clone(), mesh.segments.clone());
+            }
+        }
+    }
+
     // ── Center-override pre-pass ────────────────────────────────────────────
     // Sprites that belong to a vanim group OR a venemy group share a single
     // bounding-box center, so per-frame / per-state geometry shifts no longer
@@ -505,7 +515,7 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     .parent()
                     .and_then(|p| p.parent())
                     .map(|p| p.join("enemies"));
-                s.push_str(&level.compile_to_arm_asm_with_venemy(&dims_map, venemy_dir.as_deref()));
+                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
@@ -1069,7 +1079,12 @@ fn emit_vec_resource(
     // position, preventing visible jiggle/teleport on transition.
     let (center_x, center_y) = override_center.unwrap_or_else(|| res.calculate_center());
 
-    let paths = res.visible_paths();
+    // Filter out degenerate paths (< 2 points = 0 segments) — they still cost
+    // a v_directMove32 + v_setScale call on PiTrex hardware with nothing drawn.
+    let paths: Vec<_> = res.visible_paths()
+        .into_iter()
+        .filter(|p| p.points.len() >= 2)
+        .collect();
 
     s.push_str(&format!("@ --- {} ({} path(s)) ---\n", override_name, paths.len()));
     s.push_str(&format!(".global _{sym}_VECTORS\n"));

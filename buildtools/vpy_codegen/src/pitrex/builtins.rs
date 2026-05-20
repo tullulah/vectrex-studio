@@ -79,6 +79,7 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_draw_enemies());
     s.push_str(&emit_pitrex_kill_enemy());
     s.push_str(&emit_pitrex_enemy_fire_event());
+    s.push_str(&emit_pitrex_get_frame_us());
 
     s
 }
@@ -111,13 +112,26 @@ fn emit_pitrex_wait_recal() -> String {
     s.push_str("    beq     .Lwrcal_skip_measure\n");
     s.push_str("    sub     r6, r5, r6          @ r6 = work_us (handles 32-bit wrap)\n");
 
-    // Decrement print counter; print every 50 frames
+    // Overflow alarm: print "!OVR:W=NNNNus/20000us\r\n" every frame that exceeds budget
+    // 20000 (0x4E20) doesn't fit in an ARM32 rotated-8-bit immediate — use literal pool load.
+    s.push_str("    ldr     r4, =20000\n");
+    s.push_str("    cmp     r6, r4\n");
+    s.push_str("    blt     .Lwrcal_no_ovr\n");
+    s.push_str("    ldr     r0, =.Lstr_cpu_ovr\n");
+    s.push_str("    bl      vpy_uart_puts        @ \"!OVR:W=\"\n");
+    s.push_str("    mov     r0, r6\n");
+    s.push_str("    bl      vpy_uart_print_int   @ work µs\n");
+    s.push_str("    ldr     r0, =.Lstr_cpu_of\n");
+    s.push_str("    bl      vpy_uart_puts        @ \"/20000us\\r\\n\"\n");
+    s.push_str(".Lwrcal_no_ovr:\n");
+
+    // Decrement print counter; print every 10 frames (5×/sec at 50 Hz)
     s.push_str("    ldr     r4, =CPU_PRINT_CTR\n");
     s.push_str("    ldr     r0, [r4]\n");
     s.push_str("    subs    r0, r0, #1\n");
     s.push_str("    str     r0, [r4]\n");
     s.push_str("    bgt     .Lwrcal_skip_measure\n");
-    s.push_str("    mov     r0, #50\n");
+    s.push_str("    mov     r0, #10\n");
     s.push_str("    str     r0, [r4]            @ reset counter\n");
     s.push_str("    ldr     r0, =.Lstr_cpu_w\n");
     s.push_str("    bl      vpy_uart_puts        @ \"W=\"\n");
@@ -485,10 +499,6 @@ fn emit_pitrex_draw_vector() -> String {
     s.push_str("    b       dv_seg_loop\n");
     s.push_str("dv_done:\n");
     s.push_str("    add     sp, sp, #8          @ remove saved raw ox, oy\n");
-    // Clear brightness override: next DRAW_VECTOR uses .vec intensities
-    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
-    s.push_str("    mov     r1, #0\n");
-    s.push_str("    strb    r1, [r0]\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -644,10 +654,6 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r9, r10}\n");
     s.push_str("    b       dvex_seg_loop\n");
     s.push_str("dvex_done:\n");
-    // Clear brightness override: next DRAW_VECTOR_EX uses .vec intensities
-    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
-    s.push_str("    mov     r1, #0\n");
-    s.push_str("    strb    r1, [r0]\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
@@ -1177,18 +1183,32 @@ fn emit_pitrex_update_buttons() -> String {
 
 fn emit_pitrex_debug_print() -> String {
     let mut s = String::new();
-    // pitrex_debug_print(r0=value) — delegates to pitrex_print_number
+    // pitrex_debug_print(r0=value) — sends integer to UART
     s.push_str("@ pitrex_debug_print(r0=value)\n");
     s.push_str(".global pitrex_debug_print\n.type pitrex_debug_print, %function\npitrex_debug_print:\n");
     s.push_str("    push    {lr}\n");
-    s.push_str("    bl      pitrex_print_number\n");
+    s.push_str("    bl      vpy_uart_print_int\n");
+    s.push_str("    mov     r0, #13\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
+    s.push_str("    mov     r0, #10\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
     s.push_str("    pop     {pc}\n\n");
-    s.push_str("@ pitrex_debug_print_labeled(r0=label_ptr, r1=value)\n");
+    s.push_str("@ pitrex_debug_print_labeled(r0=label_ptr, r1=value) — UART: label=value\n");
     s.push_str(".global pitrex_debug_print_labeled\n.type pitrex_debug_print_labeled, %function\npitrex_debug_print_labeled:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, r1\n");
-    s.push_str("    bl      pitrex_print_number\n");
-    s.push_str("    pop     {pc}\n\n");
+    s.push_str("    push    {r4, r5, lr}\n");
+    s.push_str("    mov     r4, r0          @ save label_ptr\n");
+    s.push_str("    mov     r5, r1          @ save value\n");
+    s.push_str("    mov     r0, r4\n");
+    s.push_str("    bl      vpy_uart_print_int @ print label as int\n");
+    s.push_str("    mov     r0, #61         @ '='\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    bl      vpy_uart_print_int @ print value\n");
+    s.push_str("    mov     r0, #13         @ CR\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
+    s.push_str("    mov     r0, #10         @ LF\n");
+    s.push_str("    bl      RPI_AuxUartWrite\n");
+    s.push_str("    pop     {r4, r5, pc}\n\n");
     s.push_str("@ pitrex_debug_print_str(r0=str_ptr)\n");
     s.push_str(".global pitrex_debug_print_str\n.type pitrex_debug_print_str, %function\npitrex_debug_print_str:\n");
     s.push_str("    push    {lr}\n");
@@ -1297,7 +1317,7 @@ fn emit_pitrex_level_collision() -> String {
     s.push_str("    add     r0, r10, r6         @ floor_center = floor_top + player_hh\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("plcy_no_floor:\n");
-    s.push_str("    ldr     r0, =-200\n");
+    s.push_str("    ldr     r0, =-10000  @ sentinel: below any valid screen_bottom so VPy fallback triggers\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
@@ -1322,6 +1342,9 @@ fn emit_pitrex_level_collision() -> String {
     s.push_str("plcx_loop:\n    cmp     r8, #0\n    beq     plcx_done\n");
     // collidable
     s.push_str("    ldrb    r0, [r9, #6]\n    tst     r0, #0x10\n    beq     plcx_next\n");
+    // if mesh present, use wall section; otherwise fall through to AABB
+    s.push_str("    ldr     r0, [r9, #16]       @ coll_mesh_ptr\n");
+    s.push_str("    cmp     r0, #0\n    bne     plcx_wall_mesh\n");
     // y-overlap: |py - obj_y| < player_hh + obj_half_h (uses actual player_hh, not hardcoded 8)
     s.push_str("    ldrb    r0, [r9, #13]       @ obj half_h\n");
     s.push_str("    ldrsh   r1, [r7, #2]        @ obj world_y\n");
@@ -1341,6 +1364,46 @@ fn emit_pitrex_level_collision() -> String {
     s.push_str("plcx_push_pos:\n    mov     r10, r3\n");
     s.push_str("plcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #20         @ ROM obj stride = 20 bytes\n");
     s.push_str("    subs    r8, r8, #1\n    b       plcx_loop\n");
+    // wall mesh path: skip floor section, iterate vertical segments
+    s.push_str("plcx_wall_mesh:\n");
+    s.push_str("    ldr     r1, [r0]            @ floor_count\n");
+    s.push_str("    add     r0, r0, #4          @ skip floor_count word\n");
+    s.push_str("    lsl     r1, r1, #3          @ floor_count * 8 bytes per seg\n");
+    s.push_str("    add     r0, r0, r1          @ r0 = ptr to wall_count\n");
+    s.push_str("    ldr     r1, [r0]            @ wall_count\n");
+    s.push_str("    cmp     r1, #0\n    beq     plcx_next\n");
+    s.push_str("    add     r0, r0, #4          @ r0 = ptr to first wall seg\n");
+    s.push_str("plcx_wall_loop:\n");
+    s.push_str("    cmp     r1, #0\n    beq     plcx_next\n");
+    // load segment: .hword x, y_min, x, y_max (offsets 0,2,4,6)
+    s.push_str("    ldrsh   r2, [r0]            @ wall local x\n");
+    s.push_str("    ldrsh   r3, [r0, #2]        @ wall local y_min\n");
+    s.push_str("    ldrsh   r12, [r0, #6]       @ wall local y_max\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    subs    r1, r1, #1\n");
+    // world coords
+    s.push_str("    ldrsh   r14, [r7, #0]       @ obj world_x\n");
+    s.push_str("    add     r2, r2, r14         @ world_wall_x\n");
+    s.push_str("    ldrsh   r14, [r7, #2]       @ obj world_y\n");
+    s.push_str("    add     r3, r3, r14         @ world_y_min\n");
+    s.push_str("    add     r12, r12, r14       @ world_y_max\n");
+    // Y-overlap (strict): py - player_hh < y_max AND py + player_hh > y_min
+    // Using strict inequalities so a player whose feet are exactly at y_max
+    // (standing on top of the wall's upper edge) is NOT blocked horizontally.
+    s.push_str("    sub     r14, r3, r11        @ world_y_min - player_hh\n");
+    s.push_str("    cmp     r5, r14\n    ble     plcx_wall_loop  @ py + hh <= y_min: below wall\n");
+    s.push_str("    add     r14, r12, r11       @ world_y_max + player_hh\n");
+    s.push_str("    cmp     r5, r14\n    bge     plcx_wall_loop  @ py - hh >= y_max: above wall\n");
+    // X-overlap: |px - wall_x| < player_hw; compute dx_raw and abs
+    s.push_str("    sub     r3, r4, r2          @ dx_raw = px - wall_x\n");
+    s.push_str("    movs    r2, r3              @ r2 = dx_raw (sign preserved); also sets N flag\n");
+    s.push_str("    bpl     plcx_wall_dx_ok\n    neg     r3, r3  @ r3 = |dx_raw|\n");
+    s.push_str("plcx_wall_dx_ok:\n");
+    s.push_str("    cmp     r3, r6\n    bge     plcx_wall_loop  @ |dx| >= player_hw, no overlap\n");
+    // push-out = sign(dx_raw) * (player_hw - |dx|)
+    s.push_str("    sub     r3, r6, r3          @ overlap = player_hw - |dx|\n");
+    s.push_str("    cmp     r2, #0\n    bge     plcx_wall_sign_ok\n    neg     r3, r3\n");
+    s.push_str("plcx_wall_sign_ok:\n    mov     r10, r3\n    b       plcx_next\n");
     s.push_str("plcx_done:\n    mov     r0, r10\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("plcx_done_zero:\n    mov     r0, #0\n");
@@ -1418,48 +1481,81 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    pop     {pc}\n    .ltorg\n\n");
 
     // ── pitrex_music_update() ──────────────────────────────────────────────
-    // Advance music sequencer one frame:
-    //   - decrement PSG_DELAY_FRAMES if > 0
-    //   - else fire current event (apply N reg/val pairs via v_writePSG),
-    //     then advance PSG_MUSIC_PTR past it, and load NEXT event's delay.
-    //   - num_writes==0   → end of music: stop.
-    //   - num_writes==0xFF → loop marker: jump to base + loop_event_byte_offset.
-    s.push_str("@ pitrex_music_update() — advance music sequencer one frame\n");
+    // Tempo-stable sequencer using BCM CLO real-time timer.
+    // Accumulates elapsed µs into PSG_MUSIC_TICK_US; fires 50Hz ticks (20000µs each).
+    // Loops inside the call to catch up when frames are slower than 50Hz.
+    // Cap: max 60000µs accumulated = 3 ticks catchup per call.
+    //
+    // Register use:
+    //   r4 = CLO now (at entry), then PSG_DELAY_FRAMES ptr (in tick loop)
+    //   r5 = PSG_MUSIC_LAST_CLO ptr (at entry), then event ptr (in pmu_process)
+    //   r6 = delta_us (at entry), then 20000 constant / num_writes (in loops)
+    //   r7 = PSG_MUSIC_TICK_US ptr (in tick loop) — reloaded after pmu_after/pmu_loop
+    s.push_str("@ pitrex_music_update() — BCM-CLO tempo-stable sequencer\n");
     s.push_str(".global pitrex_music_update\n.type pitrex_music_update, %function\npitrex_music_update:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
     s.push_str("    ldr     r0, =PSG_IS_PLAYING\n    ldr     r0, [r0]\n");
     s.push_str("    cmp     r0, #0\n    beq     pmu_done\n");
-    // If PSG_DELAY_FRAMES > 0 → decrement, return
+    // Read CLO
+    s.push_str("    ldr     r4, =bcm2835_st\n    ldr     r4, [r4]\n");
+    s.push_str("    ldr     r4, [r4, #4]        @ r4 = CLO now\n");
+    // Compute and accumulate delta
+    s.push_str("    ldr     r5, =PSG_MUSIC_LAST_CLO\n");
+    s.push_str("    ldr     r6, [r5]            @ r6 = last CLO (0 if not yet init)\n");
+    s.push_str("    cmp     r6, #0\n    beq     pmu_init_clo\n");
+    s.push_str("    sub     r6, r4, r6          @ delta_us (wraps correctly)\n");
+    s.push_str("    ldr     r7, =PSG_MUSIC_TICK_US\n");
+    s.push_str("    ldr     r0, [r7]\n    add     r0, r0, r6\n");
+    // Cap at 60000µs (3 ticks) to prevent runaway catchup after pauses
+    s.push_str("    ldr     r6, =60000\n    cmp     r0, r6\n");
+    s.push_str("    movgt   r0, r6              @ cap\n");
+    s.push_str("    str     r0, [r7]\n");
+    s.push_str("    b       pmu_save_clo\n");
+    s.push_str("pmu_init_clo:\n");
+    s.push_str("    ldr     r7, =PSG_MUSIC_TICK_US\n    mov     r0, #0\n    str     r0, [r7]\n");
+    s.push_str("pmu_save_clo:\n");
+    s.push_str("    str     r4, [r5]            @ PSG_MUSIC_LAST_CLO = now\n");
+    // Tick loop: fire one sequencer tick per 20000µs accumulated
+    s.push_str("pmu_tick_loop:\n");
+    s.push_str("    ldr     r0, [r7]            @ PSG_MUSIC_TICK_US\n");
+    s.push_str("    ldr     r6, =20000\n    cmp     r0, r6\n");
+    s.push_str("    blt     pmu_done            @ < 20ms accumulated, nothing to fire\n");
+    s.push_str("    sub     r0, r0, r6\n    str     r0, [r7]  @ consume one tick\n");
+    // Advance sequencer by one tick
     s.push_str("    ldr     r4, =PSG_DELAY_FRAMES\n    ldr     r0, [r4]\n");
     s.push_str("    cmp     r0, #0\n    beq     pmu_process\n");
-    s.push_str("    sub     r0, r0, #1\n    str     r0, [r4]\n    b       pmu_done\n");
+    s.push_str("    sub     r0, r0, #1\n    str     r0, [r4]\n    b       pmu_tick_loop\n");
+    // Fire a sequencer event
     s.push_str("pmu_process:\n");
     s.push_str("    ldr     r5, =PSG_MUSIC_PTR\n    ldr     r5, [r5]    @ event ptr\n");
-    s.push_str("    ldrb    r6, [r5, #1]                @ num_writes\n");
+    s.push_str("    ldrb    r6, [r5, #1]        @ num_writes\n");
     s.push_str("    cmp     r6, #0\n    beq     pmu_end\n");
-    s.push_str("    cmp     r6, #0xFF\n beq     pmu_loop\n");
-    // Apply num_writes (reg, val) pairs starting at event+2
-    s.push_str("    add     r7, r5, #2\n");
+    s.push_str("    cmp     r6, #0xFF\n    beq     pmu_loop\n");
+    s.push_str("    add     r7, r5, #2          @ r7 = write pairs (overrides tick_us ptr)\n");
     s.push_str("pmu_wl:\n");
     s.push_str("    cmp     r6, #0\n    beq     pmu_after\n");
     s.push_str("    ldrb    r0, [r7]\n    ldrb    r1, [r7, #1]\n");
     s.push_str("    push    {r6, r7}\n    bl      v_writePSG\n    pop     {r6, r7}\n");
     s.push_str("    add     r7, r7, #2\n    sub     r6, r6, #1\n    b       pmu_wl\n");
     s.push_str("pmu_after:\n");
-    // r7 now = next event ptr; store and load its delay
     s.push_str("    ldr     r0, =PSG_MUSIC_PTR\n    str     r7, [r0]\n");
-    s.push_str("    ldrb    r0, [r7]                    @ next event delay\n");
-    s.push_str("    str     r0, [r4]\n");
-    s.push_str("    b       pmu_done\n");
+    s.push_str("    ldr     r4, =PSG_DELAY_FRAMES\n");
+    s.push_str("    ldrb    r0, [r7]            @ next event delay\n    str     r0, [r4]\n");
+    s.push_str("    ldr     r7, =PSG_MUSIC_TICK_US  @ reload for next tick_loop\n");
+    s.push_str("    b       pmu_tick_loop\n");
     s.push_str("pmu_end:\n    bl      pitrex_stop_music\n    b       pmu_done\n");
     s.push_str("pmu_loop:\n");
     s.push_str("    ldr     r0, =PSG_MUSIC_START\n    ldr     r0, [r0]\n");
-    s.push_str("    ldr     r1, [r0, #4]                @ loop_event_byte_offset\n");
+    s.push_str("    ldr     r1, [r0, #4]        @ loop_event_byte_offset\n");
     s.push_str("    add     r1, r0, r1\n");
     s.push_str("    ldr     r0, =PSG_MUSIC_PTR\n    str     r1, [r0]\n");
+    s.push_str("    ldr     r4, =PSG_DELAY_FRAMES\n");
     s.push_str("    ldrb    r0, [r1]\n    str     r0, [r4]\n");
+    s.push_str("    ldr     r7, =PSG_MUSIC_TICK_US  @ reload for next tick_loop\n");
+    s.push_str("    b       pmu_tick_loop\n");
     s.push_str("pmu_done:\n    pop     {r4, r5, r6, r7, pc}\n    .ltorg\n\n");
 
+    // ── pitrex_play_sfx
     // ── pitrex_play_sfx(r0=sfx_base) ───────────────────────────────────────
     // SFX header is just a single .word num_events; first event at base+4.
     s.push_str("@ pitrex_play_sfx(r0=sfx_base)\n");
@@ -1560,7 +1656,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
-    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 200 (off-screen)\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 140 (off-screen, 13-unit buffer past ±127 screen edge)\n");
     s.push_str("    mov     r12, r0\n");
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
@@ -1571,7 +1667,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r12, r12, #0        @ r12 = |oy|\n");
-    s.push_str("    cmp     r12, #200\n");
+    s.push_str("    cmp     r12, #140\n");
     s.push_str("    bgt     .Lshl_bg_skip\n");
     s.push_str("    push    {r4, r5, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
@@ -1605,7 +1701,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr (from ROM obj)\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
-    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 200 (off-screen)\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 140 (off-screen, 13-unit buffer past ±127 screen edge)\n");
     s.push_str("    mov     r12, r0\n");
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
@@ -1616,7 +1712,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r12, r12, #0        @ r12 = |oy|\n");
-    s.push_str("    cmp     r12, #200\n");
+    s.push_str("    cmp     r12, #140\n");
     s.push_str("    bgt     .Lshl_gp_skip\n");
     s.push_str("    push    {r4, r5, r7, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
@@ -1646,7 +1742,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    ldr     r6, [r5, #8]        @ vector_ptr\n");
     s.push_str("    sub     r0, r0, r10         @ ox = x - cam_x\n");
     s.push_str("    sub     r1, r1, r11         @ oy = y - cam_y\n");
-    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 200 (off-screen)\n");
+    s.push_str("    @ Cull: skip if |ox| > 180 or |oy| > 140 (off-screen, 13-unit buffer past ±127 screen edge)\n");
     s.push_str("    mov     r12, r0\n");
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
@@ -1657,7 +1753,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    cmp     r12, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r12, r12, #0        @ r12 = |oy|\n");
-    s.push_str("    cmp     r12, #200\n");
+    s.push_str("    cmp     r12, #140\n");
     s.push_str("    bgt     .Lshl_fg_skip\n");
     s.push_str("    push    {r4, r5, r10, r11}  @ save loop state\n");
     s.push_str("    push    {r8}                @ 5th arg: intensity\n");
@@ -2143,6 +2239,18 @@ fn emit_pitrex_camera_getters() -> String {
     s.push_str("    ldr     r1, =CAMERA_Y\n");
     s.push_str("    ldr     r0, [r1]\n");
     s.push_str("    bx      lr\n");
+    s.push_str("    .ltorg\n\n");
+    s.push_str("@ pitrex_get_level_floor_y() → r0 = floor surface world Y\n");
+    s.push_str("@   = camera_y - 128 + groundBottomOffset  (from level header +32)\n");
+    s.push_str(".global pitrex_get_level_floor_y\n.type pitrex_get_level_floor_y, %function\npitrex_get_level_floor_y:\n");
+    s.push_str("    ldr     r0, =LEVEL_DATA_PTR\n    ldr     r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n    beq     pglfy_none\n");
+    s.push_str("    ldrsh   r1, [r0, #32]      @ groundBottomOffset at header +32\n");
+    s.push_str("    ldr     r0, =VAR_CAMERA_Y\n    ldrsh   r0, [r0]\n");
+    s.push_str("    sub     r0, r0, #128\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str("    bx      lr\n");
+    s.push_str("pglfy_none:\n    mov     r0, #0\n    bx      lr\n");
     s.push_str("    .ltorg\n\n");
     for (fname, sym) in &[
         ("pitrex_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT"),
@@ -2885,77 +2993,115 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27 is_anim (u8)
     //   +28..+31 wp_base (u32 ROM ptr) — must not be touched by anim state
     let mut s = String::new();
-    s.push_str("@ pitrex_spawn_enemies(r0=data_ptr, r1=count) — fill enemy pool from ROM table\n");
+    // r4=ROM data_ptr  r5=ROM entry countdown  r6=pool write ptr  r7=spawned count
+    // r8=y_min  r9=y_max  r10=scratch  r0=scratch (saved to r4 at entry)
+    s.push_str("@ pitrex_spawn_enemies(r0=data_ptr, r1=total_count)\n");
+    s.push_str("@ Clears pool, reads CAMERA_Y, spawns only enemies in current floor range.\n");
     s.push_str(".global pitrex_spawn_enemies\n.type pitrex_spawn_enemies, %function\npitrex_spawn_enemies:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
-    s.push_str("    mov     r4, r0          @ data_ptr\n");
-    s.push_str("    mov     r5, r1          @ count\n");
-    s.push_str("    ldr     r6, =PITREX_ENEMY_COUNT\n");
-    s.push_str("    str     r5, [r6]\n");
-    s.push_str("    ldr     r7, =PITREX_ENEMY_POOL\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    mov     r4, r0          @ ROM data_ptr\n");
+    s.push_str("    mov     r5, r1          @ total ROM entry count\n");
+
+    // Step 1: Clear active flag for all 32 pool slots so previous level's enemies disappear.
+    s.push_str("    @ Clear pool: zero active byte for all 32 slots\n");
+    s.push_str("    ldr     r6, =PITREX_ENEMY_POOL\n");
+    s.push_str("    mov     r10, #32\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str(".Lspe_clear:\n");
+    s.push_str("    strb    r0, [r6, #12]   @ pool.active = 0\n");
+    s.push_str("    add     r6, r6, #32\n");
+    s.push_str("    subs    r10, r10, #1\n");
+    s.push_str("    bne     .Lspe_clear\n");
+
+    // Step 2: Compute y_min/y_max from CAMERA_Y (±150 — slightly wider than one screen).
+    s.push_str("    @ Compute spawn range from CAMERA_Y\n");
+    s.push_str("    ldr     r0, =CAMERA_Y\n");
+    s.push_str("    ldr     r0, [r0]        @ camera_y (signed 32-bit)\n");
+    s.push_str("    sub     r8, r0, #150    @ y_min = camera_y - 150\n");
+    s.push_str("    add     r9, r0, #150    @ y_max = camera_y + 150\n");
+
+    // Step 3: Setup pool write pointer and spawned count.
+    s.push_str("    ldr     r6, =PITREX_ENEMY_POOL  @ pool write ptr\n");
+    s.push_str("    mov     r7, #0                   @ spawned count\n");
     s.push_str("    cmp     r5, #0\n");
-    s.push_str("    beq     .Lspe_done\n");
+    s.push_str("    beq     .Lspe_store_count\n");
+
     s.push_str(".Lspe_loop:\n");
-    s.push_str("    ldr     r6, [r4]        @ sprite_ptr\n");
-    s.push_str("    str     r6, [r7]        @ pool.sprite_ptr\n");
-    s.push_str("    ldrsh   r6, [r4, #4]    @ spawn_x\n");
-    s.push_str("    strh    r6, [r7, #4]    @ pool.x\n");
-    s.push_str("    ldrsh   r6, [r4, #6]    @ spawn_y\n");
-    s.push_str("    strh    r6, [r7, #6]    @ pool.y\n");
-    s.push_str("    ldrb    r6, [r4, #8]    @ ai_type\n");
-    s.push_str("    strb    r6, [r7, #13]   @ pool.ai_type\n");
-    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count\n");
-    s.push_str("    strb    r6, [r7, #15]   @ pool.wp_count\n");
-    // mirror_on_patrol and default_facing from ROM +10/+11
-    s.push_str("    ldrb    r6, [r4, #10]   @ mirror_on_patrol\n");
-    s.push_str("    strb    r6, [r7, #24]   @ pool.mirror_on_patrol\n");
-    s.push_str("    ldrb    r6, [r4, #11]   @ default_facing\n");
-    s.push_str("    strb    r6, [r7, #25]   @ pool.default_facing\n");
-    // active=1, cur_target=0, dir=1 (start facing right); store ROM waypoints base at pool+28
-    s.push_str("    mov     r6, #1\n");
-    s.push_str("    strb    r6, [r7, #12]   @ pool.active = 1\n");
-    s.push_str("    strb    r6, [r7, #26]   @ pool.dir = 1 (right, initial)\n");
-    s.push_str("    mov     r6, #0\n");
-    s.push_str("    strb    r6, [r7, #14]   @ pool.cur_target = 0\n");
-    s.push_str("    strb    r6, [r7, #18]   @ pool.sm_state = 0\n");
-    s.push_str("    strh    r6, [r7, #8]    @ pool.thaw_timer = 0\n");
-    s.push_str("    add     r6, r4, #12     @ ROM waypoints base (ROM entry + 12)\n");
-    s.push_str("    str     r6, [r7, #28]   @ pool.wp_base = ptr to ROM waypoints\n");
-    // is_anim flag is at ROM+12 + wp_count*4 (variable offset after all waypoints)
-    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count (re-read for is_anim offset)\n");
-    s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
-    s.push_str("    add     r6, r6, #12     @ offset = 12 + wp_count*4\n");
-    s.push_str("    ldrb    r8, [r4, r6]    @ ROM is_anim flag\n");
-    s.push_str("    strb    r8, [r7, #27]   @ pool.is_anim\n");
-    // Read type_data_ptr from ROM at (12 + wp_count*4 + 4 = 16 + wp_count*4)
-    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count\n");
-    s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
-    s.push_str("    add     r6, r6, #16     @ offset = 16 + wp_count*4 (after is_anim+3 pad)\n");
-    s.push_str("    ldr     r6, [r4, r6]    @ type_data_ptr (4-byte ROM ptr)\n");
-    s.push_str("    str     r6, [r7, #20]   @ pool.type_data_ptr\n");
-    s.push_str("    ldrb    r8, [r7, #27]   @ reload is_anim for branch below\n");
-    s.push_str("    cmp     r8, #0\n");
+    // Filter by spawn_y range.
+    s.push_str("    ldrsh   r10, [r4, #6]   @ spawn_y\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    blt     .Lspe_next      @ below floor\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    bgt     .Lspe_next      @ above floor\n");
+
+    // Copy entry into pool slot at r6.
+    s.push_str("    ldr     r0, [r4]        @ sprite_ptr\n");
+    s.push_str("    str     r0, [r6]        @ pool.sprite_ptr\n");
+    s.push_str("    ldrsh   r0, [r4, #4]    @ spawn_x\n");
+    s.push_str("    strh    r0, [r6, #4]    @ pool.x\n");
+    s.push_str("    ldrsh   r0, [r4, #6]    @ spawn_y\n");
+    s.push_str("    strh    r0, [r6, #6]    @ pool.y\n");
+    s.push_str("    ldrb    r0, [r4, #8]    @ ai_type\n");
+    s.push_str("    strb    r0, [r6, #13]   @ pool.ai_type\n");
+    s.push_str("    ldrb    r0, [r4, #9]    @ wp_count\n");
+    s.push_str("    strb    r0, [r6, #15]   @ pool.wp_count\n");
+    s.push_str("    ldrb    r0, [r4, #10]   @ mirror_on_patrol\n");
+    s.push_str("    strb    r0, [r6, #24]\n");
+    s.push_str("    ldrb    r0, [r4, #11]   @ default_facing\n");
+    s.push_str("    strb    r0, [r6, #25]\n");
+    s.push_str("    mov     r0, #1\n");
+    s.push_str("    strb    r0, [r6, #12]   @ pool.active = 1\n");
+    s.push_str("    strb    r0, [r6, #26]   @ pool.dir = 1 (right)\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r6, #14]   @ pool.cur_target = 0\n");
+    s.push_str("    strb    r0, [r6, #18]   @ pool.sm_state = 0\n");
+    s.push_str("    strh    r0, [r6, #8]    @ pool.thaw_timer = 0\n");
+    s.push_str("    add     r0, r4, #12     @ ROM waypoints base\n");
+    s.push_str("    str     r0, [r6, #28]   @ pool.wp_base\n");
+    // is_anim at ROM offset 12 + wp_count*4
+    s.push_str("    ldrb    r10, [r4, #9]   @ wp_count\n");
+    s.push_str("    lsl     r10, r10, #2\n");
+    s.push_str("    add     r10, r10, #12\n");
+    s.push_str("    ldrb    r0, [r4, r10]   @ is_anim\n");
+    s.push_str("    strb    r0, [r6, #27]   @ pool.is_anim\n");
+    // type_data_ptr at ROM offset 16 + wp_count*4
+    s.push_str("    ldrb    r10, [r4, #9]   @ wp_count\n");
+    s.push_str("    lsl     r10, r10, #2\n");
+    s.push_str("    add     r10, r10, #16\n");
+    s.push_str("    ldr     r0, [r4, r10]   @ type_data_ptr\n");
+    s.push_str("    str     r0, [r6, #20]   @ pool.type_data_ptr\n");
+    // vanim init: set frame_idx=0, anim_ticks_left=frame0.duration
+    s.push_str("    ldrb    r0, [r6, #27]   @ is_anim\n");
+    s.push_str("    cmp     r0, #0\n");
     s.push_str("    beq     .Lspe_novam\n");
-    // vanim: zero frame_idx and set anim_ticks_left to frame0's duration_ticks
-    // Anim state lives at pool +16/+17 to avoid collision with wp_base at +28..+31.
-    s.push_str("    ldr     r6, [r4]        @ sprite_ptr (anim header)\n");
-    s.push_str("    ldrb    r8, [r6, #3]    @ frame_table_offset (byte3 of header)\n");
-    s.push_str("    ldr     r8, [r6, r8]    @ frame0_ptr = anim_header[frame_table_offset]\n");
-    s.push_str("    ldrb    r8, [r8]        @ frame0 duration_ticks\n");
-    s.push_str("    mov     r6, #0\n");
-    s.push_str("    strb    r6, [r7, #16]   @ pool.anim_frame_idx = 0\n");
-    s.push_str("    strb    r8, [r7, #17]   @ pool.anim_ticks_left = frame0.duration\n");
+    s.push_str("    ldr     r0, [r4]        @ sprite_ptr (anim header)\n");
+    s.push_str("    ldrb    r10, [r0, #3]   @ frame_table_offset\n");
+    s.push_str("    ldr     r10, [r0, r10]  @ frame0_ptr\n");
+    s.push_str("    ldrb    r10, [r10]      @ frame0 duration_ticks\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r6, #16]   @ pool.anim_frame_idx = 0\n");
+    s.push_str("    strb    r10, [r6, #17]  @ pool.anim_ticks_left\n");
     s.push_str(".Lspe_novam:\n");
-    // ROM stride = 12 + wp_count*4 + 4 (is_anim+3×pad) + 4 (type_data_ptr) = 20 + wp_count*4
-    s.push_str("    ldrb    r6, [r4, #9]    @ wp_count for stride\n");
-    s.push_str("    lsl     r6, r6, #2      @ wp_count * 4\n");
-    s.push_str("    add     r6, r6, #20     @ stride = 20 + wp_count*4\n");
-    s.push_str("    add     r4, r4, r6      @ advance ROM ptr\n");
-    s.push_str("    add     r7, r7, #32\n");
+
+    // Advance pool write ptr; stop if pool is full (32 slots).
+    s.push_str("    add     r6, r6, #32\n");
+    s.push_str("    add     r7, r7, #1\n");
+    s.push_str("    cmp     r7, #32\n");
+    s.push_str("    beq     .Lspe_store_count  @ pool full\n");
+
+    // Advance ROM ptr to next entry (stride = 20 + wp_count*4).
+    s.push_str(".Lspe_next:\n");
+    s.push_str("    ldrb    r10, [r4, #9]   @ wp_count\n");
+    s.push_str("    lsl     r10, r10, #2\n");
+    s.push_str("    add     r10, r10, #20   @ stride = 20 + wp_count*4\n");
+    s.push_str("    add     r4, r4, r10\n");
     s.push_str("    subs    r5, r5, #1\n");
     s.push_str("    bne     .Lspe_loop\n");
-    s.push_str(".Lspe_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
+
+    s.push_str(".Lspe_store_count:\n");
+    s.push_str("    ldr     r0, =PITREX_ENEMY_COUNT\n");
+    s.push_str("    str     r7, [r0]\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -3128,6 +3274,21 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     // Compute screen ox, oy
     s.push_str("    ldrsh   r7, [r5, #4]        @ pool.x\n");
     s.push_str("    sub     r7, r7, r8          @ ox = x - cam_x\n");
+    // Cull: skip if |ox| > 180 (off-screen horizontally)
+    s.push_str("    mov     r10, r7\n");
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r10, r10, #0        @ r10 = |ox|\n");
+    s.push_str("    cmp     r10, #180\n");
+    s.push_str("    bgt     .Lpde_skip\n");
+    // Cull: skip if |oy| > 140 (off-screen, 13-unit buffer past +-127 screen edge)
+    s.push_str("    ldrsh   r10, [r5, #6]       @ pool.y (temp for cull)\n");
+    s.push_str("    sub     r10, r10, r9        @ oy = y - cam_y\n");
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r10, r10, #0        @ r10 = |oy|\n");
+    s.push_str("    cmp     r10, #140\n");
+    s.push_str("    bgt     .Lpde_skip\n");
     // Compute mirror value
     s.push_str("    ldrb    r10, [r5, #24]      @ mirror_on_patrol\n");
     s.push_str("    cmp     r10, #0\n");
@@ -3321,6 +3482,27 @@ fn emit_pitrex_enemy_fire_event() -> String {
     s.push_str("    movgt   r0, #3\n");
     s.push_str("    strb    r0, [r2, #18]   @ store new sm_state\n");
     s.push_str("    pop     {r2, r3, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+fn emit_pitrex_get_frame_us() -> String {
+    // pitrex_get_frame_us() → r0 = µs elapsed since last v_WaitRecal returned.
+    // Uses BCM system timer CLO (offset +4 from bcm2835_st base pointer).
+    // Returns 0 on the first frame (FRAME_WORK_START == 0).
+    let mut s = String::new();
+    s.push_str("@ pitrex_get_frame_us() → r0 = µs since last WAIT_RECAL\n");
+    s.push_str(".global pitrex_get_frame_us\n.type pitrex_get_frame_us, %function\npitrex_get_frame_us:\n");
+    s.push_str("    push    {r1, r2, lr}\n");
+    s.push_str("    ldr     r1, =bcm2835_st\n");
+    s.push_str("    ldr     r1, [r1]            @ r1 = ST base ptr\n");
+    s.push_str("    ldr     r1, [r1, #4]        @ r1 = CLO (current µs)\n");
+    s.push_str("    ldr     r2, =FRAME_WORK_START\n");
+    s.push_str("    ldr     r2, [r2]            @ r2 = work window start µs\n");
+    s.push_str("    cmp     r2, #0\n");
+    s.push_str("    moveq   r0, #0              @ first frame: return 0\n");
+    s.push_str("    subne   r0, r1, r2          @ r0 = CLO - FRAME_WORK_START\n");
+    s.push_str("    pop     {r1, r2, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }

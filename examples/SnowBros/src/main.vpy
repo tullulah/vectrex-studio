@@ -55,7 +55,14 @@ current_level: i16 = 1      # 1-50
 time_left: i16 = 0          # frames restantes del nivel
 enemy_count: i16 = 0        # enemigos vivos en pantalla
 frame_timer: i16 = 0        # contador de delay para transiciones
+_t0: i16 = 0                # timing checkpoint (debug)
+_t1: i16 = 0
+_t2: i16 = 0
+_t3: i16 = 0
+_t4: i16 = 0
+_dbg_ctr: i16 = 0           # throttle: print section timing every 10 frames
 next_is_boss: i16 = 0       # flag auxiliar para detección de nivel boss
+spawn_floor_y: i16 = 0      # Y mundial del suelo detectado al cargar nivel
 
 # ── Player ──────────────────────────────────────────────────────────────────
 player_x: i16 = 0
@@ -66,12 +73,14 @@ player_facing: i16 = 0
 player_on_ground: i16 = 0
 floor_y: i16 = 0
 prev_y: i16 = 0
+push_dx: i16 = 0
 
 # ── Physics ──────────────────────────────────────────────────────────────────
 const GRAVITY = 1
 const JUMP_SPEED = 11
 const MAX_FALL_SPEED = 12
 const PLAYER_HH = 11     # half-height de player_idle.vec
+const PLAYER_HW = 6      # half-width de player_idle.vec
 
 # ── World bounds (deben coincidir con worldBounds del .vplay) ────────────────
 const WORLD_X_MIN = -96
@@ -158,6 +167,7 @@ def state_title():
     DRAW_VECTOR("init_screen", 0, 40)
     PRINT_TEXT(-70, -40, "PRESS A BUTTON")
     if J1_BUTTON_1():
+        PLAY_MUSIC("intro")
         score = 0
         lives = LIVES_START
         current_level = 1
@@ -192,14 +202,28 @@ def state_playing():
 
     SET_CAMERA_Y(camera_y)
 
+    _t0 = GET_FRAME_US()
     draw_player()
+    _t1 = GET_FRAME_US()
     draw_snowballs()
+    _t2 = GET_FRAME_US()
+    SET_INTENSITY(85)
     DRAW_ENEMIES()
+    _t3 = GET_FRAME_US()
     draw_hud()
     enemy_count = count_active_enemies()
     if enemy_count <= 0:
         enter_level_clear()
     SHOW_LEVEL()
+    _t4 = GET_FRAME_US()
+
+    _dbg_ctr = _dbg_ctr + 1
+    if _dbg_ctr >= 10:
+        _dbg_ctr = 0
+        DEBUG_PRINT_LABELED(1, _t1 - _t0)
+        DEBUG_PRINT_LABELED(2, _t2 - _t1)
+        DEBUG_PRINT_LABELED(3, _t3 - _t2)
+        DEBUG_PRINT_LABELED(4, _t4 - _t3)
 
 # ── Estado: muerte del jugador ───────────────────────────────────────────────
 def state_player_dead():
@@ -276,6 +300,7 @@ def state_boss():
     SHOW_LEVEL()
     draw_player()
     draw_snowballs()
+    SET_INTENSITY(85)
     DRAW_ENEMIES()
     draw_hud()
 
@@ -347,7 +372,7 @@ def load_current_level():
     camera_y = CAMERA_Y_MIN + (current_level - 1) * 256
     if camera_y > 0:
         camera_y = 0
-    player_y = camera_y - 86
+    player_y = camera_y - 77   # punto de búsqueda; LEVEL_COLLISION_Y lo ajusta al suelo real
     player_vy = 0
     player_on_ground = 1
     shoot_cooldown = 0
@@ -413,6 +438,8 @@ def load_current_level():
         SPAWN_ENEMIES("world_1_1")
         kill_offscreen_enemies()
         PLAY_MUSIC("Yukidama-Ondo")
+    spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH
+    player_y = spawn_floor_y
 
 def play_boss_music():
     if current_level == 10:
@@ -435,6 +462,8 @@ def update_player():
     if player_vx < 0:
         player_facing = 1
     player_x = clamp(player_x + player_vx, WORLD_X_MIN, WORLD_X_MAX)
+    push_dx = LEVEL_COLLISION_X(player_x, player_y, PLAYER_HW, PLAYER_HH)
+    player_x = player_x + push_dx
 
     # Salto y validación de suelo: cada frame cuando está grounded
     if player_on_ground == 1:
@@ -446,7 +475,7 @@ def update_player():
             floor_y = LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH)
             screen_bottom = camera_y - 127
             if floor_y < screen_bottom:
-                floor_y = camera_y - 86
+                floor_y = spawn_floor_y
             if floor_y < player_y:
                 player_on_ground = 0
 
@@ -464,7 +493,7 @@ def update_player():
             floor_y = LEVEL_COLLISION_Y(player_x, prev_y, PLAYER_HH)
             screen_bottom = camera_y - 127
             if floor_y < screen_bottom:
-                floor_y = camera_y - 86
+                floor_y = spawn_floor_y
             if player_y <= floor_y:
                 player_y = floor_y
                 player_vy = 0
@@ -474,7 +503,7 @@ def update_player():
     if player_y > WORLD_Y_MAX:
         player_y = WORLD_Y_MAX
         player_vy = 0
-    screen_floor = camera_y - 86
+    screen_floor = spawn_floor_y
     if player_y < screen_floor:
         player_y = screen_floor
         player_vy = 0
@@ -593,15 +622,11 @@ def draw_snowballs():
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
     #(rompe 6809)
-    PRINT_NUMBER(-10, 127, score)          # puntuación, arriba-izquierda
-    PRINT_NUMBER(-78, 116, lives)           # vidas, debajo del score
+    PRINT_NUMBER(0, 127, score)          # puntuación, arriba-izquierda
+    PRINT_NUMBER(-78, 127, lives)           # vidas, debajo del score
     PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha
-    # DEBUG: titchi superior (idx 1) — waypoints (y=99,y=99): Y debe ser constante
-    PRINT_TEXT(-98, -110, "x")
-    PRINT_NUMBER(-85, -110, player_x)
-
-    PRINT_TEXT(48, -110, "y")
-    PRINT_NUMBER(55, -110,player_y)
+    PRINT_NUMBER(-78, 110, player_y - camera_y)
+    PRINT_NUMBER(20, 110, LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH) - camera_y)
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():
@@ -685,8 +710,8 @@ def count_active_enemies():
 # ── Elimina enemigos fuera de la pantalla actual ────────────────────────────
 def kill_offscreen_enemies():
     i = 0
-    screen_min = camera_y - 150
-    screen_max = camera_y + 150
+    screen_min = camera_y - 128
+    screen_max = camera_y + 128
     while i < 8:
         if GET_ENEMY_ACTIVE(i) == 1:
             ey = GET_ENEMY_Y(i)
@@ -774,6 +799,10 @@ def update_balls():
                 bx = WORLD_X_MAX
                 ball_vx_arr[i] = -BALL_SPEED
                 ball_bounces[i] = ball_bounces[i] - 1
+            push_dx = LEVEL_COLLISION_X(bx, by, ENEMY_HW, ENEMY_HH)
+            if push_dx != 0:
+                bx = bx + push_dx
+                ball_vx_arr[i] = -ball_vx_arr[i]
             SET_ENEMY_X(i, bx)
             SET_ENEMY_Y(i, by)
             # Matar enemigos que toca

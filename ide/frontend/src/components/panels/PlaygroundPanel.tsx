@@ -21,6 +21,10 @@ interface VecVector {
   }[];
 }
 
+interface CollisionSegment {
+  x1: number; y1: number; x2: number; y2: number;
+}
+
 interface SceneObject {
   id: string;
   type: 'background' | 'enemy' | 'player' | 'projectile';
@@ -33,6 +37,7 @@ interface SceneObject {
   velocity?: { x: number; y: number };
   physicsEnabled?: boolean;
   collidable?: boolean;
+  collision?: { enabled?: boolean; segments?: CollisionSegment[]; width?: number; height?: number };
   gravity?: number;
   bounceDamping?: number;
   physicsType?: 'gravity' | 'bounce' | 'projectile' | 'static';
@@ -87,14 +92,23 @@ export function PlaygroundPanel() {
   const [hotspotDragOffset, setHotspotDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [widthScreens, setWidthScreens] = useState(1);
   const [heightScreens, setHeightScreens] = useState(1);
+  const [groundBottomOffset, setGroundBottomOffset] = useState(42); // units from bottom edge of screen upward (42 = 128-86 for SnowBros)
   const [scrollLimits, setScrollLimits] = useState<VPlayScrollLimits>({});
   const [draggingLimit, setDraggingLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [selectedLimit, setSelectedLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [draggingWaypointInfo, setDraggingWaypointInfo] = useState<{ enemyId: string; wpIdx: number } | null>(null);
-  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string }[]>([]);
+  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number }[]>([]);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
   const pendingScrollRef = useRef<{ top: number; left: number } | null>(null);
+
+  // Multi-selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [rubberBand, setRubberBand] = useState<{ svgX1: number; svgY1: number; svgX2: number; svgY2: number } | null>(null);
+  const dragStartVecRef = useRef<{ x: number; y: number } | null>(null);
+  const dragInitialPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const rubberBandStartRef = useRef<{ svgX: number; svgY: number } | null>(null);
+  const suppressNextClickRef = useRef(false);
 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -597,7 +611,10 @@ export function PlaygroundPanel() {
         ...(Object.keys(scrollLimits).some(k => (scrollLimits as any)[k] !== undefined)
           ? { scrollLimits }
           : {}),
-        ...(screenBackgrounds.length > 0 ? { _editorMeta: { screenBackgrounds } } : {}),
+        _editorMeta: {
+          ...(screenBackgrounds.length > 0 ? { screenBackgrounds } : {}),
+          groundBottomOffset,
+        },
       };
 
       // Validate before saving
@@ -680,10 +697,14 @@ export function PlaygroundPanel() {
       setObjects(loadedObjects);
       setHotspots(sceneData.hotspots || []);
       setScrollLimits(sceneData.scrollLimits || {});
-      setScreenBackgrounds(((sceneData as any)._editorMeta?.screenBackgrounds) || []);
+      setScreenBackgrounds((sceneData._editorMeta?.screenBackgrounds) || []);
+      if (sceneData._editorMeta?.groundBottomOffset !== undefined) {
+        setGroundBottomOffset(sceneData._editorMeta.groundBottomOffset);
+      }
       setSelectedHotspotId(null);
       setSelectedLimit(null);
       setSelectedId(null);
+      setSelectedIds(new Set());
       setSceneName(name); // Remember the scene name for future saves
       // Persist last opened scene for auto-restore on next panel visit
       if (vpyProject?.rootDir) {
@@ -782,14 +803,35 @@ export function PlaygroundPanel() {
     const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-
-    // Convert to Vectrex coordinates
     const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
     const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
 
+    // Compute effective selection for this interaction
+    let effectiveIds: Set<string>;
+    if (e.shiftKey) {
+      effectiveIds = new Set(selectedIds);
+      if (effectiveIds.has(objId)) effectiveIds.delete(objId);
+      else effectiveIds.add(objId);
+    } else if (selectedIds.has(objId) && selectedIds.size > 1) {
+      // Clicking inside an existing multi-selection: keep group for drag
+      effectiveIds = new Set(selectedIds);
+    } else {
+      effectiveIds = new Set([objId]);
+    }
+
+    setSelectedIds(effectiveIds);
+    setSelectedId(objId);
     setDraggingObjectId(objId);
     setDragOffset({ x: vecX - obj.x, y: vecY - obj.y });
-    setSelectedId(objId);
+
+    // Record drag start for multi-object movement
+    dragStartVecRef.current = { x: vecX, y: vecY };
+    dragInitialPositionsRef.current = new Map(
+      [...effectiveIds].flatMap(id => {
+        const o = objects.find(ob => ob.id === id);
+        return o ? [[id, { x: o.x, y: o.y }]] : [];
+      })
+    );
   };
 
   const handleVelocityArrowMouseDown = (e: React.MouseEvent) => {
@@ -826,7 +868,7 @@ export function PlaygroundPanel() {
     ));
   };
 
-  // Middle mouse button: start pan
+  // Middle mouse button: start pan; Left button on empty canvas: start rubber band selection
   const handleCanvasMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (e.button === 1) {
       e.preventDefault();
@@ -838,6 +880,13 @@ export function PlaygroundPanel() {
         scrollLeft: containerRef.current?.scrollLeft ?? 0,
         scrollTop: containerRef.current?.scrollTop ?? 0,
       };
+      return;
+    }
+    if (e.button === 0 && activeTool === 'select' && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const svgX = ((e.clientX - rect.left) / rect.width) * (192 * widthScreens);
+      const svgY = ((e.clientY - rect.top) / rect.height) * (256 * heightScreens);
+      rubberBandStartRef.current = { svgX, svgY };
     }
   };
 
@@ -903,19 +952,42 @@ export function PlaygroundPanel() {
       return;
     }
 
-    if (!draggingObjectId || !dragOffset || !canvasRef.current) return;
+    // Rubber band selection
+    if (rubberBandStartRef.current && !draggingObjectId && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const svgX = ((e.clientX - rect.left) / rect.width) * (192 * widthScreens);
+      const svgY = ((e.clientY - rect.top) / rect.height) * (256 * heightScreens);
+      const { svgX: sx, svgY: sy } = rubberBandStartRef.current;
+      if (Math.abs(svgX - sx) > 2 || Math.abs(svgY - sy) > 2) {
+        setRubberBand({ svgX1: sx, svgY1: sy, svgX2: svgX, svgY2: svgY });
+      }
+      return;
+    }
+
+    if (!draggingObjectId || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Convert to Vectrex coordinates
     const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
     const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
 
-    // Update object position
-    setObjects(objects.map(obj => 
-      obj.id === draggingObjectId 
+    // Multi-object drag: apply same delta to all selected objects
+    if (dragStartVecRef.current && dragInitialPositionsRef.current.size > 1) {
+      const dx = vecX - dragStartVecRef.current.x;
+      const dy = vecY - dragStartVecRef.current.y;
+      setObjects(objects.map(obj => {
+        const init = dragInitialPositionsRef.current.get(obj.id);
+        return init ? { ...obj, x: init.x + dx, y: init.y + dy } : obj;
+      }));
+      return;
+    }
+
+    // Single-object drag (original behaviour)
+    if (!dragOffset) return;
+    setObjects(objects.map(obj =>
+      obj.id === draggingObjectId
         ? { ...obj, x: vecX - dragOffset.x, y: vecY - dragOffset.y }
         : obj
     ));
@@ -931,6 +1003,26 @@ export function PlaygroundPanel() {
     setHotspotDragOffset(null);
     setDraggingLimit(null);
     setDraggingWaypointInfo(null);
+    dragStartVecRef.current = null;
+
+    // Finalize rubber band selection
+    if (rubberBand) {
+      const x1 = Math.min(rubberBand.svgX1, rubberBand.svgX2);
+      const x2 = Math.max(rubberBand.svgX1, rubberBand.svgX2);
+      const y1 = Math.min(rubberBand.svgY1, rubberBand.svgY2);
+      const y2 = Math.max(rubberBand.svgY1, rubberBand.svgY2);
+      const inside = objects.filter(obj => {
+        const s = vecToSvg(obj.x, obj.y);
+        return s.x >= x1 && s.x <= x2 && s.y >= y1 && s.y <= y2;
+      });
+      if (inside.length > 0) {
+        setSelectedIds(new Set(inside.map(o => o.id)));
+        setSelectedId(inside[inside.length - 1].id);
+        suppressNextClickRef.current = true;
+      }
+      setRubberBand(null);
+    }
+    rubberBandStartRef.current = null;
   };
 
   // Convert Vectrex coordinates to SVG viewport coordinates
@@ -943,6 +1035,10 @@ export function PlaygroundPanel() {
 
   // Canvas click — create hotspot or deselect
   const handleCanvasClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
     const target = e.target as SVGElement;
     const tag = target.tagName.toLowerCase();
 
@@ -989,6 +1085,7 @@ export function PlaygroundPanel() {
 
       setObjects(prev => [...prev, newEnemy]);
       setSelectedId(newEnemy.id);
+      setSelectedIds(new Set([newEnemy.id]));
       setSelectedHotspotId(null);
     } else if (activeTool === 'patrol') {
       // Add a waypoint to the selected enemy's patrol path
@@ -1003,6 +1100,7 @@ export function PlaygroundPanel() {
       // Select tool — clicking canvas background deselects everything
       if (tag === 'svg' || tag === 'rect') {
         setSelectedId(null);
+        setSelectedIds(new Set());
         setSelectedHotspotId(null);
         setSelectedLimit(null);
       }
@@ -1020,6 +1118,7 @@ export function PlaygroundPanel() {
       e.stopPropagation();
       setSelectedHotspotId(hs.id);
       setSelectedId(null);
+      setSelectedIds(new Set());
 
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -1121,6 +1220,7 @@ export function PlaygroundPanel() {
             setDraggingLimit(key);
             setSelectedLimit(key);
             setSelectedId(null);
+            setSelectedIds(new Set());
             setSelectedHotspotId(null);
           }}
         >
@@ -1156,7 +1256,7 @@ export function PlaygroundPanel() {
     // Enemy objects: try to render their sprite vector, fall back to diamond marker
     if (obj.type === 'enemy') {
       const svgPos = vecToSvg(obj.x, obj.y);
-      const isSelected = selectedId === obj.id;
+      const isSelected = selectedIds.has(obj.id);
       const label = (obj as any).enemyType || 'enemy';
       const color = isSelected ? '#ff44ff' : '#cc00cc';
       const enemyVecName = enemyTypeVectorMap.get((obj as any).enemyType || '');
@@ -1238,7 +1338,7 @@ export function PlaygroundPanel() {
     if (!vecData) return null;
 
     const svgPos = vecToSvg(obj.x, obj.y);
-    const isSelected = selectedId === obj.id;
+    const isSelected = selectedIds.has(obj.id);
 
     return (
       <g
@@ -1608,6 +1708,7 @@ export function PlaygroundPanel() {
           onClick={() => {
             setObjects([]);
             setSelectedId(null);
+            setSelectedIds(new Set());
             setHotspots([]);
             setSelectedHotspotId(null);
             setScrollLimits({});
@@ -1706,6 +1807,54 @@ export function PlaygroundPanel() {
               ))
             )}
           </div>
+
+          {/* Floor ground Y reference */}
+          <h3 style={{ fontSize: '12px', margin: '8px 12px 6px 12px', color: '#888', flexShrink: 0 }}>
+            FLOOR GROUND Y
+          </h3>
+          <div style={{ padding: '0 12px 8px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+              <span style={{ fontSize: '10px', color: '#666', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                offset desde abajo
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={255}
+                value={groundBottomOffset}
+                onChange={e => setGroundBottomOffset(Math.max(0, Math.min(255, parseInt(e.target.value) || 0)))}
+                style={{
+                  width: 44, background: '#1a1a1a', color: '#e8a030',
+                  border: '1px solid #e8a03066', borderRadius: 3,
+                  padding: '2px 4px', fontSize: '11px', fontFamily: 'monospace',
+                }}
+              />
+            </div>
+            {Array.from({ length: heightScreens }, (_, i) => {
+              const f = heightScreens - i; // S1=bottom, SN=top (matches screen labels)
+              const groundY = worldYMin + (f - 1) * 256 + groundBottomOffset;
+              return (
+                <div key={f} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '2px 4px', marginBottom: 1,
+                  background: '#1e1e1e', borderRadius: 2,
+                  fontSize: '10px', fontFamily: 'monospace',
+                }}>
+                  <span style={{ color: '#556655' }}>S{f}</span>
+                  <input
+                    readOnly
+                    value={`Y = ${groundY}`}
+                    style={{
+                      background: 'transparent', border: 'none', outline: 'none',
+                      color: '#e8a030', fontSize: '10px', fontFamily: 'monospace',
+                      textAlign: 'right', width: 80, cursor: 'default',
+                    }}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Canvas Area */}
@@ -1770,6 +1919,23 @@ export function PlaygroundPanel() {
                 stroke="#334433" strokeWidth="1" strokeDasharray="4 4" />
             ))}
 
+            {/* Floor ground lines — svgY = svgI*256 + (255 - groundBottomOffset) */}
+            {Array.from({ length: heightScreens }, (_, svgI) => {
+              const groundSvgY = svgI * 256 + (255 - groundBottomOffset);
+              const floorNum = heightScreens - svgI;
+              const groundWorldY = worldYMin + (floorNum - 1) * 256 + groundBottomOffset;
+              return (
+                <g key={`gnd-${svgI}`}>
+                  <line x1={0} y1={groundSvgY} x2={192 * widthScreens} y2={groundSvgY}
+                    stroke="#e8a030" strokeWidth="0.75" strokeOpacity="0.4" strokeDasharray="8 4" />
+                  <text x={192 * widthScreens - 2} y={groundSvgY - 2}
+                    fill="#e8a030" fontSize="6" fontFamily="monospace" textAnchor="end" opacity="0.55">
+                    {groundWorldY}
+                  </text>
+                </g>
+              );
+            })}
+
             {/* Screen index labels */}
             {Array.from({ length: heightScreens }, (_, svgI) => {
               const gameScreenNum = heightScreens - svgI; // S1=bottom, SN=top
@@ -1780,23 +1946,62 @@ export function PlaygroundPanel() {
               );
             })}
 
+            {/* Clip paths — one per screen slot so images can't overflow into adjacent floors */}
+            <defs>
+              {screenBackgrounds.map(sb => {
+                const svgScreenIdx = heightScreens - 1 - sb.screenIndex;
+                return (
+                  <clipPath key={`sbgclip_${sb.screenIndex}`} id={`sbgclip_${sb.screenIndex}`}>
+                    <rect x={0} y={svgScreenIdx * 256} width={192 * widthScreens} height={256} />
+                  </clipPath>
+                );
+              })}
+            </defs>
+
             {/* Screen background image guides (editor-only) */}
             {screenBackgrounds.map(sb => {
               const dataUrl = imageDataUrls.get(sb.imagePath);
               if (!dataUrl) return null;
               const svgScreenIdx = heightScreens - 1 - sb.screenIndex;
+              const offsetY = sb.offsetY ?? 0;
               return (
                 <image
                   key={`sbg_${sb.screenIndex}`}
                   href={dataUrl}
                   x={0}
-                  y={svgScreenIdx * 256}
+                  y={svgScreenIdx * 256 + offsetY}
                   width={192 * widthScreens}
                   height={256}
                   opacity={0.25}
                   preserveAspectRatio="none"
+                  clipPath={`url(#sbgclip_${sb.screenIndex})`}
                   style={{ pointerEvents: 'none' }}
                 />
+              );
+            })}
+
+            {/* Collision mesh segments — shown for all collidable objects (faint), highlighted for selected */}
+            {objects.filter(o => o.collidable && o.collision?.segments?.length).map(obj => {
+              const isSelected = obj.id === selectedId;
+              const segs = obj.collision!.segments!;
+              return (
+                <g key={`mesh_${obj.id}`}>
+                  {segs.map((seg, i) => {
+                    const p1 = vecToSvg(obj.x + seg.x1, obj.y + seg.y1);
+                    const p2 = vecToSvg(obj.x + seg.x2, obj.y + seg.y2);
+                    return (
+                      <g key={i}>
+                        <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                          stroke={isSelected ? '#00ffff' : '#00ffff55'}
+                          strokeWidth={isSelected ? 1.5 : 0.75} />
+                        {isSelected && <>
+                          <circle cx={p1.x} cy={p1.y} r={2} fill="#00ffff" />
+                          <circle cx={p2.x} cy={p2.y} r={2} fill="#00ffff" />
+                        </>}
+                      </g>
+                    );
+                  })}
+                </g>
               );
             })}
 
@@ -1806,7 +2011,7 @@ export function PlaygroundPanel() {
             {/* Patrol paths for enemy objects */}
             {objects.filter(o => o.type === 'enemy' && o.patrolWaypoints && o.patrolWaypoints.length > 0).map(obj => {
               const wps = obj.patrolWaypoints!;
-              const isSelected = obj.id === selectedId;
+              const isSelected = selectedIds.has(obj.id);
               const color = isSelected ? '#44ffff' : '#44ffff66';
               const pts = wps.map(wp => vecToSvg(wp.x, wp.y));
               return (
@@ -1845,6 +2050,21 @@ export function PlaygroundPanel() {
             {objects.filter(o => o.layer === 'background').map(renderVector)}
             {objects.filter(o => !o.layer || o.layer === 'gameplay').map(renderVector)}
             {objects.filter(o => o.layer === 'foreground').map(renderVector)}
+
+            {/* Rubber band selection rectangle */}
+            {rubberBand && (
+              <rect
+                x={Math.min(rubberBand.svgX1, rubberBand.svgX2)}
+                y={Math.min(rubberBand.svgY1, rubberBand.svgY2)}
+                width={Math.abs(rubberBand.svgX2 - rubberBand.svgX1)}
+                height={Math.abs(rubberBand.svgY2 - rubberBand.svgY1)}
+                fill="rgba(0,200,255,0.08)"
+                stroke="#00ccff"
+                strokeWidth="0.5"
+                strokeDasharray="3 2"
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
 
             {/* Status display */}
             <text x="5" y="15" fill="#00ff00" fontSize="8" fontFamily="monospace">
@@ -2289,6 +2509,65 @@ export function PlaygroundPanel() {
                         {obj.collidable ? '🔷 Objeto sólido - los demás rebotan' : '⬜ Objeto atravesable - sin colisión'}
                       </div>
                     </div>
+
+                    {/* Collision mesh editor — only for collidable objects */}
+                    {obj.collidable && (
+                      <div style={{ borderTop: '1px solid #333', marginTop: '8px', paddingTop: '8px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#00cccc', marginBottom: '6px', letterSpacing: '0.06em' }}>
+                          COLLISION MESH
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#666', marginBottom: '6px' }}>
+                          {obj.collision?.segments?.length
+                            ? `${obj.collision.segments.length} segmento(s) — ray-cast activo`
+                            : 'Sin segmentos — usa AABB automático'}
+                        </div>
+                        {(obj.collision?.segments || []).map((seg, si) => (
+                          <div key={si} style={{ display: 'flex', gap: 2, alignItems: 'center', marginBottom: 3, background: '#1a1a1a', padding: '3px 4px', borderRadius: 3 }}>
+                            <span style={{ fontSize: '9px', color: '#555', width: 14, flexShrink: 0 }}>#{si}</span>
+                            {(['x1','y1','x2','y2'] as const).map(field => (
+                              <input
+                                key={field}
+                                type="number"
+                                value={(seg as any)[field]}
+                                onChange={e => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  const newSegs = (obj.collision!.segments!).map((s, idx) =>
+                                    idx === si ? { ...s, [field]: val } : s
+                                  );
+                                  setObjects(objects.map(o => o.id === selectedId
+                                    ? { ...o, collision: { ...o.collision, enabled: true, segments: newSegs } }
+                                    : o
+                                  ));
+                                }}
+                                style={{ width: 36, background: '#111', color: '#00cccc', border: '1px solid #333', borderRadius: 2, padding: '1px 3px', fontSize: '10px', fontFamily: 'monospace' }}
+                              />
+                            ))}
+                            <button
+                              onClick={() => {
+                                const newSegs = (obj.collision?.segments || []).filter((_, idx) => idx !== si);
+                                setObjects(objects.map(o => o.id === selectedId
+                                  ? { ...o, collision: { ...o.collision, enabled: newSegs.length > 0, segments: newSegs } }
+                                  : o
+                                ));
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#663333', cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0 }}
+                            >×</button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => {
+                            const newSeg: CollisionSegment = { x1: -20, y1: 0, x2: 20, y2: 0 };
+                            const existing = obj.collision?.segments || [];
+                            setObjects(objects.map(o => o.id === selectedId
+                              ? { ...o, collision: { ...o.collision, enabled: true, segments: [...existing, newSeg] } }
+                              : o
+                            ));
+                          }}
+                          style={{ width: '100%', marginTop: 2, padding: '3px 0', background: '#1a2a2a', border: '1px solid #00cccc44', borderRadius: 3, color: '#00cccc', cursor: 'pointer', fontSize: '10px' }}
+                        >+ Añadir segmento</button>
+                      </div>
+                    )}
+
                     {/* Enemy-specific properties */}
                     {obj.type === 'enemy' && (
                       <div style={{ borderTop: '1px solid #333', marginTop: '8px', paddingTop: '8px' }}>
@@ -2430,6 +2709,7 @@ export function PlaygroundPanel() {
                       onClick={() => {
                         setObjects(objects.filter(o => o.id !== selectedId));
                         setSelectedId(null);
+                        setSelectedIds(new Set());
                       }}
                       style={{
                         padding: '4px 8px',
@@ -2463,33 +2743,63 @@ export function PlaygroundPanel() {
                   {Array.from({ length: heightScreens }, (_, i) => {
                     const sb = screenBackgrounds.find(s => s.screenIndex === i);
                     return (
-                      <div key={i} style={{ marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ color: '#556655', fontSize: '10px', width: '48px', flexShrink: 0, fontFamily: 'monospace' }}>
-                          S{i + 1}
-                        </span>
-                        <select
-                          value={sb?.imagePath || ''}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setScreenBackgrounds(prev => {
-                              const next = prev.filter(s => s.screenIndex !== i);
-                              if (val) next.push({ screenIndex: i, imagePath: val });
-                              return [...next];
-                            });
-                          }}
-                          style={{
-                            flex: 1,
-                            background: '#1a1a1a',
-                            color: sb ? '#88bb88' : '#555',
-                            border: `1px solid ${sb ? '#446644' : '#333'}`,
-                            padding: '2px 3px',
-                            fontSize: '10px',
-                            borderRadius: '2px',
-                          }}
-                        >
-                          <option value="">— none —</option>
-                          {availableImages.map(img => <option key={img} value={img}>{img.split('/').pop()}</option>)}
-                        </select>
+                      <div key={i} style={{ marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ color: '#556655', fontSize: '10px', width: '48px', flexShrink: 0, fontFamily: 'monospace' }}>
+                            S{i + 1}
+                          </span>
+                          <select
+                            value={sb?.imagePath || ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setScreenBackgrounds(prev => {
+                                const next = prev.filter(s => s.screenIndex !== i);
+                                if (val) next.push({ screenIndex: i, imagePath: val, offsetY: 0 });
+                                return [...next];
+                              });
+                            }}
+                            style={{
+                              flex: 1,
+                              background: '#1a1a1a',
+                              color: sb ? '#88bb88' : '#555',
+                              border: `1px solid ${sb ? '#446644' : '#333'}`,
+                              padding: '2px 3px',
+                              fontSize: '10px',
+                              borderRadius: '2px',
+                            }}
+                          >
+                            <option value="">— none —</option>
+                            {availableImages.map(img => <option key={img} value={img}>{img.split('/').pop()}</option>)}
+                          </select>
+                        </div>
+                        {sb && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px', paddingLeft: '52px' }}>
+                            <span style={{ fontSize: '9px', color: '#556655', width: '16px', flexShrink: 0 }}>Y</span>
+                            <input
+                              type="range"
+                              min={-255}
+                              max={255}
+                              value={sb.offsetY ?? 0}
+                              onChange={e => {
+                                const val = parseInt(e.target.value);
+                                setScreenBackgrounds(prev => prev.map(s =>
+                                  s.screenIndex === i ? { ...s, offsetY: val } : s
+                                ));
+                              }}
+                              style={{ flex: 1, accentColor: '#446644', height: '12px' }}
+                            />
+                            <span style={{ fontSize: '9px', color: '#88bb88', width: '28px', textAlign: 'right', fontFamily: 'monospace' }}>
+                              {sb.offsetY ?? 0}
+                            </span>
+                            <button
+                              onClick={() => setScreenBackgrounds(prev => prev.map(s =>
+                                s.screenIndex === i ? { ...s, offsetY: 0 } : s
+                              ))}
+                              title="Reset offset"
+                              style={{ background: 'none', border: 'none', color: '#446644', cursor: 'pointer', fontSize: '10px', padding: '0 2px' }}
+                            >↺</button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

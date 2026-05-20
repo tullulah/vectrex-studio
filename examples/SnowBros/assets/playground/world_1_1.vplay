@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-18"
+    "description": "Created in Playground - 2026-05-20"
   },
   "worldBounds": {
     "xMin": -96,
@@ -24,7 +24,7 @@
         "vectorName": "platform1",
         "layer": "gameplay",
         "x": -71,
-        "y": -2377,
+        "y": -2363,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -42,8 +42,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 72,
-        "y": -2377,
+        "x": 73,
+        "y": -2362,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -61,8 +61,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 0,
-        "y": -2377,
+        "x": 1,
+        "y": -2363,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -81,7 +81,7 @@
         "vectorName": "platform2",
         "layer": "gameplay",
         "x": 0,
-        "y": -2331,
+        "y": -2326,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -100,7 +100,7 @@
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": -54,
-        "y": -2283,
+        "y": -2291,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -118,8 +118,8 @@
         "type": "obstacle",
         "vectorName": "platform3",
         "layer": "gameplay",
-        "x": 54,
-        "y": -2282,
+        "x": 55,
+        "y": -2292,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -137,8 +137,8 @@
         "type": "obstacle",
         "vectorName": "platform4",
         "layer": "gameplay",
-        "x": 0,
-        "y": -2237,
+        "x": -2,
+        "y": -2239,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -155,21 +155,33 @@
           "segments": [
             {
               "x1": -70,
-              "y1": -6,
+              "y1": 0,
               "x2": -45,
-              "y2": -6
+              "y2": 0
             },
             {
               "x1": -45,
-              "y1": 12,
+              "y1": 18,
               "x2": 47,
-              "y2": 12
+              "y2": 18
             },
             {
               "x1": 47,
-              "y1": -4,
+              "y1": 2,
               "x2": 70,
-              "y2": -4
+              "y2": 2
+            },
+            {
+              "x1": -45,
+              "y1": 0,
+              "x2": -45,
+              "y2": 18
+            },
+            {
+              "x1": 47,
+              "y1": 2,
+              "x2": 47,
+              "y2": 18
             }
           ]
         }
@@ -180,7 +192,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": -42,
-        "y": -2201,
+        "y": -2207,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -188,11 +200,11 @@
         "patrolWaypoints": [
           {
             "x": -3,
-            "y": -2205
+            "y": -2206
           },
           {
             "x": -42,
-            "y": -2205
+            "y": -2206
           }
         ],
         "wave": 0,
@@ -208,7 +220,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": 43,
-        "y": -2201,
+        "y": -2207,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -216,11 +228,11 @@
         "patrolWaypoints": [
           {
             "x": 45,
-            "y": -2205
+            "y": -2206
           },
           {
             "x": 3,
-            "y": -2205
+            "y": -2206
           }
         ],
         "wave": 0,
@@ -235,20 +247,20 @@
         "type": "enemy",
         "vectorName": "titchi_walk",
         "layer": "gameplay",
-        "x": -87,
-        "y": -2261,
+        "x": -86,
+        "y": -2270,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
         "patrolWaypoints": [
           {
-            "x": -91,
-            "y": -2262
+            "x": -90,
+            "y": -2269
           },
           {
-            "x": -14,
-            "y": -2262
+            "x": -15,
+            "y": -2269
           }
         ],
         "wave": 0,
@@ -264,19 +276,19 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": 86,
-        "y": -2261,
+        "y": -2270,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
         "patrolWaypoints": [
           {
-            "x": 89,
-            "y": -2261
+            "x": 91,
+            "y": -2269
           },
           {
-            "x": 14,
-            "y": -2261
+            "x": 15,
+            "y": -2269
           }
         ],
         "wave": 0,
@@ -291,8 +303,8 @@
         "type": "enemy",
         "vectorName": "titchi_walk",
         "layer": "gameplay",
-        "x": -55,
-        "y": -2309,
+        "x": -52,
+        "y": -2306,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -300,11 +312,11 @@
         "patrolWaypoints": [
           {
             "x": -55,
-            "y": -2312
+            "y": -2305
           },
           {
-            "x": 56,
-            "y": -2312
+            "x": 57,
+            "y": -2305
           }
         ],
         "wave": 0,
@@ -315,240 +327,12 @@
         }
       },
       {
-        "id": "plat_f3_1",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -82,
-        "y": -1865,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f3_2",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": -30,
-        "y": -1819,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f3_3",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 30,
-        "y": -1771,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f3_4",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 82,
-        "y": -1725,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f4_1",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": -55,
-        "y": -1609,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f4_2",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -1609,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f4_3",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 55,
-        "y": -1609,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f4_4",
-        "type": "obstacle",
-        "vectorName": "platform2",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -1515,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f4_5",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -75,
-        "y": -1469,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f4_6",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 75,
-        "y": -1469,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f5_1",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": -50,
-        "y": -1353,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f5_2",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 50,
-        "y": -1353,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
         "id": "plat_f5_3",
         "type": "obstacle",
         "vectorName": "platform2",
         "layer": "gameplay",
-        "x": 0,
-        "y": -1307,
+        "x": 2,
+        "y": -1204,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -566,8 +350,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": -65,
-        "y": -1259,
+        "x": -71,
+        "y": -1313,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -585,8 +369,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 65,
-        "y": -1259,
+        "x": 71,
+        "y": -1314,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -619,487 +403,12 @@
         "physicsType": "static"
       },
       {
-        "id": "plat_f6_2",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 82,
-        "y": -1097,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f6_3",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": -35,
-        "y": -1051,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f6_4",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 35,
-        "y": -1051,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f6_5",
-        "type": "obstacle",
-        "vectorName": "platform2",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -957,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f7_1",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 82,
-        "y": -841,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f7_2",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 30,
-        "y": -795,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f7_3",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": -30,
-        "y": -747,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f7_4",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -82,
-        "y": -701,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_1",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -70,
-        "y": -585,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_2",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -585,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_3",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 70,
-        "y": -585,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_4",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -45,
-        "y": -539,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_5",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 45,
-        "y": -539,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_6",
-        "type": "obstacle",
-        "vectorName": "platform2",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -491,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_7",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -80,
-        "y": -445,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f8_8",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 80,
-        "y": -445,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_1",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -80,
-        "y": -329,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_2",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -30,
-        "y": -329,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_3",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 30,
-        "y": -329,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_4",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 80,
-        "y": -329,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_5",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": -48,
-        "y": -283,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_6",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 48,
-        "y": -283,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_7",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": -65,
-        "y": -235,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_8",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 0,
-        "y": -235,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f9_9",
-        "type": "obstacle",
-        "vectorName": "platform1",
-        "layer": "gameplay",
-        "x": 65,
-        "y": -235,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
         "id": "plat_f10_1",
         "type": "obstacle",
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": -55,
-        "y": -73,
+        "y": 44,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1111,90 +420,14 @@
         "gravity": 0,
         "bounceDamping": 0,
         "physicsType": "static"
-      },
-      {
-        "id": "plat_f10_2",
-        "type": "obstacle",
-        "vectorName": "platform3",
-        "layer": "gameplay",
-        "x": 55,
-        "y": -73,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "plat_f10_3",
-        "type": "obstacle",
-        "vectorName": "platform2",
-        "layer": "gameplay",
-        "x": 0,
-        "y": 67,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 0,
-        "bounceDamping": 0,
-        "physicsType": "static"
-      },
-      {
-        "id": "obj_1779039156770",
-        "type": "background",
-        "vectorName": "platform5",
-        "layer": "gameplay",
-        "x": -18,
-        "y": -2101,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_1779039588976",
-        "type": "background",
-        "vectorName": "platform6",
-        "layer": "gameplay",
-        "x": 34,
-        "y": -2074,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
       },
       {
         "id": "obj_1779039595209",
         "type": "background",
         "vectorName": "platform7",
         "layer": "gameplay",
-        "x": -33,
-        "y": -2037,
+        "x": -39,
+        "y": -2022,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1205,34 +438,19 @@
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "obj_1779039600860",
-        "type": "background",
-        "vectorName": "platform6",
-        "layer": "gameplay",
-        "x": 35,
-        "y": -2005,
-        "rotation": 0,
-        "scale": 1,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false,
-        "collidable": true,
-        "gravity": 1,
-        "bounceDamping": 0.85,
-        "physicsType": "gravity"
+        "physicsType": "gravity",
+        "collision": {
+          "enabled": false,
+          "segments": []
+        }
       },
       {
         "id": "obj_1779039612850",
         "type": "background",
         "vectorName": "platform3",
         "layer": "gameplay",
-        "x": -18,
-        "y": -1985,
+        "x": -15,
+        "y": -1967,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1243,44 +461,17 @@
         "collidable": true,
         "gravity": 1,
         "bounceDamping": 0.85,
-        "physicsType": "gravity"
-      },
-      {
-        "id": "enemy_1779039990874",
-        "type": "enemy",
-        "vectorName": "titchi_walk",
-        "layer": "gameplay",
-        "x": -53,
-        "y": -1959,
-        "rotation": 0,
-        "scale": 1,
-        "enemyType": "titchi",
-        "aiType": "patrol",
-        "patrolWaypoints": [],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        }
-      },
-      {
-        "id": "enemy_1779084899889",
-        "type": "enemy",
-        "vectorName": "titchi_idle",
-        "layer": "gameplay",
-        "x": 15,
-        "y": -1746,
-        "rotation": 0,
-        "scale": 1,
-        "enemyType": "titchi",
-        "aiType": "patrol",
-        "patrolWaypoints": [],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
+        "physicsType": "gravity",
+        "collision": {
+          "enabled": true,
+          "segments": [
+            {
+              "x1": -40,
+              "y1": 8,
+              "x2": 40,
+              "y2": 8
+            }
+          ]
         }
       },
       {
@@ -1288,13 +479,22 @@
         "type": "enemy",
         "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": 1,
-        "y": -1494,
+        "x": -28,
+        "y": -1442,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [],
+        "patrolWaypoints": [
+          {
+            "x": -31,
+            "y": -1439
+          },
+          {
+            "x": 70,
+            "y": -1439
+          }
+        ],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -1308,7 +508,7 @@
         "vectorName": "titchi_idle",
         "layer": "gameplay",
         "x": -74,
-        "y": -1241,
+        "y": -1222,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1326,8 +526,8 @@
         "type": "enemy",
         "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -1,
-        "y": -930,
+        "x": 0,
+        "y": -941,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1364,8 +564,8 @@
         "type": "enemy",
         "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -22,
-        "y": -452,
+        "x": -50,
+        "y": -431,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1383,8 +583,8 @@
         "type": "enemy",
         "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -2,
-        "y": -212,
+        "x": -1,
+        "y": -194,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1402,8 +602,8 @@
         "type": "enemy",
         "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -11,
-        "y": 92,
+        "x": 62,
+        "y": 12,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1415,6 +615,579 @@
           "x": 0,
           "y": 0
         }
+      },
+      {
+        "id": "obj_1779136501781",
+        "type": "background",
+        "vectorName": "platform2",
+        "layer": "gameplay",
+        "x": 1,
+        "y": -1702,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779136713265",
+        "type": "background",
+        "vectorName": "platform3",
+        "layer": "gameplay",
+        "x": -54,
+        "y": -32,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779136770373",
+        "type": "background",
+        "vectorName": "platform4",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -478,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137245752",
+        "type": "background",
+        "vectorName": "platform8",
+        "layer": "gameplay",
+        "x": -47,
+        "y": -1795,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137276328",
+        "type": "background",
+        "vectorName": "platform8",
+        "layer": "gameplay",
+        "x": 46,
+        "y": -1795,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137281443",
+        "type": "background",
+        "vectorName": "platform9",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -1779,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137285764",
+        "type": "background",
+        "vectorName": "platform9",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -1815,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137292143",
+        "type": "background",
+        "vectorName": "platform10",
+        "layer": "gameplay",
+        "x": -89,
+        "y": -1778,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137302062",
+        "type": "background",
+        "vectorName": "platform10",
+        "layer": "gameplay",
+        "x": -91,
+        "y": -1815,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779137314661",
+        "type": "background",
+        "vectorName": "platform10",
+        "layer": "gameplay",
+        "x": 88,
+        "y": -1813,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200615241",
+        "type": "background",
+        "vectorName": "platform10",
+        "layer": "gameplay",
+        "x": 89,
+        "y": -1777,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200813768",
+        "type": "background",
+        "vectorName": "platform12",
+        "layer": "gameplay",
+        "x": -77,
+        "y": -1852,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200818339",
+        "type": "background",
+        "vectorName": "platform11",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -1852,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200822637",
+        "type": "background",
+        "vectorName": "platform12",
+        "layer": "gameplay",
+        "x": 77,
+        "y": -1852,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200937309",
+        "type": "background",
+        "vectorName": "platform13",
+        "layer": "gameplay",
+        "x": -84,
+        "y": -1741,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200949033",
+        "type": "background",
+        "vectorName": "platform13",
+        "layer": "gameplay",
+        "x": 83,
+        "y": -1741,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779200958440",
+        "type": "background",
+        "vectorName": "platform14",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -1741,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "enemy_1779199876324",
+        "type": "enemy",
+        "vectorName": "frog_idle",
+        "layer": "gameplay",
+        "x": -49,
+        "y": -1940,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "frog",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -49,
+            "y": -1942
+          },
+          {
+            "x": 23,
+            "y": -1942
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "mirrorOnPatrol": true
+      },
+      {
+        "id": "obj_1779222300621",
+        "type": "background",
+        "vectorName": "platform15",
+        "layer": "gameplay",
+        "x": 39,
+        "y": -1986,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity",
+        "collision": {
+          "enabled": false,
+          "segments": []
+        }
+      },
+      {
+        "id": "obj_1779222312948",
+        "type": "background",
+        "vectorName": "platform15",
+        "layer": "gameplay",
+        "x": 39,
+        "y": -2058,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779222326779",
+        "type": "background",
+        "vectorName": "platform7",
+        "layer": "gameplay",
+        "x": -39,
+        "y": -2092,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity",
+        "collision": {
+          "enabled": false,
+          "segments": []
+        }
+      },
+      {
+        "id": "obj_1779223460996",
+        "type": "background",
+        "vectorName": "platform16",
+        "layer": "gameplay",
+        "x": 53,
+        "y": -1596,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779223473176",
+        "type": "background",
+        "vectorName": "platform17",
+        "layer": "gameplay",
+        "x": -53,
+        "y": -1596,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779223483673",
+        "type": "background",
+        "vectorName": "platform18",
+        "layer": "gameplay",
+        "x": -53,
+        "y": -1570,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity",
+        "collision": {
+          "enabled": false,
+          "segments": []
+        }
+      },
+      {
+        "id": "obj_1779223490000",
+        "type": "background",
+        "vectorName": "platform18",
+        "layer": "gameplay",
+        "x": 53,
+        "y": -1570,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779224247401",
+        "type": "background",
+        "vectorName": "platform19",
+        "layer": "gameplay",
+        "x": -18,
+        "y": -1517,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779224460231",
+        "type": "background",
+        "vectorName": "platform20",
+        "layer": "gameplay",
+        "x": 18,
+        "y": -1497,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779273236506",
+        "type": "background",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": 73,
+        "y": -1241,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779273241626",
+        "type": "background",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": -71,
+        "y": -1241,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
       }
     ],
     "foreground": []
@@ -1430,12 +1203,55 @@
     "screenBackgrounds": [
       {
         "screenIndex": 0,
-        "imagePath": "assets/backgrounds/floor1.png"
+        "imagePath": "assets/backgrounds/floor1.png",
+        "offsetY": -14
       },
       {
         "screenIndex": 1,
-        "imagePath": "assets/backgrounds/floor2.png"
+        "imagePath": "assets/backgrounds/floor2.png",
+        "offsetY": -10
+      },
+      {
+        "screenIndex": 2,
+        "imagePath": "assets/backgrounds/floor3.png",
+        "offsetY": -13
+      },
+      {
+        "screenIndex": 3,
+        "imagePath": "assets/backgrounds/floor4.png",
+        "offsetY": -13
+      },
+      {
+        "screenIndex": 4,
+        "imagePath": "assets/backgrounds/floor5.png",
+        "offsetY": -14
+      },
+      {
+        "screenIndex": 5,
+        "imagePath": "assets/backgrounds/floor6.png",
+        "offsetY": -15
+      },
+      {
+        "screenIndex": 6,
+        "imagePath": "assets/backgrounds/floor7.png",
+        "offsetY": -15
+      },
+      {
+        "screenIndex": 7,
+        "imagePath": "assets/backgrounds/floor8.png",
+        "offsetY": -13
+      },
+      {
+        "screenIndex": 8,
+        "imagePath": "assets/backgrounds/floor9.png",
+        "offsetY": -14
+      },
+      {
+        "screenIndex": 9,
+        "imagePath": "assets/backgrounds/floor10.png",
+        "offsetY": -12
       }
-    ]
+    ],
+    "groundBottomOffset": 25
   }
 }

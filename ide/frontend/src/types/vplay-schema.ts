@@ -212,6 +212,13 @@ export interface VPlayLevel {
 
   // Scroll limits (camera clamp boundaries for scrolling levels)
   scrollLimits?: VPlayScrollLimits;
+
+  // Editor-only metadata (not used at runtime)
+  _editorMeta?: {
+    screenBackgrounds?: { screenIndex: number; imagePath: string; offsetY?: number }[];
+    groundBottomOffset?: number;
+    [key: string]: unknown;
+  };
 }
 
 /**

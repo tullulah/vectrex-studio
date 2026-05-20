@@ -96,6 +96,9 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let psg_start = alloc.alloc(4); decls.push_str(&format!(".equ PSG_MUSIC_START, 0x{psg_start:08X}\n"));
     let psg_play  = alloc.alloc(4); decls.push_str(&format!(".equ PSG_IS_PLAYING, 0x{psg_play:08X}\n"));
     let psg_delay = alloc.alloc(4); decls.push_str(&format!(".equ PSG_DELAY_FRAMES, 0x{psg_delay:08X}\n"));
+    // Real-time music tick accumulator (decouples tempo from frame rate)
+    let psg_tick  = alloc.alloc(4); decls.push_str(&format!(".equ PSG_MUSIC_TICK_US, 0x{psg_tick:08X}\n"));
+    let psg_clo   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_MUSIC_LAST_CLO, 0x{psg_clo:08X}\n"));
     // SFX
     let sfx_ptr   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_PTR, 0x{sfx_ptr:08X}\n"));
     let sfx_act   = alloc.alloc(4); decls.push_str(&format!(".equ PSG_SFX_ACTIVE, 0x{sfx_act:08X}\n"));
@@ -527,6 +530,11 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
         s.push_str("    bl      pitrex_note_update\n");
     }
     s.push_str("    bl      v_doSound          @ flush PSG buffer to hardware\n");
+    // Reset brightness override each frame so unrelated states use .vec per-path intensities.
+    // SET_INTENSITY within loop() re-applies it and persists for that frame.
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]\n");
 
     if let Some(f) = loop_fn {
         // Emit loop body with periodic pool flushes every ~3 KB of generated text
@@ -633,6 +641,7 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".Lstr_sint:          .asciz \"SINT=\"\n");
     s.push_str(".Lstr_cpu_w:         .asciz \"W=\"\n");
     s.push_str(".Lstr_cpu_of:        .asciz \"/20000us\\r\\n\"\n");
+    s.push_str(".Lstr_cpu_ovr:       .asciz \"!OVR:W=\"\n");
     s.push_str("    .ltorg\n\n");
 
     Ok(s)
