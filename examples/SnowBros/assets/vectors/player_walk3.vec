@@ -13,7 +13,7 @@
       "paths": [
         {
           "name": "path_1777581126869_copy",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -50,7 +50,7 @@
         },
         {
           "name": "path_1777584336391_copy",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -72,7 +72,7 @@
         },
         {
           "name": "path_1777616370718_copy",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -89,7 +89,7 @@
         },
         {
           "name": "path_1778249004054",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -156,22 +156,75 @@
         },
         {
           "name": "path_1778249127972",
-          "intensity": 65,
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": 7,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1777579922106_copy",
+          "intensity": 85,
           "closed": false,
           "points": [
             {
               "x": -2,
-              "y": 6,
-              "z": 0
-            },
-            {
-              "x": -1,
               "y": 9,
               "z": 0
             },
             {
               "x": 1,
               "y": 7,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1777579947092_copy",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": 7,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779292747693_copy",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": 7,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779292759972_copy",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -2,
+              "y": 9,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 8,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 5,
               "z": 0
             }
           ]

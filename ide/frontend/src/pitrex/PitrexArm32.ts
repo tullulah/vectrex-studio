@@ -927,6 +927,20 @@ function executeOne(s: PitrexArm32State): boolean {
       break;
     }
 
+    // ── MLA (multiply accumulate) ────────────────────────────────────────
+    case 'mla': case 'mlas': {
+      // ARM32: mla rd, rn, rm, ra  →  rd = rn * rm + ra
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      const ra = regIdx(operands[3] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0 || ra < 0) break;
+      const mlaRes = (Math.imul(getReg(s, rn), getReg(s, rm)) + getReg(s, ra)) | 0;
+      setReg(s, rd, mlaRes);
+      if (op === 'mlas') setNZFlags(s, mlaRes);
+      break;
+    }
+
     // ── AND ─────────────────────────────────────────────────────────────
     case 'and': case 'ands': {
       const rd = regIdx(operands[0] ?? '');

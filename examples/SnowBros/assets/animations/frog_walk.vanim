@@ -19,6 +19,14 @@
         "frog_walk2"
       ],
       "paths": []
+    },
+    {
+      "index": 2,
+      "duration_ticks": 8,
+      "vec_refs": [
+        "frog_walk3"
+      ],
+      "paths": []
     }
   ]
 }

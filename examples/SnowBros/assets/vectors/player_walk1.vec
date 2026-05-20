@@ -13,29 +13,24 @@
       "paths": [
         {
           "name": "path_1777579922106",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
-              "x": -3,
-              "y": 8,
+              "x": -2,
+              "y": 9,
               "z": 0
             },
             {
               "x": 1,
               "y": 7,
               "z": 0
-            },
-            {
-              "x": -3,
-              "y": 8,
-              "z": 0
             }
           ]
         },
         {
           "name": "path_1777579947092",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -67,7 +62,7 @@
         },
         {
           "name": "path_1777579986975",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -89,7 +84,7 @@
         },
         {
           "name": "path_1777580075142",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -111,7 +106,7 @@
         },
         {
           "name": "path_1777580104867",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -133,7 +128,7 @@
         },
         {
           "name": "path_1777580151490",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -150,7 +145,7 @@
         },
         {
           "name": "path_1777580186611",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -172,7 +167,7 @@
         },
         {
           "name": "path_1778249673645",
-          "intensity": 65,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -188,6 +183,45 @@
             {
               "x": 2,
               "y": -3,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779292747693",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -2,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": 7,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1779292759972",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -2,
+              "y": 9,
+              "z": 0
+            },
+            {
+              "x": -3,
+              "y": 8,
+              "z": 0
+            },
+            {
+              "x": -2,
+              "y": 6,
               "z": 0
             }
           ]

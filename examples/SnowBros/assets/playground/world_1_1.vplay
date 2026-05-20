@@ -450,7 +450,7 @@
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": -15,
-        "y": -1967,
+        "y": -1959,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -945,19 +945,19 @@
         "vectorName": "frog_idle",
         "layer": "gameplay",
         "x": -49,
-        "y": -1940,
+        "y": -1939,
         "rotation": 0,
         "scale": 1,
         "enemyType": "frog",
         "aiType": "patrol",
         "patrolWaypoints": [
           {
-            "x": -49,
-            "y": -1942
+            "x": -52,
+            "y": -1937
           },
           {
-            "x": 23,
-            "y": -1942
+            "x": 24,
+            "y": -1937
           }
         ],
         "wave": 0,
@@ -974,7 +974,7 @@
         "vectorName": "platform15",
         "layer": "gameplay",
         "x": 39,
-        "y": -1986,
+        "y": -1982,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -997,7 +997,7 @@
         "vectorName": "platform15",
         "layer": "gameplay",
         "x": 39,
-        "y": -2058,
+        "y": -2063,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1015,8 +1015,8 @@
         "type": "background",
         "vectorName": "platform7",
         "layer": "gameplay",
-        "x": -39,
-        "y": -2092,
+        "x": -38,
+        "y": -2102,
         "rotation": 0,
         "scale": 1,
         "velocity": {

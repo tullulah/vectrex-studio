@@ -3,8 +3,8 @@ META TARGET = pitrex
 META MAX_ENEMIES = 8
 
 # ── Debug ────────────────────────────────────────────────────────────────────
-const INVINCIBLE = 0   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 0   # piso inicial (0=normal floor 1, 2=floor 2, etc.)
+const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
+const START_FLOOR = 2   # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE = 0        # título + "press a button"
@@ -655,8 +655,7 @@ def draw_hud():
     PRINT_NUMBER(0, 127, score)          # puntuación, arriba-izquierda
     PRINT_NUMBER(-78, 127, lives)           # vidas, debajo del score
     PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha
-    PRINT_NUMBER(-78, 110, player_y - camera_y)
-    PRINT_NUMBER(20, 110, LEVEL_COLLISION_Y(player_x, player_y, PLAYER_HH) - camera_y)
+    
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():
