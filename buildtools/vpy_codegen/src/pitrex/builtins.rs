@@ -2984,11 +2984,12 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     //   +16+wp_count*4   type_data_ptr (u32: ROM pointer to per-type SM data)
     // Pool entry layout (32 bytes):
     //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
-    //   +8  thaw_timer (i16), +10 (free i16)
+    //   +8  thaw_timer (i16) — also reused as idle_timer for ai_type=4 wander
+    //   +10 (free i16) — reserved for vy when platform-jump AI is added (phase 2)
     //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
     //   +16 anim_frame_idx (u8), +17 anim_ticks_left (u8)
-    //   +18 sm_state (u8, state machine state)
-    //   +19 (free)
+    //   +18 sm_state (u8, snow/ball state machine: 0=normal, 1+=snowed)
+    //   +19 sub_state (u8, wander AI sub-state: 0=WALK, 1=IDLE; unused by other ai_types)
     //   +20..+23 type_data_ptr (u32 ROM ptr to per-type SM data table)
     //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27 is_anim (u8)
     //   +28..+31 wp_base (u32 ROM ptr) — must not be touched by anim state
@@ -3055,7 +3056,8 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r6, #14]   @ pool.cur_target = 0\n");
     s.push_str("    strb    r0, [r6, #18]   @ pool.sm_state = 0\n");
-    s.push_str("    strh    r0, [r6, #8]    @ pool.thaw_timer = 0\n");
+    s.push_str("    strb    r0, [r6, #19]   @ pool.sub_state = 0 (WALK for wander AI)\n");
+    s.push_str("    strh    r0, [r6, #8]    @ pool.thaw_timer / idle_timer = 0\n");
     s.push_str("    add     r0, r4, #12     @ ROM waypoints base\n");
     s.push_str("    str     r0, [r6, #28]   @ pool.wp_base\n");
     // is_anim at ROM offset 12 + wp_count*4
@@ -3131,10 +3133,13 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    ldrb    r6, [r5, #18]       @ sm_state\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    bne     .Lpue_skip          @ frozen: do not patrol\n");
-    // only patrol (ai_type==1)
+    // dispatch on ai_type
     s.push_str("    ldrb    r6, [r5, #13]       @ ai_type\n");
+    s.push_str("    cmp     r6, #4\n");
+    s.push_str("    beq     .Lpue_wander\n");
     s.push_str("    cmp     r6, #1\n");
-    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    bne     .Lpue_skip          @ unsupported ai_type\n");
+    // ── ai_type=1: full X+Y patrol ───────────────────────────────────────
     // need at least 2 waypoints
     s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
     s.push_str("    cmp     r6, #2\n");
@@ -3209,6 +3214,82 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    it      ge\n");
     s.push_str("    movge   r6, #0              @ wrap\n");
     s.push_str("    strb    r6, [r5, #14]       @ pool.cur_target\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── ai_type=4: wander (X-only patrol + idle pause between legs) ────
+    // Sub-state at pool+19: 0=WALK, 1=IDLE
+    // Idle timer at pool+8 (i16): random 30..93 frames between legs
+    // Needs >= 2 waypoints; otherwise skip.
+    s.push_str(".Lpue_wander:\n");
+    s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
+    s.push_str("    cmp     r6, #2\n");
+    s.push_str("    blt     .Lpue_skip\n");
+    s.push_str("    ldrb    r6, [r5, #19]       @ sub_state\n");
+    s.push_str("    cmp     r6, #1\n");
+    s.push_str("    beq     .Lpue_w_idle\n");
+    // ── WALK ────────────────────────────────────────────────────────────
+    // Read target_x from current waypoint, ignore target_y (X-only).
+    s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
+    s.push_str("    ldr     r7, [r5, #28]       @ wp_base\n");
+    s.push_str("    lsl     r6, r6, #2          @ cur_target * 4\n");
+    s.push_str("    add     r7, r7, r6\n");
+    s.push_str("    ldrsh   r8, [r7]            @ target_x\n");
+    s.push_str("    ldrsh   r10, [r5, #4]       @ x\n");
+    s.push_str("    sub     r6, r8, r10         @ dx\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_w_arrived\n");
+    // update dir from dx sign
+    s.push_str("    mov     r7, #0              @ dir=left default\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r7, #1              @ dir=right if dx>0\n");
+    s.push_str("    strb    r7, [r5, #26]       @ pool.dir\n");
+    s.push_str("    blt     .Lpue_w_xneg\n");
+    // dx > 0
+    s.push_str("    cmp     r6, r12\n");
+    s.push_str("    ble     .Lpue_w_xsnap\n");
+    s.push_str("    add     r10, r10, r12       @ x += SPEED\n");
+    s.push_str("    b       .Lpue_w_store\n");
+    s.push_str(".Lpue_w_xneg:\n");
+    s.push_str("    rsb     r6, r6, #0          @ |dx|\n");
+    s.push_str("    cmp     r6, r12\n");
+    s.push_str("    ble     .Lpue_w_xsnap\n");
+    s.push_str("    sub     r10, r10, r12       @ x -= SPEED\n");
+    s.push_str("    b       .Lpue_w_store\n");
+    s.push_str(".Lpue_w_xsnap:\n");
+    s.push_str("    mov     r10, r8             @ x = target_x\n");
+    s.push_str(".Lpue_w_store:\n");
+    s.push_str("    strh    r10, [r5, #4]       @ pool.x = x\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    bne     .Lpue_skip          @ not yet at target\n");
+    // ── arrived: advance waypoint and enter IDLE ───────────────────────
+    s.push_str(".Lpue_w_arrived:\n");
+    s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
+    s.push_str("    ldrb    r7, [r5, #15]       @ wp_count\n");
+    s.push_str("    add     r6, r6, #1\n");
+    s.push_str("    cmp     r6, r7\n");
+    s.push_str("    it      ge\n");
+    s.push_str("    movge   r6, #0\n");
+    s.push_str("    strb    r6, [r5, #14]\n");
+    // call pitrex_random for idle duration; preserve r4,r5
+    s.push_str("    bl      pitrex_random\n");
+    s.push_str("    and     r0, r0, #0x3F       @ 0..63\n");
+    s.push_str("    add     r0, r0, #30         @ 30..93 frames idle\n");
+    s.push_str("    strh    r0, [r5, #8]        @ idle_timer\n");
+    s.push_str("    mov     r0, #1\n");
+    s.push_str("    strb    r0, [r5, #19]       @ sub_state = IDLE\n");
+    s.push_str("    mov     r12, #1             @ restore SPEED (bl clobbered r12)\n");
+    s.push_str("    b       .Lpue_skip\n");
+    // ── IDLE ────────────────────────────────────────────────────────────
+    s.push_str(".Lpue_w_idle:\n");
+    s.push_str("    ldrsh   r6, [r5, #8]        @ idle_timer\n");
+    s.push_str("    sub     r6, r6, #1\n");
+    s.push_str("    strh    r6, [r5, #8]\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    bgt     .Lpue_skip          @ still idle\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("    strb    r6, [r5, #19]       @ sub_state = WALK\n");
+    s.push_str("    @ fall through to skip\n");
+
     s.push_str(".Lpue_skip:\n");
     s.push_str("    add     r5, r5, #32         @ next pool entry\n");
     s.push_str("    subs    r4, r4, #1\n");

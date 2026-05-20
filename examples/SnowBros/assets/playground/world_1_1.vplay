@@ -1199,7 +1199,7 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [
           {
             "x": 1,
@@ -1228,7 +1228,7 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [
           {
             "x": -57,
@@ -1256,7 +1256,7 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [
           {
             "x": -5,
@@ -1286,7 +1286,7 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [
           {
             "x": -55,

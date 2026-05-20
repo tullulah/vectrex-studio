@@ -217,15 +217,17 @@ pub struct CollisionSegment {
 ///
 /// Encoding:
 ///   0 = static
-///   1 = patrol  (default)
+///   1 = patrol   (X+Y movement toward each waypoint in sequence, default)
 ///   2 = chase
 ///   3 = flee
+///   4 = wander   (X-only patrol + idle pause between waypoint legs)
 fn ai_type_byte(ai: &Option<String>) -> u8 {
     match ai.as_deref() {
         Some("static") => 0,
         Some("patrol") => 1,
         Some("chase")  => 2,
         Some("flee")   => 3,
+        Some("wander") => 4,
         _              => 1, // patrol is the sensible default
     }
 }
