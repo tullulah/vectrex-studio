@@ -57,6 +57,18 @@ pub struct EnemyAction {
     /// Whether the action loops continuously
     #[serde(default, rename = "loop")]
     pub loop_anim: bool,
+
+    /// Action type: "animation" (default) or "shoot"
+    #[serde(default, rename = "type")]
+    pub action_type: Option<String>,
+
+    /// Shoot direction: "side" (default) or "down"
+    #[serde(default)]
+    pub direction: Option<String>,
+
+    /// Shoot side only: mirror projectile based on enemy facing
+    #[serde(default)]
+    pub mirror: Option<bool>,
 }
 
 /// Enemy stats block
@@ -395,6 +407,18 @@ impl EnemyResource {
             let sprite_type = sprite_type_byte(&action.sprite);
             let loop_val    = if action.loop_anim { 1u8 } else { 0u8 };
 
+            // action_flags byte [3]:
+            //   bit 0 = is_shoot
+            //   bit 1 = shoot_down (0=side, 1=down)
+            //   bit 2 = mirror
+            let is_shoot = action.action_type.as_deref() == Some("shoot");
+            let shoot_down = action.direction.as_deref() == Some("down");
+            let do_mirror  = action.mirror.unwrap_or(false);
+            let action_flags: u8 =
+                (if is_shoot   { 0x01 } else { 0 }) |
+                (if shoot_down { 0x02 } else { 0 }) |
+                (if do_mirror  { 0x04 } else { 0 });
+
             // Vanim actions reference a per-action 2-byte RAM state block
             let anim_state_sym: Option<String> = if is_vanim && !action.sprite.is_empty() {
                 let action_up = action.name
@@ -412,7 +436,10 @@ impl EnemyResource {
             ));
             out.push_str(&format!("    FCB {}                   ; sprite_type: 0=vec, 1=vanim\n", sprite_type));
             out.push_str(&format!("    FCB {}                   ; loop={}\n", loop_val, action.loop_anim));
-            out.push_str("    FCB 0                    ; pad (entry byte [3])\n");
+            out.push_str(&format!(
+                "    FCB ${:02X}                  ; action_flags (b0=shoot b1=down b2=mirror)\n",
+                action_flags
+            ));
             if let Some(sym) = &anim_state_sym {
                 out.push_str(&format!(
                     "    FDB {}    ; [4-5] anim state RAM ptr (frame_idx, ticks_left)\n",
@@ -592,21 +619,9 @@ mod tests {
             version: "1.0".to_string(),
             name: "snowbrother".to_string(),
             actions: vec![
-                EnemyAction {
-                    name: "idle".to_string(),
-                    sprite: "/path/to/player_idle.vec".to_string(),
-                    loop_anim: true,
-                },
-                EnemyAction {
-                    name: "walk".to_string(),
-                    sprite: "/path/to/player_walk.vanim".to_string(),
-                    loop_anim: true,
-                },
-                EnemyAction {
-                    name: "frozen".to_string(),
-                    sprite: "/path/to/player_frozen.vec".to_string(),
-                    loop_anim: false,
-                },
+                EnemyAction { name: "idle".to_string(), sprite: "/path/to/player_idle.vec".to_string(), loop_anim: true, ..Default::default() },
+                EnemyAction { name: "walk".to_string(), sprite: "/path/to/player_walk.vanim".to_string(), loop_anim: true, ..Default::default() },
+                EnemyAction { name: "frozen".to_string(), sprite: "/path/to/player_frozen.vec".to_string(), loop_anim: false, ..Default::default() },
             ],
             stats: EnemyStats { hp: 3, speed: 40, action_duration: 180 },
             behavior: EnemyBehavior {
@@ -703,11 +718,7 @@ mod tests {
     fn test_null_sprite_emits_zero() {
         let enemy = EnemyResource {
             name: "ghost".to_string(),
-            actions: vec![EnemyAction {
-                name: "float".to_string(),
-                sprite: "".to_string(),
-                loop_anim: true,
-            }],
+            actions: vec![EnemyAction { name: "float".to_string(), sprite: "".to_string(), loop_anim: true, ..Default::default() }],
             stats: EnemyStats { hp: 1, speed: 10, action_duration: 60 },
             ..Default::default()
         };
@@ -776,8 +787,8 @@ mod tests {
         };
         let mut enemy = make_snowbrother();
         // Add matching actions
-        enemy.actions.push(EnemyAction { name: "snow1".to_string(), sprite: "".to_string(), loop_anim: true });
-        enemy.actions.push(EnemyAction { name: "ball".to_string(), sprite: "".to_string(), loop_anim: false });
+        enemy.actions.push(EnemyAction { name: "snow1".to_string(), sprite: "".to_string(), loop_anim: true, ..Default::default() });
+        enemy.actions.push(EnemyAction { name: "ball".to_string(), sprite: "".to_string(), loop_anim: false, ..Default::default() });
         enemy.state_machine = Some(sm);
 
         let asm = enemy.compile_to_asm_with_name(None);

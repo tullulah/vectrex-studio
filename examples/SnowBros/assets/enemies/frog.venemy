@@ -26,6 +26,22 @@
       "name": "ball",
       "sprite": "assets/vectors/titchi_ball.vec",
       "loop": true
+    },
+    {
+      "name": "fire_side",
+      "sprite": "assets/vectors/frog_fire_side.vec",
+      "loop": false,
+      "type": "shoot",
+      "direction": "side",
+      "mirror": true
+    },
+    {
+      "name": "fire_down",
+      "sprite": "assets/vectors/frog_fire_down.vec",
+      "loop": false,
+      "type": "shoot",
+      "direction": "down",
+      "mirror": false
     }
   ],
   "stats": {
@@ -58,6 +74,14 @@
           {
             "event": "onSnowHit",
             "to": "snow1"
+          },
+          {
+            "event": "onFireSide",
+            "to": "fire_side"
+          },
+          {
+            "event": "onFireDown",
+            "to": "fire_down"
           }
         ]
       },
@@ -96,6 +120,20 @@
             "to": "normal"
           }
         ]
+      },
+      {
+        "name": "fire_side",
+        "action": "fire_side",
+        "decay_frames": 40,
+        "decay_to": "normal",
+        "on_event": []
+      },
+      {
+        "name": "fire_down",
+        "action": "fire_down",
+        "decay_frames": 40,
+        "decay_to": "normal",
+        "on_event": []
       }
     ]
   }

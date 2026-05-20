@@ -3260,7 +3260,7 @@ pub(crate) fn emit_pitrex_draw_enemies() -> String {
     s.push_str("    ldr     r6, [r1, r2]        @ state-specific sprite_ptr\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    beq     .Lpde_default_sprite @ slot empty → fall back\n");
-    s.push_str("    add     r2, r1, #16         @ &is_anim_table[0]\n");
+    s.push_str("    add     r2, r1, #32         @ &is_anim_table[0] (after 8 sprite ptrs)\n");
     s.push_str("    ldrb    r2, [r2, r0]        @ state-specific is_anim flag\n");
     s.push_str("    strb    r2, [r5, #19]       @ stash temp is_anim at pool+19 (free byte)\n");
     s.push_str("    b       .Lpde_check_sprite\n");
@@ -3456,32 +3456,50 @@ fn emit_pitrex_kill_enemy() -> String {
 
 fn emit_pitrex_enemy_fire_event() -> String {
     // pitrex_enemy_fire_event(r0=idx, r1=event_hash) — transition enemy SM state.
-    // Pool[idx*32+18] = sm_state (u8). Iterates the state's event table looking
-    // for a matching hash; if found, sets sm_state to the target state.
-    // SM record layout (13 bytes, at _NAME_SM_STATES + state_idx*13):
-    //   +0: action_idx, +1-2: decay_frames, +3: decay_to, +4: event_count
-    //   +5,+6: event0 (hash,to), +7,+8: event1, +9,+10: event2, +11,+12: event3
-    // NOTE: ARM32 SM table uses .byte/.hword (same layout as M6809 FCB/FDB).
-    // sprite_ptr at pool+0 → enemy type header; SM ptr is embedded in the level
-    // data. For now we use a simplified hardcoded bump: sm_state = min(sm_state+1, 3).
-    // TODO: look up SM table from sprite header when ARM32 SM tables are emitted.
+    //
+    // Reads type_data_ptr from pool+20, then searches the per-state event table
+    // embedded in _DATA at offset 44 + sm_state*20:
+    //   +0: event_count (.byte), +1..3: pad
+    //   +4 per event: .byte hash, .byte target_state, .byte[2] pad
+    // On match, writes target_state to pool+18 (sm_state).
     let mut s = String::new();
-    s.push_str("@ pitrex_enemy_fire_event(r0=idx, r1=event_hash) — bump SM state\n");
+    s.push_str("@ pitrex_enemy_fire_event(r0=idx, r1=event_hash) — dispatch SM event\n");
     s.push_str(".global pitrex_enemy_fire_event\n.type pitrex_enemy_fire_event, %function\npitrex_enemy_fire_event:\n");
-    s.push_str("    push    {r2, r3, lr}\n");
-    // r0 = idx, r2 = pool base + idx*32
+    s.push_str("    push    {r2, r3, r4, r5, lr}\n");
+    // r2 = pool entry for idx
     s.push_str("    mov     r2, #32\n");
     s.push_str("    mul     r2, r0, r2\n");
     s.push_str("    ldr     r3, =PITREX_ENEMY_POOL\n");
     s.push_str("    add     r2, r3, r2\n");
-    // r0 = current sm_state
-    s.push_str("    ldrb    r0, [r2, #18]   @ sm_state\n");
-    // bump: sm_state = min(sm_state+1, 3)
-    s.push_str("    add     r0, r0, #1\n");
-    s.push_str("    cmp     r0, #3\n");
-    s.push_str("    movgt   r0, #3\n");
-    s.push_str("    strb    r0, [r2, #18]   @ store new sm_state\n");
-    s.push_str("    pop     {r2, r3, pc}\n");
+    // r3 = sm_state
+    s.push_str("    ldrb    r3, [r2, #18]   @ sm_state\n");
+    // r4 = type_data_ptr
+    s.push_str("    ldr     r4, [r2, #20]   @ type_data_ptr\n");
+    s.push_str("    cmp     r4, #0\n");
+    s.push_str("    beq     .Lpfe_done\n");
+    // r4 = base of event block for this state: _DATA + 44 + sm_state*20
+    s.push_str("    mov     r5, #20\n");
+    s.push_str("    mla     r4, r3, r5, r4  @ base + sm_state*20\n");
+    s.push_str("    add     r4, r4, #44     @ + event table offset\n");
+    // r3 = event_count
+    s.push_str("    ldrb    r3, [r4]        @ event_count\n");
+    s.push_str("    add     r4, r4, #4      @ skip to first event entry\n");
+    s.push_str(".Lpfe_loop:\n");
+    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    beq     .Lpfe_done\n");
+    s.push_str("    ldrb    r5, [r4]        @ table hash\n");
+    s.push_str("    cmp     r5, r1          @ compare with input hash\n");
+    s.push_str("    bne     .Lpfe_next\n");
+    // match: write target_state
+    s.push_str("    ldrb    r5, [r4, #1]    @ target_state\n");
+    s.push_str("    strb    r5, [r2, #18]   @ pool.sm_state = target\n");
+    s.push_str("    b       .Lpfe_done\n");
+    s.push_str(".Lpfe_next:\n");
+    s.push_str("    sub     r3, r3, #1\n");
+    s.push_str("    add     r4, r4, #4\n");
+    s.push_str("    b       .Lpfe_loop\n");
+    s.push_str(".Lpfe_done:\n");
+    s.push_str("    pop     {r2, r3, r4, r5, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
@@ -3663,17 +3681,17 @@ mod tests {
 
         // Must compute variable offset (12 + wp_count*4) and read via register-indexed load
         assert!(
-            asm.contains("[r4, r6]"),
-            "Bug 3A regression: pitrex_spawn must read ROM[12+wp_count*4] via [r4, r6] (got: ...)"
+            asm.contains("[r4, r10]"),
+            "Bug 3A regression: pitrex_spawn must read ROM[12+wp_count*4] via [r4, r10] (got: ...)"
         );
         // Must store is_anim into pool offset +27
         assert!(
-            asm.contains("[r7, #27]"),
+            asm.contains("[r6, #27]"),
             "Bug 3A regression: pitrex_spawn must write pool[+27] for is_anim (got: ...)"
         );
         // The read must come before the store
-        let rom_read_pos  = asm.find("[r4, r6]").unwrap();
-        let pool27_pos = asm.find("[r7, #27]").unwrap();
+        let rom_read_pos  = asm.find("[r4, r10]").unwrap();
+        let pool27_pos = asm.find("[r6, #27]").unwrap();
         assert!(
             rom_read_pos < pool27_pos,
             "Bug 3A regression: ROM is_anim must be read before pool[+27] is written"

@@ -6,10 +6,19 @@ import type { FileNode } from '../types/models';
 // Types
 // ============================================
 
+export type EnemyActionType = 'animation' | 'shoot';
+export type ShootDirection = 'side' | 'down';
+
 export interface EnemyAction {
   name: string;
   sprite: string;
   loop: boolean;
+  /** 'animation' (default) or 'shoot' — shoot actions spawn a projectile when entered */
+  type?: EnemyActionType;
+  /** shoot only: direction of the projectile */
+  direction?: ShootDirection;
+  /** shoot only: mirror the projectile sprite based on enemy facing */
+  mirror?: boolean;
 }
 
 export interface EnemyStats {
@@ -300,7 +309,67 @@ const ActionRow: React.FC<ActionRowProps> = ({
         )}
       </select>
 
-      {/* Row 3: loop toggle + sprite type badge */}
+      {/* Row 3: action type selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 11, color: '#666', minWidth: 32 }}>type</span>
+        {(['animation', 'shoot'] as EnemyActionType[]).map(t => (
+          <button
+            key={t}
+            onClick={() => onChange({ type: t === 'animation' ? undefined : t })}
+            style={{
+              fontSize: 10,
+              padding: '2px 8px',
+              borderRadius: 8,
+              border: `1px solid ${(action.type ?? 'animation') === t ? '#5577cc' : '#2a2a4e'}`,
+              background: (action.type ?? 'animation') === t ? '#1a2a4a' : 'transparent',
+              color: (action.type ?? 'animation') === t ? '#88aaff' : '#555',
+              cursor: 'pointer',
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Row 4: shoot options (only when type=shoot) */}
+      {action.type === 'shoot' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, paddingLeft: 8, borderLeft: '2px solid #33334a' }}>
+          <span style={{ fontSize: 11, color: '#666', minWidth: 46 }}>direction</span>
+          {(['side', 'down'] as ShootDirection[]).map(d => (
+            <button
+              key={d}
+              onClick={() => onChange({ direction: d, mirror: d === 'down' ? false : action.mirror })}
+              style={{
+                fontSize: 10,
+                padding: '2px 8px',
+                borderRadius: 8,
+                border: `1px solid ${(action.direction ?? 'side') === d ? '#cc7733' : '#2a2a4e'}`,
+                background: (action.direction ?? 'side') === d ? '#2a1a00' : 'transparent',
+                color: (action.direction ?? 'side') === d ? '#ffaa44' : '#555',
+                cursor: 'pointer',
+              }}
+            >
+              {d}
+            </button>
+          ))}
+          {(action.direction ?? 'side') === 'side' && (
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 11, color: '#888', cursor: 'pointer', userSelect: 'none', marginLeft: 8,
+            }}>
+              <input
+                type="checkbox"
+                checked={action.mirror ?? false}
+                onChange={e => onChange({ mirror: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              mirror
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Row 5: loop toggle + sprite type badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <label style={{
           display: 'flex',

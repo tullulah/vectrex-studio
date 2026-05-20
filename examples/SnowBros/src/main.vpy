@@ -3,8 +3,8 @@ META TARGET = pitrex
 META MAX_ENEMIES = 8
 
 # ── Debug ────────────────────────────────────────────────────────────────────
-const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 2   # piso inicial (0=normal floor 1, 2=floor 2, etc.)
+const INVINCIBLE = 0   # 1 = no muere por enemigos ni por tiempo
+const START_FLOOR = 0   # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE = 0        # título + "press a button"
@@ -23,10 +23,36 @@ const TITCHI_STATE_SNOW1 = 1
 const TITCHI_STATE_SNOW2 = 2
 const TITCHI_STATE_BALL = 3
 
+# ── Frog SM state indices ─────────────────────────────────────────────────
+const FROG_STATE_NORMAL    = 0
+const FROG_STATE_SNOW1     = 1
+const FROG_STATE_SNOW2     = 2
+const FROG_STATE_BALL      = 3
+const FROG_STATE_FIRE_SIDE = 4
+const FROG_STATE_FIRE_DOWN = 5
+
+# ── Frog bullet physics ───────────────────────────────────────────────────
+const FROG_FIRE_INTERVAL    = 120   # frames between shots (~2s)
+const FROG_BULLET_SPEED     = 3
+const FROG_BULLET_DOWN_SPEED = 3
+const FROG_BULLET_HW        = 4
+const FROG_BULLET_HH        = 4
+
 # ── Thaw timers (one per enemy slot, managed in VPy) ─────────────────────
 const THAW_TICKS_SNOW = 180   # snow1/snow2: ~3s at 60fps
 const THAW_TICKS_BALL = 300   # ball: ~5s at 60fps
 thaw_timers = [0, 0, 0, 0, 0, 0, 0, 0]
+
+# ── Frog fire system ──────────────────────────────────────────────────────
+frog_fire_timer = [0, 0, 0, 0, 0, 0, 0, 0]   # per-slot shoot countdown
+frog_fire_decay = [0, 0, 0, 0, 0, 0, 0, 0]   # frames until fire anim ends → back to normal
+frog_bullet_active: i16 = 0
+frog_bullet_x: i16 = 0
+frog_bullet_y: i16 = 0
+frog_bullet_vx: i16 = 0
+frog_bullet_vy: i16 = 0
+frog_bullet_dir: i16 = 0      # 0 = side, 1 = down
+frog_bullet_mirror: i16 = 0   # 0 = right, 1 = left (side shots only)
 
 # ── Ball-rolling system ───────────────────────────────────────────────────
 const BALL_SPEED = 4
@@ -197,6 +223,8 @@ def state_playing():
     update_thaw()
     update_balls()
     ball_ball_collision()
+    update_frog_fire()
+    update_frog_bullet()
     check_snowball_enemy_collision()
     check_player_enemy_collision()
 
@@ -206,6 +234,7 @@ def state_playing():
     draw_player()
     _t1 = GET_FRAME_US()
     draw_snowballs()
+    draw_frog_bullet()
     _t2 = GET_FRAME_US()
     SET_INTENSITY(85)
     DRAW_ENEMIES()
@@ -383,6 +412,7 @@ def load_current_level():
     player_has_power = 0
     SET_CAMERA_Y(camera_y)
     reset_balls()
+    reset_frog_fire()
     if current_level == 1:
         LOAD_LEVEL("world_1_1")
         SPAWN_ENEMIES("world_1_1")
@@ -688,13 +718,14 @@ def update_thaw():
     while i < 8:
         st = GET_ENEMY_STATE(i)
         if st > 0:
-            if ball_rolling[i] == 0:
-                thaw_timers[i] = thaw_timers[i] - 1
-                if thaw_timers[i] <= 0:
-                    st = st - 1
-                    SET_ENEMY_STATE(i, st)
-                    if st > 0:
-                        thaw_timers[i] = THAW_TICKS_SNOW
+            if st < 4:
+                if ball_rolling[i] == 0:
+                    thaw_timers[i] = thaw_timers[i] - 1
+                    if thaw_timers[i] <= 0:
+                        st = st - 1
+                        SET_ENEMY_STATE(i, st)
+                        if st > 0:
+                            thaw_timers[i] = THAW_TICKS_SNOW
         i = i + 1
 
 # ── Cuenta enemigos activos directamente del pool ───────────────────────────
@@ -907,3 +938,111 @@ def check_player_enemy_collision():
                             SET_ENEMY_X(i, player_x - 20)
                             player_x = player_x + 1
         i = i + 1
+
+# ── Frog fire system ──────────────────────────────────────────────────────
+def reset_frog_fire():
+    i = 0
+    frog_bullet_active = 0
+    while i < 8:
+        frog_fire_timer[i] = FROG_FIRE_INTERVAL
+        frog_fire_decay[i] = 0
+        i = i + 1
+
+def update_frog_fire():
+    i = 0
+    while i < 8:
+        if GET_ENEMY_ACTIVE(i) == 1:
+            st = GET_ENEMY_STATE(i)
+            # Fire state decay: return to normal after 40 frames
+            if st == FROG_STATE_FIRE_SIDE:
+                frog_fire_decay[i] = frog_fire_decay[i] - 1
+                if frog_fire_decay[i] <= 0:
+                    SET_ENEMY_STATE(i, FROG_STATE_NORMAL)
+                    frog_fire_timer[i] = FROG_FIRE_INTERVAL
+            if st == FROG_STATE_FIRE_DOWN:
+                frog_fire_decay[i] = frog_fire_decay[i] - 1
+                if frog_fire_decay[i] <= 0:
+                    SET_ENEMY_STATE(i, FROG_STATE_NORMAL)
+                    frog_fire_timer[i] = FROG_FIRE_INTERVAL
+            # Normal state: countdown to next shot
+            if st == 0:
+                frog_fire_timer[i] = frog_fire_timer[i] - 1
+                if frog_fire_timer[i] <= 0:
+                    frog_fire_timer[i] = FROG_FIRE_INTERVAL
+                    ex = GET_ENEMY_X(i)
+                    ey = GET_ENEMY_Y(i)
+                    # Fire down if player is below and roughly aligned
+                    fire_down_flag = 0
+                    if player_y < ey - 20:
+                        dx = player_x - ex
+                        if dx < 0:
+                            dx = -dx
+                        if dx < 40:
+                            fire_down_flag = 1
+                    if fire_down_flag == 1:
+                        ENEMY_FIRE_EVENT(i, "onFireDown")
+                        new_st = GET_ENEMY_STATE(i)
+                        if new_st == FROG_STATE_FIRE_DOWN:
+                            frog_fire_decay[i] = 40
+                            if frog_bullet_active == 0:
+                                frog_bullet_x = ex
+                                frog_bullet_y = ey
+                                frog_bullet_vx = 0
+                                frog_bullet_vy = -FROG_BULLET_DOWN_SPEED
+                                frog_bullet_dir = 1
+                                frog_bullet_mirror = 0
+                                frog_bullet_active = 1
+                    if fire_down_flag == 0:
+                        ENEMY_FIRE_EVENT(i, "onFireSide")
+                        new_st = GET_ENEMY_STATE(i)
+                        if new_st == FROG_STATE_FIRE_SIDE:
+                            frog_fire_decay[i] = 40
+                            if frog_bullet_active == 0:
+                                frog_bullet_x = ex
+                                frog_bullet_y = ey
+                                mirror_flag = 0
+                                if player_x < ex:
+                                    mirror_flag = 1
+                                frog_bullet_vx = FROG_BULLET_SPEED
+                                if mirror_flag == 1:
+                                    frog_bullet_vx = -FROG_BULLET_SPEED
+                                frog_bullet_vy = 0
+                                frog_bullet_dir = 0
+                                frog_bullet_mirror = mirror_flag
+                                frog_bullet_active = 1
+        i = i + 1
+
+def update_frog_bullet():
+    if frog_bullet_active == 1:
+        frog_bullet_x = frog_bullet_x + frog_bullet_vx
+        frog_bullet_y = frog_bullet_y + frog_bullet_vy
+        if frog_bullet_x < -127:
+            frog_bullet_active = 0
+        if frog_bullet_x > 127:
+            frog_bullet_active = 0
+        scr_y = frog_bullet_y - camera_y
+        if scr_y < -127:
+            frog_bullet_active = 0
+        if scr_y > 127:
+            frog_bullet_active = 0
+        if frog_bullet_active == 1:
+            dx = frog_bullet_x - player_x
+            if dx < 0:
+                dx = -dx
+            dy = frog_bullet_y - player_y
+            if dy < 0:
+                dy = -dy
+            if dx < FROG_BULLET_HW + PLAYER_HW:
+                if dy < FROG_BULLET_HH + PLAYER_HH:
+                    frog_bullet_active = 0
+                    if INVINCIBLE == 0:
+                        on_player_death()
+
+def draw_frog_bullet():
+    if frog_bullet_active == 1:
+        SET_INTENSITY(110)
+        scr_y = frog_bullet_y - camera_y
+        if frog_bullet_dir == 0:
+            DRAW_VECTOR("frog_fire_side", frog_bullet_x, scr_y, frog_bullet_mirror)
+        if frog_bullet_dir == 1:
+            DRAW_VECTOR("frog_fire_down", frog_bullet_x, scr_y, 0)

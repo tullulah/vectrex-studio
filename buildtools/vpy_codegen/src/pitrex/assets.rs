@@ -1351,46 +1351,43 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
 // Enemy per-type DATA table (.venemy → ARM)
 // ============================================================
 //
-// Emits `_<NAME>_DATA` — a fixed-size table read by the runtime enemy
-// system to pick the sprite for each state machine state. The table is
-// referenced via pool.type_data_ptr (+20), populated by spawn from the
-// level enemy instance's trailing word.
-//
-// Layout (fixed 24 bytes, .balign 4):
-//   [0..15]  4 × .word — sprite_ptr for state 0..3 (0 if no such state)
-//   [16..19] 4 × .byte — is_anim flag (0=vec, 1=vanim) for state 0..3
-//   [20]     .byte    — state_count (1..4)
-//   [21..23] .byte    — pad to 4-byte alignment
-//
-// State i resolution:
-//   1. state_machine.states[i].action → action name
-//   2. find actions[].name == action_name → sprite path
-//   3. sprite path → ARM label (vec → _STEM_VECTORS, vanim → _ANIM_STEM)
-//
-// If state machine is absent, all 4 slots are 0 and state_count = 0.
-fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
-    let mut s = String::new();
-    s.push_str(&format!("@ ---- Enemy DATA (state→sprite table): {} ----\n", name_up));
-    s.push_str(&format!(".global _{name_up}_DATA\n"));
-    s.push_str(".balign 4\n");
-    s.push_str(&format!("_{name_up}_DATA:\n"));
+// FNV-1a hash truncated to 8 bits — must match the hash in pitrex/expressions.rs
+fn fnv1a_u8(s: &str) -> u8 {
+    let mut h: u32 = 2166136261;
+    for b in s.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
+    (h & 0xFF) as u8
+}
 
-    // Resolve each state slot (0..3): (sprite_label, is_anim)
-    let mut slot_data: [(String, u8); 4] =
-        [("0".to_string(), 0), ("0".to_string(), 0),
-         ("0".to_string(), 0), ("0".to_string(), 0)];
+// Emits `_<NAME>_DATA` — variable-size table read by the runtime enemy system.
+//
+// Layout (.balign 4):
+//   [0 ..31]  8 × .word  — sprite_ptr for state 0..7 (0 if no such state)
+//   [32..39]  8 × .byte  — is_anim flag for state 0..7 (0=vec 1=vanim)
+//   [40]      .byte      — state_count
+//   [41..43]  .byte[3]   — pad
+//   [44..]    Event table: 8 × 20-byte per-state blocks
+//               Per block: .byte event_count, .byte[3] pad
+//                          up to 4 × (.byte hash, .byte target_state, .byte[2] pad)
+//             Runtime: ENEMY_FIRE_EVENT reads block at offset 44 + sm_state*20
+fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
+    const MAX_STATES: usize = 8;
+    const MAX_EVENTS: usize = 4;
+
+    let mut sprite_ptrs: Vec<String> = vec!["0".to_string(); MAX_STATES];
+    let mut is_anims: Vec<u8> = vec![0u8; MAX_STATES];
     let mut state_count: u8 = 0;
+    // event_table[state_idx] = Vec of (hash, target_state)
+    let mut event_table: Vec<Vec<(u8, u8)>> = vec![vec![]; MAX_STATES];
 
     if let Some(sm) = &res.state_machine {
-        for (i, state) in sm.states.iter().take(4).enumerate() {
-            // Find the action that matches this state's action name
+        state_count = sm.states.len().min(MAX_STATES) as u8;
+
+        for (i, state) in sm.states.iter().take(MAX_STATES).enumerate() {
+            // Resolve sprite for this state
             let action = res.actions.iter().find(|a| a.name == state.action);
             if let Some(action) = action {
-                let sprite_path = &action.sprite;
-                if sprite_path.is_empty() {
-                    slot_data[i] = ("0".to_string(), 0);
-                } else {
-                    let path = Path::new(sprite_path);
+                if !action.sprite.is_empty() {
+                    let path = Path::new(&action.sprite);
                     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     let stem = path.file_stem()
                         .and_then(|s| s.to_str())
@@ -1403,25 +1400,55 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
                         "vanim" => (format!("_ANIM_{}", stem), 1u8),
                         _       => ("0".to_string(), 0),
                     };
-                    slot_data[i] = (label, is_anim);
+                    sprite_ptrs[i] = label;
+                    is_anims[i] = is_anim;
                 }
             }
+            // Resolve event transitions
+            for trans in state.on_event.iter().take(MAX_EVENTS) {
+                let hash = fnv1a_u8(&trans.event);
+                let target = sm.states.iter().position(|s| s.name == trans.to)
+                    .map(|p| p as u8).unwrap_or(0);
+                event_table[i].push((hash, target));
+            }
         }
-        state_count = sm.states.len().min(4) as u8;
     }
 
-    // Emit 4 × .word sprite_ptr
-    s.push_str(&format!("    .word {}    @ state 0 sprite_ptr\n", slot_data[0].0));
-    s.push_str(&format!("    .word {}    @ state 1 sprite_ptr\n", slot_data[1].0));
-    s.push_str(&format!("    .word {}    @ state 2 sprite_ptr\n", slot_data[2].0));
-    s.push_str(&format!("    .word {}    @ state 3 sprite_ptr\n", slot_data[3].0));
-    // Emit 4 × .byte is_anim
-    s.push_str(&format!("    .byte {}    @ state 0 is_anim\n", slot_data[0].1));
-    s.push_str(&format!("    .byte {}    @ state 1 is_anim\n", slot_data[1].1));
-    s.push_str(&format!("    .byte {}    @ state 2 is_anim\n", slot_data[2].1));
-    s.push_str(&format!("    .byte {}    @ state 3 is_anim\n", slot_data[3].1));
+    let mut s = String::new();
+    s.push_str(&format!("@ ---- Enemy DATA (state→sprite+event table): {} ----\n", name_up));
+    s.push_str(&format!(".global _{name_up}_DATA\n"));
+    s.push_str(".balign 4\n");
+    s.push_str(&format!("_{name_up}_DATA:\n"));
+
+    // 8 × sprite_ptr
+    for i in 0..MAX_STATES {
+        s.push_str(&format!("    .word {}    @ state {} sprite_ptr\n", sprite_ptrs[i], i));
+    }
+    // 8 × is_anim
+    for i in 0..MAX_STATES {
+        s.push_str(&format!("    .byte {}    @ state {} is_anim\n", is_anims[i], i));
+    }
+    // state_count + 3 pad  (offset 40..43)
     s.push_str(&format!("    .byte {}    @ state_count\n", state_count));
-    s.push_str("    .byte 0, 0, 0    @ pad to 4-byte alignment\n");
+    s.push_str("    .byte 0, 0, 0    @ pad\n");
+
+    // Event table: MAX_STATES × 20 bytes each (offset 44..)
+    for i in 0..MAX_STATES {
+        let events = &event_table[i];
+        s.push_str(&format!("    @ state {} events ({} transitions)\n", i, events.len()));
+        s.push_str(&format!("    .byte {}    @ event_count\n", events.len()));
+        s.push_str("    .byte 0, 0, 0    @ pad\n");
+        for &(hash, target) in events.iter() {
+            s.push_str(&format!("    .byte 0x{hash:02X}  @ event hash (FNV-1a)\n"));
+            s.push_str(&format!("    .byte {}         @ target_state\n", target));
+            s.push_str("    .byte 0, 0     @ pad\n");
+        }
+        // Pad remaining event slots to MAX_EVENTS
+        for _ in events.len()..MAX_EVENTS {
+            s.push_str("    .byte 0, 0, 0, 0   @ empty event slot\n");
+        }
+    }
+
     s.push('\n');
     s
 }

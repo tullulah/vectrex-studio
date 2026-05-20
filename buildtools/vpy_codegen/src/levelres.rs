@@ -1014,6 +1014,7 @@ mod tests {
                 foreground: vec![],
             },
             scroll_limits: VPlayScrollLimits::default(),
+            editor_meta: VPlayEditorMeta::default(),
         };
 
         assert_eq!(level.version, "2.0");
@@ -1045,6 +1046,7 @@ mod tests {
                 foreground: vec![],
             },
             scroll_limits: VPlayScrollLimits::default(),
+            editor_meta: VPlayEditorMeta::default(),
         };
 
         let asm = level.compile_to_asm();
