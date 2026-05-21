@@ -992,6 +992,16 @@ def update_frog_fire():
                                 frog_bullet_mirror = 0
                                 frog_bullet_active = 1
                     if fire_down_flag == 0:
+                        # Face the player before firing sideways so the
+                        # frog_fire_side sprite mirrors correctly (left/right).
+                        face_left = 0
+                        if player_x < ex:
+                            face_left = 1
+                        # pool.dir: 0=left, 1=right (mirrored against default_facing)
+                        if face_left == 1:
+                            SET_ENEMY_DIR(i, 0)
+                        if face_left == 0:
+                            SET_ENEMY_DIR(i, 1)
                         ENEMY_FIRE_EVENT(i, "onFireSide")
                         new_st = GET_ENEMY_STATE(i)
                         if new_st == FROG_STATE_FIRE_SIDE:
@@ -999,15 +1009,12 @@ def update_frog_fire():
                             if frog_bullet_active == 0:
                                 frog_bullet_x = ex
                                 frog_bullet_y = ey
-                                mirror_flag = 0
-                                if player_x < ex:
-                                    mirror_flag = 1
                                 frog_bullet_vx = FROG_BULLET_SPEED
-                                if mirror_flag == 1:
+                                if face_left == 1:
                                     frog_bullet_vx = -FROG_BULLET_SPEED
                                 frog_bullet_vy = 0
                                 frog_bullet_dir = 0
-                                frog_bullet_mirror = mirror_flag
+                                frog_bullet_mirror = face_left
                                 frog_bullet_active = 1
         i = i + 1
 

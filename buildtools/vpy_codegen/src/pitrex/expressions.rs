@@ -359,6 +359,24 @@ pub fn emit_call(
              \x20   strh    r0, [r1, #6]    @ pool.y = r0\n"
         ));
     }
+    if info.name.to_uppercase() == "SET_ENEMY_DIR" {
+        // Pool+26 = dir (u8: 0=left, 1=right). Combined with mirror_on_patrol
+        // and default_facing, draw_enemies decides whether to flip the sprite.
+        let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_DIR: missing idx arg")?, var_addrs)?;
+        let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_DIR: missing dir arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ SET_ENEMY_DIR(idx, dir)  ; 0=left, 1=right\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   push    {{r1}}              @ save pool entry ptr\n\
+             {val_s}\
+             \x20   pop     {{r1}}\n\
+             \x20   strb    r0, [r1, #26]   @ pool.dir = r0 (0=left, 1=right)\n"
+        ));
+    }
     if info.name.to_uppercase() == "GET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_STATE: missing arg")?, var_addrs)?;
         return Ok(format!(

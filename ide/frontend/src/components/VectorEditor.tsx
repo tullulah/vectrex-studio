@@ -3153,6 +3153,42 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     updateResource(resource, newResource);
   }, [resource, updateResource]);
 
+  // Rotate vector — rotates every point (anchors AND bezier control points,
+  // since they all live in `points[]`) around the design-time origin (0,0)
+  // by `degrees` degrees, CCW positive in the .vec coord system where +Y is up.
+  // Coordinates are rounded back to integers so the output stays Vectrex-safe.
+  const rotateVector = useCallback((degrees: number) => {
+    const rad = (degrees * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const newResource = { ...resource };
+    let rotated = 0;
+    newResource.layers.forEach(layer => {
+      layer.paths.forEach(path => {
+        path.points.forEach(point => {
+          const x = point.x;
+          const y = point.y;
+          point.x = Math.round(x * cos - y * sin);
+          point.y = Math.round(x * sin + y * cos);
+          rotated++;
+        });
+      });
+    });
+    // Rotate the background image offset too, so the reference image stays
+    // aligned to the sprite after the rotation.
+    if (newResource.backgroundOffset) {
+      const bx = newResource.backgroundOffset.x;
+      const by = newResource.backgroundOffset.y;
+      newResource.backgroundOffset = {
+        x: Math.round(bx * cos - by * sin),
+        y: Math.round(bx * sin + by * cos),
+      };
+      setBackgroundOffset(newResource.backgroundOffset);
+    }
+    console.log(`[VectorEditor] Rotated ${rotated} points by ${degrees}°`);
+    updateResource(resource, newResource);
+  }, [resource, updateResource]);
+
   // UI Components
   const Toolbar = () => (
     <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -3415,6 +3451,74 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         title="Mirror Y - flip vertically (negate Y coordinates)"
       >
         ⇅ Mirror Y
+      </button>
+      <button
+        onClick={() => rotateVector(90)}
+        style={{
+          padding: '8px 12px',
+          background: '#3a5a3e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Rotate 90° counter-clockwise around (0,0)"
+      >
+        ↺ Rotate +90°
+      </button>
+      <button
+        onClick={() => rotateVector(-90)}
+        style={{
+          padding: '8px 12px',
+          background: '#3a5a3e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Rotate 90° clockwise around (0,0)"
+      >
+        ↻ Rotate -90°
+      </button>
+      <input
+        type="number"
+        defaultValue={15}
+        step={1}
+        title="Custom rotation angle (degrees, CCW positive)"
+        style={{
+          width: '48px',
+          padding: '6px 4px',
+          background: '#1a1a2a',
+          color: 'white',
+          border: '1px solid #3a5a3e',
+          borderRadius: '4px',
+          fontSize: '12px',
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            const v = parseFloat((e.target as HTMLInputElement).value);
+            if (!Number.isNaN(v) && v !== 0) rotateVector(v);
+          }
+        }}
+        id="rotate-angle-input"
+      />
+      <button
+        onClick={() => {
+          const inp = document.getElementById('rotate-angle-input') as HTMLInputElement | null;
+          const v = inp ? parseFloat(inp.value) : NaN;
+          if (!Number.isNaN(v) && v !== 0) rotateVector(v);
+        }}
+        style={{
+          padding: '8px 10px',
+          background: '#3a5a3e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Rotate by the angle in the input (positive = CCW)"
+      >
+        🔁 Rotate
       </button>
       <button
         onClick={chainEdges}
