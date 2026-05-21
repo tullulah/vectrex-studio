@@ -59,6 +59,10 @@ export interface AreaTransition {
   from: number;
   to: number;
   type: AreaTransitionType;
+  /** Optional explicit takeoff X on the source area. Defaults to (x_min+x_max)/2. */
+  from_x?: number;
+  /** Optional explicit landing X on the target area. Defaults to (x_min+x_max)/2. */
+  to_x?: number;
 }
 
 export interface VPlayMetadata {

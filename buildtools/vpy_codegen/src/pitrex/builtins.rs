@@ -3350,12 +3350,13 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    add     r6, r6, r6          @ ac*8\n");
     s.push_str("    add     r11, r11, r6        @ trans_ptr\n");
     // Keep cur_area in r6 (callee-saved across bl pitrex_random).
+    // Transition records are 8 bytes: [from, to, type, pad, from_x:i16, to_x:i16].
     s.push_str("    ldrb    r6, [r5, #11]       @ cur_area\n");
     s.push_str("    mov     r7, #0              @ trans index\n");
     s.push_str(".Lpue_w_pick:\n");
     s.push_str("    cmp     r7, r10\n");
     s.push_str("    bge     .Lpue_w_to_walk     @ exhausted, no transition\n");
-    s.push_str("    lsl     r1, r7, #2\n");
+    s.push_str("    lsl     r1, r7, #3          @ idx * 8\n");
     s.push_str("    ldrb    r2, [r11, r1]       @ trans.from\n");
     s.push_str("    cmp     r2, r6\n");
     s.push_str("    bne     .Lpue_w_pick_next\n");
@@ -3369,15 +3370,19 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    add     r7, r7, #1\n");
     s.push_str("    b       .Lpue_w_pick\n");
     s.push_str(".Lpue_w_pick_hit:\n");
-    // r7 = transition index; load target area_idx from trans[r7].to
-    s.push_str("    lsl     r1, r7, #2\n");
-    s.push_str("    add     r0, r11, r1\n");
-    s.push_str("    ldrb    r2, [r0, #1]        @ to (target area idx)\n");
+    // r7 = transition index. Load trans[r7] fields and commit.
+    s.push_str("    lsl     r1, r7, #3          @ trans[r7] offset (8 bytes)\n");
+    s.push_str("    add     r3, r11, r1         @ &trans[r7]\n");
+    s.push_str("    ldrb    r2, [r3, #1]        @ to (target area idx)\n");
     s.push_str("    strb    r2, [r5, #11]       @ current_area_idx = target\n");
-    // Compute target_y = areas[target].y
-    s.push_str("    lsl     r1, r2, #3          @ target*8\n");
+    s.push_str("    ldrsh   r1, [r3, #4]        @ from_x\n");
+    s.push_str("    strh    r1, [r5, #4]        @ snap enemy.x to takeoff X\n");
+    s.push_str("    ldrsh   r1, [r3, #6]        @ to_x\n");
+    s.push_str("    strh    r1, [r5, #14]       @ stash target_x in pool+14..15\n");
+    // Compute target_y = areas[target].y (areas at areas_ptr + 8, stride 8)
+    s.push_str("    lsl     r1, r2, #3          @ target_area_idx * 8\n");
     s.push_str("    add     r1, r1, #8\n");
-    s.push_str("    add     r1, r8, r1\n");
+    s.push_str("    add     r1, r8, r1          @ &area[target]\n");
     s.push_str("    ldrsh   r3, [r1]            @ target_y\n");
     s.push_str("    strh    r3, [r5, #8]        @ stash target_y in pool+8..9\n");
     s.push_str("    mov     r0, #2\n");
@@ -3414,7 +3419,9 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strh    r6, [r5, #6]\n");
     s.push_str("    b       .Lpue_skip\n");
     s.push_str(".Lpue_w_air_land:\n");
-    // y == target. Snap to new area's y (already there) and resume WALK.
+    // y reached target. Snap x to target_x (stashed at pool+14..15) and walk.
+    s.push_str("    ldrsh   r1, [r5, #14]       @ target_x\n");
+    s.push_str("    strh    r1, [r5, #4]        @ enemy.x = to_x\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");

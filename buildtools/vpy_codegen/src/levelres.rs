@@ -165,12 +165,18 @@ pub struct WalkableArea {
 }
 
 /// A transition between two walkable areas (by index in `walkable_areas`).
+/// Optional from_x / to_x pin the takeoff and landing X within the source
+/// and target areas; defaults are area centers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AreaTransition {
     pub from: u8,
     pub to: u8,
     #[serde(rename = "type")]
     pub ttype: String,  // "jump_up" or "drop"
+    #[serde(default)]
+    pub from_x: Option<i16>,
+    #[serde(default)]
+    pub to_x: Option<i16>,
 }
 
 /// A single waypoint for an enemy patrol route (local level coordinates)
@@ -690,9 +696,21 @@ impl VPlayLevel {
                             "drop"    => 2u8,
                             _         => 0u8,
                         };
+                        // Compute defaults: if from_x / to_x absent, use the
+                        // center of the corresponding area (matches editor's
+                        // default rendering).
+                        let center_of = |idx: u8| -> i16 {
+                            let a = areas.get(idx as usize)
+                                .unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                            ((a.x_min as i32 + a.x_max as i32) / 2) as i16
+                        };
+                        let fx = t.from_x.unwrap_or_else(|| center_of(t.from));
+                        let tx = t.to_x.unwrap_or_else(|| center_of(t.to));
                         areas_tables.push_str(&format!(
                             "    .byte {}, {}, {}, 0  @ trans {}: from, to, type({})\n",
                             t.from, t.to, ttype, ti_idx, t.ttype));
+                        areas_tables.push_str(&format!(
+                            "    .hword {}, {}        @ from_x, to_x\n", fx, tx));
                     }
                 } else {
                     out.push_str("    .word 0          @ areas_ptr (none)\n");

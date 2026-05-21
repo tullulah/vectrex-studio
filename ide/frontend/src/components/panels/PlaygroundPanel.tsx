@@ -86,6 +86,7 @@ export function PlaygroundPanel() {
     areaIdx?: number;
     dir?: 1 | -1;
     targetY?: number;
+    targetX?: number;
     targetAreaIdx?: number;
   };
   const enemyWanderStateRef = useRef<Map<string, WanderState>>(new Map());
@@ -112,6 +113,11 @@ export function PlaygroundPanel() {
   const [draggingLimit, setDraggingLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [selectedLimit, setSelectedLimit] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
   const [draggingWaypointInfo, setDraggingWaypointInfo] = useState<{ enemyId: string; wpIdx: number } | null>(null);
+  // Phase 2: dragging a transition endpoint (from_x or to_x) constrains motion
+  // to the X-axis within the corresponding area's range.
+  const [draggingTransitionEndpoint, setDraggingTransitionEndpoint] = useState<
+    { enemyId: string; transIdx: number; endpoint: 'from' | 'to' } | null
+  >(null);
   const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number }[]>([]);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
@@ -425,15 +431,15 @@ export function PlaygroundPanel() {
                   : [];
             if (areas.length === 0) return obj;
             const transitions = ((obj as any).transitions as
-              | { from: number; to: number; type: 'jump_up' | 'drop' }[]
+              | { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number }[]
               | undefined) ?? [];
             const SPEED = (obj as any).speed ?? 1.0;
             const st = enemyWanderStateRef.current.get(obj.id) as
-              | { sub: 'walk' | 'idle' | 'air'; timer: number; areaIdx?: number; dir?: 1 | -1; targetY?: number; targetAreaIdx?: number }
+              | { sub: 'walk' | 'idle' | 'air'; timer: number; areaIdx?: number; dir?: 1 | -1; targetY?: number; targetX?: number; targetAreaIdx?: number }
               | undefined
               ?? { sub: 'walk' as const, timer: 0, areaIdx: 0, dir: 1 };
 
-            // AIRBORNE: move y toward target_y at 2u/frame; on arrival snap and walk.
+            // AIRBORNE: move y toward target_y at 2u/frame; on arrival snap x and walk.
             if (st.sub === 'air' && st.targetY !== undefined) {
               const dy = st.targetY - obj.y;
               const absDy = Math.abs(dy);
@@ -443,7 +449,7 @@ export function PlaygroundPanel() {
                   areaIdx: st.targetAreaIdx ?? st.areaIdx ?? 0,
                   dir: st.dir ?? 1,
                 });
-                return { ...obj, y: st.targetY };
+                return { ...obj, x: st.targetX ?? obj.x, y: st.targetY };
               }
               return { ...obj, y: obj.y + Math.sign(dy) * 2 };
             }
@@ -460,14 +466,20 @@ export function PlaygroundPanel() {
               for (const t of candidates) {
                 // 25% chance per candidate to commit (matches ARM coin-flip)
                 if (Math.random() < 0.25) {
+                  const srcArea = areas[t.from];
+                  const dstArea = areas[t.to];
+                  const fromX = (t as any).from_x ?? (srcArea.x_min + srcArea.x_max) / 2;
+                  const toX   = (t as any).to_x   ?? (dstArea.x_min + dstArea.x_max) / 2;
                   enemyWanderStateRef.current.set(obj.id, {
                     sub: 'air', timer: 0,
                     areaIdx: curArea,
                     targetAreaIdx: t.to,
-                    targetY: areas[t.to].y,
+                    targetY: dstArea.y,
+                    targetX: toX,
                     dir: st.dir ?? 1,
                   });
-                  return obj;
+                  // Snap enemy.x to from_x — matches the ARM "takeoff" snap.
+                  return { ...obj, x: fromX };
                 }
               }
               // No transition picked: back to WALK on same area.
@@ -1058,6 +1070,46 @@ export function PlaygroundPanel() {
       return;
     }
 
+    // Phase 2: dragging a transition endpoint. Only X moves (clamped to the
+    // corresponding area's x_min..x_max); Y is fixed by the area.
+    if (draggingTransitionEndpoint && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const { enemyId, transIdx, endpoint } = draggingTransitionEndpoint;
+      setObjects(prev => prev.map(o => {
+        if (o.id !== enemyId) return o;
+        const explicit = (o as any).walkable_areas as
+          | { y: number; x_min: number; x_max: number }[]
+          | undefined;
+        const wps2 = o.patrolWaypoints ?? [];
+        const areas = explicit && explicit.length > 0
+          ? explicit
+          : wps2.length > 0
+            ? [{
+                y: o.y,
+                x_min: Math.min(...wps2.map(w => w.x)),
+                x_max: Math.max(...wps2.map(w => w.x)),
+              }]
+            : [];
+        const transitions = ((o as any).transitions as
+          | { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number }[]
+          | undefined) ?? [];
+        if (transIdx >= transitions.length) return o;
+        const t = transitions[transIdx];
+        const areaIdx = endpoint === 'from' ? t.from : t.to;
+        if (areaIdx >= areas.length) return o;
+        const a = areas[areaIdx];
+        const clamped = Math.max(a.x_min, Math.min(a.x_max, vecX));
+        const next = [...transitions];
+        next[transIdx] = endpoint === 'from'
+          ? { ...t, from_x: clamped }
+          : { ...t, to_x: clamped };
+        return { ...o, transitions: next } as any;
+      }));
+      return;
+    }
+
     if (draggingVelocity) {
       handleVelocityArrowDrag(e);
       return;
@@ -1114,6 +1166,7 @@ export function PlaygroundPanel() {
     setHotspotDragOffset(null);
     setDraggingLimit(null);
     setDraggingWaypointInfo(null);
+    setDraggingTransitionEndpoint(null);
     dragStartVecRef.current = null;
 
     // Finalize rubber band selection
@@ -2175,20 +2228,23 @@ export function PlaygroundPanel() {
                         </g>
                       );
                     })}
-                    {/* Transitions: curved dashed arrows between area centers */}
+                    {/* Transitions: curved dashed arrows from (from_x, area_from.y)
+                        to (to_x, area_to.y). Both endpoints draggable when the
+                        enemy is selected. */}
                     {transitions.map((t, ti) => {
                       if (t.from >= areas.length || t.to >= areas.length) return null;
                       const fromArea = areas[t.from];
                       const toArea = areas[t.to];
-                      const fromMid = vecToSvg((fromArea.x_min + fromArea.x_max) / 2, fromArea.y);
-                      const toMid   = vecToSvg((toArea.x_min   + toArea.x_max)   / 2, toArea.y);
-                      // Bezier control point off to one side to make the arc visible.
-                      const midX = (fromMid.x + toMid.x) / 2;
-                      const midY = (fromMid.y + toMid.y) / 2;
-                      const dxArrow = toMid.x - fromMid.x;
-                      const dyArrow = toMid.y - fromMid.y;
+                      const fromX = (t as any).from_x ?? (fromArea.x_min + fromArea.x_max) / 2;
+                      const toX   = (t as any).to_x   ?? (toArea.x_min   + toArea.x_max)   / 2;
+                      const fromPt = vecToSvg(fromX, fromArea.y);
+                      const toPt   = vecToSvg(toX,   toArea.y);
+                      // Bezier control point off to one side for visible arc
+                      const midX = (fromPt.x + toPt.x) / 2;
+                      const midY = (fromPt.y + toPt.y) / 2;
+                      const dxArrow = toPt.x - fromPt.x;
+                      const dyArrow = toPt.y - fromPt.y;
                       const lenArrow = Math.sqrt(dxArrow * dxArrow + dyArrow * dyArrow) || 1;
-                      // perpendicular offset for bow
                       const px = -dyArrow / lenArrow * 10;
                       const py =  dxArrow / lenArrow * 10;
                       const ctlX = midX + px;
@@ -2198,11 +2254,27 @@ export function PlaygroundPanel() {
                       return (
                         <g key={`trans_${ti}`}>
                           <path
-                            d={`M ${fromMid.x} ${fromMid.y} Q ${ctlX} ${ctlY} ${toMid.x} ${toMid.y}`}
+                            d={`M ${fromPt.x} ${fromPt.y} Q ${ctlX} ${ctlY} ${toPt.x} ${toPt.y}`}
                             stroke={tStroke} strokeWidth={isSelected ? 1 : 0.6}
                             strokeDasharray="2 1.5" fill="none" />
-                          {/* Arrowhead at target */}
-                          <circle cx={toMid.x} cy={toMid.y} r={1.6} fill={tStroke} />
+                          {/* Takeoff endpoint (from). Draggable when selected. */}
+                          <circle cx={fromPt.x} cy={fromPt.y} r={isSelected ? 2.6 : 1.8}
+                            fill={tStroke} stroke={isSelected ? '#ffffff' : 'none'}
+                            strokeWidth={0.4}
+                            style={{ cursor: isSelected ? 'grab' : 'default' }}
+                            onMouseDown={isSelected ? (e) => {
+                              e.stopPropagation();
+                              setDraggingTransitionEndpoint({ enemyId: obj.id, transIdx: ti, endpoint: 'from' });
+                            } : undefined} />
+                          {/* Landing endpoint (to). Slightly larger, also draggable. */}
+                          <circle cx={toPt.x} cy={toPt.y} r={isSelected ? 3 : 2}
+                            fill={tStroke} stroke={isSelected ? '#ffffff' : 'none'}
+                            strokeWidth={0.4}
+                            style={{ cursor: isSelected ? 'grab' : 'default' }}
+                            onMouseDown={isSelected ? (e) => {
+                              e.stopPropagation();
+                              setDraggingTransitionEndpoint({ enemyId: obj.id, transIdx: ti, endpoint: 'to' });
+                            } : undefined} />
                         </g>
                       );
                     })}
