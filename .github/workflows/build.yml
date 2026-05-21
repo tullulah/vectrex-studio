@@ -150,12 +150,24 @@ jobs:
         working-directory: ide/electron
         run: npx electron-builder --linux AppImage deb --publish never
 
-      - name: Package Electron (macOS)
+      - name: Package Electron app dir (macOS)
         if: matrix.platform == 'mac'
         working-directory: ide/electron
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --mac dmg zip --publish never
+        run: npx electron-builder --mac dir --publish never
+
+      - name: Ad-hoc sign the app (macOS)
+        if: matrix.platform == 'mac'
+        working-directory: ide/electron
+        run: codesign --force --deep --sign - "dist/mac-arm64/Vectrex Studio.app"
+
+      - name: Build DMG and ZIP from signed app (macOS)
+        if: matrix.platform == 'mac'
+        working-directory: ide/electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --mac dmg zip --prepackaged "dist/mac-arm64/Vectrex Studio.app" --publish never
 
       - name: Package Electron (Windows)
         if: matrix.platform == 'win'
