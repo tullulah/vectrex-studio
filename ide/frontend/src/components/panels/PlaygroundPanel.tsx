@@ -46,6 +46,11 @@ interface SceneObject {
   enemyType?: string;
   aiType?: 'static' | 'patrol' | 'wander' | 'chase' | 'flee';
   patrolWaypoints?: { x: number; y: number }[];
+  /** Phase 2: explicit walkable areas. If absent, a single area is derived
+   *  from patrolWaypoints' X-range at spawn Y. */
+  walkable_areas?: { y: number; x_min: number; x_max: number }[];
+  /** Phase 2: optional transitions between walkable areas (by index). */
+  transitions?: { from: number; to: number; type: 'jump_up' | 'drop' }[];
   wave?: number;
   respawn?: boolean;
   speed?: number;  // patrol speed in Vectrex units/frame (default 1.0)
@@ -74,8 +79,16 @@ export function PlaygroundPanel() {
   const [editingVelocity, setEditingVelocity] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const enemyPatrolIdxRef = useRef<Map<string, number>>(new Map());
-  // Wander AI sub-state: 'walk' (moving toward target) or 'idle' (paused between legs).
-  const enemyWanderStateRef = useRef<Map<string, { sub: 'walk' | 'idle'; timer: number }>>(new Map());
+  // Wander AI sub-state: 'walk' / 'idle' / 'air' + current area, direction, transition target.
+  type WanderState = {
+    sub: 'walk' | 'idle' | 'air';
+    timer: number;
+    areaIdx?: number;
+    dir?: 1 | -1;
+    targetY?: number;
+    targetAreaIdx?: number;
+  };
+  const enemyWanderStateRef = useRef<Map<string, WanderState>>(new Map());
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [modalMode, setModalMode] = useState<'save' | 'load'>('save');
   const [sceneName, setSceneName] = useState('');
@@ -390,39 +403,100 @@ export function PlaygroundPanel() {
             return { ...obj, x: nx, y: ny, _facingRight: dx > 0 };
           }
 
-          // Enemy wander simulation: X-only patrol with idle pause between legs.
-          // Mirrors the ARM pitrex_update_enemies ai_type=4 branch so the playground
-          // preview matches in-game behavior.
+          // Enemy wander simulation: area-based AI mirroring the ARM runtime.
+          //   - WALK: bounce between current area's x_min and x_max.
+          //   - IDLE: timer, on expiry roll for transition.
+          //   - AIRBORNE: linear y-interp toward target area.
           if (obj.type === 'enemy' && (obj as any).aiType === 'wander') {
-            const wps: { x: number; y: number }[] = (obj as any).patrolWaypoints || [];
-            if (wps.length < 2) return obj;
+            const explicit = (obj as any).walkable_areas as
+              | { y: number; x_min: number; x_max: number }[]
+              | undefined;
+            const wps = (obj as any).patrolWaypoints as { x: number; y: number }[] | undefined;
+            // Build the effective area list (mirrors levelres derive_walkable_areas).
+            const areas =
+              explicit && explicit.length > 0
+                ? explicit
+                : wps && wps.length >= 2
+                  ? [{
+                      y: obj.y,
+                      x_min: Math.min(...wps.map(w => w.x)),
+                      x_max: Math.max(...wps.map(w => w.x)),
+                    }]
+                  : [];
+            if (areas.length === 0) return obj;
+            const transitions = ((obj as any).transitions as
+              | { from: number; to: number; type: 'jump_up' | 'drop' }[]
+              | undefined) ?? [];
             const SPEED = (obj as any).speed ?? 1.0;
-            const idx = enemyPatrolIdxRef.current.get(obj.id) ?? 0;
-            const st = enemyWanderStateRef.current.get(obj.id) ?? { sub: 'walk' as const, timer: 0 };
+            const st = enemyWanderStateRef.current.get(obj.id) as
+              | { sub: 'walk' | 'idle' | 'air'; timer: number; areaIdx?: number; dir?: 1 | -1; targetY?: number; targetAreaIdx?: number }
+              | undefined
+              ?? { sub: 'walk' as const, timer: 0, areaIdx: 0, dir: 1 };
 
+            // AIRBORNE: move y toward target_y at 2u/frame; on arrival snap and walk.
+            if (st.sub === 'air' && st.targetY !== undefined) {
+              const dy = st.targetY - obj.y;
+              const absDy = Math.abs(dy);
+              if (absDy <= 2) {
+                enemyWanderStateRef.current.set(obj.id, {
+                  sub: 'walk', timer: 0,
+                  areaIdx: st.targetAreaIdx ?? st.areaIdx ?? 0,
+                  dir: st.dir ?? 1,
+                });
+                return { ...obj, y: st.targetY };
+              }
+              return { ...obj, y: obj.y + Math.sign(dy) * 2 };
+            }
+
+            // IDLE: count down; on expiry, scan transitions for matches.
             if (st.sub === 'idle') {
               const nextTimer = st.timer - 1;
-              if (nextTimer <= 0) {
-                enemyWanderStateRef.current.set(obj.id, { sub: 'walk', timer: 0 });
-              } else {
-                enemyWanderStateRef.current.set(obj.id, { sub: 'idle', timer: nextTimer });
+              if (nextTimer > 0) {
+                enemyWanderStateRef.current.set(obj.id, { ...st, timer: nextTimer });
+                return obj;
               }
-              return obj;  // no position change while idle
+              const curArea = st.areaIdx ?? 0;
+              const candidates = transitions.filter(t => t.from === curArea && t.to < areas.length);
+              for (const t of candidates) {
+                // 25% chance per candidate to commit (matches ARM coin-flip)
+                if (Math.random() < 0.25) {
+                  enemyWanderStateRef.current.set(obj.id, {
+                    sub: 'air', timer: 0,
+                    areaIdx: curArea,
+                    targetAreaIdx: t.to,
+                    targetY: areas[t.to].y,
+                    dir: st.dir ?? 1,
+                  });
+                  return obj;
+                }
+              }
+              // No transition picked: back to WALK on same area.
+              enemyWanderStateRef.current.set(obj.id, {
+                sub: 'walk', timer: 0,
+                areaIdx: curArea,
+                dir: st.dir ?? 1,
+              });
+              return obj;
             }
 
-            // walking: move toward target.x only (preserve Y)
-            const target = wps[idx % wps.length];
-            const dx = target.x - obj.x;
+            // WALK: bounce between current area's x_min, x_max.
+            const curAreaIdx = st.areaIdx ?? 0;
+            const area = areas[curAreaIdx] ?? areas[0];
+            const dir = st.dir ?? 1;
+            const targetX = dir === 1 ? area.x_max : area.x_min;
+            const dx = targetX - obj.x;
             const absDx = Math.abs(dx);
             if (absDx <= SPEED) {
-              // arrived: advance waypoint and enter idle (random 30..93 frames @60fps)
-              enemyPatrolIdxRef.current.set(obj.id, (idx + 1) % wps.length);
+              // Reached edge: reverse and enter IDLE.
               const idleFrames = 30 + Math.floor(Math.random() * 64);
-              enemyWanderStateRef.current.set(obj.id, { sub: 'idle', timer: idleFrames });
-              return { ...obj, x: target.x, _facingRight: dx > 0 };
+              enemyWanderStateRef.current.set(obj.id, {
+                sub: 'idle', timer: idleFrames,
+                areaIdx: curAreaIdx,
+                dir: dir === 1 ? -1 : 1,
+              });
+              return { ...obj, x: targetX, y: area.y, _facingRight: dir === 1 };
             }
-            const nx = obj.x + Math.sign(dx) * SPEED;
-            return { ...obj, x: nx, _facingRight: dx > 0 };
+            return { ...obj, x: obj.x + Math.sign(dx) * SPEED, y: area.y, _facingRight: dir === 1 };
           }
 
           if (!obj.physicsEnabled) return obj;
@@ -2047,32 +2121,93 @@ export function PlaygroundPanel() {
             {hotspots.map(hs => renderHotspot(hs))}
 
             {/* Patrol paths / walkable areas for enemy objects */}
-            {objects.filter(o => o.type === 'enemy' && o.patrolWaypoints && o.patrolWaypoints.length > 0).map(obj => {
-              const wps = obj.patrolWaypoints!;
+            {objects.filter(o => o.type === 'enemy' && (
+              (o.patrolWaypoints && o.patrolWaypoints.length > 0)
+              || ((o as any).walkable_areas && (o as any).walkable_areas.length > 0)
+            )).map(obj => {
+              const wps = obj.patrolWaypoints ?? [];
               const isSelected = selectedIds.has(obj.id);
               const isWander = (obj as any).aiType === 'wander';
 
-              // Wander: render a single horizontal walkable-area bar at the
-              // enemy's spawn Y, from min(wp.x) to max(wp.x). The area is the
-              // patrol corridor — enemy walks X-only within it, no physics.
+              // Wander: render all walkable areas as horizontal bars and any
+              // transitions as curved arrows between area centers. Falls back
+              // to a single area derived from the waypoint X-range if no
+              // explicit `walkable_areas` is defined on the enemy.
               if (isWander) {
-                const xMin = Math.min(...wps.map(w => w.x));
-                const xMax = Math.max(...wps.map(w => w.x));
-                const areaY = obj.y;  // enemy spawn Y = walkable area Y
-                const leftSvg  = vecToSvg(xMin, areaY);
-                const rightSvg = vecToSvg(xMax, areaY);
+                const explicitAreas = (obj as any).walkable_areas as
+                  | { y: number; x_min: number; x_max: number }[]
+                  | undefined;
+                const areas =
+                  explicitAreas && explicitAreas.length > 0
+                    ? explicitAreas
+                    : wps.length > 0
+                      ? [{
+                          y: obj.y,
+                          x_min: Math.min(...wps.map(w => w.x)),
+                          x_max: Math.max(...wps.map(w => w.x)),
+                        }]
+                      : [];
+                if (areas.length === 0) return null;
+                const transitions = ((obj as any).transitions as
+                  | { from: number; to: number; type: 'jump_up' | 'drop' }[]
+                  | undefined) ?? [];
                 const color = isSelected ? '#ffaa44' : '#ffaa4488';
                 return (
                   <g key={`area_${obj.id}`}>
-                    {/* Walkable-area bar */}
-                    <line x1={leftSvg.x} y1={leftSvg.y} x2={rightSvg.x} y2={rightSvg.y}
-                      stroke={color} strokeWidth={isSelected ? 1.5 : 1} />
-                    {/* End caps */}
-                    <line x1={leftSvg.x} y1={leftSvg.y - 4} x2={leftSvg.x} y2={leftSvg.y + 4}
-                      stroke={color} strokeWidth={1} />
-                    <line x1={rightSvg.x} y1={rightSvg.y - 4} x2={rightSvg.x} y2={rightSvg.y + 4}
-                      stroke={color} strokeWidth={1} />
-                    {/* Waypoint handles (still draggable) */}
+                    {/* Walkable-area bars */}
+                    {areas.map((area, ai) => {
+                      const leftSvg  = vecToSvg(area.x_min, area.y);
+                      const rightSvg = vecToSvg(area.x_max, area.y);
+                      return (
+                        <g key={`area_${ai}`}>
+                          <line x1={leftSvg.x} y1={leftSvg.y} x2={rightSvg.x} y2={rightSvg.y}
+                            stroke={color} strokeWidth={isSelected ? 1.5 : 1} />
+                          <line x1={leftSvg.x} y1={leftSvg.y - 4} x2={leftSvg.x} y2={leftSvg.y + 4}
+                            stroke={color} strokeWidth={1} />
+                          <line x1={rightSvg.x} y1={rightSvg.y - 4} x2={rightSvg.x} y2={rightSvg.y + 4}
+                            stroke={color} strokeWidth={1} />
+                          {/* Area index label (only when selected) */}
+                          {isSelected && (
+                            <text x={(leftSvg.x + rightSvg.x) / 2} y={leftSvg.y - 3}
+                              fill={color} fontSize="6" fontFamily="monospace"
+                              textAnchor="middle">{ai}</text>
+                          )}
+                        </g>
+                      );
+                    })}
+                    {/* Transitions: curved dashed arrows between area centers */}
+                    {transitions.map((t, ti) => {
+                      if (t.from >= areas.length || t.to >= areas.length) return null;
+                      const fromArea = areas[t.from];
+                      const toArea = areas[t.to];
+                      const fromMid = vecToSvg((fromArea.x_min + fromArea.x_max) / 2, fromArea.y);
+                      const toMid   = vecToSvg((toArea.x_min   + toArea.x_max)   / 2, toArea.y);
+                      // Bezier control point off to one side to make the arc visible.
+                      const midX = (fromMid.x + toMid.x) / 2;
+                      const midY = (fromMid.y + toMid.y) / 2;
+                      const dxArrow = toMid.x - fromMid.x;
+                      const dyArrow = toMid.y - fromMid.y;
+                      const lenArrow = Math.sqrt(dxArrow * dxArrow + dyArrow * dyArrow) || 1;
+                      // perpendicular offset for bow
+                      const px = -dyArrow / lenArrow * 10;
+                      const py =  dxArrow / lenArrow * 10;
+                      const ctlX = midX + px;
+                      const ctlY = midY + py;
+                      const tColor = t.type === 'jump_up' ? '#88ffaa' : '#ff8866';
+                      const tStroke = isSelected ? tColor : tColor + '88';
+                      return (
+                        <g key={`trans_${ti}`}>
+                          <path
+                            d={`M ${fromMid.x} ${fromMid.y} Q ${ctlX} ${ctlY} ${toMid.x} ${toMid.y}`}
+                            stroke={tStroke} strokeWidth={isSelected ? 1 : 0.6}
+                            strokeDasharray="2 1.5" fill="none" />
+                          {/* Arrowhead at target */}
+                          <circle cx={toMid.x} cy={toMid.y} r={1.6} fill={tStroke} />
+                        </g>
+                      );
+                    })}
+                    {/* Waypoint handles (still draggable; useful for editing the
+                        derived single-area case). */}
                     {wps.map((wp, i) => {
                       const pt = vecToSvg(wp.x, wp.y);
                       return (
@@ -2788,6 +2923,115 @@ export function PlaygroundPanel() {
                             </button>
                           </div>
                         )}
+
+                        {/* ── Wander: walkable_areas + transitions (Phase 2) ── */}
+                        {obj.aiType === 'wander' && (() => {
+                          const areas = ((obj as any).walkable_areas as { y: number; x_min: number; x_max: number }[] | undefined) ?? [];
+                          const transitions = ((obj as any).transitions as { from: number; to: number; type: 'jump_up' | 'drop' }[] | undefined) ?? [];
+                          const updateAreas = (next: typeof areas) =>
+                            setObjects(objects.map(o => o.id === selectedId ? ({ ...o, walkable_areas: next } as any) : o));
+                          const updateTransitions = (next: typeof transitions) =>
+                            setObjects(objects.map(o => o.id === selectedId ? ({ ...o, transitions: next } as any) : o));
+                          return (
+                            <>
+                              <div style={{ borderTop: '1px solid #333', marginTop: 8, paddingTop: 6 }}>
+                                <div style={{ fontSize: '10px', color: '#ffaa44', marginBottom: 4 }}>
+                                  Walkable areas: {areas.length}
+                                  <span
+                                    onClick={() => {
+                                      // Seed: derive a sensible default near the enemy
+                                      const wps = obj.patrolWaypoints ?? [];
+                                      const xMin = wps.length > 0 ? Math.min(...wps.map(w => w.x)) : obj.x - 20;
+                                      const xMax = wps.length > 0 ? Math.max(...wps.map(w => w.x)) : obj.x + 20;
+                                      updateAreas([...areas, { y: obj.y, x_min: xMin, x_max: xMax }]);
+                                    }}
+                                    style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                                  >
+                                    + add area
+                                  </span>
+                                </div>
+                                {areas.map((a, ai) => (
+                                  <div key={ai} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                                    <span style={{ color: '#888', width: 18 }}>#{ai}</span>
+                                    <span style={{ color: '#666' }}>y</span>
+                                    <input type="number" value={a.y}
+                                      onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
+                                        const next = [...areas]; next[ai] = { ...next[ai], y: v }; updateAreas(next); }}
+                                      style={{ width: 50, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
+                                    <span style={{ color: '#666' }}>x</span>
+                                    <input type="number" value={a.x_min}
+                                      onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
+                                        const next = [...areas]; next[ai] = { ...next[ai], x_min: v }; updateAreas(next); }}
+                                      title="x_min"
+                                      style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
+                                    <span style={{ color: '#666' }}>..</span>
+                                    <input type="number" value={a.x_max}
+                                      onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
+                                        const next = [...areas]; next[ai] = { ...next[ai], x_max: v }; updateAreas(next); }}
+                                      title="x_max"
+                                      style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
+                                    <button
+                                      onClick={() => {
+                                        const next = areas.filter((_, i) => i !== ai);
+                                        updateAreas(next);
+                                        // Drop transitions referencing the removed area; reindex the rest.
+                                        updateTransitions(transitions
+                                          .filter(t => t.from !== ai && t.to !== ai)
+                                          .map(t => ({
+                                            ...t,
+                                            from: t.from > ai ? t.from - 1 : t.from,
+                                            to:   t.to   > ai ? t.to   - 1 : t.to,
+                                          })));
+                                      }}
+                                      title="Remove area"
+                                      style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                    >×</button>
+                                  </div>
+                                ))}
+                              </div>
+                              {areas.length >= 2 && (
+                                <div style={{ borderTop: '1px solid #333', marginTop: 6, paddingTop: 6 }}>
+                                  <div style={{ fontSize: '10px', color: '#ffaa44', marginBottom: 4 }}>
+                                    Transitions: {transitions.length}
+                                    <span
+                                      onClick={() => updateTransitions([...transitions, { from: 0, to: 1, type: 'jump_up' as const }])}
+                                      style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                                    >
+                                      + add transition
+                                    </span>
+                                  </div>
+                                  {transitions.map((t, ti) => (
+                                    <div key={ti} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                                      <span style={{ color: '#888', width: 18 }}>#{ti}</span>
+                                      <select value={t.from}
+                                        onChange={e => { const next = [...transitions]; next[ti] = { ...next[ti], from: parseInt(e.target.value, 10) }; updateTransitions(next); }}
+                                        style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
+                                        {areas.map((_, ai) => <option key={ai} value={ai}>{ai}</option>)}
+                                      </select>
+                                      <span style={{ color: '#666' }}>→</span>
+                                      <select value={t.to}
+                                        onChange={e => { const next = [...transitions]; next[ti] = { ...next[ti], to: parseInt(e.target.value, 10) }; updateTransitions(next); }}
+                                        style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
+                                        {areas.map((_, ai) => <option key={ai} value={ai}>{ai}</option>)}
+                                      </select>
+                                      <select value={t.type}
+                                        onChange={e => { const next = [...transitions]; next[ti] = { ...next[ti], type: e.target.value as 'jump_up' | 'drop' }; updateTransitions(next); }}
+                                        style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
+                                        <option value="jump_up">jump_up</option>
+                                        <option value="drop">drop</option>
+                                      </select>
+                                      <button
+                                        onClick={() => updateTransitions(transitions.filter((_, i) => i !== ti))}
+                                        title="Remove"
+                                        style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                      >×</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                     <button
