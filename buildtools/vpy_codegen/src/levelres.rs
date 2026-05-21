@@ -146,6 +146,31 @@ pub struct VPlayObject {
     /// Which direction the sprite art faces by default: "right" (default) or "left".
     #[serde(default, rename = "defaultFacing")]
     pub default_facing: String,
+    /// Optional explicit walkable areas (Phase 2 wander AI). If absent and the
+    /// enemy has waypoints, a single area is derived from the waypoint X-range
+    /// at the spawn Y. If both present, walkable_areas wins.
+    #[serde(default)]
+    pub walkable_areas: Option<Vec<WalkableArea>>,
+    /// Optional transitions between walkable areas (Phase 2).
+    #[serde(default)]
+    pub transitions: Option<Vec<AreaTransition>>,
+}
+
+/// A horizontal walkable area for wander enemies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalkableArea {
+    pub y: i16,
+    pub x_min: i16,
+    pub x_max: i16,
+}
+
+/// A transition between two walkable areas (by index in `walkable_areas`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AreaTransition {
+    pub from: u8,
+    pub to: u8,
+    #[serde(rename = "type")]
+    pub ttype: String,  // "jump_up" or "drop"
 }
 
 /// A single waypoint for an enemy patrol route (local level coordinates)
@@ -598,7 +623,10 @@ impl VPlayLevel {
         // Always emit the table label so SPAWN_ENEMIES can link even when ec==0.
         out.push_str(&format!(".global _{name}_PITREX_ENEMIES\n_{name}_PITREX_ENEMIES:\n"));
         if ec > 0 {
-            for obj in &enemy_objs {
+            // Per-enemy walkable-area tables are appended after the enemies array.
+            let mut areas_tables = String::new();
+
+            for (idx, obj) in enemy_objs.iter().enumerate() {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
                 let ai = ai_type_byte(&obj.ai_type);
                 let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
@@ -638,11 +666,66 @@ impl VPlayLevel {
                 // (state→sprite_ptr table + state→is_anim flags). Read by spawn
                 // into pool+20; used by update/draw_enemies to pick frozen sprite.
                 out.push_str(&format!("    .word _{et}_DATA   @ type_data_ptr\n"));
+
+                // areas_ptr (Phase 2): pointer to per-enemy walkable-areas table,
+                // or 0 if no areas defined.
+                let areas = Self::derive_walkable_areas(obj);
+                let trans = obj.transitions.as_deref().unwrap_or(&[]);
+                if !areas.is_empty() {
+                    let alabel = format!("_{name}_ENEMY{idx}_AREAS");
+                    out.push_str(&format!("    .word {alabel}   @ areas_ptr\n"));
+                    // Build the areas table; appended after this loop.
+                    areas_tables.push_str("    .balign 4\n");
+                    areas_tables.push_str(&format!("{alabel}:\n"));
+                    areas_tables.push_str(&format!("    .word {}  @ area_count\n", areas.len()));
+                    areas_tables.push_str(&format!("    .word {}  @ trans_count\n", trans.len()));
+                    for (ai_idx, a) in areas.iter().enumerate() {
+                        areas_tables.push_str(&format!(
+                            "    .hword {}, {}, {}, 0  @ area {}: y, x_min, x_max\n",
+                            a.y, a.x_min, a.x_max, ai_idx));
+                    }
+                    for (ti_idx, t) in trans.iter().enumerate() {
+                        let ttype = match t.ttype.as_str() {
+                            "jump_up" => 1u8,
+                            "drop"    => 2u8,
+                            _         => 0u8,
+                        };
+                        areas_tables.push_str(&format!(
+                            "    .byte {}, {}, {}, 0  @ trans {}: from, to, type({})\n",
+                            t.from, t.to, ttype, ti_idx, t.ttype));
+                    }
+                } else {
+                    out.push_str("    .word 0          @ areas_ptr (none)\n");
+                }
             }
             out.push_str("\n");
+            if !areas_tables.is_empty() {
+                out.push_str("@ Per-enemy walkable-area tables (Phase 2 wander AI)\n");
+                out.push_str(&areas_tables);
+                out.push_str("\n");
+            }
         }
 
         out
+    }
+
+    /// Compute the walkable areas for an enemy. If explicit `walkable_areas`
+    /// are provided in the .vplay, return them as-is. Otherwise derive a
+    /// single area from the patrol waypoints' X-range at the spawn Y.
+    fn derive_walkable_areas(obj: &VPlayObject) -> Vec<WalkableArea> {
+        if let Some(ref explicit) = obj.walkable_areas {
+            if !explicit.is_empty() {
+                return explicit.clone();
+            }
+        }
+        let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
+        if wps.len() >= 2 {
+            let x_min = wps.iter().map(|w| w.x).min().unwrap();
+            let x_max = wps.iter().map(|w| w.x).max().unwrap();
+            vec![WalkableArea { y: obj.y as i16, x_min, x_max }]
+        } else {
+            vec![]
+        }
     }
 
     /// Compile a single object for the ARM binary format (20 bytes).

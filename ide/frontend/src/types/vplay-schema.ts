@@ -39,6 +39,28 @@ export type AIType =
   | 'flee'
   | 'custom';
 
+/**
+ * A horizontal walkable area: enemy walks X-only within [x_min, x_max] at y.
+ * Wander enemies are confined to one area; transitions move them between areas.
+ */
+export interface WalkableArea {
+  y: number;
+  x_min: number;
+  x_max: number;
+}
+
+export type AreaTransitionType = 'jump_up' | 'drop';
+
+/**
+ * A transition between two walkable areas. Enemy in area `from` may roll at
+ * idle-end to enter AIRBORNE state and ballistic-travel to area `to`.
+ */
+export interface AreaTransition {
+  from: number;
+  to: number;
+  type: AreaTransitionType;
+}
+
 export interface VPlayMetadata {
   name: string;
   author?: string;

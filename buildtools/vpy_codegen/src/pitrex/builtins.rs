@@ -2975,25 +2975,31 @@ fn emit_pitrex_note_engine() -> String {
 
 pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // pitrex_spawn_enemies(r0=data_ptr, r1=count)
-    // ROM record layout (variable, stride = 20 + wp_count*4):
+    // ROM record layout (variable, stride = 24 + wp_count*4):
     //   +0  sprite_ptr (u32), +4 spawn_x (i16), +6 spawn_y (i16)
     //   +8  ai_type (u8), +9 wp_count (u8)
     //   +10 mirror_on_patrol (u8), +11 default_facing (u8: 0=right 1=left)
     //   +12 wp0_x..wp(N-1)_y (wp_count * 4 bytes)
     //   +12+wp_count*4   is_anim (u8) + 3 pad bytes
     //   +16+wp_count*4   type_data_ptr (u32: ROM pointer to per-type SM data)
+    //   +20+wp_count*4   areas_ptr (u32: ROM pointer to walkable-areas table,
+    //                                0 if none — see Phase 2 wander AI)
     // Pool entry layout (32 bytes):
     //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
-    //   +8  thaw_timer (i16) — reused as idle_timer for ai_type=4 wander
-    //   +10 sub_state (u8, wander: 0=WALK, 1=IDLE)
-    //   +11 (reserved for future use; currently zero-init only)
-    //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
+    //   +8  thaw_timer (i16) — multiplexed for wander: idle_timer in IDLE,
+    //       target_y in AIRBORNE
+    //   +10 sub_state (u8, wander: 0=WALK, 1=IDLE, 2=AIRBORNE)
+    //   +11 current_area_idx (u8, wander) — index into the areas table
+    //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8, patrol only),
+    //   +15 wp_count (u8, patrol only)
     //   +16 anim_frame_idx (u8), +17 anim_ticks_left (u8)
     //   +18 sm_state (u8, snow/ball state machine: 0=normal, 1+=snowed)
     //   +19 (used by draw_enemies as transient is_anim temp — NOT safe across frames)
     //   +20..+23 type_data_ptr (u32 ROM ptr to per-type SM data table)
     //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27 is_anim (u8)
-    //   +28..+31 wp_base (u32 ROM ptr) — must not be touched by anim state
+    //   +28..+31 multiplexed per ai_type:
+    //              patrol (1): wp_base (ROM ptr to waypoints)
+    //              wander (4): areas_ptr (ROM ptr to walkable-areas table)
     let mut s = String::new();
     // r4=ROM data_ptr  r5=ROM entry countdown  r6=pool write ptr  r7=spawned count
     // r8=y_min  r9=y_max  r10=scratch  r0=scratch (saved to r4 at entry)
@@ -3058,10 +3064,13 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    strb    r0, [r6, #14]   @ pool.cur_target = 0\n");
     s.push_str("    strb    r0, [r6, #18]   @ pool.sm_state = 0\n");
     s.push_str("    strb    r0, [r6, #10]   @ pool.sub_state = 0 (WALK for wander AI)\n");
-    s.push_str("    strb    r0, [r6, #11]   @ pool.vy = 0\n");
+    s.push_str("    strb    r0, [r6, #11]   @ pool.current_area_idx = 0 (wander)\n");
     s.push_str("    strh    r0, [r6, #8]    @ pool.thaw_timer / idle_timer = 0\n");
+    // pool+28 multiplexed: wp_base for patrol, areas_ptr for wander.
+    // We unconditionally store wp_base here; for wander we'll overwrite it
+    // with areas_ptr below (loaded from ROM +20+wp_count*4).
     s.push_str("    add     r0, r4, #12     @ ROM waypoints base\n");
-    s.push_str("    str     r0, [r6, #28]   @ pool.wp_base\n");
+    s.push_str("    str     r0, [r6, #28]   @ pool.wp_base (patrol)\n");
     // is_anim at ROM offset 12 + wp_count*4
     s.push_str("    ldrb    r10, [r4, #9]   @ wp_count\n");
     s.push_str("    lsl     r10, r10, #2\n");
@@ -3074,6 +3083,18 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    add     r10, r10, #16\n");
     s.push_str("    ldr     r0, [r4, r10]   @ type_data_ptr\n");
     s.push_str("    str     r0, [r6, #20]   @ pool.type_data_ptr\n");
+    // areas_ptr at ROM offset 20 + wp_count*4 (Phase 2). For wander (ai_type=4)
+    // overwrite pool+28 (wp_base) with this pointer so the wander AI sees the
+    // walkable-areas table where it expects.
+    s.push_str("    ldrb    r0, [r4, #8]    @ ai_type\n");
+    s.push_str("    cmp     r0, #4\n");
+    s.push_str("    bne     .Lspe_skip_areas\n");
+    s.push_str("    ldrb    r10, [r4, #9]\n");
+    s.push_str("    lsl     r10, r10, #2\n");
+    s.push_str("    add     r10, r10, #20\n");
+    s.push_str("    ldr     r0, [r4, r10]   @ areas_ptr\n");
+    s.push_str("    str     r0, [r6, #28]   @ pool.areas_ptr (overlays wp_base)\n");
+    s.push_str(".Lspe_skip_areas:\n");
     // vanim init: set frame_idx=0, anim_ticks_left=frame0.duration
     s.push_str("    ldrb    r0, [r6, #27]   @ is_anim\n");
     s.push_str("    cmp     r0, #0\n");
@@ -3093,11 +3114,14 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    cmp     r7, #32\n");
     s.push_str("    beq     .Lspe_store_count  @ pool full\n");
 
-    // Advance ROM ptr to next entry (stride = 20 + wp_count*4).
+    // Advance ROM ptr to next entry (stride = 24 + wp_count*4).
+    // 24 = sprite_ptr(4) + spawn_x(2) + spawn_y(2) + ai_type(1) + wp_count(1)
+    //    + mirror(1) + facing(1) + is_anim(1) + 3pad + type_data_ptr(4)
+    //    + areas_ptr(4)
     s.push_str(".Lspe_next:\n");
     s.push_str("    ldrb    r10, [r4, #9]   @ wp_count\n");
     s.push_str("    lsl     r10, r10, #2\n");
-    s.push_str("    add     r10, r10, #20   @ stride = 20 + wp_count*4\n");
+    s.push_str("    add     r10, r10, #24   @ stride = 24 + wp_count*4\n");
     s.push_str("    add     r4, r4, r10\n");
     s.push_str("    subs    r5, r5, #1\n");
     s.push_str("    bne     .Lspe_loop\n");
@@ -3218,73 +3242,89 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r6, [r5, #14]       @ pool.cur_target\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── ai_type=4: wander (X-only patrol within walkable area + idle pause) ──
-    // Phase 1 design: each enemy is constrained to a single "walkable area"
-    // defined by its waypoints (X range, fixed Y from spawn). No physics,
-    // no floor queries, no jumps — the level designer is responsible for
-    // placing the enemy where it looks right. This is the classic Snow Bros
-    // / Mega Man enemy AI model: predictable patrol on a fixed corridor.
+    // ── ai_type=4: wander — area-based AI with optional transitions ────
+    // Phase 2 design: enemy lives inside one of N walkable areas
+    // (rectangles defined by y, x_min, x_max). It walks X-only between the
+    // edges of its current area. On reaching an edge, IDLE pause, then
+    // either reverse OR (if transitions are defined from this area) ballistic-
+    // jump to a target area.
     //
-    // Sub-state at pool+10: 0=WALK, 1=IDLE
-    // Idle timer at pool+8 (i16): random 30..93 frames between legs
-    // Needs >= 2 waypoints; otherwise skip.
+    // Pool fields used:
+    //   +8..9  i16  idle_timer in IDLE, target_y in AIRBORNE
+    //   +10    u8   sub_state: 0=WALK, 1=IDLE, 2=AIRBORNE
+    //   +11    u8   current_area_idx
+    //   +26    u8   pool.dir (0=going to x_min, 1=going to x_max)
+    //   +28..31 u32 areas_ptr (ROM table: [area_count|trans_count|areas|trans])
+    //
+    // Areas table layout (per enemy, in ROM):
+    //   word 0: area_count   (e.g. 1 or more)
+    //   word 1: trans_count  (e.g. 0 or more)
+    //   then area_count * 8 bytes:  hword y, x_min, x_max, 0
+    //   then trans_count * 4 bytes: byte from, to, type, 0   (type 1=jump_up 2=drop)
     s.push_str(".Lpue_wander:\n");
-    s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
+    s.push_str("    ldr     r6, [r5, #28]       @ areas_ptr (overlays wp_base)\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_skip          @ no areas defined\n");
+    s.push_str("    ldr     r7, [r6]            @ area_count\n");
+    s.push_str("    cmp     r7, #0\n");
+    s.push_str("    beq     .Lpue_skip\n");
+    s.push_str("    ldrb    r6, [r5, #10]       @ sub_state\n");
     s.push_str("    cmp     r6, #2\n");
-    s.push_str("    blt     .Lpue_skip\n");
-    s.push_str("    ldrb    r6, [r5, #10]       @ sub_state (wander)\n");
+    s.push_str("    beq     .Lpue_w_air\n");
     s.push_str("    cmp     r6, #1\n");
     s.push_str("    beq     .Lpue_w_idle\n");
+
     // ── WALK ────────────────────────────────────────────────────────────
-    // Move X-only toward current waypoint. Y is untouched — the enemy stays
-    // at whatever Y it spawned at (the walkable area's Y).
-    s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
-    s.push_str("    ldr     r7, [r5, #28]       @ wp_base\n");
-    s.push_str("    lsl     r6, r6, #2          @ cur_target * 4\n");
-    s.push_str("    add     r7, r7, r6\n");
-    s.push_str("    ldrsh   r8, [r7]            @ target_x\n");
-    s.push_str("    ldrsh   r10, [r5, #4]       @ x\n");
-    s.push_str("    sub     r6, r8, r10         @ dx\n");
-    s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq     .Lpue_w_arrived\n");
-    s.push_str("    mov     r7, #0              @ dir=left default\n");
+    // Load current area's (y, x_min, x_max). r8=area_base_ptr.
+    // area_offset = 8 + 8 * current_area_idx
+    s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
+    s.push_str("    ldrb    r6, [r5, #11]       @ current_area_idx\n");
+    s.push_str("    lsl     r6, r6, #3          @ idx * 8\n");
+    s.push_str("    add     r8, r8, r6\n");
+    s.push_str("    add     r8, r8, #8          @ &area[idx]\n");
+    s.push_str("    ldrsh   r9, [r8, #2]        @ x_min\n");
+    s.push_str("    ldrsh   r10, [r8, #4]       @ x_max\n");
+    s.push_str("    ldrsh   r11, [r5, #4]       @ x\n");
+    s.push_str("    ldrb    r6, [r5, #26]       @ dir (0=left,1=right)\n");
+    s.push_str("    cmp     r6, #1\n");
+    s.push_str("    beq     .Lpue_w_right\n");
+    // dir = LEFT: target = x_min
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    ble     .Lpue_w_edge        @ already at/past x_min\n");
+    s.push_str("    sub     r11, r11, r12       @ x -= SPEED\n");
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r11, r9             @ clamp to x_min\n");
+    s.push_str("    strh    r11, [r5, #4]\n");
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    b       .Lpue_w_edge\n");
+    s.push_str(".Lpue_w_right:\n");
+    // dir = RIGHT: target = x_max
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    bge     .Lpue_w_edge\n");
+    s.push_str("    add     r11, r11, r12\n");
+    s.push_str("    cmp     r11, r10\n");
     s.push_str("    it      gt\n");
-    s.push_str("    movgt   r7, #1              @ dir=right if dx>0\n");
-    s.push_str("    strb    r7, [r5, #26]       @ pool.dir\n");
-    s.push_str("    blt     .Lpue_w_xneg\n");
-    s.push_str("    cmp     r6, r12\n");
-    s.push_str("    ble     .Lpue_w_xsnap\n");
-    s.push_str("    add     r10, r10, r12       @ x += SPEED\n");
-    s.push_str("    b       .Lpue_w_store\n");
-    s.push_str(".Lpue_w_xneg:\n");
-    s.push_str("    rsb     r6, r6, #0          @ |dx|\n");
-    s.push_str("    cmp     r6, r12\n");
-    s.push_str("    ble     .Lpue_w_xsnap\n");
-    s.push_str("    sub     r10, r10, r12       @ x -= SPEED\n");
-    s.push_str("    b       .Lpue_w_store\n");
-    s.push_str(".Lpue_w_xsnap:\n");
-    s.push_str("    mov     r10, r8             @ x = target_x\n");
-    s.push_str(".Lpue_w_store:\n");
-    s.push_str("    strh    r10, [r5, #4]       @ pool.x = x\n");
-    s.push_str("    cmp     r10, r8\n");
-    s.push_str("    bne     .Lpue_skip          @ not yet at target\n");
-    // ── arrived: advance waypoint and enter IDLE ───────────────────────
-    s.push_str(".Lpue_w_arrived:\n");
-    s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
-    s.push_str("    ldrb    r7, [r5, #15]       @ wp_count\n");
-    s.push_str("    add     r6, r6, #1\n");
-    s.push_str("    cmp     r6, r7\n");
-    s.push_str("    it      ge\n");
-    s.push_str("    movge   r6, #0\n");
-    s.push_str("    strb    r6, [r5, #14]\n");
+    s.push_str("    movgt   r11, r10\n");
+    s.push_str("    strh    r11, [r5, #4]\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    bne     .Lpue_skip\n");
+
+    // Reached an edge — reverse direction and enter IDLE
+    s.push_str(".Lpue_w_edge:\n");
+    s.push_str("    ldrb    r6, [r5, #26]       @ dir\n");
+    s.push_str("    eor     r6, r6, #1          @ flip\n");
+    s.push_str("    strb    r6, [r5, #26]\n");
     s.push_str("    bl      pitrex_random\n");
-    s.push_str("    and     r0, r0, #0x3F       @ 0..63\n");
-    s.push_str("    add     r0, r0, #30         @ 30..93 frames idle\n");
+    s.push_str("    and     r0, r0, #0x3F\n");
+    s.push_str("    add     r0, r0, #30         @ 30..93 frames\n");
     s.push_str("    strh    r0, [r5, #8]        @ idle_timer\n");
     s.push_str("    mov     r0, #1\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = IDLE\n");
-    s.push_str("    mov     r12, #1             @ restore SPEED\n");
+    s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
+
     // ── IDLE ────────────────────────────────────────────────────────────
     s.push_str(".Lpue_w_idle:\n");
     s.push_str("    ldrsh   r6, [r5, #8]        @ idle_timer\n");
@@ -3292,8 +3332,91 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strh    r6, [r5, #8]\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    bgt     .Lpue_skip          @ still idle\n");
-    s.push_str("    mov     r6, #0\n");
-    s.push_str("    strb    r6, [r5, #10]       @ sub_state = WALK\n");
+    // Idle expired: maybe transition. We use a simple deterministic policy
+    // for the picker: walk the transitions list, and for each match of
+    // `from == current_area_idx`, roll a coin. The first matching coin-up
+    // commits to that transition. If nothing wins, fall back to WALK.
+    // This gives roughly uniform per-frame chances across multiple matches
+    // without needing modulo (no udiv on the ARMv6 target).
+    s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
+    s.push_str("    ldr     r9, [r8]            @ area_count\n");
+    s.push_str("    ldr     r10, [r8, #4]       @ trans_count\n");
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    beq     .Lpue_w_to_walk     @ no transitions defined\n");
+    // trans_ptr = areas_ptr + 8 + area_count*8
+    s.push_str("    add     r11, r8, #8\n");
+    s.push_str("    add     r6, r9, r9          @ ac*2\n");
+    s.push_str("    add     r6, r6, r6          @ ac*4\n");
+    s.push_str("    add     r6, r6, r6          @ ac*8\n");
+    s.push_str("    add     r11, r11, r6        @ trans_ptr\n");
+    // Keep cur_area in r6 (callee-saved across bl pitrex_random).
+    s.push_str("    ldrb    r6, [r5, #11]       @ cur_area\n");
+    s.push_str("    mov     r7, #0              @ trans index\n");
+    s.push_str(".Lpue_w_pick:\n");
+    s.push_str("    cmp     r7, r10\n");
+    s.push_str("    bge     .Lpue_w_to_walk     @ exhausted, no transition\n");
+    s.push_str("    lsl     r1, r7, #2\n");
+    s.push_str("    ldrb    r2, [r11, r1]       @ trans.from\n");
+    s.push_str("    cmp     r2, r6\n");
+    s.push_str("    bne     .Lpue_w_pick_next\n");
+    // Matching from. Roll a coin: ~25% chance to commit (low 2 bits == 0).
+    // pitrex_random preserves r4-r11, so r6/r7/r10/r11 survive the bl.
+    s.push_str("    bl      pitrex_random\n");
+    s.push_str("    and     r0, r0, #3\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lpue_w_pick_hit\n");
+    s.push_str(".Lpue_w_pick_next:\n");
+    s.push_str("    add     r7, r7, #1\n");
+    s.push_str("    b       .Lpue_w_pick\n");
+    s.push_str(".Lpue_w_pick_hit:\n");
+    // r7 = transition index; load target area_idx from trans[r7].to
+    s.push_str("    lsl     r1, r7, #2\n");
+    s.push_str("    add     r0, r11, r1\n");
+    s.push_str("    ldrb    r2, [r0, #1]        @ to (target area idx)\n");
+    s.push_str("    strb    r2, [r5, #11]       @ current_area_idx = target\n");
+    // Compute target_y = areas[target].y
+    s.push_str("    lsl     r1, r2, #3          @ target*8\n");
+    s.push_str("    add     r1, r1, #8\n");
+    s.push_str("    add     r1, r8, r1\n");
+    s.push_str("    ldrsh   r3, [r1]            @ target_y\n");
+    s.push_str("    strh    r3, [r5, #8]        @ stash target_y in pool+8..9\n");
+    s.push_str("    mov     r0, #2\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
+    s.push_str("    mov     r12, #1\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_w_to_walk:\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
+    s.push_str("    mov     r12, #1\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── AIRBORNE: linear interpolation toward target_y (pool+8..9). Y moves
+    // at 2 units/frame; X is held fixed (or could drift toward target area's
+    // center — kept simple here). Lands when y reaches target_y.
+    s.push_str(".Lpue_w_air:\n");
+    s.push_str("    ldrsh   r6, [r5, #6]        @ current y\n");
+    s.push_str("    ldrsh   r7, [r5, #8]        @ target_y\n");
+    s.push_str("    cmp     r6, r7\n");
+    s.push_str("    beq     .Lpue_w_air_land\n");
+    s.push_str("    bgt     .Lpue_w_air_dn\n");
+    // y < target: move up
+    s.push_str("    add     r6, r6, #2\n");
+    s.push_str("    cmp     r6, r7\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r6, r7\n");
+    s.push_str("    strh    r6, [r5, #6]\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_w_air_dn:\n");
+    s.push_str("    sub     r6, r6, #2\n");
+    s.push_str("    cmp     r6, r7\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r6, r7\n");
+    s.push_str("    strh    r6, [r5, #6]\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_w_air_land:\n");
+    // y == target. Snap to new area's y (already there) and resume WALK.
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");
 
     s.push_str(".Lpue_skip:\n");
