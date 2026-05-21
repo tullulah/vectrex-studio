@@ -123,6 +123,11 @@ export function PlaygroundPanel() {
   const [draggingTransitionEndpoint, setDraggingTransitionEndpoint] = useState<
     { enemyId: string; transIdx: number; endpoint: 'from' | 'to' } | null
   >(null);
+  // Same as draggingTransitionEndpoint but for the standalone level-wide
+  // transitions overlay (no enemy owner).
+  const [draggingLevelTransitionEndpoint, setDraggingLevelTransitionEndpoint] = useState<
+    { transIdx: number; endpoint: 'from' | 'to' } | null
+  >(null);
   const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number }[]>([]);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   // Level-wide walkable areas + transitions. Enemies whose own `walkable_areas`
@@ -1279,6 +1284,29 @@ export function PlaygroundPanel() {
       return;
     }
 
+    // Level-wide transition endpoint drag — same logic as the per-enemy one
+    // but writes to levelTransitions and clamps to the level area's range.
+    if (draggingLevelTransitionEndpoint && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const { transIdx, endpoint } = draggingLevelTransitionEndpoint;
+      setLevelTransitions(prev => {
+        if (transIdx >= prev.length) return prev;
+        const t = prev[transIdx];
+        const areaIdx = endpoint === 'from' ? t.from : t.to;
+        if (areaIdx >= levelWalkableAreas.length) return prev;
+        const a = levelWalkableAreas[areaIdx];
+        const clamped = Math.max(a.x_min, Math.min(a.x_max, vecX));
+        const next = [...prev];
+        next[transIdx] = endpoint === 'from'
+          ? { ...t, from_x: clamped }
+          : { ...t, to_x: clamped };
+        return next;
+      });
+      return;
+    }
+
     if (draggingVelocity) {
       handleVelocityArrowDrag(e);
       return;
@@ -1347,6 +1375,7 @@ export function PlaygroundPanel() {
     setDraggingLimit(null);
     setDraggingWaypointInfo(null);
     setDraggingTransitionEndpoint(null);
+    setDraggingLevelTransitionEndpoint(null);
     dragStartVecRef.current = null;
 
     // Finalize rubber band selection
@@ -2601,7 +2630,22 @@ export function PlaygroundPanel() {
                         <path d={`M ${fromPt.x} ${fromPt.y} Q ${ctlX} ${ctlY} ${toPt.x} ${toPt.y}`}
                           stroke={tColor + '99'} strokeWidth={0.6}
                           strokeDasharray="2 1.5" fill="none" />
-                        <circle cx={toPt.x} cy={toPt.y} r={2} fill={tColor + 'cc'} />
+                        {/* Takeoff endpoint — draggable; clamps to from-area X range. */}
+                        <circle cx={fromPt.x} cy={fromPt.y} r={2.4}
+                          fill={tColor + 'cc'} stroke="#ffffff" strokeWidth={0.4}
+                          style={{ cursor: 'grab' }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setDraggingLevelTransitionEndpoint({ transIdx: ti, endpoint: 'from' });
+                          }} />
+                        {/* Landing endpoint — draggable; clamps to to-area X range. */}
+                        <circle cx={toPt.x} cy={toPt.y} r={2.8}
+                          fill={tColor + 'cc'} stroke="#ffffff" strokeWidth={0.4}
+                          style={{ cursor: 'grab' }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setDraggingLevelTransitionEndpoint({ transIdx: ti, endpoint: 'to' });
+                          }} />
                         <text x={ctlX} y={ctlY} fontSize="6" fontFamily="monospace"
                           textAnchor="middle" stroke="#000" strokeWidth="2"
                           style={{ paintOrder: 'stroke' }}>T{ti}</text>
