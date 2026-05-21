@@ -3590,62 +3590,85 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r0, [r5, #26]       @ dir = right\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── AIRBORNE: arc motion. Each frame steps X by up to AIR_SPEED=4 toward
-    // target_x and runs Y parabolic physics (y += vy; vy -= 1; vy clamped to
-    // >= -3). Landing requires BOTH x == target_x AND |y - target_y| <= 4 —
-    // otherwise near-vertical transitions teleported because X arrived in 1
-    // frame and snap-to-target_y fired immediately. After x is at target the
-    // X step is a no-op and only Y physics runs until proximity is met.
+    // ── AIRBORNE: two phases.
+    //
+    //   Phase A (X moving): step X toward target by AIR_SPEED=4 and run the
+    //                       parabolic Y arc (y += vy; vy -= 1; vy clamped to
+    //                       >= -3). This is the visible jump.
+    //
+    //   Phase B (X done):   lerp Y toward target_y at AIR_SPEED until reached,
+    //                       then land. Guarantees the AIRBORNE state ends in
+    //                       a bounded number of frames regardless of arc shape
+    //                       — previously, long jump_across with vy capped at
+    //                       -3 made Y diverge past target and the proximity
+    //                       check never fired, leaving enemies floating and
+    //                       the frame budget blown (visible as flicker and
+    //                       brighter beam dwell).
     s.push_str(".Lpue_w_air:\n");
-    // X step toward target_x at AIR_SPEED=4.
     s.push_str("    ldrsh   r10, [r5, #4]       @ current x\n");
     s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
     s.push_str("    sub     r6, r8, r10         @ dx\n");
     s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq     .Lpue_w_air_y       @ x at target → just do Y physics\n");
+    s.push_str("    beq     .Lpue_w_air_y_lerp  @ Phase B: lerp Y, then land\n");
+    // Phase A: X step + parabolic Y.
     s.push_str("    bgt     .Lpue_w_air_xright\n");
     s.push_str("    sub     r10, r10, #4        @ x -= AIR_SPEED\n");
     s.push_str("    cmp     r10, r8\n");
     s.push_str("    it      lt\n");
-    s.push_str("    movlt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    movlt   r10, r8\n");
     s.push_str("    strh    r10, [r5, #4]\n");
-    s.push_str("    b       .Lpue_w_air_y\n");
+    s.push_str("    b       .Lpue_w_air_y_arc\n");
     s.push_str(".Lpue_w_air_xright:\n");
     s.push_str("    add     r10, r10, #4        @ x += AIR_SPEED\n");
     s.push_str("    cmp     r10, r8\n");
     s.push_str("    it      gt\n");
-    s.push_str("    movgt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    movgt   r10, r8\n");
     s.push_str("    strh    r10, [r5, #4]\n");
-    s.push_str(".Lpue_w_air_y:\n");
-    // Y parabolic step.
-    s.push_str("    ldrsh   r6, [r5, #6]        @ current y\n");
+    s.push_str(".Lpue_w_air_y_arc:\n");
+    s.push_str("    ldrsh   r6, [r5, #6]\n");
     s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
     s.push_str("    add     r6, r6, r7\n");
     s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
     s.push_str("    sub     r7, r7, #1\n");
-    s.push_str("    mvn     r0, #2              @ r0 = -3 (terminal fall velocity)\n");
+    s.push_str("    mvn     r0, #2              @ -3 (terminal)\n");
     s.push_str("    cmp     r7, r0\n");
     s.push_str("    it      lt\n");
     s.push_str("    movlt   r7, r0              @ clamp vy >= -3\n");
     s.push_str("    strh    r7, [r5, #8]\n");
-    // Landing test: x at target AND |y - target_y| <= 4.
-    s.push_str("    ldrsh   r10, [r5, #4]\n");
-    s.push_str("    ldrsh   r1, [r5, #14]\n");
-    s.push_str("    cmp     r10, r1\n");
-    s.push_str("    bne     .Lpue_skip          @ x not at target yet\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // Phase B: X is at target_x. Step Y toward target_y at AIR_SPEED, land
+    // when equal. r6 is reused as current y, r9 as target_y.
+    s.push_str(".Lpue_w_air_y_lerp:\n");
     s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
-    s.push_str("    ldrb    r2, [r5, #11]\n");
+    s.push_str("    ldrb    r2, [r5, #11]       @ current_area_idx (= target)\n");
     s.push_str("    lsl     r2, r2, #3\n");
     s.push_str("    add     r8, r8, r2\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
     s.push_str("    ldrsh   r9, [r8]            @ target_y\n");
-    s.push_str("    sub     r0, r6, r9          @ y - target_y\n");
+    s.push_str("    ldrsh   r6, [r5, #6]\n");
+    s.push_str("    sub     r0, r9, r6          @ target_y - y\n");
     s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lpue_w_air_land\n");
+    s.push_str("    bgt     .Lpue_w_air_ylerp_up\n");
+    // y > target: step down
+    s.push_str("    sub     r6, r6, #4\n");
+    s.push_str("    cmp     r6, r9\n");
     s.push_str("    it      lt\n");
-    s.push_str("    rsblt   r0, r0, #0          @ |dy|\n");
-    s.push_str("    cmp     r0, #4\n");
-    s.push_str("    bgt     .Lpue_skip          @ y not close to target yet\n");
-    // Landed.
+    s.push_str("    movlt   r6, r9\n");
+    s.push_str("    strh    r6, [r5, #6]\n");
+    s.push_str("    cmp     r6, r9\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    b       .Lpue_w_air_land\n");
+    s.push_str(".Lpue_w_air_ylerp_up:\n");
+    s.push_str("    add     r6, r6, #4\n");
+    s.push_str("    cmp     r6, r9\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r6, r9\n");
+    s.push_str("    strh    r6, [r5, #6]\n");
+    s.push_str("    cmp     r6, r9\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str(".Lpue_w_air_land:\n");
     s.push_str("    strh    r9, [r5, #6]        @ snap y = target_y\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");

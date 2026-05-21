@@ -576,29 +576,36 @@ export function PlaygroundPanel() {
               return { ...obj, x: obj.x + dir * SPEED, _facingRight: dir === 1 };
             }
 
-            // AIRBORNE: arc. X moves at AIR_SPEED=4 toward target_x; Y is
-            // parabolic (y += vy each frame, vy -= 1, clamped >= -3). Land
-            // only when x == target AND |y - target_y| <= 4 — purely X-driven
-            // landing teleported on near-vertical transitions.
+            // AIRBORNE: two-phase. While X is still moving, run the
+            // parabolic Y arc. Once X is at target, lerp Y toward target_y
+            // at AIR_SPEED so the AIRBORNE state always ends in bounded time
+            // (long jump_across used to leave enemies floating because Y
+            // diverged past target while X was still moving).
             if (st.sub === 'air' && st.targetX !== undefined && st.targetY !== undefined) {
               const AIR_SPEED = 4;
               const dx = st.targetX - obj.x;
               const absDx = Math.abs(dx);
               const dir: 1 | -1 = dx >= 0 ? 1 : -1;
+              if (absDx === 0) {
+                // Phase B: lerp Y to target.
+                const dy = st.targetY - obj.y;
+                if (dy === 0) {
+                  enemyWanderStateRef.current.set(obj.id, {
+                    sub: 'walk', timer: 0,
+                    areaIdx: st.targetAreaIdx ?? st.areaIdx ?? 0,
+                    dir: st.dir ?? 1,
+                  });
+                  return { ...obj, x: st.targetX, y: st.targetY, _facingRight: dir === 1 };
+                }
+                const yStep = Math.sign(dy) * Math.min(Math.abs(dy), AIR_SPEED);
+                const ny = obj.y + yStep;
+                return { ...obj, y: ny, _facingRight: dir === 1 };
+              }
+              // Phase A: X step + parabolic Y.
               const nx = absDx <= AIR_SPEED ? st.targetX : obj.x + dir * AIR_SPEED;
               const curVy = st.vy ?? 0;
               const ny = obj.y + curVy;
               const nextVy = Math.max(-3, curVy - 1);
-              const atTargetX = nx === st.targetX;
-              const yClose = Math.abs(ny - st.targetY) <= 4;
-              if (atTargetX && yClose) {
-                enemyWanderStateRef.current.set(obj.id, {
-                  sub: 'walk', timer: 0,
-                  areaIdx: st.targetAreaIdx ?? st.areaIdx ?? 0,
-                  dir: st.dir ?? 1,
-                });
-                return { ...obj, x: st.targetX, y: st.targetY, _facingRight: dir === 1 };
-              }
               enemyWanderStateRef.current.set(obj.id, { ...st, vy: nextVy });
               return { ...obj, x: nx, y: ny, _facingRight: dir === 1 };
             }
