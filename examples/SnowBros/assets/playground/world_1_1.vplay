@@ -15,6 +15,89 @@
     "yMin": -2432,
     "yMax": 127
   },
+  "walkable_areas": [
+    {
+      "y": -1976,
+      "x_min": -2,
+      "x_max": 56
+    },
+    {
+      "y": -2013,
+      "x_min": -58,
+      "x_max": 2
+    },
+    {
+      "y": -2054,
+      "x_min": -2,
+      "x_max": 57
+    },
+    {
+      "y": -2093,
+      "x_min": -56,
+      "x_max": 2
+    },
+    {
+      "y": -2137,
+      "x_min": -87,
+      "x_max": 89
+    }
+  ],
+  "transitions": [
+    {
+      "from": 0,
+      "to": 1,
+      "type": "drop",
+      "to_x": -2,
+      "from_x": 1
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "type": "drop",
+      "to_x": 2,
+      "from_x": -2
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "type": "drop",
+      "to_x": -2,
+      "from_x": 1
+    },
+    {
+      "from": 1,
+      "to": 0,
+      "type": "jump_up",
+      "from_x": -2,
+      "to_x": 1
+    },
+    {
+      "from": 2,
+      "to": 1,
+      "type": "jump_up",
+      "from_x": 2,
+      "to_x": -2
+    },
+    {
+      "from": 3,
+      "to": 2,
+      "type": "jump_up",
+      "from_x": -3,
+      "to_x": 2
+    },
+    {
+      "from": 3,
+      "to": 4,
+      "type": "drop",
+      "from_x": -3
+    },
+    {
+      "from": 4,
+      "to": 3,
+      "type": "jump_up",
+      "to_x": -2
+    }
+  ],
   "layers": {
     "background": [],
     "gameplay": [
@@ -1190,152 +1273,199 @@
         "physicsType": "gravity"
       },
       {
-        "id": "enemy_1779308540741",
+        "id": "enemy_1779370636186",
         "type": "enemy",
-        "vectorName": "yellow_troll_idle",
+        "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": 48,
-        "y": -1975,
+        "x": -86,
+        "y": -1718,
         "rotation": 0,
         "scale": 1,
-        "enemyType": "yellow_troll",
+        "enemyType": "titchi",
         "aiType": "wander",
-        "patrolWaypoints": [
-          {
-            "x": 0,
-            "y": -1973
-          },
-          {
-            "x": 57,
-            "y": -1973
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "defaultFacing": "left",
-        "physicsEnabled": false,
-        "walkable_areas": [
-          {
-            "y": -1975,
-            "x_min": 0,
-            "x_max": 57
-          },
-          {
-            "y": -1937,
-            "x_min": -53,
-            "x_max": 21
-          }
-        ],
-        "transitions": [
-          {
-            "from": 0,
-            "to": 1,
-            "type": "jump_up",
-            "to_x": 13,
-            "from_x": 15
-          },
-          {
-            "from": 0,
-            "to": 1,
-            "type": "drop",
-            "to_x": 13,
-            "from_x": 15
-          }
-        ]
+        }
       },
       {
-        "id": "enemy_1779308542591",
+        "id": "enemy_1779370641068",
         "type": "enemy",
-        "vectorName": "yellow_troll_idle",
+        "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -49,
-        "y": -2016,
+        "x": 85,
+        "y": -1722,
         "rotation": 0,
         "scale": 1,
-        "enemyType": "yellow_troll",
+        "enemyType": "titchi",
         "aiType": "wander",
-        "patrolWaypoints": [
-          {
-            "x": -57,
-            "y": -2015
-          },
-          {
-            "x": 4,
-            "y": -2015
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "physicsEnabled": false
-      },
-      {
-        "id": "enemy_1779308666915",
-        "type": "enemy",
-        "vectorName": "yellow_troll_idle",
-        "layer": "gameplay",
-        "x": 51,
-        "y": -2055,
-        "rotation": 0,
-        "scale": 1,
-        "enemyType": "yellow_troll",
-        "aiType": "wander",
-        "patrolWaypoints": [
-          {
-            "x": -5,
-            "y": -2054
-          },
-          {
-            "x": 54,
-            "y": -2054
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "defaultFacing": "left",
-        "mirrorOnPatrol": true,
         "velocity": {
           "x": 0,
           "y": 0
-        },
-        "physicsEnabled": false
+        }
       },
       {
-        "id": "enemy_1779308709158",
+        "id": "enemy_1779370655288",
         "type": "enemy",
-        "vectorName": "yellow_troll_idle",
+        "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -44,
-        "y": -2097,
+        "x": -88,
+        "y": -1831,
         "rotation": 0,
         "scale": 1,
-        "enemyType": "yellow_troll",
+        "enemyType": "titchi",
         "aiType": "wander",
-        "patrolWaypoints": [
-          {
-            "x": -55,
-            "y": -2093
-          },
-          {
-            "x": 3,
-            "y": -2093
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
         },
-        "physicsEnabled": true,
-        "collidable": false
+        "walkable_areas": [],
+        "transitions": []
+      },
+      {
+        "id": "enemy_1779370657328",
+        "type": "enemy",
+        "vectorName": "titchi_idle",
+        "layer": "gameplay",
+        "x": 85,
+        "y": -1832,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "defaultFacing": "left",
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779370679059",
+        "type": "enemy",
+        "vectorName": "frog_idle",
+        "layer": "gameplay",
+        "x": -51,
+        "y": -1682,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "frog",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779370681486",
+        "type": "enemy",
+        "vectorName": "frog_idle",
+        "layer": "gameplay",
+        "x": 54,
+        "y": -1682,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "frog",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "defaultFacing": "left",
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779380138694",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": 43,
+        "y": -1980,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779380142150",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": -42,
+        "y": -2020,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779380143289",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": 42,
+        "y": -2061,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1779380144613",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": -45,
+        "y": -2099,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       }
     ],
     "foreground": []

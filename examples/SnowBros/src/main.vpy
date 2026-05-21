@@ -4,7 +4,7 @@ META MAX_ENEMIES = 8
 
 # ── Debug ────────────────────────────────────────────────────────────────────
 const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 2   # piso inicial (0=normal floor 1, 2=floor 2, etc.)
+const START_FLOOR = 2 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE = 0        # título + "press a button"
