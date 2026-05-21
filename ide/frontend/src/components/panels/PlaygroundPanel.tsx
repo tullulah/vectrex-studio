@@ -128,6 +128,27 @@ export function PlaygroundPanel() {
   type LevelTransition = { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number };
   const [levelWalkableAreas, setLevelWalkableAreas] = useState<LevelArea[]>([]);
   const [levelTransitions, setLevelTransitions] = useState<LevelTransition[]>([]);
+  // While set, the next canvas click+drag rewrites this level area's geometry
+  // (y from the click row, x_min/x_max from the drag X range).
+  const [drawingLevelAreaIdx, setDrawingLevelAreaIdx] = useState<number | null>(null);
+  const [drawingPreview, setDrawingPreview] = useState<
+    { y: number; x_min: number; x_max: number } | null
+  >(null);
+  const drawingStartXRef = useRef<number | null>(null);
+
+  // ESC cancels walkable-area draw mode without committing.
+  useEffect(() => {
+    if (drawingLevelAreaIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDrawingLevelAreaIdx(null);
+        setDrawingPreview(null);
+        drawingStartXRef.current = null;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawingLevelAreaIdx]);
   const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
   const pendingScrollRef = useRef<{ top: number; left: number } | null>(null);
 
@@ -1046,6 +1067,20 @@ export function PlaygroundPanel() {
       };
       return;
     }
+    // Walkable-area draw mode: convert click to vec coords, anchor x_min/x_max
+    // at the click point and remember y. Drag will sweep the x range.
+    if (e.button === 0 && drawingLevelAreaIdx !== null && canvasRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const vecY = Math.round(worldYMax - (mouseY / rect.height) * (256 * heightScreens));
+      drawingStartXRef.current = vecX;
+      setDrawingPreview({ y: vecY, x_min: vecX, x_max: vecX });
+      return;
+    }
     if (e.button === 0 && activeTool === 'select' && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
       const svgX = ((e.clientX - rect.left) / rect.width) * (192 * widthScreens);
@@ -1061,6 +1096,18 @@ export function PlaygroundPanel() {
       const dy = e.clientY - panStartRef.current.y;
       containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
       containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+      return;
+    }
+
+    // Walkable-area draw mode: while the user holds the mouse down after the
+    // first click, sweep x_max (and re-clamp x_min to whichever is lower).
+    if (drawingLevelAreaIdx !== null && drawingStartXRef.current !== null && drawingPreview && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const vecX = Math.round((mouseX / rect.width) * (192 * widthScreens) + worldXMin);
+      const xMin = Math.min(drawingStartXRef.current, vecX);
+      const xMax = Math.max(drawingStartXRef.current, vecX);
+      setDrawingPreview({ y: drawingPreview.y, x_min: xMin, x_max: xMax });
       return;
     }
 
@@ -1198,6 +1245,17 @@ export function PlaygroundPanel() {
   };
 
   const handleCanvasMouseUp = () => {
+    // Walkable-area draw mode: commit the dragged geometry to the target area
+    // and exit draw mode. If the user only clicked (no drag), x_min == x_max
+    // and we still commit — they can drag the input boxes later to widen.
+    if (drawingLevelAreaIdx !== null && drawingPreview) {
+      const idx = drawingLevelAreaIdx;
+      const p = drawingPreview;
+      setLevelWalkableAreas(prev => prev.map((a, i) => i === idx ? { y: p.y, x_min: p.x_min, x_max: p.x_max } : a));
+      setDrawingLevelAreaIdx(null);
+      setDrawingPreview(null);
+      drawingStartXRef.current = null;
+    }
     isPanningRef.current = false;
     setIsPanning(false);
     setDraggingObjectId(null);
@@ -2096,7 +2154,7 @@ export function PlaygroundPanel() {
                 display: 'block',
                 backgroundColor: '#000',
                 border: `2px solid ${activeTool === 'hotspot' ? '#ffaa00' : activeTool === 'enemy' ? '#ff44ff' : activeTool === 'patrol' ? '#44ffff' : '#00ff00'}`,
-                cursor: isPanning ? 'grabbing' : (activeTool === 'hotspot' || activeTool === 'enemy' || activeTool === 'patrol') ? 'crosshair' : 'default',
+                cursor: isPanning ? 'grabbing' : (drawingLevelAreaIdx !== null || activeTool === 'hotspot' || activeTool === 'enemy' || activeTool === 'patrol') ? 'crosshair' : 'default',
               }}
             >
             {/* Grid */}
@@ -2397,6 +2455,28 @@ export function PlaygroundPanel() {
             {objects.filter(o => o.layer === 'background').map(renderVector)}
             {objects.filter(o => !o.layer || o.layer === 'gameplay').map(renderVector)}
             {objects.filter(o => o.layer === 'foreground').map(renderVector)}
+
+            {/* Walkable-area draw preview (while the user is dragging in
+                draw-mode for a level area). Painted as a bright cyan bar so
+                it stands out against the orange/blue area bars. */}
+            {drawingPreview && drawingLevelAreaIdx !== null && (() => {
+              const left  = vecToSvg(drawingPreview.x_min, drawingPreview.y);
+              const right = vecToSvg(drawingPreview.x_max, drawingPreview.y);
+              return (
+                <g key="drawing_preview" style={{ pointerEvents: 'none' }}>
+                  <line x1={left.x} y1={left.y} x2={right.x} y2={right.y}
+                    stroke="#00ffff" strokeWidth="2" />
+                  <line x1={left.x} y1={left.y - 5} x2={left.x} y2={left.y + 5}
+                    stroke="#00ffff" strokeWidth="1.5" />
+                  <line x1={right.x} y1={right.y - 5} x2={right.x} y2={right.y + 5}
+                    stroke="#00ffff" strokeWidth="1.5" />
+                  <text x={(left.x + right.x) / 2} y={left.y - 6}
+                    fill="#00ffff" fontSize="6" fontFamily="monospace" textAnchor="middle">
+                    #{drawingLevelAreaIdx} y={drawingPreview.y} {drawingPreview.x_min}..{drawingPreview.x_max}
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Rubber band selection rectangle */}
             {rubberBand && (
@@ -3275,8 +3355,14 @@ export function PlaygroundPanel() {
                     + add area
                   </span>
                 </div>
-                {levelWalkableAreas.map((a, ai) => (
-                  <div key={ai} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                {levelWalkableAreas.map((a, ai) => {
+                  const isDrawingThis = drawingLevelAreaIdx === ai;
+                  return (
+                  <div key={ai} style={{
+                    display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px',
+                    background: isDrawingThis ? '#003344' : 'transparent',
+                    borderRadius: 3, padding: isDrawingThis ? '2px 3px' : 0,
+                  }}>
                     <span style={{ color: '#888', width: 18 }}>#{ai}</span>
                     <span style={{ color: '#666' }}>y</span>
                     <input type="number" value={a.y}
@@ -3297,6 +3383,30 @@ export function PlaygroundPanel() {
                       style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
                     <button
                       onClick={() => {
+                        if (isDrawingThis) {
+                          // Toggle off — cancel
+                          setDrawingLevelAreaIdx(null);
+                          setDrawingPreview(null);
+                          drawingStartXRef.current = null;
+                        } else {
+                          setDrawingLevelAreaIdx(ai);
+                          setDrawingPreview(null);
+                          drawingStartXRef.current = null;
+                        }
+                      }}
+                      title={isDrawingThis
+                        ? 'Click+drag on the canvas to set the area, or click this button again to cancel'
+                        : 'Edit area by drawing on the canvas (click+drag horizontally; Y comes from click row)'}
+                      style={{
+                        fontSize: '10px',
+                        background: isDrawingThis ? '#0066aa' : '#1a3a3a',
+                        border: '1px solid ' + (isDrawingThis ? '#00aaff' : '#3a5a5a'),
+                        color: isDrawingThis ? '#fff' : '#88ccff',
+                        borderRadius: 2, padding: '1px 5px', cursor: 'pointer',
+                      }}
+                    >✏️</button>
+                    <button
+                      onClick={() => {
                         const next = levelWalkableAreas.filter((_, i) => i !== ai);
                         setLevelWalkableAreas(next);
                         // Drop level transitions that reference the removed area; reindex others.
@@ -3307,12 +3417,19 @@ export function PlaygroundPanel() {
                             from: t.from > ai ? t.from - 1 : t.from,
                             to:   t.to   > ai ? t.to   - 1 : t.to,
                           })));
+                        // Cancel draw mode if we were editing this row.
+                        if (drawingLevelAreaIdx === ai) {
+                          setDrawingLevelAreaIdx(null);
+                          setDrawingPreview(null);
+                          drawingStartXRef.current = null;
+                        }
                       }}
                       title="Remove area"
                       style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
                     >×</button>
                   </div>
-                ))}
+                  );
+                })}
                 {levelWalkableAreas.length >= 2 && (
                   <div style={{ marginTop: 6 }}>
                     <div style={{ fontSize: '10px', color: '#88aacc', marginBottom: 4 }}>
