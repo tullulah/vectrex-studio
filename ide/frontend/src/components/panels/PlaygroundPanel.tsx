@@ -549,11 +549,18 @@ export function PlaygroundPanel() {
               const dir: 1 | -1 = dx >= 0 ? 1 : -1;
               if (absDx <= SPEED) {
                 // Arrived — initial arc velocity from transition type (mirrors
-                // pitrex/builtins.rs .Lpue_w_tt_reached).
-                const vy0 =
-                  st.transType === 'drop' ? -1
-                  : st.transType === 'jump_across' ? 3
-                  : 6;
+                // pitrex/builtins.rs .Lpue_w_tt_reached). For jump_up, scale
+                // vy0 so vy0*(vy0+1)/2 >= dy (so the peak actually reaches the
+                // target). Drop/across use small fixed impulses.
+                const targetYJump = st.targetY ?? obj.y;
+                const dyJump = targetYJump - obj.y;
+                let vy0: number;
+                if (st.transType === 'drop') vy0 = -1;
+                else if (st.transType === 'jump_across') vy0 = 3;
+                else {
+                  vy0 = 4;
+                  while (vy0 < 16 && (vy0 * (vy0 + 1)) >> 1 < dyJump) vy0++;
+                }
                 // Face the jump target so the sprite mirror is correct.
                 const targetX = st.targetX ?? st.fromX;
                 const airDir: 1 | -1 = targetX >= st.fromX ? 1 : -1;
@@ -569,16 +576,22 @@ export function PlaygroundPanel() {
               return { ...obj, x: obj.x + dir * SPEED, _facingRight: dir === 1 };
             }
 
-            // AIRBORNE: arc. X moves linearly at SPEED toward target_x; Y is
-            // parabolic (y += vy each frame, vy -= 1 gravity). Lands when X
-            // reaches target_x → snap Y to target_y.
+            // AIRBORNE: arc. X moves at AIR_SPEED=4 toward target_x; Y is
+            // parabolic (y += vy each frame, vy -= 1, clamped >= -3). Land
+            // only when x == target AND |y - target_y| <= 4 — purely X-driven
+            // landing teleported on near-vertical transitions.
             if (st.sub === 'air' && st.targetX !== undefined && st.targetY !== undefined) {
-              const vy = st.vy ?? 0;
+              const AIR_SPEED = 4;
               const dx = st.targetX - obj.x;
               const absDx = Math.abs(dx);
               const dir: 1 | -1 = dx >= 0 ? 1 : -1;
-              if (absDx <= SPEED) {
-                // Landed.
+              const nx = absDx <= AIR_SPEED ? st.targetX : obj.x + dir * AIR_SPEED;
+              const curVy = st.vy ?? 0;
+              const ny = obj.y + curVy;
+              const nextVy = Math.max(-3, curVy - 1);
+              const atTargetX = nx === st.targetX;
+              const yClose = Math.abs(ny - st.targetY) <= 4;
+              if (atTargetX && yClose) {
                 enemyWanderStateRef.current.set(obj.id, {
                   sub: 'walk', timer: 0,
                   areaIdx: st.targetAreaIdx ?? st.areaIdx ?? 0,
@@ -586,9 +599,7 @@ export function PlaygroundPanel() {
                 });
                 return { ...obj, x: st.targetX, y: st.targetY, _facingRight: dir === 1 };
               }
-              const nx = obj.x + dir * SPEED;
-              const ny = obj.y + vy;
-              enemyWanderStateRef.current.set(obj.id, { ...st, vy: vy - 1 });
+              enemyWanderStateRef.current.set(obj.id, { ...st, vy: nextVy });
               return { ...obj, x: nx, y: ny, _facingRight: dir === 1 };
             }
 
