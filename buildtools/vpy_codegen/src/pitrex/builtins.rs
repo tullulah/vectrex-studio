@@ -3133,6 +3133,49 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    ldr     r0, [r4, r10]   @ areas_ptr\n");
     s.push_str("    str     r0, [r6, #28]   @ pool.areas_ptr (overlays wp_base)\n");
     s.push_str(".Lspe_skip_areas:\n");
+    // Wander only: snap pool.y and current_area_idx to the area whose y is
+    // closest to spawn_y. Without this, an enemy spawned slightly off the
+    // exact area.y would walk forever at its spawn altitude instead of on a
+    // platform (the WALK state only touches X). We also prefer this over
+    // hard-requiring the level designer to align spawn_y with area.y.
+    s.push_str("    ldrb    r0, [r6, #13]       @ ai_type\n");
+    s.push_str("    cmp     r0, #4\n");
+    s.push_str("    bne     .Lspe_no_area_snap\n");
+    s.push_str("    ldr     r10, [r6, #28]      @ areas_ptr\n");
+    s.push_str("    cmp     r10, #0\n");
+    s.push_str("    beq     .Lspe_no_area_snap\n");
+    s.push_str("    ldr     r0, [r10]           @ area_count\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lspe_no_area_snap\n");
+    s.push_str("    add     r10, r10, #8        @ &area[0]\n");
+    s.push_str("    ldrsh   r1, [r6, #6]        @ spawn_y\n");
+    s.push_str("    mov     r2, #0              @ best_idx\n");
+    s.push_str("    mov     r3, #1\n");
+    s.push_str("    lsl     r3, r3, #16         @ best_dist = 0x10000 (large sentinel)\n");
+    s.push_str("    mov     r8, #0              @ i\n");
+    s.push_str(".Lspe_area_loop:\n");
+    s.push_str("    ldrsh   r9, [r10]           @ area[i].y\n");
+    s.push_str("    sub     r9, r9, r1\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    rsblt   r9, r9, #0          @ |dy|\n");
+    s.push_str("    cmp     r9, r3\n");
+    s.push_str("    bge     .Lspe_area_next\n");
+    s.push_str("    mov     r3, r9              @ new best_dist\n");
+    s.push_str("    mov     r2, r8              @ new best_idx\n");
+    s.push_str(".Lspe_area_next:\n");
+    s.push_str("    add     r10, r10, #8\n");
+    s.push_str("    add     r8, r8, #1\n");
+    s.push_str("    cmp     r8, r0\n");
+    s.push_str("    blt     .Lspe_area_loop\n");
+    s.push_str("    strb    r2, [r6, #11]       @ current_area_idx = best\n");
+    s.push_str("    ldr     r10, [r6, #28]\n");
+    s.push_str("    add     r10, r10, #8\n");
+    s.push_str("    lsl     r9, r2, #3\n");
+    s.push_str("    add     r10, r10, r9\n");
+    s.push_str("    ldrsh   r0, [r10]           @ area[best].y\n");
+    s.push_str("    strh    r0, [r6, #6]        @ snap pool.y = area.y\n");
+    s.push_str(".Lspe_no_area_snap:\n");
     // vanim init: set frame_idx=0, anim_ticks_left=frame0.duration
     s.push_str("    ldrb    r0, [r6, #27]   @ is_anim\n");
     s.push_str("    cmp     r0, #0\n");
@@ -3521,14 +3564,15 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r0, [r5, #26]       @ dir = right\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── AIRBORNE: arc motion. X moves linearly at SPEED toward target_x
-    // (stashed at pool+14..15). Y is parabolic: y += vy; vy -= 1 each frame.
-    // The enemy lands when X reaches target_x — then Y is snapped to the
-    // target area's y (recomputed from areas_ptr+8+cur_area*8). This keeps
-    // the visual arc cheap (no per-frame integer-divide) while guaranteeing
-    // accurate landing position.
+    // ── AIRBORNE: arc motion. X moves linearly at AIR_SPEED=4 toward
+    // target_x (stashed at pool+14..15) — faster than walk SPEED so the
+    // flight is short and the arc magnitude stays bounded. Y is parabolic:
+    // y += vy; vy -= 1 each frame; vy is clamped to >= -3 so long X spans
+    // can't send Y diverging off-screen. The enemy lands when X reaches
+    // target_x — Y is snapped to the target area's y (recomputed from
+    // areas_ptr+8+cur_area*8) so the final position is exact.
     s.push_str(".Lpue_w_air:\n");
-    // X interpolation toward target_x.
+    // X interpolation toward target_x at AIR_SPEED=4.
     s.push_str("    ldrsh   r10, [r5, #4]       @ current x\n");
     s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
     s.push_str("    sub     r6, r8, r10         @ dx = target_x - x\n");
@@ -3536,26 +3580,30 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    beq     .Lpue_w_air_xdone   @ already at target_x\n");
     s.push_str("    bgt     .Lpue_w_air_xright\n");
     // dx < 0: move left
-    s.push_str("    sub     r10, r10, r12       @ x -= SPEED\n");
+    s.push_str("    sub     r10, r10, #4        @ x -= AIR_SPEED\n");
     s.push_str("    cmp     r10, r8\n");
     s.push_str("    it      lt\n");
     s.push_str("    movlt   r10, r8             @ clamp to target_x\n");
     s.push_str("    strh    r10, [r5, #4]\n");
     s.push_str("    b       .Lpue_w_air_y\n");
     s.push_str(".Lpue_w_air_xright:\n");
-    s.push_str("    add     r10, r10, r12       @ x += SPEED\n");
+    s.push_str("    add     r10, r10, #4        @ x += AIR_SPEED\n");
     s.push_str("    cmp     r10, r8\n");
     s.push_str("    it      gt\n");
     s.push_str("    movgt   r10, r8             @ clamp to target_x\n");
     s.push_str("    strh    r10, [r5, #4]\n");
     s.push_str(".Lpue_w_air_y:\n");
-    // Y parabolic step: y += vy; vy -= 1 (gravity).
+    // Y parabolic step: y += vy; vy -= 1 (gravity); clamp vy >= -3.
     s.push_str("    ldrsh   r6, [r5, #6]        @ current y\n");
     s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
     s.push_str("    add     r6, r6, r7\n");
     s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
     s.push_str("    sub     r7, r7, #1\n");
-    s.push_str("    strh    r7, [r5, #8]        @ vy -= 1\n");
+    s.push_str("    mvn     r0, #2              @ r0 = -3 (terminal fall velocity)\n");
+    s.push_str("    cmp     r7, r0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r7, r0              @ clamp vy >= -3\n");
+    s.push_str("    strh    r7, [r5, #8]\n");
     // Check landing: X reached target_x?
     s.push_str("    ldrsh   r10, [r5, #4]\n");
     s.push_str("    cmp     r10, r8\n");
