@@ -3138,41 +3138,48 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // exact area.y would walk forever at its spawn altitude instead of on a
     // platform (the WALK state only touches X). We also prefer this over
     // hard-requiring the level designer to align spawn_y with area.y.
+    // NOTE: r8 = y_min and r9 = y_max are loop invariants of the outer spawn
+    // loop (Y-range filter). We MUST NOT clobber them across this block. Use
+    // only r0, r1, r2, r3, r10, r12 as scratch here.
     s.push_str("    ldrb    r0, [r6, #13]       @ ai_type\n");
     s.push_str("    cmp     r0, #4\n");
     s.push_str("    bne     .Lspe_no_area_snap\n");
     s.push_str("    ldr     r10, [r6, #28]      @ areas_ptr\n");
     s.push_str("    cmp     r10, #0\n");
     s.push_str("    beq     .Lspe_no_area_snap\n");
-    s.push_str("    ldr     r0, [r10]           @ area_count\n");
-    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    ldr     r12, [r10]          @ area_count (kept in r12 across loop)\n");
+    s.push_str("    cmp     r12, #0\n");
     s.push_str("    beq     .Lspe_no_area_snap\n");
     s.push_str("    add     r10, r10, #8        @ &area[0]\n");
     s.push_str("    ldrsh   r1, [r6, #6]        @ spawn_y\n");
     s.push_str("    mov     r2, #0              @ best_idx\n");
     s.push_str("    mov     r3, #1\n");
     s.push_str("    lsl     r3, r3, #16         @ best_dist = 0x10000 (large sentinel)\n");
-    s.push_str("    mov     r8, #0              @ i\n");
+    s.push_str("    mov     r0, #0              @ i\n");
+    s.push_str("    push    {r4}                @ free one scratch (r4 is ROM data_ptr)\n");
     s.push_str(".Lspe_area_loop:\n");
-    s.push_str("    ldrsh   r9, [r10]           @ area[i].y\n");
-    s.push_str("    sub     r9, r9, r1\n");
-    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    cmp     r0, r12\n");
+    s.push_str("    bge     .Lspe_area_done\n");
+    s.push_str("    ldrsh   r4, [r10]           @ area[i].y\n");
+    s.push_str("    sub     r4, r4, r1\n");
+    s.push_str("    cmp     r4, #0\n");
     s.push_str("    it      lt\n");
-    s.push_str("    rsblt   r9, r9, #0          @ |dy|\n");
-    s.push_str("    cmp     r9, r3\n");
-    s.push_str("    bge     .Lspe_area_next\n");
-    s.push_str("    mov     r3, r9              @ new best_dist\n");
-    s.push_str("    mov     r2, r8              @ new best_idx\n");
-    s.push_str(".Lspe_area_next:\n");
+    s.push_str("    rsblt   r4, r4, #0          @ |dy|\n");
+    s.push_str("    cmp     r4, r3\n");
+    s.push_str("    bge     .Lspe_area_skip\n");
+    s.push_str("    mov     r3, r4              @ new best_dist\n");
+    s.push_str("    mov     r2, r0              @ new best_idx\n");
+    s.push_str(".Lspe_area_skip:\n");
     s.push_str("    add     r10, r10, #8\n");
-    s.push_str("    add     r8, r8, #1\n");
-    s.push_str("    cmp     r8, r0\n");
-    s.push_str("    blt     .Lspe_area_loop\n");
+    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    b       .Lspe_area_loop\n");
+    s.push_str(".Lspe_area_done:\n");
+    s.push_str("    pop     {r4}                @ restore ROM data_ptr\n");
     s.push_str("    strb    r2, [r6, #11]       @ current_area_idx = best\n");
     s.push_str("    ldr     r10, [r6, #28]\n");
     s.push_str("    add     r10, r10, #8\n");
-    s.push_str("    lsl     r9, r2, #3\n");
-    s.push_str("    add     r10, r10, r9\n");
+    s.push_str("    lsl     r12, r2, #3\n");
+    s.push_str("    add     r10, r10, r12\n");
     s.push_str("    ldrsh   r0, [r10]           @ area[best].y\n");
     s.push_str("    strh    r0, [r6, #6]        @ snap pool.y = area.y\n");
     s.push_str(".Lspe_no_area_snap:\n");
