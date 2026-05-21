@@ -15,89 +15,6 @@
     "yMin": -2432,
     "yMax": 127
   },
-  "walkable_areas": [
-    {
-      "y": -1976,
-      "x_min": -2,
-      "x_max": 56
-    },
-    {
-      "y": -2013,
-      "x_min": -58,
-      "x_max": 2
-    },
-    {
-      "y": -2054,
-      "x_min": -2,
-      "x_max": 57
-    },
-    {
-      "y": -2093,
-      "x_min": -56,
-      "x_max": 2
-    },
-    {
-      "y": -2137,
-      "x_min": -87,
-      "x_max": 89
-    }
-  ],
-  "transitions": [
-    {
-      "from": 0,
-      "to": 1,
-      "type": "drop",
-      "to_x": -2,
-      "from_x": 1
-    },
-    {
-      "from": 1,
-      "to": 2,
-      "type": "drop",
-      "to_x": 2,
-      "from_x": -2
-    },
-    {
-      "from": 2,
-      "to": 3,
-      "type": "drop",
-      "to_x": -2,
-      "from_x": 1
-    },
-    {
-      "from": 1,
-      "to": 0,
-      "type": "jump_up",
-      "from_x": -2,
-      "to_x": 1
-    },
-    {
-      "from": 2,
-      "to": 1,
-      "type": "jump_up",
-      "from_x": 2,
-      "to_x": -2
-    },
-    {
-      "from": 3,
-      "to": 2,
-      "type": "jump_up",
-      "from_x": -3,
-      "to_x": 2
-    },
-    {
-      "from": 3,
-      "to": 4,
-      "type": "drop",
-      "from_x": -3
-    },
-    {
-      "from": 4,
-      "to": 3,
-      "type": "jump_up",
-      "to_x": -2
-    }
-  ],
   "layers": {
     "background": [],
     "gameplay": [
@@ -279,17 +196,8 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -3,
-            "y": -2206
-          },
-          {
-            "x": -42,
-            "y": -2206
-          }
-        ],
+        "aiType": "wander",
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -308,16 +216,7 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": 45,
-            "y": -2206
-          },
-          {
-            "x": 3,
-            "y": -2206
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -336,16 +235,7 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -90,
-            "y": -2269
-          },
-          {
-            "x": -15,
-            "y": -2269
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -364,16 +254,7 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": 91,
-            "y": -2269
-          },
-          {
-            "x": 15,
-            "y": -2269
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -392,16 +273,7 @@
         "scale": 1,
         "enemyType": "titchi",
         "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -55,
-            "y": -2305
-          },
-          {
-            "x": 57,
-            "y": -2305
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -1531,5 +1403,6 @@
       }
     ],
     "groundBottomOffset": 25
-  }
+  },
+  "isolateScreens": true
 }

@@ -40,6 +40,12 @@ pub struct VPlayLevel {
     /// semantics as `walkable_areas`.
     #[serde(default)]
     pub transitions: Option<Vec<AreaTransition>>,
+    /// When true, auto-derived transitions never cross a screen boundary
+    /// (256-unit Y band aligned to worldBounds.yMax). For per-screen games
+    /// like SnowBros where each "floor" is its own level — enemies should
+    /// not auto-jump between floors.
+    #[serde(default, rename = "isolateScreens")]
+    pub isolate_screens: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -704,7 +710,7 @@ impl VPlayLevel {
                 } else if let Some(ref t) = self.transitions {
                     t.as_slice()
                 } else {
-                    derived_trans = Self::derive_transitions(&areas);
+                    derived_trans = Self::derive_transitions(&areas, self.isolate_screens, self.world_bounds.y_max as i16);
                     &derived_trans
                 };
                 if !areas.is_empty() {
@@ -768,7 +774,11 @@ impl VPlayLevel {
     ///                          closest neighbor on each side is emitted, so
     ///                          enemies never skip-jump from #0 to #3.
     /// All transitions are emitted in both directions.
-    fn derive_transitions(areas: &[WalkableArea]) -> Vec<AreaTransition> {
+    fn derive_transitions(
+        areas: &[WalkableArea],
+        isolate_screens: bool,
+        world_y_max: i16,
+    ) -> Vec<AreaTransition> {
         const MIN_X_OVERLAP: i16 = 4;
         const LATERAL_Y: i16 = 8;
         const LATERAL_GAP: i16 = 60;
@@ -786,6 +796,16 @@ impl VPlayLevel {
             let hi = a.x_max.min(b.x_max);
             ((lo as i32 + hi as i32) / 2) as i16
         };
+        // Screen partition aligned to worldBounds.yMax (each screen is a
+        // 256-unit Y band). Two areas with the same screen index are on the
+        // same floor; transitions between different screens are filtered out
+        // when `isolate_screens` is set.
+        let screen_of = |y: i16| -> i32 {
+            (world_y_max as i32 - y as i32).div_euclid(256)
+        };
+        let same_screen = |a: &WalkableArea, b: &WalkableArea| -> bool {
+            !isolate_screens || screen_of(a.y) == screen_of(b.y)
+        };
 
         for i in 0..n {
             // Closest area strictly above with X-overlap (immediate upper).
@@ -793,6 +813,7 @@ impl VPlayLevel {
             for j in 0..n {
                 if j == i { continue; }
                 if areas[j].y <= areas[i].y { continue; }
+                if !same_screen(&areas[i], &areas[j]) { continue; }
                 if overlap_amount(&areas[i], &areas[j]) < MIN_X_OVERLAP { continue; }
                 match upper {
                     None => upper = Some(j),
@@ -820,6 +841,7 @@ impl VPlayLevel {
             let mut right: Option<usize> = None;
             for j in 0..n {
                 if j == i { continue; }
+                if !same_screen(&areas[i], &areas[j]) { continue; }
                 let dy = (areas[i].y as i32 - areas[j].y as i32).abs() as i16;
                 if dy > LATERAL_Y { continue; }
                 if overlap_amount(&areas[i], &areas[j]) > 0 { continue; }

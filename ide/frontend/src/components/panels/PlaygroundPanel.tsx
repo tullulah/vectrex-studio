@@ -141,6 +141,11 @@ export function PlaygroundPanel() {
   type LevelTransition = { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number };
   const [levelWalkableAreas, setLevelWalkableAreas] = useState<LevelArea[]>([]);
   const [levelTransitions, setLevelTransitions] = useState<LevelTransition[]>([]);
+  /** When true, derive_transitions never crosses a screen boundary (256u Y
+   *  band aligned to worldYMax). For per-screen games like SnowBros where
+   *  each "floor" is its own level — wander enemies shouldn't auto-jump
+   *  between floors. */
+  const [isolateScreens, setIsolateScreens] = useState<boolean>(false);
   /** Collect walkable areas from every placed .vec asset's own `walkableAreas`,
    *  translated by the object's (x, y). Used as the next fallback below the
    *  level's own `walkable_areas` and below per-enemy overrides. */
@@ -176,12 +181,18 @@ export function PlaygroundPanel() {
       Math.max(0, Math.min(a.x_max, b.x_max) - Math.max(a.x_min, b.x_min));
     const overlapMid = (a: LevelArea, b: LevelArea) =>
       Math.round((Math.max(a.x_min, b.x_min) + Math.min(a.x_max, b.x_max)) / 2);
+    // Screen partition aligned to worldYMax; floor used to detect cross-
+    // screen pairs that the isolateScreens flag wants to suppress.
+    const screenOf = (y: number) => Math.floor((worldYMax - y) / 256);
+    const sameScreen = (a: LevelArea, b: LevelArea) =>
+      !isolateScreens || screenOf(a.y) === screenOf(b.y);
     for (let i = 0; i < n; i++) {
       // Immediate upper neighbor (X-overlap).
       let upper: number | null = null;
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
         if (areas[j].y <= areas[i].y) continue;
+        if (!sameScreen(areas[i], areas[j])) continue;
         if (overlap(areas[i], areas[j]) < MIN_X_OVERLAP) continue;
         if (upper === null || areas[j].y < areas[upper].y) upper = j;
       }
@@ -195,6 +206,7 @@ export function PlaygroundPanel() {
       let right: number | null = null;
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
+        if (!sameScreen(areas[i], areas[j])) continue;
         if (Math.abs(areas[i].y - areas[j].y) > LATERAL_Y) continue;
         if (overlap(areas[i], areas[j]) > 0) continue;
         if (areas[j].x_max < areas[i].x_min) {
@@ -878,6 +890,7 @@ export function PlaygroundPanel() {
         // so old levels round-trip unchanged.
         ...(levelWalkableAreas.length > 0 ? { walkable_areas: levelWalkableAreas } : {}),
         ...(levelTransitions.length > 0 ? { transitions: levelTransitions } : {}),
+        ...(isolateScreens ? { isolateScreens: true } : {}),
         layers: {
           background: objects.filter(obj => obj.layer === 'background').map(obj => ({
             ...obj,
@@ -1011,6 +1024,7 @@ export function PlaygroundPanel() {
       // Level-wide walkable areas / transitions (Phase 2 inheritance source).
       setLevelWalkableAreas((sceneData as any).walkable_areas ?? []);
       setLevelTransitions((sceneData as any).transitions ?? []);
+      setIsolateScreens(!!(sceneData as any).isolateScreens);
       if (sceneData._editorMeta?.groundBottomOffset !== undefined) {
         setGroundBottomOffset(sceneData._editorMeta.groundBottomOffset);
       }
@@ -3659,6 +3673,22 @@ export function PlaygroundPanel() {
                 <div style={{ fontSize: '10px', color: '#555', marginBottom: '6px' }}>
                   Inherited by wander enemies that don't define their own.
                 </div>
+                {/* Multi-screen level isolation. When checked, auto-derived
+                    transitions never cross a 256u Y screen boundary —
+                    suitable for per-screen games like SnowBros. */}
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  fontSize: '10px', color: '#aac', marginBottom: '8px',
+                  cursor: 'pointer',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={isolateScreens}
+                    onChange={(e) => setIsolateScreens(e.target.checked)}
+                    style={{ accentColor: '#88aacc' }}
+                  />
+                  Isolate screens (no auto-jumps between floors)
+                </label>
                 <div style={{ fontSize: '10px', color: '#88aacc', marginBottom: 4 }}>
                   Areas: {levelWalkableAreas.length}
                   <span
