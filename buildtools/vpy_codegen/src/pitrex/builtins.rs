@@ -3422,6 +3422,8 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    add     r3, r11, r1         @ &trans[r7]\n");
     s.push_str("    ldrb    r2, [r3, #1]        @ to (target area idx)\n");
     s.push_str("    strb    r2, [r5, #11]       @ current_area_idx = target\n");
+    s.push_str("    ldrb    r2, [r3, #2]        @ type (1=jump_up, 2=drop, 3=jump_across)\n");
+    s.push_str("    strb    r2, [r5, #15]       @ stash transition type at pool+15 (wp_count slot, free for wander)\n");
     s.push_str("    ldrsh   r1, [r3, #4]        @ from_x\n");
     s.push_str("    strh    r1, [r5, #8]        @ stash from_x in pool+8..9 (WALK_TO_TAKEOFF target)\n");
     s.push_str("    ldrsh   r1, [r3, #6]        @ to_x\n");
@@ -3480,46 +3482,93 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strh    r10, [r5, #4]\n");
     s.push_str("    cmp     r10, r8\n");
     s.push_str("    bne     .Lpue_skip\n");
-    // Arrived at from_x — switch to AIRBORNE
+    // Arrived at from_x — switch to AIRBORNE. Pick initial vy from transition
+    // type stashed at pool+15 at commit time:
+    //   1 = jump_up      → vy0 = +6  (high arc up)
+    //   2 = drop         → vy0 = -1  (gentle fall, gravity does the rest)
+    //   3 = jump_across  → vy0 = +3  (low arc sideways)
+    // Gravity is applied each frame in .Lpue_w_air (vy -= 1, so vy positive
+    // means moving up since Vectrex Y+ is up). X is interpolated linearly at
+    // SPEED toward target_x; landing is X-driven (snap Y when X reaches goal).
     s.push_str(".Lpue_w_tt_reached:\n");
+    s.push_str("    ldrb    r6, [r5, #15]       @ transition type\n");
+    s.push_str("    cmp     r6, #2\n");
+    s.push_str("    beq     .Lpue_w_tt_drop\n");
+    s.push_str("    cmp     r6, #3\n");
+    s.push_str("    beq     .Lpue_w_tt_across\n");
+    // type 1 (jump_up) or anything else
+    s.push_str("    mov     r0, #6\n");
+    s.push_str("    b       .Lpue_w_tt_setvy\n");
+    s.push_str(".Lpue_w_tt_drop:\n");
+    s.push_str("    mvn     r0, #0              @ vy0 = -1\n");
+    s.push_str("    b       .Lpue_w_tt_setvy\n");
+    s.push_str(".Lpue_w_tt_across:\n");
+    s.push_str("    mov     r0, #3\n");
+    s.push_str(".Lpue_w_tt_setvy:\n");
+    s.push_str("    strh    r0, [r5, #8]        @ pool+8..9 = vy (signed i16)\n");
+    s.push_str("    mov     r0, #2\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
+    // Snap facing toward target_x so the sprite mirror is correct mid-arc.
+    s.push_str("    ldrsh   r0, [r5, #14]       @ target_x\n");
+    s.push_str("    ldrsh   r1, [r5, #4]        @ x\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    bge     .Lpue_w_tt_face_r\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #26]       @ dir = left\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_w_tt_face_r:\n");
+    s.push_str("    mov     r0, #1\n");
+    s.push_str("    strb    r0, [r5, #26]       @ dir = right\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── AIRBORNE: arc motion. X moves linearly at SPEED toward target_x
+    // (stashed at pool+14..15). Y is parabolic: y += vy; vy -= 1 each frame.
+    // The enemy lands when X reaches target_x — then Y is snapped to the
+    // target area's y (recomputed from areas_ptr+8+cur_area*8). This keeps
+    // the visual arc cheap (no per-frame integer-divide) while guaranteeing
+    // accurate landing position.
+    s.push_str(".Lpue_w_air:\n");
+    // X interpolation toward target_x.
+    s.push_str("    ldrsh   r10, [r5, #4]       @ current x\n");
+    s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
+    s.push_str("    sub     r6, r8, r10         @ dx = target_x - x\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_w_air_xdone   @ already at target_x\n");
+    s.push_str("    bgt     .Lpue_w_air_xright\n");
+    // dx < 0: move left
+    s.push_str("    sub     r10, r10, r12       @ x -= SPEED\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    s.push_str("    b       .Lpue_w_air_y\n");
+    s.push_str(".Lpue_w_air_xright:\n");
+    s.push_str("    add     r10, r10, r12       @ x += SPEED\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    s.push_str(".Lpue_w_air_y:\n");
+    // Y parabolic step: y += vy; vy -= 1 (gravity).
+    s.push_str("    ldrsh   r6, [r5, #6]        @ current y\n");
+    s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
+    s.push_str("    add     r6, r6, r7\n");
+    s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
+    s.push_str("    sub     r7, r7, #1\n");
+    s.push_str("    strh    r7, [r5, #8]        @ vy -= 1\n");
+    // Check landing: X reached target_x?
+    s.push_str("    ldrsh   r10, [r5, #4]\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str(".Lpue_w_air_xdone:\n");
+    // X done — snap Y to target area's y and exit AIRBORNE.
     s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
     s.push_str("    ldrb    r6, [r5, #11]       @ current_area_idx (= target)\n");
     s.push_str("    lsl     r6, r6, #3\n");
     s.push_str("    add     r8, r8, r6\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
     s.push_str("    ldrsh   r0, [r8]            @ target_y\n");
-    s.push_str("    strh    r0, [r5, #8]        @ overwrite pool+8..9 with target_y\n");
-    s.push_str("    mov     r0, #2\n");
-    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
-    s.push_str("    b       .Lpue_skip\n");
-
-    // ── AIRBORNE: linear interpolation toward target_y (pool+8..9). Y moves
-    // at 2 units/frame; X is held fixed (or could drift toward target area's
-    // center — kept simple here). Lands when y reaches target_y.
-    s.push_str(".Lpue_w_air:\n");
-    s.push_str("    ldrsh   r6, [r5, #6]        @ current y\n");
-    s.push_str("    ldrsh   r7, [r5, #8]        @ target_y\n");
-    s.push_str("    cmp     r6, r7\n");
-    s.push_str("    beq     .Lpue_w_air_land\n");
-    s.push_str("    bgt     .Lpue_w_air_dn\n");
-    // y < target: move up
-    s.push_str("    add     r6, r6, #2\n");
-    s.push_str("    cmp     r6, r7\n");
-    s.push_str("    it      gt\n");
-    s.push_str("    movgt   r6, r7\n");
-    s.push_str("    strh    r6, [r5, #6]\n");
-    s.push_str("    b       .Lpue_skip\n");
-    s.push_str(".Lpue_w_air_dn:\n");
-    s.push_str("    sub     r6, r6, #2\n");
-    s.push_str("    cmp     r6, r7\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r6, r7\n");
-    s.push_str("    strh    r6, [r5, #6]\n");
-    s.push_str("    b       .Lpue_skip\n");
-    s.push_str(".Lpue_w_air_land:\n");
-    // y reached target. Snap x to target_x (stashed at pool+14..15) and walk.
-    s.push_str("    ldrsh   r1, [r5, #14]       @ target_x\n");
-    s.push_str("    strh    r1, [r5, #4]        @ enemy.x = to_x\n");
+    s.push_str("    strh    r0, [r5, #6]        @ snap y = target_y\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");

@@ -89,6 +89,10 @@ export function PlaygroundPanel() {
     targetY?: number;
     targetX?: number;
     targetAreaIdx?: number;
+    /** Arc velocity (positive = up) — set when entering AIRBORNE per transition type. */
+    vy?: number;
+    /** Cached transition type so AIRBORNE knows the arc shape. */
+    transType?: 'jump_up' | 'drop' | 'jump_across';
   };
   const enemyWanderStateRef = useRef<Map<string, WanderState>>(new Map());
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
@@ -539,31 +543,48 @@ export function PlaygroundPanel() {
               const absDx = Math.abs(dx);
               const dir: 1 | -1 = dx >= 0 ? 1 : -1;
               if (absDx <= SPEED) {
-                // Arrived — switch to AIRBORNE
+                // Arrived — initial arc velocity from transition type (mirrors
+                // pitrex/builtins.rs .Lpue_w_tt_reached).
+                const vy0 =
+                  st.transType === 'drop' ? -1
+                  : st.transType === 'jump_across' ? 3
+                  : 6;
+                // Face the jump target so the sprite mirror is correct.
+                const targetX = st.targetX ?? st.fromX;
+                const airDir: 1 | -1 = targetX >= st.fromX ? 1 : -1;
                 enemyWanderStateRef.current.set(obj.id, {
                   ...st,
                   sub: 'air',
                   timer: 0,
-                  dir,
+                  dir: airDir,
+                  vy: vy0,
                 });
-                return { ...obj, x: st.fromX, _facingRight: dir === 1 };
+                return { ...obj, x: st.fromX, _facingRight: airDir === 1 };
               }
               return { ...obj, x: obj.x + dir * SPEED, _facingRight: dir === 1 };
             }
 
-            // AIRBORNE: move y toward target_y at 2u/frame; on arrival snap x and walk.
-            if (st.sub === 'air' && st.targetY !== undefined) {
-              const dy = st.targetY - obj.y;
-              const absDy = Math.abs(dy);
-              if (absDy <= 2) {
+            // AIRBORNE: arc. X moves linearly at SPEED toward target_x; Y is
+            // parabolic (y += vy each frame, vy -= 1 gravity). Lands when X
+            // reaches target_x → snap Y to target_y.
+            if (st.sub === 'air' && st.targetX !== undefined && st.targetY !== undefined) {
+              const vy = st.vy ?? 0;
+              const dx = st.targetX - obj.x;
+              const absDx = Math.abs(dx);
+              const dir: 1 | -1 = dx >= 0 ? 1 : -1;
+              if (absDx <= SPEED) {
+                // Landed.
                 enemyWanderStateRef.current.set(obj.id, {
                   sub: 'walk', timer: 0,
                   areaIdx: st.targetAreaIdx ?? st.areaIdx ?? 0,
                   dir: st.dir ?? 1,
                 });
-                return { ...obj, x: st.targetX ?? obj.x, y: st.targetY };
+                return { ...obj, x: st.targetX, y: st.targetY, _facingRight: dir === 1 };
               }
-              return { ...obj, y: obj.y + Math.sign(dy) * 2 };
+              const nx = obj.x + dir * SPEED;
+              const ny = obj.y + vy;
+              enemyWanderStateRef.current.set(obj.id, { ...st, vy: vy - 1 });
+              return { ...obj, x: nx, y: ny, _facingRight: dir === 1 };
             }
 
             // IDLE: count down; on expiry, scan transitions for matches.
@@ -592,6 +613,7 @@ export function PlaygroundPanel() {
                     targetX: toX,
                     fromX,
                     dir: st.dir ?? 1,
+                    transType: t.type as 'jump_up' | 'drop' | 'jump_across',
                   });
                   return obj;
                 }
