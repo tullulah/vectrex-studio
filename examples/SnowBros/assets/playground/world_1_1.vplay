@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-20"
+    "description": "Created in Playground - 2026-05-21"
   },
   "worldBounds": {
     "xMin": -96,
@@ -1202,12 +1202,12 @@
         "aiType": "wander",
         "patrolWaypoints": [
           {
-            "x": 1,
-            "y": -1976
+            "x": 0,
+            "y": -1973
           },
           {
-            "x": 56,
-            "y": -1977
+            "x": 57,
+            "y": -1973
           }
         ],
         "wave": 0,
@@ -1216,7 +1216,8 @@
           "x": 0,
           "y": 0
         },
-        "defaultFacing": "left"
+        "defaultFacing": "left",
+        "physicsEnabled": false
       },
       {
         "id": "enemy_1779308542591",
@@ -1244,7 +1245,8 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "physicsEnabled": false
       },
       {
         "id": "enemy_1779308666915",
@@ -1274,7 +1276,8 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "physicsEnabled": false
       },
       {
         "id": "enemy_1779308709158",
@@ -1290,11 +1293,11 @@
         "patrolWaypoints": [
           {
             "x": -55,
-            "y": -2097
+            "y": -2093
           },
           {
-            "x": 4,
-            "y": -2097
+            "x": 3,
+            "y": -2093
           }
         ],
         "wave": 0,
@@ -1302,7 +1305,9 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "physicsEnabled": true,
+        "collidable": false
       }
     ],
     "foreground": []

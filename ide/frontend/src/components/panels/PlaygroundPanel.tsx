@@ -2046,10 +2046,56 @@ export function PlaygroundPanel() {
             {/* Render hotspots below objects */}
             {hotspots.map(hs => renderHotspot(hs))}
 
-            {/* Patrol paths for enemy objects */}
+            {/* Patrol paths / walkable areas for enemy objects */}
             {objects.filter(o => o.type === 'enemy' && o.patrolWaypoints && o.patrolWaypoints.length > 0).map(obj => {
               const wps = obj.patrolWaypoints!;
               const isSelected = selectedIds.has(obj.id);
+              const isWander = (obj as any).aiType === 'wander';
+
+              // Wander: render a single horizontal walkable-area bar at the
+              // enemy's spawn Y, from min(wp.x) to max(wp.x). The area is the
+              // patrol corridor — enemy walks X-only within it, no physics.
+              if (isWander) {
+                const xMin = Math.min(...wps.map(w => w.x));
+                const xMax = Math.max(...wps.map(w => w.x));
+                const areaY = obj.y;  // enemy spawn Y = walkable area Y
+                const leftSvg  = vecToSvg(xMin, areaY);
+                const rightSvg = vecToSvg(xMax, areaY);
+                const color = isSelected ? '#ffaa44' : '#ffaa4488';
+                return (
+                  <g key={`area_${obj.id}`}>
+                    {/* Walkable-area bar */}
+                    <line x1={leftSvg.x} y1={leftSvg.y} x2={rightSvg.x} y2={rightSvg.y}
+                      stroke={color} strokeWidth={isSelected ? 1.5 : 1} />
+                    {/* End caps */}
+                    <line x1={leftSvg.x} y1={leftSvg.y - 4} x2={leftSvg.x} y2={leftSvg.y + 4}
+                      stroke={color} strokeWidth={1} />
+                    <line x1={rightSvg.x} y1={rightSvg.y - 4} x2={rightSvg.x} y2={rightSvg.y + 4}
+                      stroke={color} strokeWidth={1} />
+                    {/* Waypoint handles (still draggable) */}
+                    {wps.map((wp, i) => {
+                      const pt = vecToSvg(wp.x, wp.y);
+                      return (
+                        <circle
+                          key={`wp_${i}`}
+                          cx={pt.x} cy={pt.y}
+                          r={isSelected ? 4 : 2}
+                          fill={color}
+                          stroke={isSelected ? '#ffffff' : 'none'}
+                          strokeWidth={0.5}
+                          style={{ cursor: isSelected ? 'grab' : 'default' }}
+                          onMouseDown={isSelected ? (e) => {
+                            e.stopPropagation();
+                            setDraggingWaypointInfo({ enemyId: obj.id, wpIdx: i });
+                          } : undefined}
+                        />
+                      );
+                    })}
+                  </g>
+                );
+              }
+
+              // Patrol (and others): dashed waypoint path
               const color = isSelected ? '#44ffff' : '#44ffff66';
               const pts = wps.map(wp => vecToSvg(wp.x, wp.y));
               return (
