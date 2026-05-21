@@ -1365,10 +1365,13 @@ fn fnv1a_u8(s: &str) -> u8 {
 //   [32..39]  8 × .byte  — is_anim flag for state 0..7 (0=vec 1=vanim)
 //   [40]      .byte      — state_count
 //   [41..43]  .byte[3]   — pad
-//   [44..]    Event table: 8 × 20-byte per-state blocks
+//   [44..203] Event table: 8 × 20-byte per-state blocks
 //               Per block: .byte event_count, .byte[3] pad
 //                          up to 4 × (.byte hash, .byte target_state, .byte[2] pad)
 //             Runtime: ENEMY_FIRE_EVENT reads block at offset 44 + sm_state*20
+//   [204..207] .word     — idle_sprite_ptr (wander IDLE swap target; 0 if none)
+//   [208]      .byte     — idle_is_anim
+//   [209..211] .byte[3]  — pad
 fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
     const MAX_STATES: usize = 8;
     const MAX_EVENTS: usize = 4;
@@ -1379,6 +1382,24 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
     // event_table[state_idx] = Vec of (hash, target_state)
     let mut event_table: Vec<Vec<(u8, u8)>> = vec![vec![]; MAX_STATES];
 
+    // Resolve a sprite path to its emitted label + is_anim flag.
+    let resolve_sprite = |sprite_path: &str| -> Option<(String, u8)> {
+        if sprite_path.is_empty() { return None; }
+        let path = Path::new(sprite_path);
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let stem = path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_uppercase()
+            .replace('-', "_")
+            .replace(' ', "_");
+        match ext {
+            "vec"   => Some((format!("_{}_VECTORS", stem), 0u8)),
+            "vanim" => Some((format!("_ANIM_{}", stem), 1u8)),
+            _       => None,
+        }
+    };
+
     if let Some(sm) = &res.state_machine {
         state_count = sm.states.len().min(MAX_STATES) as u8;
 
@@ -1386,20 +1407,7 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
             // Resolve sprite for this state
             let action = res.actions.iter().find(|a| a.name == state.action);
             if let Some(action) = action {
-                if !action.sprite.is_empty() {
-                    let path = Path::new(&action.sprite);
-                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                    let stem = path.file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_uppercase()
-                        .replace('-', "_")
-                        .replace(' ', "_");
-                    let (label, is_anim) = match ext {
-                        "vec"   => (format!("_{}_VECTORS", stem), 0u8),
-                        "vanim" => (format!("_ANIM_{}", stem), 1u8),
-                        _       => ("0".to_string(), 0),
-                    };
+                if let Some((label, is_anim)) = resolve_sprite(&action.sprite) {
                     sprite_ptrs[i] = label;
                     is_anims[i] = is_anim;
                 }
@@ -1413,6 +1421,13 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
             }
         }
     }
+
+    // Resolve the "idle" action's sprite (used by wander IDLE sub-state to
+    // visually halt motion). 0 if no action named "idle" exists.
+    let (idle_sprite, idle_is_anim) = res.actions.iter()
+        .find(|a| a.name == "idle")
+        .and_then(|a| resolve_sprite(&a.sprite))
+        .unwrap_or_else(|| ("0".to_string(), 0u8));
 
     let mut s = String::new();
     s.push_str(&format!("@ ---- Enemy DATA (state→sprite+event table): {} ----\n", name_up));
@@ -1432,7 +1447,7 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
     s.push_str(&format!("    .byte {}    @ state_count\n", state_count));
     s.push_str("    .byte 0, 0, 0    @ pad\n");
 
-    // Event table: MAX_STATES × 20 bytes each (offset 44..)
+    // Event table: MAX_STATES × 20 bytes each (offset 44..203)
     for i in 0..MAX_STATES {
         let events = &event_table[i];
         s.push_str(&format!("    @ state {} events ({} transitions)\n", i, events.len()));
@@ -1448,6 +1463,11 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
             s.push_str("    .byte 0, 0, 0, 0   @ empty event slot\n");
         }
     }
+
+    // Wander IDLE sprite (offset 204..211)
+    s.push_str(&format!("    .word {}    @ idle_sprite_ptr (wander IDLE swap)\n", idle_sprite));
+    s.push_str(&format!("    .byte {}    @ idle_is_anim\n", idle_is_anim));
+    s.push_str("    .byte 0, 0, 0    @ pad\n");
 
     s.push('\n');
     s

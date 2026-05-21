@@ -74,6 +74,7 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_print_number_impl());
     s.push_str(&emit_pitrex_draw_anim());
     s.push_str(&emit_pitrex_note_engine());
+    s.push_str(&emit_pitrex_wander_set_sprite());
     s.push_str(&emit_pitrex_spawn_enemies());
     s.push_str(&emit_pitrex_update_enemies());
     s.push_str(&emit_pitrex_draw_enemies());
@@ -2973,6 +2974,43 @@ fn emit_pitrex_note_engine() -> String {
 
 // ── Enemy system ─────────────────────────────────────────────────────────────
 
+/// Tiny helper used by the wander AI when transitioning between WALK and IDLE
+/// sub-states. Swaps pool.sprite_ptr / pool.is_anim and resets the per-pool
+/// animation cursor (frame_idx = 0, ticks_left = frame0.duration).
+///
+/// Args:
+///   r0 = pool entry ptr
+///   r1 = sprite_ptr (0 → no-op, leaves pool untouched)
+///   r2 = is_anim flag
+/// Clobbers: r3
+pub(crate) fn emit_pitrex_wander_set_sprite() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_wander_set_sprite(r0=pool, r1=sprite_ptr, r2=is_anim)\n");
+    s.push_str(".global pitrex_wander_set_sprite\n");
+    s.push_str(".type pitrex_wander_set_sprite, %function\n");
+    s.push_str("pitrex_wander_set_sprite:\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    bne     .Lpwss_do\n");
+    s.push_str("    bx      lr                  @ null sprite: no-op\n");
+    s.push_str(".Lpwss_do:\n");
+    s.push_str("    str     r1, [r0, #0]        @ pool.sprite_ptr = r1\n");
+    s.push_str("    strb    r2, [r0, #27]       @ pool.is_anim = r2\n");
+    s.push_str("    mov     r3, #0\n");
+    s.push_str("    strb    r3, [r0, #16]       @ pool.anim_frame_idx = 0\n");
+    s.push_str("    cmp     r2, #0\n");
+    s.push_str("    bne     .Lpwss_anim\n");
+    s.push_str("    bx      lr                  @ static vec: no anim ticks\n");
+    s.push_str(".Lpwss_anim:\n");
+    // For vanim: read frame_table_offset (anim header +3), then frame0 duration.
+    s.push_str("    ldrb    r3, [r1, #3]        @ frame_table_offset\n");
+    s.push_str("    ldr     r3, [r1, r3]        @ frame0_ptr\n");
+    s.push_str("    ldrb    r3, [r3]            @ frame0.duration_ticks\n");
+    s.push_str("    strb    r3, [r0, #17]       @ pool.anim_ticks_left\n");
+    s.push_str("    bx      lr\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
 pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // pitrex_spawn_enemies(r0=data_ptr, r1=count)
     // ROM record layout (variable, stride = 24 + wp_count*4):
@@ -3324,6 +3362,12 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strh    r0, [r5, #8]        @ idle_timer\n");
     s.push_str("    mov     r0, #1\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = IDLE\n");
+    // Swap to idle animation: load idle_sprite_ptr from _DATA+204
+    s.push_str("    ldr     r3, [r5, #20]       @ type_data_ptr\n");
+    s.push_str("    ldr     r1, [r3, #204]      @ idle_sprite_ptr\n");
+    s.push_str("    ldrb    r2, [r3, #208]      @ idle_is_anim\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    bl      pitrex_wander_set_sprite\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
 
@@ -3384,11 +3428,23 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strh    r1, [r5, #14]       @ stash target_x in pool+14..15\n");
     s.push_str("    mov     r0, #3\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK_TO_TAKEOFF\n");
+    // Restore walk animation: enemy is leaving IDLE to walk to the takeoff point.
+    s.push_str("    ldr     r3, [r5, #20]       @ type_data_ptr\n");
+    s.push_str("    ldr     r1, [r3]            @ _DATA+0 = walk sprite_ptr\n");
+    s.push_str("    ldrb    r2, [r3, #32]       @ _DATA+32 = walk is_anim\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    bl      pitrex_wander_set_sprite\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
     s.push_str(".Lpue_w_to_walk:\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
+    // Restore walk animation: _DATA[0] is the sm_state=0 sprite (walk action).
+    s.push_str("    ldr     r3, [r5, #20]       @ type_data_ptr\n");
+    s.push_str("    ldr     r1, [r3]            @ _DATA+0 = walk sprite_ptr\n");
+    s.push_str("    ldrb    r2, [r3, #32]       @ _DATA+32 = walk is_anim\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str("    bl      pitrex_wander_set_sprite\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
 
