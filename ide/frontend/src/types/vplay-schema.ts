@@ -49,7 +49,7 @@ export interface WalkableArea {
   x_max: number;
 }
 
-export type AreaTransitionType = 'jump_up' | 'drop';
+export type AreaTransitionType = 'jump_up' | 'drop' | 'jump_across';
 
 /**
  * A transition between two walkable areas. Enemy in area `from` may roll at

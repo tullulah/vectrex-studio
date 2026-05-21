@@ -688,10 +688,17 @@ impl VPlayLevel {
                 // same applies to `transitions`. Either field being a non-None
                 // (even empty) on the enemy is treated as an explicit override.
                 let areas = Self::derive_walkable_areas(obj, self.walkable_areas.as_deref());
+                // Transitions: explicit override on the enemy → use as-is.
+                // Else explicit override at level → use as-is. Else auto-derive
+                // from the area geometry (immediate neighbors only).
+                let derived_trans;
                 let trans: &[AreaTransition] = if let Some(ref t) = obj.transitions {
                     t.as_slice()
+                } else if let Some(ref t) = self.transitions {
+                    t.as_slice()
                 } else {
-                    self.transitions.as_deref().unwrap_or(&[])
+                    derived_trans = Self::derive_transitions(&areas);
+                    &derived_trans
                 };
                 if !areas.is_empty() {
                     let alabel = format!("_{name}_ENEMY{idx}_AREAS");
@@ -708,9 +715,10 @@ impl VPlayLevel {
                     }
                     for (ti_idx, t) in trans.iter().enumerate() {
                         let ttype = match t.ttype.as_str() {
-                            "jump_up" => 1u8,
-                            "drop"    => 2u8,
-                            _         => 0u8,
+                            "jump_up"     => 1u8,
+                            "drop"        => 2u8,
+                            "jump_across" => 3u8,
+                            _             => 0u8,
                         };
                         // Compute defaults: if from_x / to_x absent, use the
                         // center of the corresponding area (matches editor's
@@ -737,6 +745,123 @@ impl VPlayLevel {
                 out.push_str("@ Per-enemy walkable-area tables (Phase 2 wander AI)\n");
                 out.push_str(&areas_tables);
                 out.push_str("\n");
+            }
+        }
+
+        out
+    }
+
+    /// Auto-derive transitions between walkable areas from geometry. Three
+    /// categories of immediate neighbors are emitted:
+    ///   - jump_up   / drop  : vertical pair with X-overlap >= MIN_X_OVERLAP.
+    ///                          Closest above/below to each area; from_x/to_x
+    ///                          centered on the overlap.
+    ///   - jump_across       : lateral pair with similar Y (|dy| <= LATERAL_Y),
+    ///                          no X-overlap, X-gap <= LATERAL_GAP. Only the
+    ///                          closest neighbor on each side is emitted, so
+    ///                          enemies never skip-jump from #0 to #3.
+    /// All transitions are emitted in both directions.
+    fn derive_transitions(areas: &[WalkableArea]) -> Vec<AreaTransition> {
+        const MIN_X_OVERLAP: i16 = 4;
+        const LATERAL_Y: i16 = 8;
+        const LATERAL_GAP: i16 = 60;
+
+        let mut out: Vec<AreaTransition> = Vec::new();
+        let n = areas.len();
+
+        let overlap_amount = |a: &WalkableArea, b: &WalkableArea| -> i16 {
+            let lo = a.x_min.max(b.x_min);
+            let hi = a.x_max.min(b.x_max);
+            (hi as i32 - lo as i32).max(0) as i16
+        };
+        let overlap_mid = |a: &WalkableArea, b: &WalkableArea| -> i16 {
+            let lo = a.x_min.max(b.x_min);
+            let hi = a.x_max.min(b.x_max);
+            ((lo as i32 + hi as i32) / 2) as i16
+        };
+
+        for i in 0..n {
+            // Closest area strictly above with X-overlap (immediate upper).
+            let mut upper: Option<usize> = None;
+            for j in 0..n {
+                if j == i { continue; }
+                if areas[j].y <= areas[i].y { continue; }
+                if overlap_amount(&areas[i], &areas[j]) < MIN_X_OVERLAP { continue; }
+                match upper {
+                    None => upper = Some(j),
+                    Some(u) if areas[j].y < areas[u].y => upper = Some(j),
+                    _ => {}
+                }
+            }
+            if let Some(u) = upper {
+                let mid = overlap_mid(&areas[i], &areas[u]);
+                out.push(AreaTransition {
+                    from: i as u8, to: u as u8,
+                    ttype: "jump_up".to_string(),
+                    from_x: Some(mid), to_x: Some(mid),
+                });
+                out.push(AreaTransition {
+                    from: u as u8, to: i as u8,
+                    ttype: "drop".to_string(),
+                    from_x: Some(mid), to_x: Some(mid),
+                });
+            }
+
+            // Lateral neighbors: closest on left and right at similar Y, with
+            // no X-overlap and gap within reach.
+            let mut left:  Option<usize> = None;
+            let mut right: Option<usize> = None;
+            for j in 0..n {
+                if j == i { continue; }
+                let dy = (areas[i].y as i32 - areas[j].y as i32).abs() as i16;
+                if dy > LATERAL_Y { continue; }
+                if overlap_amount(&areas[i], &areas[j]) > 0 { continue; }
+                if areas[j].x_max < areas[i].x_min {
+                    let gap = areas[i].x_min - areas[j].x_max;
+                    if gap > LATERAL_GAP { continue; }
+                    match left {
+                        None => left = Some(j),
+                        Some(l) if (areas[i].x_min - areas[j].x_max) < (areas[i].x_min - areas[l].x_max) => left = Some(j),
+                        _ => {}
+                    }
+                } else if areas[j].x_min > areas[i].x_max {
+                    let gap = areas[j].x_min - areas[i].x_max;
+                    if gap > LATERAL_GAP { continue; }
+                    match right {
+                        None => right = Some(j),
+                        Some(r) if (areas[j].x_min - areas[i].x_max) < (areas[r].x_min - areas[i].x_max) => right = Some(j),
+                        _ => {}
+                    }
+                }
+            }
+            // Only emit when i < j to avoid duplicate emission from the j-side iteration.
+            if let Some(l) = left {
+                if i < l {
+                    out.push(AreaTransition {
+                        from: i as u8, to: l as u8,
+                        ttype: "jump_across".to_string(),
+                        from_x: Some(areas[i].x_min), to_x: Some(areas[l].x_max),
+                    });
+                    out.push(AreaTransition {
+                        from: l as u8, to: i as u8,
+                        ttype: "jump_across".to_string(),
+                        from_x: Some(areas[l].x_max), to_x: Some(areas[i].x_min),
+                    });
+                }
+            }
+            if let Some(r) = right {
+                if i < r {
+                    out.push(AreaTransition {
+                        from: i as u8, to: r as u8,
+                        ttype: "jump_across".to_string(),
+                        from_x: Some(areas[i].x_max), to_x: Some(areas[r].x_min),
+                    });
+                    out.push(AreaTransition {
+                        from: r as u8, to: i as u8,
+                        ttype: "jump_across".to_string(),
+                        from_x: Some(areas[r].x_min), to_x: Some(areas[i].x_max),
+                    });
+                }
             }
         }
 

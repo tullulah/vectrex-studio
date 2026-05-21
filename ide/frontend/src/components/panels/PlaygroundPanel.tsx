@@ -128,6 +128,63 @@ export function PlaygroundPanel() {
   type LevelTransition = { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number };
   const [levelWalkableAreas, setLevelWalkableAreas] = useState<LevelArea[]>([]);
   const [levelTransitions, setLevelTransitions] = useState<LevelTransition[]>([]);
+  /**
+   * Mirror of levelres.rs::derive_transitions — for each area in `areas`,
+   * emit transitions to its immediate vertical neighbors (X-overlap ≥ 4)
+   * as jump_up/drop, and to its immediate lateral neighbors (similar Y,
+   * X-gap ≤ 60) as jump_across. Used everywhere we need the effective
+   * transitions list when no explicit override exists.
+   */
+  const deriveTransitions = (areas: LevelArea[]): LevelTransition[] => {
+    const MIN_X_OVERLAP = 4;
+    const LATERAL_Y = 8;
+    const LATERAL_GAP = 60;
+    const out: LevelTransition[] = [];
+    const n = areas.length;
+    const overlap = (a: LevelArea, b: LevelArea) =>
+      Math.max(0, Math.min(a.x_max, b.x_max) - Math.max(a.x_min, b.x_min));
+    const overlapMid = (a: LevelArea, b: LevelArea) =>
+      Math.round((Math.max(a.x_min, b.x_min) + Math.min(a.x_max, b.x_max)) / 2);
+    for (let i = 0; i < n; i++) {
+      // Immediate upper neighbor (X-overlap).
+      let upper: number | null = null;
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (areas[j].y <= areas[i].y) continue;
+        if (overlap(areas[i], areas[j]) < MIN_X_OVERLAP) continue;
+        if (upper === null || areas[j].y < areas[upper].y) upper = j;
+      }
+      if (upper !== null) {
+        const mid = overlapMid(areas[i], areas[upper]);
+        out.push({ from: i, to: upper,  type: 'jump_up', from_x: mid, to_x: mid });
+        out.push({ from: upper, to: i,  type: 'drop',    from_x: mid, to_x: mid });
+      }
+      // Closest lateral on each side (similar Y, no X-overlap, gap ≤ LATERAL_GAP).
+      let left: number | null = null;
+      let right: number | null = null;
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (Math.abs(areas[i].y - areas[j].y) > LATERAL_Y) continue;
+        if (overlap(areas[i], areas[j]) > 0) continue;
+        if (areas[j].x_max < areas[i].x_min) {
+          if (areas[i].x_min - areas[j].x_max > LATERAL_GAP) continue;
+          if (left === null || (areas[i].x_min - areas[j].x_max) < (areas[i].x_min - areas[left].x_max)) left = j;
+        } else if (areas[j].x_min > areas[i].x_max) {
+          if (areas[j].x_min - areas[i].x_max > LATERAL_GAP) continue;
+          if (right === null || (areas[j].x_min - areas[i].x_max) < (areas[right].x_min - areas[i].x_max)) right = j;
+        }
+      }
+      if (left !== null && i < left) {
+        out.push({ from: i, to: left, type: 'jump_across' as any, from_x: areas[i].x_min, to_x: areas[left].x_max });
+        out.push({ from: left, to: i, type: 'jump_across' as any, from_x: areas[left].x_max, to_x: areas[i].x_min });
+      }
+      if (right !== null && i < right) {
+        out.push({ from: i, to: right, type: 'jump_across' as any, from_x: areas[i].x_max, to_x: areas[right].x_min });
+        out.push({ from: right, to: i, type: 'jump_across' as any, from_x: areas[right].x_min, to_x: areas[i].x_max });
+      }
+    }
+    return out;
+  };
   // While set, the next canvas click+drag rewrites this level area's geometry
   // (y from the click row, x_min/x_max from the drag X range).
   const [drawingLevelAreaIdx, setDrawingLevelAreaIdx] = useState<number | null>(null);
@@ -467,7 +524,9 @@ export function PlaygroundPanel() {
             if (areas.length === 0) return obj;
             const transitions = explicitTransitions !== undefined
               ? explicitTransitions
-              : levelTransitions;
+              : levelTransitions.length > 0
+                ? levelTransitions
+                : deriveTransitions(areas);
             const SPEED = (obj as any).speed ?? 1.0;
             const st = enemyWanderStateRef.current.get(obj.id) as
               | WanderState
@@ -2311,7 +2370,9 @@ export function PlaygroundPanel() {
                 if (areas.length === 0) return null;
                 const transitions = explicitTransitions !== undefined
                   ? explicitTransitions
-                  : levelTransitions;
+                  : levelTransitions.length > 0
+                    ? levelTransitions
+                    : deriveTransitions(areas);
                 // Inherited areas render dimmer + dashed to signal they
                 // come from the level (not editable from the enemy panel).
                 const color = isSelected
