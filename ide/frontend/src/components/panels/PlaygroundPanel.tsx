@@ -3241,6 +3241,21 @@ export function PlaygroundPanel() {
                                     )}
                                   </div>
                                 ))}
+                                {!inheritsAreas && areas.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      updateAreas([]);
+                                      // Wipe transitions too — they reference area indices that no longer exist.
+                                      if (!inheritsTransitions) {
+                                        updateTransitions([]);
+                                      }
+                                    }}
+                                    title="Remove all walkable areas (override stays — enemy will have no patrol corridor). Use 'reset → level' to inherit again."
+                                    style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
+                                  >
+                                    Clear areas
+                                  </button>
+                                )}
                               </div>
                               {areas.length >= 2 && (
                                 <div style={{ borderTop: '1px solid #333', marginTop: 6, paddingTop: 6 }}>
@@ -3304,6 +3319,15 @@ export function PlaygroundPanel() {
                                       )}
                                     </div>
                                   ))}
+                                  {!inheritsTransitions && transitions.length > 0 && (
+                                    <button
+                                      onClick={() => updateTransitions([])}
+                                      title="Remove all transitions (override stays — enemy has no jumps between areas). Use 'reset → level' to inherit again."
+                                      style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
+                                    >
+                                      Clear transitions
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </>
@@ -3430,6 +3454,21 @@ export function PlaygroundPanel() {
                   </div>
                   );
                 })}
+                {levelWalkableAreas.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setLevelWalkableAreas([]);
+                      setLevelTransitions([]);
+                      setDrawingLevelAreaIdx(null);
+                      setDrawingPreview(null);
+                      drawingStartXRef.current = null;
+                    }}
+                    title="Remove all level walkable areas (and transitions, since they reference area indices)."
+                    style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
+                  >
+                    Clear areas
+                  </button>
+                )}
                 {levelWalkableAreas.length >= 2 && (
                   <div style={{ marginTop: 6 }}>
                     <div style={{ fontSize: '10px', color: '#88aacc', marginBottom: 4 }}>
@@ -3468,6 +3507,15 @@ export function PlaygroundPanel() {
                         >×</button>
                       </div>
                     ))}
+                    {levelTransitions.length > 0 && (
+                      <button
+                        onClick={() => setLevelTransitions([])}
+                        title="Remove all level transitions"
+                        style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
+                      >
+                        Clear transitions
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
