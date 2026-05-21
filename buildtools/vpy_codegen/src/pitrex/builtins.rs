@@ -3121,16 +3121,25 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    add     r10, r10, #16\n");
     s.push_str("    ldr     r0, [r4, r10]   @ type_data_ptr\n");
     s.push_str("    str     r0, [r6, #20]   @ pool.type_data_ptr\n");
-    // areas_ptr at ROM offset 20 + wp_count*4 (Phase 2). For wander (ai_type=4)
-    // overwrite pool+28 (wp_base) with this pointer so the wander AI sees the
-    // walkable-areas table where it expects.
-    s.push_str("    ldrb    r0, [r4, #8]    @ ai_type\n");
-    s.push_str("    cmp     r0, #4\n");
-    s.push_str("    bne     .Lspe_skip_areas\n");
-    s.push_str("    ldrb    r10, [r4, #9]\n");
-    s.push_str("    lsl     r10, r10, #2\n");
+    // areas_ptr at ROM offset 20 + wp_count*4 (Phase 2). Overwrite pool+28
+    // (wp_base) with this pointer when the AI wants it there:
+    //   - wander (ai_type=4): always
+    //   - patrol (ai_type=1) with no waypoints AND areas_ptr != 0: lets the
+    //     enemy use the walkable area as its patrol range.
+    s.push_str("    ldrb    r1, [r4, #8]    @ ai_type\n");
+    s.push_str("    ldrb    r2, [r4, #9]    @ wp_count\n");
+    s.push_str("    lsl     r10, r2, #2\n");
     s.push_str("    add     r10, r10, #20\n");
-    s.push_str("    ldr     r0, [r4, r10]   @ areas_ptr\n");
+    s.push_str("    ldr     r0, [r4, r10]   @ areas_ptr from ROM\n");
+    s.push_str("    cmp     r1, #4\n");
+    s.push_str("    beq     .Lspe_store_areas    @ wander → always\n");
+    s.push_str("    cmp     r1, #1\n");
+    s.push_str("    bne     .Lspe_skip_areas     @ neither patrol nor wander\n");
+    s.push_str("    cmp     r2, #0\n");
+    s.push_str("    bne     .Lspe_skip_areas     @ patrol with waypoints → keep wp_base\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lspe_skip_areas     @ no areas\n");
+    s.push_str(".Lspe_store_areas:\n");
     s.push_str("    str     r0, [r6, #28]   @ pool.areas_ptr (overlays wp_base)\n");
     s.push_str(".Lspe_skip_areas:\n");
     // Wander only: snap pool.y and current_area_idx to the area whose y is
@@ -3143,7 +3152,13 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // only r0, r1, r2, r3, r10, r12 as scratch here.
     s.push_str("    ldrb    r0, [r6, #13]       @ ai_type\n");
     s.push_str("    cmp     r0, #4\n");
-    s.push_str("    bne     .Lspe_no_area_snap\n");
+    s.push_str("    beq     .Lspe_area_snap_ok\n");
+    s.push_str("    cmp     r0, #1\n");
+    s.push_str("    bne     .Lspe_no_area_snap  @ neither patrol nor wander\n");
+    s.push_str("    ldrb    r0, [r6, #15]       @ wp_count\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bne     .Lspe_no_area_snap  @ patrol w/ waypoints: leave Y as spawn_y\n");
+    s.push_str(".Lspe_area_snap_ok:\n");
     s.push_str("    ldr     r10, [r6, #28]      @ areas_ptr\n");
     s.push_str("    cmp     r10, #0\n");
     s.push_str("    beq     .Lspe_no_area_snap\n");
@@ -3253,11 +3268,20 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    beq     .Lpue_wander\n");
     s.push_str("    cmp     r6, #1\n");
     s.push_str("    bne     .Lpue_skip          @ unsupported ai_type\n");
-    // ── ai_type=1: full X+Y patrol ───────────────────────────────────────
-    // need at least 2 waypoints
+    // ── ai_type=1 (patrol). Two variants:
+    //
+    //   A) wp_count >= 2 → classic waypoint patrol (full X+Y interp below).
+    //   B) wp_count == 0 → area-bounded patrol: bounce X within the walkable
+    //      area at pool+11 (snapped at spawn). Y stays at area.y. Cheap and
+    //      lets the level designer drop a patrol enemy onto a platform
+    //      without having to wire up waypoints.
+    //
+    // For (B) pool+28 holds areas_ptr (set in spawn when patrol has no wps).
     s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_p_area        @ wp_count == 0 → area patrol\n");
     s.push_str("    cmp     r6, #2\n");
-    s.push_str("    blt     .Lpue_skip\n");
+    s.push_str("    blt     .Lpue_skip          @ wp_count == 1: invalid\n");
     // compute &wp[cur_target] from pool.wp_base (pool+28) and cur_target (pool+14)
     s.push_str("    ldrb    r6, [r5, #14]       @ cur_target\n");
     s.push_str("    ldr     r7, [r5, #28]       @ pool.wp_base (ROM waypoints ptr)\n");
@@ -3328,6 +3352,52 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    it      ge\n");
     s.push_str("    movge   r6, #0              @ wrap\n");
     s.push_str("    strb    r6, [r5, #14]       @ pool.cur_target\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── ai_type=1 / wp_count=0: area-bounded patrol ─────────────────────
+    // pool+28 holds areas_ptr (spawn stored it there because no waypoints).
+    // pool+11 is the area index, snapped at spawn to the area whose y is
+    // closest to spawn_y. Walk X between area.x_min and area.x_max; on
+    // reaching an edge, just flip dir (no IDLE — patrol is a continuous loop).
+    s.push_str(".Lpue_p_area:\n");
+    s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     .Lpue_skip          @ no areas → idle\n");
+    s.push_str("    ldrb    r6, [r5, #11]       @ current_area_idx\n");
+    s.push_str("    lsl     r6, r6, #3\n");
+    s.push_str("    add     r8, r8, r6\n");
+    s.push_str("    add     r8, r8, #8          @ &area[idx]\n");
+    s.push_str("    ldrsh   r9, [r8, #2]        @ x_min\n");
+    s.push_str("    ldrsh   r10, [r8, #4]       @ x_max\n");
+    s.push_str("    ldrsh   r11, [r5, #4]       @ x\n");
+    s.push_str("    ldrb    r6, [r5, #26]       @ dir (0=left,1=right)\n");
+    s.push_str("    cmp     r6, #1\n");
+    s.push_str("    beq     .Lpue_p_area_right\n");
+    // dir=LEFT: target x_min
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    ble     .Lpue_p_area_edge\n");
+    s.push_str("    sub     r11, r11, r12       @ x -= SPEED\n");
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r11, r9\n");
+    s.push_str("    strh    r11, [r5, #4]\n");
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    b       .Lpue_p_area_edge\n");
+    s.push_str(".Lpue_p_area_right:\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    bge     .Lpue_p_area_edge\n");
+    s.push_str("    add     r11, r11, r12\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r11, r10\n");
+    s.push_str("    strh    r11, [r5, #4]\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str(".Lpue_p_area_edge:\n");
+    s.push_str("    ldrb    r6, [r5, #26]\n");
+    s.push_str("    eor     r6, r6, #1\n");
+    s.push_str("    strb    r6, [r5, #26]       @ flip dir\n");
     s.push_str("    b       .Lpue_skip\n");
 
     // ── ai_type=4: wander — area-based AI with optional transitions ────

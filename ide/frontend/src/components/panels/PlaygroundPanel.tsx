@@ -522,20 +522,43 @@ export function PlaygroundPanel() {
           // Enemy patrol simulation
           if (obj.type === 'enemy' && (obj as any).aiType === 'patrol') {
             const wps: { x: number; y: number }[] = (obj as any).patrolWaypoints || [];
-            if (wps.length < 2) return obj;
-            const idx = enemyPatrolIdxRef.current.get(obj.id) ?? 0;
-            const target = wps[idx % wps.length];
-            const dx = target.x - obj.x;
-            const dy = target.y - obj.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
             const SPEED = (obj as any).speed ?? 1.0;
-            if (dist < SPEED + 0.5) {
-              enemyPatrolIdxRef.current.set(obj.id, (idx + 1) % wps.length);
-              return { ...obj, x: target.x, y: target.y };
+            if (wps.length >= 2) {
+              const idx = enemyPatrolIdxRef.current.get(obj.id) ?? 0;
+              const target = wps[idx % wps.length];
+              const dx = target.x - obj.x;
+              const dy = target.y - obj.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < SPEED + 0.5) {
+                enemyPatrolIdxRef.current.set(obj.id, (idx + 1) % wps.length);
+                return { ...obj, x: target.x, y: target.y };
+              }
+              const nx = obj.x + (dx / dist) * SPEED;
+              const ny = obj.y + (dy / dist) * SPEED;
+              return { ...obj, x: nx, y: ny, _facingRight: dx > 0 };
             }
-            const nx = obj.x + (dx / dist) * SPEED;
-            const ny = obj.y + (dy / dist) * SPEED;
-            return { ...obj, x: nx, y: ny, _facingRight: dx > 0 };
+            // No waypoints: area-bounded patrol — bounce X within the
+            // closest walkable area (enemy override > level > .vec-collected).
+            const own = (obj as any).walkable_areas as { y: number; x_min: number; x_max: number }[] | undefined;
+            const candidates: { y: number; x_min: number; x_max: number }[] =
+              own !== undefined ? own
+              : levelWalkableAreas.length > 0 ? levelWalkableAreas
+              : collectVecWalkableAreas(prevObjects, loadedVectors);
+            if (candidates.length === 0) return obj;
+            let best = 0;
+            let bestDy = Math.abs(candidates[0].y - obj.y);
+            for (let i = 1; i < candidates.length; i++) {
+              const d = Math.abs(candidates[i].y - obj.y);
+              if (d < bestDy) { best = i; bestDy = d; }
+            }
+            const a = candidates[best];
+            const dirRight = (obj as any)._facingRight !== false;
+            const targetX = dirRight ? a.x_max : a.x_min;
+            const dxA = targetX - obj.x;
+            if (Math.abs(dxA) <= SPEED) {
+              return { ...obj, x: targetX, y: a.y, _facingRight: !dirRight };
+            }
+            return { ...obj, x: obj.x + Math.sign(dxA) * SPEED, y: a.y, _facingRight: dirRight };
           }
 
           // Enemy wander simulation: area-based AI mirroring the ARM runtime.
