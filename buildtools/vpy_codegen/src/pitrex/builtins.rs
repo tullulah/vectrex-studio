@@ -3264,6 +3264,25 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    mov     r10, r8             @ x = target_x\n");
     s.push_str(".Lpue_w_store:\n");
     s.push_str("    strh    r10, [r5, #4]       @ pool.x = x\n");
+    // ── ground check: if no floor at new X (i.e. walked off platform), enter AIRBORNE ──
+    // pitrex_level_collision_y(r0=x, r1=y, r2=hh) preserves r4..r11 (callee-saved).
+    s.push_str("    mov     r0, r10             @ x\n");
+    s.push_str("    ldrsh   r1, [r5, #6]        @ y\n");
+    s.push_str("    mov     r2, #10             @ hh\n");
+    s.push_str("    bl      pitrex_level_collision_y\n");
+    s.push_str("    mov     r12, #1             @ restore SPEED (bl clobbered r12)\n");
+    s.push_str("    ldrsh   r1, [r5, #6]        @ current y\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    bge     .Lpue_w_check_arrive @ floor >= y: on platform, check waypoint\n");
+    // floor < y → walked off, fall
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #11]       @ vy = 0\n");
+    s.push_str("    mov     r0, #2\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
+    s.push_str("    mov     r0, #120\n");
+    s.push_str("    strh    r0, [r5, #8]        @ airborne_timer = 120 (safety)\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_w_check_arrive:\n");
     s.push_str("    cmp     r10, r8\n");
     s.push_str("    bne     .Lpue_skip          @ not yet at target\n");
     // ── arrived: advance waypoint and enter IDLE ───────────────────────
@@ -3311,6 +3330,8 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r0, [r5, #11]       @ vy = +10\n");
     s.push_str("    mov     r0, #2\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
+    s.push_str("    mov     r0, #120\n");
+    s.push_str("    strh    r0, [r5, #8]        @ airborne_timer = 120 (safety)\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
 
@@ -3324,12 +3345,28 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r0, [r5, #11]\n");
     s.push_str("    mov     r0, #2\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
+    s.push_str("    mov     r0, #120\n");
+    s.push_str("    strh    r0, [r5, #8]        @ airborne_timer = 120 (safety)\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
 
     // ── AIRBORNE: ballistic physics + floor-collision landing ─────────
     // Each frame: y += vy; vy = max(vy-1, -8); on falling, check floor.
+    // airborne_timer (pool+8) decrements each frame — if hits 0, force WALK
+    // to prevent infinite fall when no platform exists below.
     s.push_str(".Lpue_w_air:\n");
+    // safety timer
+    s.push_str("    ldrsh   r6, [r5, #8]        @ airborne_timer\n");
+    s.push_str("    sub     r6, r6, #1\n");
+    s.push_str("    strh    r6, [r5, #8]\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    bgt     .Lpue_w_air_phys    @ still in safety window, proceed\n");
+    // timeout — abandon airborne, force WALK at current y
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #11]       @ vy = 0\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
+    s.push_str("    b       .Lpue_skip\n");
+    s.push_str(".Lpue_w_air_phys:\n");
     // load vy (signed byte)
     s.push_str("    ldrsb   r6, [r5, #11]       @ vy (signed)\n");
     // y += vy
