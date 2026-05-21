@@ -2985,9 +2985,9 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // Pool entry layout (32 bytes):
     //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
     //   +8  thaw_timer (i16) — multiplexed for wander: idle_timer in IDLE,
-    //       original_y (y at AIRBORNE entry, used for bounce-back) in AIRBORNE
+    //       airborne_timer (safety countdown, 180→0) in AIRBORNE
     //   +10 sub_state (u8, wander: 0=WALK, 1=IDLE, 2=AIRBORNE_JUMP, 3=AIRBORNE_DROP)
-    //   +11 vy (i8, wander vertical velocity when AIRBORNE; -8..+10)
+    //   +11 vy (i8, wander vertical velocity when AIRBORNE; -8..+17)
     //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
     //   +16 anim_frame_idx (u8), +17 anim_ticks_left (u8)
     //   +18 sm_state (u8, snow/ball state machine: 0=normal, 1+=snowed)
@@ -3315,78 +3315,107 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    mov     r12, #1             @ restore SPEED\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── JUMP_UP feasibility pre-check ───────────────────────────────────
-    // Query floor at (x, y + 60): finds the highest platform top below that
-    // sample. If returned floor_y > current_y, a platform exists within jump
-    // reach above the enemy → jump is worth it. Else fall back to WALK.
+    // ── JUMP_UP feasibility pre-check (ray-cast up via 2-probe diff) ────
+    // Call pitrex_level_collision_y twice:
+    //   A = floor at probe (y + MAX_REACH)
+    //   B = floor at probe (y)
+    // Both return `highest top below probe + hh`. A > B means there is a
+    // platform whose top sits strictly in (y, y+MAX_REACH] (i.e. above the
+    // enemy and within jump range). A is the target standing-y.
+    // Then derive the smallest vy whose peak rise (vy*(vy+1)/2) is enough
+    // to land on that target. Skip JUMP if no such target.
     s.push_str(".Lpue_w_try_jump:\n");
+    // Probe A
     s.push_str("    ldrsh   r0, [r5, #4]\n");
     s.push_str("    ldrsh   r1, [r5, #6]\n");
-    s.push_str("    add     r1, r1, #60         @ probe y+60 (jump reach)\n");
+    s.push_str("    add     r1, r1, #136        @ probe y + MAX_REACH (= peak for vy=16)\n");
+    s.push_str("    mov     r2, #10\n");
+    s.push_str("    bl      pitrex_level_collision_y\n");
+    s.push_str("    mov     r6, r0              @ A = floor at y+REACH\n");
+    // Probe B
+    s.push_str("    ldrsh   r0, [r5, #4]\n");
+    s.push_str("    ldrsh   r1, [r5, #6]\n");
     s.push_str("    mov     r2, #10\n");
     s.push_str("    bl      pitrex_level_collision_y\n");
     s.push_str("    mov     r12, #1\n");
+    s.push_str("    cmp     r6, r0\n");
+    s.push_str("    ble     .Lpue_w_to_walk     @ A <= B: no platform strictly above\n");
+    // height = A - current_y (= target standing y - current y)
     s.push_str("    ldrsh   r1, [r5, #6]\n");
-    s.push_str("    cmp     r0, r1\n");
-    s.push_str("    ble     .Lpue_w_to_walk     @ no platform above: skip jump\n");
-    s.push_str("    b       .Lpue_w_jump_up\n");
+    s.push_str("    sub     r2, r6, r1          @ height to reach\n");
+    // find smallest vy in [1..17] where vy*(vy+1)/2 >= height
+    s.push_str("    mov     r3, #0\n");
+    s.push_str(".Lpue_w_find_vy:\n");
+    s.push_str("    add     r3, r3, #1\n");
+    s.push_str("    cmp     r3, #17\n");
+    s.push_str("    bgt     .Lpue_w_to_walk     @ unreachable (shouldn't happen if A in range)\n");
+    s.push_str("    add     r4, r3, #1\n");
+    s.push_str("    mul     r4, r3, r4          @ vy*(vy+1)\n");
+    s.push_str("    lsr     r4, r4, #1          @ peak rise = vy*(vy+1)/2\n");
+    s.push_str("    cmp     r4, r2\n");
+    s.push_str("    blt     .Lpue_w_find_vy\n");
+    // commit JUMP with computed vy
+    s.push_str("    strb    r3, [r5, #11]       @ vy = computed\n");
+    s.push_str("    mov     r0, #2\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE_JUMP\n");
+    s.push_str("    mov     r0, #180\n");
+    s.push_str("    strh    r0, [r5, #8]        @ airborne_timer (safety)\n");
+    s.push_str("    b       .Lpue_skip\n");
 
     // ── DROP_DOWN feasibility pre-check ─────────────────────────────────
-    // Query floor at (x, y - 5): need a valid platform top strictly below
-    // current y to make dropping worthwhile.
+    // Probe at (x, y - 1): if a valid floor exists strictly below current y,
+    // commit to DROP. Physics will land on it via floor query in AIRBORNE.
     s.push_str(".Lpue_w_try_drop:\n");
     s.push_str("    ldrsh   r0, [r5, #4]\n");
     s.push_str("    ldrsh   r1, [r5, #6]\n");
-    s.push_str("    sub     r1, r1, #5\n");
+    s.push_str("    sub     r1, r1, #1\n");
     s.push_str("    mov     r2, #10\n");
     s.push_str("    bl      pitrex_level_collision_y\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    ldr     r3, =-5000\n");
     s.push_str("    cmp     r0, r3\n");
-    s.push_str("    blt     .Lpue_w_to_walk     @ no floor at all: skip drop\n");
+    s.push_str("    blt     .Lpue_w_to_walk     @ no floor at all\n");
     s.push_str("    ldrsh   r1, [r5, #6]\n");
     s.push_str("    cmp     r0, r1\n");
-    s.push_str("    bge     .Lpue_w_to_walk     @ floor not strictly below: skip drop\n");
-    s.push_str("    b       .Lpue_w_drop\n");
-
-    // ── JUMP_UP: save original_y at pool+8..9, vy=+10, enter AIRBORNE_JUMP (2) ──
-    // Max rise = sum(10..0) = 55 units; clears typical platform gaps (34..52).
-    s.push_str(".Lpue_w_jump_up:\n");
+    s.push_str("    bge     .Lpue_w_to_walk     @ floor not strictly below\n");
+    // commit DROP
     s.push_str("    ldrsh   r0, [r5, #6]\n");
-    s.push_str("    strh    r0, [r5, #8]        @ original_y\n");
-    s.push_str("    mov     r0, #10\n");
-    s.push_str("    strb    r0, [r5, #11]       @ vy = +10\n");
-    s.push_str("    mov     r0, #2\n");
-    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE_JUMP\n");
-    s.push_str("    mov     r12, #1\n");
-    s.push_str("    b       .Lpue_skip\n");
-
-    // ── DROP_DOWN: save original_y, nudge y down, vy=-1, AIRBORNE_DROP (3) ──
-    s.push_str(".Lpue_w_drop:\n");
-    s.push_str("    ldrsh   r0, [r5, #6]\n");
-    s.push_str("    strh    r0, [r5, #8]        @ original_y\n");
-    s.push_str("    sub     r0, r0, #5          @ step off current platform\n");
-    s.push_str("    strh    r0, [r5, #6]\n");
+    s.push_str("    sub     r0, r0, #5\n");
+    s.push_str("    strh    r0, [r5, #6]        @ nudge y below current floor\n");
     s.push_str("    mov     r0, #0\n");
-    s.push_str("    sub     r0, r0, #1          @ vy = -1\n");
-    s.push_str("    strb    r0, [r5, #11]\n");
+    s.push_str("    sub     r0, r0, #1\n");
+    s.push_str("    strb    r0, [r5, #11]       @ vy = -1\n");
     s.push_str("    mov     r0, #3\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE_DROP\n");
-    s.push_str("    mov     r12, #1\n");
+    s.push_str("    mov     r0, #180\n");
+    s.push_str("    strh    r0, [r5, #8]        @ airborne_timer (safety)\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── AIRBORNE (JUMP=2 or DROP=3): ballistic physics + landing ──────
-    // Each frame: y += vy; vy = max(vy-1, -8).
-    // Landing priorities:
-    //   1) Real platform found via pitrex_level_collision_y AND y reached it.
-    //   2) Bounce-back to original_y (pool+8..9):
-    //        JUMP: when y <= original_y on the way down.
-    //        DROP: when y <= original_y - 30 with no real floor in range.
-    // Either guaranteed exits AIRBORNE within ~30 frames — no infinite fall.
+    // ── AIRBORNE (JUMP=2 or DROP=3): ballistic physics + real-floor landing ─
+    // Each frame: y += vy; vy = max(vy-1, -8); land on first floor reached
+    // while falling. The pre-check at idle-exit guarantees a target platform
+    // exists in X overlap with the enemy — so during the fall, the level
+    // floor query will return that platform's top and the enemy will snap to
+    // it. No bounce-back: if the pre-check committed to AIRBORNE, the enemy
+    // will land on a real platform.
+    // Safety: airborne_timer at pool+8..9 counts down each frame; on 0,
+    // force WALK at current y (guards against unexpected edge cases).
     s.push_str(".Lpue_w_air:\n");
-    // load vy (signed byte)
+    // safety timer
+    s.push_str("    ldrsh   r6, [r5, #8]        @ airborne_timer\n");
+    s.push_str("    sub     r6, r6, #1\n");
+    s.push_str("    strh    r6, [r5, #8]\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    bgt     .Lpue_w_air_phys\n");
+    // timeout — abandon airborne at current y
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #11]\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
+    s.push_str("    b       .Lpue_skip\n");
+    // physics
+    s.push_str(".Lpue_w_air_phys:\n");
     s.push_str("    ldrsb   r6, [r5, #11]       @ vy\n");
-    s.push_str("    ldrsh   r7, [r5, #6]        @ y\n");
+    s.push_str("    ldrsh   r7, [r5, #6]\n");
     s.push_str("    add     r7, r7, r6\n");
     s.push_str("    strh    r7, [r5, #6]        @ y += vy\n");
     s.push_str("    sub     r6, r6, #1\n");
@@ -3394,48 +3423,26 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    it      lt\n");
     s.push_str("    movlt   r6, #-8\n");
     s.push_str("    strb    r6, [r5, #11]       @ vy = max(vy-1, -8)\n");
-    // only check landing while falling
+    // only land while strictly falling — prevents clipping into target
+    // platform on the way up during a JUMP rise.
     s.push_str("    cmp     r6, #0\n");
-    s.push_str("    bgt     .Lpue_w_air_done\n");
-    // call pitrex_level_collision_y(x, y, hh=10)
+    s.push_str("    bge     .Lpue_w_air_done    @ rising or at peak: no landing\n");
+    // floor query at (x, y_now)
     s.push_str("    ldrsh   r0, [r5, #4]\n");
     s.push_str("    ldrsh   r1, [r5, #6]\n");
     s.push_str("    mov     r2, #10\n");
     s.push_str("    bl      pitrex_level_collision_y\n");
-    s.push_str("    mov     r12, #1             @ restore SPEED\n");
-    // r0 = floor_y or -10000
-    s.push_str("    ldrsh   r1, [r5, #6]        @ y\n");
-    s.push_str("    ldrsh   r2, [r5, #8]        @ original_y\n");
-    // Try real-floor landing (must be valid AND y reached it AND not above original by accident)
+    s.push_str("    mov     r12, #1\n");
     s.push_str("    ldr     r3, =-5000\n");
     s.push_str("    cmp     r0, r3\n");
-    s.push_str("    blt     .Lpue_w_air_check_bounce  @ no valid real floor\n");
+    s.push_str("    blt     .Lpue_w_air_done    @ no valid floor: keep falling\n");
+    s.push_str("    ldrsh   r1, [r5, #6]\n");
     s.push_str("    cmp     r1, r0\n");
-    s.push_str("    bgt     .Lpue_w_air_check_bounce  @ still above real floor\n");
-    // Land on real floor
+    s.push_str("    bgt     .Lpue_w_air_done    @ still above floor\n");
+    // land on real floor
     s.push_str("    strh    r0, [r5, #6]\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #11]\n");
-    s.push_str("    strb    r0, [r5, #10]       @ → WALK\n");
-    s.push_str("    b       .Lpue_w_air_done\n");
-    // Bounce-back: check sub_state to pick threshold
-    s.push_str(".Lpue_w_air_check_bounce:\n");
-    s.push_str("    ldrb    r3, [r5, #10]       @ sub_state (2=JUMP, 3=DROP)\n");
-    s.push_str("    cmp     r3, #3\n");
-    s.push_str("    beq     .Lpue_w_air_drop_chk\n");
-    // JUMP: bounce when y <= original_y (and we're falling, which we are)
-    s.push_str("    cmp     r1, r2\n");
-    s.push_str("    bgt     .Lpue_w_air_done    @ still above original\n");
-    s.push_str("    b       .Lpue_w_air_snap\n");
-    // DROP: bounce when y <= original_y - 80 (rare — usually lands on real floor first)
-    s.push_str(".Lpue_w_air_drop_chk:\n");
-    s.push_str("    sub     r3, r2, #80         @ threshold\n");
-    s.push_str("    cmp     r1, r3\n");
-    s.push_str("    bgt     .Lpue_w_air_done    @ haven't dropped 80 yet\n");
-    s.push_str(".Lpue_w_air_snap:\n");
-    s.push_str("    strh    r2, [r5, #6]        @ y = original_y\n");
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    strb    r0, [r5, #11]       @ vy = 0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str(".Lpue_w_air_done:\n");
     s.push_str("    @ fall through to skip\n");
