@@ -3196,7 +3196,16 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    lsl     r12, r2, #3\n");
     s.push_str("    add     r10, r10, r12\n");
     s.push_str("    ldrsh   r0, [r10]           @ area[best].y\n");
-    s.push_str("    strh    r0, [r6, #6]        @ snap pool.y = area.y\n");
+    // Apply per-enemy-type feet_offset baked into _DATA[209]. area.y is the
+    // platform top; pool.y = area.y + feet_offset places the sprite's lowest
+    // pixel on that top regardless of sprite size or current sm_state.
+    s.push_str("    ldr     r12, [r6, #20]      @ type_data_ptr\n");
+    s.push_str("    cmp     r12, #0\n");
+    s.push_str("    beq     .Lspe_no_feet\n");
+    s.push_str("    ldrsb   r12, [r12, #209]    @ feet_offset (signed byte)\n");
+    s.push_str("    add     r0, r0, r12\n");
+    s.push_str(".Lspe_no_feet:\n");
+    s.push_str("    strh    r0, [r6, #6]        @ snap pool.y = area.y + feet_offset\n");
     s.push_str(".Lspe_no_area_snap:\n");
     // vanim init: set frame_idx=0, anim_ticks_left=frame0.duration
     s.push_str("    ldrb    r0, [r6, #27]   @ is_anim\n");
@@ -3739,7 +3748,15 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    cmp     r6, r9\n");
     s.push_str("    bne     .Lpue_skip\n");
     s.push_str(".Lpue_w_air_land:\n");
-    s.push_str("    strh    r9, [r5, #6]        @ snap y = target_y\n");
+    // Apply feet_offset (from _DATA[209]) so the sprite lands feet-first on
+    // the target platform, matching the spawn snap convention.
+    s.push_str("    ldr     r0, [r5, #20]       @ type_data_ptr\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     .Lpue_w_air_land_no_off\n");
+    s.push_str("    ldrsb   r0, [r0, #209]      @ feet_offset\n");
+    s.push_str("    add     r9, r9, r0\n");
+    s.push_str(".Lpue_w_air_land_no_off:\n");
+    s.push_str("    strh    r9, [r5, #6]        @ snap y = target_y + feet_offset\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");

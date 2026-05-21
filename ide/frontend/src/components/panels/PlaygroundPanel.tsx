@@ -149,6 +149,30 @@ export function PlaygroundPanel() {
   /** Collect walkable areas from every placed .vec asset's own `walkableAreas`,
    *  translated by the object's (x, y). Used as the next fallback below the
    *  level's own `walkable_areas` and below per-enemy overrides. */
+  /** Per-enemy-type feet offset = 5 - min_y across every loaded .vec whose
+   *  name matches the enemy type. Mirrors compute_enemy_feet_offset() in
+   *  pitrex/assets.rs so the playground preview matches the runtime. */
+  const getEnemyFeetOffset = (
+    enemyType: string | undefined,
+    vecs: Map<string, VecVector>,
+  ): number => {
+    if (!enemyType) return 0;
+    const plain = enemyType.toLowerCase();
+    const prefix = plain + '_';
+    let minY: number | null = null;
+    vecs.forEach((v, name) => {
+      if (name !== plain && !name.startsWith(prefix)) return;
+      for (const layer of v.layers) {
+        for (const p of layer.paths) {
+          for (const pt of p.points) {
+            if (minY === null || pt.y < minY) minY = pt.y;
+          }
+        }
+      }
+    });
+    return minY === null ? 0 : 5 - minY;
+  };
+
   const collectVecWalkableAreas = (
     objs: SceneObject[],
     vecs: Map<string, VecVector>,
@@ -552,13 +576,14 @@ export function PlaygroundPanel() {
               if (d < bestDy) { best = i; bestDy = d; }
             }
             const a = candidates[best];
+            const feetOff = getEnemyFeetOffset((obj as any).enemyType, loadedVectors);
             const dirRight = (obj as any)._facingRight !== false;
             const targetX = dirRight ? a.x_max : a.x_min;
             const dxA = targetX - obj.x;
             if (Math.abs(dxA) <= SPEED) {
-              return { ...obj, x: targetX, y: a.y, _facingRight: !dirRight };
+              return { ...obj, x: targetX, y: a.y + feetOff, _facingRight: !dirRight };
             }
-            return { ...obj, x: obj.x + Math.sign(dxA) * SPEED, y: a.y, _facingRight: dirRight };
+            return { ...obj, x: obj.x + Math.sign(dxA) * SPEED, y: a.y + feetOff, _facingRight: dirRight };
           }
 
           // Enemy wander simulation: area-based AI mirroring the ARM runtime.
@@ -724,9 +749,11 @@ export function PlaygroundPanel() {
                 areaIdx: curAreaIdx,
                 dir: dir === 1 ? -1 : 1,
               });
-              return { ...obj, x: targetX, y: area.y, _facingRight: dir === 1 };
+              const feetOff = getEnemyFeetOffset((obj as any).enemyType, loadedVectors);
+              return { ...obj, x: targetX, y: area.y + feetOff, _facingRight: dir === 1 };
             }
-            return { ...obj, x: obj.x + Math.sign(dx) * SPEED, y: area.y, _facingRight: dir === 1 };
+            const feetOff = getEnemyFeetOffset((obj as any).enemyType, loadedVectors);
+            return { ...obj, x: obj.x + Math.sign(dx) * SPEED, y: area.y + feetOff, _facingRight: dir === 1 };
           }
 
           if (!obj.physicsEnabled) return obj;

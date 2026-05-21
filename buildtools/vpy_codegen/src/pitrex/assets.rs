@@ -434,6 +434,15 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
         }
     }
 
+    // Build vec_min_y: lowercase name → min Y across all paths. Used by the
+    // level emitter to bake a per-enemy feet_offset so area.y can mean the
+    // platform's top surface and any enemy sprite snaps to it.
+    let mut vec_min_y: HashMap<String, i16> = HashMap::new();
+    for (name, res) in &vec_cache {
+        let (my, _) = res.calculate_y_bounds();
+        vec_min_y.insert(name.clone(), my);
+    }
+
     // ── Center-override pre-pass ────────────────────────────────────────────
     // Sprites that belong to a vanim group OR a venemy group share a single
     // bounding-box center, so per-frame / per-state geometry shifts no longer
@@ -579,7 +588,7 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                         continue;
                     }
                 };
-                s.push_str(&emit_enemy_data_for_pitrex(&resource, &sym));
+                s.push_str(&emit_enemy_data_for_pitrex(&resource, &sym, &vec_min_y));
             }
             #[allow(unreachable_patterns)]
             _ => {
@@ -1367,6 +1376,30 @@ fn fnv1a_u8(s: &str) -> u8 {
     (h & 0xFF) as u8
 }
 
+/// Compute the per-enemy-type feet_offset baked into _DATA[209]. Scans the
+/// global vec min_y map for entries matching the enemy's name (either the
+/// plain lowercase name, e.g. "titchi", or anything with the "{name}_"
+/// prefix like "titchi_idle", "titchi_walk1", "titchi_ball"). The smallest
+/// min_y across those sprites becomes the conservative feet anchor:
+///   feet_offset = 5 (hardcoded draw center→feet shift) - min_y.
+/// With this offset, pool.y = area.y + feet_offset places the sprite's
+/// lowest pixel exactly on area.y — so area.y can mean the platform's top
+/// surface regardless of which sprite the enemy is currently showing.
+fn compute_enemy_feet_offset(res: &EnemyResource, vec_min_y: &HashMap<String, i16>) -> i8 {
+    let plain = res.name.to_lowercase();
+    let prefix = format!("{}_", plain);
+    let mut acc: Option<i16> = None;
+    for (name, &my) in vec_min_y {
+        if name == &plain || name.starts_with(&prefix) {
+            acc = Some(acc.map_or(my, |a| a.min(my)));
+        }
+    }
+    match acc {
+        Some(my) => (5i16 - my).clamp(-127, 127) as i8,
+        None => 0,
+    }
+}
+
 // Emits `_<NAME>_DATA` — variable-size table read by the runtime enemy system.
 //
 // Layout (.balign 4):
@@ -1380,8 +1413,13 @@ fn fnv1a_u8(s: &str) -> u8 {
 //             Runtime: ENEMY_FIRE_EVENT reads block at offset 44 + sm_state*20
 //   [204..207] .word     — idle_sprite_ptr (wander IDLE swap target; 0 if none)
 //   [208]      .byte     — idle_is_anim
-//   [209..211] .byte[3]  — pad
-fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
+//   [209]      .byte     — feet_offset (signed: pool.y = area.y + feet_offset)
+//   [210..211] .byte[2]  — pad
+fn emit_enemy_data_for_pitrex(
+    res: &EnemyResource,
+    name_up: &str,
+    vec_min_y: &HashMap<String, i16>,
+) -> String {
     const MAX_STATES: usize = 8;
     const MAX_EVENTS: usize = 4;
 
@@ -1476,7 +1514,14 @@ fn emit_enemy_data_for_pitrex(res: &EnemyResource, name_up: &str) -> String {
     // Wander IDLE sprite (offset 204..211)
     s.push_str(&format!("    .word {}    @ idle_sprite_ptr (wander IDLE swap)\n", idle_sprite));
     s.push_str(&format!("    .byte {}    @ idle_is_anim\n", idle_is_anim));
-    s.push_str("    .byte 0, 0, 0    @ pad\n");
+    // feet_offset = 5 (the hardcoded draw center-to-feet shift in
+    // pitrex_draw_enemies) minus the smallest min_y across every .vec sprite
+    // referenced by this enemy (idle / walk / state variants — for vanim,
+    // pull the first frame's vec_ref). Applied at spawn and at wander
+    // airborne-landing so area.y can represent the platform top surface.
+    let feet_off = compute_enemy_feet_offset(res, vec_min_y);
+    s.push_str(&format!("    .byte {}    @ feet_offset (signed)\n", feet_off));
+    s.push_str("    .byte 0, 0    @ pad\n");
 
     s.push('\n');
     s
