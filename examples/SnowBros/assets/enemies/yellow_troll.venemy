@@ -11,6 +11,21 @@
       "name": "walk",
       "sprite": "assets/animations/yellow_troll_walk.vanim",
       "loop": true
+    },
+    {
+      "name": "snow1",
+      "sprite": "assets/vectors/titchi_snow1.vec",
+      "loop": true
+    },
+    {
+      "name": "snow2",
+      "sprite": "assets/vectors/titchi_snow2.vec",
+      "loop": true
+    },
+    {
+      "name": "ball",
+      "sprite": "assets/vectors/titchi_ball.vec",
+      "loop": true
     }
   ],
   "stats": {
@@ -42,6 +57,42 @@
         "on_event": [
           {
             "event": "onSnowHit",
+            "to": "snow1"
+          }
+        ]
+      },
+      {
+        "name": "snow1",
+        "action": "snow1",
+        "decay_frames": 120,
+        "decay_to": "normal",
+        "on_event": [
+          {
+            "event": "onSnowHit",
+            "to": "snow2"
+          }
+        ]
+      },
+      {
+        "name": "snow2",
+        "action": "snow2",
+        "decay_frames": 180,
+        "decay_to": "snow1",
+        "on_event": [
+          {
+            "event": "onSnowHit",
+            "to": "ball"
+          }
+        ]
+      },
+      {
+        "name": "ball",
+        "action": "ball",
+        "decay_frames": 300,
+        "decay_to": "snow2",
+        "on_event": [
+          {
+            "event": "onKick",
             "to": "normal"
           }
         ]
