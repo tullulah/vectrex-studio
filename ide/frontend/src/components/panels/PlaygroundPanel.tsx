@@ -2333,12 +2333,19 @@ export function PlaygroundPanel() {
                             stroke={color} strokeWidth={1} />
                           <line x1={rightSvg.x} y1={rightSvg.y - 4} x2={rightSvg.x} y2={rightSvg.y + 4}
                             stroke={color} strokeWidth={1} />
-                          {/* Area index label (only when selected) */}
-                          {isSelected && (
-                            <text x={(leftSvg.x + rightSvg.x) / 2} y={leftSvg.y - 3}
-                              fill={color} fontSize="6" fontFamily="monospace"
-                              textAnchor="middle">{ai}</text>
-                          )}
+                          {/* Area index label — always visible so the user can match the
+                              number to the from/to dropdowns in the transition editor. */}
+                          <text x={(leftSvg.x + rightSvg.x) / 2} y={leftSvg.y - 3}
+                            fill={color} fontSize="7" fontFamily="monospace"
+                            fontWeight={isSelected ? 700 : 500}
+                            textAnchor="middle"
+                            style={{ pointerEvents: 'none', paintOrder: 'stroke' }}
+                            stroke="#000" strokeWidth="2.5">{ai}</text>
+                          <text x={(leftSvg.x + rightSvg.x) / 2} y={leftSvg.y - 3}
+                            fill={color} fontSize="7" fontFamily="monospace"
+                            fontWeight={isSelected ? 700 : 500}
+                            textAnchor="middle"
+                            style={{ pointerEvents: 'none' }}>{ai}</text>
                         </g>
                       );
                     })}
@@ -2455,6 +2462,74 @@ export function PlaygroundPanel() {
             {objects.filter(o => o.layer === 'background').map(renderVector)}
             {objects.filter(o => !o.layer || o.layer === 'gameplay').map(renderVector)}
             {objects.filter(o => o.layer === 'foreground').map(renderVector)}
+
+            {/* Standalone render of LEVEL walkable areas + transitions.
+                Always drawn so the designer can see the level pathways and
+                their indices on the canvas while building, even when no
+                inheriting wander enemy is around to draw them. Per-enemy
+                renders draw on top of this, so own-overrides remain visible
+                in orange. Style: subtle blue dashed bars, always-labeled. */}
+            {levelWalkableAreas.length > 0 && (() => {
+              const color = '#88aacc';
+              return (
+                <g key="level_walkable_areas" style={{ pointerEvents: 'none' }}>
+                  {levelWalkableAreas.map((area, ai) => {
+                    const left  = vecToSvg(area.x_min, area.y);
+                    const right = vecToSvg(area.x_max, area.y);
+                    return (
+                      <g key={`lvl_area_${ai}`}>
+                        <line x1={left.x} y1={left.y} x2={right.x} y2={right.y}
+                          stroke={color} strokeWidth={0.8} strokeDasharray="2 2" />
+                        <line x1={left.x} y1={left.y - 4} x2={left.x} y2={left.y + 4}
+                          stroke={color} strokeWidth={1} />
+                        <line x1={right.x} y1={right.y - 4} x2={right.x} y2={right.y + 4}
+                          stroke={color} strokeWidth={1} />
+                        {/* Halo for legibility */}
+                        <text x={(left.x + right.x) / 2} y={left.y - 3}
+                          fontSize="7" fontFamily="monospace" fontWeight={600}
+                          textAnchor="middle" stroke="#000" strokeWidth="2.5"
+                          style={{ paintOrder: 'stroke' }}>{ai}</text>
+                        <text x={(left.x + right.x) / 2} y={left.y - 3}
+                          fill={color} fontSize="7" fontFamily="monospace" fontWeight={600}
+                          textAnchor="middle">{ai}</text>
+                      </g>
+                    );
+                  })}
+                  {levelTransitions.map((t, ti) => {
+                    if (t.from >= levelWalkableAreas.length || t.to >= levelWalkableAreas.length) return null;
+                    const fromArea = levelWalkableAreas[t.from];
+                    const toArea = levelWalkableAreas[t.to];
+                    const fromX = (t as any).from_x ?? (fromArea.x_min + fromArea.x_max) / 2;
+                    const toX   = (t as any).to_x   ?? (toArea.x_min   + toArea.x_max)   / 2;
+                    const fromPt = vecToSvg(fromX, fromArea.y);
+                    const toPt   = vecToSvg(toX,   toArea.y);
+                    const midX = (fromPt.x + toPt.x) / 2;
+                    const midY = (fromPt.y + toPt.y) / 2;
+                    const dxA = toPt.x - fromPt.x;
+                    const dyA = toPt.y - fromPt.y;
+                    const lenA = Math.sqrt(dxA * dxA + dyA * dyA) || 1;
+                    const px = -dyA / lenA * 10;
+                    const py =  dxA / lenA * 10;
+                    const ctlX = midX + px;
+                    const ctlY = midY + py;
+                    const tColor = t.type === 'jump_up' ? '#88ffaa' : '#ff8866';
+                    return (
+                      <g key={`lvl_trans_${ti}`}>
+                        <path d={`M ${fromPt.x} ${fromPt.y} Q ${ctlX} ${ctlY} ${toPt.x} ${toPt.y}`}
+                          stroke={tColor + '99'} strokeWidth={0.6}
+                          strokeDasharray="2 1.5" fill="none" />
+                        <circle cx={toPt.x} cy={toPt.y} r={2} fill={tColor + 'cc'} />
+                        <text x={ctlX} y={ctlY} fontSize="6" fontFamily="monospace"
+                          textAnchor="middle" stroke="#000" strokeWidth="2"
+                          style={{ paintOrder: 'stroke' }}>T{ti}</text>
+                        <text x={ctlX} y={ctlY} fill={tColor} fontSize="6" fontFamily="monospace"
+                          textAnchor="middle">T{ti}</text>
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })()}
 
             {/* Walkable-area draw preview (while the user is dragging in
                 draw-mode for a level area). Painted as a bright cyan bar so
