@@ -518,7 +518,7 @@ impl VPlayLevel {
     }
 
     pub fn compile_to_arm_asm_with_venemy(&self, dims: &HashMap<String, (i32, i32)>, venemy_dir: Option<&Path>) -> String {
-        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new())
+        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new(), &HashMap::new())
     }
 
     pub fn compile_to_arm_asm_with_venemy_and_meshes(
@@ -526,6 +526,7 @@ impl VPlayLevel {
         dims: &HashMap<String, (i32, i32)>,
         venemy_dir: Option<&Path>,
         vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
     ) -> String {
         let mut out = String::new();
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -687,7 +688,13 @@ impl VPlayLevel {
                 // present, use it. Otherwise fall back to the level's. The
                 // same applies to `transitions`. Either field being a non-None
                 // (even empty) on the enemy is treated as an explicit override.
-                let areas = Self::derive_walkable_areas(obj, self.walkable_areas.as_deref());
+                // Effective level areas: self.walkable_areas overrides; otherwise
+                // collect from any placed .vec asset that ships its own areas.
+                let level_areas: Vec<WalkableArea> = match self.walkable_areas.as_deref() {
+                    Some(a) if !a.is_empty() => a.to_vec(),
+                    _ => Self::collect_vec_walkable_areas(&self.layers, vec_walk_areas),
+                };
+                let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
                 // Transitions: explicit override on the enemy → use as-is.
                 // Else explicit override at level → use as-is. Else auto-derive
                 // from the area geometry (immediate neighbors only).
@@ -865,6 +872,30 @@ impl VPlayLevel {
             }
         }
 
+        out
+    }
+
+    /// Collect walkable areas from .vec assets placed in the level. Each
+    /// matching object contributes its asset's `walkable_areas`, translated
+    /// by the object's (x, y). Background and gameplay layers are scanned;
+    /// foreground is excluded since it's typically HUD/overlay.
+    fn collect_vec_walkable_areas(
+        layers: &VPlayLayers,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+    ) -> Vec<WalkableArea> {
+        let mut out = Vec::new();
+        let scan = layers.background.iter().chain(layers.gameplay.iter());
+        for obj in scan {
+            let key = obj.vector_name.to_lowercase();
+            let Some(areas) = vec_walk_areas.get(&key) else { continue };
+            for a in areas {
+                out.push(WalkableArea {
+                    y: a.y.saturating_add(obj.y as i16),
+                    x_min: a.x_min.saturating_add(obj.x as i16),
+                    x_max: a.x_max.saturating_add(obj.x as i16),
+                });
+            }
+        }
         out
     }
 

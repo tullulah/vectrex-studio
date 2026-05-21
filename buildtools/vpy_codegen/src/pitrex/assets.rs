@@ -425,6 +425,15 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
         }
     }
 
+    // Build vec_walk_areas: lowercase vector name → walkable_areas from .vec file.
+    // Inheritance chain at codegen time: .vec → .vplay → .venemy.
+    let mut vec_walk_areas: HashMap<String, Vec<crate::vecres::VecWalkableArea>> = HashMap::new();
+    for (name, res) in &vec_cache {
+        if !res.walkable_areas.is_empty() {
+            vec_walk_areas.insert(name.clone(), res.walkable_areas.clone());
+        }
+    }
+
     // ── Center-override pre-pass ────────────────────────────────────────────
     // Sprites that belong to a vanim group OR a venemy group share a single
     // bounding-box center, so per-frame / per-state geometry shifts no longer
@@ -515,7 +524,7 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     .parent()
                     .and_then(|p| p.parent())
                     .map(|p| p.join("enemies"));
-                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes));
+                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {

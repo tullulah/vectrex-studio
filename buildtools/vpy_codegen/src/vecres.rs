@@ -64,6 +64,24 @@ pub struct VecResource {
     /// the compiler uses this mesh instead of falling back to AABB.
     #[serde(default, rename = "collisionMesh")]
     pub collision_mesh: Option<VecCollisionMesh>,
+    /// Walkable areas defined on the asset itself (e.g. a reusable platform
+    /// vec). Coordinates are RELATIVE to the vec's origin: at level codegen
+    /// time each area is translated by the placed object's (x, y) and added
+    /// to the level's effective area list. Inheritance order is
+    /// .vec → .vplay → .venemy (least to most specific override).
+    #[serde(default, rename = "walkableAreas")]
+    pub walkable_areas: Vec<VecWalkableArea>,
+}
+
+/// A walkable area defined inside a .vec asset, with coordinates relative
+/// to the vec's origin. Each placed instance of the vec contributes its
+/// translated copy to the level's walkable_areas pool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VecWalkableArea {
+    /// Y offset from vec origin (positive = up, matches vec convention).
+    pub y: i16,
+    pub x_min: i16,
+    pub x_max: i16,
 }
 
 fn default_version() -> String {
@@ -236,6 +254,7 @@ impl VecResource {
             center_x: None,
             center_y: None,
             collision_mesh: None,
+            walkable_areas: Vec::new(),
         }
     }
     

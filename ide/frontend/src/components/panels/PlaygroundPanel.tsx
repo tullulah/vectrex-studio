@@ -19,6 +19,10 @@ interface VecVector {
     visible: boolean;
     paths: VecPath[];
   }[];
+  /** Reusable walkable areas baked into the asset. Coordinates are relative
+   *  to the vec's origin and are translated by the placed object's (x, y)
+   *  at level codegen / sim time. Inheritance: .vec → .vplay → .venemy. */
+  walkableAreas?: { y: number; x_min: number; x_max: number }[];
 }
 
 interface CollisionSegment {
@@ -137,6 +141,24 @@ export function PlaygroundPanel() {
   type LevelTransition = { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number };
   const [levelWalkableAreas, setLevelWalkableAreas] = useState<LevelArea[]>([]);
   const [levelTransitions, setLevelTransitions] = useState<LevelTransition[]>([]);
+  /** Collect walkable areas from every placed .vec asset's own `walkableAreas`,
+   *  translated by the object's (x, y). Used as the next fallback below the
+   *  level's own `walkable_areas` and below per-enemy overrides. */
+  const collectVecWalkableAreas = (
+    objs: SceneObject[],
+    vecs: Map<string, VecVector>,
+  ): LevelArea[] => {
+    const out: LevelArea[] = [];
+    for (const o of objs) {
+      if (o.layer === 'foreground') continue;
+      const v = vecs.get(o.vectorName);
+      if (!v?.walkableAreas?.length) continue;
+      for (const a of v.walkableAreas) {
+        out.push({ y: a.y + o.y, x_min: a.x_min + o.x, x_max: a.x_max + o.x });
+      }
+    }
+    return out;
+  };
   /**
    * Mirror of levelres.rs::derive_transitions — for each area in `areas`,
    * emit transitions to its immediate vertical neighbors (X-overlap ≥ 4)
@@ -516,20 +538,22 @@ export function PlaygroundPanel() {
               | { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number }[]
               | undefined;
             const wps = (obj as any).patrolWaypoints as { x: number; y: number }[] | undefined;
-            // Inheritance: explicit on enemy (even empty []) wins; otherwise
-            // fall back to level-wide; finally derive from waypoints.
+            // Inheritance: enemy override > level > .vec-collected > waypoint-derived.
+            const vecCollected = collectVecWalkableAreas(prevObjects, loadedVectors);
             const areas =
               explicit !== undefined
                 ? explicit
                 : levelWalkableAreas.length > 0
                   ? levelWalkableAreas
-                  : wps && wps.length >= 2
-                    ? [{
-                        y: obj.y,
-                        x_min: Math.min(...wps.map(w => w.x)),
-                        x_max: Math.max(...wps.map(w => w.x)),
-                      }]
-                    : [];
+                  : vecCollected.length > 0
+                    ? vecCollected
+                    : wps && wps.length >= 2
+                      ? [{
+                          y: obj.y,
+                          x_min: Math.min(...wps.map(w => w.x)),
+                          x_max: Math.max(...wps.map(w => w.x)),
+                        }]
+                      : [];
             if (areas.length === 0) return obj;
             const transitions = explicitTransitions !== undefined
               ? explicitTransitions
@@ -2423,19 +2447,24 @@ export function PlaygroundPanel() {
                   | { from: number; to: number; type: 'jump_up' | 'drop' }[]
                   | undefined;
                 const inheritsAreas = explicitAreas === undefined;
-                // Inheritance: explicit on enemy (even []) wins, then level, then waypoints.
+                // Inheritance: enemy override > level > .vec-collected > waypoints.
+                const vecCollected = inheritsAreas && levelWalkableAreas.length === 0
+                  ? collectVecWalkableAreas(objects, loadedVectors)
+                  : [];
                 const areas =
                   !inheritsAreas
                     ? explicitAreas!
                     : levelWalkableAreas.length > 0
                       ? levelWalkableAreas
-                      : wps.length > 0
-                        ? [{
-                            y: obj.y,
-                            x_min: Math.min(...wps.map(w => w.x)),
-                            x_max: Math.max(...wps.map(w => w.x)),
-                          }]
-                        : [];
+                      : vecCollected.length > 0
+                        ? vecCollected
+                        : wps.length > 0
+                          ? [{
+                              y: obj.y,
+                              x_min: Math.min(...wps.map(w => w.x)),
+                              x_max: Math.max(...wps.map(w => w.x)),
+                            }]
+                          : [];
                 if (areas.length === 0) return null;
                 const transitions = explicitTransitions !== undefined
                   ? explicitTransitions
@@ -2599,12 +2628,22 @@ export function PlaygroundPanel() {
                 inheriting wander enemy is around to draw them. Per-enemy
                 renders draw on top of this, so own-overrides remain visible
                 in orange. Style: subtle blue dashed bars, always-labeled. */}
-            {levelWalkableAreas.length > 0 && (() => {
-              const color = '#88aacc';
+            {(() => {
+              // Resolve the level's effective areas for display: explicit
+              // level walkable_areas override; else the union collected from
+              // .vec-baked areas of placed objects.
+              const effectiveLevel = levelWalkableAreas.length > 0
+                ? levelWalkableAreas
+                : collectVecWalkableAreas(objects, loadedVectors);
+              const fromVec = levelWalkableAreas.length === 0 && effectiveLevel.length > 0;
+              if (effectiveLevel.length === 0) return null;
+              // Vec-collected areas render in a subtle green so the designer
+              // can tell they came from the .vec assets, not from the level.
+              const color = fromVec ? '#88cc88' : '#88aacc';
               return (
                 <g key="level_walkable_areas">
                 <g style={{ pointerEvents: 'none' }}>
-                  {levelWalkableAreas.map((area, ai) => {
+                  {effectiveLevel.map((area, ai) => {
                     const left  = vecToSvg(area.x_min, area.y);
                     const right = vecToSvg(area.x_max, area.y);
                     return (
@@ -2628,11 +2667,13 @@ export function PlaygroundPanel() {
                   })}
                 </g>
                 {/* Transitions: kept outside the pointer-events:none group so
-                    the takeoff/landing handles can receive mousedown. */}
-                {levelTransitions.map((t, ti) => {
-                    if (t.from >= levelWalkableAreas.length || t.to >= levelWalkableAreas.length) return null;
-                    const fromArea = levelWalkableAreas[t.from];
-                    const toArea = levelWalkableAreas[t.to];
+                    the takeoff/landing handles can receive mousedown. When
+                    the level has no own transitions and no own areas (vec-
+                    collected), derive transitions from the effective areas. */}
+                {(levelTransitions.length > 0 ? levelTransitions : deriveTransitions(effectiveLevel)).map((t, ti) => {
+                    if (t.from >= effectiveLevel.length || t.to >= effectiveLevel.length) return null;
+                    const fromArea = effectiveLevel[t.from];
+                    const toArea = effectiveLevel[t.to];
                     const fromX = (t as any).from_x ?? (fromArea.x_min + fromArea.x_max) / 2;
                     const toX   = (t as any).to_x   ?? (toArea.x_min   + toArea.x_max)   / 2;
                     const fromPt = vecToSvg(fromX, fromArea.y);

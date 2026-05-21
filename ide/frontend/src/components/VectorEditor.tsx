@@ -70,6 +70,10 @@ interface VecResource {
   collisionMesh?: {
     segments: CollisionSegment[];
   };
+  /** Reusable walkable areas (Phase 2 wander AI). Coordinates are relative
+   *  to the vec's origin; the playground / codegen translate them by each
+   *  placed object's (x, y). Inheritance: .vec → .vplay → .venemy. */
+  walkableAreas?: { y: number; x_min: number; x_max: number }[];
 }
 
 interface VectorEditorProps {
@@ -83,7 +87,7 @@ interface VectorEditorProps {
   height?: number;
 }
 
-type Tool = 'select' | 'pen' | 'line' | 'bezier' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background';
+type Tool = 'select' | 'pen' | 'line' | 'bezier' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background' | 'walkarea';
 type ViewMode = 'xy' | 'xz' | 'yz' | '3d';
 
 const defaultResource: VecResource = {
@@ -692,6 +696,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   const [showCollisionMesh, setShowCollisionMesh] = useState(false);
   const [selectedEdge, setSelectedEdge] = useState<{ pathIdx: number; edgeIdx: number } | null>(null);
+  // Walkable-area paint state (active when currentTool === 'walkarea').
+  const walkAreaDrawStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [walkAreaPreview, setWalkAreaPreview] = useState<{ y: number; x_min: number; x_max: number } | null>(null);
 
   // Tracks the mousedown position for bezier anchor drag detection
   const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
@@ -1524,6 +1531,45 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.restore();
     }
 
+    // Draw walkable areas baked into the .vec (Phase 2 wander AI). Cyan
+    // dashed bars with their index, plus the live preview while painting.
+    if (resource.walkableAreas?.length || walkAreaPreview) {
+      ctx.save();
+      ctx.strokeStyle = '#44ffcc';
+      ctx.fillStyle = '#44ffcc';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      (resource.walkableAreas ?? []).forEach((a, idx) => {
+        const left  = resourceToCanvas({ x: a.x_min, y: a.y });
+        const right = resourceToCanvas({ x: a.x_max, y: a.y });
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(left.x,  left.y  - 5); ctx.lineTo(left.x,  left.y  + 5);
+        ctx.moveTo(right.x, right.y - 5); ctx.lineTo(right.x, right.y + 5);
+        ctx.stroke();
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`W${idx}`, (left.x + right.x) / 2, left.y - 6);
+        ctx.setLineDash([4, 3]);
+      });
+      if (walkAreaPreview) {
+        const a = walkAreaPreview;
+        const left  = resourceToCanvas({ x: a.x_min, y: a.y });
+        const right = resourceToCanvas({ x: a.x_max, y: a.y });
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Draw temporary points while drawing
     if (tempPoints.length > 0) {
       ctx.strokeStyle = '#00ffff';
@@ -1824,7 +1870,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview]);
 
   useEffect(() => {
     draw();
@@ -2170,7 +2216,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       setIsDrawing(true);
       return;
     }
-    
+
+    // Walkable-area paint: click-drag horizontally to define a [x_min,x_max] at y.
+    if (currentTool === 'walkarea') {
+      const p = canvasToResource(canvasX, canvasY);
+      walkAreaDrawStartRef.current = { x: Math.round(p.x), y: Math.round(p.y) };
+      setWalkAreaPreview({ y: Math.round(p.y), x_min: Math.round(p.x), x_max: Math.round(p.x) });
+      setIsDrawing(true);
+      return;
+    }
+
     const point = canvasToResource(canvasX, canvasY);
 
     if (currentTool === 'pen') {
@@ -2332,6 +2387,17 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     // Track mouse position for rubber-band preview; redraw if pen is mid-path
     mousePenPosRef.current = { x: canvasX, y: canvasY };
 
+    // Live walkable-area preview while click-dragging.
+    if (currentTool === 'walkarea' && isDrawing && walkAreaDrawStartRef.current) {
+      const p = canvasToResource(canvasX, canvasY);
+      const start = walkAreaDrawStartRef.current;
+      const x_min = Math.round(Math.min(start.x, p.x));
+      const x_max = Math.round(Math.max(start.x, p.x));
+      setWalkAreaPreview({ y: start.y, x_min, x_max });
+      draw();
+      return;
+    }
+
     // Update hovered vertex (highlight nearest vertex within snap radius)
     const prev = hoveredVertexRef.current;
     const nearest = findNearestVertex(canvasX, canvasY);
@@ -2477,6 +2543,18 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     if (currentTool === 'background' && isDrawing && isBackgroundSelected && dragStartRef.current) {
       const nr = { ...resource, backgroundOffset: backgroundOffset };
       updateResource(resource, nr);
+    }
+
+    // Finalise walkable-area paint: commit the preview as a new area on the resource.
+    if (currentTool === 'walkarea' && isDrawing && walkAreaPreview && walkAreaDrawStartRef.current) {
+      const a = walkAreaPreview;
+      if (a.x_max - a.x_min >= 2) {
+        const next = [...(resource.walkableAreas ?? []), { y: a.y, x_min: a.x_min, x_max: a.x_max }];
+        updateResource(resource, { ...resource, walkableAreas: next });
+      }
+      walkAreaDrawStartRef.current = null;
+      setWalkAreaPreview(null);
+      setIsDrawing(false);
     }
 
     // Clear drag state for 3D rotation
@@ -3233,6 +3311,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         title={viewMode === '3d' ? 'Pan/Rotate - drag to rotate 3D view' : 'Pan - drag to move view'}
       >
         {viewMode === '3d' ? '🔄 Rotate' : '✋ Pan'}
+      </button>
+      <button
+        onClick={() => setCurrentTool('walkarea')}
+        style={{
+          padding: '8px 12px',
+          background: currentTool === 'walkarea' ? '#4a8e6a' : '#3a5e4a',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Walkable area — click-drag horizontally to paint a [x_min,x_max] at y (Phase 2 wander AI)"
+      >
+        🛣️ WalkArea
       </button>
       <button
         onClick={() => setCurrentTool('circle')}
@@ -4359,6 +4451,51 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               >x</button>
             </div>
           ))}
+        </div>
+
+        {/* Walkable Areas section: stored on the .vec itself and inherited
+            by every level placement of this asset (.vec → .vplay → .venemy). */}
+        <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '8px' }}>
+          <div style={{ color: '#4fc', marginBottom: '6px', fontSize: '12px', fontWeight: 'bold' }}>
+            Walkable Areas
+          </div>
+          <div style={{ fontSize: '10px', color: '#999', marginBottom: '6px' }}>
+            {resource.walkableAreas?.length
+              ? `${resource.walkableAreas.length} area${resource.walkableAreas.length !== 1 ? 's' : ''} — pick 🛣️ WalkArea to add more`
+              : 'No areas — pick 🛣️ WalkArea and drag horizontally to paint'}
+          </div>
+          {(resource.walkableAreas ?? []).map((a, idx) => (
+            <div key={idx} style={{
+              fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
+              marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
+            }}>
+              <span style={{ flex: 1 }}>
+                W{idx}: y={a.y}, x=[{a.x_min},{a.x_max}]
+              </span>
+              <button
+                onClick={() => {
+                  const next = (resource.walkableAreas ?? []).slice();
+                  next.splice(idx, 1);
+                  updateResource(resource, { ...resource, walkableAreas: next });
+                }}
+                style={{
+                  padding: '1px 4px', background: 'transparent',
+                  border: '1px solid #666', color: '#f88', borderRadius: '2px',
+                  cursor: 'pointer', fontSize: '9px',
+                }}
+              >x</button>
+            </div>
+          ))}
+          {(resource.walkableAreas?.length ?? 0) > 0 && (
+            <button
+              onClick={() => updateResource(resource, { ...resource, walkableAreas: [] })}
+              style={{
+                marginTop: '6px', padding: '4px 8px', background: '#4a2a2a',
+                border: '1px solid #8a4a4a', color: '#faa', borderRadius: '3px',
+                cursor: 'pointer', fontSize: '10px',
+              }}
+            >Clear all</button>
+          )}
         </div>
 
         <div style={{ fontSize: '11px', color: '#888' }}>
