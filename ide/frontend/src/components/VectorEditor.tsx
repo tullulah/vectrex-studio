@@ -4464,28 +4464,44 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               ? `${resource.walkableAreas.length} area${resource.walkableAreas.length !== 1 ? 's' : ''} — pick 🛣️ WalkArea to add more`
               : 'No areas — pick 🛣️ WalkArea and drag horizontally to paint'}
           </div>
-          {(resource.walkableAreas ?? []).map((a, idx) => (
-            <div key={idx} style={{
-              fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
-              marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
-            }}>
-              <span style={{ flex: 1 }}>
-                W{idx}: y={a.y}, x=[{a.x_min},{a.x_max}]
-              </span>
-              <button
-                onClick={() => {
-                  const next = (resource.walkableAreas ?? []).slice();
-                  next.splice(idx, 1);
-                  updateResource(resource, { ...resource, walkableAreas: next });
-                }}
-                style={{
-                  padding: '1px 4px', background: 'transparent',
-                  border: '1px solid #666', color: '#f88', borderRadius: '2px',
-                  cursor: 'pointer', fontSize: '9px',
-                }}
-              >x</button>
-            </div>
-          ))}
+          {(resource.walkableAreas ?? []).map((a, idx) => {
+            const patch = (k: 'y' | 'x_min' | 'x_max', v: number) => {
+              const next = (resource.walkableAreas ?? []).slice();
+              next[idx] = { ...next[idx], [k]: v };
+              updateResource(resource, { ...resource, walkableAreas: next });
+            };
+            const inputStyle = {
+              width: 38, padding: '1px 3px', fontSize: '9px',
+              background: '#222', color: '#4fc', border: '1px solid #4a4',
+              borderRadius: '2px', fontFamily: 'monospace',
+            } as React.CSSProperties;
+            return (
+              <div key={idx} style={{
+                fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
+                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px'
+              }}>
+                <span style={{ width: 18 }}>W{idx}</span>
+                <span title="Vertical position: usually the platform's top surface; nudge until enemies sit correctly">y</span>
+                <input type="number" value={a.y} onChange={(e) => patch('y', parseInt(e.target.value) || 0)} style={inputStyle} />
+                <span>x</span>
+                <input type="number" value={a.x_min} onChange={(e) => patch('x_min', parseInt(e.target.value) || 0)} style={inputStyle} />
+                <span>..</span>
+                <input type="number" value={a.x_max} onChange={(e) => patch('x_max', parseInt(e.target.value) || 0)} style={inputStyle} />
+                <button
+                  onClick={() => {
+                    const next = (resource.walkableAreas ?? []).slice();
+                    next.splice(idx, 1);
+                    updateResource(resource, { ...resource, walkableAreas: next });
+                  }}
+                  style={{
+                    padding: '1px 4px', background: 'transparent',
+                    border: '1px solid #666', color: '#f88', borderRadius: '2px',
+                    cursor: 'pointer', fontSize: '9px',
+                  }}
+                >x</button>
+              </div>
+            );
+          })}
           {(resource.walkableAreas?.length ?? 0) > 0 && (
             <button
               onClick={() => updateResource(resource, { ...resource, walkableAreas: [] })}
