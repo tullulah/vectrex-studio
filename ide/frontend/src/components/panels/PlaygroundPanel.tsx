@@ -79,12 +79,13 @@ export function PlaygroundPanel() {
   const [editingVelocity, setEditingVelocity] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const enemyPatrolIdxRef = useRef<Map<string, number>>(new Map());
-  // Wander AI sub-state: 'walk' / 'idle' / 'air' + current area, direction, transition target.
+  // Wander AI sub-state: 'walk' / 'idle' / 'to_takeoff' / 'air' + current area, direction, transition target.
   type WanderState = {
-    sub: 'walk' | 'idle' | 'air';
+    sub: 'walk' | 'idle' | 'to_takeoff' | 'air';
     timer: number;
     areaIdx?: number;
     dir?: 1 | -1;
+    fromX?: number;
     targetY?: number;
     targetX?: number;
     targetAreaIdx?: number;
@@ -435,9 +436,27 @@ export function PlaygroundPanel() {
               | undefined) ?? [];
             const SPEED = (obj as any).speed ?? 1.0;
             const st = enemyWanderStateRef.current.get(obj.id) as
-              | { sub: 'walk' | 'idle' | 'air'; timer: number; areaIdx?: number; dir?: 1 | -1; targetY?: number; targetX?: number; targetAreaIdx?: number }
+              | WanderState
               | undefined
               ?? { sub: 'walk' as const, timer: 0, areaIdx: 0, dir: 1 };
+
+            // WALK_TO_TAKEOFF: walk X-only toward fromX, then transition into AIRBORNE.
+            if (st.sub === 'to_takeoff' && st.fromX !== undefined) {
+              const dx = st.fromX - obj.x;
+              const absDx = Math.abs(dx);
+              const dir: 1 | -1 = dx >= 0 ? 1 : -1;
+              if (absDx <= SPEED) {
+                // Arrived — switch to AIRBORNE
+                enemyWanderStateRef.current.set(obj.id, {
+                  ...st,
+                  sub: 'air',
+                  timer: 0,
+                  dir,
+                });
+                return { ...obj, x: st.fromX, _facingRight: dir === 1 };
+              }
+              return { ...obj, x: obj.x + dir * SPEED, _facingRight: dir === 1 };
+            }
 
             // AIRBORNE: move y toward target_y at 2u/frame; on arrival snap x and walk.
             if (st.sub === 'air' && st.targetY !== undefined) {
@@ -470,16 +489,18 @@ export function PlaygroundPanel() {
                   const dstArea = areas[t.to];
                   const fromX = (t as any).from_x ?? (srcArea.x_min + srcArea.x_max) / 2;
                   const toX   = (t as any).to_x   ?? (dstArea.x_min + dstArea.x_max) / 2;
+                  // Enter WALK_TO_TAKEOFF — the enemy will walk to fromX
+                  // before the actual jump. No snap here.
                   enemyWanderStateRef.current.set(obj.id, {
-                    sub: 'air', timer: 0,
+                    sub: 'to_takeoff', timer: 0,
                     areaIdx: curArea,
                     targetAreaIdx: t.to,
                     targetY: dstArea.y,
                     targetX: toX,
+                    fromX,
                     dir: st.dir ?? 1,
                   });
-                  // Snap enemy.x to from_x — matches the ARM "takeoff" snap.
-                  return { ...obj, x: fromX };
+                  return obj;
                 }
               }
               // No transition picked: back to WALK on same area.

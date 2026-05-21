@@ -3269,6 +3269,8 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    cmp     r7, #0\n");
     s.push_str("    beq     .Lpue_skip\n");
     s.push_str("    ldrb    r6, [r5, #10]       @ sub_state\n");
+    s.push_str("    cmp     r6, #3\n");
+    s.push_str("    beq     .Lpue_w_to_takeoff  @ walking toward from_x\n");
     s.push_str("    cmp     r6, #2\n");
     s.push_str("    beq     .Lpue_w_air\n");
     s.push_str("    cmp     r6, #1\n");
@@ -3370,29 +3372,69 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    add     r7, r7, #1\n");
     s.push_str("    b       .Lpue_w_pick\n");
     s.push_str(".Lpue_w_pick_hit:\n");
-    // r7 = transition index. Load trans[r7] fields and commit.
+    // r7 = transition index. Load trans[r7] fields and commit. Don't snap
+    // x yet — the enemy walks to from_x first (sub_state WALK_TO_TAKEOFF).
     s.push_str("    lsl     r1, r7, #3          @ trans[r7] offset (8 bytes)\n");
     s.push_str("    add     r3, r11, r1         @ &trans[r7]\n");
     s.push_str("    ldrb    r2, [r3, #1]        @ to (target area idx)\n");
     s.push_str("    strb    r2, [r5, #11]       @ current_area_idx = target\n");
     s.push_str("    ldrsh   r1, [r3, #4]        @ from_x\n");
-    s.push_str("    strh    r1, [r5, #4]        @ snap enemy.x to takeoff X\n");
+    s.push_str("    strh    r1, [r5, #8]        @ stash from_x in pool+8..9 (WALK_TO_TAKEOFF target)\n");
     s.push_str("    ldrsh   r1, [r3, #6]        @ to_x\n");
     s.push_str("    strh    r1, [r5, #14]       @ stash target_x in pool+14..15\n");
-    // Compute target_y = areas[target].y (areas at areas_ptr + 8, stride 8)
-    s.push_str("    lsl     r1, r2, #3          @ target_area_idx * 8\n");
-    s.push_str("    add     r1, r1, #8\n");
-    s.push_str("    add     r1, r8, r1          @ &area[target]\n");
-    s.push_str("    ldrsh   r3, [r1]            @ target_y\n");
-    s.push_str("    strh    r3, [r5, #8]        @ stash target_y in pool+8..9\n");
-    s.push_str("    mov     r0, #2\n");
-    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
+    s.push_str("    mov     r0, #3\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK_TO_TAKEOFF\n");
     s.push_str("    mov     r12, #1\n");
     s.push_str("    b       .Lpue_skip\n");
     s.push_str(".Lpue_w_to_walk:\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    mov     r12, #1\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── WALK_TO_TAKEOFF: walk X-only toward from_x (stashed at pool+8..9).
+    // When enemy.x reaches from_x, transition into AIRBORNE: compute target_y
+    // from areas[current_area_idx].y (current_area_idx was already set to the
+    // transition's target at commit time) and overwrite pool+8..9 with it.
+    s.push_str(".Lpue_w_to_takeoff:\n");
+    s.push_str("    ldrsh   r8, [r5, #8]        @ from_x\n");
+    s.push_str("    ldrsh   r10, [r5, #4]       @ x\n");
+    s.push_str("    sub     r6, r8, r10\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq     .Lpue_w_tt_reached\n");
+    s.push_str("    bgt     .Lpue_w_tt_right\n");
+    // dx < 0: walk left
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #26]       @ dir = left\n");
+    s.push_str("    sub     r10, r10, r12       @ x -= SPEED\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r10, r8             @ clamp to from_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    b       .Lpue_w_tt_reached\n");
+    s.push_str(".Lpue_w_tt_right:\n");
+    s.push_str("    mov     r0, #1\n");
+    s.push_str("    strb    r0, [r5, #26]       @ dir = right\n");
+    s.push_str("    add     r10, r10, r12       @ x += SPEED\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r10, r8             @ clamp to from_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    bne     .Lpue_skip\n");
+    // Arrived at from_x — switch to AIRBORNE
+    s.push_str(".Lpue_w_tt_reached:\n");
+    s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
+    s.push_str("    ldrb    r6, [r5, #11]       @ current_area_idx (= target)\n");
+    s.push_str("    lsl     r6, r6, #3\n");
+    s.push_str("    add     r8, r8, r6\n");
+    s.push_str("    add     r8, r8, #8          @ &area[target]\n");
+    s.push_str("    ldrsh   r0, [r8]            @ target_y\n");
+    s.push_str("    strh    r0, [r5, #8]        @ overwrite pool+8..9 with target_y\n");
+    s.push_str("    mov     r0, #2\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = AIRBORNE\n");
     s.push_str("    b       .Lpue_skip\n");
 
     // ── AIRBORNE: linear interpolation toward target_y (pool+8..9). Y moves
