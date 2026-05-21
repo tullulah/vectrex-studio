@@ -2584,7 +2584,8 @@ export function PlaygroundPanel() {
             {levelWalkableAreas.length > 0 && (() => {
               const color = '#88aacc';
               return (
-                <g key="level_walkable_areas" style={{ pointerEvents: 'none' }}>
+                <g key="level_walkable_areas">
+                <g style={{ pointerEvents: 'none' }}>
                   {levelWalkableAreas.map((area, ai) => {
                     const left  = vecToSvg(area.x_min, area.y);
                     const right = vecToSvg(area.x_max, area.y);
@@ -2607,7 +2608,10 @@ export function PlaygroundPanel() {
                       </g>
                     );
                   })}
-                  {levelTransitions.map((t, ti) => {
+                </g>
+                {/* Transitions: kept outside the pointer-events:none group so
+                    the takeoff/landing handles can receive mousedown. */}
+                {levelTransitions.map((t, ti) => {
                     if (t.from >= levelWalkableAreas.length || t.to >= levelWalkableAreas.length) return null;
                     const fromArea = levelWalkableAreas[t.from];
                     const toArea = levelWalkableAreas[t.to];
