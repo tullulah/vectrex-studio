@@ -114,6 +114,5 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
-    "afterSign": "scripts/afterSign.js"
   }
 }
