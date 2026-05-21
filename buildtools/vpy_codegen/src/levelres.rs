@@ -32,6 +32,14 @@ pub struct VPlayLevel {
     /// Editor metadata (groundBottomOffset, screen backgrounds, etc.)
     #[serde(default, rename = "_editorMeta")]
     pub editor_meta: VPlayEditorMeta,
+    /// Level-wide walkable areas. Enemies whose own `walkable_areas`
+    /// is None inherit this list at codegen time.
+    #[serde(default)]
+    pub walkable_areas: Option<Vec<WalkableArea>>,
+    /// Level-wide transitions between walkable areas. Same inheritance
+    /// semantics as `walkable_areas`.
+    #[serde(default)]
+    pub transitions: Option<Vec<AreaTransition>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -675,8 +683,16 @@ impl VPlayLevel {
 
                 // areas_ptr (Phase 2): pointer to per-enemy walkable-areas table,
                 // or 0 if no areas defined.
-                let areas = Self::derive_walkable_areas(obj);
-                let trans = obj.transitions.as_deref().unwrap_or(&[]);
+                // Inheritance: if the enemy has its own `walkable_areas` field
+                // present, use it. Otherwise fall back to the level's. The
+                // same applies to `transitions`. Either field being a non-None
+                // (even empty) on the enemy is treated as an explicit override.
+                let areas = Self::derive_walkable_areas(obj, self.walkable_areas.as_deref());
+                let trans: &[AreaTransition] = if let Some(ref t) = obj.transitions {
+                    t.as_slice()
+                } else {
+                    self.transitions.as_deref().unwrap_or(&[])
+                };
                 if !areas.is_empty() {
                     let alabel = format!("_{name}_ENEMY{idx}_AREAS");
                     out.push_str(&format!("    .word {alabel}   @ areas_ptr\n"));
@@ -727,13 +743,21 @@ impl VPlayLevel {
         out
     }
 
-    /// Compute the walkable areas for an enemy. If explicit `walkable_areas`
-    /// are provided in the .vplay, return them as-is. Otherwise derive a
-    /// single area from the patrol waypoints' X-range at the spawn Y.
-    fn derive_walkable_areas(obj: &VPlayObject) -> Vec<WalkableArea> {
+    /// Compute the walkable areas for an enemy with this precedence:
+    ///   1. Enemy's own `walkable_areas` (if present, even if empty list).
+    ///   2. Level-wide `walkable_areas` (when the enemy field is None).
+    ///   3. Single area derived from the patrol waypoints' X-range at spawn Y.
+    fn derive_walkable_areas(
+        obj: &VPlayObject,
+        level_areas: Option<&[WalkableArea]>,
+    ) -> Vec<WalkableArea> {
         if let Some(ref explicit) = obj.walkable_areas {
-            if !explicit.is_empty() {
-                return explicit.clone();
+            // Even an empty list is an explicit override (means "no areas").
+            return explicit.clone();
+        }
+        if let Some(level) = level_areas {
+            if !level.is_empty() {
+                return level.to_vec();
             }
         }
         let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);

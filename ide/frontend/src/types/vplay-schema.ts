@@ -218,10 +218,17 @@ export interface VPlayScrollLimits {
 export interface VPlayLevel {
   version: string;         // "2.0"
   type: 'level';           // File type identifier
-  
+
   metadata: VPlayMetadata;
   worldBounds: VPlayWorldBounds;
-  
+
+  /** Level-wide walkable areas. Enemies whose own `walkable_areas` is absent
+   *  (undefined / missing) inherit these. Set on an enemy to override. */
+  walkable_areas?: WalkableArea[];
+  /** Level-wide transitions between walkable areas. Inheritance mirrors
+   *  walkable_areas: absent on enemy → uses these. */
+  transitions?: AreaTransition[];
+
   // New structure: organized by layers
   layers?: VPlayLayers;
   

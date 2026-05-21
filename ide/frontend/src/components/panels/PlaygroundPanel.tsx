@@ -121,6 +121,13 @@ export function PlaygroundPanel() {
   >(null);
   const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number }[]>([]);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
+  // Level-wide walkable areas + transitions. Enemies whose own `walkable_areas`
+  // is `undefined` inherit these at codegen time (and at preview time via the
+  // JS sim). An enemy that defines its own (even an empty list) overrides.
+  type LevelArea = { y: number; x_min: number; x_max: number };
+  type LevelTransition = { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number };
+  const [levelWalkableAreas, setLevelWalkableAreas] = useState<LevelArea[]>([]);
+  const [levelTransitions, setLevelTransitions] = useState<LevelTransition[]>([]);
   const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
   const pendingScrollRef = useRef<{ top: number; left: number } | null>(null);
 
@@ -418,22 +425,28 @@ export function PlaygroundPanel() {
             const explicit = (obj as any).walkable_areas as
               | { y: number; x_min: number; x_max: number }[]
               | undefined;
-            const wps = (obj as any).patrolWaypoints as { x: number; y: number }[] | undefined;
-            // Build the effective area list (mirrors levelres derive_walkable_areas).
-            const areas =
-              explicit && explicit.length > 0
-                ? explicit
-                : wps && wps.length >= 2
-                  ? [{
-                      y: obj.y,
-                      x_min: Math.min(...wps.map(w => w.x)),
-                      x_max: Math.max(...wps.map(w => w.x)),
-                    }]
-                  : [];
-            if (areas.length === 0) return obj;
-            const transitions = ((obj as any).transitions as
+            const explicitTransitions = (obj as any).transitions as
               | { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number }[]
-              | undefined) ?? [];
+              | undefined;
+            const wps = (obj as any).patrolWaypoints as { x: number; y: number }[] | undefined;
+            // Inheritance: explicit on enemy (even empty []) wins; otherwise
+            // fall back to level-wide; finally derive from waypoints.
+            const areas =
+              explicit !== undefined
+                ? explicit
+                : levelWalkableAreas.length > 0
+                  ? levelWalkableAreas
+                  : wps && wps.length >= 2
+                    ? [{
+                        y: obj.y,
+                        x_min: Math.min(...wps.map(w => w.x)),
+                        x_max: Math.max(...wps.map(w => w.x)),
+                      }]
+                    : [];
+            if (areas.length === 0) return obj;
+            const transitions = explicitTransitions !== undefined
+              ? explicitTransitions
+              : levelTransitions;
             const SPEED = (obj as any).speed ?? 1.0;
             const st = enemyWanderStateRef.current.get(obj.id) as
               | WanderState
@@ -712,6 +725,10 @@ export function PlaygroundPanel() {
           yMin: worldYMin,
           yMax: worldYMax,
         },
+        // Level-wide walkable areas + transitions: only persisted when non-empty
+        // so old levels round-trip unchanged.
+        ...(levelWalkableAreas.length > 0 ? { walkable_areas: levelWalkableAreas } : {}),
+        ...(levelTransitions.length > 0 ? { transitions: levelTransitions } : {}),
         layers: {
           background: objects.filter(obj => obj.layer === 'background').map(obj => ({
             ...obj,
@@ -842,6 +859,9 @@ export function PlaygroundPanel() {
       setHotspots(sceneData.hotspots || []);
       setScrollLimits(sceneData.scrollLimits || {});
       setScreenBackgrounds((sceneData._editorMeta?.screenBackgrounds) || []);
+      // Level-wide walkable areas / transitions (Phase 2 inheritance source).
+      setLevelWalkableAreas((sceneData as any).walkable_areas ?? []);
+      setLevelTransitions((sceneData as any).transitions ?? []);
       if (sceneData._editorMeta?.groundBottomOffset !== undefined) {
         setGroundBottomOffset(sceneData._editorMeta.groundBottomOffset);
       }
@@ -1900,6 +1920,8 @@ export function PlaygroundPanel() {
             setScrollLimits({});
             setSelectedLimit(null);
             setScreenBackgrounds([]);
+            setLevelWalkableAreas([]);
+            setLevelTransitions([]);
           }}
           style={{
             padding: '4px 12px',
@@ -2211,31 +2233,44 @@ export function PlaygroundPanel() {
                 const explicitAreas = (obj as any).walkable_areas as
                   | { y: number; x_min: number; x_max: number }[]
                   | undefined;
-                const areas =
-                  explicitAreas && explicitAreas.length > 0
-                    ? explicitAreas
-                    : wps.length > 0
-                      ? [{
-                          y: obj.y,
-                          x_min: Math.min(...wps.map(w => w.x)),
-                          x_max: Math.max(...wps.map(w => w.x)),
-                        }]
-                      : [];
-                if (areas.length === 0) return null;
-                const transitions = ((obj as any).transitions as
+                const explicitTransitions = (obj as any).transitions as
                   | { from: number; to: number; type: 'jump_up' | 'drop' }[]
-                  | undefined) ?? [];
-                const color = isSelected ? '#ffaa44' : '#ffaa4488';
+                  | undefined;
+                const inheritsAreas = explicitAreas === undefined;
+                // Inheritance: explicit on enemy (even []) wins, then level, then waypoints.
+                const areas =
+                  !inheritsAreas
+                    ? explicitAreas!
+                    : levelWalkableAreas.length > 0
+                      ? levelWalkableAreas
+                      : wps.length > 0
+                        ? [{
+                            y: obj.y,
+                            x_min: Math.min(...wps.map(w => w.x)),
+                            x_max: Math.max(...wps.map(w => w.x)),
+                          }]
+                        : [];
+                if (areas.length === 0) return null;
+                const transitions = explicitTransitions !== undefined
+                  ? explicitTransitions
+                  : levelTransitions;
+                // Inherited areas render dimmer + dashed to signal they
+                // come from the level (not editable from the enemy panel).
+                const color = isSelected
+                  ? (inheritsAreas ? '#88aacc' : '#ffaa44')
+                  : (inheritsAreas ? '#88aacc44' : '#ffaa4488');
+                const dashed = inheritsAreas;
                 return (
                   <g key={`area_${obj.id}`}>
                     {/* Walkable-area bars */}
                     {areas.map((area, ai) => {
                       const leftSvg  = vecToSvg(area.x_min, area.y);
                       const rightSvg = vecToSvg(area.x_max, area.y);
+                      const strokeDashAttr = dashed ? { strokeDasharray: '2 2' } : {};
                       return (
                         <g key={`area_${ai}`}>
                           <line x1={leftSvg.x} y1={leftSvg.y} x2={rightSvg.x} y2={rightSvg.y}
-                            stroke={color} strokeWidth={isSelected ? 1.5 : 1} />
+                            stroke={color} strokeWidth={isSelected ? 1.5 : 1} {...strokeDashAttr} />
                           <line x1={leftSvg.x} y1={leftSvg.y - 4} x2={leftSvg.x} y2={leftSvg.y + 4}
                             stroke={color} strokeWidth={1} />
                           <line x1={rightSvg.x} y1={rightSvg.y - 4} x2={rightSvg.x} y2={rightSvg.y + 4}
@@ -3019,105 +3054,174 @@ export function PlaygroundPanel() {
 
                         {/* ── Wander: walkable_areas + transitions (Phase 2) ── */}
                         {obj.aiType === 'wander' && (() => {
-                          const areas = ((obj as any).walkable_areas as { y: number; x_min: number; x_max: number }[] | undefined) ?? [];
-                          const transitions = ((obj as any).transitions as { from: number; to: number; type: 'jump_up' | 'drop' }[] | undefined) ?? [];
+                          const ownAreas = (obj as any).walkable_areas as { y: number; x_min: number; x_max: number }[] | undefined;
+                          const ownTransitions = (obj as any).transitions as { from: number; to: number; type: 'jump_up' | 'drop'; from_x?: number; to_x?: number }[] | undefined;
+                          // Inherits from level when own field is undefined.
+                          const inheritsAreas = ownAreas === undefined;
+                          const inheritsTransitions = ownTransitions === undefined;
+                          const areas = inheritsAreas ? levelWalkableAreas : ownAreas!;
+                          const transitions = inheritsTransitions ? levelTransitions : ownTransitions!;
                           const updateAreas = (next: typeof areas) =>
                             setObjects(objects.map(o => o.id === selectedId ? ({ ...o, walkable_areas: next } as any) : o));
                           const updateTransitions = (next: typeof transitions) =>
                             setObjects(objects.map(o => o.id === selectedId ? ({ ...o, transitions: next } as any) : o));
+                          // Convert from inherit → own (copy current resolved list).
+                          const overrideAreas = () => updateAreas([...areas]);
+                          const overrideTransitions = () => updateTransitions([...transitions]);
+                          // Convert from own → inherit (delete field).
+                          const resetAreas = () =>
+                            setObjects(objects.map(o => {
+                              if (o.id !== selectedId) return o;
+                              const { walkable_areas: _wa, ...rest } = o as any;
+                              return rest;
+                            }));
+                          const resetTransitions = () =>
+                            setObjects(objects.map(o => {
+                              if (o.id !== selectedId) return o;
+                              const { transitions: _t, ...rest } = o as any;
+                              return rest;
+                            }));
                           return (
                             <>
                               <div style={{ borderTop: '1px solid #333', marginTop: 8, paddingTop: 6 }}>
-                                <div style={{ fontSize: '10px', color: '#ffaa44', marginBottom: 4 }}>
+                                <div style={{ fontSize: '10px', color: inheritsAreas ? '#88aacc' : '#ffaa44', marginBottom: 4 }}>
                                   Walkable areas: {areas.length}
-                                  <span
-                                    onClick={() => {
-                                      // Seed: derive a sensible default near the enemy
-                                      const wps = obj.patrolWaypoints ?? [];
-                                      const xMin = wps.length > 0 ? Math.min(...wps.map(w => w.x)) : obj.x - 20;
-                                      const xMax = wps.length > 0 ? Math.max(...wps.map(w => w.x)) : obj.x + 20;
-                                      updateAreas([...areas, { y: obj.y, x_min: xMin, x_max: xMax }]);
-                                    }}
-                                    style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
-                                  >
-                                    + add area
-                                  </span>
+                                  {inheritsAreas && (
+                                    <span style={{ color: '#88aacc', marginLeft: 6, fontStyle: 'italic' }}>(from level)</span>
+                                  )}
+                                  {inheritsAreas ? (
+                                    <span
+                                      onClick={overrideAreas}
+                                      title="Copy the level areas into this enemy and let you customize them."
+                                      style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                                    >
+                                      override
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span
+                                        onClick={() => {
+                                          // Seed: derive a sensible default near the enemy
+                                          const wps = obj.patrolWaypoints ?? [];
+                                          const xMin = wps.length > 0 ? Math.min(...wps.map(w => w.x)) : obj.x - 20;
+                                          const xMax = wps.length > 0 ? Math.max(...wps.map(w => w.x)) : obj.x + 20;
+                                          updateAreas([...areas, { y: obj.y, x_min: xMin, x_max: xMax }]);
+                                        }}
+                                        style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                                      >
+                                        + add area
+                                      </span>
+                                      <span
+                                        onClick={resetAreas}
+                                        title="Delete this enemy's areas and inherit from the level again."
+                                        style={{ color: '#88aacc', marginLeft: 8, cursor: 'pointer' }}
+                                      >
+                                        reset → level
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
                                 {areas.map((a, ai) => (
-                                  <div key={ai} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                                  <div key={ai} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px', opacity: inheritsAreas ? 0.6 : 1 }}>
                                     <span style={{ color: '#888', width: 18 }}>#{ai}</span>
                                     <span style={{ color: '#666' }}>y</span>
-                                    <input type="number" value={a.y}
+                                    <input type="number" value={a.y} disabled={inheritsAreas}
                                       onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
                                         const next = [...areas]; next[ai] = { ...next[ai], y: v }; updateAreas(next); }}
                                       style={{ width: 50, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
                                     <span style={{ color: '#666' }}>x</span>
-                                    <input type="number" value={a.x_min}
+                                    <input type="number" value={a.x_min} disabled={inheritsAreas}
                                       onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
                                         const next = [...areas]; next[ai] = { ...next[ai], x_min: v }; updateAreas(next); }}
                                       title="x_min"
                                       style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
                                     <span style={{ color: '#666' }}>..</span>
-                                    <input type="number" value={a.x_max}
+                                    <input type="number" value={a.x_max} disabled={inheritsAreas}
                                       onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
                                         const next = [...areas]; next[ai] = { ...next[ai], x_max: v }; updateAreas(next); }}
                                       title="x_max"
                                       style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
-                                    <button
-                                      onClick={() => {
-                                        const next = areas.filter((_, i) => i !== ai);
-                                        updateAreas(next);
-                                        // Drop transitions referencing the removed area; reindex the rest.
-                                        updateTransitions(transitions
-                                          .filter(t => t.from !== ai && t.to !== ai)
-                                          .map(t => ({
-                                            ...t,
-                                            from: t.from > ai ? t.from - 1 : t.from,
-                                            to:   t.to   > ai ? t.to   - 1 : t.to,
-                                          })));
-                                      }}
-                                      title="Remove area"
-                                      style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
-                                    >×</button>
+                                    {!inheritsAreas && (
+                                      <button
+                                        onClick={() => {
+                                          const next = areas.filter((_, i) => i !== ai);
+                                          updateAreas(next);
+                                          // Drop transitions referencing the removed area; reindex the rest.
+                                          updateTransitions(transitions
+                                            .filter(t => t.from !== ai && t.to !== ai)
+                                            .map(t => ({
+                                              ...t,
+                                              from: t.from > ai ? t.from - 1 : t.from,
+                                              to:   t.to   > ai ? t.to   - 1 : t.to,
+                                            })));
+                                        }}
+                                        title="Remove area"
+                                        style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                      >×</button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
                               {areas.length >= 2 && (
                                 <div style={{ borderTop: '1px solid #333', marginTop: 6, paddingTop: 6 }}>
-                                  <div style={{ fontSize: '10px', color: '#ffaa44', marginBottom: 4 }}>
+                                  <div style={{ fontSize: '10px', color: inheritsTransitions ? '#88aacc' : '#ffaa44', marginBottom: 4 }}>
                                     Transitions: {transitions.length}
-                                    <span
-                                      onClick={() => updateTransitions([...transitions, { from: 0, to: 1, type: 'jump_up' as const }])}
-                                      style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
-                                    >
-                                      + add transition
-                                    </span>
+                                    {inheritsTransitions && (
+                                      <span style={{ color: '#88aacc', marginLeft: 6, fontStyle: 'italic' }}>(from level)</span>
+                                    )}
+                                    {inheritsTransitions ? (
+                                      <span
+                                        onClick={overrideTransitions}
+                                        title="Copy the level transitions into this enemy."
+                                        style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                                      >
+                                        override
+                                      </span>
+                                    ) : (
+                                      <>
+                                        <span
+                                          onClick={() => updateTransitions([...transitions, { from: 0, to: 1, type: 'jump_up' as const }])}
+                                          style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                                        >
+                                          + add transition
+                                        </span>
+                                        <span
+                                          onClick={resetTransitions}
+                                          title="Delete this enemy's transitions and inherit from the level again."
+                                          style={{ color: '#88aacc', marginLeft: 8, cursor: 'pointer' }}
+                                        >
+                                          reset → level
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
                                   {transitions.map((t, ti) => (
-                                    <div key={ti} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                                    <div key={ti} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px', opacity: inheritsTransitions ? 0.6 : 1 }}>
                                       <span style={{ color: '#888', width: 18 }}>#{ti}</span>
-                                      <select value={t.from}
+                                      <select value={t.from} disabled={inheritsTransitions}
                                         onChange={e => { const next = [...transitions]; next[ti] = { ...next[ti], from: parseInt(e.target.value, 10) }; updateTransitions(next); }}
                                         style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
                                         {areas.map((_, ai) => <option key={ai} value={ai}>{ai}</option>)}
                                       </select>
                                       <span style={{ color: '#666' }}>→</span>
-                                      <select value={t.to}
+                                      <select value={t.to} disabled={inheritsTransitions}
                                         onChange={e => { const next = [...transitions]; next[ti] = { ...next[ti], to: parseInt(e.target.value, 10) }; updateTransitions(next); }}
                                         style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
                                         {areas.map((_, ai) => <option key={ai} value={ai}>{ai}</option>)}
                                       </select>
-                                      <select value={t.type}
+                                      <select value={t.type} disabled={inheritsTransitions}
                                         onChange={e => { const next = [...transitions]; next[ti] = { ...next[ti], type: e.target.value as 'jump_up' | 'drop' }; updateTransitions(next); }}
                                         style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
                                         <option value="jump_up">jump_up</option>
                                         <option value="drop">drop</option>
                                       </select>
-                                      <button
-                                        onClick={() => updateTransitions(transitions.filter((_, i) => i !== ti))}
-                                        title="Remove"
-                                        style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
-                                      >×</button>
+                                      {!inheritsTransitions && (
+                                        <button
+                                          onClick={() => updateTransitions(transitions.filter((_, i) => i !== ti))}
+                                          title="Remove"
+                                          style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                        >×</button>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -3151,8 +3255,104 @@ export function PlaygroundPanel() {
             </div>
           ) : (
             <div>
-              <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic', marginBottom: heightScreens > 1 ? '12px' : '0' }}>
+              <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic', marginBottom: '12px' }}>
                 No object selected
+              </div>
+              {/* ── Level-wide walkable areas + transitions ────────────────────── */}
+              <div>
+                <div style={{ fontSize: '11px', color: '#88aacc', fontWeight: 600, borderTop: '1px solid #3e3e3e', paddingTop: '10px', marginBottom: '4px' }}>
+                  LEVEL WALKABLE AREAS
+                </div>
+                <div style={{ fontSize: '10px', color: '#555', marginBottom: '6px' }}>
+                  Inherited by wander enemies that don't define their own.
+                </div>
+                <div style={{ fontSize: '10px', color: '#88aacc', marginBottom: 4 }}>
+                  Areas: {levelWalkableAreas.length}
+                  <span
+                    onClick={() => setLevelWalkableAreas([...levelWalkableAreas, { y: 0, x_min: -50, x_max: 50 }])}
+                    style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                  >
+                    + add area
+                  </span>
+                </div>
+                {levelWalkableAreas.map((a, ai) => (
+                  <div key={ai} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                    <span style={{ color: '#888', width: 18 }}>#{ai}</span>
+                    <span style={{ color: '#666' }}>y</span>
+                    <input type="number" value={a.y}
+                      onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
+                        const next = [...levelWalkableAreas]; next[ai] = { ...next[ai], y: v }; setLevelWalkableAreas(next); }}
+                      style={{ width: 50, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
+                    <span style={{ color: '#666' }}>x</span>
+                    <input type="number" value={a.x_min}
+                      onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
+                        const next = [...levelWalkableAreas]; next[ai] = { ...next[ai], x_min: v }; setLevelWalkableAreas(next); }}
+                      title="x_min"
+                      style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
+                    <span style={{ color: '#666' }}>..</span>
+                    <input type="number" value={a.x_max}
+                      onChange={e => { const v = parseInt(e.target.value, 10); if (Number.isNaN(v)) return;
+                        const next = [...levelWalkableAreas]; next[ai] = { ...next[ai], x_max: v }; setLevelWalkableAreas(next); }}
+                      title="x_max"
+                      style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
+                    <button
+                      onClick={() => {
+                        const next = levelWalkableAreas.filter((_, i) => i !== ai);
+                        setLevelWalkableAreas(next);
+                        // Drop level transitions that reference the removed area; reindex others.
+                        setLevelTransitions(levelTransitions
+                          .filter(t => t.from !== ai && t.to !== ai)
+                          .map(t => ({
+                            ...t,
+                            from: t.from > ai ? t.from - 1 : t.from,
+                            to:   t.to   > ai ? t.to   - 1 : t.to,
+                          })));
+                      }}
+                      title="Remove area"
+                      style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                    >×</button>
+                  </div>
+                ))}
+                {levelWalkableAreas.length >= 2 && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: '10px', color: '#88aacc', marginBottom: 4 }}>
+                      Transitions: {levelTransitions.length}
+                      <span
+                        onClick={() => setLevelTransitions([...levelTransitions, { from: 0, to: 1, type: 'jump_up' as const }])}
+                        style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}
+                      >
+                        + add transition
+                      </span>
+                    </div>
+                    {levelTransitions.map((t, ti) => (
+                      <div key={ti} style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2, fontSize: '10px' }}>
+                        <span style={{ color: '#888', width: 18 }}>#{ti}</span>
+                        <select value={t.from}
+                          onChange={e => { const next = [...levelTransitions]; next[ti] = { ...next[ti], from: parseInt(e.target.value, 10) }; setLevelTransitions(next); }}
+                          style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
+                          {levelWalkableAreas.map((_, ai) => <option key={ai} value={ai}>{ai}</option>)}
+                        </select>
+                        <span style={{ color: '#666' }}>→</span>
+                        <select value={t.to}
+                          onChange={e => { const next = [...levelTransitions]; next[ti] = { ...next[ti], to: parseInt(e.target.value, 10) }; setLevelTransitions(next); }}
+                          style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
+                          {levelWalkableAreas.map((_, ai) => <option key={ai} value={ai}>{ai}</option>)}
+                        </select>
+                        <select value={t.type}
+                          onChange={e => { const next = [...levelTransitions]; next[ti] = { ...next[ti], type: e.target.value as 'jump_up' | 'drop' }; setLevelTransitions(next); }}
+                          style={{ fontSize: '10px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }}>
+                          <option value="jump_up">jump_up</option>
+                          <option value="drop">drop</option>
+                        </select>
+                        <button
+                          onClick={() => setLevelTransitions(levelTransitions.filter((_, i) => i !== ti))}
+                          title="Remove"
+                          style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               {heightScreens > 1 && (
                 <div>
