@@ -1049,6 +1049,6 @@ def draw_frog_bullet():
         SET_INTENSITY(110)
         scr_y = frog_bullet_y - camera_y
         if frog_bullet_dir == 0:
-            DRAW_VECTOR("frog_fire_side", frog_bullet_x, scr_y, frog_bullet_mirror)
+            DRAW_VECTOR("frog_fireball_side", frog_bullet_x, scr_y, frog_bullet_mirror)
         if frog_bullet_dir == 1:
-            DRAW_VECTOR("frog_fire_down", frog_bullet_x, scr_y, 0)
+            DRAW_VECTOR("frog_fireball_down", frog_bullet_x, scr_y, 0)
