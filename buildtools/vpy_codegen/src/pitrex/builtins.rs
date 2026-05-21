@@ -3300,17 +3300,54 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    bgt     .Lpue_skip          @ still idle\n");
     // idle expired — roll for next action: WALK (75%), JUMP_UP (12.5%), DROP (12.5%)
+    // JUMP and DROP are gated by a feasibility pre-check: only commit to the
+    // action if there's a real platform within reach. Otherwise default to WALK.
     s.push_str("    bl      pitrex_random\n");
     s.push_str("    and     r0, r0, #0xFF       @ 0..255\n");
     s.push_str("    cmp     r0, #224\n");
-    s.push_str("    bge     .Lpue_w_drop        @ 224..255 = drop down\n");
+    s.push_str("    bge     .Lpue_w_try_drop    @ 224..255 = try drop down\n");
     s.push_str("    cmp     r0, #192\n");
-    s.push_str("    bge     .Lpue_w_jump_up     @ 192..223 = jump up\n");
-    // default: continue WALK on current platform
+    s.push_str("    bge     .Lpue_w_try_jump    @ 192..223 = try jump up\n");
+    // default: continue WALK
+    s.push_str(".Lpue_w_to_walk:\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    mov     r12, #1             @ restore SPEED\n");
     s.push_str("    b       .Lpue_skip\n");
+
+    // ── JUMP_UP feasibility pre-check ───────────────────────────────────
+    // Query floor at (x, y + 60): finds the highest platform top below that
+    // sample. If returned floor_y > current_y, a platform exists within jump
+    // reach above the enemy → jump is worth it. Else fall back to WALK.
+    s.push_str(".Lpue_w_try_jump:\n");
+    s.push_str("    ldrsh   r0, [r5, #4]\n");
+    s.push_str("    ldrsh   r1, [r5, #6]\n");
+    s.push_str("    add     r1, r1, #60         @ probe y+60 (jump reach)\n");
+    s.push_str("    mov     r2, #10\n");
+    s.push_str("    bl      pitrex_level_collision_y\n");
+    s.push_str("    mov     r12, #1\n");
+    s.push_str("    ldrsh   r1, [r5, #6]\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    ble     .Lpue_w_to_walk     @ no platform above: skip jump\n");
+    s.push_str("    b       .Lpue_w_jump_up\n");
+
+    // ── DROP_DOWN feasibility pre-check ─────────────────────────────────
+    // Query floor at (x, y - 5): need a valid platform top strictly below
+    // current y to make dropping worthwhile.
+    s.push_str(".Lpue_w_try_drop:\n");
+    s.push_str("    ldrsh   r0, [r5, #4]\n");
+    s.push_str("    ldrsh   r1, [r5, #6]\n");
+    s.push_str("    sub     r1, r1, #5\n");
+    s.push_str("    mov     r2, #10\n");
+    s.push_str("    bl      pitrex_level_collision_y\n");
+    s.push_str("    mov     r12, #1\n");
+    s.push_str("    ldr     r3, =-5000\n");
+    s.push_str("    cmp     r0, r3\n");
+    s.push_str("    blt     .Lpue_w_to_walk     @ no floor at all: skip drop\n");
+    s.push_str("    ldrsh   r1, [r5, #6]\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    bge     .Lpue_w_to_walk     @ floor not strictly below: skip drop\n");
+    s.push_str("    b       .Lpue_w_drop\n");
 
     // ── JUMP_UP: save original_y at pool+8..9, vy=+10, enter AIRBORNE_JUMP (2) ──
     // Max rise = sum(10..0) = 55 units; clears typical platform gaps (34..52).
@@ -3390,11 +3427,11 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    cmp     r1, r2\n");
     s.push_str("    bgt     .Lpue_w_air_done    @ still above original\n");
     s.push_str("    b       .Lpue_w_air_snap\n");
-    // DROP: bounce when y <= original_y - 30
+    // DROP: bounce when y <= original_y - 80 (rare — usually lands on real floor first)
     s.push_str(".Lpue_w_air_drop_chk:\n");
-    s.push_str("    sub     r3, r2, #30         @ threshold\n");
+    s.push_str("    sub     r3, r2, #80         @ threshold\n");
     s.push_str("    cmp     r1, r3\n");
-    s.push_str("    bgt     .Lpue_w_air_done    @ haven't dropped 30 yet\n");
+    s.push_str("    bgt     .Lpue_w_air_done    @ haven't dropped 80 yet\n");
     s.push_str(".Lpue_w_air_snap:\n");
     s.push_str("    strh    r2, [r5, #6]        @ y = original_y\n");
     s.push_str("    mov     r0, #0\n");
