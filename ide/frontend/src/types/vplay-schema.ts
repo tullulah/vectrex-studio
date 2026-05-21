@@ -30,10 +30,11 @@ export type CollisionShape = 'circle' | 'rect';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
-export type AIType = 
+export type AIType =
   | 'none'
   | 'static'
   | 'patrol'
+  | 'wander'
   | 'chase'
   | 'flee'
   | 'custom';

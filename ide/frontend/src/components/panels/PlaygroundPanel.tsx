@@ -44,7 +44,7 @@ interface SceneObject {
   radius?: number;
   // Enemy-specific
   enemyType?: string;
-  aiType?: 'static' | 'patrol' | 'chase' | 'flee';
+  aiType?: 'static' | 'patrol' | 'wander' | 'chase' | 'flee';
   patrolWaypoints?: { x: number; y: number }[];
   wave?: number;
   respawn?: boolean;
@@ -74,6 +74,8 @@ export function PlaygroundPanel() {
   const [editingVelocity, setEditingVelocity] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const enemyPatrolIdxRef = useRef<Map<string, number>>(new Map());
+  // Wander AI sub-state: 'walk' (moving toward target) or 'idle' (paused between legs).
+  const enemyWanderStateRef = useRef<Map<string, { sub: 'walk' | 'idle'; timer: number }>>(new Map());
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [modalMode, setModalMode] = useState<'save' | 'load'>('save');
   const [sceneName, setSceneName] = useState('');
@@ -386,6 +388,41 @@ export function PlaygroundPanel() {
             const nx = obj.x + (dx / dist) * SPEED;
             const ny = obj.y + (dy / dist) * SPEED;
             return { ...obj, x: nx, y: ny, _facingRight: dx > 0 };
+          }
+
+          // Enemy wander simulation: X-only patrol with idle pause between legs.
+          // Mirrors the ARM pitrex_update_enemies ai_type=4 branch so the playground
+          // preview matches in-game behavior.
+          if (obj.type === 'enemy' && (obj as any).aiType === 'wander') {
+            const wps: { x: number; y: number }[] = (obj as any).patrolWaypoints || [];
+            if (wps.length < 2) return obj;
+            const SPEED = (obj as any).speed ?? 1.0;
+            const idx = enemyPatrolIdxRef.current.get(obj.id) ?? 0;
+            const st = enemyWanderStateRef.current.get(obj.id) ?? { sub: 'walk' as const, timer: 0 };
+
+            if (st.sub === 'idle') {
+              const nextTimer = st.timer - 1;
+              if (nextTimer <= 0) {
+                enemyWanderStateRef.current.set(obj.id, { sub: 'walk', timer: 0 });
+              } else {
+                enemyWanderStateRef.current.set(obj.id, { sub: 'idle', timer: nextTimer });
+              }
+              return obj;  // no position change while idle
+            }
+
+            // walking: move toward target.x only (preserve Y)
+            const target = wps[idx % wps.length];
+            const dx = target.x - obj.x;
+            const absDx = Math.abs(dx);
+            if (absDx <= SPEED) {
+              // arrived: advance waypoint and enter idle (random 30..93 frames @60fps)
+              enemyPatrolIdxRef.current.set(obj.id, (idx + 1) % wps.length);
+              const idleFrames = 30 + Math.floor(Math.random() * 64);
+              enemyWanderStateRef.current.set(obj.id, { sub: 'idle', timer: idleFrames });
+              return { ...obj, x: target.x, _facingRight: dx > 0 };
+            }
+            const nx = obj.x + Math.sign(dx) * SPEED;
+            return { ...obj, x: nx, _facingRight: dx > 0 };
           }
 
           if (!obj.physicsEnabled) return obj;
@@ -1459,6 +1496,7 @@ export function PlaygroundPanel() {
             onClick={() => {
               setSavedScene(JSON.parse(JSON.stringify(objects)));
               enemyPatrolIdxRef.current.clear();
+              enemyWanderStateRef.current.clear();
               setIsPlaying(true);
             }}
             style={{
@@ -2590,6 +2628,7 @@ export function PlaygroundPanel() {
                           style={{ width: '100%', background: '#1a1a1a', color: '#d4d4d4', border: '1px solid #555', padding: '2px 4px', fontSize: '11px', marginBottom: '6px' }}
                         >
                           <option value="patrol">patrol</option>
+                          <option value="wander">wander (X-only + idle)</option>
                           <option value="chase">chase</option>
                           <option value="flee">flee</option>
                           <option value="static">static</option>
@@ -2600,7 +2639,7 @@ export function PlaygroundPanel() {
                             onChange={e => setObjects(objects.map(o => o.id === selectedId ? { ...o, speed: parseFloat(e.target.value) } : o))}
                             style={{ width: '100%', background: '#1a1a1a', color: '#44ffcc', border: '1px solid #555', padding: '2px 4px', fontSize: '11px' }} />
                         </div>
-                        {obj.aiType === 'patrol' && (
+                        {(obj.aiType === 'patrol' || obj.aiType === 'wander') && (
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
                             <div>
                               <label style={{ fontSize: '10px', color: '#666', display: 'block', marginBottom: '2px' }}>Mirror on turn</label>
@@ -2637,7 +2676,7 @@ export function PlaygroundPanel() {
                         </div>
                         <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
                           Patrol waypoints: {obj.patrolWaypoints?.length ?? 0}
-                          {obj.aiType === 'patrol' && (
+                          {(obj.aiType === 'patrol' || obj.aiType === 'wander') && (
                             <span
                               onClick={() => setActiveTool('patrol')}
                               style={{ color: '#44ffff', marginLeft: 8, cursor: 'pointer' }}

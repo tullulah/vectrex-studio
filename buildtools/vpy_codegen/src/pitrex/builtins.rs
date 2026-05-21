@@ -2985,11 +2985,12 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // Pool entry layout (32 bytes):
     //   +0  sprite_ptr (u32), +4 x (i16), +6 y (i16)
     //   +8  thaw_timer (i16) — also reused as idle_timer for ai_type=4 wander
-    //   +10 (free i16) — reserved for vy when platform-jump AI is added (phase 2)
+    //   +10 sub_state (u8, wander AI sub-state: 0=WALK, 1=IDLE; unused by other ai_types)
+    //   +11 (free u8) — reserved for vy hi byte when platform-jump AI is added (phase 2)
     //   +12 active (u8), +13 ai_type (u8), +14 cur_target (u8), +15 wp_count (u8)
     //   +16 anim_frame_idx (u8), +17 anim_ticks_left (u8)
     //   +18 sm_state (u8, snow/ball state machine: 0=normal, 1+=snowed)
-    //   +19 sub_state (u8, wander AI sub-state: 0=WALK, 1=IDLE; unused by other ai_types)
+    //   +19 (used by draw_enemies as transient is_anim temp — NOT safe across frames)
     //   +20..+23 type_data_ptr (u32 ROM ptr to per-type SM data table)
     //   +24 mirror_on_patrol (u8), +25 default_facing (u8), +26 dir (u8), +27 is_anim (u8)
     //   +28..+31 wp_base (u32 ROM ptr) — must not be touched by anim state
@@ -3056,7 +3057,7 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r6, #14]   @ pool.cur_target = 0\n");
     s.push_str("    strb    r0, [r6, #18]   @ pool.sm_state = 0\n");
-    s.push_str("    strb    r0, [r6, #19]   @ pool.sub_state = 0 (WALK for wander AI)\n");
+    s.push_str("    strb    r0, [r6, #10]   @ pool.sub_state = 0 (WALK for wander AI)\n");
     s.push_str("    strh    r0, [r6, #8]    @ pool.thaw_timer / idle_timer = 0\n");
     s.push_str("    add     r0, r4, #12     @ ROM waypoints base\n");
     s.push_str("    str     r0, [r6, #28]   @ pool.wp_base\n");
@@ -3224,7 +3225,7 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    ldrb    r6, [r5, #15]       @ wp_count\n");
     s.push_str("    cmp     r6, #2\n");
     s.push_str("    blt     .Lpue_skip\n");
-    s.push_str("    ldrb    r6, [r5, #19]       @ sub_state\n");
+    s.push_str("    ldrb    r6, [r5, #10]       @ sub_state (wander)\n");
     s.push_str("    cmp     r6, #1\n");
     s.push_str("    beq     .Lpue_w_idle\n");
     // ── WALK ────────────────────────────────────────────────────────────
@@ -3276,7 +3277,7 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    add     r0, r0, #30         @ 30..93 frames idle\n");
     s.push_str("    strh    r0, [r5, #8]        @ idle_timer\n");
     s.push_str("    mov     r0, #1\n");
-    s.push_str("    strb    r0, [r5, #19]       @ sub_state = IDLE\n");
+    s.push_str("    strb    r0, [r5, #10]       @ sub_state = IDLE\n");
     s.push_str("    mov     r12, #1             @ restore SPEED (bl clobbered r12)\n");
     s.push_str("    b       .Lpue_skip\n");
     // ── IDLE ────────────────────────────────────────────────────────────
@@ -3287,7 +3288,7 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    bgt     .Lpue_skip          @ still idle\n");
     s.push_str("    mov     r6, #0\n");
-    s.push_str("    strb    r6, [r5, #19]       @ sub_state = WALK\n");
+    s.push_str("    strb    r6, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");
 
     s.push_str(".Lpue_skip:\n");
