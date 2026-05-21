@@ -1,6 +1,6 @@
 {
   "name": "vpy-ide",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Vectrex Studio - A visual programming environment for Vectrex game development",
   "author": {
@@ -88,8 +88,9 @@
         "zip"
       ],
       "icon": "build/icon.icns",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
     },
     "win": {
       "target": [
@@ -112,6 +113,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "afterSign": "scripts/afterSign.js"
   }
 }
