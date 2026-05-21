@@ -3221,39 +3221,56 @@ export function PlaygroundPanel() {
                                         const next = [...areas]; next[ai] = { ...next[ai], x_max: v }; updateAreas(next); }}
                                       title="x_max"
                                       style={{ width: 42, fontSize: '10px', padding: '1px 3px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 2 }} />
-                                    {!inheritsAreas && (
-                                      <button
-                                        onClick={() => {
-                                          const next = areas.filter((_, i) => i !== ai);
-                                          updateAreas(next);
-                                          // Drop transitions referencing the removed area; reindex the rest.
-                                          updateTransitions(transitions
-                                            .filter(t => t.from !== ai && t.to !== ai)
-                                            .map(t => ({
-                                              ...t,
-                                              from: t.from > ai ? t.from - 1 : t.from,
-                                              to:   t.to   > ai ? t.to   - 1 : t.to,
-                                            })));
-                                        }}
-                                        title="Remove area"
-                                        style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
-                                      >×</button>
-                                    )}
+                                    <button
+                                      onClick={() => {
+                                        // If inheriting from level, this row × means "I want a subset
+                                        // of the level list" — promote to override (copy list), then
+                                        // remove the row.
+                                        const baseAreas = inheritsAreas ? [...areas] : areas;
+                                        const baseTransitions = inheritsTransitions ? [...transitions] : transitions;
+                                        const nextAreas = baseAreas.filter((_, i) => i !== ai);
+                                        const nextTransitions = baseTransitions
+                                          .filter(t => t.from !== ai && t.to !== ai)
+                                          .map(t => ({
+                                            ...t,
+                                            from: t.from > ai ? t.from - 1 : t.from,
+                                            to:   t.to   > ai ? t.to   - 1 : t.to,
+                                          }));
+                                        // Apply both in a single setObjects so the inheritance flip
+                                        // doesn't briefly show stale values mid-render.
+                                        setObjects(objects.map(o => {
+                                          if (o.id !== selectedId) return o;
+                                          const patch: any = { ...o, walkable_areas: nextAreas };
+                                          if (inheritsTransitions || baseTransitions.length > 0) {
+                                            patch.transitions = nextTransitions;
+                                          }
+                                          return patch;
+                                        }));
+                                      }}
+                                      title={inheritsAreas
+                                        ? 'Promote to per-enemy override and remove this row'
+                                        : 'Remove area'}
+                                      style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                    >×</button>
                                   </div>
                                 ))}
-                                {!inheritsAreas && areas.length > 0 && (
+                                {areas.length > 0 && (
                                   <button
                                     onClick={() => {
-                                      updateAreas([]);
-                                      // Wipe transitions too — they reference area indices that no longer exist.
-                                      if (!inheritsTransitions) {
-                                        updateTransitions([]);
-                                      }
+                                      // Always sets walkable_areas to []. If we were inheriting,
+                                      // this promotes to override-with-empty so the level areas no
+                                      // longer apply to this enemy. Also clears transitions in the
+                                      // same setObjects pass (their indices would be invalid).
+                                      setObjects(objects.map(o => o.id === selectedId
+                                        ? ({ ...o, walkable_areas: [], transitions: [] } as any)
+                                        : o));
                                     }}
-                                    title="Remove all walkable areas (override stays — enemy will have no patrol corridor). Use 'reset → level' to inherit again."
+                                    title={inheritsAreas
+                                      ? 'Stop inheriting from level: set this enemy to have no areas.'
+                                      : "Remove all walkable areas (override stays). Use 'reset → level' to inherit again."}
                                     style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
                                   >
-                                    Clear areas
+                                    {inheritsAreas ? 'Clear (stop inheriting)' : 'Clear areas'}
                                   </button>
                                 )}
                               </div>
@@ -3310,22 +3327,29 @@ export function PlaygroundPanel() {
                                         <option value="jump_up">jump_up</option>
                                         <option value="drop">drop</option>
                                       </select>
-                                      {!inheritsTransitions && (
-                                        <button
-                                          onClick={() => updateTransitions(transitions.filter((_, i) => i !== ti))}
-                                          title="Remove"
-                                          style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
-                                        >×</button>
-                                      )}
+                                      <button
+                                        onClick={() => {
+                                          // If inheriting, promote to override of the resolved list,
+                                          // then drop this transition.
+                                          const base = inheritsTransitions ? [...transitions] : transitions;
+                                          updateTransitions(base.filter((_, i) => i !== ti));
+                                        }}
+                                        title={inheritsTransitions
+                                          ? 'Promote to per-enemy override and remove this transition'
+                                          : 'Remove'}
+                                        style={{ fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '1px 5px', cursor: 'pointer' }}
+                                      >×</button>
                                     </div>
                                   ))}
-                                  {!inheritsTransitions && transitions.length > 0 && (
+                                  {transitions.length > 0 && (
                                     <button
                                       onClick={() => updateTransitions([])}
-                                      title="Remove all transitions (override stays — enemy has no jumps between areas). Use 'reset → level' to inherit again."
+                                      title={inheritsTransitions
+                                        ? 'Stop inheriting from level: set this enemy to have no transitions.'
+                                        : "Remove all transitions (override stays). Use 'reset → level' to inherit again."}
                                       style={{ marginTop: 2, fontSize: '10px', background: '#330000', border: '1px solid #660000', color: '#ff6666', borderRadius: 2, padding: '2px 6px', cursor: 'pointer' }}
                                     >
-                                      Clear transitions
+                                      {inheritsTransitions ? 'Clear (stop inheriting)' : 'Clear transitions'}
                                     </button>
                                   )}
                                 </div>
