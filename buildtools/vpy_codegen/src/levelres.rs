@@ -820,16 +820,10 @@ impl VPlayLevel {
         let min_x_overlap = min_x_overlap.max(0);
         let lateral_y = lateral_y.max(0);
         let lateral_gap = lateral_gap.max(0);
-        // Two areas that come from the same placed .vec are independent
-        // shelves on that asset (e.g. platform20's top + bottom). They get
-        // no jump_up/drop edge — same-Y jump_across is still fine for multi-
-        // piece .vecs at the same level.
-        let same_source = |i: usize, j: usize| -> bool {
-            match sources {
-                Some(s) if i < s.len() && j < s.len() => s[i] == s[j],
-                _ => false,
-            }
-        };
+        // (Same-source blocking was removed: enemies need to be able to
+        // jump_up / drop between parallel shelves of the same .vec for
+        // wander roaming to actually populate the lower shelf.)
+        let _ = sources;
 
         let mut out: Vec<AreaTransition> = Vec::new();
         let n = areas.len();
@@ -862,7 +856,6 @@ impl VPlayLevel {
                 if j == i { continue; }
                 if areas[j].y <= areas[i].y { continue; }
                 if !same_screen(&areas[i], &areas[j]) { continue; }
-                if same_source(i, j) { continue; }
                 if overlap_amount(&areas[i], &areas[j]) < min_x_overlap { continue; }
                 match upper {
                     None => upper = Some(j),

@@ -234,7 +234,6 @@ export function PlaygroundPanel() {
         if (j === i) continue;
         if (areas[j].y <= areas[i].y) continue;
         if (!sameScreen(areas[i], areas[j])) continue;
-        if (sameSource(i, j)) continue;
         if (overlap(areas[i], areas[j]) < MIN_X_OVERLAP) continue;
         if (upper === null || areas[j].y < areas[upper].y) upper = j;
       }
