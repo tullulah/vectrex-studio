@@ -730,11 +730,18 @@ impl VPlayLevel {
                 // Transitions: explicit override on the enemy → use as-is.
                 // Else explicit override at level → use as-is. Else auto-derive
                 // from the area geometry (immediate neighbors only).
+                // Treat an empty `transitions` list the same as None: it means
+                // "no explicit override, please auto-derive". The IDE often
+                // saves `"transitions": []` even when the designer hasn't
+                // touched them, and that empty list would otherwise suppress
+                // auto-derive entirely.
                 let derived_trans;
-                let trans: &[AreaTransition] = if let Some(ref t) = obj.transitions {
-                    t.as_slice()
-                } else if let Some(ref t) = self.transitions {
-                    t.as_slice()
+                let obj_trans = obj.transitions.as_deref().filter(|t| !t.is_empty());
+                let self_trans = self.transitions.as_deref().filter(|t| !t.is_empty());
+                let trans: &[AreaTransition] = if let Some(t) = obj_trans {
+                    t
+                } else if let Some(t) = self_trans {
+                    t
                 } else {
                     derived_trans = Self::derive_transitions(
                         &areas,
@@ -820,10 +827,18 @@ impl VPlayLevel {
         let min_x_overlap = min_x_overlap.max(0);
         let lateral_y = lateral_y.max(0);
         let lateral_gap = lateral_gap.max(0);
-        // (Same-source blocking was removed: enemies need to be able to
-        // jump_up / drop between parallel shelves of the same .vec for
-        // wander roaming to actually populate the lower shelf.)
-        let _ = sources;
+        // Same-source pairs (two walkable areas of the same placed .vec) are
+        // intentional shelves on one physical asset and should always have a
+        // direct jump_up / drop edge between them, even when another platform
+        // happens to sit between them in Y. Without this, an enemy on
+        // platform20's top shelf has to detour through some neighboring
+        // platform's shelf to reach its own bottom shelf.
+        let same_source = |i: usize, j: usize| -> bool {
+            match sources {
+                Some(s) if i < s.len() && j < s.len() => s[i] == s[j],
+                _ => false,
+            }
+        };
 
         let mut out: Vec<AreaTransition> = Vec::new();
         let n = areas.len();
@@ -872,6 +887,29 @@ impl VPlayLevel {
                 });
                 out.push(AreaTransition {
                     from: u as u8, to: i as u8,
+                    ttype: "drop".to_string(),
+                    from_x: Some(mid), to_x: Some(mid),
+                });
+            }
+            // Force a direct jump_up/drop edge to every same-source upper area
+            // (i.e. every other walkable area of the same placed .vec that
+            // sits above i in Y and has the required X-overlap). This makes
+            // shelves of a multi-tier asset always reachable from each other,
+            // even when a different platform's shelf is closer in Y.
+            for j in 0..n {
+                if j == i { continue; }
+                if !same_source(i, j) { continue; }
+                if areas[j].y <= areas[i].y { continue; }
+                if upper == Some(j) { continue; } // already emitted above
+                if overlap_amount(&areas[i], &areas[j]) < min_x_overlap { continue; }
+                let mid = overlap_mid(&areas[i], &areas[j]);
+                out.push(AreaTransition {
+                    from: i as u8, to: j as u8,
+                    ttype: "jump_up".to_string(),
+                    from_x: Some(mid), to_x: Some(mid),
+                });
+                out.push(AreaTransition {
+                    from: j as u8, to: i as u8,
                     ttype: "drop".to_string(),
                     from_x: Some(mid), to_x: Some(mid),
                 });

@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-21"
+    "description": "Created in Playground - 2026-05-22"
   },
   "worldBounds": {
     "xMin": -96,
@@ -15,6 +15,7 @@
     "yMin": -2432,
     "yMax": 127
   },
+  "isolateScreens": true,
   "layers": {
     "background": [],
     "gameplay": [
@@ -119,7 +120,7 @@
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": 55,
-        "y": -2292,
+        "y": -2291,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1338,6 +1339,63 @@
           "x": 0,
           "y": 0
         }
+      },
+      {
+        "id": "enemy_1779442193022",
+        "type": "enemy",
+        "vectorName": "yellow_troll_idle",
+        "layer": "gameplay",
+        "x": -56,
+        "y": -1471,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "yellow_troll",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "obj_1779475164506",
+        "type": "background",
+        "vectorName": "platform9",
+        "layer": "gameplay",
+        "x": -84,
+        "y": -1535,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779475174401",
+        "type": "background",
+        "vectorName": "platform9",
+        "layer": "gameplay",
+        "x": -84,
+        "y": -1499,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
       }
     ],
     "foreground": []
@@ -1403,6 +1461,5 @@
       }
     ],
     "groundBottomOffset": 25
-  },
-  "isolateScreens": true
+  }
 }

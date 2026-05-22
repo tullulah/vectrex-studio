@@ -242,6 +242,20 @@ export function PlaygroundPanel() {
         out.push({ from: i, to: upper,  type: 'jump_up', from_x: mid, to_x: mid });
         out.push({ from: upper, to: i,  type: 'drop',    from_x: mid, to_x: mid });
       }
+      // Force a direct jump_up/drop edge to every same-source upper area
+      // (i.e. every other walkable area of the same placed .vec that sits
+      // above i in Y). Multi-tier assets stay internally reachable even
+      // when another platform's shelf sits between them in Y.
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (!sameSource(i, j)) continue;
+        if (areas[j].y <= areas[i].y) continue;
+        if (upper === j) continue;
+        if (overlap(areas[i], areas[j]) < MIN_X_OVERLAP) continue;
+        const mid = overlapMid(areas[i], areas[j]);
+        out.push({ from: i, to: j, type: 'jump_up', from_x: mid, to_x: mid });
+        out.push({ from: j, to: i, type: 'drop',    from_x: mid, to_x: mid });
+      }
       // Closest lateral on each side (similar Y, no X-overlap, gap ≤ LATERAL_GAP).
       let left: number | null = null;
       let right: number | null = null;
