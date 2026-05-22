@@ -46,6 +46,19 @@ pub struct VPlayLevel {
     /// not auto-jump between floors.
     #[serde(default, rename = "isolateScreens")]
     pub isolate_screens: bool,
+    /// Auto-transition tuning. None = use built-in defaults (4 / 8 / 60).
+    ///   transitionMinXOverlap: smallest X overlap (units) for a jump_up /
+    ///       drop pair between vertically adjacent areas.
+    ///   transitionLateralY:    maximum |dy| (units) to treat two areas as
+    ///       "same row" for jump_across.
+    ///   transitionLateralGap:  maximum horizontal gap (units) between two
+    ///       same-row areas for a jump_across to be emitted.
+    #[serde(default, rename = "transitionMinXOverlap")]
+    pub transition_min_x_overlap: Option<i16>,
+    #[serde(default, rename = "transitionLateralY")]
+    pub transition_lateral_y: Option<i16>,
+    #[serde(default, rename = "transitionLateralGap")]
+    pub transition_lateral_gap: Option<i16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -710,7 +723,14 @@ impl VPlayLevel {
                 } else if let Some(ref t) = self.transitions {
                     t.as_slice()
                 } else {
-                    derived_trans = Self::derive_transitions(&areas, self.isolate_screens, self.world_bounds.y_max as i16);
+                    derived_trans = Self::derive_transitions(
+                        &areas,
+                        self.isolate_screens,
+                        self.world_bounds.y_max as i16,
+                        self.transition_min_x_overlap.unwrap_or(4),
+                        self.transition_lateral_y.unwrap_or(8),
+                        self.transition_lateral_gap.unwrap_or(60),
+                    );
                     &derived_trans
                 };
                 if !areas.is_empty() {
@@ -778,10 +798,13 @@ impl VPlayLevel {
         areas: &[WalkableArea],
         isolate_screens: bool,
         world_y_max: i16,
+        min_x_overlap: i16,
+        lateral_y: i16,
+        lateral_gap: i16,
     ) -> Vec<AreaTransition> {
-        const MIN_X_OVERLAP: i16 = 4;
-        const LATERAL_Y: i16 = 8;
-        const LATERAL_GAP: i16 = 60;
+        let min_x_overlap = min_x_overlap.max(0);
+        let lateral_y = lateral_y.max(0);
+        let lateral_gap = lateral_gap.max(0);
 
         let mut out: Vec<AreaTransition> = Vec::new();
         let n = areas.len();
@@ -814,7 +837,7 @@ impl VPlayLevel {
                 if j == i { continue; }
                 if areas[j].y <= areas[i].y { continue; }
                 if !same_screen(&areas[i], &areas[j]) { continue; }
-                if overlap_amount(&areas[i], &areas[j]) < MIN_X_OVERLAP { continue; }
+                if overlap_amount(&areas[i], &areas[j]) < min_x_overlap { continue; }
                 match upper {
                     None => upper = Some(j),
                     Some(u) if areas[j].y < areas[u].y => upper = Some(j),
@@ -843,11 +866,11 @@ impl VPlayLevel {
                 if j == i { continue; }
                 if !same_screen(&areas[i], &areas[j]) { continue; }
                 let dy = (areas[i].y as i32 - areas[j].y as i32).abs() as i16;
-                if dy > LATERAL_Y { continue; }
+                if dy > lateral_y { continue; }
                 if overlap_amount(&areas[i], &areas[j]) > 0 { continue; }
                 if areas[j].x_max < areas[i].x_min {
                     let gap = areas[i].x_min - areas[j].x_max;
-                    if gap > LATERAL_GAP { continue; }
+                    if gap > lateral_gap { continue; }
                     match left {
                         None => left = Some(j),
                         Some(l) if (areas[i].x_min - areas[j].x_max) < (areas[i].x_min - areas[l].x_max) => left = Some(j),
@@ -855,7 +878,7 @@ impl VPlayLevel {
                     }
                 } else if areas[j].x_min > areas[i].x_max {
                     let gap = areas[j].x_min - areas[i].x_max;
-                    if gap > LATERAL_GAP { continue; }
+                    if gap > lateral_gap { continue; }
                     match right {
                         None => right = Some(j),
                         Some(r) if (areas[j].x_min - areas[i].x_max) < (areas[r].x_min - areas[i].x_max) => right = Some(j),

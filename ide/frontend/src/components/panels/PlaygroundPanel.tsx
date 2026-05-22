@@ -146,6 +146,10 @@ export function PlaygroundPanel() {
    *  each "floor" is its own level — wander enemies shouldn't auto-jump
    *  between floors. */
   const [isolateScreens, setIsolateScreens] = useState<boolean>(false);
+  /** Auto-transition tuning (mirror of levelres.rs constants). */
+  const [transMinXOverlap, setTransMinXOverlap] = useState<number>(4);
+  const [transLateralY, setTransLateralY]       = useState<number>(8);
+  const [transLateralGap, setTransLateralGap]   = useState<number>(60);
   /** Collect walkable areas from every placed .vec asset's own `walkableAreas`,
    *  translated by the object's (x, y). Used as the next fallback below the
    *  level's own `walkable_areas` and below per-enemy overrides. */
@@ -196,9 +200,9 @@ export function PlaygroundPanel() {
    * transitions list when no explicit override exists.
    */
   const deriveTransitions = (areas: LevelArea[]): LevelTransition[] => {
-    const MIN_X_OVERLAP = 4;
-    const LATERAL_Y = 8;
-    const LATERAL_GAP = 60;
+    const MIN_X_OVERLAP = Math.max(0, transMinXOverlap);
+    const LATERAL_Y     = Math.max(0, transLateralY);
+    const LATERAL_GAP   = Math.max(0, transLateralGap);
     const out: LevelTransition[] = [];
     const n = areas.length;
     const overlap = (a: LevelArea, b: LevelArea) =>
@@ -941,6 +945,9 @@ export function PlaygroundPanel() {
         ...(levelWalkableAreas.length > 0 ? { walkable_areas: levelWalkableAreas } : {}),
         ...(levelTransitions.length > 0 ? { transitions: levelTransitions } : {}),
         ...(isolateScreens ? { isolateScreens: true } : {}),
+        ...(transMinXOverlap !== 4 ? { transitionMinXOverlap: transMinXOverlap } : {}),
+        ...(transLateralY    !== 8 ? { transitionLateralY: transLateralY }       : {}),
+        ...(transLateralGap !== 60 ? { transitionLateralGap: transLateralGap }   : {}),
         layers: {
           background: objects.filter(obj => obj.layer === 'background').map(obj => ({
             ...obj,
@@ -1075,6 +1082,9 @@ export function PlaygroundPanel() {
       setLevelWalkableAreas((sceneData as any).walkable_areas ?? []);
       setLevelTransitions((sceneData as any).transitions ?? []);
       setIsolateScreens(!!(sceneData as any).isolateScreens);
+      setTransMinXOverlap((sceneData as any).transitionMinXOverlap ?? 4);
+      setTransLateralY((sceneData as any).transitionLateralY ?? 8);
+      setTransLateralGap((sceneData as any).transitionLateralGap ?? 60);
       if (sceneData._editorMeta?.groundBottomOffset !== undefined) {
         setGroundBottomOffset(sceneData._editorMeta.groundBottomOffset);
       }
@@ -3739,6 +3749,43 @@ export function PlaygroundPanel() {
                   />
                   Isolate screens (no auto-jumps between floors)
                 </label>
+                {/* Auto-transition tuning (drives derive_transitions). */}
+                {(() => {
+                  const lblStyle = { fontSize: '9px', color: '#888' } as React.CSSProperties;
+                  const inputStyle = {
+                    width: 42, padding: '1px 3px', fontSize: '9px',
+                    background: '#222', color: '#aac', border: '1px solid #445',
+                    borderRadius: '2px', fontFamily: 'monospace',
+                  } as React.CSSProperties;
+                  const onWheel = (e: React.WheelEvent<HTMLInputElement>) => { e.currentTarget.blur(); };
+                  const numInput = (val: number, set: (n: number) => void) => (
+                    <input
+                      type="number"
+                      key={String(val)}
+                      defaultValue={val}
+                      onBlur={(e) => {
+                        const n = parseInt(e.currentTarget.value);
+                        if (Number.isFinite(n) && n !== val) set(n);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                        else if (e.key === 'Escape') { e.currentTarget.value = String(val); e.currentTarget.blur(); }
+                      }}
+                      onWheel={onWheel}
+                      style={inputStyle}
+                    />
+                  );
+                  return (
+                    <div style={{ marginBottom: '8px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 6px', alignItems: 'center' }}>
+                      <span style={lblStyle} title="Smallest X overlap (units) for a jump_up/drop pair between vertically adjacent areas">min X-overlap (jump_up)</span>
+                      {numInput(transMinXOverlap, setTransMinXOverlap)}
+                      <span style={lblStyle} title="Maximum |dy| (units) to treat two areas as same-row for jump_across">max |dy| (jump_across)</span>
+                      {numInput(transLateralY, setTransLateralY)}
+                      <span style={lblStyle} title="Maximum horizontal gap (units) between two same-row areas for a jump_across">max gap (jump_across)</span>
+                      {numInput(transLateralGap, setTransLateralGap)}
+                    </div>
+                  );
+                })()}
                 <div style={{ fontSize: '10px', color: '#88aacc', marginBottom: 4 }}>
                   Areas: {levelWalkableAreas.length}
                   <span
