@@ -1148,37 +1148,29 @@ impl VPlayLevel {
         };
 
         if let Some(segs) = segs_opt {
-            // Optimization: only emit "top edge" horizontal segments — those whose
-            // X-range has no other horizontal segment with a strictly greater Y above
-            // them. The collision runtime only cares about what the player can stand
-            // on; interior or bottom edges of the mesh are never relevant for floor
-            // detection. Reduces seg_count from ~46 (full mesh) to ~1-3 for typical
-            // platforms, dramatically lowering per-frame cycles in vpy_level_collision_y.
-            let mut horiz: Vec<(i16, i16, i16)> = Vec::new();
+            // Emit every horizontal segment in the mesh. We used to drop
+            // "interior" horizontals (those covered by a higher horizontal in
+            // X), but that broke multi-tier platforms like platform20 where
+            // the lower shelf is intentionally walkable — its X range is
+            // entirely inside the upper shelf's, so the filter removed it and
+            // the player couldn't stand on it. The .vec author already chose
+            // which segments to include; trust them. Runtime cost stays small
+            // because typical platforms only have 1-3 horizontal segments.
+            let mut emitted: Vec<(i16, i16, i16)> = Vec::new();
             for seg in segs {
                 if seg.y1 == seg.y2 {
                     let xa = seg.x1.min(seg.x2);
                     let xb = seg.x1.max(seg.x2);
-                    horiz.push((xa, xb, seg.y1));
+                    emitted.push((xa, xb, seg.y1));
                 }
             }
-            // Keep only top edges: for each segment S, drop it if any other horizontal
-            // segment T has T.y > S.y and T's X-range overlaps S's X-range (T sits above S).
-            let top_edges: Vec<(i16, i16, i16)> = horiz
-                .iter()
-                .filter(|&&(xa, xb, y)| {
-                    !horiz.iter().any(|&(txa, txb, ty)| {
-                        ty > y && txa < xb && txb > xa
-                    })
-                })
-                .cloned()
-                .collect();
-            let emitted: Vec<(i16, i16, i16)> = if top_edges.is_empty() {
-                // Mesh has no horizontal segments at all — keep original for safety
-                segs.iter().map(|s| (s.x1.min(s.x2), s.x1.max(s.x2), s.y1)).collect()
-            } else {
-                top_edges
-            };
+            if emitted.is_empty() {
+                // Mesh has no horizontal segments at all — emit raw segments
+                // so vertical-only meshes still produce something readable.
+                for s in segs {
+                    emitted.push((s.x1.min(s.x2), s.x1.max(s.x2), s.y1));
+                }
+            }
             // .word requires 4-byte alignment on ARM. Without an explicit balign,
             // the symbol can land on an odd address (e.g. right after a .byte or
             // .hword section), making `ldr r12, [r11], #4` read garbage — the
