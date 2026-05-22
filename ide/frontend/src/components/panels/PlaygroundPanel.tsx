@@ -181,16 +181,27 @@ export function PlaygroundPanel() {
     objs: SceneObject[],
     vecs: Map<string, VecVector>,
   ): LevelArea[] => {
-    const out: LevelArea[] = [];
-    for (const o of objs) {
-      if (o.layer === 'foreground') continue;
+    return collectVecWalkableAreasWithSources(objs, vecs).areas;
+  };
+  /** Same but also returns per-area source object index (used by
+   *  deriveTransitions to skip jump_up/drop between parallel shelves
+   *  of the same .vec). */
+  const collectVecWalkableAreasWithSources = (
+    objs: SceneObject[],
+    vecs: Map<string, VecVector>,
+  ): { areas: LevelArea[]; sources: number[] } => {
+    const areas: LevelArea[] = [];
+    const sources: number[] = [];
+    objs.forEach((o, idx) => {
+      if (o.layer === 'foreground') return;
       const v = vecs.get(o.vectorName);
-      if (!v?.walkableAreas?.length) continue;
+      if (!v?.walkableAreas?.length) return;
       for (const a of v.walkableAreas) {
-        out.push({ y: a.y + o.y, x_min: a.x_min + o.x, x_max: a.x_max + o.x });
+        areas.push({ y: a.y + o.y, x_min: a.x_min + o.x, x_max: a.x_max + o.x });
+        sources.push(idx);
       }
-    }
-    return out;
+    });
+    return { areas, sources };
   };
   /**
    * Mirror of levelres.rs::derive_transitions — for each area in `areas`,
@@ -199,10 +210,12 @@ export function PlaygroundPanel() {
    * X-gap ≤ 60) as jump_across. Used everywhere we need the effective
    * transitions list when no explicit override exists.
    */
-  const deriveTransitions = (areas: LevelArea[]): LevelTransition[] => {
+  const deriveTransitions = (areas: LevelArea[], sources?: number[]): LevelTransition[] => {
     const MIN_X_OVERLAP = Math.max(0, transMinXOverlap);
     const LATERAL_Y     = Math.max(0, transLateralY);
     const LATERAL_GAP   = Math.max(0, transLateralGap);
+    const sameSource = (i: number, j: number) =>
+      sources !== undefined && sources[i] !== undefined && sources[i] === sources[j];
     const out: LevelTransition[] = [];
     const n = areas.length;
     const overlap = (a: LevelArea, b: LevelArea) =>
@@ -221,6 +234,7 @@ export function PlaygroundPanel() {
         if (j === i) continue;
         if (areas[j].y <= areas[i].y) continue;
         if (!sameScreen(areas[i], areas[j])) continue;
+        if (sameSource(i, j)) continue;
         if (overlap(areas[i], areas[j]) < MIN_X_OVERLAP) continue;
         if (upper === null || areas[j].y < areas[upper].y) upper = j;
       }
@@ -603,7 +617,9 @@ export function PlaygroundPanel() {
               | undefined;
             const wps = (obj as any).patrolWaypoints as { x: number; y: number }[] | undefined;
             // Inheritance: enemy override > level > .vec-collected > waypoint-derived.
-            const vecCollected = collectVecWalkableAreas(prevObjects, loadedVectors);
+            const vecCollectedRes = collectVecWalkableAreasWithSources(prevObjects, loadedVectors);
+            const vecCollected = vecCollectedRes.areas;
+            const usingVecAreas = explicit === undefined && levelWalkableAreas.length === 0 && vecCollected.length > 0;
             const areas =
               explicit !== undefined
                 ? explicit
@@ -623,7 +639,7 @@ export function PlaygroundPanel() {
               ? explicitTransitions
               : levelTransitions.length > 0
                 ? levelTransitions
-                : deriveTransitions(areas);
+                : deriveTransitions(areas, usingVecAreas ? vecCollectedRes.sources : undefined);
             const SPEED = (obj as any).speed ?? 1.0;
             const st = enemyWanderStateRef.current.get(obj.id) as
               | WanderState

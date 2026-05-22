@@ -709,11 +709,24 @@ impl VPlayLevel {
                 // (even empty) on the enemy is treated as an explicit override.
                 // Effective level areas: self.walkable_areas overrides; otherwise
                 // collect from any placed .vec asset that ships its own areas.
-                let level_areas: Vec<WalkableArea> = match self.walkable_areas.as_deref() {
-                    Some(a) if !a.is_empty() => a.to_vec(),
-                    _ => Self::collect_vec_walkable_areas(&self.layers, vec_walk_areas),
-                };
+                // When using vec-collected, also keep source_idx so we can
+                // suppress auto jump_up/drop within the same placed .vec.
+                let (level_areas, level_sources): (Vec<WalkableArea>, Option<Vec<usize>>) =
+                    match self.walkable_areas.as_deref() {
+                        Some(a) if !a.is_empty() => (a.to_vec(), None),
+                        _ => {
+                            let (a, s) = Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
+                            (a, Some(s))
+                        }
+                    };
                 let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
+                // Only pass sources when the resolved area list IS the level one
+                // (so indices match). If derive picked enemy-own or waypoints,
+                // sources don't apply.
+                let sources_for_derive: Option<&[usize]> =
+                    if obj.walkable_areas.is_none() && areas.len() == level_areas.len() {
+                        level_sources.as_deref()
+                    } else { None };
                 // Transitions: explicit override on the enemy → use as-is.
                 // Else explicit override at level → use as-is. Else auto-derive
                 // from the area geometry (immediate neighbors only).
@@ -730,6 +743,7 @@ impl VPlayLevel {
                         self.transition_min_x_overlap.unwrap_or(4),
                         self.transition_lateral_y.unwrap_or(8),
                         self.transition_lateral_gap.unwrap_or(60),
+                        sources_for_derive,
                     );
                     &derived_trans
                 };
@@ -801,10 +815,21 @@ impl VPlayLevel {
         min_x_overlap: i16,
         lateral_y: i16,
         lateral_gap: i16,
+        sources: Option<&[usize]>,
     ) -> Vec<AreaTransition> {
         let min_x_overlap = min_x_overlap.max(0);
         let lateral_y = lateral_y.max(0);
         let lateral_gap = lateral_gap.max(0);
+        // Two areas that come from the same placed .vec are independent
+        // shelves on that asset (e.g. platform20's top + bottom). They get
+        // no jump_up/drop edge — same-Y jump_across is still fine for multi-
+        // piece .vecs at the same level.
+        let same_source = |i: usize, j: usize| -> bool {
+            match sources {
+                Some(s) if i < s.len() && j < s.len() => s[i] == s[j],
+                _ => false,
+            }
+        };
 
         let mut out: Vec<AreaTransition> = Vec::new();
         let n = areas.len();
@@ -837,6 +862,7 @@ impl VPlayLevel {
                 if j == i { continue; }
                 if areas[j].y <= areas[i].y { continue; }
                 if !same_screen(&areas[i], &areas[j]) { continue; }
+                if same_source(i, j) { continue; }
                 if overlap_amount(&areas[i], &areas[j]) < min_x_overlap { continue; }
                 match upper {
                     None => upper = Some(j),
@@ -924,24 +950,35 @@ impl VPlayLevel {
     /// matching object contributes its asset's `walkable_areas`, translated
     /// by the object's (x, y). Background and gameplay layers are scanned;
     /// foreground is excluded since it's typically HUD/overlay.
-    fn collect_vec_walkable_areas(
+    /// Returns a parallel
+    /// `source_idx` vector: source_idx[i] is the placed-object index that
+    /// contributed area i. Used by derive_transitions to suppress auto
+    /// jump_up/drop pairs between two parallel shelves of the same .vec
+    /// (e.g. platform20's top + bottom — they're independent surfaces, not
+    /// a vertical jump target).
+    fn collect_vec_walkable_areas_with_sources(
         layers: &VPlayLayers,
         vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
-    ) -> Vec<WalkableArea> {
+    ) -> (Vec<WalkableArea>, Vec<usize>) {
         let mut out = Vec::new();
+        let mut sources = Vec::new();
+        let mut obj_idx = 0usize;
         let scan = layers.background.iter().chain(layers.gameplay.iter());
         for obj in scan {
             let key = obj.vector_name.to_lowercase();
-            let Some(areas) = vec_walk_areas.get(&key) else { continue };
-            for a in areas {
-                out.push(WalkableArea {
-                    y: a.y.saturating_add(obj.y as i16),
-                    x_min: a.x_min.saturating_add(obj.x as i16),
-                    x_max: a.x_max.saturating_add(obj.x as i16),
-                });
+            if let Some(areas) = vec_walk_areas.get(&key) {
+                for a in areas {
+                    out.push(WalkableArea {
+                        y: a.y.saturating_add(obj.y as i16),
+                        x_min: a.x_min.saturating_add(obj.x as i16),
+                        x_max: a.x_max.saturating_add(obj.x as i16),
+                    });
+                    sources.push(obj_idx);
+                }
             }
+            obj_idx += 1;
         }
-        out
+        (out, sources)
     }
 
     /// Compute the walkable areas for an enemy with this precedence:
