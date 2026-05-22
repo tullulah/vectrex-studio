@@ -3169,27 +3169,47 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    ldrsh   r1, [r6, #6]        @ spawn_y\n");
     s.push_str("    mov     r2, #0              @ best_idx\n");
     s.push_str("    mov     r3, #1\n");
-    s.push_str("    lsl     r3, r3, #16         @ best_dist = 0x10000 (large sentinel)\n");
+    s.push_str("    lsl     r3, r3, #16         @ best_cost = 0x10000 (large sentinel)\n");
     s.push_str("    mov     r0, #0              @ i\n");
-    s.push_str("    push    {r4}                @ free one scratch (r4 is ROM data_ptr)\n");
+    // Push the regs we need to free. r4 is ROM data_ptr (outer-loop invariant)
+    // and r11 we use as scratch for spawn_x.
+    s.push_str("    push    {r4, r11}\n");
+    s.push_str("    ldrsh   r11, [r6, #4]       @ spawn_x\n");
     s.push_str(".Lspe_area_loop:\n");
     s.push_str("    cmp     r0, r12\n");
     s.push_str("    bge     .Lspe_area_done\n");
+    // |area.y - spawn_y|
     s.push_str("    ldrsh   r4, [r10]           @ area[i].y\n");
     s.push_str("    sub     r4, r4, r1\n");
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r4, r4, #0          @ |dy|\n");
+    // Cost = |dy| unless spawn_x is OUTSIDE [area.x_min, area.x_max], in which
+    // case we add a large penalty so any area that horizontally contains the
+    // enemy is preferred over one that doesn't. Prevents picking a tall
+    // shelf far above when the enemy is dropped onto a different shelf.
+    s.push_str("    push    {r0, r1}            @ save i and spawn_y temporarily\n");
+    s.push_str("    ldrsh   r0, [r10, #2]       @ x_min\n");
+    s.push_str("    ldrsh   r1, [r10, #4]       @ x_max\n");
+    s.push_str("    cmp     r11, r0\n");
+    s.push_str("    blt     .Lspe_area_outside\n");
+    s.push_str("    cmp     r11, r1\n");
+    s.push_str("    ble     .Lspe_area_inside\n");
+    s.push_str(".Lspe_area_outside:\n");
+    s.push_str("    add     r4, r4, #1024       @ X-outside penalty\n");
+    s.push_str(".Lspe_area_inside:\n");
+    s.push_str("    pop     {r0, r1}\n");
+    // Compare cost to best
     s.push_str("    cmp     r4, r3\n");
     s.push_str("    bge     .Lspe_area_skip\n");
-    s.push_str("    mov     r3, r4              @ new best_dist\n");
+    s.push_str("    mov     r3, r4              @ new best_cost\n");
     s.push_str("    mov     r2, r0              @ new best_idx\n");
     s.push_str(".Lspe_area_skip:\n");
     s.push_str("    add     r10, r10, #8\n");
     s.push_str("    add     r0, r0, #1\n");
     s.push_str("    b       .Lspe_area_loop\n");
     s.push_str(".Lspe_area_done:\n");
-    s.push_str("    pop     {r4}                @ restore ROM data_ptr\n");
+    s.push_str("    pop     {r4, r11}\n");
     s.push_str("    strb    r2, [r6, #11]       @ current_area_idx = best\n");
     s.push_str("    ldr     r10, [r6, #28]\n");
     s.push_str("    add     r10, r10, #8\n");

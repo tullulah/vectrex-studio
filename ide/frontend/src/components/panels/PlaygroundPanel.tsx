@@ -587,11 +587,19 @@ export function PlaygroundPanel() {
               : levelWalkableAreas.length > 0 ? levelWalkableAreas
               : collectVecWalkableAreas(prevObjects, loadedVectors);
             if (candidates.length === 0) return obj;
+            // Match the ARM area-snap cost: |dy| + 1024 if spawn_x is outside
+            // [area.x_min, area.x_max]. Prefer the area that horizontally
+            // contains the enemy when several are within reach in Y.
+            const costOf = (a: { y: number; x_min: number; x_max: number }) => {
+              const dy = Math.abs(a.y - obj.y);
+              const xIn = obj.x >= a.x_min && obj.x <= a.x_max;
+              return dy + (xIn ? 0 : 1024);
+            };
             let best = 0;
-            let bestDy = Math.abs(candidates[0].y - obj.y);
+            let bestCost = costOf(candidates[0]);
             for (let i = 1; i < candidates.length; i++) {
-              const d = Math.abs(candidates[i].y - obj.y);
-              if (d < bestDy) { best = i; bestDy = d; }
+              const c = costOf(candidates[i]);
+              if (c < bestCost) { best = i; bestCost = c; }
             }
             const a = candidates[best];
             const feetOff = getEnemyFeetOffset((obj as any).enemyType, loadedVectors);
