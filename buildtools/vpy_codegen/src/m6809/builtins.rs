@@ -133,6 +133,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("SET_ENEMY_Y", 2),       // i, y → writes pool[i].y
     ("SET_ENEMY_STATE", 2),   // i, state → writes pool[i].sm_state byte
     ("SET_ENEMY_DIR", 2),     // i, dir → writes pool[i].dir (0=left, 1=right)
+    ("GET_ENEMY_AREA_IDX", 1),// i → u8 current_area_idx (255 if inactive) — debug
     ("KILL_ENEMY", 1),        // i → kills enemy, returns new ENEMY_COUNT
     ("ENEMY_FIRE_EVENT", 2),  // i, "eventName" → fires event hash
 ];

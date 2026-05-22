@@ -4,7 +4,7 @@ META MAX_ENEMIES = 8
 
 # ── Debug ────────────────────────────────────────────────────────────────────
 const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 2 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
+const START_FLOOR = 4 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE = 0        # título + "press a button"
@@ -103,7 +103,7 @@ push_dx: i16 = 0
 
 # ── Physics ──────────────────────────────────────────────────────────────────
 const GRAVITY = 1
-const JUMP_SPEED = 11
+const JUMP_SPEED = 10
 const MAX_FALL_SPEED = 12
 const PLAYER_HH = 11     # half-height de player_idle.vec
 const PLAYER_HW = 6      # half-width de player_idle.vec
@@ -655,7 +655,18 @@ def draw_hud():
     PRINT_NUMBER(0, 127, score)          # puntuación, arriba-izquierda
     PRINT_NUMBER(-78, 127, lives)           # vidas, debajo del score
     PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha
-    
+
+    # ── DEBUG: per-enemy (idx, area_idx, y) for the first 4 slots ──
+    # Columns from left to right: enemy idx | area idx | y (camera-relative)
+    PRINT_TEXT(-78, 100, "I A Y")
+    i = 0
+    while i < 4:
+        if GET_ENEMY_ACTIVE(i) == 1:
+            PRINT_NUMBER(-78, 88 - i*12, i)
+            PRINT_NUMBER(-50, 88 - i*12, GET_ENEMY_AREA_IDX(i))
+            PRINT_NUMBER(-10, 88 - i*12, GET_ENEMY_Y(i) - camera_y + 128)
+        i = i + 1
+
 
 # ── Colisión nieve vs enemigos ────────────────────────────────────────────────
 def check_snowball_enemy_collision():

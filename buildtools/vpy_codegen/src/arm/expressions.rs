@@ -263,9 +263,11 @@ pub fn emit_call(
     {
         let name_up = info.name.to_uppercase();
         let is_query = matches!(name_up.as_str(),
-            "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE");
+            "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE" |
+            "GET_ENEMY_AREA_IDX");
         let is_m6809_only = matches!(name_up.as_str(),
             "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE" |
+            "GET_ENEMY_AREA_IDX" |
             "SET_ENEMY_X" | "SET_ENEMY_Y" | "SET_ENEMY_DIR" | "SET_ENEMY_STATE" |
             "KILL_ENEMY" | "ENEMY_FIRE_EVENT");
         if is_m6809_only {

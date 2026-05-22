@@ -377,6 +377,26 @@ pub fn emit_call(
              \x20   strb    r0, [r1, #26]   @ pool.dir = r0 (0=left, 1=right)\n"
         ));
     }
+    if info.name.to_uppercase() == "GET_ENEMY_AREA_IDX" {
+        // Debug helper: returns pool+11 (current_area_idx) for the given
+        // enemy. 255 if the pool slot is inactive.
+        let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_AREA_IDX: missing arg")?, var_addrs)?;
+        return Ok(format!(
+            "    @ GET_ENEMY_AREA_IDX(idx)\n\
+             {idx_s}\
+             \x20   mov     r1, #32\n\
+             \x20   mul     r0, r0, r1\n\
+             \x20   ldr     r1, =PITREX_ENEMY_POOL\n\
+             \x20   add     r1, r1, r0\n\
+             \x20   ldrb    r2, [r1, #12]   @ active\n\
+             \x20   cmp     r2, #0\n\
+             \x20   bne     1f\n\
+             \x20   mov     r0, #255\n\
+             \x20   b       2f\n\
+             1:  ldrb    r0, [r1, #11]   @ current_area_idx\n\
+             2:\n"
+        ));
+    }
     if info.name.to_uppercase() == "GET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_STATE: missing arg")?, var_addrs)?;
         return Ok(format!(
