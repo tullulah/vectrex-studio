@@ -587,13 +587,15 @@ export function PlaygroundPanel() {
               : levelWalkableAreas.length > 0 ? levelWalkableAreas
               : collectVecWalkableAreas(prevObjects, loadedVectors);
             if (candidates.length === 0) return obj;
-            // Match the ARM area-snap cost: |dy| + 1024 if spawn_x is outside
-            // [area.x_min, area.x_max]. Prefer the area that horizontally
-            // contains the enemy when several are within reach in Y.
+            // Match the ARM area-snap cost: |dy|, plus +1024 if spawn_x is
+            // outside the area's X range, plus +4096 if the area sits ABOVE
+            // the enemy's feet (gravity intuition — drop onto whichever
+            // shelf is at or below).
             const costOf = (a: { y: number; x_min: number; x_max: number }) => {
               const dy = Math.abs(a.y - obj.y);
               const xIn = obj.x >= a.x_min && obj.x <= a.x_max;
-              return dy + (xIn ? 0 : 1024);
+              const above = a.y > obj.y;
+              return dy + (xIn ? 0 : 1024) + (above ? 4096 : 0);
             };
             let best = 0;
             let bestCost = costOf(candidates[0]);

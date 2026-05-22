@@ -3184,10 +3184,14 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    it      lt\n");
     s.push_str("    rsblt   r4, r4, #0          @ |dy|\n");
-    // Cost = |dy| unless spawn_x is OUTSIDE [area.x_min, area.x_max], in which
-    // case we add a large penalty so any area that horizontally contains the
-    // enemy is preferred over one that doesn't. Prevents picking a tall
-    // shelf far above when the enemy is dropped onto a different shelf.
+    // Cost = |dy| with two penalties:
+    //   +1024 if spawn_x is OUTSIDE [area.x_min, area.x_max]  → prefer areas
+    //         that horizontally contain the enemy.
+    //   +4096 if area.y > spawn_y                              → prefer areas
+    //         at or below the enemy's feet. When two parallel shelves stack
+    //         vertically and the user drops an enemy between them, this
+    //         picks the LOWER shelf (gravity intuition) even when the upper
+    //         shelf is slightly closer in |dy|.
     s.push_str("    push    {r0, r1}            @ save i and spawn_y temporarily\n");
     s.push_str("    ldrsh   r0, [r10, #2]       @ x_min\n");
     s.push_str("    ldrsh   r1, [r10, #4]       @ x_max\n");
@@ -3198,6 +3202,14 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str(".Lspe_area_outside:\n");
     s.push_str("    add     r4, r4, #1024       @ X-outside penalty\n");
     s.push_str(".Lspe_area_inside:\n");
+    // Above-feet penalty: area.y > spawn_y. spawn_y was pushed at sp+4
+    // by `push {r0, r1}` above.
+    s.push_str("    ldrsh   r0, [r10]           @ area.y\n");
+    s.push_str("    ldr     r1, [sp, #4]        @ saved spawn_y\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    ble     .Lspe_area_not_above\n");
+    s.push_str("    add     r4, r4, #4096       @ above-feet penalty\n");
+    s.push_str(".Lspe_area_not_above:\n");
     s.push_str("    pop     {r0, r1}\n");
     // Compare cost to best
     s.push_str("    cmp     r4, r3\n");
