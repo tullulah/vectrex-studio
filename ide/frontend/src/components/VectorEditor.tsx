@@ -4474,7 +4474,25 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               width: 38, padding: '1px 3px', fontSize: '9px',
               background: '#222', color: '#4fc', border: '1px solid #4a4',
               borderRadius: '2px', fontFamily: 'monospace',
+              MozAppearance: 'textfield' as const,
             } as React.CSSProperties;
+            // Commit on blur / Enter only. Typing fires onChange dozens of
+            // times per second; each one ran updateResource → setHistory +
+            // setResource and the deep re-render reflowed the side panel,
+            // visibly jumping its scroll to the top. defaultValue + a key
+            // bound to the committed value avoids the re-render loop.
+            const commit = (k: 'y' | 'x_min' | 'x_max') => (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
+              const el = e.currentTarget;
+              const v = parseInt(el.value);
+              if (Number.isFinite(v) && v !== a[k]) patch(k, v);
+            };
+            const onKey = (k: 'y' | 'x_min' | 'x_max') => (e: React.KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === 'Enter') { e.currentTarget.blur(); }
+              else if (e.key === 'Escape') { e.currentTarget.value = String(a[k]); e.currentTarget.blur(); }
+            };
+            // Disable mouse-wheel value-change so scrolling the panel doesn't
+            // change the field while it has focus.
+            const onWheel = (e: React.WheelEvent<HTMLInputElement>) => { e.currentTarget.blur(); };
             return (
               <div key={idx} style={{
                 fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
@@ -4482,11 +4500,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               }}>
                 <span style={{ width: 18 }}>W{idx}</span>
                 <span title="Vertical position: usually the platform's top surface; nudge until enemies sit correctly">y</span>
-                <input type="number" value={a.y} onChange={(e) => patch('y', parseInt(e.target.value) || 0)} style={inputStyle} />
+                <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
-                <input type="number" value={a.x_min} onChange={(e) => patch('x_min', parseInt(e.target.value) || 0)} style={inputStyle} />
+                <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
                 <span>..</span>
-                <input type="number" value={a.x_max} onChange={(e) => patch('x_max', parseInt(e.target.value) || 0)} style={inputStyle} />
+                <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
                 <button
                   onClick={() => {
                     const next = (resource.walkableAreas ?? []).slice();
