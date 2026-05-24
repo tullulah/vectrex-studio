@@ -1854,6 +1854,19 @@ fn emit_pitrex_sfx_update() -> String {
     s.push_str(".Lsfxu_wl:\n");
     s.push_str("    cmp     r6, #0\n    beq     .Lsfxu_after\n");
     s.push_str("    ldrb    r0, [r7]\n    ldrb    r1, [r7, #1]\n");
+    // Mixer reg 7: read-modify-write so SFX only affects channel C bits.
+    // Without this, SFX writes 0x3B/0x1B (bits 0,1 set = tones A/B disabled)
+    // and silences any music playing on A/B. CHANNEL_C_MASK = 0x24 (bit2=toneC,
+    // bit5=noiseC); music's bits 0/1/3/4 come from the current PSG mixer state.
+    s.push_str("    cmp     r0, #7\n    bne     .Lsfxu_do_write\n");
+    s.push_str("    push    {r1, r6, r7}                @ save sfx_mixer + loop vars\n");
+    s.push_str("    mov     r0, #7\n    bl      v_readPSG  @ r0 = current Regs[7]\n");
+    s.push_str("    pop     {r1, r6, r7}                @ r1 = sfx_mixer, r0 = cur_mixer\n");
+    s.push_str("    and     r0, r0, #0xDB               @ keep non-C bits from music (~0x24)\n");
+    s.push_str("    and     r1, r1, #0x24               @ keep only C bits from SFX\n");
+    s.push_str("    orr     r1, r0, r1                  @ merged mixer\n");
+    s.push_str("    mov     r0, #7\n");
+    s.push_str(".Lsfxu_do_write:\n");
     s.push_str("    push    {r6, r7}\n    bl      v_writePSG\n    pop     {r6, r7}\n");
     s.push_str("    add     r7, r7, #2\n    sub     r6, r6, #1\n    b       .Lsfxu_wl\n");
     s.push_str(".Lsfxu_after:\n");

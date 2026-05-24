@@ -64,8 +64,16 @@ export interface PitrexArm32State {
   joyX2: number; joyY2: number; joyButtons2: number;
   /** Step counter (safety guard against infinite loops). */
   steps: number;
+  /** Simulated BCM CLO base in µs — advanced by exactly 20000 each runFrame()
+   *  call so pitrex_music_update sees stable 50 Hz deltas. Reading the CLO
+   *  returns base + a small intra-frame counter (so work_us measurements are
+   *  still non-zero and monotonic) but never crosses into the next tick. */
+  bcmCloBaseUs: number;
+  bcmCloIntraUs: number;
   /** PSG register write callback — set by PitrexCore to drive audio synthesis. */
   psgWrite: (reg: number, val: number) => void;
+  /** PSG register read callback — set by PitrexCore so SFX can RMW the mixer. */
+  psgRead: (reg: number) => number;
   /** Buffered UART output — accumulates text until newline, then flushes. */
   uartBuffer: string;
 }
@@ -80,9 +88,18 @@ const BCM_TIMER_ADDR = 0x20003000;
 
 function memRead32(s: PitrexArm32State, addr: number): number {
   const aligned = addr & ~3;
-  // Intercept BCM CLO register read — return a real microsecond timestamp
+  // Intercept BCM CLO register read — return a *fake* monotonic µs counter that
+  // advances by exactly 20000 per runFrame() call. The real `performance.now()`
+  // value would create irregular deltas because the IDE rAF loop runs at 60 Hz
+  // gated to a 50 Hz target (one 33 ms call, four 16.67 ms calls, one skip),
+  // so the music sequencer's tick accumulator periodically picks up >40 ms and
+  // fires two PSG events back-to-back — audible as dirt/clicks. With a fixed
+  // 20 ms step per frame, pitrex_music_update sees a clean 1-tick delta every
+  // call. The intra-frame counter keeps pitrex_wait_recal's work_us calculation
+  // monotonic and non-zero so its overflow logging still works.
   if (aligned === BCM_TIMER_ADDR + 4) {
-    return (performance.now() * 1000) >>> 0;
+    s.bcmCloIntraUs = (s.bcmCloIntraUs + 1) | 0;     // tiny tick on every read
+    return ((s.bcmCloBaseUs + s.bcmCloIntraUs) >>> 0);
   }
   return s.mem.get(aligned) ?? 0;
 }
@@ -697,6 +714,13 @@ const SDK_STUBS: Record<string, SdkStub> = {
     const val = s.regs[1] & 0xFF;
     s.psgWrite(reg, val);
   },
+  // pitrex_sfx_update needs to read the current PSG mixer value to merge
+  // SFX-channel bits with music channels (otherwise SFX writes 0x3B/0x1B
+  // and silences music tones A/B).
+  'v_readPSG': (s) => {
+    const reg = s.regs[0] & 0x0F;
+    s.regs[0] = s.psgRead(reg) | 0;
+  },
   'v_doSound': () => {},
 
   '__aeabi_idiv': (s) => {
@@ -1244,7 +1268,10 @@ export function createState(parsed: ParsedAsm): PitrexArm32State {
     joyX: 0, joyY: 0, joyButtons: 0,
     joyX2: 0, joyY2: 0, joyButtons2: 0,
     steps: 0,
+    bcmCloBaseUs: 0,
+    bcmCloIntraUs: 0,
     psgWrite: () => {},
+    psgRead: () => 0,
     uartBuffer: '',
   };
 
@@ -1297,6 +1324,14 @@ export function runFrame(
   s.texts = [];
   s.waitRecalCalled = false;
   let steps = 0;
+
+  // Advance the simulated BCM CLO by exactly one 50 Hz tick. pitrex_music_update
+  // reads the CLO to compute elapsed µs; using real wall time produces uneven
+  // 16.67 / 33.34 ms deltas under the IDE's 60→50 Hz rAF gating, which makes
+  // the music sequencer's catchup loop fire 2 PSG events back-to-back and sound
+  // like dirt. A flat 20 ms step keeps tempo locked to 50 Hz.
+  s.bcmCloBaseUs = (s.bcmCloBaseUs + 20000) | 0;
+  s.bcmCloIntraUs = 0;
 
   while (!s.waitRecalCalled && steps < maxSteps) {
     if (!executeOne(s)) break;

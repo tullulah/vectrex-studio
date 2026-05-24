@@ -45,6 +45,7 @@ export class PitrexCore {
         this.psg.write(0x18, reg & 0x0F);
         this.psg.write(0x10, val & 0xFF);
       };
+      this.state.psgRead = (reg: number) => this.psg.Regs[reg & 0x0F] & 0xFF;
       this.psg.reset();
       this._ready  = true;
       console.log(
