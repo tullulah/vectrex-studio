@@ -345,55 +345,60 @@ pub fn emit_builtin(
             out.push_str("    STD RESULT\n");
             true
         }
+        // Player 2 buttons live in the upper nibble of Vec_Btns ($C80F),
+        // the same BIOS variable as Player 1 (P1 = bits 0-3, P2 = bits 4-7).
+        // Active-HIGH after Read_Btns. The old code was looking at $C812
+        // with mask 0x01-0x08 — wrong address and wrong bit positions, so
+        // J2_BUTTON_*() never reported pressed (issue #4).
         "J2_BUTTON_1" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$01      ; Test bit 0\n");
-            out.push_str(&format!("    BEQ .J2B1_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B1_{}_END\n", label_id));
-            out.push_str(&format!(".J2B1_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit4=1 means P2 btn1 pressed\n");
+            out.push_str("    BITA #$10\n");
+            out.push_str(&format!("    BNE .J2B1_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B1_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B1_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B1_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B1_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J2_BUTTON_2" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$02      ; Test bit 1\n");
-            out.push_str(&format!("    BEQ .J2B2_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B2_{}_END\n", label_id));
-            out.push_str(&format!(".J2B2_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit5=1 means P2 btn2 pressed\n");
+            out.push_str("    BITA #$20\n");
+            out.push_str(&format!("    BNE .J2B2_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B2_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B2_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B2_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B2_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J2_BUTTON_3" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$04      ; Test bit 2\n");
-            out.push_str(&format!("    BEQ .J2B3_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B3_{}_END\n", label_id));
-            out.push_str(&format!(".J2B3_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit6=1 means P2 btn3 pressed\n");
+            out.push_str("    BITA #$40\n");
+            out.push_str(&format!("    BNE .J2B3_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B3_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B3_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B3_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B3_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J2_BUTTON_4" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$08      ; Test bit 3\n");
-            out.push_str(&format!("    BEQ .J2B4_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B4_{}_END\n", label_id));
-            out.push_str(&format!(".J2B4_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit7=1 means P2 btn4 pressed\n");
+            out.push_str("    BITA #$80\n");
+            out.push_str(&format!("    BNE .J2B4_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B4_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B4_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B4_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B4_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
