@@ -1945,32 +1945,23 @@ fn emit_pitrex_j2() -> String {
     s.push_str("v_readJoystick2Analog:\n");
     s.push_str("    bx      lr\n\n");
 
-    // J2 X — currentJoy2X is int8_t (±127). Deadzone = ±32 (~25% of full range).
-    s.push_str("@ pitrex_j2_x() → r0 = -1, 0, or +1\n");
+    // J2 X / J2 Y — return the raw analog value in -127..127, matching
+    // pitrex_j1_x/y and vpy_j2_x/y on rp2350. The old implementation
+    // applied a ±32 deadzone and returned -1/0/+1, which silently broke
+    // any game that scaled the axis (e.g. `sx = cx + jx / 4` yielded 0
+    // forever because |jx| was always ≤ 1).
+    s.push_str("@ pitrex_j2_x() → r0 = X axis (-127..127)\n");
     s.push_str(".global pitrex_j2_x\n.type pitrex_j2_x, %function\npitrex_j2_x:\n");
     s.push_str("    ldr     r1, =currentJoy2X\n");
     s.push_str("    ldrsb   r0, [r1]\n");
-    s.push_str("    cmp     r0, #32\n");
-    s.push_str("    bgt     1f\n");
-    s.push_str("    cmn     r0, #32\n");
-    s.push_str("    blt     2f\n");
-    s.push_str("    mov     r0, #0\n    bx      lr\n");
-    s.push_str("1:  mov     r0, #1\n    bx      lr\n");
-    s.push_str("2:  mvn     r0, #0\n    bx      lr\n");
+    s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
 
-    // J2 Y — currentJoy2Y is int8_t (±127). Deadzone = ±32.
-    s.push_str("@ pitrex_j2_y() → r0 = -1, 0, or +1\n");
+    s.push_str("@ pitrex_j2_y() → r0 = Y axis (-127..127)\n");
     s.push_str(".global pitrex_j2_y\n.type pitrex_j2_y, %function\npitrex_j2_y:\n");
     s.push_str("    ldr     r1, =currentJoy2Y\n");
     s.push_str("    ldrsb   r0, [r1]\n");
-    s.push_str("    cmp     r0, #32\n");
-    s.push_str("    bgt     1f\n");
-    s.push_str("    cmn     r0, #32\n");
-    s.push_str("    blt     2f\n");
-    s.push_str("    mov     r0, #0\n    bx      lr\n");
-    s.push_str("1:  mov     r0, #1\n    bx      lr\n");
-    s.push_str("2:  mvn     r0, #0\n    bx      lr\n");
+    s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
 
     // J2 buttons — bits 4-7 of currentButtonState (active low, same as J1)
