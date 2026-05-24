@@ -2247,7 +2247,7 @@ fn emit_pitrex_camera_getters() -> String {
     s.push_str("    ldr     r0, =LEVEL_DATA_PTR\n    ldr     r0, [r0]\n");
     s.push_str("    cmp     r0, #0\n    beq     pglfy_none\n");
     s.push_str("    ldrsh   r1, [r0, #32]      @ groundBottomOffset at header +32\n");
-    s.push_str("    ldr     r0, =VAR_CAMERA_Y\n    ldrsh   r0, [r0]\n");
+    s.push_str("    ldr     r0, =CAMERA_Y\n    ldr     r0, [r0]\n");
     s.push_str("    sub     r0, r0, #128\n");
     s.push_str("    add     r0, r0, r1\n");
     s.push_str("    bx      lr\n");
