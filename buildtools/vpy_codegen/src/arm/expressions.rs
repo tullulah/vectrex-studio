@@ -342,6 +342,8 @@ pub fn emit_call(
         "GET_SCROLL_LIMIT_RIGHT" => "vpy_get_scroll_limit_right",
         "GET_SCROLL_LIMIT_TOP"   => "vpy_get_scroll_limit_top",
         "GET_SCROLL_LIMIT_BOTTOM"=> "vpy_get_scroll_limit_bottom",
+        "GET_LEVEL_FLOOR_Y"      => "vpy_get_level_floor_y",
+        "GET_FRAME_US"           => "vpy_get_frame_us",
         // Message system
         "MSG_DEF"         => "vpy_msg_def",
         "PRINT_MSG"       => "vpy_print_msg",

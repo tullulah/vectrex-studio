@@ -223,6 +223,34 @@ pub fn emit_get_scroll_limit_bottom(_args: &[Expr], out: &mut String) {
     out.push_str("    STD RESULT\n");
 }
 
+/// Emit GET_LEVEL_FLOOR_Y() → CAMERA_Y - 128 + groundBottomOffset (level header +32).
+/// Mirrors pitrex_get_level_floor_y so cross-target code can share spawn math.
+pub fn emit_get_level_floor_y(_args: &[Expr], out: &mut String) {
+    out.push_str("    ; ===== GET_LEVEL_FLOOR_Y builtin =====\n");
+    out.push_str("    LDX >LEVEL_PTR\n");
+    out.push_str("    CMPX #0\n");
+    out.push_str("    BEQ GLFY_NONE\n");
+    out.push_str("    LDD 32,X            ; groundBottomOffset FDB at header +32\n");
+    out.push_str("    ADDD >CAMERA_Y      ; + camera_y\n");
+    out.push_str("    SUBD #128           ; - 128 (top of screen offset)\n");
+    out.push_str("    STD RESULT\n");
+    out.push_str("    BRA GLFY_END\n");
+    out.push_str("GLFY_NONE:\n");
+    out.push_str("    LDD #0\n");
+    out.push_str("    STD RESULT\n");
+    out.push_str("GLFY_END:\n");
+}
+
+/// Emit GET_FRAME_US() → stub. The Vectrex has no µs hardware timer accessible
+/// at this level (VIA T2 is used by display), so return 0. Code paths that read
+/// this for adaptive timing just see "no time elapsed" and skip slow-frame
+/// branches, which is harmless on M6809 (single tempo target).
+pub fn emit_get_frame_us(_args: &[Expr], out: &mut String) {
+    out.push_str("    ; ===== GET_FRAME_US builtin (stub: returns 0) =====\n");
+    out.push_str("    LDD #0\n");
+    out.push_str("    STD RESULT\n");
+}
+
 /// Emit LEVEL_COLLISION_Y(player_x, player_y) → highest floor Y at player_x in the GP layer
 ///
 /// Scans all collidable GP objects (collision_flags bit 0 set) and returns the top Y

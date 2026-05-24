@@ -1766,6 +1766,28 @@ fn emit_state_builtins() -> String {
     simple_get!("vpy_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT");
     simple_get!("vpy_get_scroll_limit_top",    "SCROLL_LIMIT_TOP");
     simple_get!("vpy_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM");
+
+    // vpy_get_level_floor_y() → camera_y - 128 + groundBottomOffset (level header +32).
+    // Mirrors pitrex_get_level_floor_y so cross-target code can share spawn-height math.
+    s.push_str(".global vpy_get_level_floor_y\n.type vpy_get_level_floor_y, %function\n.thumb_func\nvpy_get_level_floor_y:\n");
+    s.push_str("    ldr     r0, =LEVEL_DATA_PTR\n");
+    s.push_str("    ldr     r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq     vglfy_none\n");
+    s.push_str("    ldrsh   r1, [r0, #32]      @ groundBottomOffset at header +32\n");
+    s.push_str("    ldr     r0, =CAMERA_Y\n");
+    s.push_str("    ldr     r0, [r0]\n");
+    s.push_str("    sub     r0, r0, #128\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str("    bx      lr\n");
+    s.push_str("vglfy_none:\n    mov     r0, #0\n    bx      lr\n\n");
+
+    // vpy_get_frame_us() → stub. PiTrex uses the BCM CLO; rp2350 has no equivalent
+    // hardware exposed yet, so return 0. Code paths that use this for adaptive
+    // timing (e.g. SnowBros frame profiling) just see "no time elapsed" and skip
+    // their slow-frame branches, which is harmless.
+    s.push_str(".global vpy_get_frame_us\n.type vpy_get_frame_us, %function\n.thumb_func\nvpy_get_frame_us:\n");
+    s.push_str("    mov     r0, #0\n    bx      lr\n\n");
     // vpy_set_text_size: converts M6809 convention (n=1..8, n=8=normal) to ARM scale.
     // ARM TEXT_SIZE=3 ≈ normal Vectrex text (glyph 4×6 box, scale=3 → height=9 units).
     // Mapping: TEXT_SIZE = max(1, (n*3 + 4) >> 3)

@@ -110,6 +110,8 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("GET_SCROLL_LIMIT_RIGHT",  0),  // → i16 right scroll boundary
     ("GET_SCROLL_LIMIT_TOP",    0),  // → i16 top scroll boundary
     ("GET_SCROLL_LIMIT_BOTTOM", 0),  // → i16 bottom scroll boundary
+    ("GET_LEVEL_FLOOR_Y",       0),  // → i16 floor surface world Y (camera-relative)
+    ("GET_FRAME_US",            0),  // → u32 µs since last WAIT_RECAL (M6809 stub: 0)
     ("LEVEL_COLLISION_Y", 3),     // player_x, player_y, player_half_height → returns tile_top + player_hh
     ("LEVEL_COLLISION_X", 4),     // player_x, player_y, player_half_width, player_half_height → returns push-out dx
 
@@ -638,6 +640,14 @@ pub fn emit_builtin(
             debug::emit_debug_print(args, out, assets);
             true
         }
+        "DEBUG_PRINT_LABELED" => {
+            // (label, value) — discard the label (M6809 has no host UART
+            // channel to surface it on) and just print the value.
+            if args.len() >= 2 {
+                debug::emit_debug_print(&args[1..], out, assets);
+            }
+            true
+        }
         "DEBUG_PRINT_STR" => {
             debug::emit_debug_print_str(args, out, assets);
             true
@@ -768,6 +778,14 @@ pub fn emit_builtin(
         }
         "GET_SCROLL_LIMIT_BOTTOM" => {
             level::emit_get_scroll_limit_bottom(args, out);
+            true
+        }
+        "GET_LEVEL_FLOOR_Y" => {
+            level::emit_get_level_floor_y(args, out);
+            true
+        }
+        "GET_FRAME_US" => {
+            level::emit_get_frame_us(args, out);
             true
         }
         "LEVEL_COLLISION_Y" => {
@@ -977,6 +995,29 @@ pub fn emit_builtin(
                 }
                 _ => {}
             }
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
+        // ===== Enemy debug/PiTrex-only stubs =====
+        // The M6809 enemy pool has no `dir` field or area-tracking, so these
+        // ARM/PiTrex builtins become no-ops on M6809 to keep cross-target code
+        // (SnowBros etc.) compiling. SET_ENEMY_DIR still consumes its args via
+        // emit_simple_expr so any side effects in expressions still happen.
+        "SET_ENEMY_DIR" => {
+            if args.len() == 2 {
+                expressions::emit_simple_expr(&args[0], out, assets);
+                expressions::emit_simple_expr(&args[1], out, assets);
+            }
+            out.push_str("    ; SET_ENEMY_DIR: NOP on M6809 (no dir field in pool)\n");
+            true
+        }
+        "GET_ENEMY_AREA_IDX" => {
+            if args.len() == 1 {
+                expressions::emit_simple_expr(&args[0], out, assets);
+            }
+            out.push_str("    ; GET_ENEMY_AREA_IDX: stub returns 0 on M6809\n");
+            out.push_str("    LDD #0\n");
             out.push_str("    STD RESULT\n");
             true
         }
@@ -1210,7 +1251,11 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    resource.visible_paths().len()
+                    // Must match the filter in vecres.rs compile_to_asm — degenerate
+                    // paths (< 2 points) are dropped from the data table, so the
+                    // unrolled DRAW_VECTOR loop here has to drop them too or it
+                    // references _NAME_PATHN labels that were never emitted.
+                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
                  } else {
                     1
                  }
@@ -1289,7 +1334,11 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
              // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    resource.visible_paths().len()
+                    // Must match the filter in vecres.rs compile_to_asm — degenerate
+                    // paths (< 2 points) are dropped from the data table, so the
+                    // unrolled DRAW_VECTOR loop here has to drop them too or it
+                    // references _NAME_PATHN labels that were never emitted.
+                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
                  } else {
                     1
                  }

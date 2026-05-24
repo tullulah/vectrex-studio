@@ -707,16 +707,21 @@ impl VPlayLevel {
                 // present, use it. Otherwise fall back to the level's. The
                 // same applies to `transitions`. Either field being a non-None
                 // (even empty) on the enemy is treated as an explicit override.
-                // Effective level areas: self.walkable_areas overrides; otherwise
-                // collect from any placed .vec asset that ships its own areas.
-                // When using vec-collected, also keep source_idx so we can
-                // suppress auto jump_up/drop within the same placed .vec.
+                // Effective level areas precedence:
+                //   1. .vec-derived areas (each placed platform contributes its
+                //      own walkableAreas translated by object position)
+                //   2. Level-wide walkable_areas (fallback when no .vec has any)
+                // This lets platform .vec files define where enemies walk and
+                // those areas are automatically inherited by enemies that don't
+                // specify their own walkable_areas.
+                let (vec_areas, vec_sources) = Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
                 let (level_areas, level_sources): (Vec<WalkableArea>, Option<Vec<usize>>) =
-                    match self.walkable_areas.as_deref() {
-                        Some(a) if !a.is_empty() => (a.to_vec(), None),
-                        _ => {
-                            let (a, s) = Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
-                            (a, Some(s))
+                    if !vec_areas.is_empty() {
+                        (vec_areas, Some(vec_sources))
+                    } else {
+                        match self.walkable_areas.as_deref() {
+                            Some(a) if !a.is_empty() => (a.to_vec(), None),
+                            _ => (Vec::new(), None),
                         }
                     };
                 let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
@@ -724,7 +729,7 @@ impl VPlayLevel {
                 // (so indices match). If derive picked enemy-own or waypoints,
                 // sources don't apply.
                 let sources_for_derive: Option<&[usize]> =
-                    if obj.walkable_areas.is_none() && areas.len() == level_areas.len() {
+                    if obj.walkable_areas.as_ref().map_or(true, |v| v.is_empty()) && areas.len() == level_areas.len() {
                         level_sources.as_deref()
                     } else { None };
                 // Transitions: explicit override on the enemy → use as-is.
@@ -1021,8 +1026,12 @@ impl VPlayLevel {
         level_areas: Option<&[WalkableArea]>,
     ) -> Vec<WalkableArea> {
         if let Some(ref explicit) = obj.walkable_areas {
-            // Even an empty list is an explicit override (means "no areas").
-            return explicit.clone();
+            if !explicit.is_empty() {
+                return explicit.clone();
+            }
+            // Empty list: treat same as None — IDE saves [] by default even
+            // when the designer never configured walkable_areas; fall through
+            // to inherit from level/.vec areas (same as transitions handling).
         }
         if let Some(level) = level_areas {
             if !level.is_empty() {
