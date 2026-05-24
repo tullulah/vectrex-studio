@@ -613,23 +613,29 @@ export const EmulatorPanel: React.FC = () => {
     // has no second-controller config yet, so this is the quick path to make
     // J2_BUTTON_*() actually testable in jsvecx (issue #4). Bits land in the
     // high nibble of the PSG reg-14 value injected below.
+    //
+    // Listener attached on `document` with capture:true so Monaco / IDE
+    // shortcut handlers don't swallow the keys before us.
     let p2ButtonState = 0;
     const p2KeyMap: Record<string, number> = {
-      'j': 0, 'J': 0,
-      'k': 1, 'K': 1,
-      'l': 2, 'L': 2,
-      'm': 3, 'M': 3,
+      'KeyJ': 0, 'KeyK': 1, 'KeyL': 2, 'KeyM': 3,
     };
     const p2KeyDown = (e: KeyboardEvent) => {
-      const bit = p2KeyMap[e.key];
-      if (bit !== undefined) p2ButtonState |= (1 << bit);
+      const bit = p2KeyMap[e.code];
+      if (bit !== undefined) {
+        p2ButtonState |= (1 << bit);
+        console.log('[P2 key] down', e.code, '→ p2ButtonState =', p2ButtonState.toString(2).padStart(4, '0'));
+      }
     };
     const p2KeyUp = (e: KeyboardEvent) => {
-      const bit = p2KeyMap[e.key];
-      if (bit !== undefined) p2ButtonState &= ~(1 << bit);
+      const bit = p2KeyMap[e.code];
+      if (bit !== undefined) {
+        p2ButtonState &= ~(1 << bit);
+        console.log('[P2 key] up  ', e.code, '→ p2ButtonState =', p2ButtonState.toString(2).padStart(4, '0'));
+      }
     };
-    window.addEventListener('keydown', p2KeyDown);
-    window.addEventListener('keyup', p2KeyUp);
+    document.addEventListener('keydown', p2KeyDown, { capture: true });
+    document.addEventListener('keyup',   p2KeyUp,   { capture: true });
 
     const gamepadPollInterval = setInterval(() => {
       const vecx = (window as any).vecx;
@@ -763,6 +769,11 @@ export const EmulatorPanel: React.FC = () => {
           if (vecx.e8910 && vecx.e8910.e8910_write) {
             vecx.e8910.e8910_write(14, psgReg14);
           }
+          if (p2ButtonState !== 0) {
+            console.log('[P2 inject] combinedDown=', combinedDown.toString(2).padStart(8, '0'),
+                        'psgReg14=', psgReg14.toString(2).padStart(8, '0'),
+                        'vecx?', !!vecx, 'e8910?', !!(vecx && vecx.e8910));
+          }
 
           if (transitions !== 0 || buttonState !== 0) {
             setTimeout(() => {
@@ -786,8 +797,8 @@ export const EmulatorPanel: React.FC = () => {
 
     return () => {
       clearInterval(gamepadPollInterval);
-      window.removeEventListener('keydown', p2KeyDown);
-      window.removeEventListener('keyup', p2KeyUp);
+      document.removeEventListener('keydown', p2KeyDown, { capture: true } as any);
+      document.removeEventListener('keyup',   p2KeyUp,   { capture: true } as any);
     };
   }, [status, loadConfig]); // Re-create interval if status changes
 
