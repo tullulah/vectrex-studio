@@ -610,10 +610,9 @@ export const EmulatorPanel: React.FC = () => {
     let lastButtonState = 0;
 
     // Player-2 buttons over keyboard: J/K/L/M → P2 btn 1/2/3/4. The frontend
-    // has no second-controller config yet, so this is the quick path to make
-    // J2_BUTTON_*() actually testable in jsvecx (issue #4). Bits land in the
-    // high nibble of the PSG reg-14 value injected below.
-    //
+    // has no second-controller keyboard config, so this is the quick path
+    // to drive J2_BUTTON_*() without a second physical gamepad. The bits
+    // land in the high nibble of the PSG reg-14 value injected below.
     // Listener attached on `document` with capture:true so Monaco / IDE
     // shortcut handlers don't swallow the keys before us.
     let p2ButtonState = 0;
@@ -622,17 +621,11 @@ export const EmulatorPanel: React.FC = () => {
     };
     const p2KeyDown = (e: KeyboardEvent) => {
       const bit = p2KeyMap[e.code];
-      if (bit !== undefined) {
-        p2ButtonState |= (1 << bit);
-        console.log('[P2 key] down', e.code, '→ p2ButtonState =', p2ButtonState.toString(2).padStart(4, '0'));
-      }
+      if (bit !== undefined) p2ButtonState |= (1 << bit);
     };
     const p2KeyUp = (e: KeyboardEvent) => {
       const bit = p2KeyMap[e.code];
-      if (bit !== undefined) {
-        p2ButtonState &= ~(1 << bit);
-        console.log('[P2 key] up  ', e.code, '→ p2ButtonState =', p2ButtonState.toString(2).padStart(4, '0'));
-      }
+      if (bit !== undefined) p2ButtonState &= ~(1 << bit);
     };
     document.addEventListener('keydown', p2KeyDown, { capture: true });
     document.addEventListener('keyup',   p2KeyUp,   { capture: true });
@@ -805,10 +798,17 @@ export const EmulatorPanel: React.FC = () => {
           if (vecx.e8910 && vecx.e8910.e8910_write) {
             vecx.e8910.e8910_write(14, psgReg14);
           }
-          // J2 analog axes — jsvecx Joy_Analog reads jch2/jch3 for P2.
+          // J2 analog axes. jsvecx's Joy_Analog read path uses jch2/jch3 via
+          // the VIA mux, but in practice the BIOS-cached $C81D/$C81E
+          // (Vec_Joy_2_X/Y) didn't always reflect them — writing both covers
+          // the BIOS-read and the direct-RAM-read code paths.
           if (gamepadIndex2 !== null) {
             vecx.alg_jch2 = (p2GpAxisX + 128) & 0xFF;
             vecx.alg_jch3 = (p2GpAxisY + 128) & 0xFF;
+            if (vecx.write8) {
+              vecx.write8(0xC81D, p2GpAxisX & 0xFF);
+              vecx.write8(0xC81E, p2GpAxisY & 0xFF);
+            }
           }
 
           if (transitions !== 0 || buttonState !== 0) {

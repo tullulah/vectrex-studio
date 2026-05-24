@@ -83,7 +83,7 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
     let _tmpval   = alloc.alloc(4); // TMPVAL
     let _tmpptr   = alloc.alloc(4); // TMPPTR
     let _tmpptr2  = alloc.alloc(4); // TMPPTR2
-    for i in 0..5u32 { let a = alloc.alloc(4); decls.push_str(&format!(".equ VAR_ARG{i}, 0x{a:08X}\n")); }
+    for i in 0..8u32 { let a = alloc.alloc(4); decls.push_str(&format!(".equ VAR_ARG{i}, 0x{a:08X}\n")); }
     let result    = alloc.alloc(4); decls.push_str(&format!(".equ RESULT, 0x{result:08X}\n"));
     let beep      = alloc.alloc(4); decls.push_str(&format!(".equ BEEP_FRAMES_LEFT, 0x{beep:08X}\n"));
     let rng       = alloc.alloc(4); decls.push_str(&format!(".equ RAND_SEED, 0x{rng:08X}\n"));

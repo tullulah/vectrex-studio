@@ -65,13 +65,20 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
             }
             
             // User function call (name already uppercase from unifier)
-            // Evaluate arguments and store in VAR_ARG0-4
+            // Evaluate arguments and store in VAR_ARG0..VAR_ARG7.
             // D already holds the result after emit_simple_expr; no LDD RESULT reload needed.
-            for (i, arg) in call.args.iter().enumerate().take(5) {
+            const MAX_USER_ARGS: usize = 8;
+            if call.args.len() > MAX_USER_ARGS {
+                out.push_str(&format!(
+                    "    ; WARNING: {} called with {} args (max {}); extras dropped\n",
+                    call.name, call.args.len(), MAX_USER_ARGS
+                ));
+            }
+            for (i, arg) in call.args.iter().enumerate().take(MAX_USER_ARGS) {
                 emit_simple_expr(arg, out, assets);
                 out.push_str(&format!("    STD VAR_ARG{}\n", i));
             }
-            
+
             // Call function
             out.push_str(&format!("    JSR {}\n", call.name));
         }

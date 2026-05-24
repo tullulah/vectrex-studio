@@ -315,6 +315,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
     ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
     ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
+    ram.allocate("VAR_ARG5", 2, "Function argument 5 (16-bit)");
+    ram.allocate("VAR_ARG6", 2, "Function argument 6 (16-bit)");
+    ram.allocate("VAR_ARG7", 2, "Function argument 7 (16-bit)");
     ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
 
     // =========================================================================
