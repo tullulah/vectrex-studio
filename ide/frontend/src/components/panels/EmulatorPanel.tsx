@@ -647,7 +647,41 @@ export const EmulatorPanel: React.FC = () => {
 
       // Get joystick configuration from store
       const joystickConfig = useJoystickStore.getState();
-      const { gamepadIndex, axisXIndex, axisYIndex, axisXInverted, axisYInverted, deadzone, buttonMappings, dpadUpButton, dpadDownButton, dpadLeftButton, dpadRightButton } = joystickConfig;
+      const { gamepadIndex, gamepadIndex2, axisXIndex, axisYIndex, axisXInverted, axisYInverted, deadzone, buttonMappings, dpadUpButton, dpadDownButton, dpadLeftButton, dpadRightButton } = joystickConfig;
+
+      // ── Player 2 gamepad poll ──────────────────────────────────────────
+      // Reuses the same axis indices / button mappings as P1 (same model
+      // assumed). Feeds J2_X / J2_Y axes (jsvecx alg_jch2/jch3) and the
+      // high nibble of psgReg14 for J2_BUTTON_1..4.
+      let p2GpButtonState = 0;
+      let p2GpAxisX = 0;
+      let p2GpAxisY = 0;
+      if (gamepadIndex2 !== null && gamepadIndex2 !== gamepadIndex) {
+        const gp2 = gamepads[gamepadIndex2];
+        if (gp2 && gp2.connected) {
+          const raw2X = gp2.axes[axisXIndex] || 0;
+          const raw2Y = gp2.axes[axisYIndex] || 0;
+          const apply = (v: number) => (Math.abs(v) < deadzone ? 0 : v);
+          const x2 = apply(raw2X) * (axisXInverted ? -1 : 1);
+          const y2 = apply(raw2Y) * (axisYInverted ? -1 : 1);
+          // D-pad override for axes (same buttons mapped on P1)
+          const d2L = gp2.buttons[dpadLeftButton]?.pressed || false;
+          const d2R = gp2.buttons[dpadRightButton]?.pressed || false;
+          const d2U = gp2.buttons[dpadUpButton]?.pressed || false;
+          const d2D = gp2.buttons[dpadDownButton]?.pressed || false;
+          const ax2 = d2L ? -127 : d2R ? 127 : Math.round(x2 * 127);
+          const ay2 = d2D ? -127 : d2U ? 127 : Math.round(y2 * 127);
+          p2GpAxisX = ax2;
+          p2GpAxisY = ay2;
+          buttonMappings.forEach((m) => {
+            const b = gp2.buttons[m.gamepadButton];
+            if (b && b.pressed) p2GpButtonState |= (1 << (m.vectrexButton - 1));
+          });
+        }
+      }
+      // OR with keyboard JKLM fallback so both routes light up the same
+      // bits when nothing's wired to P2 gamepad.
+      const p2DownTotal = (p2ButtonState | p2GpButtonState) & 0x0F;
 
       if (gamepadIndex === null) {
         // No gamepad configured — use keyboard input (ArrowLeft/Right/Up/Down or WASD)
@@ -676,7 +710,8 @@ export const EmulatorPanel: React.FC = () => {
             vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
             // Same PSG reg 14 injection as the gamepad path so J1_BUTTON_*
             // and J2_BUTTON_*() work in keyboard-only mode. kb.buttons has
-            // P1 in bits 0-3; p2ButtonState (JKLM) goes into bits 4-7.
+            // P1 in bits 0-3; the JKLM keyboard fallback (p2ButtonState)
+            // goes into bits 4-7.
             const combinedDown = (kb.buttons & 0x0F) | ((p2ButtonState & 0x0F) << 4);
             const psgReg14 = ~combinedDown & 0xFF;
             (window as any).injectedButtonStatePSG = psgReg14;
@@ -760,19 +795,20 @@ export const EmulatorPanel: React.FC = () => {
           }
 
           // PSG reg 14 injection for Read_Btns workaround. Bits 0-3 = P1
-          // (from the configured gamepad), bits 4-7 = P2 (from the JKLM
-          // keyboard fallback). PSG reg 14 is active-LOW, so we invert the
-          // combined press mask before writing.
-          const combinedDown = (buttonState & 0x0F) | ((p2ButtonState & 0x0F) << 4);
+          // (from the configured gamepad), bits 4-7 = P2 (from the P2
+          // gamepad if configured, OR'd with the JKLM keyboard fallback).
+          // PSG reg 14 is active-LOW, so we invert the combined press mask
+          // before writing.
+          const combinedDown = (buttonState & 0x0F) | ((p2DownTotal & 0x0F) << 4);
           const psgReg14 = ~combinedDown & 0xFF;
           (window as any).injectedButtonStatePSG = psgReg14;
           if (vecx.e8910 && vecx.e8910.e8910_write) {
             vecx.e8910.e8910_write(14, psgReg14);
           }
-          if (p2ButtonState !== 0) {
-            console.log('[P2 inject] combinedDown=', combinedDown.toString(2).padStart(8, '0'),
-                        'psgReg14=', psgReg14.toString(2).padStart(8, '0'),
-                        'vecx?', !!vecx, 'e8910?', !!(vecx && vecx.e8910));
+          // J2 analog axes — jsvecx Joy_Analog reads jch2/jch3 for P2.
+          if (gamepadIndex2 !== null) {
+            vecx.alg_jch2 = (p2GpAxisX + 128) & 0xFF;
+            vecx.alg_jch3 = (p2GpAxisY + 128) & 0xFF;
           }
 
           if (transitions !== 0 || buttonState !== 0) {

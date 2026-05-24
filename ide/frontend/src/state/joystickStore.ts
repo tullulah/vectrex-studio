@@ -8,6 +8,11 @@ export interface ButtonMapping {
 export interface JoystickConfig {
   gamepadIndex: number | null;
   gamepadName: string | null;
+  // Player 2 — pick a second gamepad. Axis indices / button mappings are
+  // shared with P1 for simplicity (same controller model usually). Null
+  // means "no second controller wired" and J2_* reads return zero.
+  gamepadIndex2: number | null;
+  gamepadName2: string | null;
   // Analog stick configuration
   axisXIndex: number; // Default 0 (left stick horizontal)
   axisYIndex: number; // Default 1 (left stick vertical)
@@ -28,6 +33,7 @@ interface JoystickStore extends JoystickConfig {
   setConfigOpen: (open: boolean) => void;
   updateGamepads: (gamepads: Gamepad[]) => void;
   selectGamepad: (index: number, name: string) => void;
+  selectGamepad2: (index: number | null, name: string | null) => void;
   setAxisXIndex: (index: number) => void;
   setAxisYIndex: (index: number) => void;
   setAxisXInverted: (inverted: boolean) => void;
@@ -47,6 +53,8 @@ interface JoystickStore extends JoystickConfig {
 const defaultConfig: JoystickConfig = {
   gamepadIndex: null,
   gamepadName: null,
+  gamepadIndex2: null,
+  gamepadName2: null,
   axisXIndex: 0,
   axisYIndex: 1,
   axisXInverted: false,
@@ -77,6 +85,11 @@ export const useJoystickStore = create<JoystickStore>((set, get) => ({
 
   selectGamepad: (index, name) => {
     set({ gamepadIndex: index, gamepadName: name });
+    get().saveConfig();
+  },
+
+  selectGamepad2: (index, name) => {
+    set({ gamepadIndex2: index, gamepadName2: name });
     get().saveConfig();
   },
 
@@ -170,6 +183,8 @@ export const useJoystickStore = create<JoystickStore>((set, get) => ({
       const config: JoystickConfig = {
         gamepadIndex: state.gamepadIndex,
         gamepadName: state.gamepadName,
+        gamepadIndex2: state.gamepadIndex2,
+        gamepadName2: state.gamepadName2,
         axisXIndex: state.axisXIndex,
         axisYIndex: state.axisYIndex,
         axisXInverted: state.axisXInverted,
