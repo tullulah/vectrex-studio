@@ -2345,8 +2345,8 @@ export const EmulatorPanel: React.FC = () => {
           }
         }
 
-        // Start rAF loop capped at 60 fps (same pattern as handleCompiledBin)
-        const TARGET_MS = 1000 / 60;
+        // Start rAF loop capped at 50 fps (Vectrex PAL rate; music compiled at 50 Hz)
+        const TARGET_MS = 1000 / 50;
         let lastFrameTs = 0;
         const rp2350Loop = (ts: number) => {
           rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
@@ -2746,18 +2746,18 @@ export const EmulatorPanel: React.FC = () => {
               }
             }
 
-            // Start our own requestAnimationFrame loop capped at 60 fps.
+            // Start our own requestAnimationFrame loop capped at 50 fps.
             // RAF fires at the display refresh rate (120/144 Hz on many monitors).
             // Without a cap the game logic would run proportionally faster than
-            // the M6809 path, which is driven by the Vectrex 60 Hz VIA timer.
-            const TARGET_MS = 1000 / 60;  // 16.667 ms per frame
+            // the M6809 path, which is driven by the Vectrex 50 Hz VIA timer.
+            const TARGET_MS = 1000 / 50;  // 20 ms per frame (Vectrex PAL; music compiled at 50 Hz)
             let rp2350FrameCount = 0;
             let lastFrameTs = 0;
             const loop = (ts: number) => {
               rp2350LoopRef.current = requestAnimationFrame(loop);
               const elapsed = ts - lastFrameTs;
               if (elapsed < TARGET_MS) return;          // too soon — skip
-              lastFrameTs = ts - (elapsed % TARGET_MS); // align to 60 Hz grid
+              lastFrameTs = ts - (elapsed % TARGET_MS); // align to 50 Hz grid
               // Honour pause/stop from debug controls
               if (useDebugStore.getState().state !== 'running') return;
               rp2350FrameCount++;
