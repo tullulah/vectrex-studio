@@ -178,6 +178,17 @@ pub fn emit_helpers() -> String {
     s.push_str("    subs    r4, r4, #1\n");
     s.push_str("    bne     vspe_loop\n");
     s.push_str("vspe_done:\n");
+    // Zero ENEMY_STATE_ARM (8 × 4 bytes) so states reset on each SPAWN_ENEMIES call
+    s.push_str("    ldr     r0, =ENEMY_STATE_ARM\n");
+    s.push_str("    movs    r1, #0\n");
+    s.push_str("    stm     r0!, {r1}             @ state[0..7] = 0\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    stm     r0!, {r1}\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
 
@@ -325,6 +336,100 @@ pub fn emit_helpers() -> String {
     s.push_str("vdre_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
     s.push_str("    .ltorg\n\n");
+
+    // Enemy pool query/mutate helpers — leaf functions (no push/pop needed). Pool stride=24.
+    // ENEMY_STATE_ARM is a separate 8×i32 array for GET/SET_ENEMY_STATE.
+
+    s.push_str("@ vpy_get_enemy_active(r0=idx) -> r0=active\n");
+    s.push_str(".global vpy_get_enemy_active\n.type vpy_get_enemy_active, %function\n.thumb_func\n");
+    s.push_str("vpy_get_enemy_active:\n");
+    s.push_str("    lsl     r1, r0, #3              @ r1 = idx*8\n");
+    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    ldr     r0, [r0, r1]            @ active field\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_get_enemy_x(r0=idx) -> r0=world_x\n");
+    s.push_str(".global vpy_get_enemy_x\n.type vpy_get_enemy_x, %function\n.thumb_func\n");
+    s.push_str("vpy_get_enemy_x:\n");
+    s.push_str("    lsl     r1, r0, #3\n");
+    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str("    ldr     r0, [r0, #4]            @ world_x\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_get_enemy_y(r0=idx) -> r0=world_y\n");
+    s.push_str(".global vpy_get_enemy_y\n.type vpy_get_enemy_y, %function\n.thumb_func\n");
+    s.push_str("vpy_get_enemy_y:\n");
+    s.push_str("    lsl     r1, r0, #3\n");
+    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str("    ldr     r0, [r0, #8]            @ world_y\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_set_enemy_x(r0=idx, r1=x)\n");
+    s.push_str(".global vpy_set_enemy_x\n.type vpy_set_enemy_x, %function\n.thumb_func\n");
+    s.push_str("vpy_set_enemy_x:\n");
+    s.push_str("    lsl     r2, r0, #3\n");
+    s.push_str("    add.w   r2, r2, r2, lsl #1      @ r2 = idx*24\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    add     r0, r0, r2\n");
+    s.push_str("    str     r1, [r0, #4]            @ world_x = x\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_set_enemy_y(r0=idx, r1=y)\n");
+    s.push_str(".global vpy_set_enemy_y\n.type vpy_set_enemy_y, %function\n.thumb_func\n");
+    s.push_str("vpy_set_enemy_y:\n");
+    s.push_str("    lsl     r2, r0, #3\n");
+    s.push_str("    add.w   r2, r2, r2, lsl #1      @ r2 = idx*24\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    add     r0, r0, r2\n");
+    s.push_str("    str     r1, [r0, #8]            @ world_y = y\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_kill_enemy(r0=idx)\n");
+    s.push_str(".global vpy_kill_enemy\n.type vpy_kill_enemy, %function\n.thumb_func\n");
+    s.push_str("vpy_kill_enemy:\n");
+    s.push_str("    lsl     r1, r0, #3\n");
+    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    movs    r2, #0\n");
+    s.push_str("    str     r2, [r0, r1]            @ active = 0\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_get_enemy_state(r0=idx) -> r0=state\n");
+    s.push_str(".global vpy_get_enemy_state\n.type vpy_get_enemy_state, %function\n.thumb_func\n");
+    s.push_str("vpy_get_enemy_state:\n");
+    s.push_str("    ldr     r1, =ENEMY_STATE_ARM\n");
+    s.push_str("    lsl     r0, r0, #2              @ idx*4 (word stride)\n");
+    s.push_str("    ldr     r0, [r1, r0]\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_set_enemy_state(r0=idx, r1=state)\n");
+    s.push_str(".global vpy_set_enemy_state\n.type vpy_set_enemy_state, %function\n.thumb_func\n");
+    s.push_str("vpy_set_enemy_state:\n");
+    s.push_str("    ldr     r2, =ENEMY_STATE_ARM\n");
+    s.push_str("    lsl     r0, r0, #2\n");
+    s.push_str("    str     r1, [r2, r0]\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s.push_str("@ vpy_set_enemy_dir(r0=idx, r1=dir) — no-op (wander AI controls direction)\n");
+    s.push_str(".global vpy_set_enemy_dir\n.type vpy_set_enemy_dir, %function\n.thumb_func\n");
+    s.push_str("vpy_set_enemy_dir:\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_enemy_fire_event(r0=idx) — no-op stub\n");
+    s.push_str(".global vpy_enemy_fire_event\n.type vpy_enemy_fire_event, %function\n.thumb_func\n");
+    s.push_str("vpy_enemy_fire_event:\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_get_enemy_area_idx(r0=idx) -> r0=0 (stub)\n");
+    s.push_str(".global vpy_get_enemy_area_idx\n.type vpy_get_enemy_area_idx, %function\n.thumb_func\n");
+    s.push_str("vpy_get_enemy_area_idx:\n");
+    s.push_str("    movs    r0, #0\n");
+    s.push_str("    bx      lr\n\n");
 
     s
 }

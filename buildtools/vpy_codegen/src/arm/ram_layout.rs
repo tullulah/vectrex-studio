@@ -89,8 +89,10 @@ pub fn emit_ram_layout() -> String {
         ("J1_AXIS_Y",           0x3D0, "cached J1 Y axis (-127..127), updated each WAIT_RECAL"),
         ("J2_AXIS_X",           0x3D4, "cached J2 X axis (-127..127), updated each WAIT_RECAL"),
         ("J2_AXIS_Y",           0x3D8, "cached J2 Y axis (-127..127), updated each WAIT_RECAL"),
-        // user RAM starts here (0x3DC)
-        ("USER_RAM_START",      0x3DC, "user variables begin here"),
+        // Enemy state array (0x3DC–0x3FB): 8 slots × 4 bytes — GET/SET_ENEMY_STATE
+        ("ENEMY_STATE_ARM",     0x3DC, "enemy state per slot: 8 × i32"),
+        // user RAM starts here (0x3FC)
+        ("USER_RAM_START",      0x3FC, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {
@@ -113,7 +115,7 @@ pub struct RamAllocator {
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F3DC } // USER_RAM_START (after joystick cache at 0x3CC–0x3DB)
+        Self { next: 0x2007_F3FC } // USER_RAM_START (after enemy state at 0x3DC–0x3FB)
     }
 
     /// Allocate `bytes` bytes, return base address.

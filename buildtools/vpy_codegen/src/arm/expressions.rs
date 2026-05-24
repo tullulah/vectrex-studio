@@ -259,27 +259,6 @@ pub fn emit_call(
         }
     }
 
-    // Remaining M6809-only builtins — no-op on rp2350.
-    {
-        let name_up = info.name.to_uppercase();
-        let is_query = matches!(name_up.as_str(),
-            "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE" |
-            "GET_ENEMY_AREA_IDX");
-        let is_m6809_only = matches!(name_up.as_str(),
-            "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_STATE" |
-            "GET_ENEMY_AREA_IDX" |
-            "SET_ENEMY_X" | "SET_ENEMY_Y" | "SET_ENEMY_DIR" | "SET_ENEMY_STATE" |
-            "KILL_ENEMY" | "ENEMY_FIRE_EVENT");
-        if is_m6809_only {
-            let mut s = format!("    @ {} — M6809-only, no-op on rp2350\n", info.name);
-            if is_query {
-                // Return 0 in r0 so the result can be safely used as a value.
-                s.push_str("    mov     r0, #0\n");
-            }
-            return Ok(s);
-        }
-    }
-
     let fn_name = match info.name.as_str() {
         "WAIT_RECAL"      => "vpy_wait_recal",
         "SET_INTENSITY"   => "vpy_set_intensity",
@@ -359,6 +338,18 @@ pub fn emit_call(
         "len" | "LEN"     => "vpy_len",
         // Animation
         "DRAW_ANIM"       => "vpy_draw_anim",
+        // Enemy pool operations — ARM implementations
+        "GET_ENEMY_ACTIVE"    => "vpy_get_enemy_active",
+        "GET_ENEMY_X"         => "vpy_get_enemy_x",
+        "GET_ENEMY_Y"         => "vpy_get_enemy_y",
+        "GET_ENEMY_STATE"     => "vpy_get_enemy_state",
+        "GET_ENEMY_AREA_IDX"  => "vpy_get_enemy_area_idx",
+        "SET_ENEMY_X"         => "vpy_set_enemy_x",
+        "SET_ENEMY_Y"         => "vpy_set_enemy_y",
+        "SET_ENEMY_DIR"       => "vpy_set_enemy_dir",
+        "SET_ENEMY_STATE"     => "vpy_set_enemy_state",
+        "KILL_ENEMY"          => "vpy_kill_enemy",
+        "ENEMY_FIRE_EVENT"    => "vpy_enemy_fire_event",
         other             => other,
     };
 
@@ -728,60 +719,46 @@ mod tests {
     /// `bl GET_ENEMY_ACTIVE` (and similar), which would fail at link time with
     /// "undefined symbol".
     #[test]
-    fn test_arm_enemy_builtins_are_noop() {
+    fn test_arm_enemy_pool_builtins() {
         let var_addrs = std::collections::HashMap::new();
-
-        // True no-ops on rp2350 (M6809-only; SPAWN_ENEMIES with no level arg is also a no-op).
-        for name in &["SPAWN_ENEMIES", "KILL_ENEMY", "ENEMY_FIRE_EVENT"] {
-            let info = make_call(name);
-            let asm = emit_call(&info, &var_addrs).expect(name);
-            assert!(
-                !asm.contains(&format!("bl      {name}")),
-                "Bug 1 regression: {name} must not emit `bl {name}` on rp2350 (got: {asm:?})"
-            );
-            assert!(
-                asm.contains("no-op"),
-                "{name}: expected 'no-op' comment in output (got: {asm:?})"
-            );
-            assert!(
-                !asm.contains("mov     r0, #0"),
-                "{name}: command builtins must not set r0 (got: {asm:?})"
-            );
-        }
 
         // UPDATE_ENEMIES / DRAW_ENEMIES — real rp2350 implementations via vpy_* helpers.
         let ue_asm = emit_call(&make_call("UPDATE_ENEMIES"), &var_addrs).unwrap();
-        assert!(
-            ue_asm.contains("bl      vpy_update_enemies"),
-            "UPDATE_ENEMIES must emit `bl vpy_update_enemies` (got: {ue_asm:?})"
-        );
-        assert!(
-            !ue_asm.contains("bl      UPDATE_ENEMIES"),
-            "Bug 1 regression: UPDATE_ENEMIES must not emit `bl UPDATE_ENEMIES` (got: {ue_asm:?})"
-        );
-        let de_asm = emit_call(&make_call("DRAW_ENEMIES"), &var_addrs).unwrap();
-        assert!(
-            de_asm.contains("bl      vpy_draw_enemies"),
-            "DRAW_ENEMIES must emit `bl vpy_draw_enemies` (got: {de_asm:?})"
-        );
-        assert!(
-            !de_asm.contains("bl      DRAW_ENEMIES"),
-            "Bug 1 regression: DRAW_ENEMIES must not emit `bl DRAW_ENEMIES` (got: {de_asm:?})"
-        );
+        assert!(ue_asm.contains("bl      vpy_update_enemies"),
+            "UPDATE_ENEMIES must emit `bl vpy_update_enemies` (got: {ue_asm:?})");
 
-        // Query builtins (return a value) — must emit `mov r0, #0` (return 0).
-        for name in &["GET_ENEMY_ACTIVE", "GET_ENEMY_X", "GET_ENEMY_Y", "GET_ENEMY_STATE"] {
+        let de_asm = emit_call(&make_call("DRAW_ENEMIES"), &var_addrs).unwrap();
+        assert!(de_asm.contains("bl      vpy_draw_enemies"),
+            "DRAW_ENEMIES must emit `bl vpy_draw_enemies` (got: {de_asm:?})");
+
+        // Query builtins — must call vpy_* ARM helpers (not return hardcoded 0).
+        for (name, expected_fn) in &[
+            ("GET_ENEMY_ACTIVE",   "vpy_get_enemy_active"),
+            ("GET_ENEMY_X",        "vpy_get_enemy_x"),
+            ("GET_ENEMY_Y",        "vpy_get_enemy_y"),
+            ("GET_ENEMY_STATE",    "vpy_get_enemy_state"),
+            ("GET_ENEMY_AREA_IDX", "vpy_get_enemy_area_idx"),
+        ] {
             let info = make_call_with_arg(name, 0);
             let asm = emit_call(&info, &var_addrs).expect(name);
-            assert!(
-                !asm.contains(&format!("bl      {name}")),
-                "Bug 1 regression: {name} must not emit `bl {name}` on rp2350 (got: {asm:?})"
-            );
-            assert!(
-                asm.contains("mov     r0, #0"),
-                "{name}: query builtin must return 0 via `mov r0, #0` (got: {asm:?})"
-            );
+            assert!(asm.contains(&format!("bl      {expected_fn}")),
+                "{name}: must emit `bl {expected_fn}` (got: {asm:?})");
         }
+
+        // Mutate builtins — must call vpy_* ARM helpers.
+        for (name, expected_fn) in &[
+            ("KILL_ENEMY",      "vpy_kill_enemy"),
+            ("ENEMY_FIRE_EVENT","vpy_enemy_fire_event"),
+        ] {
+            let info = make_call_with_arg(name, 0);
+            let asm = emit_call(&info, &var_addrs).expect(name);
+            assert!(asm.contains(&format!("bl      {expected_fn}")),
+                "{name}: must emit `bl {expected_fn}` (got: {asm:?})");
+        }
+
+        // SPAWN_ENEMIES with no level arg is a no-op.
+        let sa_asm = emit_call(&make_call("SPAWN_ENEMIES"), &var_addrs).unwrap();
+        assert!(sa_asm.contains("no-op"), "SPAWN_ENEMIES (no arg) should be no-op");
     }
 
     /// SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES were already no-ops before
