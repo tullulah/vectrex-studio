@@ -327,11 +327,23 @@ fn emit_function(
     // Push 6 registers (24 bytes) to maintain 8-byte stack alignment
     s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
 
-    for (i, param) in params.iter().enumerate().take(4) {
+    // Args 0-3 arrive in r0-r3 (ARM EABI). Args 4+ live on the caller's
+    // stack at sp+24+4*(i-4) after our own push of 6 regs (r4-r8+lr = 24
+    // bytes). Caller pushed extras right-to-left so arg 4 sits at the
+    // lowest offset above the saved frame.
+    for (i, param) in params.iter().enumerate() {
         let varname = param.to_uppercase();
-        if let Some(&addr) = var_addrs.get(&varname) {
+        let Some(&addr) = var_addrs.get(&varname) else { continue };
+        if i < 4 {
             s.push_str(&format!(
                 "    ldr     r4, =0x{addr:08X}    @ save param {param}\n    str     r{i}, [r4]\n"
+            ));
+        } else {
+            let stack_off = 24 + (i - 4) * 4;
+            s.push_str(&format!(
+                "    ldr     r5, [sp, #{stack_off}]   @ load stack arg {param}\n\
+                 \x20   ldr     r4, =0x{addr:08X}    @ save param {param}\n\
+                 \x20   str     r5, [r4]\n"
             ));
         }
     }

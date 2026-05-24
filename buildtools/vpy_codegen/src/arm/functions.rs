@@ -253,12 +253,24 @@ fn emit_function(
     s.push_str(&format!(".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n"));
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
 
-    // Save incoming register arguments (r0-r3) to their RAM slots.
-    for (i, param) in params.iter().enumerate().take(4) {
+    // Save incoming arguments to their RAM slots. Args 0-3 arrive in r0-r3
+    // (ARM EABI); args 4+ live on the caller's stack — after our own push
+    // they sit at sp+20+4*(i-4) (5 regs = 20 bytes pushed). Caller pushes
+    // extras in reverse so the first stack arg (i=4) is at the lowest
+    // offset above the saved frame.
+    for (i, param) in params.iter().enumerate() {
         let varname = param.to_uppercase();
-        if let Some(&addr) = var_addrs.get(&varname) {
+        let Some(&addr) = var_addrs.get(&varname) else { continue };
+        if i < 4 {
             s.push_str(&format!(
                 "    ldr     r4, =0x{addr:08X}    @ save param {param}\n    str     r{i}, [r4]\n"
+            ));
+        } else {
+            let stack_off = 20 + (i - 4) * 4;
+            s.push_str(&format!(
+                "    ldr     r5, [sp, #{stack_off}]   @ load stack arg {param}\n\
+                 \x20   ldr     r4, =0x{addr:08X}    @ save param {param}\n\
+                 \x20   str     r5, [r4]\n"
             ));
         }
     }
