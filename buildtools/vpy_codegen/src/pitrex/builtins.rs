@@ -24,29 +24,44 @@
 //!
 //! Beam tracking: PITREX_CUR_X, PITREX_CUR_Y in .bss (set by draw fns)
 
-/// Emit all PiTrex builtin helper functions as ARM32 assembly.
-pub fn emit_builtins() -> String {
+/// Emit PiTrex builtin helper functions as ARM32 assembly. Each `if any!`
+/// gate is checked against `needed` (the set of upper-cased VPy builtin
+/// names actually called by the program). Helpers whose names don't appear
+/// are skipped, so an unused / broken helper can't break a project that
+/// doesn't call it.
+///
+/// A handful of "scaffolding" helpers (newlib stubs, msg/debug, the small
+/// math/random utility set) are emitted unconditionally — they're tiny and
+/// many other emitted helpers reach into them transitively.
+pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     let mut s = String::new();
 
     s.push_str("@ ================================================================\n");
     s.push_str("@ PiTrex ARM32 builtins\n");
     s.push_str("@ ================================================================\n\n");
 
+    // Shorthand: emit if any of these builtin names is in the needed set.
+    let any = |names: &[&str]| names.iter().any(|n| needed.contains(*n));
+
+    // Always-on baseline. Everything that's reached transitively from the
+    // per-frame loop prologue (functions.rs) or from another always-on
+    // helper has to live here, otherwise the link fails. The tree-shake
+    // currently targets only the *clearly optional* big helpers below.
+    s.push_str(&emit_pitrex_shared_bss());
     s.push_str(&emit_pitrex_wait_recal());
+    s.push_str(&emit_pitrex_newlib_stubs());
+    s.push_str(&emit_pitrex_math_helpers());
+    s.push_str(&emit_pitrex_random());
+    s.push_str(&emit_pitrex_msg_system());
+    s.push_str(&emit_pitrex_debug_print());
+    s.push_str(&emit_pitrex_camera());
+    s.push_str(&emit_pitrex_get_frame_us());
     s.push_str(&emit_pitrex_set_intensity());
     s.push_str(&emit_pitrex_move());
     s.push_str(&emit_pitrex_draw_line());
     s.push_str(&emit_pitrex_draw_line_rel());
     s.push_str(&emit_pitrex_draw_vector());
     s.push_str(&emit_pitrex_draw_vector_ex());
-    s.push_str(&emit_pitrex_j1_x());
-    s.push_str(&emit_pitrex_j1_y());
-    s.push_str(&emit_pitrex_j1_btn1());
-    s.push_str(&emit_pitrex_j1_btn2());
-    s.push_str(&emit_pitrex_j1_btn3());
-    s.push_str(&emit_pitrex_j1_btn4());
-    s.push_str(&emit_pitrex_print_text());
-    s.push_str(&emit_pitrex_print_number());
     s.push_str(&emit_pitrex_draw_rect());
     s.push_str(&emit_pitrex_draw_filled_rect());
     s.push_str(&emit_pitrex_draw_polygon());
@@ -54,34 +69,63 @@ pub fn emit_builtins() -> String {
     s.push_str(&emit_pitrex_draw_ellipse());
     s.push_str(&emit_pitrex_draw_arc());
     s.push_str(&emit_pitrex_update_buttons());
-    s.push_str(&emit_pitrex_debug_print());
-    s.push_str(&emit_pitrex_level_collision());
-    s.push_str(&emit_pitrex_camera());
-    s.push_str(&emit_pitrex_newlib_stubs());
+    s.push_str(&emit_pitrex_j1_x());
+    s.push_str(&emit_pitrex_j1_y());
+    s.push_str(&emit_pitrex_j1_btn1());
+    s.push_str(&emit_pitrex_j1_btn2());
+    s.push_str(&emit_pitrex_j1_btn3());
+    s.push_str(&emit_pitrex_j1_btn4());
+    s.push_str(&emit_pitrex_j2());
+    s.push_str(&emit_pitrex_print_text());
+    s.push_str(&emit_pitrex_print_number());
+    s.push_str(&emit_pitrex_print_number_impl());
     s.push_str(&emit_pitrex_music_helpers());
     s.push_str(&emit_pitrex_sfx_update());
-    s.push_str(&emit_pitrex_math_helpers());
-    s.push_str(&emit_pitrex_random());
-    s.push_str(&emit_pitrex_j2());
     s.push_str(&emit_pitrex_trig());
     s.push_str(&emit_pitrex_tan_clean());
     s.push_str(&emit_pitrex_rand_fns());
     s.push_str(&emit_pitrex_system());
-    s.push_str(&emit_pitrex_camera_getters());
-    s.push_str(&emit_pitrex_text_extras());
-    s.push_str(&emit_pitrex_msg_system());
-    s.push_str(&emit_pitrex_misc_stubs());
-    s.push_str(&emit_pitrex_print_number_impl());
     s.push_str(&emit_pitrex_draw_anim());
-    s.push_str(&emit_pitrex_note_engine());
-    s.push_str(&emit_pitrex_wander_set_sprite());
-    s.push_str(&emit_pitrex_spawn_enemies());
-    s.push_str(&emit_pitrex_update_enemies());
-    s.push_str(&emit_pitrex_draw_enemies());
-    s.push_str(&emit_pitrex_kill_enemy());
-    s.push_str(&emit_pitrex_enemy_fire_event());
-    s.push_str(&emit_pitrex_get_frame_us());
 
+    // ── Tree-shaken (clearly optional, larger / riskier helpers) ────────
+    if any(&["SET_TEXT_SIZE", "SET_TEXT_COLOR"]) { s.push_str(&emit_pitrex_text_extras()); }
+    if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) {
+        s.push_str(&emit_pitrex_level_collision());
+    }
+    if any(&[
+        "GET_CAMERA_X", "GET_CAMERA_Y", "GET_LEVEL_FLOOR_Y",
+        "GET_SCROLL_LIMIT_LEFT", "GET_SCROLL_LIMIT_RIGHT",
+        "GET_SCROLL_LIMIT_TOP", "GET_SCROLL_LIMIT_BOTTOM",
+    ]) {
+        s.push_str(&emit_pitrex_camera_getters());
+    }
+    // emit_pitrex_misc_stubs also provides UPDATE_LEVEL + DRAW_VECTOR_3D.
+    if any(&["UPDATE_LEVEL", "DRAW_VECTOR_3D"]) { s.push_str(&emit_pitrex_misc_stubs()); }
+    if any(&["PLAY_NOTE", "NOTE_UPDATE"]) { s.push_str(&emit_pitrex_note_engine()); }
+    if any(&["UPDATE_ENEMIES", "SPAWN_ENEMIES", "DRAW_ENEMIES"]) {
+        // wander_set_sprite is reached transitively from UPDATE_ENEMIES.
+        s.push_str(&emit_pitrex_wander_set_sprite());
+    }
+    if any(&["SPAWN_ENEMIES"])     { s.push_str(&emit_pitrex_spawn_enemies()); }
+    if any(&["UPDATE_ENEMIES"])    { s.push_str(&emit_pitrex_update_enemies()); }
+    if any(&["DRAW_ENEMIES"])      { s.push_str(&emit_pitrex_draw_enemies()); }
+    if any(&["KILL_ENEMY"])        { s.push_str(&emit_pitrex_kill_enemy()); }
+    if any(&["ENEMY_FIRE_EVENT"])  { s.push_str(&emit_pitrex_enemy_fire_event()); }
+
+    s
+}
+
+// ── Shared BSS globals (always emitted) ──────────────────────────────────
+// Vars referenced from multiple unrelated helpers. Extracting them here
+// means a single helper can be tree-shaken without breaking the link for
+// other helpers that read its globals.
+fn emit_pitrex_shared_bss() -> String {
+    let mut s = String::new();
+    s.push_str("@ Shared BSS globals (used by multiple helpers)\n");
+    s.push_str(".bss\n");
+    s.push_str(".balign 4\n");
+    s.push_str("PITREX_BRIGHTNESS_OVERRIDE: .space 1  @ 0=use .vec intensity, >0=override\n");
+    s.push_str(".text\n\n");
     s
 }
 
@@ -2773,13 +2817,15 @@ fn emit_pitrex_draw_anim() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
-    // Static state buffer + mirror/speed bytes in BSS
+    // Static state buffer + mirror/speed bytes in BSS. The brightness
+    // override lives in `emit_pitrex_shared_bss` because several other
+    // helpers (set_intensity, draw_line, draw_vector*, music/show_level)
+    // also read it.
     s.push_str(".bss\n");
     s.push_str(".balign 4\n");
     s.push_str("PITREX_ANIM_STATE_BUF: .space 2    @ [0]=frame_idx [1]=ticks_left\n");
     s.push_str("PITREX_ANIM_MIRROR: .space 1\n");
     s.push_str("PITREX_ANIM_SPEED: .space 1\n");
-    s.push_str("PITREX_BRIGHTNESS_OVERRIDE: .space 1  @ 0=use .vec intensity, >0=override\n");
     s.push_str(".text\n\n");
 
     s

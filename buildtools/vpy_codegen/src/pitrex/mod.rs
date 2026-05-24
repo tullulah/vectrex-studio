@@ -36,6 +36,7 @@ pub mod functions;
 pub mod expressions;
 pub mod builtins;
 pub mod assets;
+pub mod analysis;
 
 use vpy_parser::Module;
 use crate::AssetInfo;
@@ -137,8 +138,11 @@ pub fn generate_pitrex_asm(
     asm.push_str(".section .text\n");
     asm.push_str(".align 2\n\n");
 
-    // Builtin helper functions (draw_vector_ex, math, joystick, etc.)
-    asm.push_str(&builtins::emit_builtins());
+    // Builtin helper functions — tree-shaken: only the helpers whose VPy
+    // builtin names appear in the AST (plus the always-on scaffolding set)
+    // are emitted. See analysis.rs for the collection + dep-closure logic.
+    let needed = analysis::collect_used_builtins(module);
+    asm.push_str(&builtins::emit_builtins(&needed));
 
     // User-defined functions + game_main()
     asm.push_str(&functions::emit_functions(module, assets, &var_addrs)?);
