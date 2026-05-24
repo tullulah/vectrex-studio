@@ -681,9 +681,15 @@ export const EmulatorPanel: React.FC = () => {
         const kb = inputManager.update();
         const kbX = kb.x / 127; // normalize -127..127 → -1..1
         const kbY = kb.y / 127;
-        // rp2350 / pitrex keyboard axis and buttons
+        // rp2350 / pitrex keyboard axis and buttons. P2 axes have no
+        // keyboard fallback yet (JKLM only drives the buttons), so we
+        // pass 0/0 for the P2 stick. P2 buttons come from the JKLM mask.
         emuCore.setJoyAxis?.(kb.x, kb.y);
-        pitrexCoreRef.current?.setInput(kb.x, kb.y, kb.buttons & 0xF);
+        emuCore.setJoyButtons2?.(0xFF & ~(p2ButtonState & 0x0F));
+        pitrexCoreRef.current?.setInput(
+          kb.x, kb.y, kb.buttons & 0xF,
+          0, 0, p2ButtonState & 0xF,
+        );
         if (vecx) {
           try {
             // Always use analog mode so the gamepad's continuous values reach Joy_Analog.
@@ -752,12 +758,24 @@ export const EmulatorPanel: React.FC = () => {
       const dp2350X = dpadLeft ? -127 : dpadRight ? 127 : rp2350X;
       const dp2350Y = dpadDown ? -127 : dpadUp   ? 127 : rp2350Y;
 
-      // rp2350: forward axis and buttons
+      // rp2350: forward axis and buttons (P1 always, P2 only when wired)
       emuCore.setJoyAxis?.(dp2350X, dp2350Y);
       emuCore.setJoyButtons?.(0xF0 & ~((buttonState & 0x0F) << 4));
+      if (gamepadIndex2 !== null) {
+        emuCore.setJoyAxis2?.(p2GpAxisX, p2GpAxisY);
+        // BTN_STATE_J2 is active-low; bits 0-3 = btn 1-4.
+        emuCore.setJoyButtons2?.(0xFF & ~(p2DownTotal & 0x0F));
+      } else if (p2ButtonState !== 0) {
+        // P2-keyboard-only: still feed the buttons to rp2350.
+        emuCore.setJoyButtons2?.(0xFF & ~(p2ButtonState & 0x0F));
+      }
 
-      // pitrex: forward axis and buttons (always, even when vecx is null)
-      pitrexCoreRef.current?.setInput(dp2350X, dp2350Y, buttonState & 0xF);
+      // pitrex: forward axis and buttons for BOTH players. PitrexCore.setInput
+      // already takes the P2 triplet as its last three params.
+      pitrexCoreRef.current?.setInput(
+        dp2350X, dp2350Y, buttonState & 0xF,
+        p2GpAxisX, p2GpAxisY, p2DownTotal & 0xF,
+      );
 
       // JSVecX-specific: directional booleans, analog channels, PSG buttons
       if (vecx) {

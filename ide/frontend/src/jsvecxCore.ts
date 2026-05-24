@@ -491,6 +491,13 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     }
   }
 
+  /** Player 2 — same shape as setJoyAxis; only rp2350 currently consumes it. */
+  setJoyAxis2(x: number, y: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyAxis2(x, y);
+    }
+  }
+
   /**
    * Forward joystick button state to the active emulation target.
    * portBMask: VIA Port B bits 4-7, active-low (0 = pressed, 1 = released).
@@ -501,6 +508,13 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   setJoyButtons(portBMask: number): void {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       this._rp2350System.setJoyButtons(portBMask);
+    }
+  }
+
+  /** Player 2 button state (active-low, bits 0-3 = btn 1-4). */
+  setJoyButtons2(mask: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyButtons2(mask);
     }
   }
 

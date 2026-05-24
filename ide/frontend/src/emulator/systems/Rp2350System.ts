@@ -220,9 +220,14 @@ export class Rp2350System implements ISystem, IBus {
   // Signed i8 axis values [-127, 127]. Default 0 (centred).
   private joyJ1X: number = 0;
   private joyJ1Y: number = 0;
+  private joyJ2X: number = 0;
+  private joyJ2Y: number = 0;
   // Button state for BTN_STATE_J1 (bits 4-7, active-low). Default 0xF0 = no buttons pressed.
   // Kept separate from this.via.joyButtons (which is reset to 0x00 for analog SAR correctness).
   private joyButtonState: number = 0xF0;
+  // Player 2 button state mirrored into BTN_STATE_J2. Same active-low / bits 0-3
+  // convention as the PSG reg 14 layout — the trap below writes it straight to SRAM.
+  private joyButtonState2: number = 0xFF;
 
   // ---- Audio ----
   private audioCtx:  AudioContext | null           = null;
@@ -543,6 +548,8 @@ export class Rp2350System implements ISystem, IBus {
     const dvDrawDeltaAddr = symbols.get('dv_draw_delta');
     const j1xAddr         = symbols.get('vpy_j1_x');
     const j1yAddr         = symbols.get('vpy_j1_y');
+    const j2xAddr         = symbols.get('vpy_j2_x');
+    const j2yAddr         = symbols.get('vpy_j2_y');
 
     if (busWriteAddr !== undefined) {
       this.traps.set(busWriteAddr & ~1, this.makeBusWriteTrap());
@@ -598,6 +605,18 @@ export class Rp2350System implements ISystem, IBus {
         return 10;
       });
     }
+    if (j2xAddr !== undefined) {
+      this.traps.set(j2xAddr & ~1, (cpu: Thumb2) => {
+        cpu.setReg(0, (this.joyJ2X << 24) >> 24);
+        return 10;
+      });
+    }
+    if (j2yAddr !== undefined) {
+      this.traps.set(j2yAddr & ~1, (cpu: Thumb2) => {
+        cpu.setReg(0, (this.joyJ2Y << 24) >> 24);
+        return 10;
+      });
+    }
 
     // vpy_msg_def: compile-time declaration, pure no-op at runtime.
     // Trap it to avoid going through cpu.step() + via.tick() + beam.tick().
@@ -627,8 +646,8 @@ export class Rp2350System implements ISystem, IBus {
         // joyButtons: bits 4-7 active-low.  Use joyButtonState (not via.joyButtons, which
         // is reset to 0x00 for analog SAR correctness and would read as all-pressed).
         this.sram[j1Off] = this.joyButtonState & 0xF0;
-        // PSG register 14 (J2 buttons) — not yet wired to host input; 0xFF = all released.
-        this.sram[j2Off] = 0xFF;
+        // J2 buttons mirror joyButtonState2 (active-low). Default 0xFF = released.
+        this.sram[j2Off] = this.joyButtonState2 & 0xFF;
         return 10;
       });
       console.log(`[Rp2350System] vpy_update_buttons trap @ 0x${(updateButtonsAddr & ~1).toString(16)}`);
@@ -934,6 +953,20 @@ export class Rp2350System implements ISystem, IBus {
   setJoyAxis(x: number, y: number): void {
     this.joyJ1X = (x | 0) & 0xFF;
     this.joyJ1Y = (y | 0) & 0xFF;
+  }
+
+  /** Same as setJoyAxis but for Player 2 (drives vpy_j2_x / vpy_j2_y). */
+  setJoyAxis2(x: number, y: number): void {
+    this.joyJ2X = (x | 0) & 0xFF;
+    this.joyJ2Y = (y | 0) & 0xFF;
+  }
+
+  /**
+   * Set Player-2 button state mirrored to BTN_STATE_J2 (PSG reg 14, active-low).
+   * mask bit 0 = J2 Button 1, bit 1 = J2 Button 2, etc. Default (released): 0xFF.
+   */
+  setJoyButtons2(mask: number): void {
+    this.joyButtonState2 = mask & 0xFF;
   }
 
   // -------------------------------------------------------------------------

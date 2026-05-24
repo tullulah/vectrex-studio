@@ -599,9 +599,13 @@ const SDK_STUBS: Record<string, SdkStub> = {
   'v_setRefresh':            () => {},
   'vectrexinit':             () => {},
   'v_readButtons':           (s) => {
-    // Write currentButtonState (4 button bits, active-high in our model)
+    // currentButtonState packs both players: bits 0-3 = P1, bits 4-7 = P2
+    // (active-high in our model). pitrex_j2_btn* uses bits 4-7.
     const btnSym = s.parsed.symbols.get('currentButtonState');
-    if (btnSym) memWrite32(s, btnSym.value, s.joyButtons & 0xF);
+    if (btnSym) {
+      const packed = (s.joyButtons & 0xF) | ((s.joyButtons2 & 0xF) << 4);
+      memWrite32(s, btnSym.value, packed);
+    }
   },
   'v_readJoystick1Analog':   (s) => {
     // currentJoy1X/Y are int8_t (±127). Write byte-sized values; ldrsb reads them correctly.

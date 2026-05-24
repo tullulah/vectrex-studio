@@ -49,6 +49,10 @@ export interface IEmulatorCore {
   setJoyAxis?(x: number, y: number): void;
   /** Set joystick J1 button state for RP2350 backend (Port B mask, bits 4-7 active-low). */
   setJoyButtons?(portBMask: number): void;
+  /** Set joystick J2 axis values (only consumed by RP2350 backend so far). */
+  setJoyAxis2?(x: number, y: number): void;
+  /** Set joystick J2 button state (active-low, bits 0-3 = btn 1-4). */
+  setJoyButtons2?(mask: number): void;
 }
 
 // Tipo del identificador de backend.
