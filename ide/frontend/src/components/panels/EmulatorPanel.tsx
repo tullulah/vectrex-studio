@@ -2126,6 +2126,23 @@ export const EmulatorPanel: React.FC = () => {
       return;
     }
 
+    // rp2350 mode: cancel RAF loop and silence PSG. Without stopAudio() the
+    // ScriptProcessor keeps reading the last PSG state and the last note
+    // sustains forever after Stop is pressed.
+    const rp2350 = (emuCore as any)?._rp2350System;
+    if (rp2350LoopRef.current !== null || rp2350) {
+      if (rp2350LoopRef.current !== null) {
+        cancelAnimationFrame(rp2350LoopRef.current);
+        rp2350LoopRef.current = null;
+      }
+      useDebugStore.getState().setState('stopped');
+      setStatus('stopped');
+      setEmulatorRunning(false);
+      try { rp2350?.stopAudio?.(); } catch {}
+      console.log('[EmulatorPanel] rp2350 stopped');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // CRITICAL: Solo parar, NO resetear aquí

@@ -328,7 +328,21 @@ struct VsfxResource {
     pitch: VsfxPitch,
     #[serde(default)]
     noise: VsfxNoise,
+    #[serde(default)]
+    modulation: VsfxModulation,
 }
+
+#[derive(Deserialize, Default)]
+struct VsfxModulation {
+    #[serde(default)]
+    arpeggio: bool,
+    #[serde(default)]
+    arpeggio_notes: Vec<i8>,
+    #[serde(default = "default_arp_speed")]
+    arpeggio_speed: u16,
+}
+
+fn default_arp_speed() -> u16 { 40 }
 
 #[derive(Deserialize, Default)]
 struct VsfxOscillator {
@@ -962,27 +976,37 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
     let mut prev_vol: u8 = 0xFF;
     let mut prev_mixer: u8 = 0xFF;
 
+    // Proper ADSR phase allocation — matches sfxres.rs M6809 logic.
+    // Without an explicit sustain_f slot the original code skipped sustain
+    // entirely (sound ended after attack+decay+release frames), and arpeggio
+    // SFX (jump.vsfx, etc.) just played the linear pitch sweep without note
+    // jumps because the arpeggio branch was missing.
+    let attack_f  = attack_f.min(total_frames);
+    let decay_f   = decay_f.min(total_frames.saturating_sub(attack_f));
+    let release_f = release_f.min(total_frames.saturating_sub(attack_f + decay_f));
+    let sustain_f = total_frames.saturating_sub(attack_f + decay_f + release_f);
+
+    let arp_enabled = vsfx.modulation.arpeggio && !vsfx.modulation.arpeggio_notes.is_empty();
+    let arp_speed_ms = vsfx.modulation.arpeggio_speed.max(1) as f64;
+    let base_midi = if base_freq > 0.0 { 69.0 + 12.0 * (base_freq / 440.0).log2() } else { 69.0 };
+
     for frame in 0..total_frames {
         let mut writes: Vec<(u8, u8)> = Vec::new();
 
-        // ADSR volume
-        let tone_vol: u8 = if attack_f > 0 && frame < attack_f {
-            ((peak as u32 * frame / attack_f) as u8).min(15)
+        // ADSR volume (A → D → S → R)
+        let tone_vol: u8 = if frame < attack_f {
+            ((peak as u32 * frame / attack_f.max(1)) as u8).min(15)
+        } else if frame < attack_f + decay_f {
+            let f = frame - attack_f;
+            let drop = (peak as i32 - sustain as i32) * f as i32 / decay_f.max(1) as i32;
+            (peak as i32 - drop).max(0).min(15) as u8
+        } else if frame < attack_f + decay_f + sustain_f {
+            sustain
+        } else if release_f > 0 {
+            let f = frame - attack_f - decay_f - sustain_f;
+            (sustain as u32 * (release_f - f.min(release_f)) / release_f).min(15) as u8
         } else {
-            let f = frame - attack_f.min(frame);
-            if decay_f > 0 && f < decay_f {
-                let drop = (peak as i32 - sustain as i32) * f as i32 / decay_f as i32;
-                (peak as i32 - drop).max(0).min(15) as u8
-            } else {
-                let f2 = f - decay_f.min(f);
-                if release_f > 0 && f2 < release_f {
-                    (sustain as u32 * (release_f - f2) / release_f).min(15) as u8
-                } else if f2 < release_f || release_f == 0 {
-                    sustain
-                } else {
-                    0
-                }
-            }
+            0
         };
 
         // Noise volume: decays over noise.decay_ms, independent of tone envelope
@@ -996,13 +1020,23 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
         // Channel volume = louder of tone ADSR or noise decay
         let vol = tone_vol.max(noise_vol).min(15);
 
-        // Pitch sweep — same convention as SFX editor:
-        //   start_mult = freq multiplier at frame 0,  end_mult = freq multiplier at last frame.
-        //   period = 88200 / (base_freq × mult),  interpolating mult linearly.
-        let t = if total_frames > 1 { frame as f64 / (total_frames - 1) as f64 } else { 0.0 };
-        let mult = s_mult + (e_mult - s_mult) * t;
-        let freq = base_freq * mult;
-        let period = if freq > 0.0 { (88200.0 / freq).round() as u16 } else { 0xFFF };
+        // Pitch: arpeggio steps through arpeggio_notes (semitone offsets); else
+        // a linear pitch sweep between start_mult and end_mult. M6809 sfxres.rs
+        // prioritises arpeggio over pitch sweep — match that so the same SFX
+        // sounds the same across targets.
+        let period: u16 = if arp_enabled {
+            let frame_time_ms = (frame as f64) * 20.0; // 50 fps → 20 ms/frame
+            let n = vsfx.modulation.arpeggio_notes.len();
+            let idx = ((frame_time_ms / arp_speed_ms) as usize) % n;
+            let offset = vsfx.modulation.arpeggio_notes[idx] as f64;
+            let freq = 440.0 * 2f64.powf((base_midi + offset - 69.0) / 12.0);
+            if freq > 0.0 { (88200.0 / freq).round() as u16 } else { 0xFFF }
+        } else {
+            let t = if total_frames > 1 { frame as f64 / (total_frames - 1) as f64 } else { 0.0 };
+            let mult = s_mult + (e_mult - s_mult) * t;
+            let freq = base_freq * mult;
+            if freq > 0.0 { (88200.0 / freq).round() as u16 } else { 0xFFF }
+        };
         let period = period.max(1).min(0xFFF);
 
         let noise_active = vsfx.noise.enabled && noise_vol > 0;

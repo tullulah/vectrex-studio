@@ -571,11 +571,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD 0,X          ; RAM +0-1 = world_x (16-bit)\n");
         out.push_str("    SUBD >CAMERA_X   ; screen_x = world_x - camera_x\n");
         out.push_str("    STD >TMPVAL      ; save screen_x (overwritten by CMPB below)\n");
-        out.push_str("    ; Per-object cull using half_width from RAM+13\n");
-        out.push_str("    ; Wider culling: object stays until fully off-screen\n");
-        out.push_str("    ; Visible range: [-(128+hw), 127+hw]\n");
-        out.push_str("    ; right_limit = 127 + hw  (A=$00, B <= right_limit)\n");
-        out.push_str("    ; left_limit  = 128 - hw  (A=$FF, B >= left_limit)\n");
+        out.push_str("    ; Per-object cull with half_width expansion. Safe to widen here because\n");
+        out.push_str("    ; SLR_DRAW_CLIPPED_PATH handles per-path wrap (skip paths whose abs_x\n");
+        out.push_str("    ; falls out of i8 range) and per-segment clipping (beam-off moves when\n");
+        out.push_str("    ; cur_x + dx overflows). Visible range: [-(128+hw), 127+hw].\n");
         out.push_str("    LDB 13,X         ; B = half_width (RAM+13)\n");
         out.push_str("    STB >TMPPTR2     ; save hw\n");
         out.push_str("    LDA #127\n");
@@ -659,8 +658,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD 1,X          ; x FDB at ROM +1\n");
         out.push_str("    SUBD >CAMERA_X   ; screen_x = world_x - camera_x\n");
         out.push_str("    STD >TMPVAL\n");
-        out.push_str("    ; Per-object cull: half_width at ROM+18\n");
-        out.push_str("    ; Wider culling: object stays until fully off-screen\n");
+        out.push_str("    ; Per-object cull with half_width (ROM+18). SLR_DRAW_CLIPPED_PATH\n");
+        out.push_str("    ; handles per-path wrap and per-segment beam-off moves, so widening\n");
+        out.push_str("    ; the cull here lets partial objects render at the screen edges.\n");
         out.push_str("    LDB 18,X         ; B = half_width (ROM+18)\n");
         out.push_str("    STB >TMPPTR2     ; save hw\n");
         out.push_str("    LDA #127\n");
@@ -706,7 +706,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDU ,X++         ; U = path pointer, X advances to next entry\n");
         out.push_str("    PSHS X           ; Save pointer table position\n");
         out.push_str("    TFR U,X          ; X = actual path data\n");
-        out.push_str("    JSR Draw_Sync_List_At_With_Mirrors  ; Draw this path\n");
+        // SLR_DRAW_CLIPPED_PATH does its own per-path 16-bit clip: skips paths whose
+        // absolute X lands outside the signed-byte range, and uses beam-off moves
+        // for segments that would wrap. Calling DSWM here instead caused ghost copies
+        // on the opposite side of the screen when an object's center was just inside
+        // the edge but a path's x_start carried it past +127 / -128.
+        out.push_str("    JSR SLR_DRAW_CLIPPED_PATH ; per-path 16-bit X clip (no DSWM wrap)\n");
         out.push_str("    PULS X           ; Restore pointer table position\n");
         out.push_str("    PULS B           ; Restore count\n");
         out.push_str("    BRA SLR_PATH_LOOP\n");
