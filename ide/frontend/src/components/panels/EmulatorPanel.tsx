@@ -609,6 +609,28 @@ export const EmulatorPanel: React.FC = () => {
     // Persistent state for button debouncing (outside setInterval to persist between frames)
     let lastButtonState = 0;
 
+    // Player-2 buttons over keyboard: J/K/L/M → P2 btn 1/2/3/4. The frontend
+    // has no second-controller config yet, so this is the quick path to make
+    // J2_BUTTON_*() actually testable in jsvecx (issue #4). Bits land in the
+    // high nibble of the PSG reg-14 value injected below.
+    let p2ButtonState = 0;
+    const p2KeyMap: Record<string, number> = {
+      'j': 0, 'J': 0,
+      'k': 1, 'K': 1,
+      'l': 2, 'L': 2,
+      'm': 3, 'M': 3,
+    };
+    const p2KeyDown = (e: KeyboardEvent) => {
+      const bit = p2KeyMap[e.key];
+      if (bit !== undefined) p2ButtonState |= (1 << bit);
+    };
+    const p2KeyUp = (e: KeyboardEvent) => {
+      const bit = p2KeyMap[e.key];
+      if (bit !== undefined) p2ButtonState &= ~(1 << bit);
+    };
+    window.addEventListener('keydown', p2KeyDown);
+    window.addEventListener('keyup', p2KeyUp);
+
     const gamepadPollInterval = setInterval(() => {
       const vecx = (window as any).vecx;
       // vecx may be null in pitrex mode — do NOT early-return here.
@@ -646,6 +668,15 @@ export const EmulatorPanel: React.FC = () => {
             vecx.upHeld    = kbY > 0.3;
             vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
             vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
+            // Same PSG reg 14 injection as the gamepad path so J1_BUTTON_*
+            // and J2_BUTTON_*() work in keyboard-only mode. kb.buttons has
+            // P1 in bits 0-3; p2ButtonState (JKLM) goes into bits 4-7.
+            const combinedDown = (kb.buttons & 0x0F) | ((p2ButtonState & 0x0F) << 4);
+            const psgReg14 = ~combinedDown & 0xFF;
+            (window as any).injectedButtonStatePSG = psgReg14;
+            if (vecx.e8910 && vecx.e8910.e8910_write) {
+              vecx.e8910.e8910_write(14, psgReg14);
+            }
           } catch {}
         }
         return;
@@ -722,8 +753,12 @@ export const EmulatorPanel: React.FC = () => {
             });
           }
 
-          // PSG reg 14 injection for Read_Btns workaround
-          const psgReg14 = ~buttonState & 0xFF;
+          // PSG reg 14 injection for Read_Btns workaround. Bits 0-3 = P1
+          // (from the configured gamepad), bits 4-7 = P2 (from the JKLM
+          // keyboard fallback). PSG reg 14 is active-LOW, so we invert the
+          // combined press mask before writing.
+          const combinedDown = (buttonState & 0x0F) | ((p2ButtonState & 0x0F) << 4);
+          const psgReg14 = ~combinedDown & 0xFF;
           (window as any).injectedButtonStatePSG = psgReg14;
           if (vecx.e8910 && vecx.e8910.e8910_write) {
             vecx.e8910.e8910_write(14, psgReg14);
@@ -751,6 +786,8 @@ export const EmulatorPanel: React.FC = () => {
 
     return () => {
       clearInterval(gamepadPollInterval);
+      window.removeEventListener('keydown', p2KeyDown);
+      window.removeEventListener('keyup', p2KeyUp);
     };
   }, [status, loadConfig]); // Re-create interval if status changes
 
