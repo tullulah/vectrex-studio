@@ -227,100 +227,124 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
     }
 }
 
+/// True if `e` is guaranteed not to touch TMPVAL / TMPPTR during evaluation.
+/// Used to avoid the stack save/restore overhead for the common simple-RHS
+/// case (`a + 4`, `i * stride`, …). Conservative — anything not in this
+/// allowlist gets pushed to the stack instead.
+fn is_tmpval_safe(e: &Expr) -> bool {
+    use vpy_parser::Expr;
+    matches!(e, Expr::Number(_) | Expr::Ident(_) | Expr::StringLit(_))
+}
+
 fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
-    // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
-    // The `,S++` addressing mode doesn't properly pop for 16-bit operations.
-    // Instead, save LEFT to TMPVAL, evaluate RIGHT into D, then operate.
+    // 2026-05-24: TMPVAL gets written *during* the evaluation of any nested
+    // binop, so we have to pick an order that doesn't lose either operand.
+    // Three cases, ordered by ROM cost:
+    //
+    //   1. LEFT is a simple terminal — eval RIGHT (any complexity) into
+    //      TMPVAL, then eval LEFT into D. LEFT can't touch TMPVAL, so we
+    //      end with D=LEFT, TMPVAL=RIGHT. Zero extra bytes.
+    //
+    //   2. RIGHT is a simple terminal AND op is commutative — eval LEFT
+    //      (any complexity) into TMPVAL, then eval RIGHT into D. RIGHT
+    //      can't touch TMPVAL. We end with D=RIGHT, TMPVAL=LEFT, but the
+    //      op is commutative so the final `op TMPVAL` still yields the
+    //      correct value. Zero extra bytes.
+    //
+    //   3. Anything else — park LEFT on the hardware stack while RIGHT
+    //      is evaluated. 4 bytes overhead (PSHS D + PULS D, register-list
+    //      form — never `,S++`, which only increments S by 1).
+    //
+    // The check is structural: any non-simple expression may write TMPVAL.
+    let is_commutative = matches!(
+        op,
+        BinOp::Add | BinOp::Mul | BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor
+    );
 
-    // Evaluate left
-    emit_simple_expr(left, out, assets);
-    out.push_str("    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)\n");
+    if is_tmpval_safe(left) {
+        // Case 1: D=LEFT, TMPVAL=RIGHT after this block.
+        emit_simple_expr(right, out, assets);
+        out.push_str("    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)\n");
+        emit_simple_expr(left, out, assets);
+    } else if is_tmpval_safe(right) && is_commutative {
+        // Case 2: D=RIGHT, TMPVAL=LEFT — commutative op makes this fine.
+        emit_simple_expr(left, out, assets);
+        out.push_str("    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)\n");
+        emit_simple_expr(right, out, assets);
+    } else {
+        // Case 3: spill LEFT to stack while RIGHT (and any nested TMPVAL writes) run.
+        emit_simple_expr(left, out, assets);
+        out.push_str("    PSHS D              ; save LEFT on stack (nested RIGHT)\n");
+        emit_simple_expr(right, out, assets);
+        out.push_str("    STD TMPVAL          ; RIGHT → TMPVAL\n");
+        out.push_str("    PULS D              ; restore LEFT into D\n");
+    }
 
-    // Evaluate right
-    emit_simple_expr(right, out, assets);
-
-    // Perform operation
+    // Perform operation. In Case 1 and Case 3: D=LEFT, TMPVAL=RIGHT.
+    // In Case 2: D=RIGHT, TMPVAL=LEFT — op is commutative so the result matches.
     match op {
         BinOp::Add => {
-            out.push_str("    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)\n");
+            out.push_str("    ADDD TMPVAL         ; D = LEFT + RIGHT\n");
         }
         BinOp::Sub => {
-            out.push_str("    STD TMPPTR      ; Save right operand to TMPPTR\n");
-            out.push_str("    LDD TMPVAL      ; Get left operand from TMPVAL\n");
-            out.push_str("    SUBD TMPPTR     ; Left - Right\n");
+            out.push_str("    SUBD TMPVAL         ; D = LEFT - RIGHT\n");
         }
         BinOp::Mul => {
-            out.push_str("    LDX TMPVAL      ; Get left into X from TMPVAL\n");
-            out.push_str("    JSR MUL16       ; D = X * D\n");
+            out.push_str("    TFR D,X             ; X = LEFT\n");
+            out.push_str("    LDD TMPVAL          ; D = RIGHT\n");
+            out.push_str("    JSR MUL16           ; D = X * D\n");
         }
         BinOp::Div | BinOp::FloorDiv => {
-            out.push_str("    LDX TMPVAL      ; Get left into X from TMPVAL\n");
-            out.push_str("    JSR DIV16       ; D = X / D\n");
+            out.push_str("    TFR D,X             ; X = LEFT (dividend)\n");
+            out.push_str("    LDD TMPVAL          ; D = RIGHT (divisor)\n");
+            out.push_str("    JSR DIV16           ; D = X / D\n");
         }
         BinOp::Mod => {
-            out.push_str("    LDX TMPVAL      ; Get left into X from TMPVAL\n");
-            out.push_str("    JSR MOD16       ; D = X % D\n");
+            out.push_str("    TFR D,X             ; X = LEFT\n");
+            out.push_str("    LDD TMPVAL          ; D = RIGHT\n");
+            out.push_str("    JSR MOD16           ; D = X % D\n");
         }
         BinOp::Shl => {
-            // Shift Left: D = Left << Right
-            // LEFT in TMPVAL, RIGHT in D
+            // D = LEFT, TMPVAL = RIGHT (shift amount). Shift D LEFT by RIGHT.
             let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    STD TMPPTR      ; Save shift amount (Right)\n");
-            out.push_str("    LDD TMPVAL      ; Get value to shift (Left)\n");
-            out.push_str("    LDX TMPPTR      ; Load shift amount into X\n");
-            out.push_str(&format!("    BEQ .SHL_{}_END\n", id)); // Shift 0 -> done
-
-            // Limit shift to 16
+            out.push_str("    LDX TMPVAL          ; X = shift amount\n");
+            out.push_str(&format!("    BEQ .SHL_{}_END\n", id)); // amount 0 → no-op
             out.push_str("    CMPX #16\n");
             out.push_str(&format!("    BLE .SHL_{}_LOOP\n", id));
             out.push_str("    LDX #16\n");
-
             out.push_str(&format!(".SHL_{}_LOOP:\n", id));
             out.push_str("    ASLB\n");
             out.push_str("    ROLA\n");
             out.push_str("    LEAX -1,X\n");
             out.push_str(&format!("    BNE .SHL_{}_LOOP\n", id));
-
             out.push_str(&format!(".SHL_{}_END:\n", id));
         }
         BinOp::Shr => {
-            // Shift Right: D = Left >> Right
-            // LEFT in TMPVAL, RIGHT in D
+            // D = LEFT, TMPVAL = RIGHT (shift amount). Arithmetic shift right.
             let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    STD TMPPTR      ; Save shift amount\n");
-            out.push_str("    LDD TMPVAL      ; Get value to shift (Left)\n");
-            out.push_str("    LDX TMPPTR\n");
+            out.push_str("    LDX TMPVAL          ; X = shift amount\n");
             out.push_str(&format!("    BEQ .SHR_{}_END\n", id));
-
             out.push_str("    CMPX #16\n");
             out.push_str(&format!("    BLE .SHR_{}_LOOP\n", id));
             out.push_str("    LDX #16\n");
-
             out.push_str(&format!(".SHR_{}_LOOP:\n", id));
             out.push_str("    ASRA\n");
             out.push_str("    RORB\n");
             out.push_str("    LEAX -1,X\n");
             out.push_str(&format!("    BNE .SHR_{}_LOOP\n", id));
-
             out.push_str(&format!(".SHR_{}_END:\n", id));
         }
         BinOp::BitAnd => {
-            out.push_str("    STD TMPPTR2     ; Save right operand to TMPPTR2\n");
-            out.push_str("    LDD TMPVAL      ; Get left from TMPVAL\n");
-            out.push_str("    ANDA TMPPTR2    ; A AND TMPPTR2+0 (high byte)\n");
-            out.push_str("    ANDB TMPPTR2+1  ; B AND TMPPTR2+1 (low byte)\n");
+            out.push_str("    ANDA TMPVAL         ; A AND TMPVAL+0 (high byte)\n");
+            out.push_str("    ANDB TMPVAL+1       ; B AND TMPVAL+1 (low byte)\n");
         }
         BinOp::BitOr => {
-            out.push_str("    STD TMPPTR2     ; Save right operand to TMPPTR2\n");
-            out.push_str("    LDD TMPVAL      ; Get left from TMPVAL\n");
-            out.push_str("    ORA TMPPTR2     ; A OR TMPPTR2+0 (high byte)\n");
-            out.push_str("    ORB TMPPTR2+1   ; B OR TMPPTR2+1 (low byte)\n");
+            out.push_str("    ORA TMPVAL          ; A OR TMPVAL+0\n");
+            out.push_str("    ORB TMPVAL+1        ; B OR TMPVAL+1\n");
         }
         BinOp::BitXor => {
-            out.push_str("    STD TMPPTR2     ; Save right operand to TMPPTR2\n");
-            out.push_str("    LDD TMPVAL      ; Get left from TMPVAL\n");
-            out.push_str("    EORA TMPPTR2    ; A XOR TMPPTR2+0 (high byte)\n");
-            out.push_str("    EORB TMPPTR2+1  ; B XOR TMPPTR2+1 (low byte)\n");
+            out.push_str("    EORA TMPVAL         ; A XOR TMPVAL+0\n");
+            out.push_str("    EORB TMPVAL+1       ; B XOR TMPVAL+1\n");
         }
     }
 }

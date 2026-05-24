@@ -685,7 +685,7 @@ pub fn emit_builtin(
             true
         }
         "DRAW_RECT" => {
-            drawing::emit_draw_rect(args, out);
+            emit_draw_rect_full(args, out, assets);
             true
         }
         "DRAW_POLYGON" => {
@@ -1587,6 +1587,45 @@ fn emit_draw_circle_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
     // Call runtime helper
     out.push_str("    JSR DRAW_CIRCLE_RUNTIME\n");
     
+    out.push_str("    LDD #0\n");
+    out.push_str("    STD RESULT\n");
+}
+
+/// DRAW_RECT with full variable support.
+/// All-constant args go through `drawing::emit_draw_rect` (inline 4-line path);
+/// any variable argument falls back to evaluating each operand into the
+/// DRAW_RECT_X/Y/WIDTH/HEIGHT/INTENSITY byte slots and calling
+/// DRAW_RECT_RUNTIME (mirrors `emit_draw_circle_full`).
+fn emit_draw_rect_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    if args.len() != 4 && args.len() != 5 {
+        out.push_str("    ; ERROR: DRAW_RECT requires 4 or 5 arguments\n");
+        return;
+    }
+
+    if args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        drawing::emit_draw_rect(args, out);
+        return;
+    }
+
+    out.push_str("    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)\n");
+
+    let slots = ["DRAW_RECT_X", "DRAW_RECT_Y", "DRAW_RECT_WIDTH", "DRAW_RECT_HEIGHT"];
+    for (i, slot) in slots.iter().enumerate() {
+        expressions::emit_simple_expr(&args[i], out, assets);
+        out.push_str("    TFR B,A\n");
+        out.push_str(&format!("    STA {}\n", slot));
+    }
+
+    if args.len() == 5 {
+        expressions::emit_simple_expr(&args[4], out, assets);
+        out.push_str("    TFR B,A\n");
+        out.push_str("    STA DRAW_RECT_INTENSITY\n");
+    } else {
+        out.push_str("    LDA #$5F\n");
+        out.push_str("    STA DRAW_RECT_INTENSITY\n");
+    }
+
+    out.push_str("    JSR DRAW_RECT_RUNTIME\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }

@@ -1403,6 +1403,12 @@ mod tests {
             },
             scroll_limits: VPlayScrollLimits::default(),
             editor_meta: VPlayEditorMeta::default(),
+            walkable_areas: None,
+            transitions: None,
+            isolate_screens: false,
+            transition_min_x_overlap: None,
+            transition_lateral_y: None,
+            transition_lateral_gap: None,
         };
 
         assert_eq!(level.version, "2.0");
@@ -1435,6 +1441,12 @@ mod tests {
             },
             scroll_limits: VPlayScrollLimits::default(),
             editor_meta: VPlayEditorMeta::default(),
+            walkable_areas: None,
+            transitions: None,
+            isolate_screens: false,
+            transition_min_x_overlap: None,
+            transition_lateral_y: None,
+            transition_lateral_gap: None,
         };
 
         let asm = level.compile_to_asm();

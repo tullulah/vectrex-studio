@@ -865,10 +865,9 @@ DCR_after_intensity:\n\
         out.push_str("    NEGB                ; -width\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
-        out.push_str("    ; Draw up side\n");
+        out.push_str("    ; Draw up side (close rectangle: +height closes the -height of down side)\n");
         out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA 2,S             ; height\n");
-        out.push_str("    NEGA                ; -height\n");
+        out.push_str("    LDA 3,S             ; +height\n");
         out.push_str("    LDB #0\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
