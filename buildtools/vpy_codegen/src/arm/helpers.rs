@@ -307,11 +307,15 @@ pub fn emit_helpers() -> String {
     s.push_str("    rsb     r2, r2, #0           @ |dx|\n");
     s.push_str("    cmp     r2, #1               @ PATROL_SPEED\n");
     s.push_str("    ble.w   vupe_x_snap\n");
+    s.push_str("    mov     r2, #1\n");
+    s.push_str("    strb    r2, [r5, #26]        @ dir = left\n");
     s.push_str("    sub     r0, r0, #1\n");
     s.push_str("    b.w     vupe_x_store\n");
     s.push_str("vupe_x_pos:\n");
     s.push_str("    cmp     r2, #1               @ PATROL_SPEED\n");
     s.push_str("    ble.w   vupe_x_snap\n");
+    s.push_str("    mov     r2, #0\n");
+    s.push_str("    strb    r2, [r5, #26]        @ dir = right (moving toward higher x)\n");
     s.push_str("    add     r0, r0, #1\n");
     s.push_str("    b.w     vupe_x_store\n");
     s.push_str("vupe_x_snap:\n");
@@ -485,7 +489,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    bl      vpy_rand\n");
     s.push_str("    pop     {r6, r7, r12}\n");
     s.push_str("    and     r0, r0, #0x3F          @ 0..63\n");
-    s.push_str("    add     r0, r0, #30            @ 30..93 frames\n");
+    s.push_str("    add     r0, r0, #90            @ 90..153 frames (~2-3s)\n");
     s.push_str("    strh    r0, [r12, #0]          @ scratch_a = idle_timer\n");
     s.push_str("    mov     r0, #1\n");
     s.push_str("    strb    r0, [r5, #10]          @ sub_state = IDLE\n");
@@ -873,69 +877,112 @@ pub fn emit_helpers() -> String {
     s.push_str("vsse_done:\n");
     s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
 
-    s.push_str("@ vpy_set_enemy_dir(r0=idx, r1=dir) — no-op (wander AI controls direction)\n");
+    s.push_str("@ vpy_set_enemy_dir(r0=idx, r1=dir) — write dir into pool+26\n");
     s.push_str(".global vpy_set_enemy_dir\n.type vpy_set_enemy_dir, %function\n.thumb_func\n");
     s.push_str("vpy_set_enemy_dir:\n");
+    s.push_str("    lsl     r2, r0, #5           @ idx * 32\n");
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    add     r0, r0, r2           @ pool slot\n");
+    s.push_str("    strb    r1, [r0, #26]        @ pool+26 = dir\n");
     s.push_str("    bx      lr\n\n");
 
-    s.push_str("@ vpy_enemy_fire_event(r0=idx, r1=event_name_ptr) — increment state, update sprite from type_data table\n");
+    // vpy_enemy_fire_event(r0=idx, r1=event_name_ptr)
+    // Looks up event routing table in type_data (header byte +5 = event_count).
+    // For each entry: from_state(u8) + to_state(u8) + pad(2) + name[0..4](u32) + name[4..8](u32).
+    // On match: transitions state and updates pool sprite from state table.
+    // Falls back to increment logic when no event table present (backward compat).
+    // Guards 'onFire*' events on non-frog enemies (event table absent OR event_count < 4).
+    s.push_str("@ vpy_enemy_fire_event(r0=idx, r1=event_name_ptr) — event-routed state transition\n");
     s.push_str(".global vpy_enemy_fire_event\n.type vpy_enemy_fire_event, %function\n.thumb_func\n");
     s.push_str("vpy_enemy_fire_event:\n");
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    // 10 regs = 40 bytes → SP stays 8-byte aligned
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}\n");
     s.push_str("    mov     r7, r1               @ save event name ptr\n");
-    // Pool slot ptr
-    s.push_str("    lsl     r1, r0, #5           @ idx * 32\n");
+    // pool slot: r4
+    s.push_str("    lsl     r12, r0, #5          @ idx * 32\n");
     s.push_str("    ldr     r4, =ENEMY_POOL_ARM\n");
-    s.push_str("    add     r4, r4, r1           @ pool slot\n");
-    // Read/increment state
-    s.push_str("    lsl     r1, r0, #2           @ idx * 4 (word array)\n");
-    s.push_str("    ldr     r5, =ENEMY_STATE_ARM\n");
-    s.push_str("    ldr     r2, [r5, r1]         @ current state\n");
-    // Determine max state from type_data (or default 3)
-    s.push_str("    ldr     r3, [r4, #28]        @ type_data_ptr\n");
-    s.push_str("    cmp     r3, #0\n");
-    s.push_str("    beq.w   vefe_cap3\n");
-    s.push_str("    ldr     r6, [r3, #0]         @ state_count\n");
-    s.push_str("    sub     r6, r6, #1           @ max = state_count - 1\n");
-    s.push_str("    b.w     vefe_guard\n");
-    s.push_str("vefe_cap3:\n");
-    s.push_str("    mov     r6, #3\n");
-    // Guard: skip 'onFire*' events for enemies with no fire states (max_state < 4).
-    // update_frog_fire() fires onFire for ALL enemies; we must ignore it for non-frogs.
-    // Frogs have state_count >= 5 (max_state >= 4). Titchi has state_count=4 (max_state=3).
-    // CMP then POP preserves flags — branch after pop is safe on Thumb-2.
-    s.push_str("vefe_guard:\n");
-    s.push_str("    cmp     r6, #4               @ max_state >= 4 → has fire states\n");
+    s.push_str("    add     r4, r4, r12          @ r4 = pool slot\n");
+    // state array: r6 = ENEMY_STATE_ARM, r5 = idx*4
+    s.push_str("    lsl     r5, r0, #2           @ idx * 4\n");
+    s.push_str("    ldr     r6, =ENEMY_STATE_ARM\n");
+    s.push_str("    ldr     r2, [r6, r5]         @ r2 = current state\n");
+    // type_data: r3
+    s.push_str("    ldr     r3, [r4, #28]        @ r3 = type_data_ptr\n");
+    s.push_str("    cbz     r3, vefe_done        @ no type data\n");
+    // state_count and max_state
+    s.push_str("    ldr     r8, [r3, #0]         @ r8 = state_count\n");
+    s.push_str("    sub     r11, r8, #1          @ r11 = max_state\n");
+    // event_count from header byte +5
+    s.push_str("    ldrb    r9, [r3, #5]         @ r9 = event_count\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    bne.w   vefe_have_events\n");
+    // ── No event table: fall back to original guard + increment ──────────────
+    // Guard: skip 'onFire*' on enemies without fire states (max_state < 4).
+    s.push_str("    cbz     r7, vefe_inc\n");
+    s.push_str("    cmp     r11, #4              @ max_state >= 4 has fire states\n");
     s.push_str("    bge.w   vefe_inc\n");
-    s.push_str("    cmp     r7, #0               @ null event ptr\n");
-    s.push_str("    beq.w   vefe_inc\n");
-    s.push_str("    push    {r2, r3}\n");
-    s.push_str("    ldr     r2, [r7]             @ first 4 bytes of event name\n");
-    s.push_str("    ldr     r3, =0x69466E6F      @ 'onFi' little-endian\n");
-    s.push_str("    cmp     r2, r3\n");
-    s.push_str("    pop     {r2, r3}             @ restore state + type_data_ptr (flags preserved)\n");
+    s.push_str("    ldr     r0, [r7, #0]         @ first 4 bytes of event name\n");
+    s.push_str("    movw    r12, #0x6E6F\n");
+    s.push_str("    movt    r12, #0x6946         @ 0x69466E6F = 'onFi'\n");
+    s.push_str("    cmp     r0, r12\n");
     s.push_str("    beq.w   vefe_done            @ 'onFire*' on non-frog: skip\n");
     s.push_str("vefe_inc:\n");
     s.push_str("    add     r2, r2, #1\n");
-    s.push_str("    cmp     r2, r6\n");
+    s.push_str("    cmp     r2, r11\n");
     s.push_str("    it      gt\n");
-    s.push_str("    movgt   r2, r6\n");
-    s.push_str("    str     r2, [r5, r1]         @ store new state\n");
-    // Update sprite from type_data table: entry at base+8+state*8
-    s.push_str("    cmp     r3, #0\n");
-    s.push_str("    beq.w   vefe_done\n");
+    s.push_str("    movgt   r2, r11\n");
+    s.push_str("    str     r2, [r6, r5]         @ store new state\n");
+    s.push_str("    b.w     vefe_update_sprite\n");
+    // ── Event table lookup ───────────────────────────────────────────────────
+    s.push_str("vefe_have_events:\n");
+    // event table base = type_data + 8 + state_count * 8
+    s.push_str("    lsl     r0, r8, #3           @ state_count * 8\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    add     r10, r3, r0          @ r10 = event table base\n");
+    // load event name bytes for comparison (safe: .asciz + .align pads to >=4)
+    s.push_str("    cbz     r7, vefe_done        @ null event ptr\n");
+    s.push_str("    ldr     r8, [r7, #0]         @ name bytes 0-3\n");
+    s.push_str("    ldr     r0, [r7, #4]         @ name bytes 4-7\n");
+    // search loop: r11 = event idx
+    s.push_str("    mov     r11, #0\n");
+    s.push_str("vefe_ev_loop:\n");
+    s.push_str("    cmp     r11, r9              @ idx < event_count?\n");
+    s.push_str("    bge.w   vefe_done            @ not found → no-op\n");
+    // entry offset = r11 * 12 (= r11<<3 + r11<<2)
+    s.push_str("    lsl     r1, r11, #3\n");
+    s.push_str("    lsl     r12, r11, #2\n");
+    s.push_str("    add     r1, r1, r12\n");
+    s.push_str("    add     r1, r10, r1          @ r1 = &entry\n");
+    s.push_str("    ldrb    r12, [r1, #0]        @ from_state\n");
+    s.push_str("    cmp     r12, r2\n");
+    s.push_str("    bne     vefe_ev_next\n");
+    s.push_str("    ldr     r12, [r1, #4]        @ name[0..3]\n");
+    s.push_str("    cmp     r12, r8\n");
+    s.push_str("    bne     vefe_ev_next\n");
+    s.push_str("    ldr     r12, [r1, #8]        @ name[4..7]\n");
+    s.push_str("    cmp     r12, r0\n");
+    s.push_str("    bne     vefe_ev_next\n");
+    // match: read to_state, commit
+    s.push_str("    ldrb    r2, [r1, #1]         @ to_state\n");
+    s.push_str("    str     r2, [r6, r5]         @ ENEMY_STATE_ARM[idx] = to_state\n");
+    s.push_str("    b.w     vefe_update_sprite\n");
+    s.push_str("vefe_ev_next:\n");
+    s.push_str("    add     r11, r11, #1\n");
+    s.push_str("    b.w     vefe_ev_loop\n");
+    // ── Update pool sprite from state table ──────────────────────────────────
+    s.push_str("vefe_update_sprite:\n");
     s.push_str("    lsl     r0, r2, #3           @ state * 8\n");
-    s.push_str("    add     r0, r0, #8           @ skip header (8 bytes)\n");
+    s.push_str("    add     r0, r0, #8           @ skip header\n");
     s.push_str("    add     r0, r3, r0           @ ptr to state entry\n");
     s.push_str("    ldr     r1, [r0, #0]         @ sprite_ptr\n");
-    s.push_str("    ldrb    r2, [r0, #4]         @ is_anim\n");
-    s.push_str("    str     r1, [r4, #12]        @ update pool sprite_ptr\n");
-    s.push_str("    strb    r2, [r4, #23]        @ update pool is_anim\n");
+    s.push_str("    ldrb    r12, [r0, #4]        @ is_anim\n");
+    s.push_str("    str     r1, [r4, #12]        @ pool sprite_ptr\n");
+    s.push_str("    strb    r12, [r4, #23]       @ pool is_anim\n");
     s.push_str("    movs    r0, #0\n");
     s.push_str("    strb    r0, [r4, #24]        @ reset anim_frame_idx\n");
     s.push_str("    strb    r0, [r4, #25]        @ reset anim_ticks_left\n");
     s.push_str("vefe_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, pc}\n\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, r12, pc}\n\n");
 
     s.push_str("@ vpy_get_enemy_area_idx(r0=idx) -> r0=0 (stub)\n");
     s.push_str(".global vpy_get_enemy_area_idx\n.type vpy_get_enemy_area_idx, %function\n.thumb_func\n");

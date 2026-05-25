@@ -3569,7 +3569,7 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r6, [r5, #26]\n");
     s.push_str("    bl      pitrex_random\n");
     s.push_str("    and     r0, r0, #0x3F\n");
-    s.push_str("    add     r0, r0, #30         @ 30..93 frames\n");
+    s.push_str("    add     r0, r0, #90         @ 90..153 frames (~2-3s)\n");
     s.push_str("    strh    r0, [r5, #8]        @ idle_timer\n");
     s.push_str("    mov     r0, #1\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = IDLE\n");

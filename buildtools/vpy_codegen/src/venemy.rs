@@ -350,10 +350,25 @@ impl EnemyResource {
             None => 0,
         };
 
+        // Collect event routing entries from state machine.
+        // Each entry: (from_state_idx, to_state_idx, event_name_string)
+        let mut events: Vec<(u8, u8, String)> = Vec::new();
+        if let Some(sm) = &self.state_machine {
+            for (from_idx, state) in sm.states.iter().enumerate() {
+                for ev in &state.on_event {
+                    if let Some(to_idx) = sm.states.iter().position(|s| s.name == ev.to) {
+                        events.push((from_idx as u8, to_idx as u8, ev.event.clone()));
+                    }
+                }
+            }
+        }
+        let event_count = events.len().min(255) as u8;
+
         let state_count = states.len().max(1);
         out.push_str(&format!("    .word {state_count}    @ state_count\n"));
         out.push_str(&format!("    .byte {}              @ feet_offset (signed: screen_y += offset)\n", feet_offset as u8));
-        out.push_str("    .byte 0, 0, 0        @ pad\n");
+        out.push_str(&format!("    .byte {}              @ event_count\n", event_count));
+        out.push_str("    .hword 0             @ pad\n");
 
         for (si, (state_name, action_name)) in states.iter().enumerate() {
             let (sym, is_anim) = self.actions.iter()
@@ -364,6 +379,20 @@ impl EnemyResource {
             out.push_str(&format!("    .word {sym}   @ sprite_ptr\n"));
             out.push_str(&format!("    .byte {is_anim}   @ is_anim\n"));
             out.push_str("    .byte 0, 0, 0    @ pad\n");
+        }
+
+        // Event routing table (12 bytes per entry):
+        //   +0: from_state(u8) + to_state(u8) + pad(u16)
+        //   +4: name bytes 0-3 as LE u32
+        //   +8: name bytes 4-7 as LE u32 (zero-padded)
+        for (from, to, name) in events.iter().take(event_count as usize) {
+            let nb: Vec<u8> = name.bytes().chain(std::iter::repeat(0u8)).take(8).collect();
+            let name_lo = u32::from_le_bytes([nb[0], nb[1], nb[2], nb[3]]);
+            let name_hi = u32::from_le_bytes([nb[4], nb[5], nb[6], nb[7]]);
+            out.push_str(&format!("    @ event: {name} ({from} → {to})\n"));
+            out.push_str(&format!("    .byte {from}, {to}, 0, 0\n"));
+            out.push_str(&format!("    .word 0x{name_lo:08X}  @ name[0..3]\n"));
+            out.push_str(&format!("    .word 0x{name_hi:08X}  @ name[4..7]\n"));
         }
         out.push_str("\n");
         out
