@@ -78,21 +78,25 @@ pub fn emit_ram_layout() -> String {
         // MOVE builtin position (used by DRAW_LINE to compute absolute coordinates)
         ("VPY_MOVE_X",          0x300, "last MOVE X position (added to DRAW_LINE x0/x1)"),
         ("VPY_MOVE_Y",          0x304, "last MOVE Y position (added to DRAW_LINE y0/y1)"),
-        // Enemy system (0x308–0x3C7): 1 count word + 8 slots × 24 bytes each
+        // Enemy system (0x308–0x40B): 1 count word + 8 slots × 32 bytes each
         // Each pool slot: +0 active(u32), +4 world_x(i32), +8 world_y(i32),
-        //   +12 sprite_ptr(u32), +16 wp_base(u32), +20 wp_idx(u8)+wp_count(u8)+ai_type(u8)+pad(u8)
+        //   +12 sprite_ptr(u32), +16 wp_base(u32),
+        //   +20 wp_idx(u8)+wp_count(u8)+ai_type(u8)+is_anim(u8),
+        //   +24 anim_frame_idx(u8)+anim_ticks_left(u8)+pad(6)
         ("ENEMY_COUNT_ARM",     0x308, "active enemy count"),
-        ("ENEMY_POOL_ARM",      0x30C, "enemy pool: 8 slots × 24 bytes"),
-        // Joystick axis cache (0x3CC–0x3DB): read once during WAIT_RECAL, used during game loop
+        ("ENEMY_POOL_ARM",      0x30C, "enemy pool: 8 slots × 32 bytes"),
+        // Joystick axis cache (0x40C–0x41B): read once during WAIT_RECAL, used during game loop
         // Prevents bus_write($D000,...) during display which corrupts VIA PORT B / beam positioning
-        ("J1_AXIS_X",           0x3CC, "cached J1 X axis (-127..127), updated each WAIT_RECAL"),
-        ("J1_AXIS_Y",           0x3D0, "cached J1 Y axis (-127..127), updated each WAIT_RECAL"),
-        ("J2_AXIS_X",           0x3D4, "cached J2 X axis (-127..127), updated each WAIT_RECAL"),
-        ("J2_AXIS_Y",           0x3D8, "cached J2 Y axis (-127..127), updated each WAIT_RECAL"),
-        // Enemy state array (0x3DC–0x3FB): 8 slots × 4 bytes — GET/SET_ENEMY_STATE
-        ("ENEMY_STATE_ARM",     0x3DC, "enemy state per slot: 8 × i32"),
-        // user RAM starts here (0x3FC)
-        ("USER_RAM_START",      0x3FC, "user variables begin here"),
+        ("J1_AXIS_X",           0x40C, "cached J1 X axis (-127..127), updated each WAIT_RECAL"),
+        ("J1_AXIS_Y",           0x410, "cached J1 Y axis (-127..127), updated each WAIT_RECAL"),
+        ("J2_AXIS_X",           0x414, "cached J2 X axis (-127..127), updated each WAIT_RECAL"),
+        ("J2_AXIS_Y",           0x418, "cached J2 Y axis (-127..127), updated each WAIT_RECAL"),
+        // Enemy state array (0x41C–0x43B): 8 slots × 4 bytes — GET/SET_ENEMY_STATE
+        ("ENEMY_STATE_ARM",     0x41C, "enemy state per slot: 8 × i32"),
+        // Per-player animation state (0x43C–0x43D): frame_idx(u8)+ticks_left(u8)
+        ("VPY_PLAYER_ANIM_STATE", 0x43C, "player animation state: frame_idx(u8)+ticks_left(u8)"),
+        // user RAM starts here (0x440)
+        ("USER_RAM_START",      0x440, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {
@@ -115,7 +119,7 @@ pub struct RamAllocator {
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F3FC } // USER_RAM_START (after enemy state at 0x3DC–0x3FB)
+        Self { next: 0x2007_F440 } // USER_RAM_START (after player anim state at 0x43C–0x43D)
     }
 
     /// Allocate `bytes` bytes, return base address.

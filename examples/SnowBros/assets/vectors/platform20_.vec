@@ -196,16 +196,5 @@
       }
     ]
   },
-  "walkableAreas": [
-    {
-      "y": 47,
-      "x_min": -51,
-      "x_max": 52
-    },
-    {
-      "y": -26,
-      "x_min": -27,
-      "x_max": 39
-    }
-  ]
+  "walkableAreas": []
 }

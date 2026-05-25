@@ -308,6 +308,42 @@ impl EnemyResource {
         out
     }
 
+    /// Emit ARM Thumb-2 state sprite table (_NAME_DATA symbol).
+    /// Format: .word state_count, .word 0 (reserved), then per state:
+    ///   .word sprite_ptr, .byte is_anim, .byte 0, 0, 0  (8 bytes each)
+    /// vpy_enemy_fire_event reads entry at base+8+state*8.
+    pub fn compile_to_arm_state_table(&self, override_name: Option<&str>) -> String {
+        let raw_name = override_name.unwrap_or(&self.name);
+        let name_up = raw_name.to_uppercase().replace(' ', "_").replace('-', "_");
+        let mut out = String::new();
+        out.push_str(&format!(".global _{name_up}_DATA\n.balign 4\n_{name_up}_DATA:\n"));
+
+        let states: Vec<(&str, &str)> = if let Some(sm) = &self.state_machine {
+            sm.states.iter().map(|s| (s.name.as_str(), s.action.as_str())).collect()
+        } else if let Some(a) = self.actions.first() {
+            vec![("default", a.name.as_str())]
+        } else {
+            vec![]
+        };
+
+        let state_count = states.len().max(1);
+        out.push_str(&format!("    .word {state_count}    @ state_count\n"));
+        out.push_str("    .word 0              @ reserved\n");
+
+        for (si, (state_name, action_name)) in states.iter().enumerate() {
+            let (sym, is_anim) = self.actions.iter()
+                .find(|a| a.name == *action_name)
+                .map(|a| (sprite_to_symbol(&a.sprite), sprite_type_byte(&a.sprite)))
+                .unwrap_or_else(|| ("0".to_string(), 0u8));
+            out.push_str(&format!("    @ state {si}: {state_name}\n"));
+            out.push_str(&format!("    .word {sym}   @ sprite_ptr\n"));
+            out.push_str(&format!("    .byte {is_anim}   @ is_anim\n"));
+            out.push_str("    .byte 0, 0, 0    @ pad\n");
+        }
+        out.push_str("\n");
+        out
+    }
+
     /// Compile to M6809 assembly for **multibank** mode.
     ///
     /// The action table uses `FCB sprite_idx` (a 0-based index into

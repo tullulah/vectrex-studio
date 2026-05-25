@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-22"
+    "description": "Created in Playground - 2026-05-24"
   },
   "worldBounds": {
     "xMin": -96,
@@ -15,6 +15,13 @@
     "yMin": -2432,
     "yMax": 127
   },
+  "walkable_areas": [
+    {
+      "y": -829,
+      "x_min": -24,
+      "x_max": 47
+    }
+  ],
   "isolateScreens": true,
   "layers": {
     "background": [],
@@ -204,7 +211,10 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": [],
+        "mirrorOnPatrol": true
       },
       {
         "id": "enemy_1778250209582",
@@ -216,14 +226,16 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1778250211554",
@@ -235,14 +247,16 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1778250212985",
@@ -254,14 +268,16 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1778250214379",
@@ -273,14 +289,16 @@
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
-        "aiType": "patrol",
+        "aiType": "wander",
         "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "plat_f5_3",
@@ -501,8 +519,8 @@
         "type": "enemy",
         "vectorName": "titchi_idle",
         "layer": "gameplay",
-        "x": -74,
-        "y": -678,
+        "x": -48,
+        "y": -738,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1075,7 +1093,7 @@
         "vectorName": "platform19",
         "layer": "gameplay",
         "x": -18,
-        "y": -1517,
+        "y": -1514,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1094,7 +1112,7 @@
         "vectorName": "platform20",
         "layer": "gameplay",
         "x": 18,
-        "y": -1497,
+        "y": -1494,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1281,7 +1299,9 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1779380142150",
@@ -1300,7 +1320,9 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1779380143289",
@@ -1319,7 +1341,9 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1779380144613",
@@ -1327,7 +1351,7 @@
         "vectorName": "yellow_troll_idle",
         "layer": "gameplay",
         "x": -45,
-        "y": -2099,
+        "y": -2098,
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
@@ -1338,7 +1362,9 @@
         "velocity": {
           "x": 0,
           "y": 0
-        }
+        },
+        "walkable_areas": [],
+        "transitions": []
       },
       {
         "id": "enemy_1779442193022",
@@ -1365,7 +1391,7 @@
         "vectorName": "platform9",
         "layer": "gameplay",
         "x": -84,
-        "y": -1535,
+        "y": -1533,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1384,7 +1410,45 @@
         "vectorName": "platform9",
         "layer": "gameplay",
         "x": -84,
-        "y": -1499,
+        "y": -1494,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779483997841",
+        "type": "background",
+        "vectorName": "platform20_",
+        "layer": "gameplay",
+        "x": 6,
+        "y": -802,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779484888162",
+        "type": "background",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": -61,
+        "y": -827,
         "rotation": 0,
         "scale": 1,
         "velocity": {

@@ -1,6 +1,8 @@
 META TITLE = "SNOW BROS"
-META TARGET = rp2350
+#META TARGET = vectrex
 META MAX_ENEMIES = 8
+META ROM_TOTAL_SIZE = 131072
+META ROM_BANK_SIZE = 16384
 
 # ── Debug ────────────────────────────────────────────────────────────────────
 const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo

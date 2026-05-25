@@ -442,6 +442,7 @@ pub fn generate_m6809_asm(
     // This prevents "Branch offset OUT OF RANGE" errors from too much code in one bank
     #[allow(unused_assignments)]
     let mut _bank_assignments: std::collections::HashMap<String, u8> = std::collections::HashMap::new();
+    let mut _per_bank_func_bytes: std::collections::HashMap<u8, usize> = std::collections::HashMap::new();
     let functions_by_bank: std::collections::HashMap<u8, String>;
     
     // SIMPLIFIED ASSET DISTRIBUTION (2026-01-20):
@@ -480,6 +481,12 @@ pub fn generate_m6809_asm(
         
         match allocator.assign_banks() {
             Ok(assignments) => {
+                // Compute per-bank function code bytes (for asset distribution coordination)
+                let func_sizes = allocator.get_function_sizes();
+                for (func_name, &bank_id) in &assignments {
+                    let size = func_sizes.get(func_name).copied().unwrap_or(100);
+                    *_per_bank_func_bytes.entry(bank_id).or_insert(0) += size;
+                }
                 // Generate functions distributed by bank
                 functions_by_bank = functions::generate_functions_by_bank(module, &assets, &assignments)?;
                 _bank_assignments = assignments;
@@ -535,6 +542,7 @@ pub fn generate_m6809_asm(
                 &assets,
                 bank_size,
                 helpers_bank as u8,
+                &_per_bank_func_bytes,
             ).map_err(|e| format!("Asset distribution failed: {}", e))?;
             
             // Save lookup tables for later (will be emitted in helpers bank)

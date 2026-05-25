@@ -111,7 +111,7 @@
   "walkableAreas": [
     {
       "y": 8,
-      "x_min": -24,
+      "x_min": -25,
       "x_max": 24
     }
   ]

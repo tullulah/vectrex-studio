@@ -528,8 +528,8 @@ export class Thumb2 implements ICpu {
     // bits[15:13] = 000 — shifts and add/sub
     const b12_10 = (hw >>> 10) & 0x7;
 
-    if (b12_10 <= 0x3) {
-      // LSL / LSR / ASR imm5
+    if (b12_10 <= 0x5) {
+      // LSL / LSR / ASR imm5 (b12_10: LSL=0/1, LSR=2/3, ASR=4/5)
       const shiftType = (hw >>> 11) & 0x3;  // 0=LSL, 1=LSR, 2=ASR
       const imm5 = (hw >>> 6) & 0x1f;
       const rm   = (hw >>> 3) & 0x7;
@@ -1317,9 +1317,16 @@ export class Thumb2 implements ICpu {
         const offset = U ? imm8 : -imm8;
         addr = P ? u32(base + offset) : u32(base);
         if (W) { writeback = true; wbValue = u32(base + offset); }
-      } else {
+      } else if ((hw0 & 0x0080) !== 0) {
+        // T3: LDR/STR.W Rt, [Rn, #imm12]  — hw0=0xF8D0|Rn or 0xF8C0|Rn (bit7=1)
         const imm12 = hw1 & 0xfff;
         addr = u32(base + imm12);
+      } else {
+        // T2 register-indexed: LDR/STR.W Rt, [Rn, Rm{, LSL #imm2}]  — hw0=0xF850|Rn (bit7=0)
+        // hw1: Rt[15:12] | 0[11] | 000[10:8] | 00[7:6] | imm2[5:4] | Rm[3:0]
+        const rm   = hw1 & 0xf;
+        const imm2 = (hw1 >>> 4) & 0x3;
+        addr = u32(base + (this.regs[rm] << imm2));
       }
       const actualLoad = ((hw0 >>> 4) & 1) !== 0;
       if (actualLoad) {

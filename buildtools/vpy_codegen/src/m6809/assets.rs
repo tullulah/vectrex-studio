@@ -641,12 +641,14 @@ pub fn distribute_assets(
     bank_size: usize,
     start_bank: u8,
     max_banks: u8,
+    pre_used_bytes: &HashMap<u8, usize>,
 ) -> AssetDistribution {
     use std::collections::HashMap;
     
     let sized_assets = prepare_assets_with_sizes(assets);
     let mut bank_assignments: HashMap<u8, Vec<SizedAsset>> = HashMap::new();
-    let mut bank_sizes: HashMap<u8, usize> = HashMap::new();
+    // Seed bank_sizes with function code already assigned to each bank.
+    let mut bank_sizes: HashMap<u8, usize> = pre_used_bytes.clone();
     
     // CRITICAL FIX (2026-01-20): Assets go to Banks #1-#30 (switchable window)
     // Bank #0 = main code + LOOP
@@ -809,6 +811,7 @@ pub fn generate_distributed_assets_asm(
     assets: &[AssetInfo],
     bank_size: usize,
     helpers_bank: u8,
+    pre_used_bytes: &std::collections::HashMap<u8, usize>,
 ) -> Result<(std::collections::HashMap<u8, String>, String), String> {
     use std::collections::HashMap;
     
@@ -829,7 +832,7 @@ pub fn generate_distributed_assets_asm(
         })
         .cloned()
         .collect();
-    let distribution = distribute_assets(&distributable, bank_size, 1, helpers_bank.saturating_sub(1));
+    let distribution = distribute_assets(&distributable, bank_size, 1, helpers_bank.saturating_sub(1), pre_used_bytes);
 
     let mut bank_asm: HashMap<u8, String> = HashMap::new();
     let _asset_index = 0u16;

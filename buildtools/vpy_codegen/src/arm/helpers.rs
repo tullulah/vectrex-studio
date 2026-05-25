@@ -169,6 +169,10 @@ pub fn emit_helpers() -> String {
     s.push_str("    add     r0, r0, #12          @ offset = 12 + wp_count*4\n");
     s.push_str("    ldrb    r0, [r6, r0]         @ is_anim byte\n");
     s.push_str("    strb    r0, [r7, #23]        @ pool[+23] = is_anim\n");
+    // reset anim state so stale values from previous spawn cycles don't persist
+    s.push_str("    mov     r2, #0\n");
+    s.push_str("    strb    r2, [r7, #24]        @ reset anim_frame_idx\n");
+    s.push_str("    strb    r2, [r7, #25]        @ reset anim_ticks_left\n");
     // dir (default_facing ROM+11) and mirror_on_patrol (ROM+10) → pool+26, +27
     s.push_str("    ldrb    r0, [r6, #11]        @ default_facing (0=right 1=left)\n");
     s.push_str("    strb    r0, [r7, #26]        @ pool+26 = dir\n");
@@ -476,10 +480,11 @@ pub fn emit_helpers() -> String {
     s.push_str("vpy_set_enemy_dir:\n");
     s.push_str("    bx      lr\n\n");
 
-    s.push_str("@ vpy_enemy_fire_event(r0=idx) — increment state, update sprite from type_data table\n");
+    s.push_str("@ vpy_enemy_fire_event(r0=idx, r1=event_name_ptr) — increment state, update sprite from type_data table\n");
     s.push_str(".global vpy_enemy_fire_event\n.type vpy_enemy_fire_event, %function\n.thumb_func\n");
     s.push_str("vpy_enemy_fire_event:\n");
-    s.push_str("    push    {r4, r5, r6, lr}\n");
+    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str("    mov     r7, r1               @ save event name ptr\n");
     // Pool slot ptr
     s.push_str("    lsl     r1, r0, #5           @ idx * 32\n");
     s.push_str("    ldr     r4, =ENEMY_POOL_ARM\n");
@@ -494,9 +499,24 @@ pub fn emit_helpers() -> String {
     s.push_str("    beq.w   vefe_cap3\n");
     s.push_str("    ldr     r6, [r3, #0]         @ state_count\n");
     s.push_str("    sub     r6, r6, #1           @ max = state_count - 1\n");
-    s.push_str("    b.w     vefe_inc\n");
+    s.push_str("    b.w     vefe_guard\n");
     s.push_str("vefe_cap3:\n");
     s.push_str("    mov     r6, #3\n");
+    // Guard: skip 'onFire*' events for enemies with no fire states (max_state < 4).
+    // update_frog_fire() fires onFire for ALL enemies; we must ignore it for non-frogs.
+    // Frogs have state_count >= 5 (max_state >= 4). Titchi has state_count=4 (max_state=3).
+    // CMP then POP preserves flags — branch after pop is safe on Thumb-2.
+    s.push_str("vefe_guard:\n");
+    s.push_str("    cmp     r6, #4               @ max_state >= 4 → has fire states\n");
+    s.push_str("    bge.w   vefe_inc\n");
+    s.push_str("    cmp     r7, #0               @ null event ptr\n");
+    s.push_str("    beq.w   vefe_inc\n");
+    s.push_str("    push    {r2, r3}\n");
+    s.push_str("    ldr     r2, [r7]             @ first 4 bytes of event name\n");
+    s.push_str("    ldr     r3, =0x69466E6F      @ 'onFi' little-endian\n");
+    s.push_str("    cmp     r2, r3\n");
+    s.push_str("    pop     {r2, r3}             @ restore state + type_data_ptr (flags preserved)\n");
+    s.push_str("    beq.w   vefe_done            @ 'onFire*' on non-frog: skip\n");
     s.push_str("vefe_inc:\n");
     s.push_str("    add     r2, r2, #1\n");
     s.push_str("    cmp     r2, r6\n");
@@ -517,7 +537,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    strb    r0, [r4, #24]        @ reset anim_frame_idx\n");
     s.push_str("    strb    r0, [r4, #25]        @ reset anim_ticks_left\n");
     s.push_str("vefe_done:\n");
-    s.push_str("    pop     {r4, r5, r6, pc}\n\n");
+    s.push_str("    pop     {r4, r5, r6, r7, pc}\n\n");
 
     s.push_str("@ vpy_get_enemy_area_idx(r0=idx) -> r0=0 (stub)\n");
     s.push_str(".global vpy_get_enemy_area_idx\n.type vpy_get_enemy_area_idx, %function\n.thumb_func\n");

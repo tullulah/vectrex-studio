@@ -440,7 +440,11 @@ export class Rp2350System implements ISystem, IBus {
         const wx = (this.sram[b+4]  | (this.sram[b+5]<<8)  | (this.sram[b+6]<<16)  | (this.sram[b+7]<<24))  | 0;
         const wy = (this.sram[b+8]  | (this.sram[b+9]<<8)  | (this.sram[b+10]<<16) | (this.sram[b+11]<<24)) | 0;
         const wpIdx = this.sram[b+20];
-        console.log(`[Rp2350 ENEMY] frame=${fc} world=(${wx},${wy}) wp_idx=${wpIdx}`);
+        const isAnim = this.sram[b+23];
+        const frameIdx = this.sram[b+24];
+        const ticksLeft = this.sram[b+25];
+        const sprPtrLo = this.sram[b+12] | (this.sram[b+13]<<8) | (this.sram[b+14]<<16) | (this.sram[b+15]<<24);
+        console.log(`[Rp2350 ENEMY] frame=${fc} world=(${wx},${wy}) is_anim=${isAnim} frameIdx=${frameIdx} ticks=${ticksLeft} sprPtr=0x${sprPtrLo.toString(16)}`);
       }
     }
 
@@ -501,6 +505,13 @@ export class Rp2350System implements ISystem, IBus {
         const vx = this.sram[0x7F294] | (this.sram[0x7F295] << 8)
                  | (this.sram[0x7F296] << 16) | (this.sram[0x7F297] << 24);
         console.log(`[bounce-trace] BALL_VX written: ${vx | 0}  frame=${this.frameCounter}`);
+      }
+      // ── Animation state write trace ──────────────────────────────────────
+      // Pool slot 0 anim state: +24=frame_idx, +25=ticks_left
+      // ENEMY_POOL_ARM=0x2007F30C → slot0+24=0x2007F324, slot0+25=0x2007F325
+      if (addr >= 0x2007F324 && addr <= 0x2007F327 && (this as any)._animTraceCount < 30) {
+        (this as any)._animTraceCount = ((this as any)._animTraceCount ?? 0) + 1;
+        console.log(`[anim-trace] pool slot0 offset +${addr-0x2007F30C} = ${data}  frame=${this.frameCounter}`);
       }
       return;
     }
