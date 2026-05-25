@@ -318,6 +318,7 @@ impl EnemyResource {
         &self,
         override_name: Option<&str>,
         vec_min_y: &std::collections::HashMap<String, i16>,
+        dims_map: &std::collections::HashMap<String, (i32, i32)>,
     ) -> String {
         let raw_name = override_name.unwrap_or(&self.name);
         let name_up = raw_name.to_uppercase().replace(' ', "_").replace('-', "_");
@@ -368,7 +369,16 @@ impl EnemyResource {
         out.push_str(&format!("    .word {state_count}    @ state_count\n"));
         out.push_str(&format!("    .byte {}              @ feet_offset (signed: screen_y += offset)\n", feet_offset as u8));
         out.push_str(&format!("    .byte {}              @ event_count\n", event_count));
-        out.push_str("    .hword 0             @ pad\n");
+        // Collision bounding box: max hw/hh across all states' sprites.
+        let (max_hw, max_hh) = self.actions.iter()
+            .filter_map(|a| {
+                let stem = Path::new(&a.sprite).file_stem()?.to_str()?.to_lowercase();
+                dims_map.get(&stem).copied()
+            })
+            .fold((6i32, 8i32), |(mw, mh), (w, h)| (mw.max(w), mh.max(h)));
+        let hw_byte = max_hw.clamp(1, 127) as u8;
+        let hh_byte = max_hh.clamp(1, 127) as u8;
+        out.push_str(&format!("    .byte {hw_byte}, {hh_byte}   @ collision hw, hh\n"));
 
         for (si, (state_name, action_name)) in states.iter().enumerate() {
             let (sym, is_anim) = self.actions.iter()

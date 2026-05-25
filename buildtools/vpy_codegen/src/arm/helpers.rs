@@ -327,14 +327,18 @@ pub fn emit_helpers() -> String {
     s.push_str("    push    {r6, r7, r12}\n");
     s.push_str("    ldr     r0, [r5, #4]         @ world_x\n");
     s.push_str("    ldrsh   r1, [r5, #8]         @ world_y\n");
-    s.push_str("    mov     r2, #6               @ ENEMY_HW\n");
-    s.push_str("    mov     r3, #8               @ ENEMY_HH\n");
+    s.push_str("    ldr     r6, [r5, #28]        @ type_data_ptr\n");
+    s.push_str("    ldrb    r2, [r6, #6]         @ collision hw from type_data\n");
+    s.push_str("    ldrb    r3, [r6, #7]         @ collision hh from type_data\n");
     s.push_str("    bl      vpy_level_collision_x\n");
     s.push_str("    pop     {r6, r7, r12}\n");
     s.push_str("    cmp     r0, #0\n");
     s.push_str("    beq.w   vupe_move_y\n");
     s.push_str("    ldr     r1, [r5, #4]\n    add     r1, r1, r0\n    str     r1, [r5, #4]\n");
     s.push_str("vupe_move_y:\n");
+    // Reload world_y: r1 may be clobbered by bl vpy_level_collision_x (caller-saved)
+    // or overwritten with world_x in the push-out path.
+    s.push_str("    ldrsh   r1, [r5, #8]         @ reload world_y\n");
     // move y — snap to target if within PATROL_SPEED to avoid overshooting
     s.push_str("    cmp     r1, r11\n");
     s.push_str("    beq.w   vupe_check_wp        @ already at target y\n");
@@ -483,7 +487,9 @@ pub fn emit_helpers() -> String {
     s.push_str("    push    {r6, r7, r12}\n");
     s.push_str("    mov     r0, r11\n");
     s.push_str("    ldrsh   r1, [r5, #8]           @ world_y\n");
-    s.push_str("    mov     r2, #6\n    mov     r3, #8\n");
+    s.push_str("    ldr     r6, [r5, #28]          @ type_data_ptr\n");
+    s.push_str("    ldrb    r2, [r6, #6]           @ collision hw\n");
+    s.push_str("    ldrb    r3, [r6, #7]           @ collision hh\n");
     s.push_str("    bl      vpy_level_collision_x\n");
     s.push_str("    pop     {r6, r7, r12}\n");
     s.push_str("    cmp     r0, #0\n    beq.w   vupe_wwr_wall_ok\n");
@@ -504,7 +510,9 @@ pub fn emit_helpers() -> String {
     s.push_str("    push    {r6, r7, r12}\n");
     s.push_str("    mov     r0, r11\n");
     s.push_str("    ldrsh   r1, [r5, #8]           @ world_y\n");
-    s.push_str("    mov     r2, #6\n    mov     r3, #8\n");
+    s.push_str("    ldr     r6, [r5, #28]          @ type_data_ptr\n");
+    s.push_str("    ldrb    r2, [r6, #6]           @ collision hw\n");
+    s.push_str("    ldrb    r3, [r6, #7]           @ collision hh\n");
     s.push_str("    bl      vpy_level_collision_x\n");
     s.push_str("    pop     {r6, r7, r12}\n");
     s.push_str("    cmp     r0, #0\n    beq.w   vupe_wwl_wall_ok\n");

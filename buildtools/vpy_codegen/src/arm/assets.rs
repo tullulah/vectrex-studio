@@ -313,7 +313,7 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 };
                 match serde_json::from_str::<EnemyResource>(&text) {
-                    Ok(enemy) => s.push_str(&enemy.compile_to_arm_state_table(Some(&asset.name), &vec_min_y)),
+                    Ok(enemy) => s.push_str(&enemy.compile_to_arm_state_table(Some(&asset.name), &vec_min_y, &dims_map)),
                     Err(e) => {
                         eprintln!("[WARNING] Failed to parse venemy '{}': {}", asset.name, e);
                         s.push_str(&format!(".global _{sym}_DATA\n_{sym}_DATA:\n    .word 0\n\n"));
