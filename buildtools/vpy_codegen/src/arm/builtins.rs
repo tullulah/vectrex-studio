@@ -2433,7 +2433,11 @@ fn emit_level_builtins() -> String {
     s.push_str("    add     r0, r10, r6               @ floor_top + half_h\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("vlcy_no_floor:\n");
-    s.push_str("    mov     r0, #-128\n    add     r0, r0, r6\n");
+    // r5 = player_feet (py - hh). Returning player_feet ensures floor_y < player_y so
+    // the walkoff check triggers correctly. The old -128+hh constant is a Vectrex screen
+    // coordinate and is far above the actual world Y on screens with large negative Y values,
+    // causing the player to stay grounded even when standing over a gap.
+    s.push_str("    mov     r0, r5                    @ no floor: return player_feet so floor_y < player_y\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
     s
