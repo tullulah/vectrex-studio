@@ -427,33 +427,62 @@ pub fn emit_call(
         return Ok(s);
     }
 
-    // Special case: DRAW_VECTOR("name", ox, oy) — always emit r0=asset, r1=ox, r2=oy.
+    // Special case: DRAW_VECTOR("name", ox, oy [, mirror]) — always emit r0=asset, r1=ox, r2=oy.
     // ox/oy default to 0 when not supplied so the vector draws at screen centre.
+    // If a 4th arg (mirror) is present, route through vpy_draw_vector_ex so the mirror is applied.
     if info.name == "DRAW_VECTOR" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
             let symbol   = format!("_{sym_base}_VECTORS");
             let runtime: Vec<&Expr> = args.iter().skip(1).collect();
-            // r0 = asset ptr
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
-            s.push_str("    push    {r0}\n");
-            // r1 = ox
-            if let Some(ox) = runtime.first() {
-                s.push_str(&emit_arg(ox, var_addrs)?);
-            } else {
+            if let Some(mirror) = runtime.get(2) {
+                // 4-arg form: DRAW_VECTOR(name, ox, oy, mirror) → vpy_draw_vector_ex
+                // Push intensity=0 first (function reads [sp+32] after push of 8 regs)
                 s.push_str("    mov     r0, #0\n");
-            }
-            s.push_str("    push    {r0}\n");
-            // r2 = oy
-            if let Some(oy) = runtime.get(1) {
-                s.push_str(&emit_arg(oy, var_addrs)?);
+                s.push_str("    push    {r0}\n");
+                // r0 = asset ptr
+                s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+                s.push_str("    push    {r0}\n");
+                // r1 = ox
+                if let Some(ox) = runtime.first() {
+                    s.push_str(&emit_arg(ox, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                // r2 = oy
+                if let Some(oy) = runtime.get(1) {
+                    s.push_str(&emit_arg(oy, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                // r3 = mirror
+                s.push_str(&emit_arg(mirror, var_addrs)?);
+                s.push_str("    push    {r0}\n");
+                // pop r3=mirror, r2=oy, r1=ox, r0=asset; intensity stays at [sp]
+                s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+                s.push_str("    bl      vpy_draw_vector_ex\n");
+                s.push_str("    add     sp, sp, #4\n"); // discard intensity
             } else {
-                s.push_str("    mov     r0, #0\n");
+                // 3-arg form: DRAW_VECTOR(name, ox, oy) → vpy_draw_vector (no mirror)
+                s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+                s.push_str("    push    {r0}\n");
+                if let Some(ox) = runtime.first() {
+                    s.push_str(&emit_arg(ox, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                if let Some(oy) = runtime.get(1) {
+                    s.push_str(&emit_arg(oy, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+                s.push_str("    bl      vpy_draw_vector\n");
             }
-            s.push_str("    push    {r0}\n");
-            // pop r2, r1, r0
-            s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
-            s.push_str("    bl      vpy_draw_vector\n");
             return Ok(s);
         }
     }

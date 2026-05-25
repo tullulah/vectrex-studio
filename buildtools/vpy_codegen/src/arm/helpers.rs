@@ -467,13 +467,35 @@ pub fn emit_helpers() -> String {
     s.push_str("    ldr     r0, [r1, r0]\n");
     s.push_str("    bx      lr\n    .ltorg\n\n");
 
-    s.push_str("@ vpy_set_enemy_state(r0=idx, r1=state)\n");
+    s.push_str("@ vpy_set_enemy_state(r0=idx, r1=state) — set state and sync pool sprite/anim\n");
     s.push_str(".global vpy_set_enemy_state\n.type vpy_set_enemy_state, %function\n.thumb_func\n");
     s.push_str("vpy_set_enemy_state:\n");
+    s.push_str("    push    {r4, r5, lr}\n");
+    // Write new state to ENEMY_STATE_ARM[idx]
     s.push_str("    ldr     r2, =ENEMY_STATE_ARM\n");
-    s.push_str("    lsl     r0, r0, #2\n");
-    s.push_str("    str     r1, [r2, r0]\n");
-    s.push_str("    bx      lr\n    .ltorg\n\n");
+    s.push_str("    lsl     r3, r0, #2           @ idx * 4\n");
+    s.push_str("    str     r1, [r2, r3]         @ ENEMY_STATE_ARM[idx] = state\n");
+    // Get pool slot
+    s.push_str("    ldr     r4, =ENEMY_POOL_ARM\n");
+    s.push_str("    lsl     r3, r0, #5           @ idx * 32\n");
+    s.push_str("    add     r4, r4, r3           @ r4 = pool slot ptr\n");
+    // Load type_data_ptr from pool+28
+    s.push_str("    ldr     r5, [r4, #28]        @ type_data_ptr\n");
+    s.push_str("    cmp     r5, #0\n");
+    s.push_str("    beq.w   vsse_done\n");
+    // Entry = type_data + 8 + new_state * 8
+    s.push_str("    lsl     r0, r1, #3           @ new_state * 8\n");
+    s.push_str("    add     r0, r0, #8           @ skip header\n");
+    s.push_str("    add     r0, r5, r0           @ ptr to state entry\n");
+    s.push_str("    ldr     r1, [r0, #0]         @ sprite_ptr\n");
+    s.push_str("    ldrb    r2, [r0, #4]         @ is_anim\n");
+    s.push_str("    str     r1, [r4, #12]        @ update pool sprite_ptr\n");
+    s.push_str("    strb    r2, [r4, #23]        @ update pool is_anim\n");
+    s.push_str("    movs    r0, #0\n");
+    s.push_str("    strb    r0, [r4, #24]        @ reset anim_frame_idx\n");
+    s.push_str("    strb    r0, [r4, #25]        @ reset anim_ticks_left\n");
+    s.push_str("vsse_done:\n");
+    s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
 
     s.push_str("@ vpy_set_enemy_dir(r0=idx, r1=dir) — no-op (wander AI controls direction)\n");
     s.push_str(".global vpy_set_enemy_dir\n.type vpy_set_enemy_dir, %function\n.thumb_func\n");
