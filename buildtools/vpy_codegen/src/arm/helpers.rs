@@ -381,9 +381,17 @@ pub fn emit_helpers() -> String {
     s.push_str("    lsl     r0, r9, #3           @ idx * 8\n");
     s.push_str("    add     r0, r0, #8           @ + areas table header\n");
     s.push_str("    add     r0, r6, r0           @ area entry ptr\n");
-    // Snap world_y to area.y so feet touch the platform every frame
+    // Snap world_y to area.y + feet_offset so entity center is above the surface.
+    // Matches PiTrex: pool.world_y = entity center, not raw platform surface.
+    // This makes GET_ENEMY_Y usable directly by LEVEL_COLLISION_Y and snowball checks.
     s.push_str("    ldrsh   r3, [r0, #0]         @ area.y\n");
-    s.push_str("    str     r3, [r5, #8]         @ world_y = area.y\n");
+    s.push_str("    ldr     r1, [r5, #28]        @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     vupe_snap_no_feet\n");
+    s.push_str("    ldrsb   r1, [r1, #4]         @ feet_offset (signed byte at DATA+4)\n");
+    s.push_str("    add     r3, r3, r1\n");
+    s.push_str("vupe_snap_no_feet:\n");
+    s.push_str("    str     r3, [r5, #8]         @ world_y = area.y + feet_offset\n");
     s.push_str("    ldrsh   r9,  [r0, #2]        @ area.x_min\n");
     s.push_str("    ldrsh   r10, [r0, #4]        @ area.x_max\n");
     s.push_str("    b.w     vupe_wander_move\n");
@@ -452,14 +460,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    sub     r1, r1, r6           @ screen_x\n");
     s.push_str("    ldr     r2, [r5, #8]         @ world_y\n");
     s.push_str("    sub     r2, r2, r7           @ screen_y\n");
-    // Apply feet_offset from type_data+4 so sprite bottom lands on platform surface.
-    // feet_offset (signed byte) = 5 - min_y of all sprites for this enemy type.
-    s.push_str("    ldr     r3, [r5, #28]        @ type_data_ptr\n");
-    s.push_str("    cmp     r3, #0\n");
-    s.push_str("    beq.w   vdre_no_feet\n");
-    s.push_str("    ldrsb   r3, [r3, #4]         @ feet_offset (signed byte at DATA+4)\n");
-    s.push_str("    add     r2, r2, r3           @ screen_y += feet_offset\n");
-    s.push_str("vdre_no_feet:\n");
+    // pool.world_y already includes feet_offset (baked in by wander snap).
     // branch on is_anim: VEC → vpy_draw_vector_ex, VANIM → vpy_draw_anim
     s.push_str("    ldrb    r3, [r5, #23]        @ is_anim\n");
     s.push_str("    cmp     r3, #0\n");
