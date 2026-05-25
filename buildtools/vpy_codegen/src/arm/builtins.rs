@@ -967,6 +967,11 @@ fn emit_print_text_clean() -> String {
 
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
+    // ARM font: glyph_y=0 is bottom of glyph, glyph_y=6 is top.
+    // VPy convention: y parameter = top of text. Convert to glyph-bottom so the
+    // top of the glyph aligns with the requested y position.
+    // glyph_height = (6 * scale) >> 1; adjusted_y = y - glyph_height
+    s.push_str("    mov     r0, #6\n    mul     r0, r0, r7\n    asr     r0, r0, #1\n    sub     r5, r5, r0\n");
     s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
 
     s.push_str("    ldr     r10, =PRINT_BEAM_X\n    str     r4, [r10]\n");
