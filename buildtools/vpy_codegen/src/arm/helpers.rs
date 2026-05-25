@@ -120,8 +120,9 @@ pub fn emit_helpers() -> String {
 
     // vpy_spawn_enemies(r0=count_ptr, r1=enemies_ptr)
     // Populates ENEMY_POOL_ARM from the ROM enemy spawn table.
-    // Pool slot (24 bytes): active(4) world_x(4) world_y(4) sprite_ptr(4)
-    //   wp_base(4) wp_idx(u8)+wp_count(u8)+ai_type(u8)+pad(u8)
+    // Pool slot (32 bytes): active(4) world_x(4) world_y(4) sprite_ptr(4)
+    //   wp_base(4) wp_idx(u8)+wp_count(u8)+ai_type(u8)+is_anim(u8)
+    //   anim_frame_idx(u8)+anim_ticks_left(u8)+pad(6)
     s.push_str("@ vpy_spawn_enemies(r0=count_ptr, r1=enemies_ptr)\n");
     s.push_str(".global vpy_spawn_enemies\n.type vpy_spawn_enemies, %function\n.thumb_func\n");
     s.push_str("vpy_spawn_enemies:\n");
@@ -137,7 +138,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    str     r4, [r5]             @ update clamped count\n");
     s.push_str("    mov     r6, r1               @ r6 = ROM entry ptr\n");
     s.push_str("    ldr     r7, =ENEMY_POOL_ARM  @ r7 = pool slot ptr\n");
-    s.push_str("    mov     r8, #24              @ pool stride\n");
+    s.push_str("    mov     r8, #32              @ pool stride\n");
     s.push_str("vspe_loop:\n");
     // sprite_ptr at ROM+0
     s.push_str("    ldr     r9, [r6, #0]         @ sprite_ptr\n");
@@ -168,11 +169,22 @@ pub fn emit_helpers() -> String {
     s.push_str("    add     r0, r0, #12          @ offset = 12 + wp_count*4\n");
     s.push_str("    ldrb    r0, [r6, r0]         @ is_anim byte\n");
     s.push_str("    strb    r0, [r7, #23]        @ pool[+23] = is_anim\n");
+    // dir (default_facing ROM+11) and mirror_on_patrol (ROM+10) → pool+26, +27
+    s.push_str("    ldrb    r0, [r6, #11]        @ default_facing (0=right 1=left)\n");
+    s.push_str("    strb    r0, [r7, #26]        @ pool+26 = dir\n");
+    s.push_str("    ldrb    r0, [r6, #10]        @ mirror_on_patrol\n");
+    s.push_str("    strb    r0, [r7, #27]        @ pool+27 = mirror_on_patrol\n");
+    // type_data_ptr at ROM+12+wp_count*4+4 → pool+28
+    s.push_str("    ldrb    r1, [r6, #9]         @ wp_count\n");
+    s.push_str("    lsl     r0, r1, #2           @ wp_count * 4\n");
+    s.push_str("    add     r0, r0, #16          @ 12 + wp_count*4 + 4 = type_data_ptr offset\n");
+    s.push_str("    ldr     r0, [r6, r0]         @ type_data_ptr\n");
+    s.push_str("    str     r0, [r7, #28]        @ pool+28 = type_data_ptr\n");
     // advance ROM ptr: base(12) + wp_count*4 + 4 (is_anim+pad)
     s.push_str("    ldrb    r1, [r6, #9]         @ wp_count again\n");
     s.push_str("    mov     r0, #4\n");
     s.push_str("    mul     r0, r1, r0           @ wp_count * 4\n");
-    s.push_str("    add     r0, r0, #16          @ +12 base +4 is_anim+pad\n");
+    s.push_str("    add     r0, r0, #24          @ +12 base +4 is_anim+pad +4 type_data_ptr +4 areas_ptr\n");
     s.push_str("    add     r6, r6, r0           @ next ROM entry\n");
     s.push_str("    add     r7, r7, r8           @ next pool slot\n");
     s.push_str("    subs    r4, r4, #1\n");
@@ -202,7 +214,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    beq.w   vupe_done\n");
     s.push_str("    ldr     r5, =ENEMY_POOL_ARM  @ r5 = pool base\n");
-    s.push_str("    mov     r8, #24              @ pool stride\n");
+    s.push_str("    mov     r8, #32              @ pool stride\n");
     s.push_str("vupe_loop:\n");
     // skip inactive
     s.push_str("    ldr     r0, [r5, #0]         @ active?\n");
@@ -211,7 +223,7 @@ pub fn emit_helpers() -> String {
     // ai_type
     s.push_str("    ldrb    r0, [r5, #22]        @ ai_type\n");
     s.push_str("    cmp     r0, #1               @ patrol?\n");
-    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("    bne.w   vupe_not_patrol\n");
     // wp_count
     s.push_str("    ldrb    r6, [r5, #21]        @ wp_count\n");
     s.push_str("    cmp     r6, #0\n");
@@ -279,6 +291,47 @@ pub fn emit_helpers() -> String {
     s.push_str("    it      ge\n");
     s.push_str("    movge   r9, #0               @ wrap to 0\n");
     s.push_str("    strb    r9, [r5, #20]        @ update wp_idx\n");
+    s.push_str("    b.w     vupe_next            @ patrol path done\n");
+    // Wander AI (ai_type == 4): bounce X within level bounds, use LEVEL_DATA_PTR xMin/xMax
+    // Only moves when enemy is in normal state (ENEMY_STATE_ARM[idx] == 0)
+    s.push_str("vupe_not_patrol:\n");
+    s.push_str("    cmp     r0, #4               @ wander?\n");
+    s.push_str("    bne.w   vupe_next\n");
+    // Check enemy state — frozen enemies (state != 0) don't move
+    s.push_str("    ldr     r11, =ENEMY_POOL_ARM\n");
+    s.push_str("    sub     r11, r5, r11          @ slot_offset\n");
+    s.push_str("    lsr     r11, r11, #5          @ slot_index\n");
+    s.push_str("    ldr     r6, =ENEMY_STATE_ARM\n");
+    s.push_str("    lsl     r11, r11, #2          @ index * 4\n");
+    s.push_str("    ldr     r11, [r6, r11]        @ ENEMY_STATE_ARM[index]\n");
+    s.push_str("    cmp     r11, #0\n");
+    s.push_str("    bne.w   vupe_next             @ frozen/snow/ball: skip movement\n");
+    s.push_str("    ldr     r6, =LEVEL_DATA_PTR\n");
+    s.push_str("    ldr     r6, [r6]             @ level header ptr\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq.w   vupe_next\n");
+    s.push_str("    ldrsh   r9,  [r6, #0]        @ xMin\n");
+    s.push_str("    ldrsh   r10, [r6, #2]        @ xMax\n");
+    s.push_str("    ldr     r0, [r5, #4]         @ world_x\n");
+    s.push_str("    ldrb    r1, [r5, #26]        @ dir (0=right, 1=left)\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    bne.w   vupe_wander_left\n");
+    s.push_str("    add     r0, r0, #1           @ move right\n");
+    s.push_str("    cmp     r0, r10\n");
+    s.push_str("    blt.w   vupe_wander_store\n");
+    s.push_str("    mov     r0, r10\n");
+    s.push_str("    mov     r1, #1               @ flip to left\n");
+    s.push_str("    strb    r1, [r5, #26]\n");
+    s.push_str("    b.w     vupe_wander_store\n");
+    s.push_str("vupe_wander_left:\n");
+    s.push_str("    sub     r0, r0, #1           @ move left\n");
+    s.push_str("    cmp     r0, r9\n");
+    s.push_str("    bgt.w   vupe_wander_store\n");
+    s.push_str("    mov     r0, r9\n");
+    s.push_str("    mov     r1, #0               @ flip to right\n");
+    s.push_str("    strb    r1, [r5, #26]\n");
+    s.push_str("vupe_wander_store:\n");
+    s.push_str("    str     r0, [r5, #4]         @ update world_x\n");
     s.push_str("vupe_next:\n");
     s.push_str("    add     r5, r5, r8\n");
     s.push_str("    subs    r4, r4, #1\n");
@@ -297,7 +350,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    beq.w   vdre_done\n");
     s.push_str("    ldr     r5, =ENEMY_POOL_ARM\n");
-    s.push_str("    mov     r8, #24\n");
+    s.push_str("    mov     r8, #32\n");
     s.push_str("    ldr     r6, =CAMERA_X\n");
     s.push_str("    ldr     r7, =CAMERA_Y\n");
     s.push_str("    ldr     r6, [r6]             @ camera_x\n");
@@ -326,9 +379,18 @@ pub fn emit_helpers() -> String {
     s.push_str("    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8           @ clean up stack reservation\n");
     s.push_str("    b.w     vdre_next\n");
-    // animation path: vpy_draw_anim(r0=anim_ptr, r1=ox, r2=oy)
+    // animation path: vpy_draw_anim(r0=anim_ptr, r1=ox, r2=oy, r3=state_ptr, r4=mirror)
+    // r0=anim_ptr must be preserved; r4 is loop counter — use r9 for mirror scratch
     s.push_str("vdre_use_anim:\n");
+    s.push_str("    ldrb    r9, [r5, #26]        @ dir (0=right, 1=left) into r9\n");
+    s.push_str("    ldrb    r3, [r5, #27]        @ mirror_on_patrol\n");
+    s.push_str("    and     r9, r9, r3           @ mirror in r9 (r0=anim_ptr unchanged)\n");
+    s.push_str("    add     r3, r5, #24          @ per-enemy anim state\n");
+    s.push_str("    push    {r4, r9}             @ save loop counter + mirror (8-byte align)\n");
+    s.push_str("    mov     r4, r9               @ r4 = mirror for vpy_draw_anim\n");
+    s.push_str("    @ r0=anim_ptr r1=screen_x r2=screen_y r3=state_ptr r4=mirror\n");
     s.push_str("    bl      vpy_draw_anim\n");
+    s.push_str("    pop     {r4, r9}             @ restore loop counter\n");
     s.push_str("vdre_next:\n");
     s.push_str("    add     r5, r5, r8\n");
     s.push_str("    subs    r4, r4, #1\n");
@@ -337,14 +399,13 @@ pub fn emit_helpers() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n");
     s.push_str("    .ltorg\n\n");
 
-    // Enemy pool query/mutate helpers — leaf functions (no push/pop needed). Pool stride=24.
+    // Enemy pool query/mutate helpers — leaf functions (no push/pop needed). Pool stride=32.
     // ENEMY_STATE_ARM is a separate 8×i32 array for GET/SET_ENEMY_STATE.
 
     s.push_str("@ vpy_get_enemy_active(r0=idx) -> r0=active\n");
     s.push_str(".global vpy_get_enemy_active\n.type vpy_get_enemy_active, %function\n.thumb_func\n");
     s.push_str("vpy_get_enemy_active:\n");
-    s.push_str("    lsl     r1, r0, #3              @ r1 = idx*8\n");
-    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    lsl     r1, r0, #5              @ r1 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    ldr     r0, [r0, r1]            @ active field\n");
     s.push_str("    bx      lr\n    .ltorg\n\n");
@@ -352,8 +413,7 @@ pub fn emit_helpers() -> String {
     s.push_str("@ vpy_get_enemy_x(r0=idx) -> r0=world_x\n");
     s.push_str(".global vpy_get_enemy_x\n.type vpy_get_enemy_x, %function\n.thumb_func\n");
     s.push_str("vpy_get_enemy_x:\n");
-    s.push_str("    lsl     r1, r0, #3\n");
-    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    lsl     r1, r0, #5              @ r1 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    add     r0, r0, r1\n");
     s.push_str("    ldr     r0, [r0, #4]            @ world_x\n");
@@ -362,8 +422,7 @@ pub fn emit_helpers() -> String {
     s.push_str("@ vpy_get_enemy_y(r0=idx) -> r0=world_y\n");
     s.push_str(".global vpy_get_enemy_y\n.type vpy_get_enemy_y, %function\n.thumb_func\n");
     s.push_str("vpy_get_enemy_y:\n");
-    s.push_str("    lsl     r1, r0, #3\n");
-    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    lsl     r1, r0, #5              @ r1 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    add     r0, r0, r1\n");
     s.push_str("    ldr     r0, [r0, #8]            @ world_y\n");
@@ -372,8 +431,7 @@ pub fn emit_helpers() -> String {
     s.push_str("@ vpy_set_enemy_x(r0=idx, r1=x)\n");
     s.push_str(".global vpy_set_enemy_x\n.type vpy_set_enemy_x, %function\n.thumb_func\n");
     s.push_str("vpy_set_enemy_x:\n");
-    s.push_str("    lsl     r2, r0, #3\n");
-    s.push_str("    add.w   r2, r2, r2, lsl #1      @ r2 = idx*24\n");
+    s.push_str("    lsl     r2, r0, #5              @ r2 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    add     r0, r0, r2\n");
     s.push_str("    str     r1, [r0, #4]            @ world_x = x\n");
@@ -382,8 +440,7 @@ pub fn emit_helpers() -> String {
     s.push_str("@ vpy_set_enemy_y(r0=idx, r1=y)\n");
     s.push_str(".global vpy_set_enemy_y\n.type vpy_set_enemy_y, %function\n.thumb_func\n");
     s.push_str("vpy_set_enemy_y:\n");
-    s.push_str("    lsl     r2, r0, #3\n");
-    s.push_str("    add.w   r2, r2, r2, lsl #1      @ r2 = idx*24\n");
+    s.push_str("    lsl     r2, r0, #5              @ r2 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    add     r0, r0, r2\n");
     s.push_str("    str     r1, [r0, #8]            @ world_y = y\n");
@@ -392,8 +449,7 @@ pub fn emit_helpers() -> String {
     s.push_str("@ vpy_kill_enemy(r0=idx)\n");
     s.push_str(".global vpy_kill_enemy\n.type vpy_kill_enemy, %function\n.thumb_func\n");
     s.push_str("vpy_kill_enemy:\n");
-    s.push_str("    lsl     r1, r0, #3\n");
-    s.push_str("    add.w   r1, r1, r1, lsl #1      @ r1 = idx*24\n");
+    s.push_str("    lsl     r1, r0, #5              @ r1 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    movs    r2, #0\n");
     s.push_str("    str     r2, [r0, r1]            @ active = 0\n");
@@ -420,10 +476,48 @@ pub fn emit_helpers() -> String {
     s.push_str("vpy_set_enemy_dir:\n");
     s.push_str("    bx      lr\n\n");
 
-    s.push_str("@ vpy_enemy_fire_event(r0=idx) — no-op stub\n");
+    s.push_str("@ vpy_enemy_fire_event(r0=idx) — increment state, update sprite from type_data table\n");
     s.push_str(".global vpy_enemy_fire_event\n.type vpy_enemy_fire_event, %function\n.thumb_func\n");
     s.push_str("vpy_enemy_fire_event:\n");
-    s.push_str("    bx      lr\n\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    // Pool slot ptr
+    s.push_str("    lsl     r1, r0, #5           @ idx * 32\n");
+    s.push_str("    ldr     r4, =ENEMY_POOL_ARM\n");
+    s.push_str("    add     r4, r4, r1           @ pool slot\n");
+    // Read/increment state
+    s.push_str("    lsl     r1, r0, #2           @ idx * 4 (word array)\n");
+    s.push_str("    ldr     r5, =ENEMY_STATE_ARM\n");
+    s.push_str("    ldr     r2, [r5, r1]         @ current state\n");
+    // Determine max state from type_data (or default 3)
+    s.push_str("    ldr     r3, [r4, #28]        @ type_data_ptr\n");
+    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    beq.w   vefe_cap3\n");
+    s.push_str("    ldr     r6, [r3, #0]         @ state_count\n");
+    s.push_str("    sub     r6, r6, #1           @ max = state_count - 1\n");
+    s.push_str("    b.w     vefe_inc\n");
+    s.push_str("vefe_cap3:\n");
+    s.push_str("    mov     r6, #3\n");
+    s.push_str("vefe_inc:\n");
+    s.push_str("    add     r2, r2, #1\n");
+    s.push_str("    cmp     r2, r6\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r2, r6\n");
+    s.push_str("    str     r2, [r5, r1]         @ store new state\n");
+    // Update sprite from type_data table: entry at base+8+state*8
+    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    beq.w   vefe_done\n");
+    s.push_str("    lsl     r0, r2, #3           @ state * 8\n");
+    s.push_str("    add     r0, r0, #8           @ skip header (8 bytes)\n");
+    s.push_str("    add     r0, r3, r0           @ ptr to state entry\n");
+    s.push_str("    ldr     r1, [r0, #0]         @ sprite_ptr\n");
+    s.push_str("    ldrb    r2, [r0, #4]         @ is_anim\n");
+    s.push_str("    str     r1, [r4, #12]        @ update pool sprite_ptr\n");
+    s.push_str("    strb    r2, [r4, #23]        @ update pool is_anim\n");
+    s.push_str("    movs    r0, #0\n");
+    s.push_str("    strb    r0, [r4, #24]        @ reset anim_frame_idx\n");
+    s.push_str("    strb    r0, [r4, #25]        @ reset anim_ticks_left\n");
+    s.push_str("vefe_done:\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n\n");
 
     s.push_str("@ vpy_get_enemy_area_idx(r0=idx) -> r0=0 (stub)\n");
     s.push_str(".global vpy_get_enemy_area_idx\n.type vpy_get_enemy_area_idx, %function\n.thumb_func\n");

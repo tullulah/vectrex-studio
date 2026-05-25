@@ -526,7 +526,17 @@ pub fn emit_call(
                 s.push_str("    mov     r0, #0\n");
             }
             s.push_str("    push    {r0}\n");
+            // Evaluate mirror (4th arg) now, while r0 holds oy (already pushed), before r0=anim_ptr
+            // Push mirror so it sits below oy/ox/anim_ptr; pop order: mirror→r4, oy→r2, ox→r1, anim→r0
+            if args.len() >= 4 {
+                s.push_str(&emit_arg(&args[3], var_addrs)?);
+                s.push_str("    push    {r0}                     @ push mirror\n");
+                s.push_str("    pop     {r4}                     @ r4 = mirror\n");
+            } else {
+                s.push_str("    mov     r4, #0                     @ mirror = 0\n");
+            }
             s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    ldr     r3, =VPY_PLAYER_ANIM_STATE  @ per-entity anim state\n");
             s.push_str("    bl      vpy_draw_anim\n");
             return Ok(s);
         }

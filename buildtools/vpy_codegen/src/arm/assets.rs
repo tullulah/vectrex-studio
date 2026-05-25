@@ -6,6 +6,7 @@ use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
 use crate::animres::VanimResource;
 use crate::instrres::InstrResource;
+use crate::venemy::EnemyResource;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs;
@@ -294,6 +295,23 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 }
             }
+            AssetType::Enemy => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_DATA\n_{sym}_DATA:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                match serde_json::from_str::<EnemyResource>(&text) {
+                    Ok(enemy) => s.push_str(&enemy.compile_to_arm_state_table(Some(&asset.name))),
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to parse venemy '{}': {}", asset.name, e);
+                        s.push_str(&format!(".global _{sym}_DATA\n_{sym}_DATA:\n    .word 0\n\n"));
+                    }
+                }
+            }
             #[allow(unreachable_patterns)]
             _ => {
                 s.push_str(&format!("@ Asset stub: {} ({:?})\n", asset.name, asset.asset_type));
@@ -327,11 +345,11 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
 fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
 
-    // Timing conversion: ticks → frames @ 60 fps
-    // The RP2350 emulator runs its RAF loop at 60 fps (TARGET_MS = 1000/60).
-    // Compiling at 50 fps would cause music to play 20% too fast in the emulator.
+    // Timing conversion: ticks → frames @ 50 fps.
+    // Both the emulator RAF loop (TARGET_MS = 1000/50) and real rp2350 hardware
+    // target 50 Hz to match Vectrex PAL timing.  PiTrex also uses 50 fps.
     let ticks_per_sec = vmus.tempo / 60.0 * vmus.ticks_per_beat;
-    let tick_to_frame = |t: f64| -> u32 { (t * 60.0 / ticks_per_sec).round() as u32 };
+    let tick_to_frame = |t: f64| -> u32 { (t * 50.0 / ticks_per_sec).round() as u32 };
 
     let loop_start_frame = tick_to_frame(vmus.loop_start);
     let loop_end_frame = tick_to_frame(vmus.loop_end.unwrap_or(vmus.total_ticks));

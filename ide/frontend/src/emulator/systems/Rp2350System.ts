@@ -89,9 +89,11 @@ const VIA_ADDR_PAGE = 0x0000_F000;
 
 /**
  * Safety cycle limit per frame at RP2350 clock (150 MHz).
- * 150_000_000 / 60 ≈ 2_500_000 cycles per 16 ms frame.
+ * 150_000_000 / 50 = 3_000_000 cycles per 20 ms frame; use 15× headroom
+ * so complex scenes (SnowBros level + enemies) never hit the budget.
+ * Only catches genuine infinite loops (>300 ms of simulated work).
  */
-const MAX_CYCLES_PER_FRAME = 2_500_000;
+const MAX_CYCLES_PER_FRAME = 45_000_000;
 
 // ---------------------------------------------------------------------------
 // ARM drawing helpers
@@ -408,22 +410,12 @@ export class Rp2350System implements ISystem, IBus {
         continue;
       }
 
-      // Execute one CPU instruction
+      // Execute one CPU instruction.
+      // We do NOT tick VIA/Beam here: all drawing is handled by high-level traps
+      // (dv_reset, dv_move_to, dv_draw_delta, bus_write/bus_read) that tick the
+      // hardware themselves.  Ticking on every cycle costs ~600K JS calls/frame
+      // for game logic that doesn't touch the beam, causing frame-time jitter.
       const c = this.cpu.step(this);
-
-      // Tick VIA and Beam once per CPU cycle
-      for (let i = 0; i < c; i++) {
-        this.via.tick();
-        this.beam.tick(
-          this.via.via_acr,
-          this.via.via_pcr,
-          this.via.via_ca2,
-          this.via.via_cb2h,
-          this.via.via_cb2s,
-          this.via.via_t1pb7,
-          this.via.via_orb,
-        );
-      }
 
       spent += c;
       steps++;

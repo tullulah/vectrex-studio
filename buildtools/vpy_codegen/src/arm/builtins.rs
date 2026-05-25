@@ -2111,8 +2111,6 @@ fn emit_level_builtins() -> String {
     s.push_str("    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned\n");
     s.push_str("    mov     r4, r0\n");
     s.push_str("    ldr     r1, =LEVEL_DATA_PTR\n    str     r0, [r1]\n");
-    s.push_str("    ldr     r1, =CAMERA_X\n    mov     r2, #0\n    str     r2, [r1]\n");
-    s.push_str("    ldr     r1, =CAMERA_Y\n    str     r2, [r1]\n");
     s.push_str("    ldrb    r5, [r4, #9]              @ gpCount\n");
     s.push_str("    ldr     r1, =LEVEL_GP_COUNT\n    str     r5, [r1]\n");
     s.push_str("    cbz     r5, vll_done\n");
@@ -2320,6 +2318,8 @@ fn emit_level_builtins() -> String {
     // push when the player hits the bottom of a block from below.
     s.push_str("@ vpy_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx\n");
     s.push_str(".global vpy_level_collision_x\n.type vpy_level_collision_x, %function\n.thumb_func\nvpy_level_collision_x:\n");
+    // SnowBros has no walls; screen bounds clamped in VPy. Return 0 (no push-out).
+    s.push_str("    movs    r0, #0\n    bx      lr\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs + pad = 40 bytes, 8-aligned\n");
     s.push_str("    mov     r4, r0                    @ px\n");
     s.push_str("    mov     r5, r1                    @ py\n");
@@ -2336,6 +2336,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldrb    r0, [r7, #6]\n    cbz     r0, vlcx_next\n");
     // collidable flag (ROM +6 bit4)
     s.push_str("    ldrb    r0, [r9, #6]\n    tst     r0, #0x10\n    beq     vlcx_next\n");
+    // skip objects without collision mesh — floor-only platforms must not cause lateral push
+    s.push_str("    ldr     r0, [r9, #16]             @ coll_mesh_ptr\n");
+    s.push_str("    cmp     r0, #0\n    beq     vlcx_next             @ no mesh = floor only\n");
     // y overlap: |py - obj_y| < player_hh + obj_half_h (uses actual player_hh = r11)
     s.push_str("    ldrsh   r1, [r7, #2]              @ obj world_y\n");
     s.push_str("    ldrb    r3, [r9, #13]             @ obj half_h\n");
@@ -2457,13 +2460,14 @@ fn emit_level_builtins() -> String {
 
 fn emit_draw_anim() -> String {
     let mut s = String::new();
-    s.push_str("@ vpy_draw_anim(r0 = ARM ptr to _ANIM_NAME data block, r1 = ox, r2 = oy)\n");
+    s.push_str("@ vpy_draw_anim(r0=anim_ptr, r1=ox, r2=oy, r3=state_ptr, r4=mirror)\n");
     s.push_str(".global vpy_draw_anim\n.type vpy_draw_anim, %function\n.thumb_func\nvpy_draw_anim:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}\n");
+    s.push_str("    mov     r12, r4                     @ save mirror before r4 overwritten\n");
     s.push_str("    mov     r4, r0                      @ anim header ptr\n");
     s.push_str("    mov     r10, r1                     @ save ox\n");
     s.push_str("    mov     r11, r2                     @ save oy\n");
-    s.push_str("    ldr     r5, =VPY_ANIM_STATE_BUF\n");
+    s.push_str("    mov     r5, r3                      @ state_ptr from caller\n");
     s.push_str("    ldrb    r6, [r5]                    @ frame_idx\n");
     s.push_str("    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)\n");
 
@@ -2474,10 +2478,15 @@ fn emit_draw_anim() -> String {
     s.push_str("    add     r9, r4, #4                  @ first base_ref word-ptr\n");
     s.push_str("dar_base_loop:\n");
     s.push_str("    push    {r8, r9}\n");
+    s.push_str("    sub     sp, sp, #8                  @ intensity slot + align\n");
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    str     r0, [sp]                    @ intensity = 127\n");
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");
-    s.push_str("    bl      vpy_draw_vector\n");
+    s.push_str("    mov     r3, r12                     @ mirror\n");
+    s.push_str("    bl      vpy_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r8, r9}\n");
     s.push_str("    add     r9, r9, #4\n");
     s.push_str("    subs    r8, r8, #1\n");
@@ -2539,10 +2548,15 @@ fn emit_draw_anim() -> String {
     s.push_str("    mov     r6, r8\n");
     s.push_str("dar_vec_loop:\n");
     s.push_str("    push    {r6, r9}\n");
+    s.push_str("    sub     sp, sp, #8                  @ intensity slot + align\n");
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    str     r0, [sp]                    @ intensity = 127\n");
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");
-    s.push_str("    bl      vpy_draw_vector\n");
+    s.push_str("    mov     r3, r12                     @ mirror\n");
+    s.push_str("    bl      vpy_draw_vector_ex\n");
+    s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r6, r9}\n");
     s.push_str("    add     r9, r9, #4\n");
     s.push_str("    subs    r6, r6, #1\n");
