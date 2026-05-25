@@ -95,8 +95,11 @@ pub fn emit_ram_layout() -> String {
         ("ENEMY_STATE_ARM",     0x41C, "enemy state per slot: 8 × i32"),
         // Per-player animation state (0x43C–0x43D): frame_idx(u8)+ticks_left(u8)
         ("VPY_PLAYER_ANIM_STATE", 0x43C, "player animation state: frame_idx(u8)+ticks_left(u8)"),
-        // user RAM starts here (0x440)
-        ("USER_RAM_START",      0x440, "user variables begin here"),
+        // Wander AI per-slot scratch (0x440–0x45F): 8 slots × 4 bytes
+        // Each slot: +0..1 idle_timer/from_x/vy (i16), +2..3 target_x (i16)
+        ("WANDER_SCRATCH_ARM",  0x440, "wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)"),
+        // user RAM starts here (0x460)
+        ("USER_RAM_START",      0x460, "user variables begin here"),
     ];
 
     for (name, offset, comment) in vars {
@@ -119,7 +122,7 @@ pub struct RamAllocator {
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F440 } // USER_RAM_START (after player anim state at 0x43C–0x43D)
+        Self { next: 0x2007_F460 } // USER_RAM_START (after wander scratch at 0x440–0x45F)
     }
 
     /// Allocate `bytes` bytes, return base address.

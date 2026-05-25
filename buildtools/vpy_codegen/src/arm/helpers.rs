@@ -148,9 +148,12 @@ pub fn emit_helpers() -> String {
     // world_x = sign-extend .hword at ROM+4
     s.push_str("    ldrsh   r0, [r6, #4]         @ spawn_x\n");
     s.push_str("    str     r0, [r7, #4]         @ world_x\n");
-    // world_y
+    // world_y (i16) + sub_state + trans_type
     s.push_str("    ldrsh   r0, [r6, #6]         @ spawn_y\n");
-    s.push_str("    str     r0, [r7, #8]         @ world_y\n");
+    s.push_str("    strh    r0, [r7, #8]         @ world_y (i16)\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r7, #10]        @ sub_state = WALK\n");
+    s.push_str("    strb    r0, [r7, #11]        @ trans_type = 0\n");
     // sprite_ptr
     s.push_str("    str     r9, [r7, #12]        @ sprite_ptr\n");
     // ai_type at ROM+8, wp_count at ROM+9
@@ -254,7 +257,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    ldrsh   r11, [r7, #2]        @ target_y\n");
     // world_x, world_y
     s.push_str("    ldr     r0, [r5, #4]         @ world_x\n");
-    s.push_str("    ldr     r1, [r5, #8]         @ world_y\n");
+    s.push_str("    ldrsh   r1, [r5, #8]         @ world_y (i16)\n");
     // move x — snap to target if within PATROL_SPEED to avoid overshooting
     s.push_str("    cmp     r0, r10\n");
     s.push_str("    beq.w   vupe_move_y          @ already at target x\n");
@@ -293,7 +296,7 @@ pub fn emit_helpers() -> String {
     s.push_str("vupe_y_snap:\n");
     s.push_str("    mov     r1, r11              @ snap to target_y\n");
     s.push_str("vupe_y_next:\n");
-    s.push_str("    str     r1, [r5, #8]         @ update world_y\n");
+    s.push_str("    strh    r1, [r5, #8]         @ update world_y (i16)\n");
     s.push_str("    b.w     vupe_next\n");
     s.push_str("vupe_check_wp:\n");
     // check if x also at target
@@ -307,124 +310,366 @@ pub fn emit_helpers() -> String {
     s.push_str("    movge   r9, #0               @ wrap to 0\n");
     s.push_str("    strb    r9, [r5, #20]        @ update wp_idx\n");
     s.push_str("    b.w     vupe_next            @ patrol path done\n");
-    // Wander AI (ai_type == 4): bounce X within platform walkable area.
-    // pool+16 = areas_ptr (set at spawn), pool+20 = current area index (0xFF = unset).
-    // First tick: scan areas for closest y to world_y, store index in pool+20.
-    // Subsequent ticks: use stored index directly.
-    // area entry: y(i16), x_min(i16), x_max(i16), pad(i16) = 8 bytes.
-    // areas table: area_count(u32), trans_count(u32), areas[], transitions[].
-    // Fallback: level xMin/xMax if areas_ptr == 0.
+    // Wander AI (ai_type == 4): full platform-transition state machine.
+    // Pool fields: +8..9=world_y(i16), +10=sub_state(u8), +11=trans_type(u8),
+    //   +16=areas_ptr, +20=area_idx(u8), +26=dir(0=right,1=left), +28=type_data_ptr
+    // WANDER_SCRATCH_ARM[slot*4+0..1] = scratch_a (idle_timer/from_x/vy by state)
+    // WANDER_SCRATCH_ARM[slot*4+2..3] = target_x (i16)
+    // Sub-states: 0=WALK, 1=IDLE, 2=AIRBORNE, 3=WALK_TO_TAKEOFF
     // r4=count r5=slot r8=32(stride) — must not clobber these.
     s.push_str("vupe_not_patrol:\n");
     s.push_str("    cmp     r0, #4               @ wander?\n");
     s.push_str("    bne.w   vupe_next\n");
-    // Check enemy state — frozen (state != 0) don't move
+    // Check enemy state — frozen (state != 0) don't wander
     s.push_str("    ldr     r11, =ENEMY_POOL_ARM\n");
     s.push_str("    sub     r11, r5, r11\n");
-    s.push_str("    lsr     r11, r11, #5          @ slot index\n");
+    s.push_str("    lsr     r11, r11, #5          @ slot_idx\n");
     s.push_str("    ldr     r6, =ENEMY_STATE_ARM\n");
-    s.push_str("    lsl     r11, r11, #2\n");
-    s.push_str("    ldr     r11, [r6, r11]\n");
-    s.push_str("    cmp     r11, #0\n");
+    s.push_str("    lsl     r0, r11, #2\n");
+    s.push_str("    ldr     r0, [r6, r0]\n");
+    s.push_str("    cmp     r0, #0\n");
     s.push_str("    bne.w   vupe_next\n");
-    // Load areas_ptr from pool+16
-    s.push_str("    ldr     r6, [r5, #16]        @ areas_ptr (0 if none)\n");
+    // Compute scratch ptr: r12 = &WANDER_SCRATCH_ARM[slot_idx*4]
+    s.push_str("    ldr     r6, =WANDER_SCRATCH_ARM\n");
+    s.push_str("    lsl     r12, r11, #2          @ slot_idx * 4\n");
+    s.push_str("    add     r12, r6, r12           @ r12 = scratch ptr\n");
+    // Load areas_ptr
+    s.push_str("    ldr     r6, [r5, #16]          @ areas_ptr\n");
     s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq.w   vupe_wander_fallback\n");
-    // Check if area index is set (pool+20 != 0xFF)
-    s.push_str("    ldrb    r9, [r5, #20]        @ current area_idx\n");
+    s.push_str("    beq.w   vupe_next\n");
+    s.push_str("    ldr     r7, [r6, #0]           @ area_count\n");
+    s.push_str("    cmp     r7, #0\n");
+    s.push_str("    beq.w   vupe_next\n");
+    // --- First tick: find starting area if area_idx == 0xFF ---
+    s.push_str("    ldrb    r9, [r5, #20]          @ area_idx\n");
     s.push_str("    cmp     r9, #0xFF\n");
-    s.push_str("    bne.w   vupe_wander_have_area\n");
-    // --- find area: score = |world_y - area.y| + (world_x outside [x_min,x_max] ? 10000 : 0) ---
-    // Prefer areas whose X range contains the enemy; break ties by Y proximity.
-    // r7 = world_x (scratch, free in wander section); r12 = IP scratch.
-    s.push_str("    ldr     r1, [r6, #0]         @ area_count\n");
-    s.push_str("    cmp     r1, #0\n");
-    s.push_str("    beq.w   vupe_wander_fallback\n");
-    s.push_str("    ldr     r0, [r5, #8]         @ world_y\n");
-    s.push_str("    ldr     r7, [r5, #4]         @ world_x\n");
-    s.push_str("    mov     r9, #0               @ best_idx = 0\n");
-    s.push_str("    mvn     r10, #0              @ best_score = UINT_MAX\n");
-    s.push_str("    mov     r11, #0              @ loop_idx\n");
-    s.push_str("    add     r2, r6, #8           @ ptr to area[0]\n");
+    s.push_str("    bne.w   vupe_w_have_area\n");
+    // Find closest area by score = |world_y - area.y| + (x outside [x_min,x_max] ? 10000 : 0)
+    s.push_str("    ldrsh   r0, [r5, #8]           @ world_y\n");
+    s.push_str("    ldr     r3, [r5, #4]           @ world_x\n");
+    s.push_str("    mov     r9, #0                 @ best_idx\n");
+    s.push_str("    mvn     r10, #0                @ best_score = UINT_MAX\n");
+    s.push_str("    mov     r11, #0                @ loop_idx\n");
+    s.push_str("    add     r2, r6, #8             @ ptr to area[0]\n");
     s.push_str("vupe_fa_loop:\n");
-    s.push_str("    cmp     r11, r1\n");
+    s.push_str("    cmp     r11, r7\n");
     s.push_str("    bge.w   vupe_fa_done\n");
-    s.push_str("    ldrsh   r3, [r2, #0]         @ area.y\n");
-    s.push_str("    sub     r3, r0, r3\n");
-    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    ldrsh   r1, [r2, #0]           @ area.y\n");
+    s.push_str("    sub     r1, r0, r1             @ world_y - area.y\n");
+    s.push_str("    cmp     r1, #0\n");
     s.push_str("    it      mi\n");
-    s.push_str("    negmi   r3, r3               @ score = |world_y - area.y|\n");
-    // x range check: if world_x not in [x_min, x_max] add 10000 penalty
-    s.push_str("    ldrsh   r12, [r2, #2]        @ area.x_min\n");
-    s.push_str("    cmp     r7, r12\n");
+    s.push_str("    negmi   r1, r1                 @ |dy|\n");
+    s.push_str("    ldrsh   r0, [r2, #2]           @ area.x_min\n");  // reuse r0 temporarily
+    s.push_str("    cmp     r3, r0\n");
     s.push_str("    blt.w   vupe_fa_xout\n");
-    s.push_str("    ldrsh   r12, [r2, #4]        @ area.x_max\n");
-    s.push_str("    cmp     r7, r12\n");
+    s.push_str("    ldrsh   r0, [r2, #4]           @ area.x_max\n");
+    s.push_str("    cmp     r3, r0\n");
     s.push_str("    ble.w   vupe_fa_xin\n");
     s.push_str("vupe_fa_xout:\n");
-    s.push_str("    movw    r12, #10000\n");
-    s.push_str("    add     r3, r3, r12          @ penalise out-of-range areas\n");
+    s.push_str("    movw    r0, #10000\n");
+    s.push_str("    add     r1, r1, r0\n");
     s.push_str("vupe_fa_xin:\n");
-    s.push_str("    cmp     r3, r10\n");
-    s.push_str("    bhs.w   vupe_fa_next         @ unsigned >=: not better\n");
-    s.push_str("    mov     r10, r3\n");
-    s.push_str("    mov     r9, r11              @ new best_idx\n");
+    s.push_str("    ldrsh   r0, [r5, #8]           @ restore world_y for loop\n");
+    s.push_str("    cmp     r1, r10\n");
+    s.push_str("    bhs.w   vupe_fa_next\n");
+    s.push_str("    mov     r10, r1\n");
+    s.push_str("    mov     r9, r11\n");
     s.push_str("vupe_fa_next:\n");
-    s.push_str("    add     r2, r2, #8           @ next area (8 bytes)\n");
+    s.push_str("    add     r2, r2, #8\n");
     s.push_str("    add     r11, r11, #1\n");
     s.push_str("    b.w     vupe_fa_loop\n");
     s.push_str("vupe_fa_done:\n");
-    s.push_str("    strb    r9, [r5, #20]        @ store found area_idx\n");
-    // --- load area bounds and snap world_y to platform surface ---
-    s.push_str("vupe_wander_have_area:\n");
-    s.push_str("    lsl     r0, r9, #3           @ idx * 8\n");
-    s.push_str("    add     r0, r0, #8           @ + areas table header\n");
-    s.push_str("    add     r0, r6, r0           @ area entry ptr\n");
-    // Snap world_y to area.y + feet_offset so entity center is above the surface.
-    // Matches PiTrex: pool.world_y = entity center, not raw platform surface.
-    // This makes GET_ENEMY_Y usable directly by LEVEL_COLLISION_Y and snowball checks.
-    s.push_str("    ldrsh   r3, [r0, #0]         @ area.y\n");
-    s.push_str("    ldr     r1, [r5, #28]        @ type_data_ptr\n");
+    s.push_str("    strb    r9, [r5, #20]          @ store area_idx\n");
+    // Snap world_y to area.y + feet_offset on first placement
+    s.push_str("    lsl     r0, r9, #3             @ idx*8\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    add     r0, r6, r0             @ &area[idx]\n");
+    s.push_str("    ldrsh   r3, [r0, #0]           @ area.y\n");
+    s.push_str("    ldr     r1, [r5, #28]          @ type_data_ptr\n");
     s.push_str("    cmp     r1, #0\n");
-    s.push_str("    beq     vupe_snap_no_feet\n");
-    s.push_str("    ldrsb   r1, [r1, #4]         @ feet_offset (signed byte at DATA+4)\n");
+    s.push_str("    beq     vupe_fa_snap_no_feet\n");
+    s.push_str("    ldrsb   r1, [r1, #4]           @ feet_offset\n");
     s.push_str("    add     r3, r3, r1\n");
-    s.push_str("vupe_snap_no_feet:\n");
-    s.push_str("    str     r3, [r5, #8]         @ world_y = area.y + feet_offset\n");
-    s.push_str("    ldrsh   r9,  [r0, #2]        @ area.x_min\n");
-    s.push_str("    ldrsh   r10, [r0, #4]        @ area.x_max\n");
-    s.push_str("    b.w     vupe_wander_move\n");
-    // --- fallback: use level xMin / xMax ---
-    s.push_str("vupe_wander_fallback:\n");
-    s.push_str("    ldr     r6, =LEVEL_DATA_PTR\n");
-    s.push_str("    ldr     r6, [r6]\n");
-    s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq.w   vupe_next\n");
-    s.push_str("    ldrsh   r9,  [r6, #0]        @ xMin\n");
-    s.push_str("    ldrsh   r10, [r6, #2]        @ xMax\n");
-    // --- move within [r9, r10] ---
-    s.push_str("vupe_wander_move:\n");
-    s.push_str("    ldr     r0, [r5, #4]         @ world_x\n");
-    s.push_str("    ldrb    r1, [r5, #26]        @ dir (0=right, 1=left)\n");
+    s.push_str("vupe_fa_snap_no_feet:\n");
+    s.push_str("    strh    r3, [r5, #8]           @ world_y = area.y + feet_offset\n");
+    // Reload r7 = area_count (may have been clobbered in fa loop via r7=count which is r4 not r7 — safe)
+    // Actually r7 is area_count loaded before fa_loop, still valid here.
+    // Dispatch on sub_state
+    s.push_str("vupe_w_have_area:\n");
+    s.push_str("    ldrb    r0, [r5, #10]          @ sub_state\n");
+    s.push_str("    cmp     r0, #3\n");
+    s.push_str("    beq.w   vupe_w_to_takeoff\n");
+    s.push_str("    cmp     r0, #2\n");
+    s.push_str("    beq.w   vupe_w_air\n");
+    s.push_str("    cmp     r0, #1\n");
+    s.push_str("    beq.w   vupe_w_idle\n");
+
+    // ── WALK: move ±1 toward current edge; when reached → IDLE ──────────
+    // r6=areas_ptr, r7=area_count, r12=scratch_ptr
+    s.push_str("    ldrb    r9, [r5, #20]          @ area_idx\n");
+    s.push_str("    lsl     r0, r9, #3             @ idx*8\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    add     r0, r6, r0             @ &area[idx]\n");
+    s.push_str("    ldrsh   r9,  [r0, #2]          @ x_min\n");
+    s.push_str("    ldrsh   r10, [r0, #4]          @ x_max\n");
+    s.push_str("    ldr     r11, [r5, #4]          @ world_x (i32)\n");
+    s.push_str("    ldrb    r0, [r5, #26]          @ dir (0=right, 1=left)\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bne.w   vupe_w_walk_left\n");
+    // dir=0: moving right toward x_max
+    s.push_str("    add     r11, r11, #1\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r11, r10\n");
+    s.push_str("    str     r11, [r5, #4]          @ world_x\n");
+    s.push_str("    cmp     r11, r10\n");
+    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("    b.w     vupe_w_edge\n");
+    s.push_str("vupe_w_walk_left:\n");
+    // dir=1: moving left toward x_min
+    s.push_str("    sub     r11, r11, #1\n");
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r11, r9\n");
+    s.push_str("    str     r11, [r5, #4]          @ world_x\n");
+    s.push_str("    cmp     r11, r9\n");
+    s.push_str("    bne.w   vupe_next\n");
+    // Reached an edge → flip dir, pick random idle timer, enter IDLE
+    s.push_str("vupe_w_edge:\n");
+    s.push_str("    ldrb    r0, [r5, #26]          @ dir\n");
+    s.push_str("    eor     r0, r0, #1             @ flip\n");
+    s.push_str("    strb    r0, [r5, #26]\n");
+    // call vpy_rand — preserves r4/r5 only; save r6,r7,r12 which we still need
+    s.push_str("    push    {r6, r7, r12}\n");
+    s.push_str("    bl      vpy_rand\n");
+    s.push_str("    pop     {r6, r7, r12}\n");
+    s.push_str("    and     r0, r0, #0x3F          @ 0..63\n");
+    s.push_str("    add     r0, r0, #30            @ 30..93 frames\n");
+    s.push_str("    strh    r0, [r12, #0]          @ scratch_a = idle_timer\n");
+    s.push_str("    mov     r0, #1\n");
+    s.push_str("    strb    r0, [r5, #10]          @ sub_state = IDLE\n");
+    s.push_str("    b.w     vupe_next\n");
+
+    // ── IDLE: decrement timer; when done → pick transition or WALK ───────
+    s.push_str("vupe_w_idle:\n");
+    s.push_str("    ldrsh   r0, [r12, #0]          @ idle_timer\n");
+    s.push_str("    sub     r0, r0, #1\n");
+    s.push_str("    strh    r0, [r12, #0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bgt.w   vupe_next\n");
+    // Timer expired. Try to pick a transition.
+    s.push_str("    ldr     r9,  [r6, #4]          @ trans_count\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq.w   vupe_w_to_walk\n");
+    // trans_ptr = areas_ptr + 8 + area_count*8
+    s.push_str("    lsl     r0, r7, #3             @ area_count*8\n");
+    s.push_str("    add     r10, r6, #8\n");
+    s.push_str("    add     r10, r10, r0           @ r10 = trans_ptr\n");
+    s.push_str("    ldrb    r11, [r5, #20]         @ cur_area_idx\n");
+    s.push_str("    mov     r7, #0                 @ trans_loop_idx\n");
+    s.push_str("vupe_w_pick:\n");
+    s.push_str("    cmp     r7, r9\n");
+    s.push_str("    bge.w   vupe_w_to_walk         @ exhausted\n");
+    s.push_str("    lsl     r0, r7, #3             @ trans[i] offset (8 bytes each)\n");
+    s.push_str("    add     r0, r10, r0\n");
+    s.push_str("    ldrb    r1, [r0, #0]           @ trans.from\n");
+    s.push_str("    cmp     r1, r11\n");
+    s.push_str("    bne.w   vupe_w_pick_next\n");
+    // Coin flip ~25%: call vpy_rand (clobbers r1-r3, r6-r11 except r4/r5)
+    // Save: r6=areas_ptr, r7=loop_idx, r8=unused(pad for 8-byte align), r9=trans_count, r10=trans_ptr, r11=cur_area, r12=scratch
+    s.push_str("    push    {r6, r7, r8, r9, r10, r11, r12}\n");
+    s.push_str("    bl      vpy_rand\n");
+    s.push_str("    pop     {r6, r7, r8, r9, r10, r11, r12}\n");
+    s.push_str("    and     r0, r0, #3\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq.w   vupe_w_pick_hit\n");
+    s.push_str("vupe_w_pick_next:\n");
+    s.push_str("    add     r7, r7, #1\n");
+    s.push_str("    b.w     vupe_w_pick\n");
+    s.push_str("vupe_w_pick_hit:\n");
+    // Commit transition: trans[r7] = {from,to,type,pad,from_x,to_x} (8 bytes)
+    s.push_str("    lsl     r0, r7, #3\n");
+    s.push_str("    add     r0, r10, r0            @ &trans[r7]\n");
+    s.push_str("    ldrb    r1, [r0, #1]           @ to (target area idx)\n");
+    s.push_str("    strb    r1, [r5, #20]          @ area_idx = target\n");
+    s.push_str("    ldrb    r1, [r0, #2]           @ type\n");
+    s.push_str("    strb    r1, [r5, #11]          @ pool+11 = trans_type\n");
+    s.push_str("    ldrsh   r1, [r0, #4]           @ from_x\n");
+    s.push_str("    strh    r1, [r12, #0]          @ scratch_a = from_x\n");
+    s.push_str("    ldrsh   r1, [r0, #6]           @ to_x\n");
+    s.push_str("    strh    r1, [r12, #2]          @ scratch_b = target_x\n");
+    s.push_str("    mov     r0, #3\n");
+    s.push_str("    strb    r0, [r5, #10]          @ sub_state = WALK_TO_TAKEOFF\n");
+    s.push_str("    b.w     vupe_next\n");
+    s.push_str("vupe_w_to_walk:\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #10]          @ sub_state = WALK\n");
+    s.push_str("    b.w     vupe_next\n");
+
+    // ── WALK_TO_TAKEOFF: walk X toward from_x; when arrived → AIRBORNE ──
+    // r6=areas_ptr, r7=area_count, r12=scratch_ptr
+    s.push_str("vupe_w_to_takeoff:\n");
+    s.push_str("    ldrsh   r9,  [r12, #0]         @ from_x (scratch_a)\n");
+    s.push_str("    ldr     r10, [r5, #4]           @ world_x\n");
+    s.push_str("    sub     r0, r9, r10             @ dx = from_x - x\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq.w   vupe_w_tt_reached\n");
+    s.push_str("    bgt.w   vupe_w_tt_right\n");
+    // dx < 0: walk left
+    s.push_str("    mov     r1, #1\n");
+    s.push_str("    strb    r1, [r5, #26]           @ dir = left\n");
+    s.push_str("    sub     r10, r10, #1\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r10, r9\n");
+    s.push_str("    str     r10, [r5, #4]\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("    b.w     vupe_w_tt_reached\n");
+    s.push_str("vupe_w_tt_right:\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r5, #26]           @ dir = right\n");
+    s.push_str("    add     r10, r10, #1\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r10, r9\n");
+    s.push_str("    str     r10, [r5, #4]\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    bne.w   vupe_next\n");
+    // Arrived at from_x → compute initial vy and switch to AIRBORNE
+    s.push_str("vupe_w_tt_reached:\n");
+    // Load target area y (area_idx was already updated to target at commit)
+    s.push_str("    ldrb    r9,  [r5, #20]          @ target area_idx\n");
+    s.push_str("    lsl     r0,  r9, #3             @ idx*8\n");
+    s.push_str("    add     r0,  r0, #8\n");
+    s.push_str("    add     r0,  r6, r0             @ &area[target]\n");
+    s.push_str("    ldrsh   r9,  [r0, #0]           @ target_area.y (raw)\n");
+    // dy = target_y - current_y (both raw area.y values, before feet_offset)
+    // Use raw area.y for arc calc; feet_offset applied on landing
+    s.push_str("    ldrsh   r10, [r5, #8]           @ current world_y (has feet_offset)\n");
+    s.push_str("    ldr     r1,  [r5, #28]          @ type_data_ptr\n");
     s.push_str("    cmp     r1, #0\n");
-    s.push_str("    bne.w   vupe_wander_left\n");
-    s.push_str("    add     r0, r0, #1           @ move right\n");
+    s.push_str("    beq     vupe_w_tt_no_feet\n");
+    s.push_str("    ldrsb   r1, [r1, #4]            @ feet_offset\n");
+    s.push_str("    sub     r10, r10, r1            @ remove feet_offset → raw current area.y\n");
+    s.push_str("vupe_w_tt_no_feet:\n");
+    s.push_str("    sub     r11, r9, r10            @ dy = target.y - current.y\n");
+    s.push_str("    ldrb    r6, [r5, #11]           @ trans_type\n");
+    s.push_str("    cmp     r6, #2\n");
+    s.push_str("    beq.w   vupe_w_tt_drop\n");
+    s.push_str("    cmp     r6, #3\n");
+    s.push_str("    beq.w   vupe_w_tt_across\n");
+    // type=1 jump_up: find vy0 so vy0*(vy0+1)/2 >= dy, starting at 4, capped at 16
+    s.push_str("    mov     r3, #4\n");
+    s.push_str("vupe_w_tt_vy0_loop:\n");
+    s.push_str("    add     r2, r3, #1\n");
+    s.push_str("    mul     r2, r3, r2\n");
+    s.push_str("    lsr     r2, r2, #1             @ peak = vy0*(vy0+1)/2\n");
+    s.push_str("    cmp     r2, r11\n");
+    s.push_str("    bge.w   vupe_w_tt_setvy\n");
+    s.push_str("    add     r3, r3, #1\n");
+    s.push_str("    cmp     r3, #16\n");
+    s.push_str("    blt     vupe_w_tt_vy0_loop\n");
+    s.push_str("    b.w     vupe_w_tt_setvy\n");
+    s.push_str("vupe_w_tt_drop:\n");
+    s.push_str("    mvn     r3, #0                 @ vy0 = -1\n");
+    s.push_str("    b.w     vupe_w_tt_setvy\n");
+    s.push_str("vupe_w_tt_across:\n");
+    s.push_str("    mov     r3, #3                 @ vy0 = 3\n");
+    s.push_str("vupe_w_tt_setvy:\n");
+    s.push_str("    strh    r3, [r12, #0]           @ scratch_a = vy\n");
+    s.push_str("    mov     r0, #2\n");
+    s.push_str("    strb    r0, [r5, #10]           @ sub_state = AIRBORNE\n");
+    // Face toward target_x
+    s.push_str("    ldrsh   r0, [r12, #2]           @ target_x\n");
+    s.push_str("    ldr     r1, [r5, #4]            @ x\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    bge.w   vupe_w_tt_face_r\n");
+    s.push_str("    mov     r0, #1\n");
+    s.push_str("    strb    r0, [r5, #26]           @ dir = left\n");
+    s.push_str("    b.w     vupe_next\n");
+    s.push_str("vupe_w_tt_face_r:\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #26]           @ dir = right\n");
+    s.push_str("    b.w     vupe_next\n");
+
+    // ── AIRBORNE ─────────────────────────────────────────────────────────
+    // Phase A (target_x not yet reached): step X by ±4, arc Y by vy; vy -= 1 clamped >= -3
+    // Phase B (X done): lerp Y toward target platform y, then land
+    s.push_str("vupe_w_air:\n");
+    s.push_str("    ldr     r10, [r5, #4]           @ x\n");
+    s.push_str("    ldrsh   r9,  [r12, #2]          @ target_x\n");
+    s.push_str("    sub     r0, r9, r10             @ dx\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    beq.w   vupe_w_air_y_lerp\n");
+    // Phase A: step X
+    s.push_str("    bgt.w   vupe_w_air_xright\n");
+    s.push_str("    sub     r10, r10, #4\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r10, r9\n");
+    s.push_str("    str     r10, [r5, #4]\n");
+    s.push_str("    b.w     vupe_w_air_y_arc\n");
+    s.push_str("vupe_w_air_xright:\n");
+    s.push_str("    add     r10, r10, #4\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r10, r9\n");
+    s.push_str("    str     r10, [r5, #4]\n");
+    s.push_str("vupe_w_air_y_arc:\n");
+    s.push_str("    ldrsh   r0, [r5, #8]            @ y\n");
+    s.push_str("    ldrsh   r1, [r12, #0]           @ vy\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str("    strh    r0, [r5, #8]            @ y += vy\n");
+    s.push_str("    sub     r1, r1, #1\n");
+    s.push_str("    mvn     r2, #2                  @ -3 terminal velocity\n");
+    s.push_str("    cmp     r1, r2\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r1, r2\n");
+    s.push_str("    strh    r1, [r12, #0]           @ vy updated\n");
+    s.push_str("    b.w     vupe_next\n");
+    // Phase B: lerp Y toward target platform y, land when equal
+    s.push_str("vupe_w_air_y_lerp:\n");
+    s.push_str("    ldrb    r9,  [r5, #20]          @ target area_idx\n");
+    s.push_str("    lsl     r0,  r9, #3\n");
+    s.push_str("    add     r0,  r0, #8\n");
+    s.push_str("    add     r0,  r6, r0             @ &area[target]\n");
+    s.push_str("    ldrsh   r9,  [r0, #0]           @ target area.y (raw)\n");
+    // Compute landing y = target_area.y + feet_offset
+    s.push_str("    mov     r10, r9                 @ landing_y = target.y\n");
+    s.push_str("    ldr     r1, [r5, #28]           @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     vupe_w_air_no_feet\n");
+    s.push_str("    ldrsb   r1, [r1, #4]            @ feet_offset\n");
+    s.push_str("    add     r10, r10, r1            @ landing_y = area.y + feet_offset\n");
+    s.push_str("vupe_w_air_no_feet:\n");
+    s.push_str("    ldrsh   r0, [r5, #8]            @ current y\n");
+    s.push_str("    sub     r1, r10, r0             @ delta = landing_y - y\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq.w   vupe_w_air_land\n");
+    s.push_str("    bgt.w   vupe_w_air_yup\n");
+    s.push_str("    sub     r0, r0, #4\n");
     s.push_str("    cmp     r0, r10\n");
-    s.push_str("    blt.w   vupe_wander_store\n");
-    s.push_str("    mov     r0, r10\n");
-    s.push_str("    mov     r1, #1               @ flip to left\n");
-    s.push_str("    strb    r1, [r5, #26]\n");
-    s.push_str("    b.w     vupe_wander_store\n");
-    s.push_str("vupe_wander_left:\n");
-    s.push_str("    sub     r0, r0, #1           @ move left\n");
-    s.push_str("    cmp     r0, r9\n");
-    s.push_str("    bgt.w   vupe_wander_store\n");
-    s.push_str("    mov     r0, r9\n");
-    s.push_str("    mov     r1, #0               @ flip to right\n");
-    s.push_str("    strb    r1, [r5, #26]\n");
-    s.push_str("vupe_wander_store:\n");
-    s.push_str("    str     r0, [r5, #4]         @ update world_x\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r0, r10\n");
+    s.push_str("    strh    r0, [r5, #8]\n");
+    s.push_str("    cmp     r0, r10\n");
+    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("    b.w     vupe_w_air_land\n");
+    s.push_str("vupe_w_air_yup:\n");
+    s.push_str("    add     r0, r0, #4\n");
+    s.push_str("    cmp     r0, r10\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r0, r10\n");
+    s.push_str("    strh    r0, [r5, #8]\n");
+    s.push_str("    cmp     r0, r10\n");
+    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("vupe_w_air_land:\n");
+    s.push_str("    strh    r10, [r5, #8]           @ snap to landing_y\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    strb    r0, [r5, #10]           @ sub_state = WALK\n");
+    s.push_str("    b.w     vupe_next\n");
+
     s.push_str("vupe_next:\n");
     s.push_str("    add     r5, r5, r8\n");
     s.push_str("    subs    r4, r4, #1\n");
@@ -458,7 +703,7 @@ pub fn emit_helpers() -> String {
     // screen_x = world_x - camera_x, screen_y = world_y - camera_y
     s.push_str("    ldr     r1, [r5, #4]         @ world_x\n");
     s.push_str("    sub     r1, r1, r6           @ screen_x\n");
-    s.push_str("    ldr     r2, [r5, #8]         @ world_y\n");
+    s.push_str("    ldrsh   r2, [r5, #8]         @ world_y (i16)\n");
     s.push_str("    sub     r2, r2, r7           @ screen_y\n");
     // pool.world_y already includes feet_offset (baked in by wander snap).
     // branch on is_anim: VEC → vpy_draw_vector_ex, VANIM → vpy_draw_anim
@@ -519,7 +764,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    lsl     r1, r0, #5              @ r1 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    add     r0, r0, r1\n");
-    s.push_str("    ldr     r0, [r0, #8]            @ world_y\n");
+    s.push_str("    ldrsh   r0, [r0, #8]            @ world_y (i16 sign-extended)\n");
     s.push_str("    bx      lr\n    .ltorg\n\n");
 
     s.push_str("@ vpy_set_enemy_x(r0=idx, r1=x)\n");
@@ -537,7 +782,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    lsl     r2, r0, #5              @ r2 = idx*32\n");
     s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
     s.push_str("    add     r0, r0, r2\n");
-    s.push_str("    str     r1, [r0, #8]            @ world_y = y\n");
+    s.push_str("    strh    r1, [r0, #8]            @ world_y (i16)\n");
     s.push_str("    bx      lr\n    .ltorg\n\n");
 
     s.push_str("@ vpy_kill_enemy(r0=idx)\n");
