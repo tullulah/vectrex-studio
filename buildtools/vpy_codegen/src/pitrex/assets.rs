@@ -1415,10 +1415,10 @@ fn fnv1a_u8(s: &str) -> u8 {
 /// plain lowercase name, e.g. "titchi", or anything with the "{name}_"
 /// prefix like "titchi_idle", "titchi_walk1", "titchi_ball"). The smallest
 /// min_y across those sprites becomes the conservative feet anchor:
-///   feet_offset = 5 (hardcoded draw center→feet shift) - min_y.
-/// With this offset, pool.y = area.y + feet_offset places the sprite's
-/// lowest pixel exactly on area.y — so area.y can mean the platform's top
-/// surface regardless of which sprite the enemy is currently showing.
+///   feet_offset = -min_y
+/// pool.y = area.y + feet_offset places the sprite's lowest pixel exactly on
+/// area.y — so area.y can mean the platform top regardless of which sprite
+/// the enemy is currently showing. Matches the ARM/rp2350 convention.
 fn compute_enemy_feet_offset(res: &EnemyResource, vec_min_y: &HashMap<String, i16>) -> i8 {
     let plain = res.name.to_lowercase();
     let prefix = format!("{}_", plain);
@@ -1429,7 +1429,7 @@ fn compute_enemy_feet_offset(res: &EnemyResource, vec_min_y: &HashMap<String, i1
         }
     }
     match acc {
-        Some(my) => (5i16 - my).clamp(-127, 127) as i8,
+        Some(my) => (-my).clamp(-127, 127) as i8,
         None => 0,
     }
 }
@@ -1548,11 +1548,10 @@ fn emit_enemy_data_for_pitrex(
     // Wander IDLE sprite (offset 204..211)
     s.push_str(&format!("    .word {}    @ idle_sprite_ptr (wander IDLE swap)\n", idle_sprite));
     s.push_str(&format!("    .byte {}    @ idle_is_anim\n", idle_is_anim));
-    // feet_offset = 5 (the hardcoded draw center-to-feet shift in
-    // pitrex_draw_enemies) minus the smallest min_y across every .vec sprite
-    // referenced by this enemy (idle / walk / state variants — for vanim,
-    // pull the first frame's vec_ref). Applied at spawn and at wander
-    // airborne-landing so area.y can represent the platform top surface.
+    // feet_offset = -min_y across every .vec sprite referenced by this enemy
+    // (idle / walk / state variants — for vanim, pull the first frame's
+    // vec_ref). Applied at spawn and at wander airborne-landing so area.y
+    // can represent the platform top surface. Matches ARM/rp2350 convention.
     let feet_off = compute_enemy_feet_offset(res, vec_min_y);
     s.push_str(&format!("    .byte {}    @ feet_offset (signed)\n", feet_off));
     s.push_str("    .byte 0, 0    @ pad\n");
