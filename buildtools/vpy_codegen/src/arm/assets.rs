@@ -7,6 +7,7 @@ use crate::vecres::VecResource;
 use crate::animres::VanimResource;
 use crate::instrres::InstrResource;
 use crate::venemy::EnemyResource;
+use crate::vecres::VecMeshSegment;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs;
@@ -168,12 +169,19 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
 
     // Build vec_walk_areas: lowercase vector name → walkable_areas from .vec file.
     let mut vec_walk_areas: HashMap<String, Vec<crate::vecres::VecWalkableArea>> = HashMap::new();
+    // Build vec_meshes: lowercase vector name → collision segments from .vec file.
+    let mut vec_meshes: HashMap<String, Vec<VecMeshSegment>> = HashMap::new();
     for asset in assets {
         if !matches!(asset.asset_type, AssetType::Vector) { continue; }
         if let Ok(text) = fs::read_to_string(&asset.path) {
             if let Ok(res) = serde_json::from_str::<VecResource>(&text) {
                 if !res.walkable_areas.is_empty() {
                     vec_walk_areas.insert(asset.name.to_lowercase(), res.walkable_areas.clone());
+                }
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(asset.name.to_lowercase(), mesh.segments.clone());
+                    }
                 }
             }
         }
@@ -257,7 +265,7 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     .parent()
                     .and_then(|p| p.parent())
                     .map(|p| p.join("enemies"));
-                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &HashMap::new(), &vec_walk_areas));
+                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
