@@ -2313,51 +2313,68 @@ fn emit_level_builtins() -> String {
     s.push_str("    pop     {r4, r5, r6, pc}\n    .ltorg\n\n");
 
     // ── vpy_level_collision_x(r0=px, r1=py, r2=half_w, r3=half_h) → r0 = push-out dx ──
-    // Scans collidable GP objects. Returns push-out dx to resolve overlap (0 if none).
-    // r3=half_h is the player's actual half-height used for the Y-overlap test — prevents lateral
-    // push when the player hits the bottom of a block from below.
+    // Scans collidable GP objects with wall mesh segments. Returns push-out dx (0 if none).
+    // r3=half_h used for Y-overlap so player standing on top of a wall is not pushed sideways.
     s.push_str("@ vpy_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx\n");
     s.push_str(".global vpy_level_collision_x\n.type vpy_level_collision_x, %function\n.thumb_func\nvpy_level_collision_x:\n");
-    // SnowBros has no walls; screen bounds clamped in VPy. Return 0 (no push-out).
-    s.push_str("    movs    r0, #0\n    bx      lr\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs + pad = 40 bytes, 8-aligned\n");
-    s.push_str("    mov     r4, r0                    @ px\n");
-    s.push_str("    mov     r5, r1                    @ py\n");
-    s.push_str("    mov     r6, r2                    @ half_w (player)\n");
-    s.push_str("    mov     r11, r3                   @ half_h (player) — Y-overlap threshold\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    mov     r4, r0              @ px\n");
+    s.push_str("    mov     r5, r1              @ py\n");
+    s.push_str("    mov     r6, r2              @ half_w (player)\n");
+    s.push_str("    mov     r11, r3             @ half_h (player)\n");
     s.push_str("    ldr     r7, =LEVEL_DATA_PTR\n    ldr     r7, [r7]\n");
     s.push_str("    cbz     r7, vlcx_done_zero\n");
     s.push_str("    ldr     r8, =LEVEL_GP_COUNT\n    ldr     r8, [r8]\n");
     s.push_str("    cbz     r8, vlcx_done_zero\n");
-    s.push_str("    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)\n");
+    s.push_str("    ldr     r9, [r7, #16]       @ gpObjectsPtr (ROM)\n");
     s.push_str("    ldr     r7, =LEVEL_GP_BUF\n");
-    s.push_str("    mov     r10, #0                   @ best_dx\n");
+    s.push_str("    mov     r10, #0             @ best push-out dx\n");
     s.push_str("vlcx_loop:\n    cbz     r8, vlcx_done\n");
     s.push_str("    ldrb    r0, [r7, #6]\n    cbz     r0, vlcx_next\n");
-    // collidable flag (ROM +6 bit4)
     s.push_str("    ldrb    r0, [r9, #6]\n    tst     r0, #0x10\n    beq     vlcx_next\n");
-    // skip objects without collision mesh — floor-only platforms must not cause lateral push
-    s.push_str("    ldr     r0, [r9, #16]             @ coll_mesh_ptr\n");
-    s.push_str("    cmp     r0, #0\n    beq     vlcx_next             @ no mesh = floor only\n");
-    // y overlap: |py - obj_y| < player_hh + obj_half_h (uses actual player_hh = r11)
-    s.push_str("    ldrsh   r1, [r7, #2]              @ obj world_y\n");
-    s.push_str("    ldrb    r3, [r9, #13]             @ obj half_h\n");
-    s.push_str("    sub     r2, r5, r1                @ dy = py - obj_y\n");
-    s.push_str("    movs    r2, r2\n    bpl     vlcx_dychk\n    neg     r2, r2\n");
-    s.push_str("vlcx_dychk:\n    add     r3, r3, r11\n    cmp     r2, r3\n    bge     vlcx_next\n");
-    // x overlap: |px - obj_x| < half_w_player + obj_half_w
-    s.push_str("    ldrb    r0, [r9, #12]             @ obj half_w\n");
-    s.push_str("    ldrsh   r1, [r7, #0]              @ obj world_x\n");
-    s.push_str("    sub     r1, r4, r1                @ dx_raw = px - obj_x\n");
-    s.push_str("    add     r3, r6, r0                @ total_hw = player_hw + obj_hw\n");
-    s.push_str("    movs    r2, r1\n    bpl     vlcx_dxpos\n    neg     r2, r1\n");
-    s.push_str("vlcx_dxpos:\n    cmp     r2, r3\n    bge     vlcx_next\n");
-    // Overlapping: push-out = sign(dx_raw) * (total_hw - |dx_raw|)
-    s.push_str("    sub     r3, r3, r2                @ overlap = total_hw - |dx|\n");
-    s.push_str("    cmp     r1, #0\n    bge     vlcx_pos\n    neg     r3, r3\n");
-    s.push_str("vlcx_pos:\n    mov     r10, r3\n");
-    s.push_str(&format!("vlcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #{}    @ next ROM obj ({} bytes)\n", ARM_ROM_OBJ_STRIDE, ARM_ROM_OBJ_STRIDE));
-    s.push_str("    subs    r8, r8, #1\n    b       vlcx_loop\n");
+    // only objects with a mesh can have wall segments
+    s.push_str("    ldr     r0, [r9, #16]       @ coll_mesh_ptr\n");
+    s.push_str("    cbz     r0, vlcx_next       @ no mesh = floor only\n");
+    // skip floor section: advance past floor_count word + floor_count*8 bytes
+    s.push_str("    ldr     r1, [r0]            @ floor_count\n");
+    s.push_str("    add     r0, r0, #4          @ skip floor_count word\n");
+    s.push_str("    lsl     r1, r1, #3          @ floor_count * 8 bytes per seg\n");
+    s.push_str("    add     r0, r0, r1          @ r0 = ptr to wall_count\n");
+    s.push_str("    ldr     r1, [r0]            @ wall_count\n");
+    s.push_str("    cbz     r1, vlcx_next\n");
+    s.push_str("    add     r0, r0, #4          @ r0 = ptr to first wall seg\n");
+    s.push_str("vlcx_wall_loop:\n");
+    s.push_str("    cbz     r1, vlcx_next\n");
+    // load segment: .hword wall_x, y_min, wall_x, y_max
+    s.push_str("    ldrsh   r2, [r0]            @ wall local x\n");
+    s.push_str("    ldrsh   r3, [r0, #2]        @ wall local y_min\n");
+    s.push_str("    ldrsh   r12, [r0, #6]       @ wall local y_max\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    subs    r1, r1, #1\n");
+    // convert to world coords using RAM obj position (r7)
+    s.push_str("    ldrsh   r14, [r7, #0]       @ obj world_x\n");
+    s.push_str("    add     r2, r2, r14         @ world_wall_x\n");
+    s.push_str("    ldrsh   r14, [r7, #2]       @ obj world_y\n");
+    s.push_str("    add     r3, r3, r14         @ world_y_min\n");
+    s.push_str("    add     r12, r12, r14       @ world_y_max\n");
+    // Y-overlap (strict): player is within wall height
+    // Skip if py <= y_min - player_hh (player below wall) or py >= y_max + player_hh (above)
+    s.push_str("    sub     r14, r3, r11        @ world_y_min - player_hh\n");
+    s.push_str("    cmp     r5, r14\n    ble     vlcx_wall_loop  @ py below wall\n");
+    s.push_str("    add     r14, r12, r11       @ world_y_max + player_hh\n");
+    s.push_str("    cmp     r5, r14\n    bge     vlcx_wall_loop  @ py above wall\n");
+    // X-overlap: |px - wall_x| < player_hw
+    s.push_str("    sub     r3, r4, r2          @ dx_raw = px - wall_x\n");
+    s.push_str("    movs    r2, r3              @ r2 = dx_raw; sets N flag\n");
+    s.push_str("    bpl     vlcx_wall_dx_ok\n    neg     r3, r3  @ r3 = |dx_raw|\n");
+    s.push_str("vlcx_wall_dx_ok:\n");
+    s.push_str("    cmp     r3, r6\n    bge     vlcx_wall_loop  @ |dx| >= hw: no overlap\n");
+    // push-out = sign(dx_raw) * (player_hw - |dx|)
+    s.push_str("    sub     r3, r6, r3          @ overlap = hw - |dx|\n");
+    s.push_str("    cmp     r2, #0\n    bge     vlcx_wall_sign_ok\n    neg     r3, r3\n");
+    s.push_str("vlcx_wall_sign_ok:\n    mov     r10, r3\n    b.w     vlcx_next\n");
+    s.push_str(&format!("vlcx_next:\n    add     r7, r7, #8\n    add     r9, r9, #{}    @ next ROM obj\n", ARM_ROM_OBJ_STRIDE));
+    s.push_str("    subs    r8, r8, #1\n    b.w     vlcx_loop\n");
     s.push_str("vlcx_done:\n    mov     r0, r10\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n");
     s.push_str("vlcx_done_zero:\n    mov     r0, #0\n");
