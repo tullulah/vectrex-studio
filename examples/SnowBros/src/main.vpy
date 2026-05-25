@@ -105,7 +105,7 @@ push_dx: i16 = 0
 
 # ── Physics ──────────────────────────────────────────────────────────────────
 const GRAVITY = 1
-const JUMP_SPEED = 12
+const JUMP_SPEED = 11
 const MAX_FALL_SPEED = 12
 const PLAYER_HH = 11     # half-height de player_idle.vec
 const PLAYER_HW = 6      # half-width de player_idle.vec
