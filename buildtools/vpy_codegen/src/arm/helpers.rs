@@ -119,99 +119,139 @@ pub fn emit_helpers() -> String {
     // ================================================================
 
     // vpy_spawn_enemies(r0=count_ptr, r1=enemies_ptr)
-    // Populates ENEMY_POOL_ARM from the ROM enemy spawn table.
-    // Pool slot (32 bytes): active(4) world_x(4) world_y(4) sprite_ptr(4)
-    //   wp_base(4) wp_idx(u8)+wp_count(u8)+ai_type(u8)+is_anim(u8)
-    //   anim_frame_idx(u8)+anim_ticks_left(u8)+pad(6)
+    // Clears the 8-slot pool, reads CAMERA_Y, then iterates ALL ROM entries
+    // and fills slots only with enemies whose spawn_y is within camera_y ± 150.
+    // This mirrors pitrex_spawn_enemies so level data spanning multiple screens
+    // works correctly: each level transition re-spawns only the on-screen enemies.
+    //
+    // ROM entry layout (stride = 24 + wp_count*4):
+    //   +0  sprite_ptr(u32)  +4 spawn_x(i16)  +6 spawn_y(i16)
+    //   +8  ai_type(u8)  +9 wp_count(u8)  +10 mirror_on_patrol(u8)  +11 default_facing(u8)
+    //   +12..+12+wp_count*4-1  waypoints
+    //   +12+wp_count*4         is_anim(u8) + 3 pad
+    //   +16+wp_count*4         type_data_ptr(u32)
+    //   +20+wp_count*4         areas_ptr(u32)
+    //
+    // Pool slot (32 bytes, ENEMY_POOL_ARM):
+    //   +0  active(u32)  +4 world_x(i32)  +8 world_y(i16)  +10 sub_state(u8)  +11 trans_type(u8)
+    //   +12 sprite_ptr(u32)  +16 areas_ptr/wp_base(u32)
+    //   +20 area_idx(u8)  +21 wp_count(u8)  +22 ai_type(u8)  +23 is_anim(u8)
+    //   +24 anim_frame_idx(u8)  +25 anim_ticks_left(u8)  +26 dir(u8)  +27 mirror_on_patrol(u8)
+    //   +28 type_data_ptr(u32)
     s.push_str("@ vpy_spawn_enemies(r0=count_ptr, r1=enemies_ptr)\n");
+    s.push_str("@ Clears pool, reads CAMERA_Y±150, spawns only in-range enemies.\n");
     s.push_str(".global vpy_spawn_enemies\n.type vpy_spawn_enemies, %function\n.thumb_func\n");
     s.push_str("vpy_spawn_enemies:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n");
-    s.push_str("    ldr     r4, [r0]             @ count\n");
-    s.push_str("    ldr     r5, =ENEMY_COUNT_ARM\n");
-    s.push_str("    str     r4, [r5]             @ store count\n");
-    s.push_str("    cmp     r4, #0\n");
-    s.push_str("    beq.w   vspe_done\n");
-    s.push_str("    cmp     r4, #8               @ clamp to max 8\n");
-    s.push_str("    it      gt\n");
-    s.push_str("    movgt   r4, #8\n");
-    s.push_str("    str     r4, [r5]             @ update clamped count\n");
-    s.push_str("    mov     r6, r1               @ r6 = ROM entry ptr\n");
-    s.push_str("    ldr     r7, =ENEMY_POOL_ARM  @ r7 = pool slot ptr\n");
-    s.push_str("    mov     r8, #32              @ pool stride\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+
+    // Step 1: clear all 8 pool slots (active = 0)
+    s.push_str("    ldr     r6, =ENEMY_POOL_ARM\n");
+    s.push_str("    mov     r10, #8\n");
+    s.push_str("    mov     r11, #0\n");
+    s.push_str("vspe_clear:\n");
+    s.push_str("    str     r11, [r6, #0]            @ active = 0\n");
+    s.push_str("    add     r6, r6, #32\n");
+    s.push_str("    subs    r10, r10, #1\n");
+    s.push_str("    bne     vspe_clear\n");
+
+    // Step 2: load total ROM count and entries pointer
+    s.push_str("    ldr     r4, [r0]                 @ total ROM enemy count\n");
+    s.push_str("    mov     r5, r1                   @ r5 = ROM entries ptr\n");
+    s.push_str("    cbz     r4, vspe_store_count\n");
+
+    // Step 3: compute spawn Y range from CAMERA_Y ± 150
+    s.push_str("    ldr     r0, =CAMERA_Y\n");
+    s.push_str("    ldr     r0, [r0]                 @ camera_y\n");
+    s.push_str("    sub     r8, r0, #150             @ y_min = camera_y - 150\n");
+    s.push_str("    add     r9, r0, #150             @ y_max = camera_y + 150\n");
+
+    // Step 4: fill pool with matching entries
+    s.push_str("    ldr     r6, =ENEMY_POOL_ARM      @ pool write ptr\n");
+    s.push_str("    mov     r7, #0                   @ spawned count\n");
+
     s.push_str("vspe_loop:\n");
-    // sprite_ptr at ROM+0
-    s.push_str("    ldr     r9, [r6, #0]         @ sprite_ptr\n");
-    // active = 1
+    s.push_str("    cbz     r4, vspe_store_count     @ no more ROM entries\n");
+    s.push_str("    cmp     r7, #8\n");
+    s.push_str("    beq     vspe_store_count         @ pool full\n");
+    // filter by spawn_y
+    s.push_str("    ldrsh   r10, [r5, #6]            @ spawn_y\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    blt     vspe_next                @ below range\n");
+    s.push_str("    cmp     r10, r9\n");
+    s.push_str("    bgt     vspe_next                @ above range\n");
+
+    // copy entry → pool slot
     s.push_str("    mov     r0, #1\n");
-    s.push_str("    str     r0, [r7, #0]         @ active\n");
-    // world_x = sign-extend .hword at ROM+4
-    s.push_str("    ldrsh   r0, [r6, #4]         @ spawn_x\n");
-    s.push_str("    str     r0, [r7, #4]         @ world_x\n");
-    // world_y (i16) + sub_state + trans_type
-    s.push_str("    ldrsh   r0, [r6, #6]         @ spawn_y\n");
-    s.push_str("    strh    r0, [r7, #8]         @ world_y (i16)\n");
+    s.push_str("    str     r0, [r6, #0]             @ active = 1\n");
+    s.push_str("    ldrsh   r0, [r5, #4]             @ spawn_x\n");
+    s.push_str("    str     r0, [r6, #4]             @ world_x\n");
+    s.push_str("    ldrsh   r0, [r5, #6]             @ spawn_y\n");
+    s.push_str("    strh    r0, [r6, #8]             @ world_y (i16)\n");
     s.push_str("    mov     r0, #0\n");
-    s.push_str("    strb    r0, [r7, #10]        @ sub_state = WALK\n");
-    s.push_str("    strb    r0, [r7, #11]        @ trans_type = 0\n");
-    // sprite_ptr
-    s.push_str("    str     r9, [r7, #12]        @ sprite_ptr\n");
-    // ai_type at ROM+8, wp_count at ROM+9
-    s.push_str("    ldrb    r0, [r6, #8]         @ ai_type\n");
-    s.push_str("    ldrb    r1, [r6, #9]         @ wp_count\n");
-    s.push_str("    strb    r1, [r7, #21]        @ wp_count\n");
-    s.push_str("    strb    r0, [r7, #22]        @ ai_type\n");
+    s.push_str("    strb    r0, [r6, #10]            @ sub_state = WALK\n");
+    s.push_str("    strb    r0, [r6, #11]            @ trans_type = 0\n");
+    s.push_str("    ldr     r0, [r5, #0]             @ sprite_ptr\n");
+    s.push_str("    str     r0, [r6, #12]            @ sprite_ptr\n");
+    s.push_str("    ldrb    r0, [r5, #8]             @ ai_type\n");
+    s.push_str("    ldrb    r1, [r5, #9]             @ wp_count\n");
+    s.push_str("    strb    r1, [r6, #21]            @ wp_count\n");
+    s.push_str("    strb    r0, [r6, #22]            @ ai_type\n");
     // pool+16: wander(4) → areas_ptr; patrol → wp_base = ROM+12
-    // areas_ptr lives at ROM offset: 12 + wp_count*4 + 8 = 20 + wp_count*4
     s.push_str("    cmp     r0, #4\n");
     s.push_str("    beq.w   vspe_wander_wp\n");
-    s.push_str("    add     r2, r6, #12          @ patrol: wp_base = ROM+12\n");
-    s.push_str("    str     r2, [r7, #16]        @ pool+16 = wp_base\n");
+    s.push_str("    add     r2, r5, #12              @ patrol: wp_base = ROM+12\n");
+    s.push_str("    str     r2, [r6, #16]            @ pool+16 = wp_base\n");
     s.push_str("    mov     r2, #0\n");
-    s.push_str("    strb    r2, [r7, #20]        @ wp_idx = 0\n");
+    s.push_str("    strb    r2, [r6, #20]            @ wp_idx = 0\n");
     s.push_str("    b.w     vspe_after_wp\n");
     s.push_str("vspe_wander_wp:\n");
-    s.push_str("    lsl     r2, r1, #2           @ wp_count * 4\n");
-    s.push_str("    add     r2, r2, #20          @ 12 + wp_count*4 + 8 = areas_ptr offset\n");
-    s.push_str("    ldr     r2, [r6, r2]         @ areas_ptr\n");
-    s.push_str("    str     r2, [r7, #16]        @ pool+16 = areas_ptr\n");
+    s.push_str("    lsl     r2, r1, #2               @ wp_count * 4\n");
+    s.push_str("    add     r2, r2, #20              @ areas_ptr offset = 20 + wp_count*4\n");
+    s.push_str("    ldr     r2, [r5, r2]             @ areas_ptr\n");
+    s.push_str("    str     r2, [r6, #16]            @ pool+16 = areas_ptr\n");
     s.push_str("    mov     r2, #0xFF\n");
-    s.push_str("    strb    r2, [r7, #20]        @ pool+20 = area_idx (0xFF = not yet found)\n");
+    s.push_str("    strb    r2, [r6, #20]            @ area_idx = 0xFF (not yet found)\n");
     s.push_str("vspe_after_wp:\n");
-    // read is_anim from ROM at offset 12 + wp_count*4 (r1 = wp_count still valid)
-    s.push_str("    lsl     r0, r1, #2           @ wp_count * 4\n");
-    s.push_str("    add     r0, r0, #12          @ offset = 12 + wp_count*4\n");
-    s.push_str("    ldrb    r0, [r6, r0]         @ is_anim byte\n");
-    s.push_str("    strb    r0, [r7, #23]        @ pool[+23] = is_anim\n");
-    // reset anim state so stale values from previous spawn cycles don't persist
+    // is_anim at ROM+12+wp_count*4
+    s.push_str("    ldrb    r1, [r5, #9]             @ wp_count\n");
+    s.push_str("    lsl     r0, r1, #2               @ wp_count * 4\n");
+    s.push_str("    add     r0, r0, #12\n");
+    s.push_str("    ldrb    r0, [r5, r0]             @ is_anim\n");
+    s.push_str("    strb    r0, [r6, #23]            @ pool+23 = is_anim\n");
+    // reset anim state
     s.push_str("    mov     r2, #0\n");
-    s.push_str("    strb    r2, [r7, #24]        @ reset anim_frame_idx\n");
-    s.push_str("    strb    r2, [r7, #25]        @ reset anim_ticks_left\n");
-    // dir (default_facing ROM+11) and mirror_on_patrol (ROM+10) → pool+26, +27
-    s.push_str("    ldrb    r0, [r6, #11]        @ default_facing (0=right 1=left)\n");
-    s.push_str("    strb    r0, [r7, #26]        @ pool+26 = dir\n");
-    s.push_str("    ldrb    r0, [r6, #10]        @ mirror_on_patrol\n");
-    s.push_str("    strb    r0, [r7, #27]        @ pool+27 = mirror_on_patrol\n");
-    // type_data_ptr at ROM+12+wp_count*4+4 → pool+28
-    s.push_str("    ldrb    r1, [r6, #9]         @ wp_count\n");
-    s.push_str("    lsl     r0, r1, #2           @ wp_count * 4\n");
-    s.push_str("    add     r0, r0, #16          @ 12 + wp_count*4 + 4 = type_data_ptr offset\n");
-    s.push_str("    ldr     r0, [r6, r0]         @ type_data_ptr\n");
-    s.push_str("    str     r0, [r7, #28]        @ pool+28 = type_data_ptr\n");
-    // advance ROM ptr: base(12) + wp_count*4 + 4 (is_anim+pad)
-    s.push_str("    ldrb    r1, [r6, #9]         @ wp_count again\n");
-    s.push_str("    mov     r0, #4\n");
-    s.push_str("    mul     r0, r1, r0           @ wp_count * 4\n");
-    s.push_str("    add     r0, r0, #24          @ +12 base +4 is_anim+pad +4 type_data_ptr +4 areas_ptr\n");
-    s.push_str("    add     r6, r6, r0           @ next ROM entry\n");
-    s.push_str("    add     r7, r7, r8           @ next pool slot\n");
+    s.push_str("    strb    r2, [r6, #24]            @ anim_frame_idx = 0\n");
+    s.push_str("    strb    r2, [r6, #25]            @ anim_ticks_left = 0\n");
+    // dir and mirror_on_patrol
+    s.push_str("    ldrb    r0, [r5, #11]            @ default_facing\n");
+    s.push_str("    strb    r0, [r6, #26]            @ dir\n");
+    s.push_str("    ldrb    r0, [r5, #10]            @ mirror_on_patrol\n");
+    s.push_str("    strb    r0, [r6, #27]            @ mirror_on_patrol\n");
+    // type_data_ptr at ROM+16+wp_count*4
+    s.push_str("    ldrb    r1, [r5, #9]             @ wp_count\n");
+    s.push_str("    lsl     r0, r1, #2               @ wp_count * 4\n");
+    s.push_str("    add     r0, r0, #16\n");
+    s.push_str("    ldr     r0, [r5, r0]             @ type_data_ptr\n");
+    s.push_str("    str     r0, [r6, #28]            @ pool+28 = type_data_ptr\n");
+    // advance pool ptr
+    s.push_str("    add     r6, r6, #32              @ next pool slot\n");
+    s.push_str("    add     r7, r7, #1               @ spawned++\n");
+
+    s.push_str("vspe_next:\n");
+    // advance ROM ptr: 24 + wp_count*4
+    s.push_str("    ldrb    r10, [r5, #9]            @ wp_count\n");
+    s.push_str("    lsl     r11, r10, #2             @ wp_count * 4\n");
+    s.push_str("    add     r11, r11, #24\n");
+    s.push_str("    add     r5, r5, r11              @ next ROM entry\n");
     s.push_str("    subs    r4, r4, #1\n");
-    s.push_str("    bne     vspe_loop\n");
-    s.push_str("vspe_done:\n");
+    s.push_str("    b       vspe_loop\n");
+
+    s.push_str("vspe_store_count:\n");
+    s.push_str("    ldr     r0, =ENEMY_COUNT_ARM\n");
+    s.push_str("    str     r7, [r0]                 @ store spawned count\n");
     // Zero ENEMY_STATE_ARM (8 × 4 bytes) so states reset on each SPAWN_ENEMIES call
     s.push_str("    ldr     r0, =ENEMY_STATE_ARM\n");
     s.push_str("    movs    r1, #0\n");
-    s.push_str("    stm     r0!, {r1}             @ state[0..7] = 0\n");
     s.push_str("    stm     r0!, {r1}\n");
     s.push_str("    stm     r0!, {r1}\n");
     s.push_str("    stm     r0!, {r1}\n");
@@ -219,7 +259,8 @@ pub fn emit_helpers() -> String {
     s.push_str("    stm     r0!, {r1}\n");
     s.push_str("    stm     r0!, {r1}\n");
     s.push_str("    stm     r0!, {r1}\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
+    s.push_str("    stm     r0!, {r1}\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
 
     // vpy_update_enemies() — patrol movement (1 unit/frame toward current waypoint)
