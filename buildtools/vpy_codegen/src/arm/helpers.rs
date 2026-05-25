@@ -286,7 +286,24 @@ pub fn emit_helpers() -> String {
     // wp_count
     s.push_str("    ldrb    r6, [r5, #21]        @ wp_count\n");
     s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq.w   vupe_next\n");
+    s.push_str("    bne.w   vupe_patrol_has_wps\n");
+    // wp_count==0: use idle sprite when game state==0 (normal)
+    s.push_str("    ldr     r0, =ENEMY_POOL_ARM\n");
+    s.push_str("    sub     r0, r5, r0\n");
+    s.push_str("    lsr     r0, r0, #5           @ slot_idx\n");
+    s.push_str("    ldr     r1, =ENEMY_STATE_ARM\n");
+    s.push_str("    lsl     r0, r0, #2           @ slot_idx*4\n");
+    s.push_str("    ldr     r0, [r1, r0]         @ game state\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bne.w   vupe_next            @ not normal → keep current sprite\n");
+    s.push_str("    ldr     r0, [r5, #28]        @ type_data_ptr\n");
+    s.push_str("    cbz     r0, vupe_next\n");
+    s.push_str("    ldr     r1, [r0, #8]         @ idle_sprite_ptr (TYPE_DATA+8)\n");
+    s.push_str("    ldrb    r2, [r0, #12]        @ idle_is_anim (TYPE_DATA+12)\n");
+    s.push_str("    str     r1, [r5, #12]        @ pool sprite_ptr\n");
+    s.push_str("    strb    r2, [r5, #23]        @ pool is_anim\n");
+    s.push_str("    b.w     vupe_next\n");
+    s.push_str("vupe_patrol_has_wps:\n");
     // wp_base
     s.push_str("    ldr     r7, [r5, #16]        @ wp_base\n");
     s.push_str("    ldrb    r9, [r5, #20]        @ wp_idx\n");
@@ -458,6 +475,22 @@ pub fn emit_helpers() -> String {
     // Dispatch on sub_state
     s.push_str("vupe_w_have_area:\n");
     s.push_str("    ldrb    r0, [r5, #10]          @ sub_state\n");
+    // Update pool sprite based on sub_state (only runs for game-state==0 enemies).
+    // IDLE(1) → idle_sprite (TYPE_DATA+8); all other → state[0] walk sprite (TYPE_DATA+16).
+    s.push_str("    ldr     r1, [r5, #28]          @ type_data_ptr\n");
+    s.push_str("    cbz     r1, vupe_w_sprite_disp\n");
+    s.push_str("    cmp     r0, #1                 @ IDLE sub-state?\n");
+    s.push_str("    bne     vupe_w_sprite_walk\n");
+    s.push_str("    ldr     r2, [r1, #8]           @ idle_sprite_ptr\n");
+    s.push_str("    ldrb    r3, [r1, #12]          @ idle_is_anim\n");
+    s.push_str("    b       vupe_w_sprite_set\n");
+    s.push_str("vupe_w_sprite_walk:\n");
+    s.push_str("    ldr     r2, [r1, #16]          @ state[0] sprite_ptr (walk)\n");
+    s.push_str("    ldrb    r3, [r1, #20]          @ state[0] is_anim\n");
+    s.push_str("vupe_w_sprite_set:\n");
+    s.push_str("    str     r2, [r5, #12]          @ pool sprite_ptr\n");
+    s.push_str("    strb    r3, [r5, #23]          @ pool is_anim\n");
+    s.push_str("vupe_w_sprite_disp:\n");
     s.push_str("    cmp     r0, #3\n");
     s.push_str("    beq.w   vupe_w_to_takeoff\n");
     s.push_str("    cmp     r0, #2\n");
@@ -494,7 +527,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    pop     {r6, r7, r12}\n");
     s.push_str("    cmp     r0, #0\n    beq.w   vupe_wwr_wall_ok\n");
     s.push_str("    ldr     r1, [r5, #4]\n    add     r1, r1, r0\n    str     r1, [r5, #4]\n");
-    s.push_str("    ldr     r11, [r5, #4]          @ reload after push-out\n");
+    s.push_str("    b.w     vupe_w_edge            @ wall hit → flip dir like reaching x_max\n");
     s.push_str("vupe_wwr_wall_ok:\n");
     s.push_str("    cmp     r11, r10\n");
     s.push_str("    bne.w   vupe_next\n");
@@ -517,7 +550,7 @@ pub fn emit_helpers() -> String {
     s.push_str("    pop     {r6, r7, r12}\n");
     s.push_str("    cmp     r0, #0\n    beq.w   vupe_wwl_wall_ok\n");
     s.push_str("    ldr     r1, [r5, #4]\n    add     r1, r1, r0\n    str     r1, [r5, #4]\n");
-    s.push_str("    ldr     r11, [r5, #4]          @ reload after push-out\n");
+    s.push_str("    b.w     vupe_w_edge            @ wall hit → flip dir like reaching x_min\n");
     s.push_str("vupe_wwl_wall_ok:\n");
     s.push_str("    cmp     r11, r9\n");
     s.push_str("    bne.w   vupe_next\n");
@@ -905,9 +938,9 @@ pub fn emit_helpers() -> String {
     s.push_str("    ldr     r5, [r4, #28]        @ type_data_ptr\n");
     s.push_str("    cmp     r5, #0\n");
     s.push_str("    beq.w   vsse_done\n");
-    // Entry = type_data + 8 + new_state * 8
+    // Entry = type_data + 16 + new_state * 8 (header is 16 bytes: counts+feet+event+hw+hh+idle)
     s.push_str("    lsl     r0, r1, #3           @ new_state * 8\n");
-    s.push_str("    add     r0, r0, #8           @ skip header\n");
+    s.push_str("    add     r0, r0, #16          @ skip header\n");
     s.push_str("    add     r0, r5, r0           @ ptr to state entry\n");
     s.push_str("    ldr     r1, [r0, #0]         @ sprite_ptr\n");
     s.push_str("    ldrb    r2, [r0, #4]         @ is_anim\n");
@@ -977,9 +1010,9 @@ pub fn emit_helpers() -> String {
     s.push_str("    b.w     vefe_update_sprite\n");
     // ── Event table lookup ───────────────────────────────────────────────────
     s.push_str("vefe_have_events:\n");
-    // event table base = type_data + 8 + state_count * 8
+    // event table base = type_data + 16 + state_count * 8
     s.push_str("    lsl     r0, r8, #3           @ state_count * 8\n");
-    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    add     r0, r0, #16\n");
     s.push_str("    add     r10, r3, r0          @ r10 = event table base\n");
     // load event name bytes for comparison (safe: .asciz + .align pads to >=4)
     s.push_str("    cbz     r7, vefe_done        @ null event ptr\n");
@@ -1014,7 +1047,7 @@ pub fn emit_helpers() -> String {
     // ── Update pool sprite from state table ──────────────────────────────────
     s.push_str("vefe_update_sprite:\n");
     s.push_str("    lsl     r0, r2, #3           @ state * 8\n");
-    s.push_str("    add     r0, r0, #8           @ skip header\n");
+    s.push_str("    add     r0, r0, #16          @ skip header\n");
     s.push_str("    add     r0, r3, r0           @ ptr to state entry\n");
     s.push_str("    ldr     r1, [r0, #0]         @ sprite_ptr\n");
     s.push_str("    ldrb    r12, [r0, #4]        @ is_anim\n");

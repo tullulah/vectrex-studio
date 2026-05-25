@@ -379,6 +379,18 @@ impl EnemyResource {
         let hw_byte = max_hw.clamp(1, 127) as u8;
         let hh_byte = max_hh.clamp(1, 127) as u8;
         out.push_str(&format!("    .byte {hw_byte}, {hh_byte}   @ collision hw, hh\n"));
+        // Idle sprite: used when enemy is stationary (patrol wp_count=0 or wander IDLE sub-state).
+        // Priority: action named "idle" > first static (.vec) action > first action.
+        let idle_action = self.actions.iter()
+            .find(|a| a.name == "idle")
+            .or_else(|| self.actions.iter().find(|a| sprite_type_byte(&a.sprite) == 0))
+            .or_else(|| self.actions.first());
+        let (idle_sym, idle_is_anim) = idle_action
+            .map(|a| (sprite_to_symbol(&a.sprite), sprite_type_byte(&a.sprite)))
+            .unwrap_or_else(|| ("0".to_string(), 0u8));
+        out.push_str(&format!("    .word {idle_sym}   @ idle_sprite_ptr (+8)\n"));
+        out.push_str(&format!("    .byte {idle_is_anim}, 0, 0, 0   @ idle_is_anim + pad (+12..+15)\n"));
+        // State entries start at +16 (shifted from +8 to make room for idle sprite).
 
         for (si, (state_name, action_name)) in states.iter().enumerate() {
             let (sym, is_anim) = self.actions.iter()
