@@ -156,14 +156,25 @@ pub fn emit_helpers() -> String {
     // ai_type at ROM+8, wp_count at ROM+9
     s.push_str("    ldrb    r0, [r6, #8]         @ ai_type\n");
     s.push_str("    ldrb    r1, [r6, #9]         @ wp_count\n");
-    // wp_base = &ROM+12 (first waypoint)
-    s.push_str("    add     r2, r6, #12          @ wp_base = ROM+12\n");
-    s.push_str("    str     r2, [r7, #16]        @ wp_base\n");
-    // pack wp_idx=0, wp_count, ai_type into [r7+20]
-    s.push_str("    mov     r2, #0               @ wp_idx\n");
-    s.push_str("    strb    r2, [r7, #20]        @ wp_idx\n");
     s.push_str("    strb    r1, [r7, #21]        @ wp_count\n");
     s.push_str("    strb    r0, [r7, #22]        @ ai_type\n");
+    // pool+16: wander(4) → areas_ptr; patrol → wp_base = ROM+12
+    // areas_ptr lives at ROM offset: 12 + wp_count*4 + 8 = 20 + wp_count*4
+    s.push_str("    cmp     r0, #4\n");
+    s.push_str("    beq.w   vspe_wander_wp\n");
+    s.push_str("    add     r2, r6, #12          @ patrol: wp_base = ROM+12\n");
+    s.push_str("    str     r2, [r7, #16]        @ pool+16 = wp_base\n");
+    s.push_str("    mov     r2, #0\n");
+    s.push_str("    strb    r2, [r7, #20]        @ wp_idx = 0\n");
+    s.push_str("    b.w     vspe_after_wp\n");
+    s.push_str("vspe_wander_wp:\n");
+    s.push_str("    lsl     r2, r1, #2           @ wp_count * 4\n");
+    s.push_str("    add     r2, r2, #20          @ 12 + wp_count*4 + 8 = areas_ptr offset\n");
+    s.push_str("    ldr     r2, [r6, r2]         @ areas_ptr\n");
+    s.push_str("    str     r2, [r7, #16]        @ pool+16 = areas_ptr\n");
+    s.push_str("    mov     r2, #0xFF\n");
+    s.push_str("    strb    r2, [r7, #20]        @ pool+20 = area_idx (0xFF = not yet found)\n");
+    s.push_str("vspe_after_wp:\n");
     // read is_anim from ROM at offset 12 + wp_count*4 (r1 = wp_count still valid)
     s.push_str("    lsl     r0, r1, #2           @ wp_count * 4\n");
     s.push_str("    add     r0, r0, #12          @ offset = 12 + wp_count*4\n");
@@ -296,26 +307,96 @@ pub fn emit_helpers() -> String {
     s.push_str("    movge   r9, #0               @ wrap to 0\n");
     s.push_str("    strb    r9, [r5, #20]        @ update wp_idx\n");
     s.push_str("    b.w     vupe_next            @ patrol path done\n");
-    // Wander AI (ai_type == 4): bounce X within level bounds, use LEVEL_DATA_PTR xMin/xMax
-    // Only moves when enemy is in normal state (ENEMY_STATE_ARM[idx] == 0)
+    // Wander AI (ai_type == 4): bounce X within platform walkable area.
+    // pool+16 = areas_ptr (set at spawn), pool+20 = current area index (0xFF = unset).
+    // First tick: scan areas for closest y to world_y, store index in pool+20.
+    // Subsequent ticks: use stored index directly.
+    // area entry: y(i16), x_min(i16), x_max(i16), pad(i16) = 8 bytes.
+    // areas table: area_count(u32), trans_count(u32), areas[], transitions[].
+    // Fallback: level xMin/xMax if areas_ptr == 0.
+    // r4=count r5=slot r8=32(stride) — must not clobber these.
     s.push_str("vupe_not_patrol:\n");
     s.push_str("    cmp     r0, #4               @ wander?\n");
     s.push_str("    bne.w   vupe_next\n");
-    // Check enemy state — frozen enemies (state != 0) don't move
+    // Check enemy state — frozen (state != 0) don't move
     s.push_str("    ldr     r11, =ENEMY_POOL_ARM\n");
-    s.push_str("    sub     r11, r5, r11          @ slot_offset\n");
-    s.push_str("    lsr     r11, r11, #5          @ slot_index\n");
+    s.push_str("    sub     r11, r5, r11\n");
+    s.push_str("    lsr     r11, r11, #5          @ slot index\n");
     s.push_str("    ldr     r6, =ENEMY_STATE_ARM\n");
-    s.push_str("    lsl     r11, r11, #2          @ index * 4\n");
-    s.push_str("    ldr     r11, [r6, r11]        @ ENEMY_STATE_ARM[index]\n");
+    s.push_str("    lsl     r11, r11, #2\n");
+    s.push_str("    ldr     r11, [r6, r11]\n");
     s.push_str("    cmp     r11, #0\n");
-    s.push_str("    bne.w   vupe_next             @ frozen/snow/ball: skip movement\n");
+    s.push_str("    bne.w   vupe_next\n");
+    // Load areas_ptr from pool+16
+    s.push_str("    ldr     r6, [r5, #16]        @ areas_ptr (0 if none)\n");
+    s.push_str("    cmp     r6, #0\n");
+    s.push_str("    beq.w   vupe_wander_fallback\n");
+    // Check if area index is set (pool+20 != 0xFF)
+    s.push_str("    ldrb    r9, [r5, #20]        @ current area_idx\n");
+    s.push_str("    cmp     r9, #0xFF\n");
+    s.push_str("    bne.w   vupe_wander_have_area\n");
+    // --- find area: score = |world_y - area.y| + (world_x outside [x_min,x_max] ? 10000 : 0) ---
+    // Prefer areas whose X range contains the enemy; break ties by Y proximity.
+    // r7 = world_x (scratch, free in wander section); r12 = IP scratch.
+    s.push_str("    ldr     r1, [r6, #0]         @ area_count\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq.w   vupe_wander_fallback\n");
+    s.push_str("    ldr     r0, [r5, #8]         @ world_y\n");
+    s.push_str("    ldr     r7, [r5, #4]         @ world_x\n");
+    s.push_str("    mov     r9, #0               @ best_idx = 0\n");
+    s.push_str("    mvn     r10, #0              @ best_score = UINT_MAX\n");
+    s.push_str("    mov     r11, #0              @ loop_idx\n");
+    s.push_str("    add     r2, r6, #8           @ ptr to area[0]\n");
+    s.push_str("vupe_fa_loop:\n");
+    s.push_str("    cmp     r11, r1\n");
+    s.push_str("    bge.w   vupe_fa_done\n");
+    s.push_str("    ldrsh   r3, [r2, #0]         @ area.y\n");
+    s.push_str("    sub     r3, r0, r3\n");
+    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    it      mi\n");
+    s.push_str("    negmi   r3, r3               @ score = |world_y - area.y|\n");
+    // x range check: if world_x not in [x_min, x_max] add 10000 penalty
+    s.push_str("    ldrsh   r12, [r2, #2]        @ area.x_min\n");
+    s.push_str("    cmp     r7, r12\n");
+    s.push_str("    blt.w   vupe_fa_xout\n");
+    s.push_str("    ldrsh   r12, [r2, #4]        @ area.x_max\n");
+    s.push_str("    cmp     r7, r12\n");
+    s.push_str("    ble.w   vupe_fa_xin\n");
+    s.push_str("vupe_fa_xout:\n");
+    s.push_str("    movw    r12, #10000\n");
+    s.push_str("    add     r3, r3, r12          @ penalise out-of-range areas\n");
+    s.push_str("vupe_fa_xin:\n");
+    s.push_str("    cmp     r3, r10\n");
+    s.push_str("    bhs.w   vupe_fa_next         @ unsigned >=: not better\n");
+    s.push_str("    mov     r10, r3\n");
+    s.push_str("    mov     r9, r11              @ new best_idx\n");
+    s.push_str("vupe_fa_next:\n");
+    s.push_str("    add     r2, r2, #8           @ next area (8 bytes)\n");
+    s.push_str("    add     r11, r11, #1\n");
+    s.push_str("    b.w     vupe_fa_loop\n");
+    s.push_str("vupe_fa_done:\n");
+    s.push_str("    strb    r9, [r5, #20]        @ store found area_idx\n");
+    // --- load area bounds and snap world_y to platform surface ---
+    s.push_str("vupe_wander_have_area:\n");
+    s.push_str("    lsl     r0, r9, #3           @ idx * 8\n");
+    s.push_str("    add     r0, r0, #8           @ + areas table header\n");
+    s.push_str("    add     r0, r6, r0           @ area entry ptr\n");
+    // Snap world_y to area.y so feet touch the platform every frame
+    s.push_str("    ldrsh   r3, [r0, #0]         @ area.y\n");
+    s.push_str("    str     r3, [r5, #8]         @ world_y = area.y\n");
+    s.push_str("    ldrsh   r9,  [r0, #2]        @ area.x_min\n");
+    s.push_str("    ldrsh   r10, [r0, #4]        @ area.x_max\n");
+    s.push_str("    b.w     vupe_wander_move\n");
+    // --- fallback: use level xMin / xMax ---
+    s.push_str("vupe_wander_fallback:\n");
     s.push_str("    ldr     r6, =LEVEL_DATA_PTR\n");
-    s.push_str("    ldr     r6, [r6]             @ level header ptr\n");
+    s.push_str("    ldr     r6, [r6]\n");
     s.push_str("    cmp     r6, #0\n");
     s.push_str("    beq.w   vupe_next\n");
     s.push_str("    ldrsh   r9,  [r6, #0]        @ xMin\n");
     s.push_str("    ldrsh   r10, [r6, #2]        @ xMax\n");
+    // --- move within [r9, r10] ---
+    s.push_str("vupe_wander_move:\n");
     s.push_str("    ldr     r0, [r5, #4]         @ world_x\n");
     s.push_str("    ldrb    r1, [r5, #26]        @ dir (0=right, 1=left)\n");
     s.push_str("    cmp     r1, #0\n");
@@ -371,6 +452,14 @@ pub fn emit_helpers() -> String {
     s.push_str("    sub     r1, r1, r6           @ screen_x\n");
     s.push_str("    ldr     r2, [r5, #8]         @ world_y\n");
     s.push_str("    sub     r2, r2, r7           @ screen_y\n");
+    // Apply feet_offset from type_data+4 so sprite bottom lands on platform surface.
+    // feet_offset (signed byte) = 5 - min_y of all sprites for this enemy type.
+    s.push_str("    ldr     r3, [r5, #28]        @ type_data_ptr\n");
+    s.push_str("    cmp     r3, #0\n");
+    s.push_str("    beq.w   vdre_no_feet\n");
+    s.push_str("    ldrsb   r3, [r3, #4]         @ feet_offset (signed byte at DATA+4)\n");
+    s.push_str("    add     r2, r2, r3           @ screen_y += feet_offset\n");
+    s.push_str("vdre_no_feet:\n");
     // branch on is_anim: VEC → vpy_draw_vector_ex, VANIM → vpy_draw_anim
     s.push_str("    ldrb    r3, [r5, #23]        @ is_anim\n");
     s.push_str("    cmp     r3, #0\n");

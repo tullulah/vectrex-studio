@@ -149,19 +149,19 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
     s.push_str("@ ============================================================\n\n");
 
     // Build dims map: lowercase vector name → (natural_half_w, natural_half_h)
+    // Also build vec_min_y: lowercase vector name → min_y (lowest Y coord in the sprite).
     let mut dims_map: HashMap<String, (i32, i32)> = HashMap::new();
+    let mut vec_min_y: HashMap<String, i16> = HashMap::new();
     for asset in assets {
         if !matches!(asset.asset_type, AssetType::Vector) { continue; }
         if let Ok(text) = fs::read_to_string(&asset.path) {
             if let Ok(res) = serde_json::from_str::<VecResource>(&text) {
                 let (min_x, max_x) = res.calculate_x_bounds();
-                let (_min_y, max_y) = res.calculate_y_bounds();
+                let (min_y, max_y) = res.calculate_y_bounds();
                 let hw = ((max_x - min_x) as i32) / 2;
-                // hh = max_y: distance from local origin (0,0) to the top surface.
-                // The renderer draws at native scale (no per-object scale applied),
-                // so max_y is the correct unscaled top extent for collision.
                 let hh = (max_y as i32).max(1);
                 dims_map.insert(asset.name.to_lowercase(), (hw, hh));
+                vec_min_y.insert(asset.name.to_lowercase(), min_y);
             }
         }
 }
@@ -305,7 +305,7 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 };
                 match serde_json::from_str::<EnemyResource>(&text) {
-                    Ok(enemy) => s.push_str(&enemy.compile_to_arm_state_table(Some(&asset.name))),
+                    Ok(enemy) => s.push_str(&enemy.compile_to_arm_state_table(Some(&asset.name), &vec_min_y)),
                     Err(e) => {
                         eprintln!("[WARNING] Failed to parse venemy '{}': {}", asset.name, e);
                         s.push_str(&format!(".global _{sym}_DATA\n_{sym}_DATA:\n    .word 0\n\n"));

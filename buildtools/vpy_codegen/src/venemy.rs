@@ -309,12 +309,20 @@ impl EnemyResource {
     }
 
     /// Emit ARM Thumb-2 state sprite table (_NAME_DATA symbol).
-    /// Format: .word state_count, .word 0 (reserved), then per state:
+    /// Format: .word state_count, .byte feet_offset, .byte[3] pad, then per state:
     ///   .word sprite_ptr, .byte is_anim, .byte 0, 0, 0  (8 bytes each)
+    /// feet_offset (signed) = 5 - min_y across all sprites for this enemy type.
+    /// Draw: screen_y += feet_offset so the sprite's lowest pixel lands on area.y.
     /// vpy_enemy_fire_event reads entry at base+8+state*8.
-    pub fn compile_to_arm_state_table(&self, override_name: Option<&str>) -> String {
+    pub fn compile_to_arm_state_table(
+        &self,
+        override_name: Option<&str>,
+        vec_min_y: &std::collections::HashMap<String, i16>,
+    ) -> String {
         let raw_name = override_name.unwrap_or(&self.name);
         let name_up = raw_name.to_uppercase().replace(' ', "_").replace('-', "_");
+        let plain = raw_name.to_lowercase();
+        let prefix = format!("{}_", plain);
         let mut out = String::new();
         out.push_str(&format!(".global _{name_up}_DATA\n.balign 4\n_{name_up}_DATA:\n"));
 
@@ -326,9 +334,26 @@ impl EnemyResource {
             vec![]
         };
 
+        // Compute feet_offset = 5 - min_y (smallest Y coord across all sprites for this type).
+        // Matches PiTrex formula. With this, draw at world_y + feet_offset puts the
+        // lowest pixel exactly 5 units above area.y (a small clearance).
+        let mut acc_min_y: Option<i16> = None;
+        for (name, &my) in vec_min_y {
+            if name == &plain || name.starts_with(&prefix) {
+                acc_min_y = Some(acc_min_y.map_or(my, |a| a.min(my)));
+            }
+        }
+        // ARM: no extra shift (unlike PiTrex which adds 5 for its renderer offset).
+        // feet_offset = -min_y so the sprite's lowest pixel lands exactly on area.y.
+        let feet_offset: i8 = match acc_min_y {
+            Some(my) => (-my).clamp(-127, 127) as i8,
+            None => 0,
+        };
+
         let state_count = states.len().max(1);
         out.push_str(&format!("    .word {state_count}    @ state_count\n"));
-        out.push_str("    .word 0              @ reserved\n");
+        out.push_str(&format!("    .byte {}              @ feet_offset (signed: screen_y += offset)\n", feet_offset as u8));
+        out.push_str("    .byte 0, 0, 0        @ pad\n");
 
         for (si, (state_name, action_name)) in states.iter().enumerate() {
             let (sym, is_anim) = self.actions.iter()
