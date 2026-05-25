@@ -1056,61 +1056,44 @@ fn emit_print_text_clean() -> String {
 
 fn emit_print_number() -> String {
     let mut s = String::new();
-    s.push_str("@ vpy_print_number(r0=x, r1=y, r2=value) — prints 0-9999 as decimal\n");
+    s.push_str("@ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999, no leading zeros\n");
     s.push_str(".global vpy_print_number\n.type vpy_print_number, %function\n.thumb_func\nvpy_print_number:\n");
-    // We build a 5-char string in RAM (4 digits + null) then call vpy_print_text.
-    // Use a small scratch buffer on the stack.
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
-    s.push_str("    mov     r4, r0              @ x\n");
-    s.push_str("    mov     r5, r1              @ y\n");
-    s.push_str("    mov     r6, r2              @ value\n");
-    // Allocate 8 bytes on stack for the digit string (aligned)
-    s.push_str("    sub     sp, sp, #8\n");
-    s.push_str("    mov     r7, sp              @ buf ptr\n");
-    // Clamp value 0-9999
-    s.push_str("    cmp     r6, #0\n    bge     vpn_pos\n    mov     r6, #0\nvpn_pos:\n");
-    s.push_str("    ldr     r0, =9999\n    cmp     r6, r0\n    ble     vpn_ok\n    mov     r6, r0\nvpn_ok:\n");
-    // Thousands digit
-    s.push_str("    ldr     r1, =1000\n    sdiv    r0, r6, r1\n");
-    s.push_str("    add     r0, r0, #0x30\n    strb    r0, [r7]\n");
-    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n"); // hmm, r0 has char not digit
-    s.clear();
-    s.push_str("@ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999\n");
-    s.push_str(".global vpy_print_number\n.type vpy_print_number, %function\n.thumb_func\nvpy_print_number:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, lr}\n");
+    // r4=x  r5=y  r6=|value|  r7=buf_start  r8=write_ptr  r9=has_significant_digit
+    // 8 callee-saves + lr = 32 bytes pushed; +8 stack buffer = 40 total → 8-byte aligned
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
     s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n");
-    // 8-byte stack buffer: enough for '-' + 4 digits + null + 1 spare
-    s.push_str("    sub     sp, sp, #8\n    mov     r7, sp\n");
-    // r8 = write pointer: starts at r7, advances past '-' for negative values
-    s.push_str("    mov     r8, r7\n");
-    // Negative: write '-', negate, advance write ptr
+    s.push_str("    sub     sp, sp, #8\n    mov     r7, sp\n    mov     r8, r7\n");
+    // Negative sign
     s.push_str("    cmp     r6, #0\n    bge     vpn_pos\n");
-    s.push_str("    mov     r0, #45\n    strb    r0, [r8]\n");   // '-' = ASCII 45
-    s.push_str("    add     r8, r8, #1\n    neg     r6, r6\n");
+    s.push_str("    mov     r0, #45\n    strb    r0, [r8]\n    add     r8, r8, #1\n    neg     r6, r6\n");
     s.push_str("vpn_pos:\n");
-    // Clamp absolute value to 9999
-    s.push_str("    ldr     r0, =9999\n    cmp     r6, r0\n    ble     vpn_clamp\n    mov     r6, r0\nvpn_clamp:\n");
-    // Thousands: r0=divisor, r1=digit, r6=remainder; digits write at [r8+N]
-    s.push_str("    ldr     r0, =1000\n    sdiv    r1, r6, r0\n");
-    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
-    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8]\n");
+    // Clamp 0..9999
+    s.push_str("    ldr     r0, =9999\n    cmp     r6, r0\n    ble     vpn_clamp\n    mov     r6, r0\n");
+    s.push_str("vpn_clamp:\n    mov     r9, #0\n");
+    // Thousands
+    s.push_str("    ldr     r0, =1000\n    sdiv    r1, r6, r0\n    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
+    s.push_str("    cmp     r1, #0\n    beq     vpn_skip_thou\n");
+    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8]\n    add     r8, r8, #1\n    mov     r9, #1\n");
+    s.push_str("vpn_skip_thou:\n");
     // Hundreds
-    s.push_str("    mov     r0, #100\n    sdiv    r1, r6, r0\n");
-    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
-    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8, #1]\n");
+    s.push_str("    mov     r0, #100\n    sdiv    r1, r6, r0\n    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
+    s.push_str("    cmp     r9, #0\n    bne     vpn_write_hund\n    cmp     r1, #0\n    beq     vpn_skip_hund\n");
+    s.push_str("vpn_write_hund:\n    add     r1, r1, #48\n    strb    r1, [r8]\n    add     r8, r8, #1\n    mov     r9, #1\n");
+    s.push_str("vpn_skip_hund:\n");
     // Tens
-    s.push_str("    mov     r0, #10\n    sdiv    r1, r6, r0\n");
-    s.push_str("    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
-    s.push_str("    add     r1, r1, #48\n    strb    r1, [r8, #2]\n");
-    // Units
-    s.push_str("    add     r1, r6, #48\n    strb    r1, [r8, #3]\n");
+    s.push_str("    mov     r0, #10\n    sdiv    r1, r6, r0\n    mul     r0, r0, r1\n    sub     r6, r6, r0\n");
+    s.push_str("    cmp     r9, #0\n    bne     vpn_write_tens\n    cmp     r1, #0\n    beq     vpn_skip_tens\n");
+    s.push_str("vpn_write_tens:\n    add     r1, r1, #48\n    strb    r1, [r8]\n    add     r8, r8, #1\n");
+    s.push_str("vpn_skip_tens:\n");
+    // Units — always written (even for value==0)
+    s.push_str("    add     r1, r6, #48\n    strb    r1, [r8]\n    add     r8, r8, #1\n");
     // Null terminator
-    s.push_str("    mov     r0, #0\n    strb    r0, [r8, #4]\n");
-    // vpy_print_text(x, y, buf) — r2=r7 always (points to '-' or first digit)
+    s.push_str("    mov     r0, #0\n    strb    r0, [r8]\n");
+    // vpy_print_text(x, y, buf_start)
     s.push_str("    mov     r0, r4\n    mov     r1, r5\n    mov     r2, r7\n");
     s.push_str("    bl      vpy_print_text\n");
     s.push_str("    add     sp, sp, #8\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
     s
 }
 
