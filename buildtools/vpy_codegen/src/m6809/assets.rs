@@ -118,6 +118,17 @@ fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>
     }
 }
 
+/// Collect all vector names referenced by any Animation asset in `assets`.
+/// These vectors are embedded inline in vanim data and are NOT in VECTOR_ADDR_TABLE.
+/// Used by builtins.rs to mirror the exact VECTOR_ADDR_TABLE filter logic.
+pub fn collect_anim_vec_refs(assets: &[crate::AssetInfo]) -> HashSet<String> {
+    let mut refs = HashSet::new();
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, crate::AssetType::Animation)) {
+        collect_vanim_vec_refs(&asset.path, &mut refs);
+    }
+    refs
+}
+
 /// Scan a .vanim JSON file and add all vec_refs (base_refs + per-frame) to used_names.
 fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
     let Ok(resource) = crate::animres::VanimResource::load(Path::new(vanim_path)) else { return };

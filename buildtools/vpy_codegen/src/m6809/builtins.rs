@@ -14,6 +14,7 @@ use super::math_extended;
 use super::drawing;
 use super::level;
 use super::utilities;
+use super::assets;
 use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
@@ -1240,10 +1241,17 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // The asset must exist in the ROM (checked during compilation)
     match &args[0] {
         Expr::StringLit(asset_name) => {
-            // Find asset index in the vector assets list (for multibank lookup tables)
-            let vector_assets: Vec<_> = assets.iter()
-                .filter(|a| matches!(a.asset_type, AssetType::Vector))
+            // Find asset index in the vector assets list (for multibank lookup tables).
+            // IMPORTANT: must exactly mirror the VECTOR_ADDR_TABLE built in assets.rs:
+            //   1. Sort alphabetically (same as vector_entries.sort_by)
+            //   2. Exclude animation-embedded vecs (same as !anim_vec_refs.contains(&a.name))
+            //      because those go inline in vanim data, not in VECTOR_ADDR_TABLE.
+            let anim_vec_refs = assets::collect_anim_vec_refs(assets);
+            let mut vector_assets: Vec<_> = assets.iter()
+                .filter(|a| matches!(a.asset_type, AssetType::Vector)
+                    && !anim_vec_refs.contains(&a.name))
                 .collect();
+            vector_assets.sort_by(|a, b| a.name.cmp(&b.name));
             let asset_index = vector_assets.iter()
                 .position(|a| a.name == *asset_name)
                 .unwrap_or(0);
@@ -1265,22 +1273,31 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
 
             let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
             
+            let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
+            let skip_label = format!("DRVEC_SKIP_{}", label_id);
+
             out.push_str(&format!("    ; Asset: {} (index={}, {} paths)\n", asset_name, asset_index, path_count));
-            
-            // Evaluate x position (arg 1) - save immediately to avoid overwrite
+
+            // Evaluate x position (arg 1) — 16-bit signed result in D
             expressions::emit_simple_expr(&args[1], out, assets);
-            out.push_str("    TFR B,A       ; X position (low byte) — B already holds it\n");
-            out.push_str("    STA TMPPTR    ; Save X to temporary storage\n");
+            // Cull if screen_x is outside signed 8-bit range [-128, 127]
+            out.push_str("    STA TMPPTR2      ; save high byte of 16-bit screen_x\n");
+            out.push_str("    TFR B,A\n");
+            out.push_str("    SEX              ; A = sign-extend of B (0x00 or 0xFF)\n");
+            out.push_str(&format!("    CMPA TMPPTR2     ; vs actual high byte\n"));
+            out.push_str(&format!("    LBNE {}          ; out of 8-bit range — skip draw\n", skip_label));
+            out.push_str("    TFR B,A\n");
+            out.push_str("    STA TMPPTR       ; save 8-bit x\n");
 
             // Evaluate y position (arg 2)
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    TFR B,A       ; Y position (low byte) — B already holds it\n");
-            out.push_str("    STA TMPPTR+1  ; Save Y to temporary storage\n");
-            
-            // Restore X and Y from temporary storage and set positions
-            out.push_str("    LDA TMPPTR    ; X position\n");
+            out.push_str("    TFR B,A          ; Y position (8-bit signed in A)\n");
+            out.push_str("    STA TMPPTR+1     ; Save Y to temporary storage\n");
+
+            // Set draw positions
+            out.push_str("    LDA TMPPTR       ; X position\n");
             out.push_str("    STA DRAW_VEC_X\n");
-            out.push_str("    LDA TMPPTR+1  ; Y position\n");
+            out.push_str("    LDA TMPPTR+1     ; Y position\n");
             out.push_str("    STA DRAW_VEC_Y\n");
             
             // Mirror X: optional 4th arg (0=normal, 1=flip X)
@@ -1315,7 +1332,8 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                 // Restore DP (match core compiler pattern - no ACR manipulation needed)
                 out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             }
-            
+
+            out.push_str(&format!("{}:\n", skip_label));
             out.push_str("    LDD #0\n    STD RESULT\n");
         }
         _ => {
@@ -1347,15 +1365,19 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             };
             
             // Find asset index for multibank lookup tables
-            let vector_assets: Vec<_> = assets.iter()
-                .filter(|a| matches!(a.asset_type, AssetType::Vector))
+            // IMPORTANT: must exactly mirror VECTOR_ADDR_TABLE: sort + exclude anim-embedded vecs
+            let anim_vec_refs = assets::collect_anim_vec_refs(assets);
+            let mut vector_assets: Vec<_> = assets.iter()
+                .filter(|a| matches!(a.asset_type, AssetType::Vector)
+                    && !anim_vec_refs.contains(&a.name))
                 .collect();
+            vector_assets.sort_by(|a, b| a.name.cmp(&b.name));
             let asset_index = vector_assets.iter()
                 .position(|a| a.name == *asset_name)
                 .unwrap_or(0);
-            
+
             let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
-            
+
             out.push_str(&format!("    ; Asset: {} (index={}, {} paths) with mirror + intensity\n", asset_name, asset_index, path_count));
             
             // Evaluate x position (arg 1)
