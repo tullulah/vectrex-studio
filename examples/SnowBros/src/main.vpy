@@ -361,8 +361,8 @@ def enter_game_start():
     camera_y = CAMERA_Y_MIN + (current_level - 1) * 256
     if camera_y > 0:
         camera_y = 0
-    SET_CAMERA_Y(camera_y)
-    LOAD_LEVEL("world_1_1")
+    LOAD_LEVEL("world_1_1")    # LOAD first — resets CAMERA_Y to 0
+    SET_CAMERA_Y(camera_y)     # THEN set correct camera position
     game_state = STATE_GAME_START
 
 def enter_level_clear():
