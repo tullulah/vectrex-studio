@@ -845,6 +845,46 @@ pub fn generate_distributed_assets_asm(
         .collect();
     let distribution = distribute_assets(&distributable, bank_size, 1, helpers_bank.saturating_sub(1), pre_used_bytes);
 
+    // Build vec_bank_map: lowercase vec name → bank_id, from distribution results.
+    // Used to regenerate level ASM with correct vector_bank bytes (stride-21 format).
+    let mut vec_bank_map: HashMap<String, u8> = HashMap::new();
+    for (bank_id, sized_assets) in &distribution.bank_assignments {
+        for asset in sized_assets {
+            if matches!(asset.info.asset_type, AssetType::Vector) {
+                vec_bank_map.insert(asset.info.name.to_lowercase(), *bank_id);
+            }
+        }
+    }
+
+    // Build vec_dims from distribution: vec name → (half_width, half_height).
+    // Needed to regenerate level ASM with correct AABB bytes.
+    let all_vec_assets: Vec<SizedAsset> = distribution.bank_assignments.values()
+        .flat_map(|assets| assets.iter())
+        .filter(|a| matches!(a.info.asset_type, AssetType::Vector))
+        .cloned()
+        .collect();
+    let vec_dims_for_levels = build_vec_dims(&all_vec_assets);
+
+    // Regenerate level ASM using the now-known vec_bank_map (stride-21 with bank bytes).
+    // This second pass replaces the first-pass level ASM that was generated in
+    // prepare_assets_with_sizes without knowing which bank each vector lives in.
+    let mut level_asm_by_name: HashMap<String, String> = HashMap::new();
+    for (_, sized_assets) in &distribution.bank_assignments {
+        for asset in sized_assets {
+            if matches!(asset.info.asset_type, AssetType::Level) {
+                match crate::levelres::VPlayLevel::load(std::path::Path::new(&asset.info.path)) {
+                    Ok(resource) => {
+                        let asm_code = resource.compile_to_asm_with_bank_map(&vec_dims_for_levels, &vec_bank_map);
+                        level_asm_by_name.insert(asset.info.name.clone(), asm_code);
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to reload level asset '{}' for bank-map pass: {}", asset.info.name, e);
+                    }
+                }
+            }
+        }
+    }
+
     let mut bank_asm: HashMap<u8, String> = HashMap::new();
     let _asset_index = 0u16;
 
@@ -859,8 +899,15 @@ pub fn generate_distributed_assets_asm(
         asm.push_str(&format!(";***************************************************************************\n\n"));
 
         for asset in sized_assets {
-            // Use pre-generated ASM code
-            asm.push_str(&asset.asm_code);
+            // Use pre-generated ASM code (level ASM replaced with bank-map version)
+            let code = if matches!(asset.info.asset_type, AssetType::Level) {
+                level_asm_by_name.get(&asset.info.name)
+                    .map(|s| s.as_str())
+                    .unwrap_or(&asset.asm_code)
+            } else {
+                &asset.asm_code
+            };
+            asm.push_str(code);
             asm.push_str("\n");
 
             // Track for lookup table with correct label suffix based on type

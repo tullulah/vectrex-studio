@@ -313,6 +313,21 @@ impl VPlayLevel {
     /// byte values for half_width/half_height instead of cross-bank symbol references.
     /// `dims` maps lowercase vec asset name → (half_width, half_height).
     pub fn compile_to_asm_with_vec_dims(&self, dims: &HashMap<String, (u32, u32)>) -> String {
+        self.compile_m6809_inner(dims, &HashMap::new())
+    }
+
+    /// Compile level to M6809 ASM with both vector dims and bank assignment map.
+    /// Used in multibank second-pass compilation after bank distribution is known.
+    /// `vec_bank_map` maps lowercase vec asset name → bank number.
+    pub fn compile_to_asm_with_bank_map(
+        &self,
+        dims: &HashMap<String, (u32, u32)>,
+        vec_bank_map: &HashMap<String, u8>,
+    ) -> String {
+        self.compile_m6809_inner(dims, vec_bank_map)
+    }
+
+    fn compile_m6809_inner(&self, dims: &HashMap<String, (u32, u32)>, vec_bank_map: &HashMap<String, u8>) -> String {
         let mut out = String::new();
 
         // Compute enemy objects BEFORE emitting the level header so we can embed the count/ptr
@@ -374,26 +389,27 @@ impl VPlayLevel {
         };
         out.push_str(&format!("    FCB {}  ; enemy_count\n", enemy_header_count));
         out.push_str(&format!("    FDB {}  ; enemy_instances_ptr (0 if none)\n", instances_header_label));
+        out.push_str(&format!("    FDB {}  ; groundBottomOffset (floor surface offset from screen bottom)\n", self.editor_meta.ground_bottom_offset));
         out.push_str("\n");
 
         // Emit background objects
         out.push_str(&format!("_{}_BG_OBJECTS:\n", name));
         for obj in &self.layers.background {
-            out.push_str(&self.compile_object_with_dims(obj, dims));
+            out.push_str(&self.compile_object_with_dims(obj, dims, vec_bank_map));
         }
         out.push_str("\n");
 
         // Emit gameplay objects
         out.push_str(&format!("_{}_GAMEPLAY_OBJECTS:\n", name));
         for obj in &self.layers.gameplay {
-            out.push_str(&self.compile_object_with_dims(obj, dims));
+            out.push_str(&self.compile_object_with_dims(obj, dims, vec_bank_map));
         }
         out.push_str("\n");
 
         // Emit foreground objects
         out.push_str(&format!("_{}_FG_OBJECTS:\n", name));
         for obj in &self.layers.foreground {
-            out.push_str(&self.compile_object_with_dims(obj, dims));
+            out.push_str(&self.compile_object_with_dims(obj, dims, vec_bank_map));
         }
         out.push_str("\n");
 
@@ -409,16 +425,29 @@ impl VPlayLevel {
             for (i, obj) in enemy_objects.iter().enumerate() {
                 let et = obj.enemy_type.as_deref().unwrap_or("");
                 let et_up = et.to_uppercase().replace(' ', "_").replace('-', "_");
-                let ai_byte = ai_type_byte(&obj.ai_type);
                 let wave = obj.wave;
                 let respawn_byte = if obj.respawn { 1u8 } else { 0u8 };
-
                 let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
-                let wp_count = wps.len();
-                let wp_label = if wp_count > 0 {
-                    format!("_{}_ENEMY{}_WPS", name, i)
+                let is_wander = obj.ai_type.as_deref() == Some("wander");
+
+                // Wander enemies with no explicit waypoints: derive patrol bounds from walkable_areas
+                let (ai_byte, wp_count, wp_label) = if is_wander && wps.is_empty() {
+                    let level_areas = self.walkable_areas.as_deref().unwrap_or(&[]);
+                    let best = level_areas.iter().min_by_key(|a| {
+                        let dy = (obj.y as i32 - a.y as i32).abs();
+                        let x_in = obj.x >= a.x_min && obj.x <= a.x_max;
+                        if x_in { dy } else { dy + 10000 }
+                    });
+                    if best.is_some() {
+                        (1u8, 2usize, format!("_{}_ENEMY{}_WPS", name, i))
+                    } else {
+                        (1u8, 0usize, "0".to_string())
+                    }
                 } else {
-                    "0".to_string()
+                    let ai = ai_type_byte(&obj.ai_type);
+                    let wpc = wps.len();
+                    let lbl = if wpc > 0 { format!("_{}_ENEMY{}_WPS", name, i) } else { "0".to_string() };
+                    (ai, wpc, lbl)
                 };
 
                 out.push_str(&format!("    ; instance {}\n", i));
@@ -436,6 +465,7 @@ impl VPlayLevel {
             // Emit waypoint tables
             for (i, obj) in enemy_objects.iter().enumerate() {
                 let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
+                let is_wander = obj.ai_type.as_deref() == Some("wander");
                 if !wps.is_empty() {
                     out.push_str(&format!("_{}_ENEMY{}_WPS:\n", name, i));
                     for wp in wps {
@@ -443,6 +473,22 @@ impl VPlayLevel {
                         out.push_str(&format!("    FDB {}  ; wp y\n", wp.y));
                     }
                     out.push_str("\n");
+                } else if is_wander {
+                    // Auto-generated patrol waypoints from closest walkable area
+                    let level_areas = self.walkable_areas.as_deref().unwrap_or(&[]);
+                    let best = level_areas.iter().min_by_key(|a| {
+                        let dy = (obj.y as i32 - a.y as i32).abs();
+                        let x_in = obj.x >= a.x_min && obj.x <= a.x_max;
+                        if x_in { dy } else { dy + 10000 }
+                    });
+                    if let Some(area) = best {
+                        out.push_str(&format!("_{}_ENEMY{}_WPS:\n", name, i));
+                        out.push_str(&format!("    FDB {}  ; wp0 x (area x_min)\n", area.x_min));
+                        out.push_str(&format!("    FDB {}  ; wp0 y (spawn y)\n", obj.y));
+                        out.push_str(&format!("    FDB {}  ; wp1 x (area x_max)\n", area.x_max));
+                        out.push_str(&format!("    FDB {}  ; wp1 y (spawn y)\n", obj.y));
+                        out.push_str("\n");
+                    }
                 }
             }
         }
@@ -1212,8 +1258,8 @@ impl VPlayLevel {
         (mesh, out)
     }
 
-    /// Compile a single object to assembly (M6809 format)
-    fn compile_object_with_dims(&self, obj: &VPlayObject, dims: &HashMap<String, (u32, u32)>) -> String {
+    /// Compile a single object to assembly (M6809 format, stride-21)
+    fn compile_object_with_dims(&self, obj: &VPlayObject, dims: &HashMap<String, (u32, u32)>, vec_bank_map: &HashMap<String, u8>) -> String {
         let mut out = String::new();
         
         out.push_str(&format!("; Object: {} ({})\n", obj.id, obj.obj_type));
@@ -1330,48 +1376,57 @@ impl VPlayLevel {
         // Spawn delay (16-bit)
         out.push_str(&format!("    FDB {}  ; spawn_delay\n", obj.spawn_delay));
         
-        // Pointer to vector data (will be resolved by linker)
-        // Enemy-type objects: visual is managed by the enemy system, not the level renderer.
-        // Use null vector_ptr (level renderer checks CMPU #0 and skips drawing if null).
+        // Stride-21 ROM object layout for vector reference:
+        //   ROM+16: vector_bank FCB ($FF = null / no visual)
+        //   ROM+17-18: vector_ptr FDB
+        //   ROM+19: half_width FCB
+        //   ROM+20: half_height FCB
+        //
+        // SHOW_LEVEL_RUNTIME reads vector_bank at +16 first. $FF means no visual; any
+        // other value is the bank to switch to before reading vector_ptr at +17.
+        // This prevents reading stale data when SHOW_LEVEL_RUNTIME has the level bank
+        // active and the vector asset lives in a different bank.
         let is_enemy_obj = obj.enemy_type.as_ref().map_or(false, |t| !t.is_empty());
         if obj.vector_name.is_empty() || is_enemy_obj {
-            out.push_str("    FDB 0  ; vector_ptr (no visual for this object)\n");
-            out.push_str("    FCB 8  ; half_width (default, ROM+18)\n");
-            out.push_str("    FCB 8  ; half_height (default, ROM+19)\n");
+            out.push_str("    FCB $FF  ; vector_bank = null (no visual, ROM+16)\n");
+            out.push_str("    FDB 0    ; vector_ptr null (ROM+17)\n");
+            out.push_str("    FCB 8    ; half_width (default, ROM+19)\n");
+            out.push_str("    FCB 8    ; half_height (default, ROM+20)\n");
         } else {
             let vector_label = format!("_{}_VECTORS", obj.vector_name.to_uppercase());
-            out.push_str(&format!("    FDB {}  ; vector_ptr\n", vector_label));
+            let vec_key = obj.vector_name.to_lowercase();
+            // Bank where this vector lives; 0 = bank map not populated (single-bank / first pass)
+            let bank_num = vec_bank_map.get(&vec_key).copied().unwrap_or(0);
+            out.push_str(&format!("    FCB {}   ; vector_bank (ROM+16)\n", bank_num));
+            out.push_str(&format!("    FDB {}  ; vector_ptr (ROM+17)\n", vector_label));
 
-            // Bytes +18-19: half_width (cull margin) + half_height (collision AABB)
-            // When copied to RAM via LDD ,X++; STD ,U++:
-            //   RAM+13 = half_width (A), RAM+14 = half_height (B)
+            // Bytes +19-20: half_width (cull margin) + half_height (collision AABB)
             // Explicit collision.width/height in .vplay takes priority over vec bounding box.
             let coll_override_w_m6809 = obj.collision.as_ref().and_then(|c| c.width);
             let coll_override_h_m6809 = obj.collision.as_ref().and_then(|c| c.height);
-            let vec_key = obj.vector_name.to_lowercase();
+            let frame1_key = format!("{}1", vec_key);
 
             // half_width — always emit a literal (avoids cross-bank EQU references and vanim gaps)
             // Priority: explicit override → dims map → dims map of first frame (vanim) → default 8
-            let frame1_key = format!("{}1", vec_key);
             if let Some(nat_w) = coll_override_w_m6809 {
                 let hw = ((nat_w as f32 * obj.scale).round() as u32).clamp(1, 127);
-                out.push_str(&format!("    FCB {}  ; half_width (explicit override, ROM+18)\n", hw));
+                out.push_str(&format!("    FCB {}  ; half_width (explicit override, ROM+19)\n", hw));
             } else if let Some(&(hw, _)) = dims.get(&vec_key).or_else(|| dims.get(&frame1_key)) {
                 let scaled = ((hw as f32 * obj.scale).round() as u32).clamp(1, 127);
-                out.push_str(&format!("    FCB {}  ; half_width ({:.2}x, ROM+18)\n", scaled, obj.scale));
+                out.push_str(&format!("    FCB {}  ; half_width ({:.2}x, ROM+19)\n", scaled, obj.scale));
             } else {
-                out.push_str("    FCB 8  ; half_width (default, ROM+18)\n");
+                out.push_str("    FCB 8  ; half_width (default, ROM+19)\n");
             }
 
             // half_height — always emit a literal (avoids cross-bank EQU references and vanim gaps)
             if let Some(nat_h) = coll_override_h_m6809 {
                 let hh = ((nat_h as f32 * obj.scale).round() as u32).clamp(1, 127);
-                out.push_str(&format!("    FCB {}  ; half_height (explicit override, ROM+19)\n", hh));
+                out.push_str(&format!("    FCB {}  ; half_height (explicit override, ROM+20)\n", hh));
             } else if let Some(&(_, hh)) = dims.get(&vec_key).or_else(|| dims.get(&frame1_key)) {
                 let scaled = ((hh as f32 * obj.scale).round() as u32).clamp(1, 127);
-                out.push_str(&format!("    FCB {}  ; half_height ({:.2}x, ROM+19)\n", scaled, obj.scale));
+                out.push_str(&format!("    FCB {}  ; half_height ({:.2}x, ROM+20)\n", scaled, obj.scale));
             } else {
-                out.push_str("    FCB 8  ; half_height (default, ROM+19)\n");
+                out.push_str("    FCB 8  ; half_height (default, ROM+20)\n");
             }
         }
         

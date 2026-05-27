@@ -2,9 +2,12 @@
 // vplay-aware level loading, rendering, and physics
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use vpy_parser::{Expr, Module, Stmt};
 use super::expressions;
 use crate::AssetInfo;
+
+static GLFY_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Returns true if the module uses any level system builtins
 pub fn needs_level_runtime(module: &Module) -> bool {
@@ -46,8 +49,8 @@ pub fn needs_level_runtime(module: &Module) -> bool {
 ///   +19..+20: FDB fgObjectsPtr
 ///   +21..+28: FDB scrollLeft, scrollRight, scrollTop, scrollBottom
 ///
-/// GP objects (20 bytes each in ROM) are copied to LEVEL_GP_BUFFER (14 bytes each in RAM).
-/// BG/FG objects stay in ROM and are read directly with stride 20.
+/// All layers (BG/GP/FG) are read from ROM directly with stride 21 (stride-21 format).
+/// Stride-21 adds a vector_bank FCB at ROM+16 before the vector_ptr FDB at ROM+17.
 pub fn emit_load_level(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     out.push_str("    ; ===== LOAD_LEVEL builtin =====\n");
 
@@ -226,19 +229,18 @@ pub fn emit_get_scroll_limit_bottom(_args: &[Expr], out: &mut String) {
 /// Emit GET_LEVEL_FLOOR_Y() → CAMERA_Y - 128 + groundBottomOffset (level header +32).
 /// Mirrors pitrex_get_level_floor_y so cross-target code can share spawn math.
 pub fn emit_get_level_floor_y(_args: &[Expr], out: &mut String) {
+    let n = GLFY_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let skip = format!("GLFY_SKIP_{}", n);
     out.push_str("    ; ===== GET_LEVEL_FLOOR_Y builtin =====\n");
     out.push_str("    LDX >LEVEL_PTR\n");
+    out.push_str("    LDD #0              ; default offset = 0 if no level\n");
     out.push_str("    CMPX #0\n");
-    out.push_str("    BEQ GLFY_NONE\n");
+    out.push_str(&format!("    BEQ {}          ; no level loaded — keep offset 0\n", skip));
     out.push_str("    LDD 32,X            ; groundBottomOffset FDB at header +32\n");
+    out.push_str(&format!("{}:\n", skip));
     out.push_str("    ADDD >CAMERA_Y      ; + camera_y\n");
-    out.push_str("    SUBD #128           ; - 128 (top of screen offset)\n");
+    out.push_str("    SUBD #128           ; - 128 (half screen height)\n");
     out.push_str("    STD RESULT\n");
-    out.push_str("    BRA GLFY_END\n");
-    out.push_str("GLFY_NONE:\n");
-    out.push_str("    LDD #0\n");
-    out.push_str("    STD RESULT\n");
-    out.push_str("GLFY_END:\n");
 }
 
 /// Emit GET_FRAME_US() → stub. The Vectrex has no µs hardware timer accessible
@@ -382,7 +384,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STD >LEVEL_ENEMY_INSTANCES_PTR\n");
         out.push_str("    \n");
         out.push_str("    ; === Setup GP pointer: point directly to ROM (matches core) ===\n");
-        out.push_str("    ; GP objects are read from ROM with stride=20, same as BG/FG\n");
+        out.push_str("    ; GP objects are read from ROM with stride=21 (stride-21 format), same as BG/FG\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    BEQ LLR_SKIP_GP  ; Skip if no GP objects\n");
         out.push_str("    LDD >LEVEL_GP_ROM_PTR ; Just point to ROM\n");
@@ -398,13 +400,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PULS D,X,Y,U,PC  ; Restore and return\n");
         out.push_str("    \n");
         // ---- LLR_COPY_OBJECTS subroutine ----
-        out.push_str("; === LLR_COPY_OBJECTS - Copy N ROM objects to RAM buffer ===\n");
-        out.push_str("; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 15 bytes/obj)\n");
-        out.push_str("; ROM object layout (20 bytes):\n");
+        out.push_str("; === LLR_COPY_OBJECTS - LEGACY (not called; GP objects read from ROM directly)\n");
+        out.push_str("; Input:  B = count, X = source (ROM, 21 bytes/obj stride-21), U = dest (RAM)\n");
+        out.push_str("; ROM object layout (21 bytes, stride-21):\n");
         out.push_str(";   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),\n");
         out.push_str(";   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,\n");
         out.push_str(";   +11: physics_flags, +12: collision_flags, +13: collision_size,\n");
-        out.push_str(";   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height\n");
+        out.push_str(";   +14-15: spawn_delay(FDB), +16: vector_bank(FCB), +17-18: vector_ptr(FDB),\n");
+        out.push_str(";   +19: half_width, +20: half_height\n");
         out.push_str("; RAM object layout (15 bytes):\n");
         out.push_str(";   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,\n");
         out.push_str(";   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,\n");
@@ -453,21 +456,21 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)\n");
         out.push_str("    LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB\n");
         out.push_str("    STA ,U+\n");
-        out.push_str("    LEAX 2,X         ; Skip spawn_delay FDB (2 bytes), X now at ROM +16\n");
-        out.push_str("    ; RAM +11-12: vector_ptr FDB (ROM +16-17)\n");
-        out.push_str("    LDD ,X++         ; ROM +16-17\n");
+        out.push_str("    LEAX 3,X         ; Skip spawn_delay FDB (2 bytes) + vector_bank (1), X now at ROM+17\n");
+        out.push_str("    ; RAM +11-12: vector_ptr FDB (ROM +17-18, stride-21)\n");
+        out.push_str("    LDD ,X++         ; ROM +17-18 = vector_ptr FDB\n");
         out.push_str("    STD ,U++\n");
-        out.push_str("    ; RAM +13-14: properties_ptr FDB (ROM +18-19)\n");
-        out.push_str("    LDD ,X++         ; ROM +18-19\n");
+        out.push_str("    ; RAM +13-14: half_width + half_height (ROM +19-20, stride-21)\n");
+        out.push_str("    LDD ,X++         ; ROM +19-20\n");
         out.push_str("    STD ,U++\n");
-        out.push_str("    ; X is now past end of this ROM object (ROM +1 + 8 + 5 + 2 + 2 + 2 = +20 total)\n");
+        out.push_str("    ; X is now past end of this ROM object (ROM+1 + 8 + 5 + 3 + 2 + 2 = +21 total)\n");
         out.push_str("    ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:\n");
         out.push_str("    ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged\n");
         out.push_str("    ;   then LEAX 8,X (X now at ROM+9)\n");
         out.push_str("    ;   then 5 post-increment ,X+ → X at ROM+14\n");
-        out.push_str("    ;   then LEAX 2,X (X at ROM+16)\n");
-        out.push_str("    ;   then 2x LDD ,X++ → X at ROM+20\n");
-        out.push_str("    ;   ROM+20 from original ROM+0 = next object start\n");
+        out.push_str("    ;   then LEAX 3,X (X at ROM+17)\n");
+        out.push_str("    ;   then 2x LDD ,X++ → X at ROM+21\n");
+        out.push_str("    ;   ROM+21 from original ROM+0 = next object start (stride-21)\n");
         out.push_str("    \n");
         out.push_str("    PULS B           ; Restore counter\n");
         out.push_str("    DECB\n");
@@ -484,8 +487,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; === SHOW_LEVEL_RUNTIME ===\n");
         out.push_str("; Draw all level objects from all layers\n");
         out.push_str("; Input:  LEVEL_PTR = pointer to level header\n");
-        out.push_str("; Layers: BG (ROM stride 20), GP (RAM stride 15), FG (ROM stride 20)\n");
-        out.push_str("; Each object: load intensity, x, y, vector_ptr, call SLR_DRAW_OBJECTS\n");
+        out.push_str("; Layers: BG (ROM stride 21), GP (ROM stride 21), FG (ROM stride 21)\n");
+        out.push_str("; ROM object layout (21 bytes, stride-21):\n");
+        out.push_str(";   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),\n");
+        out.push_str(";   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,\n");
+        out.push_str(";   +11: physics_flags, +12: collision_flags, +13: collision_size,\n");
+        out.push_str(";   +14-15: spawn_delay(FDB), +16: vector_bank(FCB, $FF=null),\n");
+        out.push_str(";   +17-18: vector_ptr(FDB), +19: half_width(FCB), +20: half_height(FCB)\n");
+        out.push_str("; Each object: load intensity, x, y, vector_bank, vector_ptr, call SLR_DRAW_OBJECTS\n");
         out.push_str("SHOW_LEVEL_RUNTIME:\n");
         out.push_str("    PSHS D,X,Y,U     ; Preserve registers\n");
         out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
@@ -512,35 +521,35 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB ,X+          ; B = fgCount\n");
         out.push_str("    STB >LEVEL_FG_COUNT\n");
         out.push_str("    \n");
-        out.push_str("    ; === Draw Background Layer (ROM, stride=20) ===\n");
+        out.push_str("    ; === Draw Background Layer (ROM, stride=21) ===\n");
         out.push_str("SLR_BG_COUNT:\n");
         out.push_str("    CLRB\n");
         out.push_str("    LDB >LEVEL_BG_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_GAMEPLAY\n");
-        out.push_str("    LDA #20          ; ROM object stride\n");
+        out.push_str("    LDA #21          ; ROM object stride (stride-21)\n");
         out.push_str("    LDX >LEVEL_BG_ROM_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
-        out.push_str("    ; === Draw Gameplay Layer (RAM, stride=15) ===\n");
+        out.push_str("    ; === Draw Gameplay Layer (ROM, stride=21) ===\n");
         out.push_str("SLR_GAMEPLAY:\n");
         out.push_str("SLR_GP_COUNT:\n");
         out.push_str("    CLRB\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_FOREGROUND\n");
-        out.push_str("    LDA #20          ; GP objects read from ROM (20 bytes)\n");
+        out.push_str("    LDA #21          ; GP objects read from ROM (stride-21)\n");
         out.push_str("    LDX >LEVEL_GP_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
-        out.push_str("    ; === Draw Foreground Layer (ROM, stride=20) ===\n");
+        out.push_str("    ; === Draw Foreground Layer (ROM, stride=21) ===\n");
         out.push_str("SLR_FOREGROUND:\n");
         out.push_str("SLR_FG_COUNT:\n");
         out.push_str("    CLRB\n");
         out.push_str("    LDB >LEVEL_FG_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_DONE\n");
-        out.push_str("    LDA #20          ; ROM object stride\n");
+        out.push_str("    LDA #21          ; ROM object stride (stride-21)\n");
         out.push_str("    LDX >LEVEL_FG_ROM_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
@@ -558,10 +567,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         // ---- SLR_DRAW_OBJECTS subroutine ----
         out.push_str("; === SLR_DRAW_OBJECTS - Draw N objects from a layer ===\n");
-        out.push_str("; Input:  A = stride (15=RAM, 20=ROM), B = count, X = objects ptr\n");
-        out.push_str("; For ROM objects (stride=20): intensity at +8, y FDB at +3, x FDB at +1, vector_ptr FDB at +16\n");
-        out.push_str("; For RAM objects (stride=15): look up intensity from ROM via LEVEL_GP_ROM_PTR,\n");
-        out.push_str(";   world_x at +0-1 (16-bit), y at +2, vector_ptr FDB at +11\n");
+        out.push_str("; Input:  A = stride (21=ROM), B = count, X = objects ptr\n");
+        out.push_str("; For ROM objects (stride=21, stride-21 format):\n");
+        out.push_str(";   intensity at +8, y FDB at +3, x FDB at +1, half_width at +19\n");
+        out.push_str(";   vector_bank at +16 ($FF=null), vector_ptr FDB at +17\n");
         out.push_str("; Camera: SUBD >CAMERA_X applied to world_x; objects outside i8 range are culled\n");
         out.push_str("SLR_DRAW_OBJECTS:\n");
         out.push_str("    PSHS A           ; Save stride on stack (A=stride)\n");
@@ -571,91 +580,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("    PSHS B           ; Save counter (LDD clobbers B)\n");
         out.push_str("    \n");
-        out.push_str("    ; Determine ROM vs RAM offsets via stride\n");
-        out.push_str("    LDA 1,S          ; Peek stride from stack (+1 because B is on top)\n");
-        out.push_str("    CMPA #20\n");
-        out.push_str("    LBEQ SLR_ROM_OFFSETS\n");
-        out.push_str("    \n");
-        out.push_str("    ; === RAM object (stride=15) ===\n");
-        out.push_str("    ; Need to look up intensity from ROM counterpart\n");
-        out.push_str("    ; objIndex = LEVEL_GP_COUNT - currentCount\n");
-        out.push_str("    PSHS X           ; Save RAM object pointer\n");
-        out.push_str("    LDB >LEVEL_GP_COUNT\n");
-        out.push_str("    SUBB 2,S         ; B = objIndex = totalCount - currentCounter\n");
-        out.push_str("    LDX >LEVEL_GP_ROM_PTR  ; X = ROM base\n");
-        out.push_str("SLR_ROM_ADDR_LOOP:\n");
-        out.push_str("    BEQ SLR_INTENSITY_READ ; Done if index=0\n");
-        out.push_str("    LEAX 20,X        ; Advance by ROM stride\n");
-        out.push_str("    DECB\n");
-        out.push_str("    BRA SLR_ROM_ADDR_LOOP\n");
-        out.push_str("SLR_INTENSITY_READ:\n");
-        out.push_str("    LDA 8,X          ; intensity at ROM +8\n");
-        out.push_str("    STA >DRAW_VEC_INTENSITY  ; DP=$D0, must use extended addressing\n");
-        out.push_str("    PULS X           ; Restore RAM object pointer\n");
-        out.push_str("    \n");
-        out.push_str("    CLR >MIRROR_X    ; DP=$D0, must use extended addressing\n");
-        out.push_str("    CLR >MIRROR_Y\n");
-        out.push_str("    ; Load world_x (16-bit), subtract CAMERA_X, check visibility\n");
-        out.push_str("    LDD 0,X          ; RAM +0-1 = world_x (16-bit)\n");
-        out.push_str("    SUBD >CAMERA_X   ; screen_x = world_x - camera_x\n");
-        out.push_str("    STD >TMPVAL      ; save screen_x (overwritten by CMPB below)\n");
-        out.push_str("    ; Per-object cull with half_width expansion. Safe to widen here because\n");
-        out.push_str("    ; SLR_DRAW_CLIPPED_PATH handles per-path wrap (skip paths whose abs_x\n");
-        out.push_str("    ; falls out of i8 range) and per-segment clipping (beam-off moves when\n");
-        out.push_str("    ; cur_x + dx overflows). Visible range: [-(128+hw), 127+hw].\n");
-        out.push_str("    LDB 13,X         ; B = half_width (RAM+13)\n");
-        out.push_str("    STB >TMPPTR2     ; save hw\n");
-        out.push_str("    LDA #127\n");
-        out.push_str("    ADDA >TMPPTR2    ; A = 127 + hw (right boundary)\n");
-        out.push_str("    STA >TMPPTR\n");
-        out.push_str("    LDA #128\n");
-        out.push_str("    SUBA >TMPPTR2    ; A = 128 - hw (left boundary, unsigned)\n");
-        out.push_str("    STA >TMPPTR+1\n");
-        out.push_str("    LDD >TMPVAL      ; restore screen_x into D\n");
-        out.push_str("    TSTA\n");
-        out.push_str("    BEQ SLR_RAM_A_ZERO\n");
-        out.push_str("    INCA\n");
-        out.push_str("    LBNE SLR_OBJ_NEXT        ; A not $FF: too far\n");
-        out.push_str("    ; A=$FF: visible if B >= left_limit (128-hw)\n");
-        out.push_str("    CMPB >TMPPTR+1\n");
-        out.push_str("    BHS SLR_RAM_VISIBLE       ; unsigned >=\n");
-        out.push_str("    LBRA SLR_OBJ_NEXT\n");
-        out.push_str("SLR_RAM_A_ZERO:\n");
-        out.push_str("    ; A=0: visible if B <= right_limit (127+hw)\n");
-        out.push_str("    CMPB >TMPPTR\n");
-        out.push_str("    BLS SLR_RAM_VISIBLE       ; unsigned <=\n");
-        out.push_str("    LBRA SLR_OBJ_NEXT\n");
-        out.push_str("SLR_RAM_VISIBLE:\n");
-        out.push_str("    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)\n");
-        out.push_str("    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)\n");
-        out.push_str("    ; Apply CAMERA_Y: sign-extend world_y (8-bit), subtract CAMERA_Y, cull\n");
-        out.push_str("    LDB 2,X          ; world_y (signed byte at RAM +2)\n");
-        out.push_str("    SEX              ; sign-extend B into D\n");
-        out.push_str("    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y\n");
-        out.push_str("    TSTA\n");
-        out.push_str("    BEQ SLR_RAM_Y_ZERO\n");
-        out.push_str("    INCA\n");
-        out.push_str("    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above\n");
-        out.push_str("    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)\n");
-        out.push_str("    CMPB #128\n");
-        out.push_str("    BHS SLR_RAM_Y_VISIBLE\n");
-        out.push_str("    LBRA SLR_OBJ_NEXT\n");
-        out.push_str("SLR_RAM_Y_ZERO:\n");
-        out.push_str("    ; A=0: visible if B <= 127\n");
-        out.push_str("    CMPB #127\n");
-        out.push_str("    BLS SLR_RAM_Y_VISIBLE\n");
-        out.push_str("    LBRA SLR_OBJ_NEXT\n");
-        out.push_str("SLR_RAM_Y_VISIBLE:\n");
-        out.push_str("    STB >DRAW_VEC_Y\n");
-        out.push_str("    LDU 11,X         ; vector_ptr at RAM +11\n");
-        out.push_str("    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)\n");
-        out.push_str("    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned\n");
-        out.push_str("    LDA 3,X          ; scale_t1 from RAM +3 (pre-computed T1 = scale*127)\n");
-        out.push_str("    STA >DRAW_T1_SCALED\n");
-        out.push_str("    LBRA SLR_DRAW_VECTOR\n");
+        out.push_str("    ; All layers use stride-21 ROM format — fall straight through\n");
         out.push_str("    \n");
         out.push_str("SLR_ROM_OFFSETS:\n");
-        out.push_str("    ; === ROM object (stride=20) ===\n");
+        out.push_str("    ; === ROM object (stride=21, stride-21 format) ===\n");
         out.push_str("    ; Skip enemy spawn markers (type==1): drawn by DRAW_ENEMIES, not SHOW_LEVEL\n");
         out.push_str("    LDA ,X           ; type byte at ROM+0\n");
         out.push_str("    CMPA #1\n");
@@ -686,10 +614,10 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD 1,X          ; x FDB at ROM +1\n");
         out.push_str("    SUBD >CAMERA_X   ; screen_x = world_x - camera_x\n");
         out.push_str("    STD >TMPVAL\n");
-        out.push_str("    ; Per-object cull with half_width (ROM+18). SLR_DRAW_CLIPPED_PATH\n");
+        out.push_str("    ; Per-object cull with half_width (ROM+19, stride-21). SLR_DRAW_CLIPPED_PATH\n");
         out.push_str("    ; handles per-path wrap and per-segment beam-off moves, so widening\n");
         out.push_str("    ; the cull here lets partial objects render at the screen edges.\n");
-        out.push_str("    LDB 18,X         ; B = half_width (ROM+18)\n");
+        out.push_str("    LDB 19,X         ; B = half_width (ROM+19)\n");
         out.push_str("    STB >TMPPTR2     ; save hw\n");
         out.push_str("    LDA #127\n");
         out.push_str("    ADDA >TMPPTR2    ; A = 127 + hw (right boundary)\n");
@@ -712,11 +640,22 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("SLR_ROM_VISIBLE:\n");
         out.push_str("    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)\n");
         out.push_str("    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)\n");
-        out.push_str("    LDU 16,X         ; vector_ptr FDB at ROM +16\n");
-        out.push_str("    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)\n");
-        out.push_str("    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned\n");
-        out.push_str("    LDA 6,X          ; scale_t1 from ROM +6 (low byte of scale FDB; pre-computed T1 = scale*127)\n");
+        out.push_str("    ; Stride-21: vector_bank at ROM+16 ($FF=null), vector_ptr FDB at ROM+17\n");
+        out.push_str("    ; CRITICAL: read ALL level-bank data BEFORE switching to vector bank.\n");
+        out.push_str("    LDA 16,X         ; A = vector_bank (LEVEL BANK ACTIVE)\n");
+        out.push_str("    CMPA #$FF        ; $FF = null (no visual for this object)\n");
+        out.push_str("    LBEQ SLR_OBJ_NEXT ; null bank → skip draw\n");
+        out.push_str("    LDU 17,X         ; vector_ptr FDB at ROM+17 (STILL IN LEVEL BANK)\n");
+        out.push_str("    LDA 6,X          ; scale_t1 at ROM+6 (STILL IN LEVEL BANK)\n");
         out.push_str("    STA >DRAW_T1_SCALED\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: NOW switch to the vector's bank.\n");
+            out.push_str("    ; U = vector address valid in that bank; level data fully read above.\n");
+            out.push_str("    ; Level bank is restored in SLR_PATH_DONE after all paths are drawn.\n");
+            out.push_str("    LDA 16,X         ; reload vector_bank (LDA 6,X clobbered A)\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00        ; switch to vector bank\n");
+        }
         out.push_str("    \n");
         out.push_str("SLR_DRAW_VECTOR:\n");
         out.push_str("    PSHS X           ; Save object pointer\n");
@@ -746,6 +685,13 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("SLR_PATH_DONE:\n");
         out.push_str("    PULS X           ; Restore object pointer\n");
+        if crate::m6809::builtins::use_banked_assets() {
+            out.push_str("    ; MULTIBANK: Restore level bank now that all vector paths are drawn.\n");
+            out.push_str("    ; SLR_OBJ_NEXT needs the level bank active to advance X through level objects.\n");
+            out.push_str("    LDA >LEVEL_BANK\n");
+            out.push_str("    STA >CURRENT_ROM_BANK\n");
+            out.push_str("    STA $DF00        ; switch back to level bank\n");
+        }
         out.push_str("    \n");
         out.push_str("SLR_OBJ_NEXT:\n");
         out.push_str("    ; Advance to next object using stride\n");
@@ -1388,7 +1334,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STA 2,U          ; store back y (RAM +2)\n");
         out.push_str("    \n");
         out.push_str("UGFC_NEXT_FG:\n");
-        out.push_str("    LEAX 20,X        ; Next FG object (ROM stride 20)\n");
+        out.push_str("    LEAX 21,X        ; Next FG object (ROM stride 21)\n");
         out.push_str("    DECB\n");
         out.push_str("    LBRA UGFC_FG_LOOP\n");
         out.push_str("    \n");
@@ -1415,8 +1361,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str(";         Returns $FF80 (-128) if no collidable surface found at that X.\n");
         out.push_str("; Algorithm: for each collidable GP object, check X AABB overlap,\n");
         out.push_str(";   compute surface_top = obj_y(16) + half_height, track max (16-bit).\n");
-        out.push_str("; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,\n");
-        out.push_str(";   +18=half_width, +19=half_height. Stride=20.\n");
+        out.push_str("; ROM object offsets (stride-21): +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,\n");
+        out.push_str(";   +16=vector_bank, +17-18=vector_ptr, +19=half_width, +20=half_height. Stride=21.\n");
         out.push_str("LEVEL_COLLISION_Y_RUNTIME:\n");
         out.push_str("    PSHS X,Y,U       ; Save regs (NOT D - result returns in D)\n");
         if crate::m6809::builtins::use_banked_assets() {
@@ -1451,9 +1397,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    BEQ LCOL_Y_NEXT  ; not collidable\n");
         out.push_str("    \n");
         out.push_str("    ; --- X AABB overlap: obj_x - hw <= player_x <= obj_x + hw ---\n");
-        out.push_str("    ; Compute left_edge = obj_x - hw (16-bit, ROM+1=x FDB, ROM+18=half_width)\n");
+        out.push_str("    ; Compute left_edge = obj_x - hw (16-bit, ROM+1=x FDB, ROM+19=half_width stride-21)\n");
         out.push_str("    LDD 1,X          ; D = world_x FDB (ROM+1-2)\n");
-        out.push_str("    SUBB 18,X        ; B = world_x_lo - half_width\n");
+        out.push_str("    SUBB 19,X        ; B = world_x_lo - half_width (ROM+19)\n");
         out.push_str("    SBCA #0          ; A = world_x_hi - borrow\n");
         out.push_str("    STD >TMPVAL      ; TMPVAL = left_edge\n");
         out.push_str("    \n");
@@ -1464,7 +1410,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("    ; Compute right_edge = obj_x + hw (16-bit)\n");
         out.push_str("    LDD 1,X          ; D = world_x FDB\n");
-        out.push_str("    ADDB 18,X        ; B = world_x_lo + half_width\n");
+        out.push_str("    ADDB 19,X        ; B = world_x_lo + half_width (ROM+19)\n");
         out.push_str("    ADCA #0          ; A = world_x_hi + carry\n");
         out.push_str("    STD >TMPVAL      ; TMPVAL = right_edge\n");
         out.push_str("    \n");
@@ -1475,7 +1421,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("    ; --- X overlaps — compute surface_top = obj_y(16-bit) + half_height ---\n");
         out.push_str("    LDD 3,X          ; D = world_y FDB (ROM+3-4, full 16-bit signed)\n");
-        out.push_str("    ADDB 19,X        ; B = world_y_lo + half_height\n");
+        out.push_str("    ADDB 20,X        ; B = world_y_lo + half_height (ROM+20, stride-21)\n");
         out.push_str("    ADCA #0          ; propagate carry to high byte\n");
         out.push_str("    STD >TMPVAL      ; TMPVAL = surface_top (16-bit)\n");
         out.push_str("    ; Filter: skip surfaces above the player's feet (surface_top > player_feet)\n");
@@ -1492,7 +1438,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STD >LCOL_BEST_Y ; new best landing Y (16-bit)\n");
         out.push_str("    \n");
         out.push_str("LCOL_Y_NEXT:\n");
-        out.push_str("    LEAX 20,X        ; next ROM object (stride 20)\n");
+        out.push_str("    LEAX 21,X        ; next ROM object (stride 21)\n");
         out.push_str("    PULS B\n");
         out.push_str("    DECB\n");
         out.push_str("    BRA LCOL_Y_LOOP\n");
@@ -1530,8 +1476,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("; Output: RESULT = signed push-out dx (16-bit). Positive=right, negative=left.\n");
         out.push_str("; Returns 0 if no overlap found.\n");
         out.push_str("; Scratch: uses LCOL_THW for total_hw (preserves LCOL_PHH=player_hh across iterations).\n");
-        out.push_str("; ROM object offsets: +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,\n");
-        out.push_str(";   +18=half_width, +19=half_height. Stride=20.\n");
+        out.push_str("; ROM object offsets (stride-21): +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,\n");
+        out.push_str(";   +16=vector_bank, +17-18=vector_ptr, +19=half_width, +20=half_height. Stride=21.\n");
         out.push_str("LEVEL_COLLISION_X_RUNTIME:\n");
         out.push_str("    PSHS X,Y,U\n");
         if crate::m6809::builtins::use_banked_assets() {
@@ -1573,16 +1519,16 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    TSTA             ; if |dy| > 255, definitely no overlap\n");
         out.push_str("    LBNE LCOL_X_NEXT\n");
         // High byte is 0, so B = |dy| as byte. Compare with threshold.
-        out.push_str("    LDA 19,X         ; A = obj_half_height (ROM+19)\n");
+        out.push_str("    LDA 20,X         ; A = obj_half_height (ROM+20, stride-21)\n");
         out.push_str("    ADDA >LCOL_PHH   ; A = threshold = obj_hh + player_hh\n");
         out.push_str("    STB >TMPVAL      ; save |dy| lo byte\n");
         out.push_str("    LDB >TMPVAL      ; B = |dy| lo byte\n");
         out.push_str("    STA >TMPVAL+1    ; save threshold\n");
         out.push_str("    CMPB >TMPVAL+1   ; |dy| vs threshold\n");
         out.push_str("    LBGE LCOL_X_NEXT ; |dy| >= threshold → no Y overlap\n");
-        // total_hw = player_hw + obj_half_w (ROM+18) → store in LCOL_THW
+        // total_hw = player_hw + obj_half_w (ROM+19, stride-21) → store in LCOL_THW
         out.push_str("    LDA >LCOL_PHW\n");
-        out.push_str("    ADDA 18,X\n");      // obj_half_width at ROM+18
+        out.push_str("    ADDA 19,X\n");      // obj_half_width at ROM+19 (stride-21)
         out.push_str("    STA >LCOL_THW\n");
         // left_edge = obj_x - total_hw (16-bit, ROM+1=x FDB)
         out.push_str("    LDD 1,X\n");        // D = world_x FDB (ROM+1-2)
@@ -1631,7 +1577,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PULS B\n");
         out.push_str("    LBRA LCOL_X_DONE\n");
         out.push_str("LCOL_X_NEXT:\n");
-        out.push_str("    LEAX 20,X\n");   // next ROM object (stride 20)
+        out.push_str("    LEAX 21,X\n");   // next ROM object (stride 21)
         out.push_str("    PULS B\n");
         out.push_str("    DECB\n");
         out.push_str("    LBRA LCOL_X_LOOP\n");
