@@ -180,8 +180,12 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         // Clipped-path draw loop tracker
         ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: tracked beam X for per-segment clipping");
         ram.allocate("DRAW_T1_SCALED", 1, "SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale)");
-        // GP objects RAM buffer (max 32 objects × 15 bytes)
-        ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
+        // GP objects RAM buffer + GP-GP/GP-FG physics scratch — only used by
+        // UPDATE_LEVEL_RUNTIME. Gated so games that don't call UPDATE_LEVEL don't
+        // pay 480+ bytes of RAM (critical on the 1KB M6809 target).
+        if needed.contains("UPDATE_LEVEL_RUNTIME") {
+            ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
+        }
         // LEVEL_COLLISION_Y input/scratch variables
         ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION player world_x input (16-bit)");
         ram.allocate("LCOL_BEST_Y", 2, "LEVEL_COLLISION_Y best floor y found (16-bit signed)");
@@ -189,16 +193,24 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION player half_height");
         ram.allocate("LCOL_PHW", 1, "LEVEL_COLLISION_X player half_width");
         ram.allocate("LCOL_THW", 1, "LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch)");
-        // Physics / collision temporaries
-        ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
-        ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
-        ram.allocate("UGPC_INNER_IDX", 1, "GP-GP inner loop index");
-        ram.allocate("UGPC_DX", 2, "GP-GP |dx| (16-bit)");
-        ram.allocate("UGPC_DIST", 2, "GP-GP Manhattan distance (16-bit)");
-        ram.allocate("UGFC_GP_IDX", 1, "GP-FG outer loop GP index");
-        ram.allocate("UGFC_FG_COUNT", 1, "GP-FG inner loop FG count");
-        ram.allocate("UGFC_DX", 1, "GP-FG |dx|");
-        ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
+        // LEVEL_COLLISION_Y mesh ray-cast scratch
+        ram.allocate("LCOL_OBJ_Y", 2, "LEVEL_COLLISION_Y current object world_y (16-bit)");
+        ram.allocate("LCOL_LOCAL_PX", 2, "LEVEL_COLLISION_Y player_x in object-local coords (16-bit)");
+        ram.allocate("LCOL_OBJ_CNT", 1, "LEVEL_COLLISION_Y GP objects remaining");
+        ram.allocate("LCOL_SEG_CNT", 1, "LEVEL_COLLISION_Y mesh floor segments remaining");
+        // Physics / collision temporaries (GP-GP and GP-FG) — only used by
+        // UPDATE_LEVEL_RUNTIME, gated to save RAM on the M6809 target.
+        if needed.contains("UPDATE_LEVEL_RUNTIME") {
+            ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
+            ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
+            ram.allocate("UGPC_INNER_IDX", 1, "GP-GP inner loop index");
+            ram.allocate("UGPC_DX", 2, "GP-GP |dx| (16-bit)");
+            ram.allocate("UGPC_DIST", 2, "GP-GP Manhattan distance (16-bit)");
+            ram.allocate("UGFC_GP_IDX", 1, "GP-FG outer loop GP index");
+            ram.allocate("UGFC_FG_COUNT", 1, "GP-FG inner loop FG count");
+            ram.allocate("UGFC_DX", 1, "GP-FG |dx|");
+            ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
+        }
     }
 
     // Enemy system variables
@@ -206,6 +218,15 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES")
     {
         let max_enemies: usize = module.meta.max_enemies.unwrap_or(8) as usize;
+        // M6809 has only 1KB of RAM (mirrored across $C800-$CFFF). The enemy pool
+        // lives high in RAM and must not overflow past the $CBFF mirror boundary,
+        // so the M6809 target caps MAX_ENEMIES at 10 (10 * 17 = 170 bytes).
+        if max_enemies > 10 {
+            return Err(format!(
+                "META MAX_ENEMIES = {max_enemies} exceeds the M6809 limit of 10 \
+                 (1KB RAM constraint). Lower MAX_ENEMIES to 10 or less for the Vectrex/6809 target."
+            ));
+        }
         const ENEMY_STRIDE: usize = 17;
         ram.allocate("ENEMY_POOL", max_enemies * ENEMY_STRIDE,
             "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N)");
@@ -476,6 +497,12 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             }
             if name_upper == "LEVEL_COLLISION_X" {
                 needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
+            }
+            if name_upper == "GET_LEVEL_FLOOR_Y" {
+                // Multibank emits a JSR to this helper instead of inlining the
+                // bank-switch (which would self-corrupt PC from switchable banks).
+                // Single-bank inline path doesn't need it. See emit_get_level_floor_y.
+                needed.insert("GET_LEVEL_FLOOR_Y_RUNTIME".to_string());
             }
             
 // Math helpers: Need runtime if operands contain variables
@@ -2505,11 +2532,14 @@ SM_ST_EVT3T   EQU 12\n\
 ; Entry: B = instance count, X = ptr to _LEVEL_ENEMY_INSTANCES table\n\
 ; Initialises ENEMY_POOL from the ROM instance table.\n\
 SPAWN_ENEMIES_RUNTIME:\n\
-    STB >ENEMY_COUNT\n\
+    ; Entry: B = total ROM instance count, X = ptr to instances table.\n\
+    ; Per-screen reuse (mirrors pitrex): only spawn enemies whose world Y is\n\
+    ; within +/-150 of CAMERA_Y, capped at the pool size ({max_enemies}).\n\
     LBEQ SPAWN_ENE_DONE\n\
-    ; Zero-clear the pool (B × 13 bytes)\n\
-    STX >ENEMY_SCRATCH_PTR\n\
+    STB >ENEMY_LOOP_IDX        ; scan counter = total ROM entries to examine\n\
+    ; Zero-clear ALL pool slots so stale enemies from the previous screen vanish\n\
     LDY #ENEMY_POOL\n\
+    LDB #{max_enemies}\n\
     CLRA\n\
 SPAWN_CLR_LOOP:\n\
     STA ,Y+\n\
@@ -2531,11 +2561,18 @@ SPAWN_CLR_LOOP:\n\
     STA ,Y+\n\
     DECB\n\
     BNE SPAWN_CLR_LOOP\n\
-    ; Fill pool from instance table\n\
-    LDB >ENEMY_COUNT\n\
+    CLR >ENEMY_COUNT           ; spawned (in-range) count = 0\n\
+    LDX >LEVEL_ENEMY_INSTANCES_PTR\n\
+    STX >ENEMY_SCRATCH_PTR\n\
     LDY #ENEMY_POOL\n\
-SPAWN_FILL_LOOP:\n\
+SPAWN_SCAN_LOOP:\n\
     LDX >ENEMY_SCRATCH_PTR\n\
+    LDD 4,X                    ; D = instance world Y (offset +4,+5)\n\
+    SUBD >CAMERA_Y             ; D = spawn_y - camera_y\n\
+    CMPD #150\n\
+    LBGT SPAWN_SKIP            ; off-screen below (signed)\n\
+    CMPD #$FF6A                ; -150: off-screen above (signed)\n\
+    LBLT SPAWN_SKIP\n\
     LDA #1\n\
     STA ,Y              ; +0 active=1\n\
     LDA 2,X\n\
@@ -2599,14 +2636,19 @@ SPAWN_SM_DONE:\n\
     PULS B              ; restore loop counter\n\
     CLR 14,Y            ; pool.sm_decay_timer hi = 0\n\
     CLR 15,Y            ; pool.sm_decay_timer lo = 0\n\
-    LDX >ENEMY_SCRATCH_PTR ; restore instance ptr (clobbered above)\n\
-    ; advance X by 12 (instance stride)\n\
+    ; filled a slot: advance pool ptr, bump spawned count, stop if pool full\n\
+    LEAY 17,Y\n\
+    INC >ENEMY_COUNT\n\
+    LDA >ENEMY_COUNT\n\
+    CMPA #{max_enemies}\n\
+    BHS SPAWN_ENE_DONE         ; pool full -> stop scanning\n\
+SPAWN_SKIP:\n\
+    ; advance to next ROM instance (stride 12) and keep scanning\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
     LEAX 12,X\n\
     STX >ENEMY_SCRATCH_PTR\n\
-    ; advance Y by 17 (pool stride)\n\
-    LEAY 17,Y\n\
-    DECB\n\
-    LBNE SPAWN_FILL_LOOP\n\
+    DEC >ENEMY_LOOP_IDX\n\
+    LBNE SPAWN_SCAN_LOOP\n\
 SPAWN_ENE_DONE:\n\
     RTS\n\
 \n"
@@ -2813,12 +2855,19 @@ DRW_ENE_LOOP:\n\
     STA >ENEMY_SCRATCH_X    ; save hi\n\
     LDA 5,X             ; anim_state addr lo\n\
     STA >ENEMY_SCRATCH_X+1  ; save lo\n\
-    ; Set draw position from enemy pool: x at +2 (lo), y at +4 (lo)\n\
-    LDA 2,Y             ; x lo\n\
-    STA >DRAW_VEC_X\n\
+    ; screen_x = world_x(16-bit) - camera_x(16-bit), y unchanged\n\
+    LDA 1,Y             ; world_x hi (POOL_X_HI)\n\
+    LDB 2,Y             ; world_x lo (POOL_X_LO)\n\
+    SUBD >CAMERA_X      ; D = world_x - camera_x (16-bit)\n\
+    STA >TMPPTR2        ; save high byte for range check\n\
+    TFR B,A\n\
+    SEX                 ; A = sign-extend of B (0x00 or 0xFF)\n\
+    CMPA >TMPPTR2       ; compare with actual high byte\n\
+    LBNE DRW_ENE_NEXT_POP  ; out of 8-bit range — skip draw\n\
+    STB >DRAW_VEC_X\n\
     CLR >DRAW_VEC_X_HI\n\
-    LDA 4,Y             ; y lo\n\
-    STA >DRAW_VEC_Y\n\
+    LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
+    STB >DRAW_VEC_Y\n\
     ; Branch on sprite_type\n\
     LDB >ENEMY_SCRATCH_Y\n\
     CMPB #1\n\
@@ -2877,11 +2926,18 @@ DRW_ENE_DONE:\n\
     CMPD #0             ; 0 = no sprite assigned\n\
     LBEQ DRW_ENE_NEXT_POP\n\
     TFR D,X             ; X = _NAME_VECTORS header address\n\
-    ; Set draw position while DP=$C8 (direct page addressing)\n\
-    LDA 2,Y             ; world_x lo (pool +2)\n\
-    STA DRAW_VEC_X\n\
-    LDA 4,Y             ; world_y lo (pool +4)\n\
-    STA DRAW_VEC_Y\n\
+    ; screen_x = world_x(16-bit) - camera_x(16-bit), y unchanged\n\
+    LDA 1,Y             ; world_x hi (POOL_X_HI)\n\
+    LDB 2,Y             ; world_x lo (POOL_X_LO)\n\
+    SUBD CAMERA_X       ; D = world_x - camera_x (16-bit, DP=$C8 relative)\n\
+    STA TMPPTR2         ; save high byte for range check\n\
+    TFR B,A\n\
+    SEX                 ; A = sign-extend of B (0x00 or 0xFF)\n\
+    CMPA TMPPTR2        ; compare with actual high byte\n\
+    LBNE DRW_ENE_NEXT_POP  ; out of 8-bit range — skip draw\n\
+    STB DRAW_VEC_X      ; screen_x lo byte\n\
+    LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
+    STB DRAW_VEC_Y\n\
     CLR DRAW_VEC_INTENSITY  ; use vector's own intensity\n\
     CLR MIRROR_X\n\
     CLR MIRROR_Y\n\

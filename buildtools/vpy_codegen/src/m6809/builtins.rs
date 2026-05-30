@@ -141,6 +141,11 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("ENEMY_FIRE_EVENT", 2),  // i, "eventName" → fires event hash
 ];
 
+/// True if `name` resolves to a known builtin / native runtime function.
+pub fn is_builtin(name: &str) -> bool {
+    expected_builtin_arity(name).is_some()
+}
+
 /// Get expected arity for a builtin (None if not a builtin)
 fn expected_builtin_arity(name: &str) -> Option<usize> {
     let upper = name.to_ascii_uppercase();

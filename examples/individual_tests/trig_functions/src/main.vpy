@@ -20,7 +20,7 @@ def loop():
     py = sin(angle) / 3
 
     # Draw orbiting dot
-    DRAW_CIRCLE(px, py, 30, 100)
+    DRAW_CIRCLE(px, py, 5, 120)
 
     # Draw center crosshair
     DRAW_LINE(0, -5, 0, 5, 40)

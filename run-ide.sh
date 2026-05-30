@@ -250,38 +250,25 @@ wait_for_port() {
   return 1
 }
 
+# ALWAYS rebuild the frontend dist/ — Electron falls back to dist/index.html
+# whenever VITE_DEV_SERVER_URL isn't set (production mode, npm run start, packaged
+# app, or if the Vite dev server fails to come up). Without this step, every edit
+# to src/ or public/ is invisible to those launch paths and the IDE silently runs
+# yesterday's bundle. `npm run build` already includes the typecheck.
+echo '[INFO] Construyendo frontend (dist/) ...'
+(cd "$ROOT/ide/frontend" && npm run build)
+if [ $? -ne 0 ]; then
+  echo '[ERR ] Frontend build falló (typecheck o vite build)'
+  exit 1
+fi
+echo '[OK  ] dist/ actualizado'
+
 if [ "$PRODUCTION" = true ]; then
   echo '[INFO] Modo producción - sin hot reload'
-  
-  # Verificación de tipos TypeScript
-  echo '[INFO] Verificando tipos TypeScript...'
-  (cd "$ROOT/ide/frontend" && npm run typecheck)
-  if [ $? -ne 0 ]; then
-    echo '[ERR ] TypeScript typecheck falló - el código tiene errores de tipos'
-    exit 1
-  fi
-  echo '[OK  ] TypeScript typecheck exitoso'
-  
-  # Asegurar que el frontend esté construido
-  echo '[INFO] Construyendo frontend...'
-  (cd "$ROOT/ide/frontend" && npm run build)
-  if [ $? -ne 0 ]; then
-    echo '[ERR ] Frontend build falló'
-    exit 1
-  fi
-  # Ejecutar en modo producción
+  # Ejecutar en modo producción (dist/ ya está fresco arriba)
   (cd "$ROOT/ide/electron" && npm run start)
 else
   echo '[INFO] Modo desarrollo - con hot reload'
-  
-  # Verificación de tipos TypeScript
-  echo '[INFO] Verificando tipos TypeScript...'
-  (cd "$ROOT/ide/frontend" && npm run typecheck)
-  if [ $? -ne 0 ]; then
-    echo '[ERR ] TypeScript typecheck falló - el código tiene errores de tipos'
-    exit 1
-  fi
-  echo '[OK  ] TypeScript typecheck exitoso'
   
   if [ "$NO_CLEAR" = true ]; then
     export FORCE_COLOR=1

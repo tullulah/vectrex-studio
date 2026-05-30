@@ -44,21 +44,41 @@ pub fn set_include_dir(dir: Option<PathBuf>) {
 /// - symbol_table: Defined symbols
 /// - unresolved_refs: Unresolved symbols (only in object_mode)
 pub fn assemble_m6809(
-    asm_source: &str, 
+    asm_source: &str,
     org: u16,
     object_mode: bool,
     use_long_branches: bool,
 ) -> Result<(Vec<u8>, HashMap<usize, usize>, HashMap<String, u16>, Vec<UnresolvedRef>), String> {
+    assemble_m6809_seeded(asm_source, org, object_mode, use_long_branches, &HashMap::new())
+}
+
+/// Like `assemble_m6809` but pre-seeds the equates table with externally-known
+/// symbols (e.g. RAM EQUs and cross-bank labels). Used by debug-gen to assemble a
+/// flattened multibank ASM whose RAM-EQU block was stripped during flattening — the
+/// seed lets operands resolve without an "Invalid address" error, so the line→address
+/// map can be produced.
+pub fn assemble_m6809_seeded(
+    asm_source: &str,
+    org: u16,
+    object_mode: bool,
+    use_long_branches: bool,
+    seed_equates: &HashMap<String, u16>,
+) -> Result<(Vec<u8>, HashMap<usize, usize>, HashMap<String, u16>, Vec<UnresolvedRef>), String> {
     let mut emitter = BinaryEmitter::new(org);
     let mut equates: HashMap<String, u16> = HashMap::new(); // For EQU directives
     let mut unresolved_refs: Vec<UnresolvedRef> = Vec::new(); // Unresolved symbols (object mode)
-    
+
     // Configure emitter for object mode and long branches
     emitter.set_object_mode(object_mode);
     emitter.set_long_branches(use_long_branches);
-    
+
     // Always load Vectrex BIOS symbols at startup
     load_vectrex_symbols(&mut equates);
+
+    // Seed externally-known symbols (overridden by any in-file EQU of the same name).
+    for (k, v) in seed_equates {
+        equates.insert(k.clone(), *v);
+    }
     
     // PRE-PASS: Process entire file collecting EQU and INCLUDE symbols
     // Multiple passes to resolve symbol dependencies
@@ -187,6 +207,10 @@ pub fn assemble_m6809(
             continue;
         }
         
+        // Record this physical ASM line so line_to_offset maps ASM-line -> address.
+        // (The codegen emits no `; VPy line` markers, so without this the map is empty.)
+        emitter.set_source_line(current_line);
+
         // Process instructions and data directives
         if let Err(e) = parse_and_emit_instruction(&mut emitter, trimmed, &equates, &last_global_label) {
             return Err(format!("Error at line {}: {} (code: '{}')", current_line, e, trimmed));

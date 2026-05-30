@@ -313,21 +313,29 @@ impl VPlayLevel {
     /// byte values for half_width/half_height instead of cross-bank symbol references.
     /// `dims` maps lowercase vec asset name → (half_width, half_height).
     pub fn compile_to_asm_with_vec_dims(&self, dims: &HashMap<String, (u32, u32)>) -> String {
-        self.compile_m6809_inner(dims, &HashMap::new())
+        self.compile_m6809_inner(dims, &HashMap::new(), &HashMap::new())
     }
 
     /// Compile level to M6809 ASM with both vector dims and bank assignment map.
     /// Used in multibank second-pass compilation after bank distribution is known.
     /// `vec_bank_map` maps lowercase vec asset name → bank number.
+    /// `vec_meshes` maps lowercase vec name → its collision segments (for the
+    /// LEVEL_COLLISION_Y mesh ray-cast; empty map → AABB fallback for all objects).
     pub fn compile_to_asm_with_bank_map(
         &self,
         dims: &HashMap<String, (u32, u32)>,
         vec_bank_map: &HashMap<String, u8>,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
     ) -> String {
-        self.compile_m6809_inner(dims, vec_bank_map)
+        self.compile_m6809_inner(dims, vec_bank_map, vec_meshes)
     }
 
-    fn compile_m6809_inner(&self, dims: &HashMap<String, (u32, u32)>, vec_bank_map: &HashMap<String, u8>) -> String {
+    fn compile_m6809_inner(
+        &self,
+        dims: &HashMap<String, (u32, u32)>,
+        vec_bank_map: &HashMap<String, u8>,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+    ) -> String {
         let mut out = String::new();
 
         // Compute enemy objects BEFORE emitting the level header so we can embed the count/ptr
@@ -394,24 +402,40 @@ impl VPlayLevel {
 
         // Emit background objects
         out.push_str(&format!("_{}_BG_OBJECTS:\n", name));
+        let mut meshes = String::new();
         for obj in &self.layers.background {
-            out.push_str(&self.compile_object_with_dims(obj, dims, vec_bank_map));
+            let (m, rec) = self.compile_object_with_dims(obj, dims, vec_bank_map, vec_meshes, &name);
+            out.push_str(&rec);
+            meshes.push_str(&m);
         }
         out.push_str("\n");
 
         // Emit gameplay objects
         out.push_str(&format!("_{}_GAMEPLAY_OBJECTS:\n", name));
         for obj in &self.layers.gameplay {
-            out.push_str(&self.compile_object_with_dims(obj, dims, vec_bank_map));
+            let (m, rec) = self.compile_object_with_dims(obj, dims, vec_bank_map, vec_meshes, &name);
+            out.push_str(&rec);
+            meshes.push_str(&m);
         }
         out.push_str("\n");
 
         // Emit foreground objects
         out.push_str(&format!("_{}_FG_OBJECTS:\n", name));
         for obj in &self.layers.foreground {
-            out.push_str(&self.compile_object_with_dims(obj, dims, vec_bank_map));
+            let (m, rec) = self.compile_object_with_dims(obj, dims, vec_bank_map, vec_meshes, &name);
+            out.push_str(&rec);
+            meshes.push_str(&m);
         }
         out.push_str("\n");
+
+        // Emit collision mesh data blocks (referenced by coll_mesh_ptr at object +21).
+        // Kept in the same bank as the level so LEVEL_COLLISION_Y (which switches to
+        // the level bank) can dereference them in-bank.
+        if !meshes.is_empty() {
+            out.push_str("; ---- Collision meshes ----\n");
+            out.push_str(&meshes);
+            out.push_str("\n");
+        }
 
         // Emit enemy instances (separate section — enemy_objects computed at top of fn)
 
@@ -1180,74 +1204,27 @@ impl VPlayLevel {
         out.push_str(&format!("    .byte {}   @ vel_x_init\n", vx as u8));
         out.push_str(&format!("    .byte {}   @ vel_y_init\n", vy as u8));
 
-        // +16..+20: collision mesh pointer
-        // Build mesh label from sanitized object ID
+        // +16: collision mesh pointer. Segment extraction is shared with the
+        // M6809 emitter (collision_segments); only the .word/.hword emission below
+        // is ARM-specific. We emit every horizontal segment the .vec author chose
+        // (no interior-horizontal filtering — that broke multi-tier platforms like
+        // platform20 whose lower shelf is intentionally walkable).
         let mesh_label = format!("_COLMESH_{}_{}", level_name, obj.id.replace('-', "_").replace(' ', "_"));
-        let segs_opt = obj.collision.as_ref()
-            .and_then(|c| c.segments.as_ref())
-            .filter(|v| !v.is_empty());
-
-        // Fallback: if no level-side segments, use the .vec file's own collision mesh
-        let vec_segs_converted: Vec<CollisionSegment>;
-        let segs_opt = if segs_opt.is_some() {
-            segs_opt
-        } else if let Some(vm) = vec_meshes.get(&obj.vector_name.to_lowercase()) {
-            if !vm.is_empty() {
-                vec_segs_converted = vm.iter().map(|s| CollisionSegment { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 }).collect();
-                Some(&vec_segs_converted)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if let Some(segs) = segs_opt {
-            // Emit every horizontal segment in the mesh. We used to drop
-            // "interior" horizontals (those covered by a higher horizontal in
-            // X), but that broke multi-tier platforms like platform20 where
-            // the lower shelf is intentionally walkable — its X range is
-            // entirely inside the upper shelf's, so the filter removed it and
-            // the player couldn't stand on it. The .vec author already chose
-            // which segments to include; trust them. Runtime cost stays small
-            // because typical platforms only have 1-3 horizontal segments.
-            let mut emitted: Vec<(i16, i16, i16)> = Vec::new();
-            for seg in segs {
-                if seg.y1 == seg.y2 {
-                    let xa = seg.x1.min(seg.x2);
-                    let xb = seg.x1.max(seg.x2);
-                    emitted.push((xa, xb, seg.y1));
-                }
-            }
-            if emitted.is_empty() {
-                // Mesh has no horizontal segments at all — emit raw segments
-                // so vertical-only meshes still produce something readable.
-                for s in segs {
-                    emitted.push((s.x1.min(s.x2), s.x1.max(s.x2), s.y1));
-                }
-            }
+        let (floors, walls) = self.collision_segments(obj, vec_meshes);
+        if !floors.is_empty() || !walls.is_empty() {
             // .word requires 4-byte alignment on ARM. Without an explicit balign,
-            // the symbol can land on an odd address (e.g. right after a .byte or
-            // .hword section), making `ldr r12, [r11], #4` read garbage — the
-            // first byte gets combined with adjacent data, producing a "seg_count"
-            // in the billions and turning the raycast loop into an infinite spin.
+            // the symbol can land on an odd address, making `ldr r12, [r11], #4`
+            // read garbage — a huge "seg_count" that spins the raycast forever.
             mesh.push_str("    .balign 4\n");
-            mesh.push_str(&format!("{}:  @ {} top-edge collision segments (filtered from {} original)\n",
-                mesh_label, emitted.len(), segs.len()));
-            mesh.push_str(&format!("    .word {}  @ floor segment count\n", emitted.len()));
-            for (xa, xb, y) in &emitted {
+            mesh.push_str(&format!("{}:  @ {} floor + {} wall collision segments\n",
+                mesh_label, floors.len(), walls.len()));
+            mesh.push_str(&format!("    .word {}  @ floor segment count\n", floors.len()));
+            for (xa, xb, y) in &floors {
                 mesh.push_str(&format!("    .hword {}, {}, {}, {}  @ x1={} y1={} x2={} y2={}\n",
                     xa, y, xb, y, xa, y, xb, y));
             }
-            // Extract vertical wall segments (x1==x2, y1!=y2) for horizontal collision
-            let mut wall_segs: Vec<(i16, i16, i16)> = Vec::new(); // (x, y_min, y_max)
-            for seg in segs {
-                if seg.x1 == seg.x2 && seg.y1 != seg.y2 {
-                    wall_segs.push((seg.x1, seg.y1.min(seg.y2), seg.y1.max(seg.y2)));
-                }
-            }
-            mesh.push_str(&format!("    .word {}  @ wall segment count\n", wall_segs.len()));
-            for (x, ya, yb) in &wall_segs {
+            mesh.push_str(&format!("    .word {}  @ wall segment count\n", walls.len()));
+            for (x, ya, yb) in &walls {
                 mesh.push_str(&format!("    .hword {}, {}, {}, {}  @ x={} ymin={} ymax={}\n", x, ya, x, yb, x, ya, yb));
             }
             out.push_str(&format!("    .word {}  @ coll_mesh_ptr\n\n", mesh_label));
@@ -1258,8 +1235,62 @@ impl VPlayLevel {
         (mesh, out)
     }
 
-    /// Compile a single object to assembly (M6809 format, stride-21)
-    fn compile_object_with_dims(&self, obj: &VPlayObject, dims: &HashMap<String, (u32, u32)>, vec_bank_map: &HashMap<String, u8>) -> String {
+    /// Target-independent collision-segment extraction for an object.
+    /// Returns (floors, walls) in local (.vec) coordinates:
+    ///   floors: (xa, xb, y)     horizontal top-edges (y1==y2), xa <= xb
+    ///   walls:  (x, ymin, ymax) vertical edges (x1==x2, y1!=y2)
+    /// Source priority: explicit obj.collision.segments, else the .vec file's own
+    /// mesh. Shared by the M6809 (FDB) and ARM (.word/.hword) emitters so the
+    /// extraction logic lives in one place — only the byte emission diverges.
+    fn collision_segments(
+        &self,
+        obj: &VPlayObject,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+    ) -> (Vec<(i16, i16, i16)>, Vec<(i16, i16, i16)>) {
+        let segs: Vec<(i16, i16, i16, i16)> = if let Some(ls) =
+            obj.collision.as_ref().and_then(|c| c.segments.as_ref()).filter(|v| !v.is_empty())
+        {
+            ls.iter().map(|s| (s.x1, s.y1, s.x2, s.y2)).collect()
+        } else if let Some(vm) = vec_meshes.get(&obj.vector_name.to_lowercase()) {
+            vm.iter().map(|s| (s.x1, s.y1, s.x2, s.y2)).collect()
+        } else {
+            Vec::new()
+        };
+
+        let mut floors = Vec::new();
+        for &(x1, y1, x2, y2) in &segs {
+            if y1 == y2 {
+                floors.push((x1.min(x2), x1.max(x2), y1));
+            }
+        }
+        // Mesh with no horizontal segments: fall back to raw segments so
+        // vertical-only meshes still produce a usable floor list.
+        if floors.is_empty() && !segs.is_empty() {
+            for &(x1, y1, x2, _y2) in &segs {
+                floors.push((x1.min(x2), x1.max(x2), y1));
+            }
+        }
+        let mut walls = Vec::new();
+        for &(x1, y1, x2, y2) in &segs {
+            if x1 == x2 && y1 != y2 {
+                walls.push((x1, y1.min(y2), y1.max(y2)));
+            }
+        }
+        (floors, walls)
+    }
+
+    /// Compile a single object to assembly (M6809 format, stride-23).
+    /// Returns (mesh_block, object_record). mesh_block is the collision-mesh data
+    /// (emitted once per object with segments) and is empty when the object uses
+    /// the AABB fallback (coll_mesh_ptr = 0).
+    fn compile_object_with_dims(
+        &self,
+        obj: &VPlayObject,
+        dims: &HashMap<String, (u32, u32)>,
+        vec_bank_map: &HashMap<String, u8>,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+        level_name: &str,
+    ) -> (String, String) {
         let mut out = String::new();
         
         out.push_str(&format!("; Object: {} ({})\n", obj.id, obj.obj_type));
@@ -1429,9 +1460,32 @@ impl VPlayLevel {
                 out.push_str("    FCB 8  ; half_height (default, ROM+20)\n");
             }
         }
-        
+
+        // +21-22: collision mesh pointer. Segment extraction shared with the ARM
+        // emitter (collision_segments); only the FDB emission below is M6809-specific.
+        // Mesh format at coll_mesh_ptr (16-bit big-endian):
+        //   FDB floor_count; per floor: FDB x1,y1,x2,y2 (local coords, y1==y2)
+        //   FDB wall_count;  per wall:  FDB x,ymin,x,ymax
+        let mut mesh = String::new();
+        let (floors, walls) = self.collision_segments(obj, vec_meshes);
+        if !floors.is_empty() {
+            let mesh_label = format!("_COLMESH_{}_{}", level_name, obj.id.replace('-', "_").replace(' ', "_"));
+            out.push_str(&format!("    FDB {}  ; coll_mesh_ptr (ROM+21)\n", mesh_label));
+            mesh.push_str(&format!("{}:  ; {} floor + {} wall collision segments\n", mesh_label, floors.len(), walls.len()));
+            mesh.push_str(&format!("    FDB {}  ; floor segment count\n", floors.len()));
+            for (xa, xb, y) in &floors {
+                mesh.push_str(&format!("    FDB {},{},{},{}  ; x1,y1,x2,y2\n", xa, y, xb, y));
+            }
+            mesh.push_str(&format!("    FDB {}  ; wall segment count\n", walls.len()));
+            for (x, ya, yb) in &walls {
+                mesh.push_str(&format!("    FDB {},{},{},{}  ; x,ymin,x,ymax\n", x, ya, x, yb));
+            }
+        } else {
+            out.push_str("    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)\n");
+        }
+
         out.push_str("\n");
-        out
+        (mesh, out)
     }
 }
 

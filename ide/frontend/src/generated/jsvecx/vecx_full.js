@@ -4054,6 +4054,23 @@ function VecX()
     this.ram = new Array(0x400);
     utils.initArray(this.ram, 0);
 
+    // --- Debugger breakpoint support (used by ide EmulatorPanel) ---
+    // Breakpoint addresses are keyed by 16-bit PC (bank-relative; matches across
+    // banks — a known limitation for multibank, but enough to stop at most code).
+    this.breakpoints = {};
+    this.pausedByBreakpoint = false;
+    this._resumeSkipPc = -1;       // PC to execute once without re-triggering its breakpoint
+    this.debugState = 'stopped';
+    this.addBreakpoint = function(addr) { this.breakpoints[addr & 0xFFFF] = true; };
+    this.removeBreakpoint = function(addr) { delete this.breakpoints[addr & 0xFFFF]; };
+    this.clearBreakpoints = function() { this.breakpoints = {}; };
+    this.isPausedByBreakpoint = function() { return this.pausedByBreakpoint; };
+    this.resumeFromBreakpoint = function() {
+        // Allow the instruction AT the current breakpoint to run once, then re-arm.
+        this.pausedByBreakpoint = false;
+        this._resumeSkipPc = this.e6809 ? this.e6809.reg_pc : -1;
+    };
+
     /* the sound chip registers */
 
     //unsigned snd_regs[16];
@@ -5348,6 +5365,15 @@ function VecX()
 
         while( cycles > 0 )
         {
+            // Debugger: stop before executing the instruction at a breakpoint.
+            // _resumeSkipPc lets "continue" step past the current breakpoint once.
+            var _bpPc = e6809.reg_pc & 0xFFFF;
+            if (this.breakpoints[_bpPc] && _bpPc !== this._resumeSkipPc) {
+                this.pausedByBreakpoint = true;
+                this.debugState = 'paused';
+                break;
+            }
+            this._resumeSkipPc = -1;
             icycles = e6809.e6809_sstep(this.via_ifr & 0x80, 0);
 
             for( c = 0; c < icycles; c++ )

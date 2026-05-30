@@ -907,6 +907,41 @@ fn emit_stmt(
 
         Stmt::Pass { .. } => Ok(String::new()),
 
+        Stmt::Switch { expr, cases, default, .. } => {
+            let id = next_id();
+            let end_lbl = format!("switch_end_{id}");
+            let cleanup_lbl = format!("switch_cleanup_{id}");
+            let mut s = String::new();
+
+            s.push_str(&emit_expr(expr, var_addrs)?);
+            s.push_str("    push    {r0, r1}       @ switch value (r1=pad, 8-byte align)\n");
+
+            for (ci, (case_val, case_body)) in cases.iter().enumerate() {
+                let no_match_lbl = format!("switch_next_{ci}_{id}");
+                s.push_str(&emit_expr(case_val, var_addrs)?);
+                s.push_str("    mov     r1, r0\n");
+                s.push_str("    ldr     r0, [sp, #0]   @ reload switch value\n");
+                s.push_str("    cmp     r0, r1\n");
+                s.push_str(&format!("    bne     {no_match_lbl}\n"));
+                for st in case_body {
+                    s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?);
+                }
+                s.push_str(&format!("    b       {cleanup_lbl}\n"));
+                s.push_str(&format!("{no_match_lbl}:\n"));
+            }
+
+            if let Some(default_body) = default {
+                for st in default_body {
+                    s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?);
+                }
+            }
+
+            s.push_str(&format!("{cleanup_lbl}:\n"));
+            s.push_str("    add     sp, sp, #8     @ pop switch value\n");
+            s.push_str(&format!("{end_lbl}:\n"));
+            Ok(s)
+        }
+
         other => Err(format!("Unsupported statement in PiTrex backend: {:?}", other)),
     }
 }

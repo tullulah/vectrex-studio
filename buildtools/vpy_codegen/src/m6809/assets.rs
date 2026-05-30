@@ -865,7 +865,22 @@ pub fn generate_distributed_assets_asm(
         .collect();
     let vec_dims_for_levels = build_vec_dims(&all_vec_assets);
 
-    // Regenerate level ASM using the now-known vec_bank_map (stride-21 with bank bytes).
+    // Build vec_meshes: lowercase vec name → collision segments from the .vec file,
+    // for the LEVEL_COLLISION_Y mesh ray-cast (empty → AABB fallback for that object).
+    let mut vec_meshes: HashMap<String, Vec<crate::vecres::VecMeshSegment>> = HashMap::new();
+    for asset in &all_vec_assets {
+        if let Ok(text) = std::fs::read_to_string(&asset.info.path) {
+            if let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) {
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(asset.info.name.to_lowercase(), mesh.segments.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // Regenerate level ASM using the now-known vec_bank_map (stride-23 with bank bytes).
     // This second pass replaces the first-pass level ASM that was generated in
     // prepare_assets_with_sizes without knowing which bank each vector lives in.
     let mut level_asm_by_name: HashMap<String, String> = HashMap::new();
@@ -874,7 +889,7 @@ pub fn generate_distributed_assets_asm(
             if matches!(asset.info.asset_type, AssetType::Level) {
                 match crate::levelres::VPlayLevel::load(std::path::Path::new(&asset.info.path)) {
                     Ok(resource) => {
-                        let asm_code = resource.compile_to_asm_with_bank_map(&vec_dims_for_levels, &vec_bank_map);
+                        let asm_code = resource.compile_to_asm_with_bank_map(&vec_dims_for_levels, &vec_bank_map, &vec_meshes);
                         level_asm_by_name.insert(asset.info.name.clone(), asm_code);
                     }
                     Err(e) => {

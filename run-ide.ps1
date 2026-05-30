@@ -71,14 +71,20 @@ if(-not (Test-Path $lspExe)){
   Write-Host "[WARN] Binario LSP no encontrado en $lspExe (spawn podría fallar)" -ForegroundColor Yellow
 }
 
+# ALWAYS rebuild frontend dist/ — Electron falls back to dist/index.html whenever
+# VITE_DEV_SERVER_URL isn't set (production mode, npm run start, packaged app, or
+# if the Vite dev server fails to come up). Without this step, every edit to src/
+# or public/ is invisible on those paths and the IDE silently runs yesterday's
+# bundle. `npm run build` already includes the typecheck.
+Write-Host '[INFO] Construyendo frontend (dist/) ...' -ForegroundColor Cyan
+& powershell -NoLogo -NoProfile -Command "Set-Location ide/frontend; npm run build"
+if($LASTEXITCODE -ne 0){ Write-Host '[ERR ] Frontend build falló' -ForegroundColor Red; exit 1 }
+Write-Host '[OK  ] dist/ actualizado' -ForegroundColor Green
+
 Write-Host '[INFO] Lanzando entorno Electron' -ForegroundColor Cyan
 if($Production){
   Write-Host '[INFO] Modo producción - sin hot reload' -ForegroundColor Green
-  # Asegurar que el frontend esté construido
-  Write-Host '[INFO] Construyendo frontend...' -ForegroundColor Cyan
-  & powershell -NoLogo -NoProfile -Command "Set-Location ide/frontend; npm run build"
-  if($LASTEXITCODE -ne 0){ Write-Host '[ERR ] Frontend build falló' -ForegroundColor Red; exit 1 }
-  # Ejecutar en modo producción
+  # dist/ ya está fresco arriba; ejecutar en modo producción
   & powershell -NoLogo -NoProfile -Command "Set-Location ide/electron; npm run start"
 } else {
   Write-Host '[INFO] Modo desarrollo - con hot reload' -ForegroundColor Yellow

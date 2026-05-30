@@ -59,11 +59,11 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
       console.log('[JsVecxCore] Original write8 function:', typeof this.inst.write8);
       const originalWrite8 = this.inst.write8.bind(this.inst);
       this.inst.write8 = (address: number, data: number) => {
-        // Interceptar escrituras al área de debug C000-C003 (unmapped gap)
-        if (address >= 0xC000 && address <= 0xC003) {
+        // Interceptar escrituras al área de debug C000-C004 (unmapped gap)
+        // Protocol: C000=val_lo C001=val_hi C002=label_hi C003=label_lo C004=marker
+        if (address >= 0xC000 && address <= 0xC004) {
           const debugAddr = address - 0xC000;
           this.debugRam[debugAddr] = data;
-          console.log(`[DEBUG-WRITE] Wrote ${data} to debug address C0${debugAddr.toString(16).padStart(2, '0').toUpperCase()}`);
           // No llamar originalWrite8 - es un gap, no hay RAM real aquí
           return;
         }
@@ -76,12 +76,10 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
         console.log('[JsVecxCore] Original read8 function:', typeof this.inst.read8);
         const originalRead8 = this.inst.read8.bind(this.inst);
         this.inst.read8 = (address: number) => {
-          // Interceptar lecturas del área de debug C000-C003
-          if (address >= 0xC000 && address <= 0xC003) {
+          // Interceptar lecturas del área de debug C000-C004
+          if (address >= 0xC000 && address <= 0xC004) {
             const debugAddr = address - 0xC000;
-            const value = this.debugRam[debugAddr] || 0xFF; // Leer del buffer interno
-            console.log(`[DEBUG-READ] Read ${value} from debug address C0${debugAddr.toString(16).padStart(2, '0').toUpperCase()}`);
-            return value;
+            return this.debugRam[debugAddr] || 0xFF; // Leer del buffer interno
           }
           // Para otras direcciones, usar la función original
           return originalRead8(address);

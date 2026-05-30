@@ -1,6 +1,6 @@
 META TITLE = "SNOW BROS"
 #META TARGET = vectrex
-META MAX_ENEMIES = 8
+META MAX_ENEMIES = 10
 META ROM_TOTAL_SIZE = 131072
 META ROM_BANK_SIZE = 16384
 
@@ -215,10 +215,10 @@ def state_game_start():
 
 # ── Estado: gameplay ─────────────────────────────────────────────────────────
 def state_playing():
-    time_left = time_left - 1
-    if time_left <= 0:
-        if INVINCIBLE == 0:
-            on_player_death()
+    # time_left = time_left - 1
+    # if time_left <= 0:
+    #     if INVINCIBLE == 0:
+    #         on_player_death()
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
@@ -228,33 +228,28 @@ def state_playing():
     update_frog_fire()
     update_frog_bullet()
     check_snowball_enemy_collision()
-    check_player_enemy_collision()
+    # check_player_enemy_collision()
 
     SET_CAMERA_Y(camera_y)
 
-    _t0 = GET_FRAME_US()
     draw_player()
-    _t1 = GET_FRAME_US()
     draw_snowballs()
     draw_frog_bullet()
-    _t2 = GET_FRAME_US()
     SET_INTENSITY(85)
     DRAW_ENEMIES()
-    _t3 = GET_FRAME_US()
     draw_hud()
-    enemy_count = count_active_enemies()
-    if enemy_count <= 0:
-        enter_level_clear()
+    # enemy_count = count_active_enemies()
+    # if enemy_count <= 0:
+    #     enter_level_clear()
     SHOW_LEVEL()
-    _t4 = GET_FRAME_US()
 
-    _dbg_ctr = _dbg_ctr + 1
-    if _dbg_ctr >= 10:
-        _dbg_ctr = 0
-        DEBUG_PRINT_LABELED(1, _t1 - _t0)
-        DEBUG_PRINT_LABELED(2, _t2 - _t1)
-        DEBUG_PRINT_LABELED(3, _t3 - _t2)
-        DEBUG_PRINT_LABELED(4, _t4 - _t3)
+    # _dbg_ctr = _dbg_ctr + 1
+    # if _dbg_ctr >= 10:
+    #     _dbg_ctr = 0
+    #     DEBUG_PRINT_LABELED(1, _t1 - _t0)
+    #     DEBUG_PRINT_LABELED(2, _t2 - _t1)
+    #     DEBUG_PRINT_LABELED(3, _t3 - _t2)
+    #     DEBUG_PRINT_LABELED(4, _t4 - _t3)
 
 # ── Estado: muerte del jugador ───────────────────────────────────────────────
 def state_player_dead():

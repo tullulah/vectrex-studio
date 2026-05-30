@@ -278,6 +278,12 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     asm.push_str("    ; Initialize global variables\n");
     asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    if crate::m6809::level::needs_level_runtime(module) {
+        asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init); LOAD_LEVEL must NOT reset it.\n");
+        asm.push_str("    LDD #0\n");
+        asm.push_str("    STD >CAMERA_X\n");
+        asm.push_str("    STD >CAMERA_Y\n");
+    }
     if has_print_calls(module) {
         asm.push_str("    LDA #$F8\n");
         asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
@@ -467,7 +473,35 @@ fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo
     Ok(())
 }
 
+/// If a statement's primary expression is a direct call to a builtin/native
+/// runtime function, return its name (for the `; NATIVE_CALL` debug annotation).
+fn primary_builtin_call(stmt: &Stmt) -> Option<&str> {
+    let expr = match stmt {
+        Stmt::Expr(e, _) => e,
+        Stmt::Assign { value, .. } => value,
+        Stmt::Let { value, .. } => value,
+        Stmt::CompoundAssign { value, .. } => value,
+        Stmt::Return(Some(e), _) => e,
+        _ => return None,
+    };
+    if let Expr::Call(call) = expr {
+        if crate::m6809::builtins::is_builtin(&call.name) {
+            return Some(&call.name);
+        }
+    }
+    None
+}
+
 fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_labels: &[(String, String)]) -> Result<(), String> {
+    // Debug annotations (Phase 9 PDB): map this statement's first emitted instruction
+    // back to its VPy source line, and flag native/builtin calls for step-into.
+    let src_line = stmt.source_line();
+    if src_line > 0 {
+        asm.push_str(&format!("; VPy_LINE:{}\n", src_line));
+        if let Some(name) = primary_builtin_call(stmt) {
+            asm.push_str(&format!("; NATIVE_CALL: {} at line {}\n", name.to_ascii_uppercase(), src_line));
+        }
+    }
     match stmt {
         Stmt::Assign { target, value, .. } => {
             match target {
@@ -728,6 +762,45 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             asm.push_str(&format!("{}: ; forin end\n", le));
         }
 
+        Stmt::For { var, start, end, step, body, .. } => {
+            let ls = fresh_label("FR");
+            let li = fresh_label("FR_INC");
+            let le = fresh_label("FR_END");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((le.clone(), li.clone()));
+
+            let var_label = format!("VAR_{}", var.to_uppercase());
+
+            // Init loop variable = start
+            expressions::emit_simple_expr(start, asm, assets);
+            asm.push_str(&format!("    STD >{}\n", var_label));
+
+            asm.push_str(&format!("{}: ; for start\n", ls));
+
+            // Condition: var < end
+            expressions::emit_simple_expr(end, asm, assets);
+            asm.push_str("    STD >TMPVAL         ; for limit\n");
+            asm.push_str(&format!("    LDD >{}\n", var_label));
+            asm.push_str("    CMPD >TMPVAL\n");
+            asm.push_str(&format!("    LBGE {}\n", le));
+
+            for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
+
+            asm.push_str(&format!("{}: ; for inc\n", li));
+            asm.push_str(&format!("    LDD >{}\n", var_label));
+            if let Some(step_expr) = step {
+                expressions::emit_simple_expr(step_expr, asm, assets);
+                asm.push_str("    STD >TMPVAL\n");
+                asm.push_str(&format!("    LDD >{}\n", var_label));
+                asm.push_str("    ADDD >TMPVAL\n");
+            } else {
+                asm.push_str("    ADDD #1\n");
+            }
+            asm.push_str(&format!("    STD >{}\n", var_label));
+            asm.push_str(&format!("    LBRA {}\n", ls));
+            asm.push_str(&format!("{}: ; for end\n", le));
+        }
+
         Stmt::Switch { expr, cases, default, .. } => {
             let le = fresh_label("SW_END");
 
@@ -813,6 +886,14 @@ pub fn generate_functions_by_bank(
     bank0_asm.push_str("    ; Initialize global variables\n");
     bank0_asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     bank0_asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    if crate::m6809::level::needs_level_runtime(module) {
+        bank0_asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init). LOAD_LEVEL must NOT\n");
+        bank0_asm.push_str("    ; reset it (matches pitrex): the game sets it via SET_CAMERA_Y before\n");
+        bank0_asm.push_str("    ; LOAD_LEVEL/SPAWN, and GET_LEVEL_FLOOR_Y / the spawn Y-filter read it.\n");
+        bank0_asm.push_str("    LDD #0\n");
+        bank0_asm.push_str("    STD >CAMERA_X\n");
+        bank0_asm.push_str("    STD >CAMERA_Y\n");
+    }
     if has_print_calls(module) {
         bank0_asm.push_str("    LDA #$F8\n");
         bank0_asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");

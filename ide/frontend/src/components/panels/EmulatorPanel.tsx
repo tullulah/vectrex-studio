@@ -956,9 +956,53 @@ export const EmulatorPanel: React.FC = () => {
         const debugStore = useDebugStore.getState();
         debugStore.setState('paused');
         debugStore.setCurrentAsmAddress(formatAddress(currentPC));
-        
-        // Map address → VPy line using helper
-        if (pdbData) {
+
+        // Bank-aware ASM navigation: open the ACTIVE bank's ASM file at the exact line.
+        // asmBankAddr is keyed "bank:ADDR" (multibank PC is bank-relative), asmBankFiles
+        // maps each bank to its ASM file (relative to the build dir / compiled binary).
+        let navigatedToAsm = false;
+        const pdb: any = pdbData;
+        if (pdb?.asmBankAddr && pdb?.asmBankFiles && lastCompiledBinary) {
+          const bank = (vecx.currentBank ?? 0);
+          const pcHex = (currentPC & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+          const asmLine = pdb.asmBankAddr[`${bank}:${pcHex}`];
+          const asmRel = pdb.asmBankFiles[String(bank)];
+          if (asmLine && asmRel) {
+            const binDir = lastCompiledBinary.substring(0, lastCompiledBinary.lastIndexOf('/'));
+            const asmPath = `${binDir}/${asmRel}`;
+            const asmUri = `file://${asmPath}`;
+            const editorStore = useEditorStore.getState();
+            const navigate = () => {
+              (window as any).asmDebuggingMode = true;
+              (window as any).asmDebuggingFile = asmUri;
+              editorStore.setActive(asmUri);
+              debugStore.setCurrentVpyLine(asmLine); // 1-based; highlight effect uses it directly
+              editorStore.gotoLocation(asmUri, asmLine - 1, 0); // vpy.goto adds +1
+              console.log(`[EmulatorPanel] ✓ ASM nav: bank ${bank} PC 0x${pcHex} → ${asmRel}:${asmLine}`);
+            };
+            const existing = editorStore.documents.find(d => d.uri === asmUri);
+            if (existing) {
+              navigate();
+              navigatedToAsm = true;
+            } else if ((window as any).files?.readFile) {
+              navigatedToAsm = true;
+              (window as any).files.readFile(asmPath).then((res: {content?: string; error?: string}) => {
+                if (res && !res.error && res.content) {
+                  editorStore.openDocument({ uri: asmUri, content: res.content, language: 'vpy', dirty: false, mtime: Date.now(), diagnostics: [] });
+                  navigate();
+                } else {
+                  console.warn(`[EmulatorPanel] ⚠️ Could not read ASM file ${asmPath}: ${res?.error}`);
+                }
+              });
+            }
+          } else {
+            console.log(`[EmulatorPanel] ⚠️ No asmBankAddr entry for bank ${bank} PC 0x${pcHex}`);
+          }
+        }
+
+        // Fall back to VPy line mapping only if we didn't navigate to ASM.
+        if (!navigatedToAsm && pdbData) {
+          (window as any).asmDebuggingMode = false;
           const vpyLine = asmAddressToVpyLine(currentPC, pdbData);
           if (vpyLine !== null) {
             debugStore.setCurrentVpyLine(vpyLine);
@@ -967,13 +1011,13 @@ export const EmulatorPanel: React.FC = () => {
             console.log(`[EmulatorPanel] ⚠️  No VPy line mapping for address ${formatAddress(currentPC)}`);
           }
         }
-        
+
         console.log('[EmulatorPanel] 🛑 Execution paused at breakpoint');
       }
     } catch (e) {
       console.error('[EmulatorPanel] Error checking breakpoint:', e);
     }
-  }, [debugState, pdbData]);
+  }, [debugState, pdbData, lastCompiledBinary]);
 
   // Phase 3: Setup breakpoint checking interval
   useEffect(() => {
@@ -1155,7 +1199,9 @@ export const EmulatorPanel: React.FC = () => {
             // Calculate target address (next line after current)
             const currentPC = vecx.e6809?.reg_pc;
             const stepOverPdbData = useDebugStore.getState().pdbData;
-            if (currentPC && stepOverPdbData) {
+            // PC === 0 is a valid address (e.g. multibank bank-relative entry of a
+            // function placed at the bank's start), so check for undefined, not truthiness.
+            if (currentPC !== undefined && stepOverPdbData) {
               // Get line address map for both single-bank and multibank formats
               const lineAddressMap = getLineAddressMap(stepOverPdbData);
               
@@ -1211,23 +1257,43 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-step-into':
           console.log('[EmulatorPanel] 🔽 Debug: Step into');
-          
-          const debugStoreForStepInto = useDebugStore.getState();
-          debugStoreForStepInto.setState('running');
-          
-          // FIXED (2026-01-11): Execute using JSVecx's built-in step mechanism
-          // Instead of manually looping, let JSVecx handle stepping properly
-          if (vecx.e6809 && vecx.debugStepInto) {
-            const currentPC = vecx.e6809.reg_pc;
-            const currentVpyLine = getCurrentVpyLineForPC(currentPC, debugStoreForStepInto.pdbData);
-            
-            console.log(`[EmulatorPanel] 📍 Single step from VPy line ${currentVpyLine}, PC ${formatAddress(currentPC)}`);
-            
-            // Execute ONE instruction and let the normal pause mechanism handle line updates
-            vecx.debugStepInto(false);
-            
-            // The emulator will pause after one step, and the 'debugger-paused' handler
-            // will update the current line based on the new PC
+          {
+            const debugStoreForStepInto = useDebugStore.getState();
+            debugStoreForStepInto.setState('running');
+
+            if (!vecx.e6809 || !vecx.debugStepInto) break;
+
+            // Step until PC maps to a *different* VPy source line. One M6809
+            // instruction is rarely enough — a function call may go through a
+            // cross-bank trampoline (JSR TRAMP_FOO → bank switch → JMP FOO) and
+            // a non-call statement may emit several instructions before the
+            // next line's address. We loop synchronously through vecx_emu's
+            // step mechanism (each debugStepInto runs 1 instruction and pauses)
+            // until PC sits on a mapped, different VPy line, with a safety cap.
+            const startPC = vecx.e6809.reg_pc;
+            const pdb = debugStoreForStepInto.pdbData;
+            const startLine = getCurrentVpyLineForPC(startPC, pdb);
+            console.log(`[EmulatorPanel] 📍 Step Into from VPy line ${startLine}, PC ${formatAddress(startPC)}`);
+
+            const MAX_STEP_INTO_INSTRUCTIONS = 10000;
+            let steps = 0;
+            let landed = false;
+            while (steps < MAX_STEP_INTO_INSTRUCTIONS) {
+              vecx.debugStepInto(false); // runs 1 instruction synchronously
+              steps++;
+              const newPC = vecx.e6809.reg_pc;
+              const newLine = getCurrentVpyLineForPC(newPC, pdb);
+              if (newLine !== null && newLine !== startLine) {
+                console.log(`[EmulatorPanel] 🎯 Step Into landed at VPy line ${newLine}, PC ${formatAddress(newPC)} (${steps} instructions)`);
+                landed = true;
+                break;
+              }
+            }
+            if (!landed) {
+              console.warn(`[EmulatorPanel] ⚠️ Step Into hit safety cap (${MAX_STEP_INTO_INSTRUCTIONS} instructions) without reaching a new mapped line`);
+            }
+            // vecx posts 'debugger-paused' from the final debugStepInto;
+            // the handler will pick up the final PC and update the UI.
           }
           break;
           
@@ -2210,10 +2276,11 @@ export const EmulatorPanel: React.FC = () => {
       // Clear opcode trace on reset
       if (win.clearOpcodeTrace) {
         win.clearOpcodeTrace();
-        win.OPCODE_TRACE_MAX = 5000;
+        // Large trace to capture bank-switch transitions before code-into-data crashes.
+        win.OPCODE_TRACE_MAX = 50000;
         // Only enable full trace if explicitly requested (not by default)
         // win.OPCODE_TRACE_FULL = true;
-        console.log('[EmulatorPanel] 🧹 Opcode trace cleared on reset');
+        console.log('[EmulatorPanel] 🧹 Opcode trace cleared on reset (max=50000)');
       }
 
       // Delete previous .stack on reset (if we know where the .bin is)
@@ -2448,14 +2515,18 @@ export const EmulatorPanel: React.FC = () => {
                   // Clear opcode trace and set ROM name for .stack file generation
                   if ((window as any).clearOpcodeTrace) {
                     (window as any).clearOpcodeTrace();
-                    // Bigger trace to capture the real jump into RAM/garbage
-                    (window as any).OPCODE_TRACE_MAX = 5000;
+                    // Large trace to capture bank-switch transitions and the real
+                    // jump into RAM/garbage. e6809.js's default is also 50000;
+                    // we set the window override explicitly so the value is the
+                    // same regardless of whether code reads the global or the
+                    // window property.
+                    (window as any).OPCODE_TRACE_MAX = 50000;
                     // Full trace streaming to disk (.trace next to binary)
                     // Only enable if explicitly set via --enable-tracebin flag
                     // (window as any).OPCODE_TRACE_FULL = true;
                     (window as any).CURRENT_ROM_NAME = romName + '.bin';
                     (window as any).CURRENT_ROM_PATH = lastCompiledBinary;
-                    console.log('[EmulatorPanel] 🧹 Opcode trace cleared for:', romName + '.bin');
+                    console.log('[EmulatorPanel] 🧹 Opcode trace cleared for:', romName + '.bin', 'path:', lastCompiledBinary);
                   }
                   
                   // CRITICAL: Initialize debugState to 'running' when loading binary
@@ -2891,6 +2962,14 @@ export const EmulatorPanel: React.FC = () => {
         setShowPitrexOverlay(false);
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         setLoadedROM(`Compiled - ${romName}`);
+
+        // Tell the emulator's crash trace where to save .stack files. Without
+        // this, dumpOpcodeTrace() in e6809.js sees CURRENT_ROM_PATH=null and
+        // silently skips the save — the only place this used to be set was a
+        // different load path (file-API reload), not the Build+Run path here.
+        (window as any).CURRENT_ROM_PATH = payload.binPath;
+        (window as any).CURRENT_ROM_NAME = romName + '.bin';
+        console.log('[EmulatorPanel] 📍 CURRENT_ROM_PATH set for crash-trace saves:', payload.binPath);
         
         // Dispatch event para notificar a otros paneles (ej: MemoryPanel recarga PDB)
         // Si tenemos pdbData, pasarlo en el evento

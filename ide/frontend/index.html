@@ -45,15 +45,43 @@
         window.lastDebugValue = 0xFF;
         window.pollFrameCount = 0;
         
-        // Intercept write8 for debug area (C000-C00F)
+        // Read a label/string from cart memory at the given pointer (current bank).
+        window.readDebugStr = function(ptr) {
+            let s = '';
+            for (let i = 0; i < 32; i++) {
+                const ch = vecx.read8(ptr + i);
+                if (ch === 0 || ch === 0x80 || (ch & 0x80)) break; // null / Vectrex terminator
+                s += String.fromCharCode(ch);
+            }
+            return s;
+        };
+
+        // Intercept write8 for debug area (C000-C00F).
+        // Protocol (matches m6809/debug.rs): C000=val_lo C002=val_hi C004/C005=label_ptr,
+        // C001=marker written LAST ($FE labeled, $42 simple). We commit synchronously on
+        // the marker write so every DEBUG_PRINT call is captured (no per-frame race).
         if (vecx.write8) {
             const originalWrite8 = vecx.write8.bind(vecx);
             vecx.write8 = function(address, data) {
-                // Intercept writes to debug gap C000-C00F
                 if (address >= 0xC000 && address <= 0xC00F) {
                     const debugAddr = address - 0xC000;
                     window.debugRam[debugAddr] = data;
-                    console.log(`%c[DEBUG-WRITE] 📝 C0${debugAddr.toString(16).toUpperCase()}=${data.toString(16).padStart(2,'0')} (${data})`, 'background: #080; color: #0f0; font-weight: bold');
+                    // Commit on the marker write (C001 = address offset 1)
+                    if (debugAddr === 1 && (data === 0xFE || data === 0x42)) {
+                        const valLo = window.debugRam[0] || 0;
+                        const valHi = window.debugRam[2] || 0;
+                        let val = (valHi << 8) | valLo;
+                        if (val > 0x7FFF) val -= 0x10000; // signed 16-bit
+                        if (data === 0xFE) {
+                            const labelPtr = ((window.debugRam[4] || 0) << 8) | (window.debugRam[5] || 0);
+                            const label = labelPtr ? window.readDebugStr(labelPtr) : '';
+                            if (label) window.debugVariables[label] = val;
+                            else window.debugMessages.push('DEBUG: ' + val);
+                        } else {
+                            window.debugMessages.push('DEBUG: ' + val);
+                        }
+                        window.debugRam[1] = 0; // consume marker so the frame poll won't re-process
+                    }
                     return; // Don't call original - this is unmapped gap
                 }
                 return originalWrite8(address, data);

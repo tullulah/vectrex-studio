@@ -1784,7 +1784,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
             );
             
             match linker.generate_multibank_rom(&asm_path, &output_path_mb) {
-                Ok(_symbol_table) => {
+                Ok(symbol_table) => {
                     println!("  {} Phase 6.7 SUCCESS: Multi-bank binary written to {}",
                         "✓".green(), output_path_mb.display());
                     println!("     Total size: {} KB ({} banks × {} KB)",
@@ -1801,9 +1801,19 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                             .join("multibank_temp")
                             .join("bank_00_full.asm");
                         let pdb_path = output_path_mb.with_extension("pdb");
+                        let func_lines: Vec<(String, usize)> = unified.items.iter().filter_map(|it| {
+                            if let vpy_parser::Item::Function(f) = it {
+                                Some((f.name.to_uppercase(), f.line))
+                            } else { None }
+                        }).collect();
+                        let bank_asms = collect_bank_asms(flat_asm_path.parent()
+                            .unwrap_or_else(|| std::path::Path::new(".")));
+                        // Use the entry .vpy file name (not project name) so the IDE opens the
+                        // correct source tab when a breakpoint hits.
+                        let src_name = format!("{}.vpy", entry_module_name);
                         match std::fs::read_to_string(&flat_asm_path) {
                             Ok(flat_asm) => {
-                                match generate_pdb(&flat_asm, &project_name, &pdb_path) {
+                                match generate_pdb(&flat_asm, &src_name, &pdb_path, &symbol_table, &func_lines, &bank_asms) {
                                     Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
                                     Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
                                 }
@@ -2043,7 +2053,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         );
         
         match linker.generate_multibank_rom(&asm_path, &output_path_mb) {
-            Ok(_symbol_table) => {
+            Ok(symbol_table) => {
                 println!("  {} Phase 6.7 SUCCESS: Multi-bank binary written to {}",
                     "✓".green(), output_path_mb.display());
                 println!("     Total size: {} KB ({} banks × {} KB)",
@@ -2059,9 +2069,19 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                         .join("multibank_temp")
                         .join("bank_00_full.asm");
                     let pdb_path = output_path_mb.with_extension("pdb");
+                    let func_lines: Vec<(String, usize)> = module.items.iter().filter_map(|it| {
+                        if let vpy_parser::Item::Function(f) = it {
+                            Some((f.name.to_uppercase(), f.line))
+                        } else { None }
+                    }).collect();
+                    let bank_asms = collect_bank_asms(flat_asm_path.parent()
+                        .unwrap_or_else(|| std::path::Path::new(".")));
+                    // Use the entry .vpy file name (not project name) so the IDE opens the
+                    // correct source tab when a breakpoint hits.
+                    let src_name = source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy");
                     match std::fs::read_to_string(&flat_asm_path) {
                         Ok(flat_asm) => {
-                            match generate_pdb(&flat_asm, &project_name, &pdb_path) {
+                            match generate_pdb(&flat_asm, src_name, &pdb_path, &symbol_table, &func_lines, &bank_asms) {
                                 Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
                                 Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
                             }
@@ -2146,7 +2166,17 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
     {
         println!("\n{}", "Phase 9: Generating debug symbols...".bright_cyan());
         let pdb_path = output_path.with_extension("pdb");
-        match generate_pdb(&generated.asm_source, source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy"), &pdb_path) {
+        // Real symbol addresses from the linker (single-bank: offset == bank-relative PC).
+        let sb_syms: std::collections::BTreeMap<String, u16> = rom.symbols.iter()
+            .map(|(name, loc)| (name.clone(), loc.offset))
+            .collect();
+        // Function name → VPy definition line, for vpyLineMap breakpoint resolution.
+        let sb_funcs: Vec<(String, usize)> = module.items.iter().filter_map(|it| {
+            if let vpy_parser::Item::Function(f) = it {
+                Some((f.name.to_uppercase(), f.line))
+            } else { None }
+        }).collect();
+        match generate_pdb(&generated.asm_source, source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy"), &pdb_path, &sb_syms, &sb_funcs, &[]) {
             Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
             Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
         }
@@ -2166,19 +2196,58 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
 ///   - functions: lines matching `FUNC_NAME:` at start of line (not VAR_/EQU/FCB/FDB)
 ///   - labels: all other `LABEL:` definitions
 ///   - line map: `; VPy_LINE:N` annotations
+/// Collects per-bank full ASM files from a multibank_temp directory: returns
+/// (bank_id, file content, relative path) sorted by bank id, for `bank_NN_full.asm`.
+fn collect_bank_asms(temp_dir: &std::path::Path) -> Vec<(u8, String, String)> {
+    let mut out: Vec<(u8, String, String)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(temp_dir) {
+        for e in entries.flatten() {
+            let fname = e.file_name().to_string_lossy().to_string();
+            if let Some(rest) = fname.strip_prefix("bank_") {
+                if let Some(num) = rest.strip_suffix("_full.asm") {
+                    if let Ok(bank_id) = num.parse::<u8>() {
+                        if let Ok(content) = std::fs::read_to_string(e.path()) {
+                            out.push((bank_id, content, format!("multibank_temp/{}", fname)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.sort_by_key(|(b, _, _)| *b);
+    out
+}
+
 fn generate_pdb(
     asm_source: &str,
     source_name: &str,
     output_pdb_path: &std::path::Path,
+    // label name (UPPERCASE) -> bank-relative address (PC). From the linker (Phase 7).
+    symbol_table: &std::collections::BTreeMap<String, u16>,
+    // (UPPERCASE function name, VPy def line). From the parsed module.
+    func_lines: &[(String, usize)],
+    // Per-bank full ASM: (bank_id, file content, relative path). Each is assembled
+    // standalone to build a bank-aware line/address map (asmBankAddr) and the
+    // bank->file table (asmBankFiles) so the IDE opens the active bank's ASM on pause.
+    bank_asms: &[(u8, String, String)],
 ) -> std::io::Result<()> {
-    #[allow(unused_imports)]
-    use std::collections::HashMap as _HashMap;
+    use std::collections::HashMap;
 
+    // ── Output maps (IDE PdbData schema; see ide/frontend/src/state/debugStore.ts) ──
     let mut variables: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-    let mut functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-    let mut labels: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-    let mut vpy_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-    let mut asm_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // VPy fn -> {startLine,endLine,address,type}
+    let mut symbols: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();   // label -> "0xADDR"
+    let mut labels: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();    // non-VAR equate -> int
+    let mut line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();  // "vpyLine" -> "0xADDR" (VPy breakpoints)
+    let mut vpy_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "decAddr" -> {file,line,column} (PC→VPy)
+    let mut asm_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "0xADDR" -> {file,address,line} (PC→ASM)
+    let mut native_calls: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "vpyLine" -> "NAME"
+    let mut asm_functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // label -> {name,file,startLine,endLine,type}
+    let mut bios_symbols: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();  // BIOS name -> "0xADDR"
+    let mut asm_address_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_bank_addr: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_bank_files: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_file_field = serde_json::Value::Null;
 
     // EQU address parser: `NAME  EQU $BASE+$OFF` or `NAME  EQU $ADDR`
     let parse_equ_address = |line: &str| -> Option<u32> {
@@ -2188,7 +2257,6 @@ fn generate_pdb(
         let kw = it.next()?.to_uppercase();
         if kw != "EQU" { return None; }
         let rhs = it.next()?;
-        // Handle `$BASE+$OFF` or `$ADDR`
         if let Some((base, off)) = rhs.split_once('+') {
             let b = u32::from_str_radix(base.trim_start_matches('$'), 16).ok()?;
             let o = u32::from_str_radix(off.trim_start_matches('$'), 16).ok()?;
@@ -2197,95 +2265,225 @@ fn generate_pdb(
             u32::from_str_radix(rhs.trim_start_matches('$'), 16).ok()
         }
     };
-
-    // Size from comment: look for `(N bytes)` at end of comment
     let parse_comment_size = |line: &str| -> usize {
         let comment = line.split(';').nth(1).unwrap_or("");
         if let Some(bp) = comment.rfind(" bytes)") {
             let before = &comment[..bp];
             if let Some(pp) = before.rfind('(') {
-                if let Ok(n) = before[pp+1..].trim().parse::<usize>() {
-                    return n;
-                }
+                if let Ok(n) = before[pp+1..].trim().parse::<usize>() { return n; }
             }
         }
-        2 // default i16
+        2
     };
 
-    for (line_idx, line) in asm_source.lines().enumerate() {
+    // ── Variables + equate labels (from the unified ASM text) ──
+    for line in asm_source.lines() {
         let trimmed = line.trim();
-
-        // VPy line annotation: `; VPy_LINE:N`
-        if trimmed.starts_with("; VPy_LINE:") {
-            if let Ok(vpy_n) = trimmed["// VPy_LINE:".len()..].trim().parse::<u32>()
-                .or_else(|_| trimmed["; VPy_LINE:".len()..].trim().parse::<u32>()) {
-                let asm_key = line_idx.to_string();
-                let vpy_key = vpy_n.to_string();
-                vpy_line_map.insert(vpy_key.clone(), serde_json::Value::Number(line_idx.into()));
-                asm_line_map.insert(asm_key, serde_json::Value::Number(vpy_n.into()));
-            }
-            continue;
-        }
-
         let code = trimmed.split(';').next().unwrap_or("").trim();
-
-        // EQU lines
-        if code.to_uppercase().contains(" EQU ") {
-            let mut it = code.split_whitespace();
-            if let Some(name) = it.next() {
-                if let Some(addr) = parse_equ_address(trimmed) {
-                    if name.starts_with("VAR_") {
-                        let size = parse_comment_size(trimmed);
-                        let clean = name.strip_prefix("VAR_").unwrap_or(name).to_lowercase();
-                        let var_type = if line.contains("system") || line.contains("System") {
-                            "system"
-                        } else if line.contains("array") || name.contains("_DATA") {
-                            "array"
-                        } else {
-                            "unknown"
-                        };
-                        variables.insert(clean.clone(), serde_json::json!({
-                            "name": clean,
-                            "address": format!("0x{:04X}", addr),
-                            "size": size,
-                            "type": var_type,
-                            "declLine": null
-                        }));
-                    } else if !name.starts_with("_") {
-                        labels.insert(name.to_string(), serde_json::Value::Number(addr.into()));
-                    }
-                }
-            }
-            continue;
+        if !code.to_uppercase().contains(" EQU ") { continue; }
+        let Some(name) = code.split_whitespace().next() else { continue };
+        let Some(addr) = parse_equ_address(trimmed) else { continue };
+        if name.starts_with("VAR_") {
+            let size = parse_comment_size(trimmed);
+            let clean = name.strip_prefix("VAR_").unwrap_or(name).to_lowercase();
+            let var_type = if line.contains("system") || line.contains("System") { "system" }
+                else if line.contains("array") || name.contains("_DATA") { "array" }
+                else { "unknown" };
+            variables.insert(clean.clone(), serde_json::json!({
+                "name": clean, "address": format!("0x{:04X}", addr),
+                "size": size, "type": var_type, "declLine": null
+            }));
+        } else if !name.starts_with('_') {
+            labels.insert(name.to_string(), serde_json::Value::Number(addr.into()));
         }
+    }
 
-        // Label definitions (no EQU): `LABEL_NAME:` at start
-        if let Some(label) = code.strip_suffix(':') {
-            let label = label.trim();
-            if !label.is_empty() && !label.contains(' ') && !label.starts_with('.') {
-                // Likely a function if uppercase and not VAR_
-                let up = label.to_uppercase();
-                if up == label && !label.starts_with("VAR_") {
-                    functions.insert(label.to_string(), serde_json::Value::Number(0.into()));
+    // ── Symbols: every linker-resolved label -> "0xADDR" ──
+    for (name, addr) in symbol_table {
+        symbols.insert(name.clone(), serde_json::Value::String(format!("0x{:04X}", addr)));
+    }
+
+    // ── BIOS symbols from VECTREX.I (NAME EQU/SET $XXXX) ──
+    {
+        let inc = resolve_include_dir();
+        if let Ok(content) = std::fs::read_to_string(inc.join("VECTREX.I")) {
+            for l in content.lines() {
+                let code = l.split(';').next().unwrap_or("").split('*').next().unwrap_or("");
+                let mut it = code.split_whitespace();
+                if let (Some(name), Some(kw), Some(val)) = (it.next(), it.next(), it.next()) {
+                    let kw = kw.to_ascii_uppercase();
+                    if kw == "EQU" || kw == "SET" {
+                        let v = val.trim();
+                        let parsed = if let Some(h) = v.strip_prefix('$') {
+                            u32::from_str_radix(h, 16).ok()
+                        } else if let Some(h) = v.strip_prefix("0x").or_else(|| v.strip_prefix("0X")) {
+                            u32::from_str_radix(h, 16).ok()
+                        } else { v.parse::<u32>().ok() };
+                        if let Some(a) = parsed {
+                            bios_symbols.insert(name.to_string(), serde_json::Value::String(format!("0x{:04X}", a)));
+                        }
+                    }
                 }
             }
         }
     }
 
+    // ── VPy functions: name -> {startLine,endLine,address,type} ──
+    {
+        let mut sorted: Vec<(usize, &str)> = func_lines.iter().map(|(n, l)| (*l, n.as_str())).collect();
+        sorted.sort();
+        for (i, (def_line, uname)) in sorted.iter().enumerate() {
+            // VPy `loop()` compiles to the label `LOOP_BODY`, not `LOOP`; fall back to `<NAME>_BODY`.
+            let addr = symbol_table.get(*uname)
+                .or_else(|| symbol_table.get(&format!("{}_BODY", uname)))
+                .copied().unwrap_or(0);
+            let end_line = if i + 1 < sorted.len() { sorted[i + 1].0.saturating_sub(1) } else { def_line + 1 };
+            functions.insert(uname.to_string(), serde_json::json!({
+                "address": format!("0x{:04X}", addr),
+                "startLine": def_line, "endLine": end_line, "type": "vpy"
+            }));
+        }
+    }
+
+    // ── Seed the re-assembler so each unit resolves operands (linker labels + EQUs) ──
+    let mut seed_equates: HashMap<String, u16> = HashMap::new();
+    for (name, addr) in symbol_table { seed_equates.insert(name.clone(), *addr); }
+    for line in asm_source.lines() {
+        let t = line.trim();
+        if t.to_uppercase().contains(" EQU ") {
+            if let Some(name) = t.split_whitespace().next() {
+                if let Some(addr) = parse_equ_address(t) { seed_equates.insert(name.to_string(), addr as u16); }
+            }
+        }
+    }
+
+    // Units to assemble: single-bank = one (asm_source); multibank = each bank file.
+    let asm_name = source_name.replace(".vpy", ".asm");
+    let units: Vec<(&str, u16, Option<u8>, String)> = if bank_asms.is_empty() {
+        asm_file_field = serde_json::Value::String(asm_name.clone());
+        vec![(asm_source, 0x0000u16, None, asm_name.clone())]
+    } else {
+        bank_asms.iter().map(|(b, c, rel)| {
+            let org = if c.contains("ORG $4000") { 0x4000u16 } else { 0x0000u16 };
+            (c.as_str(), org, Some(*b), rel.clone())
+        }).collect()
+    };
+
+    for (text, org, bank_opt, file_rel) in &units {
+        let line_to_addr = match vpy_assembler::m6809::asm_to_binary::assemble_m6809_seeded(text, *org, true, false, &seed_equates) {
+            Ok((_bin, map, _syms, _unresolved)) => map,
+            Err(e) => { eprintln!("  ⚠ PDB asm map skipped for {}: {}", file_rel, e); continue; }
+        };
+
+        // asmAddressMap (single) / asmBankAddr (multi) + asmLineMap (PC→ASM)
+        for (asm_line, addr) in &line_to_addr {
+            let a = *addr as u16;
+            let key = format!("0x{:04X}", a);
+            match bank_opt {
+                Some(b) => { asm_bank_addr.insert(format!("{}:{:04X}", b, a), serde_json::Value::Number((*asm_line as u64).into())); }
+                None => {
+                    asm_address_map.insert(asm_line.to_string(), serde_json::Value::String(format!("{:04X}", a)));
+                    // asmLineMap (PC→ASM) is single-bank only: bank-relative addresses
+                    // collide across banks, so multibank uses asmBankAddr/asmBankFiles instead.
+                    asm_line_map.entry(key.clone()).or_insert_with(|| {
+                        let mut o = serde_json::Map::new();
+                        o.insert("file".into(), serde_json::Value::String(file_rel.clone()));
+                        o.insert("address".into(), serde_json::Value::String(key.clone()));
+                        o.insert("line".into(), serde_json::Value::Number((*asm_line as u64).into()));
+                        serde_json::Value::Object(o)
+                    });
+                }
+            }
+        }
+        if let Some(b) = bank_opt { asm_bank_files.insert(b.to_string(), serde_json::Value::String(file_rel.clone())); }
+
+        // Per-statement VPy↔ASM + native-call scan. Runs for every unit/bank: the
+        // VPy_LINE annotations survive into each bank's full ASM, so multibank gets
+        // statement-granularity breakpoints too. Banks are scanned in ascending order
+        // and first-writer wins, so a bank-relative address that collides across banks
+        // keeps the lower bank's (user code lives in the low banks).
+        // The physical line counter must match the assembler (1-based, every line).
+        {
+            let mut pending_vpy: Option<u32> = None;
+            let mut phys = 0usize;
+            let mut label_lines: Vec<(String, usize)> = Vec::new();
+            for raw in text.lines() {
+                phys += 1;
+                let t = raw.trim();
+                if let Some(rest) = t.strip_prefix("; VPy_LINE:") {
+                    if let Ok(n) = rest.trim().parse::<u32>() { pending_vpy = Some(n); }
+                    continue;
+                }
+                if let Some(rest) = t.strip_prefix("; NATIVE_CALL:") {
+                    if let Some((name, ln)) = rest.trim().split_once(" at line ") {
+                        if let Ok(n) = ln.trim().parse::<u32>() {
+                            native_calls.entry(n.to_string())
+                                .or_insert_with(|| serde_json::Value::String(name.trim().to_string()));
+                        }
+                    }
+                    continue;
+                }
+                // Track label defs for asmFunctions.
+                let code = t.split(';').next().unwrap_or("").trim();
+                if let Some(lbl) = code.strip_suffix(':') {
+                    let lbl = lbl.trim();
+                    if !lbl.is_empty() && !lbl.contains(' ') && !lbl.starts_with('.') {
+                        label_lines.push((lbl.to_string(), phys));
+                    }
+                }
+                // First addressed line after a VPy_LINE marker binds that VPy line.
+                if let Some(n) = pending_vpy {
+                    if let Some(addr) = line_to_addr.get(&phys) {
+                        let a = *addr as u16;
+                        let hex = format!("0x{:04X}", a);
+                        line_map.entry(n.to_string()).or_insert_with(|| serde_json::Value::String(hex.clone()));
+                        vpy_line_map.entry(a.to_string()) // decimal-addr key (IDE PC→VPy lookup)
+                            .or_insert_with(|| serde_json::json!({ "file": source_name, "line": n, "column": 0 }));
+                        pending_vpy = None;
+                    }
+                }
+            }
+            // asmFunctions: single-bank only (multibank PC→ASM uses asmBankAddr).
+            if bank_opt.is_none() {
+                for (i, (name, start)) in label_lines.iter().enumerate() {
+                    let end = if i + 1 < label_lines.len() { label_lines[i + 1].1.saturating_sub(1) } else { *start };
+                    let ty = if bios_symbols.contains_key(name) { "bios" }
+                        else if func_lines.iter().any(|(u, _)| u == &name.to_uppercase()) { "vpy" }
+                        else { "native" };
+                    asm_functions.entry(name.clone()).or_insert_with(|| serde_json::json!({
+                        "name": name, "file": file_rel, "startLine": start, "endLine": end, "type": ty
+                    }));
+                }
+            }
+        }
+    }
+
+    // Multibank: point pdb.asm at bank 0's file as a default.
+    if !bank_asms.is_empty() {
+        if let Some(b0) = asm_bank_files.get("0") { asm_file_field = b0.clone(); }
+    }
+
+    let entry = symbol_table.get("START").or_else(|| symbol_table.get("MAIN")).copied().unwrap_or(0);
+
     let pdb = serde_json::json!({
         "version": "2.0",
         "source": source_name,
+        "asm": asm_file_field,
+        "binary": source_name.replace(".vpy", ".bin"),
+        "entry_point": format!("0x{:04X}", entry),
+        "symbols": symbols,
         "variables": variables,
         "functions": functions,
         "labels": labels,
+        "lineMap": line_map,
         "vpyLineMap": vpy_line_map,
         "asmLineMap": asm_line_map,
-        "lineMap": {},
-        "symbols": {},
-        "nativeCalls": {},
-        "asmFunctions": {},
-        "asmAddressMap": {},
-        "bios_symbols": {}
+        "asmAddressMap": asm_address_map,
+        "asmBankAddr": asm_bank_addr,
+        "asmBankFiles": asm_bank_files,
+        "asmFunctions": asm_functions,
+        "nativeCalls": native_calls,
+        "bios_symbols": bios_symbols
     });
 
     let json_str = serde_json::to_string_pretty(&pdb)

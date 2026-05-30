@@ -13,8 +13,10 @@ static GLFY_COUNTER: AtomicUsize = AtomicUsize::new(0);
 pub fn needs_level_runtime(module: &Module) -> bool {
     fn check_expr(expr: &Expr) -> bool {
         if let Expr::Call(c) = expr {
+            // GET_LEVEL_FLOOR_Y must also pull in the runtime block — its multibank
+            // path is a JSR to a helper emitted alongside the other LEVEL_*_RUNTIMEs.
             matches!(c.name.as_str(),
-                "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "LEVEL_COLLISION_Y" | "LEVEL_COLLISION_X")
+                "LOAD_LEVEL" | "SHOW_LEVEL" | "UPDATE_LEVEL" | "LEVEL_COLLISION_Y" | "LEVEL_COLLISION_X" | "GET_LEVEL_FLOOR_Y")
         } else { false }
     }
     fn check_stmt(stmt: &Stmt) -> bool {
@@ -228,19 +230,33 @@ pub fn emit_get_scroll_limit_bottom(_args: &[Expr], out: &mut String) {
 
 /// Emit GET_LEVEL_FLOOR_Y() → CAMERA_Y - 128 + groundBottomOffset (level header +32).
 /// Mirrors pitrex_get_level_floor_y so cross-target code can share spawn math.
+///
+/// MULTIBANK: emits a JSR to GET_LEVEL_FLOOR_Y_RUNTIME (in the fixed helpers bank).
+/// Inlining the bank-switch sequence at the call site is UNSAFE because the call
+/// site lives in a switchable bank — `STA $DF00` flips the mapped bank
+/// underneath PC's own code fetches and the very next instruction executes from
+/// the wrong bank (level-data bytes interpreted as code → invalid opcode crash).
+/// The runtime helper sits at $4000+ which is the fixed helpers bank, so bank
+/// switching from there is safe (PC's code fetches never come from $0000-$3FFF).
 pub fn emit_get_level_floor_y(_args: &[Expr], out: &mut String) {
-    let n = GLFY_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let skip = format!("GLFY_SKIP_{}", n);
     out.push_str("    ; ===== GET_LEVEL_FLOOR_Y builtin =====\n");
-    out.push_str("    LDX >LEVEL_PTR\n");
-    out.push_str("    LDD #0              ; default offset = 0 if no level\n");
-    out.push_str("    CMPX #0\n");
-    out.push_str(&format!("    BEQ {}          ; no level loaded — keep offset 0\n", skip));
-    out.push_str("    LDD 32,X            ; groundBottomOffset FDB at header +32\n");
-    out.push_str(&format!("{}:\n", skip));
-    out.push_str("    ADDD >CAMERA_Y      ; + camera_y\n");
-    out.push_str("    SUBD #128           ; - 128 (half screen height)\n");
-    out.push_str("    STD RESULT\n");
+    if crate::m6809::builtins::use_banked_assets() {
+        // Single instruction: helper does all the work in helpers bank.
+        out.push_str("    JSR GET_LEVEL_FLOOR_Y_RUNTIME\n");
+    } else {
+        // Single-bank: safe to inline (no bank switching at all).
+        let n = GLFY_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let skip = format!("GLFY_SKIP_{}", n);
+        out.push_str("    LDX >LEVEL_PTR\n");
+        out.push_str("    LDD #0              ; default offset = 0 if no level\n");
+        out.push_str("    CMPX #0\n");
+        out.push_str(&format!("    BEQ {}          ; no level loaded — keep offset 0\n", skip));
+        out.push_str("    LDD 32,X            ; groundBottomOffset FDB at header +32\n");
+        out.push_str(&format!("{}:\n", skip));
+        out.push_str("    ADDD >CAMERA_Y      ; + camera_y\n");
+        out.push_str("    SUBD #128           ; - 128 (half screen height)\n");
+        out.push_str("    STD RESULT\n");
+    }
 }
 
 /// Emit GET_FRAME_US() → stub. The Vectrex has no µs hardware timer accessible
@@ -324,6 +340,40 @@ pub fn emit_level_collision_x(args: &[Expr], out: &mut String, assets: &[crate::
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
 
     // =========================================================================
+    // GET_LEVEL_FLOOR_Y_RUNTIME — multibank only
+    // =========================================================================
+    // Read groundBottomOffset (FDB at level header +32) and compute the floor
+    // screen-Y. Lives in helpers bank ($4000+, fixed) so STA $DF00 here never
+    // affects PC's own code fetches. Callers in switchable banks `JSR` to this
+    // helper instead of inlining the bank-switch sequence (which would flip the
+    // bank under their own PC and execute level-data bytes as code).
+    if needed.contains("GET_LEVEL_FLOOR_Y_RUNTIME") && crate::m6809::builtins::use_banked_assets() {
+        out.push_str("; === GET_LEVEL_FLOOR_Y_RUNTIME (multibank) ===\n");
+        out.push_str("GET_LEVEL_FLOOR_Y_RUNTIME:\n");
+        out.push_str("    LDX >LEVEL_PTR\n");
+        out.push_str("    LDD #0              ; default offset = 0 if no level\n");
+        out.push_str("    CMPX #0\n");
+        out.push_str("    BEQ GLFYR_NO_LEVEL  ; no level loaded — keep offset 0\n");
+        out.push_str("    LDA >CURRENT_ROM_BANK\n");
+        out.push_str("    PSHS A              ; save current bank\n");
+        out.push_str("    LDA >LEVEL_BANK\n");
+        out.push_str("    STA >CURRENT_ROM_BANK\n");
+        out.push_str("    STA $DF00           ; switch — safe: we're in fixed helpers bank\n");
+        out.push_str("    LDD 32,X            ; groundBottomOffset FDB at header +32\n");
+        out.push_str("    STD >TMPVAL         ; save across bank restore (PULS clobbers D's hi)\n");
+        out.push_str("    PULS A              ; restore original bank\n");
+        out.push_str("    STA >CURRENT_ROM_BANK\n");
+        out.push_str("    STA $DF00\n");
+        out.push_str("    LDD >TMPVAL\n");
+        out.push_str("GLFYR_NO_LEVEL:\n");
+        out.push_str("    ADDD >CAMERA_Y      ; + camera_y\n");
+        out.push_str("    SUBD #128           ; - 128 (half screen height)\n");
+        out.push_str("    STD RESULT\n");
+        out.push_str("    RTS\n");
+        out.push_str("\n");
+    }
+
+    // =========================================================================
     // LOAD_LEVEL_RUNTIME
     // =========================================================================
     if needed.contains("LOAD_LEVEL_RUNTIME") {
@@ -342,10 +392,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDA #1\n");
         out.push_str("    STA >LEVEL_LOADED    ; Mark level as loaded\n");
         out.push_str("    \n");
-        out.push_str("    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized\n");
-        out.push_str("    LDD #0\n");
-        out.push_str("    STD >CAMERA_X\n");
-        out.push_str("    STD >CAMERA_Y\n");
+        out.push_str("    ; Camera is NOT reset here (matches pitrex/rp2350). It is initialised once\n");
+        out.push_str("    ; at boot in MAIN; the game sets it via SET_CAMERA_Y before LOAD_LEVEL, and\n");
+        out.push_str("    ; GET_LEVEL_FLOOR_Y / the SPAWN_ENEMIES Y-filter read it after this call.\n");
         out.push_str("    \n");
         out.push_str("    ; Skip world bounds (8 bytes) + time/score (4 bytes)\n");
         out.push_str("    LEAX 12,X        ; X now points to object counts (+12)\n");
@@ -527,7 +576,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB >LEVEL_BG_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_GAMEPLAY\n");
-        out.push_str("    LDA #21          ; ROM object stride (stride-21)\n");
+        out.push_str("    LDA #23          ; ROM object stride (stride-23, +21-22 = coll_mesh_ptr)\n");
         out.push_str("    LDX >LEVEL_BG_ROM_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
@@ -538,7 +587,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_FOREGROUND\n");
-        out.push_str("    LDA #21          ; GP objects read from ROM (stride-21)\n");
+        out.push_str("    LDA #23          ; GP objects read from ROM (stride-23, +21-22 = coll_mesh_ptr)\n");
         out.push_str("    LDX >LEVEL_GP_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
@@ -549,7 +598,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB >LEVEL_FG_COUNT\n");
         out.push_str("    CMPB #0\n");
         out.push_str("    BEQ SLR_DONE\n");
-        out.push_str("    LDA #21          ; ROM object stride (stride-21)\n");
+        out.push_str("    LDA #23          ; ROM object stride (stride-23, +21-22 = coll_mesh_ptr)\n");
         out.push_str("    LDX >LEVEL_FG_ROM_PTR\n");
         out.push_str("    JSR SLR_DRAW_OBJECTS\n");
         out.push_str("    \n");
@@ -1334,7 +1383,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    STA 2,U          ; store back y (RAM +2)\n");
         out.push_str("    \n");
         out.push_str("UGFC_NEXT_FG:\n");
-        out.push_str("    LEAX 21,X        ; Next FG object (ROM stride 21)\n");
+        out.push_str("    LEAX 23,X        ; Next FG object (ROM stride 23)\n");
         out.push_str("    DECB\n");
         out.push_str("    LBRA UGFC_FG_LOOP\n");
         out.push_str("    \n");
@@ -1380,76 +1429,98 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    \n");
         out.push_str("    ; Check level loaded\n");
         out.push_str("    TST >LEVEL_LOADED\n");
-        out.push_str("    BEQ LCOL_Y_DONE\n");
+        out.push_str("    LBEQ LCOL_Y_DONE\n");
         out.push_str("    \n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
-        out.push_str("    BEQ LCOL_Y_DONE\n");
+        out.push_str("    LBEQ LCOL_Y_DONE\n");
+        out.push_str("    STB >LCOL_OBJ_CNT  ; GP objects remaining\n");
         out.push_str("    LDX >LEVEL_GP_PTR  ; X = ROM GP objects\n");
         out.push_str("    \n");
         out.push_str("LCOL_Y_LOOP:\n");
-        out.push_str("    TSTB\n");
-        out.push_str("    BEQ LCOL_Y_DONE\n");
-        out.push_str("    PSHS B           ; save count\n");
-        out.push_str("    \n");
-        out.push_str("    ; --- Check collision flag (bit 0 at ROM+12) ---\n");
+        out.push_str("    ; --- collision flag (bit 0 at ROM+12) ---\n");
         out.push_str("    LDA 12,X\n");
         out.push_str("    BITA #$01\n");
-        out.push_str("    BEQ LCOL_Y_NEXT  ; not collidable\n");
-        out.push_str("    \n");
-        out.push_str("    ; --- X AABB overlap: obj_x - hw <= player_x <= obj_x + hw ---\n");
-        out.push_str("    ; Compute left_edge = obj_x - hw (16-bit, ROM+1=x FDB, ROM+19=half_width stride-21)\n");
-        out.push_str("    LDD 1,X          ; D = world_x FDB (ROM+1-2)\n");
-        out.push_str("    SUBB 19,X        ; B = world_x_lo - half_width (ROM+19)\n");
-        out.push_str("    SBCA #0          ; A = world_x_hi - borrow\n");
-        out.push_str("    STD >TMPVAL      ; TMPVAL = left_edge\n");
-        out.push_str("    \n");
-        out.push_str("    ; Compare player_x >= left_edge (signed 16-bit)\n");
+        out.push_str("    LBEQ LCOL_Y_NEXT  ; not collidable\n");
+        out.push_str("    ; --- broadphase X: obj_x - hw <= player_x <= obj_x + hw ---\n");
+        out.push_str("    LDD 1,X          ; obj_x FDB (ROM+1)\n");
+        out.push_str("    SUBB 19,X        ; - half_width (ROM+19)\n");
+        out.push_str("    SBCA #0\n");
+        out.push_str("    STD >TMPVAL      ; left_edge\n");
         out.push_str("    LDD >LCOL_PX\n");
         out.push_str("    CMPD >TMPVAL\n");
-        out.push_str("    LBLT LCOL_Y_NEXT ; player_x < left_edge → no overlap\n");
-        out.push_str("    \n");
-        out.push_str("    ; Compute right_edge = obj_x + hw (16-bit)\n");
-        out.push_str("    LDD 1,X          ; D = world_x FDB\n");
-        out.push_str("    ADDB 19,X        ; B = world_x_lo + half_width (ROM+19)\n");
-        out.push_str("    ADCA #0          ; A = world_x_hi + carry\n");
-        out.push_str("    STD >TMPVAL      ; TMPVAL = right_edge\n");
-        out.push_str("    \n");
-        out.push_str("    ; Compare player_x <= right_edge (signed 16-bit)\n");
+        out.push_str("    LBLT LCOL_Y_NEXT ; player_x < left_edge\n");
+        out.push_str("    LDD 1,X\n");
+        out.push_str("    ADDB 19,X        ; + half_width\n");
+        out.push_str("    ADCA #0\n");
+        out.push_str("    STD >TMPVAL      ; right_edge\n");
         out.push_str("    LDD >LCOL_PX\n");
         out.push_str("    CMPD >TMPVAL\n");
-        out.push_str("    LBGT LCOL_Y_NEXT ; player_x > right_edge → no overlap\n");
+        out.push_str("    LBGT LCOL_Y_NEXT ; player_x > right_edge\n");
         out.push_str("    \n");
-        out.push_str("    ; --- X overlaps — compute surface_top = obj_y(16-bit) + half_height ---\n");
-        out.push_str("    LDD 3,X          ; D = world_y FDB (ROM+3-4, full 16-bit signed)\n");
-        out.push_str("    ADDB 20,X        ; B = world_y_lo + half_height (ROM+20, stride-21)\n");
-        out.push_str("    ADCA #0          ; propagate carry to high byte\n");
-        out.push_str("    STD >TMPVAL      ; TMPVAL = surface_top (16-bit)\n");
-        out.push_str("    ; Filter: skip surfaces above the player's feet (surface_top > player_feet)\n");
-        out.push_str("    ;   — player can only land on surfaces at or below their feet level.\n");
-        out.push_str("    CMPD >LCOL_PY    ; signed 16-bit compare surface_top vs player_feet\n");
-        out.push_str("    LBGT LCOL_Y_NEXT ; surface_top > player_feet → already passed below → skip\n");
-        out.push_str("    ; Compute landing Y = surface_top + player_half_height (16-bit)\n");
-        out.push_str("    LDD >TMPVAL      ; reload surface_top\n");
-        out.push_str("    ADDB >LCOL_PHH   ; add player_hh to low byte\n");
-        out.push_str("    ADCA #0          ; propagate carry\n");
-        out.push_str("    ; Update best_floor if this landing Y > current best (16-bit signed)\n");
+        out.push_str("    ; --- X overlaps. Ray-cast mesh if coll_mesh_ptr(ROM+21) != 0, else AABB ---\n");
+        out.push_str("    LDD 21,X         ; coll_mesh_ptr\n");
+        out.push_str("    LBEQ LCOL_Y_AABB\n");
+        out.push_str("    PSHS X           ; preserve object ptr across the segment walk\n");
+        out.push_str("    LDD >LCOL_PX\n");
+        out.push_str("    SUBD 1,X         ; local_px = player_x - obj_x\n");
+        out.push_str("    STD >LCOL_LOCAL_PX\n");
+        out.push_str("    LDD 3,X          ; obj world_y (ROM+3)\n");
+        out.push_str("    STD >LCOL_OBJ_Y\n");
+        out.push_str("    LDY 21,X         ; Y = mesh data ptr (level bank)\n");
+        out.push_str("    LDB 1,Y          ; floor_count low byte (FDB at mesh+0)\n");
+        out.push_str("    STB >LCOL_SEG_CNT\n");
+        out.push_str("    LEAY 2,Y         ; Y -> first floor segment\n");
+        out.push_str("LCOL_Y_SEG:\n");
+        out.push_str("    LDB >LCOL_SEG_CNT\n");
+        out.push_str("    BEQ LCOL_Y_SEG_DONE\n");
+        out.push_str("    ; floor segment: x1=,Y y1=2,Y x2=4,Y (y2=6,Y unused; y1==y2)\n");
+        out.push_str("    LDD >LCOL_LOCAL_PX\n");
+        out.push_str("    CMPD ,Y          ; local_px vs x1\n");
+        out.push_str("    BLT LCOL_Y_SEG_ADV ; local_px < x1 → off this segment\n");
+        out.push_str("    LDD >LCOL_LOCAL_PX\n");
+        out.push_str("    CMPD 4,Y         ; local_px vs x2\n");
+        out.push_str("    BGT LCOL_Y_SEG_ADV ; local_px > x2 → off this segment\n");
+        out.push_str("    LDD 2,Y          ; y1 (local)\n");
+        out.push_str("    ADDD >LCOL_OBJ_Y ; world_seg_y = y1 + obj_world_y\n");
+        out.push_str("    CMPD >LCOL_PY    ; vs player_feet\n");
+        out.push_str("    BGT LCOL_Y_SEG_ADV ; above feet → skip\n");
         out.push_str("    CMPD >LCOL_BEST_Y\n");
-        out.push_str("    BLE LCOL_Y_NEXT  ; not better\n");
-        out.push_str("    STD >LCOL_BEST_Y ; new best landing Y (16-bit)\n");
+        out.push_str("    BLE LCOL_Y_SEG_ADV ; not higher than best\n");
+        out.push_str("    STD >LCOL_BEST_Y ; new best floor top\n");
+        out.push_str("LCOL_Y_SEG_ADV:\n");
+        out.push_str("    LEAY 8,Y         ; next floor segment (4 FDB)\n");
+        out.push_str("    DEC >LCOL_SEG_CNT\n");
+        out.push_str("    BRA LCOL_Y_SEG\n");
+        out.push_str("LCOL_Y_SEG_DONE:\n");
+        out.push_str("    PULS X           ; restore object ptr\n");
+        out.push_str("    BRA LCOL_Y_NEXT\n");
+        out.push_str("    \n");
+        out.push_str("LCOL_Y_AABB:\n");
+        out.push_str("    ; AABB fallback: surface_top = obj_y(ROM+3) + half_height(ROM+20)\n");
+        out.push_str("    LDD 3,X\n");
+        out.push_str("    ADDB 20,X\n");
+        out.push_str("    ADCA #0\n");
+        out.push_str("    CMPD >LCOL_PY    ; vs player_feet\n");
+        out.push_str("    BGT LCOL_Y_NEXT  ; above feet → skip\n");
+        out.push_str("    CMPD >LCOL_BEST_Y\n");
+        out.push_str("    BLE LCOL_Y_NEXT  ; not higher\n");
+        out.push_str("    STD >LCOL_BEST_Y\n");
         out.push_str("    \n");
         out.push_str("LCOL_Y_NEXT:\n");
-        out.push_str("    LEAX 21,X        ; next ROM object (stride 21)\n");
-        out.push_str("    PULS B\n");
-        out.push_str("    DECB\n");
-        out.push_str("    BRA LCOL_Y_LOOP\n");
+        out.push_str("    LEAX 23,X        ; next ROM object (stride 23)\n");
+        out.push_str("    DEC >LCOL_OBJ_CNT\n");
+        out.push_str("    LBNE LCOL_Y_LOOP\n");
         out.push_str("    \n");
         out.push_str("LCOL_Y_DONE:\n");
-        out.push_str("    ; Return best_floor as RESULT (16-bit)\n");
+        out.push_str("    ; best holds floor_top (16-bit). Landing Y = floor_top + player_hh.\n");
         out.push_str("    LDD >LCOL_BEST_Y\n");
-        out.push_str("    ; If no floor found ($8000), return -128 for backward compat\n");
         out.push_str("    CMPD #$8000\n");
-        out.push_str("    BNE LCOL_Y_RET\n");
-        out.push_str("    LDD #$FF80       ; -128\n");
+        out.push_str("    BEQ LCOL_Y_NOFLOOR\n");
+        out.push_str("    ADDB >LCOL_PHH   ; + player_hh\n");
+        out.push_str("    ADCA #0\n");
+        out.push_str("    BRA LCOL_Y_RET\n");
+        out.push_str("LCOL_Y_NOFLOOR:\n");
+        out.push_str("    LDD #$FF80       ; -128 (no floor found)\n");
         out.push_str("LCOL_Y_RET:\n");
         out.push_str("    STD RESULT\n");
         if crate::m6809::builtins::use_banked_assets() {
@@ -1494,93 +1565,100 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LBEQ LCOL_X_DONE\n");
         out.push_str("    LDB >LEVEL_GP_COUNT\n");
         out.push_str("    LBEQ LCOL_X_DONE\n");
+        out.push_str("    STB >LCOL_OBJ_CNT  ; GP objects remaining\n");
         out.push_str("    LDX >LEVEL_GP_PTR\n");
         out.push_str("LCOL_X_LOOP:\n");
-        out.push_str("    TSTB\n");
-        out.push_str("    LBEQ LCOL_X_DONE\n");
-        out.push_str("    PSHS B\n");
-        // Collidable check
+        out.push_str("    ; collision flag (bit 0 at ROM+12)\n");
         out.push_str("    LDA 12,X\n");
         out.push_str("    BITA #$01\n");
         out.push_str("    LBEQ LCOL_X_NEXT\n");
-        // Y overlap (16-bit): |player_y - obj_y| < player_hh + obj_half_h
-        // Compute dy = player_y - obj_y (16-bit signed)
-        out.push_str("    LDD >LCOL_PY     ; D = player_y (16-bit)\n");
-        out.push_str("    SUBD 3,X         ; D = player_y - obj_y (16-bit, ROM+3-4)\n");
-        // Take absolute value of D (16-bit)
-        out.push_str("    BPL LCOL_X_DYPOS\n");
-        // Negate D: D = -D (complement + 1)
+        out.push_str("    ; coll_mesh_ptr (ROM+21); 0 = floor-only, no walls → no horizontal push\n");
+        out.push_str("    LDD 21,X\n");
+        out.push_str("    LBEQ LCOL_X_NEXT\n");
+        out.push_str("    ; cache obj_x / obj_y for local→world conversion (X stays = obj ptr)\n");
+        out.push_str("    LDD 1,X\n");
+        out.push_str("    STD >LCOL_LOCAL_PX  ; reuse scratch as obj_x\n");
+        out.push_str("    LDD 3,X\n");
+        out.push_str("    STD >LCOL_OBJ_Y     ; obj_y\n");
+        out.push_str("    ; navigate mesh: skip floor section to reach wall_count\n");
+        out.push_str("    LDD 21,X\n");
+        out.push_str("    TFR D,Y             ; Y = mesh ptr\n");
+        out.push_str("    LDD ,Y              ; floor_count (FDB)\n");
+        out.push_str("    ASLB\n");
+        out.push_str("    ROLA\n");
+        out.push_str("    ASLB\n");
+        out.push_str("    ROLA\n");
+        out.push_str("    ASLB\n");
+        out.push_str("    ROLA               ; D = floor_count * 8 (bytes per floor seg)\n");
+        out.push_str("    ADDD #2            ; + the floor_count word itself\n");
+        out.push_str("    LEAY D,Y           ; Y -> wall_count\n");
+        out.push_str("    LDD ,Y             ; wall_count (FDB)\n");
+        out.push_str("    STB >LCOL_SEG_CNT  ; low byte (walls are few)\n");
+        out.push_str("    LBEQ LCOL_X_NEXT   ; no walls\n");
+        out.push_str("    LEAY 2,Y           ; Y -> first wall segment\n");
+        out.push_str("LCOL_X_WALL:\n");
+        out.push_str("    LDB >LCOL_SEG_CNT\n");
+        out.push_str("    LBEQ LCOL_X_NEXT\n");
+        out.push_str("    ; wall segment: x=,Y ymin=2,Y ymax=6,Y (local coords)\n");
+        out.push_str("    LDD ,Y\n");
+        out.push_str("    ADDD >LCOL_LOCAL_PX ; world_wall_x = x + obj_x\n");
+        out.push_str("    STD >TMPVAL         ; TMPVAL = world_wall_x\n");
+        out.push_str("    ; Y-overlap lower bound: skip if py <= world_y_min - player_hh\n");
+        out.push_str("    LDD 2,Y\n");
+        out.push_str("    ADDD >LCOL_OBJ_Y    ; world_y_min\n");
+        out.push_str("    SUBB >LCOL_PHH\n");
+        out.push_str("    SBCA #0             ; world_y_min - player_hh\n");
+        out.push_str("    STD >TMPPTR\n");
+        out.push_str("    LDD >LCOL_PY\n");
+        out.push_str("    CMPD >TMPPTR\n");
+        out.push_str("    LBLE LCOL_X_WALL_ADV ; py below wall\n");
+        out.push_str("    ; Y-overlap upper bound: skip if py >= world_y_max + player_hh\n");
+        out.push_str("    LDD 6,Y\n");
+        out.push_str("    ADDD >LCOL_OBJ_Y    ; world_y_max\n");
+        out.push_str("    ADDB >LCOL_PHH\n");
+        out.push_str("    ADCA #0             ; world_y_max + player_hh\n");
+        out.push_str("    STD >TMPPTR\n");
+        out.push_str("    LDD >LCOL_PY\n");
+        out.push_str("    CMPD >TMPPTR\n");
+        out.push_str("    LBGE LCOL_X_WALL_ADV ; py above wall\n");
+        out.push_str("    ; X-overlap: dx_raw = px - world_wall_x\n");
+        out.push_str("    LDD >LCOL_PX\n");
+        out.push_str("    SUBD >TMPVAL\n");
+        out.push_str("    STD >TMPPTR         ; dx_raw (signed 16-bit; hi byte = sign)\n");
+        out.push_str("    BPL LCOL_X_DXP\n");
         out.push_str("    COMA\n");
         out.push_str("    COMB\n");
-        out.push_str("    ADDD #1\n");
-        out.push_str("LCOL_X_DYPOS:\n");
-        // D = |dy| (16-bit), compare with threshold (player_hh + obj_hh)
-        // For reasonable game objects, threshold fits in a byte, so check high byte first
-        out.push_str("    TSTA             ; if |dy| > 255, definitely no overlap\n");
-        out.push_str("    LBNE LCOL_X_NEXT\n");
-        // High byte is 0, so B = |dy| as byte. Compare with threshold.
-        out.push_str("    LDA 20,X         ; A = obj_half_height (ROM+20, stride-21)\n");
-        out.push_str("    ADDA >LCOL_PHH   ; A = threshold = obj_hh + player_hh\n");
-        out.push_str("    STB >TMPVAL      ; save |dy| lo byte\n");
-        out.push_str("    LDB >TMPVAL      ; B = |dy| lo byte\n");
-        out.push_str("    STA >TMPVAL+1    ; save threshold\n");
-        out.push_str("    CMPB >TMPVAL+1   ; |dy| vs threshold\n");
-        out.push_str("    LBGE LCOL_X_NEXT ; |dy| >= threshold → no Y overlap\n");
-        // total_hw = player_hw + obj_half_w (ROM+19, stride-21) → store in LCOL_THW
+        out.push_str("    ADDD #1             ; D = |dx_raw|\n");
+        out.push_str("LCOL_X_DXP:\n");
+        out.push_str("    TSTA\n");
+        out.push_str("    LBNE LCOL_X_WALL_ADV ; |dx| > 255 → no overlap\n");
+        out.push_str("    CMPB >LCOL_PHW\n");
+        out.push_str("    LBHS LCOL_X_WALL_ADV ; |dx| >= player_hw → no overlap\n");
+        out.push_str("    ; push_mag = player_hw - |dx|  (B = |dx|)\n");
         out.push_str("    LDA >LCOL_PHW\n");
-        out.push_str("    ADDA 19,X\n");      // obj_half_width at ROM+19 (stride-21)
-        out.push_str("    STA >LCOL_THW\n");
-        // left_edge = obj_x - total_hw (16-bit, ROM+1=x FDB)
-        out.push_str("    LDD 1,X\n");        // D = world_x FDB (ROM+1-2)
-        out.push_str("    SUBB >LCOL_THW\n");
-        out.push_str("    SBCA #0\n");
-        out.push_str("    STD >TMPVAL\n");
-        out.push_str("    LDD >LCOL_PX\n");
-        out.push_str("    CMPD >TMPVAL\n");
-        out.push_str("    LBLT LCOL_X_NEXT\n");
-        // right_edge = obj_x + total_hw (16-bit)
-        out.push_str("    LDD 1,X\n");        // D = world_x FDB (ROM+1-2)
-        out.push_str("    ADDB >LCOL_THW\n");
-        out.push_str("    ADCA #0\n");
-        out.push_str("    STD >TMPVAL\n");
-        out.push_str("    LDD >LCOL_PX\n");
-        out.push_str("    CMPD >TMPVAL\n");
-        out.push_str("    LBGT LCOL_X_NEXT\n");
-        // Push-out: dx = player_x_lo - obj_x_lo (ROM+2 = x low byte)
-        out.push_str("    LDD >LCOL_PX\n");   // D = player_x
-        out.push_str("    SUBB 2,X\n");       // B = player_x_lo - obj_x_lo (ROM+2) = dx (signed)
-        out.push_str("    STB >TMPVAL\n");    // save signed dx for direction
-        out.push_str("    TSTB\n");
-        out.push_str("    BPL LCOL_X_DXABS\n");
-        out.push_str("    NEGB\n");           // B = |dx| (when dx was negative)
-        out.push_str("LCOL_X_DXABS:\n");
-        // B = |dx|; compute push_magnitude = total_hw - |dx| via NEGB + ADDB
-        out.push_str("    NEGB\n");           // B = -|dx|
-        out.push_str("    ADDB >LCOL_THW\n"); // B = total_hw - |dx| = push_magnitude
-        // A = push_magnitude (from TFR B,A above), B = push_magnitude (unchanged)
-        // Load dx sign into B; branch on direction; put push_magnitude back in B for SEX
-        out.push_str("    TFR B,A\n");        // A = push_magnitude (B also = push_magnitude here)
-        out.push_str("    LDB >TMPVAL\n");    // B = original dx (sign reference)
+        out.push_str("    PSHS B\n");
+        out.push_str("    SUBA ,S+            ; A = player_hw - |dx|\n");
+        out.push_str("    LDB >TMPPTR         ; B = dx_raw hi byte (sign)\n");
         out.push_str("    BMI LCOL_X_PUSH_LEFT\n");
-        // Push right (dx >= 0): D = $00:push_magnitude
-        out.push_str("    TFR A,B\n");        // B = push_magnitude (A unchanged)
-        out.push_str("    SEX\n");            // D = sign_extend(B=push_magnitude) = $00:push_magnitude
+        out.push_str("    ; push right (dx_raw >= 0): RESULT = +push_mag\n");
+        out.push_str("    TFR A,B\n");
+        out.push_str("    SEX\n");
         out.push_str("    STD RESULT\n");
-        out.push_str("    PULS B\n");
-        out.push_str("    LBRA LCOL_X_DONE\n");
+        out.push_str("    BRA LCOL_X_WALL_ADV\n");
         out.push_str("LCOL_X_PUSH_LEFT:\n");
-        // Push left (dx < 0): D = $FF:(-push_magnitude)
-        out.push_str("    NEGA\n");           // A = -push_magnitude
-        out.push_str("    TFR A,B\n");        // B = -push_magnitude
-        out.push_str("    SEX\n");            // D = sign_extend(B=-push_magnitude) = $FF:(-push_magnitude)
+        out.push_str("    ; push left (dx_raw < 0): RESULT = -push_mag\n");
+        out.push_str("    NEGA\n");
+        out.push_str("    TFR A,B\n");
+        out.push_str("    SEX\n");
         out.push_str("    STD RESULT\n");
-        out.push_str("    PULS B\n");
-        out.push_str("    LBRA LCOL_X_DONE\n");
+        out.push_str("LCOL_X_WALL_ADV:\n");
+        out.push_str("    LEAY 8,Y           ; next wall segment (4 FDB)\n");
+        out.push_str("    DEC >LCOL_SEG_CNT\n");
+        out.push_str("    LBNE LCOL_X_WALL\n");
         out.push_str("LCOL_X_NEXT:\n");
-        out.push_str("    LEAX 21,X\n");   // next ROM object (stride 21)
-        out.push_str("    PULS B\n");
-        out.push_str("    DECB\n");
-        out.push_str("    LBRA LCOL_X_LOOP\n");
+        out.push_str("    LEAX 23,X          ; next ROM object (stride 23)\n");
+        out.push_str("    DEC >LCOL_OBJ_CNT\n");
+        out.push_str("    LBNE LCOL_X_LOOP\n");
         out.push_str("LCOL_X_DONE:\n");
         if crate::m6809::builtins::use_banked_assets() {
             out.push_str("    ; MULTIBANK: Restore original bank\n");

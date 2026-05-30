@@ -15,10 +15,6 @@ def loop():
 
     DRAW_VECTOR_EX("platform", 0, 0,0,0)
 
-    #DRAW_VECTOR_EX("platformver", 0, -15,0,0)
-
-    #DRAW_LINE(-57,0, 58,0, 80)
-
     
 
     

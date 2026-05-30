@@ -830,8 +830,10 @@ pub fn emit_helpers() -> String {
     s.push_str("    ldrb    r3, [r5, #23]        @ is_anim\n");
     s.push_str("    cmp     r3, #0\n");
     s.push_str("    bne.w   vdre_use_anim\n");
-    // static vector path
-    s.push_str("    mov     r3, #0               @ mirror=0\n");
+    // static vector path — respect dir + mirror_on_patrol just like anim path
+    s.push_str("    ldrb    r3, [r5, #26]        @ dir (0=right, 1=left)\n");
+    s.push_str("    ldrb    r12, [r5, #27]       @ mirror_on_patrol\n");
+    s.push_str("    and     r3, r3, r12          @ mirror = dir & mirror_on_patrol\n");
     s.push_str("    sub     sp, sp, #8           @ reserve 8 bytes (keeps 8-byte alignment)\n");
     s.push_str("    mov     r12, #127\n");
     s.push_str("    str     r12, [sp]            @ intensity=127 at [sp+0] (5th arg)\n");

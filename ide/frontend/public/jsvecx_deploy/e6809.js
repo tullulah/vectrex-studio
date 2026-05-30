@@ -29,8 +29,19 @@ var MUSIC_FUNCTION_ADDRS = {
 var OPCODE_TRACE_BUFFER = [];
 // Default to a larger buffer so we can capture the jump into garbage/ram.
 // Can be overridden at runtime via window.OPCODE_TRACE_MAX.
-var OPCODE_TRACE_MAX = 2000;
-var OPCODE_TRACE_ENABLED = true;
+// Bumped 2000 → 50000 to capture enough history to see bank-switch transitions
+// (the crash class we're chasing — a runtime that switches bank then returns
+// to caller without restoring — leaves no obvious local marker; we need the
+// instruction whose STA $DF00 / STA CURRENT_ROM_BANK flipped to the wrong bank).
+var OPCODE_TRACE_MAX = 50000;
+// Per-instruction trace is OFF by default — it adds significant overhead
+// (Array.shift on a 50000-entry buffer is O(N) per instruction). When chasing
+// a crash, enable at runtime in the DevTools console:
+//     window.OPCODE_TRACE_ENABLED = true
+// and reproduce. The crash-dump path (PC/regs/stack snapshot/bank) still
+// fires unconditionally, so most diagnostics work without the per-instruction
+// trace anyway.
+var OPCODE_TRACE_ENABLED = false;
 var ERROR_HALT = false;
 var CURRENT_ROM_NAME = null;
 var CURRENT_ROM_PATH = null;
@@ -200,8 +211,14 @@ function getOpcodeTraceMax() {
 }
 
 function addOpcodeTrace(pc, opcode, regs, bytes) {
-    if (!OPCODE_TRACE_ENABLED) return;
-    
+    // Honor runtime toggle via window.OPCODE_TRACE_ENABLED so a paused session
+    // can enable tracing without rebuilding. Default OFF for perf.
+    if (typeof window !== 'undefined' && typeof window.OPCODE_TRACE_ENABLED !== 'undefined') {
+        if (!window.OPCODE_TRACE_ENABLED) return;
+    } else if (!OPCODE_TRACE_ENABLED) {
+        return;
+    }
+
     const bank = (this && this.vecx && typeof this.vecx.currentBank === 'number')
         ? this.vecx.currentBank
         : 0;
@@ -317,20 +334,29 @@ function dumpOpcodeTrace(errorMsg, extra) {
     }
     
     // Save to disk (Electron) if possible, otherwise fallback to browser download.
+    // Loud logging at every step so we know exactly why a save might not happen —
+    // this dance is critical when the in-console trace gets truncated and we need
+    // the file on disk to grep for bank transitions.
     try {
         if (typeof window !== 'undefined') {
             const w = window;
-            // Prefer absolute bin path if provided
-            const stackPath = (CURRENT_ROM_PATH && typeof CURRENT_ROM_PATH === 'string')
-                ? CURRENT_ROM_PATH.replace(/\.(bin|BIN)$/, '.stack')
+            const romPath = (typeof CURRENT_ROM_PATH !== 'undefined' && CURRENT_ROM_PATH)
+                || (w.CURRENT_ROM_PATH || null);
+            const romName = (typeof CURRENT_ROM_NAME !== 'undefined' && CURRENT_ROM_NAME)
+                || (w.CURRENT_ROM_NAME || null);
+            console.log('[trace-save] CURRENT_ROM_PATH=' + romPath + ' CURRENT_ROM_NAME=' + romName + ' hasFilesAPI=' + (!!(w.files && typeof w.files.saveFile === 'function')));
+            const stackPath = (romPath && typeof romPath === 'string')
+                ? romPath.replace(/\.(bin|BIN)$/, '.stack')
                 : null;
 
             if (stackPath && w.files && typeof w.files.saveFile === 'function') {
+                console.log('[trace-save] writing ' + output.length + ' bytes to ' + stackPath);
                 w.files.saveFile({ path: stackPath, content: output })
-                    .then(() => console.log("📝 Stack trace saved to: " + stackPath))
+                    .then((r) => console.log("📝 Stack trace saved to: " + stackPath + " (response: " + JSON.stringify(r) + ")"))
                     .catch((e) => console.warn("Failed to save .stack via Electron files API:", e));
-            } else if (CURRENT_ROM_NAME) {
-                const fileName = CURRENT_ROM_NAME.replace(/\.(bin|BIN)$/, '.stack');
+            } else if (romName) {
+                const fileName = romName.replace(/\.(bin|BIN)$/, '.stack');
+                console.log('[trace-save] no files API or path — falling back to browser download as ' + fileName);
                 const blob = new Blob([output], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -339,6 +365,8 @@ function dumpOpcodeTrace(errorMsg, extra) {
                 a.click();
                 URL.revokeObjectURL(url);
                 console.log("📝 Stack trace downloaded: " + fileName);
+            } else {
+                console.warn('[trace-save] cannot save: CURRENT_ROM_PATH and CURRENT_ROM_NAME both null. EmulatorPanel must set window.CURRENT_ROM_PATH after compile/load.');
             }
         }
     } catch (e) {
@@ -2546,6 +2574,40 @@ function e6809()
                 console.log("    S: 0x" + this.reg_s.value.toString(16).toUpperCase().padStart(4, '0'));
                 console.log("    DP: 0x" + (this.reg_dp & 0xFF).toString(16).toUpperCase().padStart(2, '0'));
                 console.log("    CC: 0x" + this.reg_cc.toString(16).toUpperCase().padStart(2, '0'));
+                // Bank-switching corruption is a common cause of "code runs into data".
+                // Show the active switchable bank ($0000-$3FFF). The property name in
+                // public/jsvecx_deploy/vecx.js is `currentBank` (camelCase); the older
+                // src/generated/jsvecx/vecx_full.js uses `current_bank`. We try both.
+                var __bk = 'unknown';
+                var __src = '';
+                try {
+                    var __v = (typeof window !== 'undefined') ? window.vecx : null;
+                    if (__v) {
+                        if (typeof __v.currentBank !== 'undefined') {
+                            __bk = '0x' + (__v.currentBank & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+                            __src = 'window.vecx.currentBank';
+                        } else if (typeof __v.current_bank !== 'undefined') {
+                            __bk = '0x' + (__v.current_bank & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+                            __src = 'window.vecx.current_bank';
+                        }
+                    }
+                } catch (e) { __src = 'error: ' + e.message; }
+                console.log("    BANK: " + __bk + " [src=" + __src + "] (active switchable bank at $0000-$3FFF)");
+                // Dump extended state. Include both naming conventions and the bank
+                // register address so we can confirm bank-switch corruption hypotheses.
+                try {
+                    if (typeof window !== 'undefined' && window.vecx) {
+                        var v = window.vecx;
+                        var keys = ['currentBank','current_bank','isMultibank','bankRegister','via_pcr','via_acr','via_ifr','running','debugState'];
+                        var info = keys.map(function(k){
+                            var val = v[k];
+                            if (typeof val === 'undefined') return k+'=undef';
+                            if (typeof val === 'number') return k+'=0x'+val.toString(16);
+                            return k+'='+val;
+                        }).join(' ');
+                        console.log("    VECX STATE: " + info);
+                    }
+                } catch (e) {}
                 const stackSnapshot = dumpStackSnapshot(this);
                 console.log(stackSnapshot);
                 
