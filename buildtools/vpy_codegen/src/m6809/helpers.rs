@@ -227,9 +227,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
                  (1KB RAM constraint). Lower MAX_ENEMIES to 10 or less for the Vectrex/6809 target."
             ));
         }
-        const ENEMY_STRIDE: usize = 17;
+        const ENEMY_STRIDE: usize = 28;
         ram.allocate("ENEMY_POOL", max_enemies * ENEMY_STRIDE,
-            "Enemy instances pool (active+x+y+type_ptr+action+ai+hp+wp_idx+wp_ptr+wp_count+sm_state+sm_timer × N)");
+            "Enemy instances pool (Phase 2 wander: +18 sub_state, +19 cur_area_idx, +20 idle_timer, +21 trans_type, +22..23 target_x, +24..25 vy/from_x, +26 feet_offset × N)");
         ram.allocate("ENEMY_LOOP_IDX", 1, "Enemy loop counter");
         ram.allocate("ENEMY_COUNT", 1, "Active enemy count");
         ram.allocate("ENEMY_SCRATCH_PTR", 2, "Scratch pointer for enemy iteration");
@@ -546,6 +546,8 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                 // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
                 // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
                 needed.insert("DRAW_ANIM_RUNTIME".to_string());
+                // Wander enemies use RAND_HELPER for randomized idle pauses
+                needed.insert("RAND_HELPER".to_string());
             }
 
             // Recursively analyze arguments
@@ -2488,9 +2490,9 @@ DAR_DONE:\n\
 fn emit_enemy_system_runtime(asm: &mut String, max_enemies: usize, is_multibank: bool, has_vanim_enemies: bool) {
     asm.push_str(&format!(
 "; ============================================================================\n\
-; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 17 bytes)\n\
+; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 28 bytes)\n\
 ; ============================================================================\n\
-ENEMY_POOL_STRIDE EQU 17\n\
+ENEMY_POOL_STRIDE EQU 28\n\
 ENEMY_POOL_MAX    EQU {max_enemies}\n\
 \n\
 ; Pool record offsets\n\
@@ -2510,6 +2512,35 @@ POOL_SM_STATE EQU 13\n\
 POOL_SM_TMR_HI EQU 14\n\
 POOL_SM_TMR_LO EQU 15\n\
 POOL_WPCOUNT   EQU 16\n\
+POOL_DIR        EQU 17\n\
+POOL_SUB_STATE  EQU 18\n\
+POOL_AREA_IDX   EQU 19\n\
+POOL_IDLE_TIMER EQU 20\n\
+POOL_TRANS_TYPE EQU 21\n\
+POOL_TARGET_X_HI EQU 22\n\
+POOL_TARGET_X_LO EQU 23\n\
+POOL_FROMX_OR_VY_HI EQU 24\n\
+POOL_FROMX_OR_VY_LO EQU 25\n\
+POOL_FEET_OFFSET EQU 26\n\
+POOL_VY0_STASH EQU 27\n\
+;   POOL_FROMX_OR_VY (2) — WALK_TO_TAKEOFF: from_x (i16). AIRBORNE: vy (i16, low byte = i8 vy).\n\
+;   POOL_FEET_OFFSET (1) — set at SPAWN to enemy's sprite half-height. Used to snap\n\
+;     world_y = area.y + feet_offset on spawn and on land.\n\
+;   POOL_VY0_STASH (1) — initial vy of the in-progress transition (set at commit,\n\
+;     applied at takeoff). Comes from trans entry's vy0 byte (per-transition tuned).\n\
+;   POOL_DIR (1) — 0=facing right, 1=facing left. Written by UPDATE_ENEMIES when\n\
+;   patrol moves the enemy on X (LBGT path = right, LBLT/SUB path = left). Read by\n\
+;   DRAW_ENEMIES into MIRROR_X so the sprite reflects the current direction.\n\
+;   POOL_SUB_STATE (1) — wander only. 0=WALK, 1=IDLE, 2=AIRBORNE, 3=WALK_TO_TAKEOFF\n\
+;   POOL_AREA_IDX (1) — wander only. Current area index into level's AREAS table.\n\
+;   POOL_IDLE_TIMER (1) — wander only. Frames remaining in idle. Decremented each\n\
+;   frame while sub_state=1; on expire either commits a transition or returns to WALK.\n\
+;   POOL_TRANS_TYPE (1) — wander only. Type of in-progress transition: 1=jump_up, 2=drop, 3=jump_across.\n\
+;   POOL_TARGET_X (2) — wander only. Target X stashed at transition commit (i16).\n\
+;   POOL_VY (2) — wander only. AIRBORNE: signed vertical velocity (i16, only low byte typically used).\n\
+;     WALK_TO_TAKEOFF: stores from_x in same slot since vy isn't used yet.\n\
+; For wander enemies, wp_ptr (pool +11..12) is reused as areas_ptr (points to\n\
+;   _LVL_AREAS_HEADER), and wp_count (pool +16) holds area_count.\n\
 ; SM state record layout (SM_STATE_STRIDE = 13 bytes, max 4 events)\n\
 SM_STATE_STRIDE EQU 13\n\
 SM_HDR_INIT   EQU 1\n\
@@ -2559,6 +2590,17 @@ SPAWN_CLR_LOOP:\n\
     STA ,Y+\n\
     STA ,Y+\n\
     STA ,Y+\n\
+    STA ,Y+                    ; +17 dir (clears to 0=right)\n\
+    STA ,Y+                    ; +18 sub_state (clears to 0=WALK)\n\
+    STA ,Y+                    ; +19 cur_area_idx (clears to 0)\n\
+    STA ,Y+                    ; +20 idle_timer (clears to 0)\n\
+    STA ,Y+                    ; +21 trans_type (clears to 0)\n\
+    STA ,Y+                    ; +22 target_x hi\n\
+    STA ,Y+                    ; +23 target_x lo\n\
+    STA ,Y+                    ; +24 from_x/vy hi\n\
+    STA ,Y+                    ; +25 from_x/vy lo\n\
+    STA ,Y+                    ; +26 feet_offset (set by SPAWN_FILL for wander)\n\
+    STA ,Y+                    ; +27 pad\n\
     DECB\n\
     BNE SPAWN_CLR_LOOP\n\
     CLR >ENEMY_COUNT           ; spawned (in-range) count = 0\n\
@@ -2636,16 +2678,30 @@ SPAWN_SM_DONE:\n\
     PULS B              ; restore loop counter\n\
     CLR 14,Y            ; pool.sm_decay_timer hi = 0\n\
     CLR 15,Y            ; pool.sm_decay_timer lo = 0\n\
+    ; Wander (ai_type=4) starts in walk action and copies feet_offset+area_idx.\n\
+    ; CRITICAL: X is currently type_ptr or SM_state record (clobbered by SM init).\n\
+    ; Must reload X = ENEMY_SCRATCH_PTR (instance ptr) before reading instance bytes.\n\
+    LDA 8,Y             ; ai_type\n\
+    CMPA #4\n\
+    BNE SPAWN_ACT_DONE\n\
+    LDA #1\n\
+    STA 7,Y             ; action=1 (walk)\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = instance ptr (was clobbered by SM init)\n\
+    LDA 12,X            ; instance.feet_offset (instance +12)\n\
+    STA 26,Y            ; pool.feet_offset\n\
+    LDA 13,X            ; instance.initial_area_idx (instance +13)\n\
+    STA 19,Y            ; pool.cur_area_idx\n\
+SPAWN_ACT_DONE:\n\
     ; filled a slot: advance pool ptr, bump spawned count, stop if pool full\n\
-    LEAY 17,Y\n\
+    LEAY 28,Y\n\
     INC >ENEMY_COUNT\n\
     LDA >ENEMY_COUNT\n\
     CMPA #{max_enemies}\n\
     BHS SPAWN_ENE_DONE         ; pool full -> stop scanning\n\
 SPAWN_SKIP:\n\
-    ; advance to next ROM instance (stride 12) and keep scanning\n\
+    ; advance to next ROM instance (stride 14) and keep scanning\n\
     LDX >ENEMY_SCRATCH_PTR\n\
-    LEAX 12,X\n\
+    LEAX 14,X\n\
     STX >ENEMY_SCRATCH_PTR\n\
     DEC >ENEMY_LOOP_IDX\n\
     LBNE SPAWN_SCAN_LOOP\n\
@@ -2659,8 +2715,21 @@ SPAWN_ENE_DONE:\n\
     if is_multibank {
         asm.push_str(
 "; UPDATE_ENEMIES_RUNTIME (multibank)\n\
-; Waypoints live in the level bank. Bank is switched at entry and restored at exit.\n\
-; Waypoint table: each entry is 2x FDB = 4 bytes (x hi, x lo, y hi, y lo)\n\
+; Patrol (ai_type=1): waypoint loop. Wander (ai_type=4): area-based state machine.\n\
+; Areas table (per level, in level bank) format:\n\
+;   +0  FCB area_count\n\
+;   +1  FCB trans_count\n\
+;   +2  area[0]: FDB y, FDB x_min, FDB x_max, FCB pad, FCB pad (8 bytes)\n\
+;   +2+area_count*8: trans[0]: FCB from, FCB to, FCB type, FCB pad, FDB from_x, FDB to_x\n\
+; Wander pool fields:\n\
+;   +18 sub_state: 0=WALK 1=IDLE 2=AIRBORNE 3=WALK_TO_TAKEOFF\n\
+;   +19 cur_area_idx (set to target at commit)\n\
+;   +20 idle_timer (IDLE)\n\
+;   +21 trans_type (1=jump_up 2=drop 3=jump_across)\n\
+;   +22..23 target_x (to_x stashed at commit)\n\
+;   +24    airborne_timer / pad\n\
+;   +25    vy (i8, AIRBORNE)\n\
+;   +26    feet_offset\n\
 UPDATE_ENEMIES_RUNTIME:\n\
     LDB >ENEMY_COUNT\n\
     LBEQ UPD_ENE_DONE\n\
@@ -2676,59 +2745,317 @@ UPD_ENE_LOOP:\n\
     LBEQ UPD_ENE_NEXT_POP\n\
     LDA 8,Y             ; ai_type\n\
     CMPA #1\n\
-    LBNE UPD_ENE_NEXT_POP ; only patrol handled\n\
+    LBEQ UPD_PATROL\n\
+    CMPA #4\n\
+    LBEQ UPD_WANDER\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; ============ PATROL (waypoint-based) ============\n\
+UPD_PATROL:\n\
     LDA 11,Y\n\
     LDB 12,Y\n\
     CMPD #0\n\
-    LBEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
-    TFR D,X             ; X = wp_ptr base (level bank)\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X             ; X = wp_ptr base\n\
     LDA 10,Y            ; wp_idx\n\
     ASLA\n\
-    ASLA                ; × 4 bytes per waypoint (FDB x, FDB y)\n\
+    ASLA                ; * 4 bytes per waypoint\n\
     LEAX A,X            ; X = &wp[wp_idx]\n\
-    ; ---- Move X (16-bit signed) ----\n\
-    LDD ,X              ; D = target_x (FDB)\n\
-    CMPD 1,Y            ; target_x - world_x\n\
-    LBEQ UPD_MOVE_Y     ; x already at target\n\
-    LBGT UPD_INC_X\n\
-    LDD 1,Y\n\
-    SUBD #1\n\
-    STD 1,Y\n\
-    LBRA UPD_MOVE_Y\n\
-UPD_INC_X:\n\
-    LDD 1,Y\n\
-    ADDD #1\n\
-    STD 1,Y\n\
-UPD_MOVE_Y:\n\
-    ; ---- Move Y (16-bit signed) ----\n\
-    LDD 2,X             ; D = target_y (FDB)\n\
-    CMPD 3,Y            ; target_y - world_y\n\
-    LBEQ UPD_CHECK_WP   ; y at target\n\
-    LBGT UPD_INC_Y\n\
-    LDD 3,Y\n\
-    SUBD #1\n\
-    STD 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_INC_Y:\n\
-    LDD 3,Y\n\
-    ADDD #1\n\
-    STD 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_CHECK_WP:\n\
-    ; y at target: check x too\n\
-    LDD ,X              ; D = target_x\n\
+    LDD ,X              ; target_x\n\
     CMPD 1,Y\n\
-    LBNE UPD_ENE_NEXT_POP ; x not yet at target\n\
-    ; Both x and y at target: advance wp_idx\n\
-    INC 10,Y            ; wp_idx++\n\
-    LDA 10,Y\n\
-    CMPA 16,Y           ; compare to wp_count (pool +16)\n\
-    LBLO UPD_ENE_NEXT_POP ; if idx < count, done\n\
-    CLR 10,Y            ; else wrap to 0\n\
+    LBEQ UPD_P_MOVE_Y\n\
+    LBGT UPD_P_INC_X\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_P_MOVE_Y\n\
+UPD_P_INC_X:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+UPD_P_MOVE_Y:\n\
+    LDD 2,X             ; target_y\n\
+    CMPD 3,Y\n\
+    LBEQ UPD_P_CHECK_WP\n\
+    LBGT UPD_P_INC_Y\n\
+    LDD 3,Y\n\
+    SUBD #1\n\
+    STD 3,Y\n\
     LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_INC_Y:\n\
+    LDD 3,Y\n\
+    ADDD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_CHECK_WP:\n\
+    LDD ,X\n\
+    CMPD 1,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    INC 10,Y\n\
+    LDA 10,Y\n\
+    CMPA 16,Y\n\
+    LBLO UPD_ENE_NEXT_POP\n\
+    CLR 10,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; ============ WANDER (area-based state machine) ============\n\
+UPD_WANDER:\n\
+    LDA 18,Y            ; sub_state\n\
+    LBEQ UPD_W_WALK\n\
+    CMPA #1\n\
+    LBEQ UPD_W_IDLE\n\
+    CMPA #2\n\
+    LBEQ UPD_W_AIR\n\
+    CMPA #3\n\
+    LBEQ UPD_W_TT\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_WALK:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X             ; X = areas_header_ptr\n\
+    LDB 19,Y            ; cur_area_idx\n\
+    LDA #8\n\
+    MUL                 ; D = idx*8\n\
+    ADDD #2             ; +2 to skip header\n\
+    LEAX D,X            ; X = &area[idx]\n\
+    LDA 17,Y            ; POOL_DIR\n\
+    LBNE UPD_W_WALK_L\n\
+    ; dir=0 right: walk +1, clamp to x_max\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    PSHS D              ; save proposed x\n\
+    LDD 4,X             ; x_max\n\
+    CMPD ,S\n\
+    LBLT UPD_W_EDGE_R   ; proposed > x_max → edge\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_R:\n\
+    LEAS 2,S\n\
+    LDD 4,X             ; clamp to x_max\n\
+    STD 1,Y\n\
+    LBRA UPD_W_EDGE\n\
+UPD_W_WALK_L:\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    PSHS D\n\
+    LDD 2,X             ; x_min\n\
+    CMPD ,S\n\
+    LBGT UPD_W_EDGE_L\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_L:\n\
+    LEAS 2,S\n\
+    LDD 2,X             ; clamp to x_min\n\
+    STD 1,Y\n\
+UPD_W_EDGE:\n\
+    ; Reached an edge: flip dir, enter IDLE\n\
+    LDA 17,Y\n\
+    EORA #1\n\
+    STA 17,Y\n\
+    LDA #1\n\
+    STA 18,Y            ; sub_state = IDLE\n\
+    CLR 7,Y             ; action = idle\n\
+    JSR RAND_HELPER\n\
+    ANDB #$3F\n\
+    ADDB #90\n\
+    STB 20,Y            ; idle_timer\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_IDLE:\n\
+    DEC 20,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    ; Idle expired: try a transition (25% chance per matching entry)\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X             ; X = areas_header_ptr\n\
+    LDB 1,X             ; trans_count\n\
+    LBEQ UPD_W_TO_WALK\n\
+    PSHS B              ; save trans_count\n\
+    LDA ,X              ; area_count\n\
+    LDB #8\n\
+    MUL                 ; D = area_count*8\n\
+    ADDD #2\n\
+    LEAX D,X            ; X = trans_ptr (start of trans array)\n\
+    PULS B              ; B = trans_count (loop counter)\n\
+UPD_W_TRY_LOOP:\n\
+    LDA 19,Y            ; cur_area_idx\n\
+    CMPA ,X             ; trans.from\n\
+    BNE UPD_W_NEXT_TRY\n\
+    ; Match: roll 25% chance\n\
+    PSHS B,X\n\
+    JSR RAND_HELPER\n\
+    ANDB #3\n\
+    TSTB\n\
+    PULS B,X\n\
+    BNE UPD_W_NEXT_TRY\n\
+    ; Commit transition: X = &trans[matched]\n\
+    LDA 1,X\n\
+    STA 19,Y            ; cur_area_idx = to\n\
+    LDA 2,X\n\
+    STA 21,Y            ; trans_type\n\
+    LDA 3,X\n\
+    STA 27,Y            ; vy0_stash (precomputed by compiler for this transition)\n\
+    LDD 4,X\n\
+    STD 24,Y            ; from_x stashed at pool+24..25\n\
+    LDD 6,X\n\
+    STD 22,Y            ; target_x at pool+22..23\n\
+    LDA #3\n\
+    STA 18,Y            ; sub_state = WALK_TO_TAKEOFF\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_NEXT_TRY:\n\
+    LEAX 8,X\n\
+    DECB\n\
+    BNE UPD_W_TRY_LOOP\n\
+UPD_W_TO_WALK:\n\
+    CLR 18,Y            ; sub_state = WALK\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_TT:\n\
+    ; WALK_TO_TAKEOFF: walk X-only toward from_x at pool+24..25\n\
+    LDD 24,Y            ; from_x\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_TT_REACHED\n\
+    LBGT UPD_W_TT_RIGHT\n\
+    ; cur_x > from_x: walk left\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_RIGHT:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_REACHED:\n\
+    ; Arrived at from_x: load precomputed vy0 and enter AIRBORNE.\n\
+    LDA 27,Y            ; vy0_stash (set at commit from trans entry)\n\
+    STA 25,Y            ; vy (i8)\n\
+    LDA #120\n\
+    STA 24,Y            ; airborne timeout (frames)\n\
+    ; Face toward target_x\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBGT UPD_W_TT_FACE_R\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_W_TT_AIR\n\
+UPD_W_TT_FACE_R:\n\
+    CLR 17,Y\n\
+UPD_W_TT_AIR:\n\
+    LDA #2\n\
+    STA 18,Y            ; sub_state = AIRBORNE\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_AIR:\n\
+    ; Check timeout first\n\
+    DEC 24,Y\n\
+    LBEQ UPD_W_AIR_LAND\n\
+    ; X interp toward target_x by 2 px/frame\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_AIR_Y    ; x at target\n\
+    LBGT UPD_W_AIR_X_R\n\
+    LDD 1,Y\n\
+    SUBD #2\n\
+    CMPD 22,Y\n\
+    LBGT UPD_W_AIR_X_OKL\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKL:\n\
+    STD 1,Y\n\
+    LBRA UPD_W_AIR_Y\n\
+UPD_W_AIR_X_R:\n\
+    LDD 1,Y\n\
+    ADDD #2\n\
+    CMPD 22,Y\n\
+    LBLT UPD_W_AIR_X_OKR\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKR:\n\
+    STD 1,Y\n\
+UPD_W_AIR_Y:\n\
+    ; y += vy (sign-extended), vy -= 1, clamp vy >= -4\n\
+    LDB 25,Y\n\
+    SEX                 ; D = signed vy\n\
+    ADDD 3,Y\n\
+    STD 3,Y\n\
+    LDB 25,Y\n\
+    DECB\n\
+    CMPB #$FC           ; -4\n\
+    BGE UPD_W_AIR_VYOK\n\
+    LDB #$FC\n\
+UPD_W_AIR_VYOK:\n\
+    STB 25,Y\n\
+    ; Check land: compute target_y = areas[cur_area].y + feet_offset and compare\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X            ; X = &area[cur_area_idx] (target)\n\
+    LDB 26,Y            ; B = feet_offset (low byte)\n\
+    CLRA                ; A = 0 (high byte)\n\
+    ADDD ,X             ; D = feet_offset + area.y (16-bit at X)\n\
+    ; If trans_type=2 (drop) or vy<=0 (descending): land if cur_y <= target_y\n\
+    ; Else (ascending jump_up): just keep going\n\
+    PSHS D              ; stash target_y (we'll need it twice)\n\
+    LDA 21,Y\n\
+    CMPA #2\n\
+    BEQ UPD_W_AIR_CHK_DOWN\n\
+    LDB 25,Y\n\
+    TSTB\n\
+    BPL UPD_W_AIR_NOLAND\n\
+UPD_W_AIR_CHK_DOWN:\n\
+    LDD ,S              ; reload target_y\n\
+    CMPD 3,Y            ; target_y vs cur_y\n\
+    LBLT UPD_W_AIR_NOLAND  ; target_y < cur_y → still above\n\
+    ; cur_y <= target_y: land — snap and switch to WALK\n\
+    PULS D              ; D = target_y\n\
+    STD 3,Y             ; snap world_y\n\
+    CLR 18,Y            ; sub_state = WALK\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_NOLAND:\n\
+    LEAS 2,S            ; discard saved target_y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_LAND:\n\
+    ; Timeout path: recompute target_y, snap, switch to WALK\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    LDB 26,Y\n\
+    CLRA\n\
+    ADDD ,X             ; D = feet_offset + area.y\n\
+    STD 3,Y\n\
+    CLR 18,Y            ; sub_state = WALK\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
 UPD_ENE_NEXT_POP:\n\
     PULS B              ; restore loop counter\n\
-    LEAY 17,Y           ; next pool record\n\
+    LEAY 28,Y           ; next pool record\n\
     DECB\n\
     LBNE UPD_ENE_LOOP\n\
     PULS A              ; restore original bank\n\
@@ -2740,70 +3067,309 @@ UPD_ENE_DONE:\n\
     } else {
         asm.push_str(
 "; UPDATE_ENEMIES_RUNTIME (single-bank)\n\
-; Waypoint table: each entry is 2x FDB = 4 bytes (x hi, x lo, y hi, y lo)\n\
+; Same as multibank version without bank switching.\n\
 UPDATE_ENEMIES_RUNTIME:\n\
     LDB >ENEMY_COUNT\n\
     LBEQ UPD_ENE_DONE\n\
     LDY #ENEMY_POOL\n\
 UPD_ENE_LOOP:\n\
-    PSHS B              ; save loop counter\n\
-    LDA ,Y              ; active?\n\
+    PSHS B\n\
+    LDA ,Y\n\
     LBEQ UPD_ENE_NEXT_POP\n\
-    LDA 8,Y             ; ai_type\n\
+    LDA 8,Y\n\
     CMPA #1\n\
-    LBNE UPD_ENE_NEXT_POP ; only patrol handled\n\
+    LBEQ UPD_PATROL\n\
+    CMPA #4\n\
+    LBEQ UPD_WANDER\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_PATROL:\n\
     LDA 11,Y\n\
     LDB 12,Y\n\
     CMPD #0\n\
-    LBEQ UPD_ENE_NEXT_POP ; no waypoint table\n\
-    TFR D,X             ; X = wp_ptr base\n\
-    LDA 10,Y            ; wp_idx\n\
-    ASLA\n\
-    ASLA                ; × 4 bytes per waypoint (FDB x, FDB y)\n\
-    LEAX A,X            ; X = &wp[wp_idx]\n\
-    ; ---- Move X (16-bit signed) ----\n\
-    LDD ,X              ; D = target_x (FDB)\n\
-    CMPD 1,Y            ; target_x - world_x\n\
-    LBEQ UPD_MOVE_Y     ; x already at target\n\
-    LBGT UPD_INC_X\n\
-    LDD 1,Y\n\
-    SUBD #1\n\
-    STD 1,Y\n\
-    LBRA UPD_MOVE_Y\n\
-UPD_INC_X:\n\
-    LDD 1,Y\n\
-    ADDD #1\n\
-    STD 1,Y\n\
-UPD_MOVE_Y:\n\
-    ; ---- Move Y (16-bit signed) ----\n\
-    LDD 2,X             ; D = target_y (FDB)\n\
-    CMPD 3,Y            ; target_y - world_y\n\
-    LBEQ UPD_CHECK_WP   ; y at target\n\
-    LBGT UPD_INC_Y\n\
-    LDD 3,Y\n\
-    SUBD #1\n\
-    STD 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_INC_Y:\n\
-    LDD 3,Y\n\
-    ADDD #1\n\
-    STD 3,Y\n\
-    LBRA UPD_ENE_NEXT_POP\n\
-UPD_CHECK_WP:\n\
-    ; y at target: check x too\n\
-    LDD ,X              ; D = target_x\n\
-    CMPD 1,Y\n\
-    LBNE UPD_ENE_NEXT_POP ; x not yet at target\n\
-    ; Both x and y at target: advance wp_idx\n\
-    INC 10,Y            ; wp_idx++\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X\n\
     LDA 10,Y\n\
-    CMPA 16,Y           ; compare to wp_count (pool +16)\n\
-    LBLO UPD_ENE_NEXT_POP ; if idx < count, done\n\
-    CLR 10,Y            ; else wrap to 0\n\
+    ASLA\n\
+    ASLA\n\
+    LEAX A,X\n\
+    LDD ,X\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_P_MOVE_Y\n\
+    LBGT UPD_P_INC_X\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_P_MOVE_Y\n\
+UPD_P_INC_X:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+UPD_P_MOVE_Y:\n\
+    LDD 2,X\n\
+    CMPD 3,Y\n\
+    LBEQ UPD_P_CHECK_WP\n\
+    LBGT UPD_P_INC_Y\n\
+    LDD 3,Y\n\
+    SUBD #1\n\
+    STD 3,Y\n\
     LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_INC_Y:\n\
+    LDD 3,Y\n\
+    ADDD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_CHECK_WP:\n\
+    LDD ,X\n\
+    CMPD 1,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    INC 10,Y\n\
+    LDA 10,Y\n\
+    CMPA 16,Y\n\
+    LBLO UPD_ENE_NEXT_POP\n\
+    CLR 10,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_WANDER:\n\
+    LDA 18,Y\n\
+    LBEQ UPD_W_WALK\n\
+    CMPA #1\n\
+    LBEQ UPD_W_IDLE\n\
+    CMPA #2\n\
+    LBEQ UPD_W_AIR\n\
+    CMPA #3\n\
+    LBEQ UPD_W_TT\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_WALK:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    LDA 17,Y\n\
+    LBNE UPD_W_WALK_L\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    PSHS D\n\
+    LDD 4,X\n\
+    CMPD ,S\n\
+    LBLT UPD_W_EDGE_R\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_R:\n\
+    LEAS 2,S\n\
+    LDD 4,X\n\
+    STD 1,Y\n\
+    LBRA UPD_W_EDGE\n\
+UPD_W_WALK_L:\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    PSHS D\n\
+    LDD 2,X\n\
+    CMPD ,S\n\
+    LBGT UPD_W_EDGE_L\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_L:\n\
+    LEAS 2,S\n\
+    LDD 2,X\n\
+    STD 1,Y\n\
+UPD_W_EDGE:\n\
+    LDA 17,Y\n\
+    EORA #1\n\
+    STA 17,Y\n\
+    LDA #1\n\
+    STA 18,Y\n\
+    CLR 7,Y\n\
+    JSR RAND_HELPER\n\
+    ANDB #$3F\n\
+    ADDB #90\n\
+    STB 20,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_IDLE:\n\
+    DEC 20,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 1,X\n\
+    LBEQ UPD_W_TO_WALK\n\
+    PSHS B\n\
+    LDA ,X\n\
+    LDB #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    PULS B\n\
+UPD_W_TRY_LOOP:\n\
+    LDA 19,Y\n\
+    CMPA ,X\n\
+    BNE UPD_W_NEXT_TRY\n\
+    PSHS B,X\n\
+    JSR RAND_HELPER\n\
+    ANDB #3\n\
+    TSTB\n\
+    PULS B,X\n\
+    BNE UPD_W_NEXT_TRY\n\
+    LDA 1,X\n\
+    STA 19,Y\n\
+    LDA 2,X\n\
+    STA 21,Y\n\
+    LDA 3,X\n\
+    STA 27,Y            ; vy0_stash from trans entry\n\
+    LDD 4,X\n\
+    STD 24,Y\n\
+    LDD 6,X\n\
+    STD 22,Y\n\
+    LDA #3\n\
+    STA 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_NEXT_TRY:\n\
+    LEAX 8,X\n\
+    DECB\n\
+    BNE UPD_W_TRY_LOOP\n\
+UPD_W_TO_WALK:\n\
+    CLR 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_TT:\n\
+    LDD 24,Y\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_TT_REACHED\n\
+    LBGT UPD_W_TT_RIGHT\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_RIGHT:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_REACHED:\n\
+    LDA 27,Y            ; vy0_stash from commit\n\
+    STA 25,Y\n\
+    LDA #120\n\
+    STA 24,Y\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBGT UPD_W_TT_FACE_R\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_W_TT_AIR\n\
+UPD_W_TT_FACE_R:\n\
+    CLR 17,Y\n\
+UPD_W_TT_AIR:\n\
+    LDA #2\n\
+    STA 18,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_AIR:\n\
+    DEC 24,Y\n\
+    LBEQ UPD_W_AIR_LAND\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_AIR_Y\n\
+    LBGT UPD_W_AIR_X_R\n\
+    LDD 1,Y\n\
+    SUBD #2\n\
+    CMPD 22,Y\n\
+    LBGT UPD_W_AIR_X_OKL\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKL:\n\
+    STD 1,Y\n\
+    LBRA UPD_W_AIR_Y\n\
+UPD_W_AIR_X_R:\n\
+    LDD 1,Y\n\
+    ADDD #2\n\
+    CMPD 22,Y\n\
+    LBLT UPD_W_AIR_X_OKR\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKR:\n\
+    STD 1,Y\n\
+UPD_W_AIR_Y:\n\
+    LDB 25,Y\n\
+    SEX\n\
+    ADDD 3,Y\n\
+    STD 3,Y\n\
+    LDB 25,Y\n\
+    DECB\n\
+    CMPB #$FC\n\
+    BGE UPD_W_AIR_VYOK\n\
+    LDB #$FC\n\
+UPD_W_AIR_VYOK:\n\
+    STB 25,Y\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X            ; X = &area[cur_area]\n\
+    LDB 26,Y            ; B = feet_offset\n\
+    CLRA\n\
+    ADDD ,X             ; D = feet_offset + area.y\n\
+    PSHS D              ; stash target_y\n\
+    LDA 21,Y\n\
+    CMPA #2\n\
+    BEQ UPD_W_AIR_CHK_DOWN\n\
+    LDB 25,Y\n\
+    TSTB\n\
+    BPL UPD_W_AIR_NOLAND\n\
+UPD_W_AIR_CHK_DOWN:\n\
+    LDD ,S\n\
+    CMPD 3,Y\n\
+    LBLT UPD_W_AIR_NOLAND\n\
+    PULS D\n\
+    STD 3,Y\n\
+    CLR 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_NOLAND:\n\
+    LEAS 2,S\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_LAND:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    LDB 26,Y\n\
+    CLRA\n\
+    ADDD ,X             ; D = feet_offset + area.y\n\
+    STD 3,Y\n\
+    CLR 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
 UPD_ENE_NEXT_POP:\n\
-    PULS B              ; restore loop counter\n\
-    LEAY 17,Y           ; next pool record\n\
+    PULS B\n\
+    LEAY 28,Y\n\
     DECB\n\
     LBNE UPD_ENE_LOOP\n\
 UPD_ENE_DONE:\n\
@@ -2868,6 +3434,15 @@ DRW_ENE_LOOP:\n\
     CLR >DRAW_VEC_X_HI\n\
     LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
     STB >DRAW_VEC_Y\n\
+    ; Mirror: 0 = facing right (no mirror), 1 = facing left (flip X).\n\
+    ; POOL_DIR is set by UPDATE_ENEMIES based on patrol movement.\n\
+    ; Set BOTH MIRROR_X (vec path → DSWM) and DRAW_ANIM_MIRROR_X. DRAW_ANIM_BANKED\n\
+    ; clears MIRROR_X at entry so animated sprites need the persistent ANIM flag\n\
+    ; which DRAW_ANIM_RUNTIME re-applies to MIRROR_X for each frame's path loop.\n\
+    LDA 17,Y            ; POOL_DIR (0=right, 1=left)\n\
+    STA >MIRROR_X\n\
+    STA >DRAW_ANIM_MIRROR_X\n\
+    CLR >MIRROR_Y\n\
     ; Branch on sprite_type\n\
     LDB >ENEMY_SCRATCH_Y\n\
     CMPB #1\n\
@@ -2905,7 +3480,7 @@ DRW_ENE_VANIM:\n\
         asm.push_str(
 "DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
-    LEAY 17,Y           ; next pool record\n\
+    LEAY 28,Y           ; next pool record\n\
     DECB\n\
     LBNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\
@@ -2939,7 +3514,12 @@ DRW_ENE_DONE:\n\
     LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
     STB DRAW_VEC_Y\n\
     CLR DRAW_VEC_INTENSITY  ; use vector's own intensity\n\
-    CLR MIRROR_X\n\
+    ; Mirror from POOL_DIR (set by UPDATE_ENEMIES patrol move): 0=right, 1=left.\n\
+    ; Set both MIRROR_X (path loop) and DRAW_ANIM_MIRROR_X (DAR re-applies it\n\
+    ; per frame because DRAW_ANIM_BANKED clears MIRROR_X at entry).\n\
+    LDA 17,Y\n\
+    STA MIRROR_X\n\
+    STA DRAW_ANIM_MIRROR_X\n\
     CLR MIRROR_Y\n\
     ; Draw paths — mirrors DRAW_VECTOR_BANKED path loop (no bank switch)\n\
     JSR $F1AA           ; DP_to_D0 (required before DSWM / VIA access)\n\
@@ -2961,7 +3541,7 @@ DRW_ENE_SB_DONE:\n\
     JSR $F1AF           ; DP_to_C8 (restore DP for RAM access)\n\
 DRW_ENE_NEXT_POP:\n\
     PULS B              ; restore outer loop counter\n\
-    LEAY 17,Y           ; next pool record\n\
+    LEAY 28,Y           ; next pool record\n\
     DECB\n\
     LBNE DRW_ENE_LOOP\n\
 DRW_ENE_DONE:\n\

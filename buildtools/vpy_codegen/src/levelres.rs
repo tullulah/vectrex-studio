@@ -313,7 +313,7 @@ impl VPlayLevel {
     /// byte values for half_width/half_height instead of cross-bank symbol references.
     /// `dims` maps lowercase vec asset name → (half_width, half_height).
     pub fn compile_to_asm_with_vec_dims(&self, dims: &HashMap<String, (u32, u32)>) -> String {
-        self.compile_m6809_inner(dims, &HashMap::new(), &HashMap::new())
+        self.compile_m6809_inner(dims, &HashMap::new(), &HashMap::new(), &HashMap::new())
     }
 
     /// Compile level to M6809 ASM with both vector dims and bank assignment map.
@@ -327,7 +327,17 @@ impl VPlayLevel {
         vec_bank_map: &HashMap<String, u8>,
         vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
     ) -> String {
-        self.compile_m6809_inner(dims, vec_bank_map, vec_meshes)
+        self.compile_m6809_inner(dims, vec_bank_map, vec_meshes, &HashMap::new())
+    }
+
+    pub fn compile_to_asm_with_bank_map_and_walk(
+        &self,
+        dims: &HashMap<String, (u32, u32)>,
+        vec_bank_map: &HashMap<String, u8>,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+    ) -> String {
+        self.compile_m6809_inner(dims, vec_bank_map, vec_meshes, vec_walk_areas)
     }
 
     fn compile_m6809_inner(
@@ -335,6 +345,7 @@ impl VPlayLevel {
         dims: &HashMap<String, (u32, u32)>,
         vec_bank_map: &HashMap<String, u8>,
         vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
     ) -> String {
         let mut out = String::new();
 
@@ -437,6 +448,17 @@ impl VPlayLevel {
             out.push_str("\n");
         }
 
+        // Phase 2 wander: precompute the level-wide AREAS + TRANS tables (shared by
+        // all wander enemies in this level). Areas pool: level walkable_areas plus
+        // per-vec walkable_areas translated to world coords.
+        let level_areas_input = self.walkable_areas.as_deref().unwrap_or(&[]);
+        let level_areas_world = Self::collect_all_walk_areas_world(&self.layers, vec_walk_areas, level_areas_input);
+        let level_transitions = Self::derive_transitions_m6809(
+            &level_areas_world,
+            self.isolate_screens,
+            self.world_bounds.y_max,
+        );
+
         // Emit enemy instances (separate section — enemy_objects computed at top of fn)
 
         if enemy_objects.is_empty() {
@@ -444,6 +466,7 @@ impl VPlayLevel {
         } else {
             out.push_str(&format!("_{}_ENEMY_COUNT EQU {}\n\n", name, enemy_objects.len()));
             out.push_str(&format!("; ---- Enemy instances for level {} ----\n", name));
+            out.push_str(&format!("; Instance stride = 14 bytes: type_ptr(2) x(2) y(2) ai(1) wave(1) respawn(1) wp_count(1) wp_ptr(2) feet_off(1) init_area_idx(1)\n"));
             out.push_str(&format!("_{}_ENEMY_INSTANCES:\n", name));
 
             for (i, obj) in enemy_objects.iter().enumerate() {
@@ -454,19 +477,51 @@ impl VPlayLevel {
                 let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
                 let is_wander = obj.ai_type.as_deref() == Some("wander");
 
-                // Wander enemies with no explicit waypoints: derive patrol bounds from walkable_areas
-                let (ai_byte, wp_count, wp_label) = if is_wander && wps.is_empty() {
-                    let level_areas = self.walkable_areas.as_deref().unwrap_or(&[]);
-                    let best = level_areas.iter().min_by_key(|a| {
-                        let dy = (obj.y as i32 - a.y as i32).abs();
-                        let x_in = obj.x >= a.x_min && obj.x <= a.x_max;
-                        if x_in { dy } else { dy + 10000 }
-                    });
-                    if best.is_some() {
-                        (1u8, 2usize, format!("_{}_ENEMY{}_WPS", name, i))
-                    } else {
-                        (1u8, 0usize, "0".to_string())
-                    }
+                // Per-enemy feet_offset = half-height of the IDLE sprite (origin at
+                // center, feet at -hh local → +hh world raises the center so feet
+                // touch the walk-area y). Always 0 for non-wander.
+                let feet_off = if is_wander {
+                    // Try obj.vector_name first (may be a .vanim → not in dims).
+                    // Fallback to "{enemy_type}_idle" which is always the static idle .vec.
+                    let primary = obj.vector_name.to_lowercase();
+                    let fallback = obj
+                        .enemy_type
+                        .as_deref()
+                        .map(|t| format!("{}_idle", t.to_lowercase()))
+                        .unwrap_or_default();
+                    dims
+                        .get(&primary)
+                        .or_else(|| dims.get(&fallback))
+                        .map(|(_, hh)| *hh as u8)
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+
+                // Initial area index: find best area for spawn (x,y). Min |dy| with X-in-range bias.
+                let init_area_idx = if is_wander && !level_areas_world.is_empty() {
+                    level_areas_world
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_, a)| {
+                            let dy = (obj.y as i32 - a.y as i32).abs();
+                            let x_in = obj.x >= a.x_min && obj.x <= a.x_max;
+                            if x_in { dy } else { dy + 10000 }
+                        })
+                        .map(|(idx, _)| idx as u8)
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+
+                // For wander enemies, wp_count becomes area_count and wp_ptr
+                // becomes areas_header_ptr (the level-wide shared table).
+                let (ai_byte, wp_count, wp_label) = if is_wander && !level_areas_world.is_empty() {
+                    let area_count = level_areas_world.len();
+                    (4u8, area_count, format!("_{}_AREAS_HEADER", name))
+                } else if is_wander {
+                    // No areas at all — wander degenerates to no-op
+                    (4u8, 0usize, "0".to_string())
                 } else {
                     let ai = ai_type_byte(&obj.ai_type);
                     let wpc = wps.len();
@@ -478,45 +533,127 @@ impl VPlayLevel {
                 out.push_str(&format!("    FDB _{}_ENEMY   ; enemy type ptr\n", et_up));
                 out.push_str(&format!("    FDB {}                   ; spawn x\n", obj.x));
                 out.push_str(&format!("    FDB {}                   ; spawn y\n", obj.y));
-                out.push_str(&format!("    FCB {}                    ; ai_type: 0=static,1=patrol,2=chase,3=flee\n", ai_byte));
+                out.push_str(&format!("    FCB {}                    ; ai_type: 0=static,1=patrol,2=chase,3=flee,4=wander\n", ai_byte));
                 out.push_str(&format!("    FCB {}                    ; wave (0=always present)\n", wave));
                 out.push_str(&format!("    FCB {}                    ; respawn: 0=no, 1=yes\n", respawn_byte));
-                out.push_str(&format!("    FCB {}                    ; waypoint_count\n", wp_count));
-                out.push_str(&format!("    FDB {}   ; ptr to waypoints (0 if none)\n", wp_label));
+                out.push_str(&format!("    FCB {}                    ; wp_count (or area_count for wander)\n", wp_count));
+                out.push_str(&format!("    FDB {}   ; wp_ptr (or areas_header_ptr for wander; 0 if none)\n", wp_label));
+                out.push_str(&format!("    FCB {}                    ; feet_offset (sprite half-height for wander, 0 otherwise)\n", feet_off));
+                out.push_str(&format!("    FCB {}                    ; initial_area_idx (wander only)\n", init_area_idx));
                 out.push_str("\n");
             }
 
-            // Emit waypoint tables
+            // Emit non-wander explicit waypoint tables (wander uses shared AREAS table)
             for (i, obj) in enemy_objects.iter().enumerate() {
                 let wps = obj.patrol_waypoints.as_deref().unwrap_or(&[]);
                 let is_wander = obj.ai_type.as_deref() == Some("wander");
-                if !wps.is_empty() {
+                if !is_wander && !wps.is_empty() {
                     out.push_str(&format!("_{}_ENEMY{}_WPS:\n", name, i));
                     for wp in wps {
                         out.push_str(&format!("    FDB {}  ; wp x\n", wp.x));
                         out.push_str(&format!("    FDB {}  ; wp y\n", wp.y));
                     }
                     out.push_str("\n");
-                } else if is_wander {
-                    // Auto-generated patrol waypoints from closest walkable area
-                    let level_areas = self.walkable_areas.as_deref().unwrap_or(&[]);
-                    let best = level_areas.iter().min_by_key(|a| {
-                        let dy = (obj.y as i32 - a.y as i32).abs();
-                        let x_in = obj.x >= a.x_min && obj.x <= a.x_max;
-                        if x_in { dy } else { dy + 10000 }
-                    });
-                    if let Some(area) = best {
-                        out.push_str(&format!("_{}_ENEMY{}_WPS:\n", name, i));
-                        out.push_str(&format!("    FDB {}  ; wp0 x (area x_min)\n", area.x_min));
-                        out.push_str(&format!("    FDB {}  ; wp0 y (spawn y)\n", obj.y));
-                        out.push_str(&format!("    FDB {}  ; wp1 x (area x_max)\n", area.x_max));
-                        out.push_str(&format!("    FDB {}  ; wp1 y (spawn y)\n", obj.y));
-                        out.push_str("\n");
+                }
+            }
+
+            // Emit shared Phase 2 wander AREAS + TRANS tables (level-wide)
+            if !level_areas_world.is_empty() {
+                let area_count = level_areas_world.len();
+                let trans_count = level_transitions.len();
+                out.push_str(&format!("; ---- Phase 2 wander: level-wide areas ({} areas, {} transitions) ----\n",
+                    area_count, trans_count));
+                out.push_str(&format!("_{}_AREAS_HEADER:\n", name));
+                out.push_str(&format!("    FCB {}    ; area_count\n", area_count));
+                out.push_str(&format!("    FCB {}    ; trans_count\n", trans_count));
+                out.push_str(&format!("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n"));
+                for (idx, a) in level_areas_world.iter().enumerate() {
+                    out.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
+                    out.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
+                    out.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
+                    out.push_str(&format!("    FCB 0,0      ; pad\n"));
+                }
+                if trans_count > 0 {
+                    out.push_str(&format!("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n"));
+                    out.push_str(&format!("; type: 1=jump_up, 2=drop, 3=jump_across; vy0 = signed initial velocity\n"));
+                    for (idx, t) in level_transitions.iter().enumerate() {
+                        let (from, to, ttype, vy0, from_x, to_x) = t;
+                        // vy0 is i8; emit as unsigned byte by reinterpreting
+                        let vy0_byte = *vy0 as u8;
+                        out.push_str(&format!("    FCB {},{},{},${:02X}  ; trans[{}] from,to,type,vy0\n",
+                            from, to, ttype, vy0_byte, idx));
+                        out.push_str(&format!("    FDB {}     ; from_x\n", from_x));
+                        out.push_str(&format!("    FDB {}     ; to_x\n", to_x));
+                    }
+                }
+                out.push_str("\n");
+            }
+        }
+
+        out
+    }
+
+    /// Auto-derive transitions between walkable areas based on geometry.
+    /// Filters cross-screen pairs when isolate_screens is set (256-unit Y screen partition).
+    /// Returns Vec<(from, to, type, vy0, from_x, to_x)>.
+    fn derive_transitions_m6809(
+        areas: &[WalkableArea],
+        isolate_screens: bool,
+        world_y_max: i16,
+    ) -> Vec<(u8, u8, u8, i8, i16, i16)> {
+        let mut out = Vec::new();
+        const MAX_TRANS: usize = 24;
+        const MAX_JUMP_DY: i16 = 100;          // max height for jump_up reach
+        const MAX_ACROSS_GAP: i16 = 60;        // max horizontal gap for jump_across
+        const MAX_ACROSS_DY: i16 = 40;         // max vertical delta for jump_across
+
+        // Screen partition aligned to worldBounds.yMax (256-unit Y bands).
+        let screen_of = |y: i16| -> i32 {
+            (world_y_max as i32 - y as i32).div_euclid(256)
+        };
+
+        // Compute jump_up vy0 such that vy0*(vy0+1)/2 >= dy (peak height covers dy).
+        // Cap at 16 to fit in i8. Matches PiTrex iterative formula.
+        let vy0_for_jump_up = |dy: i16| -> i8 {
+            for v in 4i16..=16 {
+                if v * (v + 1) / 2 >= dy { return v as i8; }
+            }
+            16
+        };
+
+        for (i, a) in areas.iter().enumerate() {
+            for (j, b) in areas.iter().enumerate() {
+                if i == j { continue; }
+                if out.len() >= MAX_TRANS { return out; }
+                if isolate_screens && screen_of(a.y) != screen_of(b.y) { continue; }
+                let ov_min = a.x_min.max(b.x_min);
+                let ov_max = a.x_max.min(b.x_max);
+                let overlap = ov_max - ov_min;
+                let dy = b.y - a.y;
+                if overlap > 0 {
+                    let from_x = (ov_min + ov_max) / 2;
+                    let to_x = from_x;
+                    if dy > 0 && dy <= MAX_JUMP_DY {
+                        // jump_up: target higher than source
+                        let vy0 = vy0_for_jump_up(dy);
+                        out.push((i as u8, j as u8, 1u8, vy0, from_x, to_x));
+                    } else if dy < 0 && (-dy) <= MAX_JUMP_DY {
+                        // drop: target lower
+                        out.push((i as u8, j as u8, 2u8, -1i8, from_x, to_x));
+                    }
+                } else {
+                    let gap = (-overlap).max(0);
+                    if gap > 0 && gap <= MAX_ACROSS_GAP && dy.abs() <= MAX_ACROSS_DY {
+                        let (from_x, to_x) = if a.x_max < b.x_min {
+                            (a.x_max, b.x_min)
+                        } else {
+                            (a.x_min, b.x_max)
+                        };
+                        out.push((i as u8, j as u8, 3u8, 3i8, from_x, to_x));
                     }
                 }
             }
         }
-
         out
     }
 
@@ -1085,6 +1222,45 @@ impl VPlayLevel {
             obj_idx += 1;
         }
         (out, sources)
+    }
+
+    /// Pool ALL walkable areas in world coords: level-wide + every placed
+    /// background/gameplay object's .vec walkable_areas translated by the
+    /// object's (x, y). Returns a flat Vec usable as a candidate set for
+    /// wander-enemy patrol-bound derivation on the M6809 target (matches
+    /// ARM's `collect_vec_walkable_areas_with_sources` plus level pool).
+    fn collect_all_walk_areas_world(
+        layers: &VPlayLayers,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+        level_areas: &[WalkableArea],
+    ) -> Vec<WalkableArea> {
+        let mut out: Vec<WalkableArea> = level_areas.to_vec();
+        let scan = layers.background.iter().chain(layers.gameplay.iter());
+        for obj in scan {
+            let key = obj.vector_name.to_lowercase();
+            if let Some(areas) = vec_walk_areas.get(&key) {
+                for a in areas {
+                    out.push(WalkableArea {
+                        y: a.y.saturating_add(obj.y as i16),
+                        x_min: a.x_min.saturating_add(obj.x as i16),
+                        x_max: a.x_max.saturating_add(obj.x as i16),
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// Pick the closest walkable area to an enemy: minimise |dy| with a heavy
+    /// penalty if the enemy's X is outside the area's [x_min, x_max] range.
+    /// Returns the chosen area (cloned), or None when no candidates exist.
+    #[allow(dead_code)]
+    fn find_best_walk_area<'a>(areas: &'a [WalkableArea], obj: &VPlayObject) -> Option<&'a WalkableArea> {
+        areas.iter().min_by_key(|a| {
+            let dy = (obj.y as i32 - a.y as i32).abs();
+            let x_in = obj.x >= a.x_min && obj.x <= a.x_max;
+            if x_in { dy } else { dy + 10000 }
+        })
     }
 
     /// Compute the walkable areas for an enemy with this precedence:

@@ -974,7 +974,7 @@ pub fn emit_builtin(
             }
             expressions::emit_simple_expr(&args[0], out, assets);
             out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
-            out.push_str("    LDB #16             ; ENEMY_POOL_STRIDE\n");
+            out.push_str("    LDB #28             ; ENEMY_POOL_STRIDE\n");
             out.push_str("    MUL                 ; D = A * stride\n");
             out.push_str("    LDX #ENEMY_POOL\n");
             out.push_str("    LEAX D,X            ; X = &pool[i]\n");
@@ -1037,7 +1037,7 @@ pub fn emit_builtin(
             // Compute pool entry pointer: X = &pool[i]
             expressions::emit_simple_expr(&args[0], out, assets);
             out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
-            out.push_str("    LDB #16             ; ENEMY_POOL_STRIDE (mirrors GET_ENEMY_X)\n");
+            out.push_str("    LDB #28             ; ENEMY_POOL_STRIDE (must match runtime POOL_DIR=17 + 1 byte)\n");
             out.push_str("    MUL                 ; D = A * stride\n");
             out.push_str("    LDX #ENEMY_POOL\n");
             out.push_str("    LEAX D,X            ; X = &pool[i]\n");

@@ -868,6 +868,11 @@ pub fn generate_distributed_assets_asm(
     // Build vec_meshes: lowercase vec name → collision segments from the .vec file,
     // for the LEVEL_COLLISION_Y mesh ray-cast (empty → AABB fallback for that object).
     let mut vec_meshes: HashMap<String, Vec<crate::vecres::VecMeshSegment>> = HashMap::new();
+    // Per-vec walkable areas (vec-local coords). Used by levelres wander-enemy
+    // patrol-bound derivation: each placed platform contributes its own walk
+    // band so titchis end up patrolling the platform they spawn on, not just
+    // the level-wide floor band.
+    let mut vec_walk_areas: HashMap<String, Vec<crate::vecres::VecWalkableArea>> = HashMap::new();
     for asset in &all_vec_assets {
         if let Ok(text) = std::fs::read_to_string(&asset.info.path) {
             if let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) {
@@ -875,6 +880,9 @@ pub fn generate_distributed_assets_asm(
                     if !mesh.segments.is_empty() {
                         vec_meshes.insert(asset.info.name.to_lowercase(), mesh.segments.clone());
                     }
+                }
+                if !res.walkable_areas.is_empty() {
+                    vec_walk_areas.insert(asset.info.name.to_lowercase(), res.walkable_areas.clone());
                 }
             }
         }
@@ -889,7 +897,7 @@ pub fn generate_distributed_assets_asm(
             if matches!(asset.info.asset_type, AssetType::Level) {
                 match crate::levelres::VPlayLevel::load(std::path::Path::new(&asset.info.path)) {
                     Ok(resource) => {
-                        let asm_code = resource.compile_to_asm_with_bank_map(&vec_dims_for_levels, &vec_bank_map, &vec_meshes);
+                        let asm_code = resource.compile_to_asm_with_bank_map_and_walk(&vec_dims_for_levels, &vec_bank_map, &vec_meshes, &vec_walk_areas);
                         level_asm_by_name.insert(asset.info.name.clone(), asm_code);
                     }
                     Err(e) => {
@@ -1368,9 +1376,11 @@ pub(crate) fn generate_draw_anim_banked_wrapper() -> String {
     asm.push_str("; Clobbers: A, B, X  (DRAW_ANIM_RUNTIME preserves D,X,Y,U via PSHS/PULS)\n");
     asm.push_str(";***************************************************************************\n");
     asm.push_str("DRAW_ANIM_BANKED:\n");
-    asm.push_str("    ; Set up animation draw parameters (defaults: normal size, no mirror, vanim timing)\n");
-    asm.push_str("    CLR >DRAW_ANIM_MIRROR_X\n");
-    asm.push_str("    CLR >MIRROR_X\n");
+    asm.push_str("    ; Set up animation draw parameters (defaults: normal size, vanim timing).\n");
+    asm.push_str("    ; NOTE: do NOT clear DRAW_ANIM_MIRROR_X or MIRROR_X here — DRAW_ENEMIES\n");
+    asm.push_str("    ; sets them from POOL_DIR right before calling us, and clearing would wipe\n");
+    asm.push_str("    ; the patrol-direction mirror. DRAW_ANIM_RUNTIME re-applies DRAW_ANIM_MIRROR_X\n");
+    asm.push_str("    ; to MIRROR_X per frame, so just leave both alone.\n");
     asm.push_str("    CLR >MIRROR_Y\n");
     asm.push_str("    LDA #$7F\n");
     asm.push_str("    STA >DRAW_ANIM_SCALE\n");
