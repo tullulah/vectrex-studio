@@ -829,7 +829,7 @@ export const EmulatorPanel: React.FC = () => {
             }
           }
 
-          if (transitions !== 0 || buttonState !== 0) {
+          if ((transitions !== 0 || buttonState !== 0) && (window as any).BUTTON_DEBUG) {
             setTimeout(() => {
               const c811 = vecx.read8(0xC811);
               const c80f = vecx.read8(0xC80F);
@@ -2832,7 +2832,7 @@ export const EmulatorPanel: React.FC = () => {
               // Honour pause/stop from debug controls
               if (useDebugStore.getState().state !== 'running') return;
               rp2350FrameCount++;
-              if (rp2350FrameCount <= 5 || rp2350FrameCount % 120 === 0) {
+              if ((window as any).RP2350_DEBUG && (rp2350FrameCount <= 5 || rp2350FrameCount % 120 === 0)) {
                 console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
               }
               emuCore.runFrame();

@@ -376,7 +376,8 @@ export class Rp2350System implements ISystem, IBus {
    */
   runFrame(): Segment[] {
     const fc     = this.frameCounter;
-    const logAll = fc < 10 || fc % 60 === 0;
+    const debugEnabled = (typeof window !== 'undefined') && !!(window as any).RP2350_DEBUG;
+    const logAll = debugEnabled && (fc < 10 || fc % 60 === 0);
 
     if (logAll) {
       console.log(`[Rp2350System.runFrame] ENTER frame=${fc} pc=0x${this.cpu.pc.toString(16)} sp=0x${this.cpu.getReg(13).toString(16)} traps=${this.traps.size}`);
@@ -430,16 +431,14 @@ export class Rp2350System implements ISystem, IBus {
         console.log(`[Rp2350System.runFrame] first PCs: ${firstPcs.join(' → ')}`);
       }
     }
-    // Dump enemy pool state every frame for the first 90 frames, then every 60
-    if (fc < 90 || fc % 60 === 0) {
+    // Dump enemy pool state (debug only — enable via window.RP2350_DEBUG=true)
+    if (debugEnabled && (fc < 90 || fc % 60 === 0)) {
       const ecOff = 0x7F308;
       const count = (this.sram[ecOff] | (this.sram[ecOff+1]<<8) | (this.sram[ecOff+2]<<16) | (this.sram[ecOff+3]<<24)) >>> 0;
       if (count > 0) {
         const b = 0x7F30C;
-        const active = (this.sram[b] | (this.sram[b+1]<<8) | (this.sram[b+2]<<16) | (this.sram[b+3]<<24)) >>> 0;
         const wx = (this.sram[b+4]  | (this.sram[b+5]<<8)  | (this.sram[b+6]<<16)  | (this.sram[b+7]<<24))  | 0;
         const wy = (this.sram[b+8]  | (this.sram[b+9]<<8)  | (this.sram[b+10]<<16) | (this.sram[b+11]<<24)) | 0;
-        const wpIdx = this.sram[b+20];
         const isAnim = this.sram[b+23];
         const frameIdx = this.sram[b+24];
         const ticksLeft = this.sram[b+25];
@@ -496,12 +495,13 @@ export class Rp2350System implements ISystem, IBus {
       // ── Ball-variable write trace (debug bounce bug) ──────────────────
       // Detect when the HIGH byte (last byte, +3) of ball vel vars is written,
       // then log the full signed 32-bit value so we can see direction changes.
-      if (addr === 0x2007F29B) {  // BALL_VY high byte
+      const debugBall = (typeof window !== 'undefined') && !!(window as any).RP2350_DEBUG;
+      if (debugBall && addr === 0x2007F29B) {  // BALL_VY high byte
         const vy = this.sram[0x7F298] | (this.sram[0x7F299] << 8)
                  | (this.sram[0x7F29A] << 16) | (this.sram[0x7F29B] << 24);
         console.log(`[bounce-trace] BALL_VY written: ${vy | 0}  frame=${this.frameCounter}`);
       }
-      if (addr === 0x2007F297) {  // BALL_VX high byte
+      if (debugBall && addr === 0x2007F297) {  // BALL_VX high byte
         const vx = this.sram[0x7F294] | (this.sram[0x7F295] << 8)
                  | (this.sram[0x7F296] << 16) | (this.sram[0x7F297] << 24);
         console.log(`[bounce-trace] BALL_VX written: ${vx | 0}  frame=${this.frameCounter}`);
@@ -509,7 +509,7 @@ export class Rp2350System implements ISystem, IBus {
       // ── Animation state write trace ──────────────────────────────────────
       // Pool slot 0 anim state: +24=frame_idx, +25=ticks_left
       // ENEMY_POOL_ARM=0x2007F30C → slot0+24=0x2007F324, slot0+25=0x2007F325
-      if (addr >= 0x2007F324 && addr <= 0x2007F327 && (this as any)._animTraceCount < 30) {
+      if (debugBall && addr >= 0x2007F324 && addr <= 0x2007F327 && (this as any)._animTraceCount < 30) {
         (this as any)._animTraceCount = ((this as any)._animTraceCount ?? 0) + 1;
         console.log(`[anim-trace] pool slot0 offset +${addr-0x2007F30C} = ${data}  frame=${this.frameCounter}`);
       }

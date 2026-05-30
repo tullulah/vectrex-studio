@@ -1257,8 +1257,84 @@ def loop():
         break;
       }
       
-      default:
+      case 'layout.reset': {
+        resetLayout();
+        break;
+      }
+      case 'project.openPath': {
+        // Same shape as openRecent — path arrives in payload.
+        const projectPath = payload || '';
+        if (!projectPath) { logger.error('Project', 'No path provided for openPath'); break; }
+        await openVpyProject(projectPath);
+        break;
+      }
+      case 'view.hideActivePanel': {
+        const mdl: any = (window as any).__vpyDockModel;
+        let activeComp: string | undefined;
+        try {
+          mdl?.visitNodes?.((n: any) => {
+            if (activeComp) return;
+            if (n.getType && n.getType() === 'tabset') {
+              const sel = n.getSelectedNode?.();
+              if (sel) {
+                const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+              }
+            }
+          });
+        } catch {}
+        if (activeComp) toggleComponent(activeComp as any);
+        break;
+      }
+      case 'view.togglePinActivePanel': {
+        const pnlRef: any = (window as any).__pinnedPanelsRef;
+        const mdl: any = (window as any).__vpyDockModel;
+        let activeComp: string | undefined;
+        try {
+          mdl?.visitNodes?.((n: any) => {
+            if (activeComp) return;
+            if (n.getType && n.getType() === 'tabset') {
+              const sel = n.getSelectedNode?.();
+              if (sel) {
+                const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+              }
+            }
+          });
+        } catch {}
+        if (activeComp && pnlRef?.current) {
+          if (pnlRef.current.has(activeComp)) {
+            pnlRef.current.delete(activeComp);
+            toggleComponent(activeComp as any);
+          } else {
+            pnlRef.current.add(activeComp);
+          }
+          try {
+            const arr = Array.from(pnlRef.current.values());
+            if (arr.length) localStorage.setItem('vpy_pinned_panels_v1', JSON.stringify(arr));
+            else localStorage.removeItem('vpy_pinned_panels_v1');
+          } catch {}
+        }
+        break;
+      }
+      default: {
+        // View panel toggles from Electron native menu: view.toggle.<component>
+        // Maps directly to dockBus toggleComponent. 'dual-emulator' isn't a real
+        // DockComponent yet, so silently ignore until it is implemented.
+        if (id.startsWith('view.toggle.')) {
+          const comp = id.slice('view.toggle.'.length);
+          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls'];
+          if (valid.includes(comp)) {
+            toggleComponent(comp as any);
+          } else if (comp === 'dual-emulator') {
+            logger.info('App', 'dual-emulator panel not yet implemented');
+          } else {
+            logger.warn('App', 'unknown view panel:', comp);
+          }
+          break;
+        }
         logger.warn('App', 'unknown command:', id);
+      }
     }
   }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild]);
 

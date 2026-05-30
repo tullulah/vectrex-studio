@@ -717,7 +717,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   private _runFrameRp2350(): { stepsRun: number; vectors: Segment[] } {
     if (!this._rp2350System) return { stepsRun: 0, vectors: [] };
     const fc = this.frameCounter;
-    const log = fc < 10 || fc % 60 === 0;
+    const log = !!(window as any).RP2350_DEBUG && (fc < 10 || fc % 60 === 0);
     if (log) console.log(`[rp2350 runFrame] frame=${fc} enter`);
     try {
       const segments = this._rp2350System.runFrame();

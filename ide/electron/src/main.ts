@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, session, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, dialog, systemPreferences } from 'electron';
 import { spawn } from 'child_process';
 // Legacy TypeScript emulator removed: all references to './emu6809' have been deleted.
 // NOTE: Remaining emulator-related IPC endpoints that depended on globalCpu have been pruned.
@@ -74,6 +74,22 @@ interface LspChild {
   stdin: NodeJS.WritableStream;
 }
 let lsp: LspChild | null = null;
+
+// macOS auto-injects Writing Tools / AutoFill / Dictation / Emoji items into any
+// menu labeled "Edit". Suppress them via NSUserDefaults so AppKit skips the injection
+// when it builds the menu. Must run BEFORE Menu.setApplicationMenu.
+if (process.platform === 'darwin') {
+  try {
+    systemPreferences.setUserDefault('NSDisabledDictationMenuItem', 'boolean', true as any);
+    systemPreferences.setUserDefault('NSDisabledCharacterPaletteMenuItem', 'boolean', true as any);
+    // Writing Tools (macOS 15.x Sequoia)
+    systemPreferences.setUserDefault('NSAllowAIWritingTools', 'boolean', false as any);
+    // AutoFill submenu in Edit menu
+    systemPreferences.setUserDefault('WebAutomaticTextReplacementEnabled', 'boolean', false as any);
+  } catch (e) {
+    console.warn('[macOS] failed to suppress Edit menu auto-items:', e);
+  }
+}
 
 async function createWindow() {
   const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
