@@ -173,21 +173,21 @@ def main():
 def loop():
     if game_state == STATE_TITLE:
         state_title()
-    if game_state == STATE_GAME_START:
+    elif game_state == STATE_GAME_START:
         state_game_start()
-    if game_state == STATE_PLAYING:
+    elif game_state == STATE_PLAYING:
         state_playing()
-    if game_state == STATE_PLAYER_DEAD:
+    elif game_state == STATE_PLAYER_DEAD:
         state_player_dead()
-    if game_state == STATE_LEVEL_CLEAR:
+    elif game_state == STATE_LEVEL_CLEAR:
         state_level_clear()
-    if game_state == STATE_BOSS_INTRO:
+    elif game_state == STATE_BOSS_INTRO:
         state_boss_intro()
-    if game_state == STATE_BOSS:
+    elif game_state == STATE_BOSS:
         state_boss()
-    if game_state == STATE_GAME_OVER:
+    elif game_state == STATE_GAME_OVER:
         state_game_over()
-    if game_state == STATE_ALL_CLEAR:
+    elif game_state == STATE_ALL_CLEAR:
         state_all_clear()
 
 # ── Estado: título ───────────────────────────────────────────────────────────
@@ -205,6 +205,10 @@ def state_title():
 
 # ── Estado: pantalla "ROUND N" ───────────────────────────────────────────────
 def state_game_start():
+    # NOTA: aquí NO se llama a state_playing(). En este estado los enemigos
+    # aún no están spawneados (LOAD_LEVEL+SPAWN_ENEMIES corre cuando frame_timer
+    # llega a 0). Si se llamara state_playing() ahora, count_active_enemies()
+    # devolvería 0 → enter_level_clear() → salto inmediato al siguiente nivel.
     SHOW_LEVEL()
     PRINT_TEXT(-30, 20, "ROUND")
     PRINT_NUMBER(30, 20, current_level)
@@ -216,9 +220,9 @@ def state_game_start():
 # ── Estado: gameplay ─────────────────────────────────────────────────────────
 def state_playing():
     # time_left = time_left - 1
-    # if time_left <= 0:
-    #     if INVINCIBLE == 0:
-    #         on_player_death()
+    if time_left <= 0:
+        if INVINCIBLE == 0:
+            on_player_death()
     update_player()
     update_snowballs()
     UPDATE_ENEMIES()
@@ -228,7 +232,7 @@ def state_playing():
     update_frog_fire()
     update_frog_bullet()
     check_snowball_enemy_collision()
-    # check_player_enemy_collision()
+    check_player_enemy_collision()
 
     SET_CAMERA_Y(camera_y)
 
@@ -238,9 +242,9 @@ def state_playing():
     SET_INTENSITY(85)
     DRAW_ENEMIES()
     draw_hud()
-    # enemy_count = count_active_enemies()
-    # if enemy_count <= 0:
-    #     enter_level_clear()
+    enemy_count = count_active_enemies()
+    if enemy_count <= 0:
+        enter_level_clear()
     SHOW_LEVEL()
 
     # _dbg_ctr = _dbg_ctr + 1
@@ -250,6 +254,7 @@ def state_playing():
     #     DEBUG_PRINT_LABELED(2, _t2 - _t1)
     #     DEBUG_PRINT_LABELED(3, _t3 - _t2)
     #     DEBUG_PRINT_LABELED(4, _t4 - _t3)
+
 
 # ── Estado: muerte del jugador ───────────────────────────────────────────────
 def state_player_dead():
@@ -393,6 +398,7 @@ def check_if_boss_level():
 
 # ── Carga de nivel + música ──────────────────────────────────────────────────
 def load_current_level():
+    STOP_MUSIC()
     time_left = LEVEL_TIME
     player_x = 0
     camera_y = CAMERA_Y_MIN + (current_level - 1) * 256
@@ -407,77 +413,38 @@ def load_current_level():
     snow2_active = 0
     snow_life_max = SNOW_LIFE_NORMAL
     player_has_power = 0
-    SET_CAMERA_Y(camera_y)
     reset_balls()
     reset_frog_fire()
-    if current_level == 1:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 2:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 3:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 4:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 5:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 6:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
+
+    # Todos los niveles usan world_1_1 por ahora (placeholder hasta que existan
+    # los demás .vplay). Cuando los tengas, añade ramas concretas antes del
+    # bloque por defecto.
+    LOAD_LEVEL("world_1_1")
+    SPAWN_ENEMIES("world_1_1")
+    kill_offscreen_enemies()
+
+    # Música por nivel: niveles 6 y 7 usan Henshoku, el resto Yukidama-Ondo.
+    if current_level == 16:
         PLAY_MUSIC("Henshoku")
-    if current_level == 7:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
+    elif current_level == 7:
         PLAY_MUSIC("Henshoku")
-    if current_level == 8:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
+    else:
         PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 9:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 11:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
-    if current_level == 12:
-        LOAD_LEVEL("world_1_1")
-        SPAWN_ENEMIES("world_1_1")
-        kill_offscreen_enemies()
-        PLAY_MUSIC("Yukidama-Ondo")
+
     spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH
     player_y = spawn_floor_y
 
 def play_boss_music():
+    # Niveles boss (10, 20, 30, 40, 50) usan la misma intro.
     if current_level == 10:
         PLAY_MUSIC("Boss_Intro")
-    if current_level == 20:
+    elif current_level == 20:
         PLAY_MUSIC("Boss_Intro")
-    if current_level == 30:
+    elif current_level == 30:
         PLAY_MUSIC("Boss_Intro")
-    if current_level == 40:
+    elif current_level == 40:
         PLAY_MUSIC("Boss_Intro")
-    if current_level == 50:
+    elif current_level == 50:
         PLAY_MUSIC("Boss_Intro")
 
 # ── Jugador ──────────────────────────────────────────────────────────────────
@@ -648,7 +615,6 @@ def draw_snowballs():
 
 # ── HUD ──────────────────────────────────────────────────────────────────────
 def draw_hud():
-    #(rompe 6809)
     PRINT_NUMBER(0, 127, score)          # puntuación, arriba-izquierda
     PRINT_NUMBER(-78, 127, lives)           # vidas, debajo del score
     PRINT_NUMBER(58, 127, time_left / 60)   # tiempo en segundos, arriba-derecha

@@ -349,6 +349,59 @@ fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[
     }
 }
 
+/// Try to extract an integer literal value from an expression that resolves
+/// to a compile-time constant. Catches direct integer literals and identifiers
+/// bound to a `const`. Returns None for runtime expressions.
+pub fn try_extract_int_literal(expr: &Expr) -> Option<i32> {
+    match expr {
+        Expr::Number(n) => Some(*n as i32),
+        Expr::Ident(id) => context::get_const_value(&id.name).map(|v| v as i32),
+        _ => None,
+    }
+}
+
+/// Branch-if-false peephole for if/elif/while conditions.
+///
+/// Without this, `if x == LIT` emits ~9 instructions / ~25 cycles because
+/// `emit_compare` produces a 0/1 boolean value in D and then the caller does
+/// `LBEQ skip`. For simple `==` / `!=` against a literal we can just emit
+/// `LDD x; CMPD #LIT; LBNE/LBEQ skip` (~3 instructions / ~10 cycles).
+///
+/// Falls back to the generic boolean-then-LBEQ path for non-Compare conds or
+/// for ops other than Eq/Ne (signed-vs-unsigned compare semantics are tricky
+/// with the mix of i16/u16 types in user code; safer to keep the existing
+/// boolean-materialise path for <,<=,>,>=).
+pub fn emit_branch_if_false(cond: &Expr, label: &str, out: &mut String, assets: &[AssetInfo]) {
+    if let Expr::Compare { left, op, right } = cond {
+        // Eq / Ne are signed-agnostic — Z flag is set the same way for both
+        // signed and unsigned 16-bit subtract — so we can safely peephole.
+        let inv = match op {
+            CmpOp::Eq => Some("LBNE"),
+            CmpOp::Ne => Some("LBEQ"),
+            _ => None,
+        };
+        if let Some(inv_op) = inv {
+            // Prefer literal on RHS (most common: `if x == LITERAL`).
+            if let Some(lit) = try_extract_int_literal(right) {
+                emit_simple_expr(left, out, assets);
+                out.push_str(&format!("    CMPD #{}\n", lit));
+                out.push_str(&format!("    {} {}\n", inv_op, label));
+                return;
+            }
+            // Symmetric for Eq/Ne: also handle literal on LHS.
+            if let Some(lit) = try_extract_int_literal(left) {
+                emit_simple_expr(right, out, assets);
+                out.push_str(&format!("    CMPD #{}\n", lit));
+                out.push_str(&format!("    {} {}\n", inv_op, label));
+                return;
+            }
+        }
+    }
+    // Fallback: produce 0/1 in D then branch when zero (= condition false).
+    emit_simple_expr(cond, out, assets);
+    out.push_str(&format!("    LBEQ {}\n", label));
+}
+
 fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
     let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
 

@@ -409,35 +409,96 @@ impl VPlayLevel {
         out.push_str(&format!("    FCB {}  ; enemy_count\n", enemy_header_count));
         out.push_str(&format!("    FDB {}  ; enemy_instances_ptr (0 if none)\n", instances_header_label));
         out.push_str(&format!("    FDB {}  ; groundBottomOffset (floor surface offset from screen bottom)\n", self.editor_meta.ground_bottom_offset));
+
+        // ── PER-SCREEN OBJECT INDEX (Phase: SHOW_LEVEL perf) ──────────────
+        // Partition each layer's objects by 256-unit Y screen band so
+        // SHOW_LEVEL only iterates the current camera's screen instead of
+        // every object every frame. Header appends:
+        //   +34   FCB screen_count
+        //   +35   FDB _LVL_BG_SCREENS_PTR    (per-screen index for BG layer)
+        //   +37   FDB _LVL_GP_SCREENS_PTR
+        //   +39   FDB _LVL_FG_SCREENS_PTR
+        // Each _LVL_X_SCREENS entry (3 bytes per screen): FCB count, FDB sublist_ptr.
+        // The flat _LVL_X_OBJECTS lists are emitted in screen-sorted order so
+        // each screen's sublist is a contiguous range within the flat list.
+        let screen_count: usize = {
+            let span = (self.world_bounds.y_max as i32 - self.world_bounds.y_min as i32).max(0);
+            ((span / 256) + 1).max(1) as usize
+        };
+        out.push_str(&format!("    FCB {}    ; +34 screen_count\n", screen_count));
+        out.push_str(&format!("    FDB _{}_BG_SCREENS  ; +35 BG screens index\n", name));
+        out.push_str(&format!("    FDB _{}_GP_SCREENS  ; +37 GP screens index\n", name));
+        out.push_str(&format!("    FDB _{}_FG_SCREENS  ; +39 FG screens index\n", name));
         out.push_str("\n");
 
-        // Emit background objects
-        out.push_str(&format!("_{}_BG_OBJECTS:\n", name));
+        // Helper: group objects by screen index (single-screen assignment by center Y).
+        // Edge cases (objects spanning boundaries) tolerated; runtime Y-cull is still done.
+        let y_max = self.world_bounds.y_max;
+        let group_by_screen = |objs: &[VPlayObject]| -> Vec<Vec<usize>> {
+            let mut buckets: Vec<Vec<usize>> = vec![Vec::new(); screen_count];
+            for (i, obj) in objs.iter().enumerate() {
+                let s = ((y_max as i32 - obj.y as i32).max(0) / 256) as usize;
+                let s = s.min(screen_count - 1);
+                buckets[s].push(i);
+            }
+            buckets
+        };
+
+        let bg_buckets = group_by_screen(&self.layers.background);
+        let gp_buckets = group_by_screen(&self.layers.gameplay);
+        let fg_buckets = group_by_screen(&self.layers.foreground);
+
+        // Helper to emit a layer's objects in screen-sorted order with per-screen sublabels.
         let mut meshes = String::new();
-        for obj in &self.layers.background {
-            let (m, rec) = self.compile_object_with_dims(obj, dims, vec_bank_map, vec_meshes, &name);
-            out.push_str(&rec);
-            meshes.push_str(&m);
-        }
-        out.push_str("\n");
+        let emit_layer = |out: &mut String,
+                          meshes: &mut String,
+                          flat_label: &str,
+                          per_screen_label_prefix: &str,
+                          objs: &[VPlayObject],
+                          buckets: &[Vec<usize>]| {
+            out.push_str(&format!("{}:\n", flat_label));
+            for (s, bucket) in buckets.iter().enumerate() {
+                out.push_str(&format!("{}_S{}:\n", per_screen_label_prefix, s));
+                for &i in bucket {
+                    let (m, rec) = self.compile_object_with_dims(&objs[i], dims, vec_bank_map, vec_meshes, &name);
+                    out.push_str(&rec);
+                    meshes.push_str(&m);
+                }
+            }
+            out.push_str("\n");
+        };
 
-        // Emit gameplay objects
-        out.push_str(&format!("_{}_GAMEPLAY_OBJECTS:\n", name));
-        for obj in &self.layers.gameplay {
-            let (m, rec) = self.compile_object_with_dims(obj, dims, vec_bank_map, vec_meshes, &name);
-            out.push_str(&rec);
-            meshes.push_str(&m);
-        }
-        out.push_str("\n");
+        emit_layer(
+            &mut out, &mut meshes,
+            &format!("_{}_BG_OBJECTS", name),
+            &format!("_{}_BG_OBJECTS", name),
+            &self.layers.background, &bg_buckets,
+        );
+        emit_layer(
+            &mut out, &mut meshes,
+            &format!("_{}_GAMEPLAY_OBJECTS", name),
+            &format!("_{}_GAMEPLAY_OBJECTS", name),
+            &self.layers.gameplay, &gp_buckets,
+        );
+        emit_layer(
+            &mut out, &mut meshes,
+            &format!("_{}_FG_OBJECTS", name),
+            &format!("_{}_FG_OBJECTS", name),
+            &self.layers.foreground, &fg_buckets,
+        );
 
-        // Emit foreground objects
-        out.push_str(&format!("_{}_FG_OBJECTS:\n", name));
-        for obj in &self.layers.foreground {
-            let (m, rec) = self.compile_object_with_dims(obj, dims, vec_bank_map, vec_meshes, &name);
-            out.push_str(&rec);
-            meshes.push_str(&m);
-        }
-        out.push_str("\n");
+        // Emit per-screen index tables (3 bytes per screen: FCB count, FDB ptr).
+        let emit_index = |out: &mut String, table_label: &str, sublist_prefix: &str, buckets: &[Vec<usize>]| {
+            out.push_str(&format!("{}:\n", table_label));
+            for (s, bucket) in buckets.iter().enumerate() {
+                out.push_str(&format!("    FCB {}  ; screen {} count\n", bucket.len(), s));
+                out.push_str(&format!("    FDB {}_S{}  ; screen {} ptr\n", sublist_prefix, s, s));
+            }
+            out.push_str("\n");
+        };
+        emit_index(&mut out, &format!("_{}_BG_SCREENS", name), &format!("_{}_BG_OBJECTS", name), &bg_buckets);
+        emit_index(&mut out, &format!("_{}_GP_SCREENS", name), &format!("_{}_GAMEPLAY_OBJECTS", name), &gp_buckets);
+        emit_index(&mut out, &format!("_{}_FG_SCREENS", name), &format!("_{}_FG_OBJECTS", name), &fg_buckets);
 
         // Emit collision mesh data blocks (referenced by coll_mesh_ptr at object +21).
         // Kept in the same bank as the level so LEVEL_COLLISION_Y (which switches to

@@ -49,6 +49,56 @@ pub fn has_beep_calls(module: &Module) -> bool {
     })
 }
 
+/// Check if any code path uses analog joystick reads (J1_X / J1_Y / J2_X / J2_Y / J2_ANALOG_X/Y).
+/// When true, we auto-inject ONE Joy_Analog BIOS call per frame at the top of LOOP_BODY
+/// and J1X_BUILTIN/J1Y_BUILTIN/etc. become cheap cached-RAM reads. Saves ~750 cycles per
+/// duplicate call (Joy_Analog is heavy and already populates all 4 axes per BIOS call).
+pub fn has_joystick_analog_calls(module: &Module) -> bool {
+    fn is_joy(name: &str) -> bool {
+        matches!(name, "J1_X" | "J1_Y" | "J2_X" | "J2_Y" | "J2_ANALOG_X" | "J2_ANALOG_Y")
+    }
+    fn check_expr(expr: &Expr) -> bool {
+        match expr {
+            Expr::Call(c) => is_joy(&c.name) || c.args.iter().any(check_expr),
+            Expr::Compare { left, right, .. } => check_expr(left) || check_expr(right),
+            Expr::Binary { left, right, .. } => check_expr(left) || check_expr(right),
+            Expr::Logic { left, right, .. } => check_expr(left) || check_expr(right),
+            Expr::Not(e) | Expr::BitNot(e) => check_expr(e),
+            Expr::Index { target, index } => check_expr(target) || check_expr(index),
+            Expr::MethodCall(info) => check_expr(&info.target) || info.args.iter().any(check_expr),
+            Expr::List(items) => items.iter().any(check_expr),
+            Expr::FieldAccess { target, .. } => check_expr(target),
+            _ => false,
+        }
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::Assign { value, .. } => check_expr(value),
+            Stmt::CompoundAssign { value, .. } => check_expr(value),
+            Stmt::Let { value, .. } => check_expr(value),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            Stmt::ForIn { body, .. } => body.iter().any(check_stmt),
+            Stmt::Return(Some(e), _) => check_expr(e),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
 /// Check if module uses PLAY_NOTE (needs NOTE_UPDATE_RUNTIME + PLAY_NOTE_RUNTIME auto-injection)
 pub fn has_note_calls(module: &Module) -> bool {
     fn check_expr(expr: &Expr) -> bool {
@@ -394,6 +444,16 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // stores current state in $C80F, computes rising-edge in $C811, updates $C80E.
         // More reliable on real hardware than direct PSG reads.
         asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
+        // Auto-inject Joy_Analog ONCE per frame if any code uses analog joystick reads.
+        // Without this, every J1_X()/J1_Y() call would do its own ~750-cycle BIOS poll;
+        // here we poll once (populating all 4 axes at $C81B-$C81E) and the per-call
+        // builtins become cheap cached-RAM reads (~10 cycles).
+        if has_joystick_analog_calls(module) {
+            asm.push_str("    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)\n");
+            asm.push_str("    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E\n");
+            asm.push_str("    JSR Reset0Ref ; Restore beam state after Joy_Analog\n");
+            asm.push_str("    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)\n");
+        }
         // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
         if has_beep_calls(module) {
             asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
@@ -654,17 +714,17 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             let end = fresh_label("IF_END");
             let mut next = fresh_label("IF_NEXT");
             let simple_if = elifs.is_empty() && else_body.is_none();
-            expressions::emit_simple_expr(cond, asm, assets);
-            // D already holds the condition result from emit_simple_expr; branch directly.
-            asm.push_str(&format!("    LBEQ {}\n", next));
+            // Peephole: emit direct compare-and-branch for `if x == LIT` / `if x != LIT`
+            // patterns (saves ~15 cycles vs the boolean-materialise+LBEQ path).
+            // Falls back to the generic path for non-Compare conds and for ordered
+            // comparisons (signed/unsigned tricky with mixed i16/u16 globals).
+            expressions::emit_branch_if_false(cond, &next, asm, assets);
             for s in body { generate_statement(s, asm, assets, loop_labels)?; }
             asm.push_str(&format!("    LBRA {}\n", end));
             for (i, (c, b)) in elifs.iter().enumerate() {
                 asm.push_str(&format!("{}:\n", next));
                 let new_next = if i == elifs.len() - 1 && else_body.is_none() { end.clone() } else { fresh_label("IF_NEXT") };
-                expressions::emit_simple_expr(c, asm, assets);
-                // D already holds the condition result from emit_simple_expr; branch directly.
-                asm.push_str(&format!("    LBEQ {}\n", new_next));
+                expressions::emit_branch_if_false(c, &new_next, asm, assets);
                 for s in b { generate_statement(s, asm, assets, loop_labels)?; }
                 asm.push_str(&format!("    LBRA {}\n", end));
                 next = new_next;
@@ -686,8 +746,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             let mut inner_labels = loop_labels.to_vec();
             inner_labels.push((le.clone(), ls.clone())); // break→end, continue→top
             asm.push_str(&format!("{}: ; while start\n", ls));
-            expressions::emit_simple_expr(cond, asm, assets);
-            asm.push_str(&format!("    LBEQ {}\n", le));
+            // Same peephole as Stmt::If — direct compare-and-branch when applicable.
+            expressions::emit_branch_if_false(cond, &le, asm, assets);
             for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
             asm.push_str(&format!("    LBRA {}\n{}: ; while end\n", ls, le));
         }
@@ -971,6 +1031,13 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
         // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         bank0_asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
+        // Auto-inject Joy_Analog ONCE per frame (same rationale as single-bank path).
+        if has_joystick_analog_calls(module) {
+            bank0_asm.push_str("    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)\n");
+            bank0_asm.push_str("    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E\n");
+            bank0_asm.push_str("    JSR Reset0Ref ; Restore beam state after Joy_Analog\n");
+            bank0_asm.push_str("    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)\n");
+        }
         if has_beep_calls(module) {
             bank0_asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
         }

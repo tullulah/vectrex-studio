@@ -429,8 +429,19 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ; Read enemy data from header (+29: count, +30,+31: instances_ptr)\n");
         out.push_str("    LDB ,X+         ; B = enemy_count\n");
         out.push_str("    STB >LEVEL_ENEMY_COUNT\n");
-        out.push_str("    LDD ,X          ; D = enemy_instances_ptr\n");
+        out.push_str("    LDD ,X++        ; D = enemy_instances_ptr (advance past +30..+31)\n");
         out.push_str("    STD >LEVEL_ENEMY_INSTANCES_PTR\n");
+        out.push_str("    LEAX 2,X        ; skip groundBottomOffset (+32..+33)\n");
+        out.push_str("    \n");
+        out.push_str("    ; Per-screen object index (+34..+40)\n");
+        out.push_str("    LDB ,X+         ; B = screen_count\n");
+        out.push_str("    STB >LEVEL_SCREEN_COUNT\n");
+        out.push_str("    LDD ,X++        ; D = bg_screens_ptr\n");
+        out.push_str("    STD >LEVEL_BG_SCREENS_PTR\n");
+        out.push_str("    LDD ,X++        ; D = gp_screens_ptr\n");
+        out.push_str("    STD >LEVEL_GP_SCREENS_PTR\n");
+        out.push_str("    LDD ,X          ; D = fg_screens_ptr\n");
+        out.push_str("    STD >LEVEL_FG_SCREENS_PTR\n");
         out.push_str("    \n");
         out.push_str("    ; === Setup GP pointer: point directly to ROM (matches core) ===\n");
         out.push_str("    ; GP objects are read from ROM with stride=21 (stride-21 format), same as BG/FG\n");
@@ -561,7 +572,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    BEQ SLR_DONE     ; No level loaded, skip\n");
         out.push_str("    LDX >LEVEL_PTR\n");
         out.push_str("    \n");
-        out.push_str("    ; Re-read object counts from header\n");
+        out.push_str("    ; Re-read object counts from header (legacy: kept for any caller that reads RAM vars)\n");
         out.push_str("    LEAX 12,X        ; X points to counts (+12)\n");
         out.push_str("    LDB ,X+          ; B = bgCount\n");
         out.push_str("    STB >LEVEL_BG_COUNT\n");
@@ -570,37 +581,60 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB ,X+          ; B = fgCount\n");
         out.push_str("    STB >LEVEL_FG_COUNT\n");
         out.push_str("    \n");
-        out.push_str("    ; === Draw Background Layer (ROM, stride=21) ===\n");
-        out.push_str("SLR_BG_COUNT:\n");
-        out.push_str("    CLRB\n");
-        out.push_str("    LDB >LEVEL_BG_COUNT\n");
-        out.push_str("    CMPB #0\n");
-        out.push_str("    BEQ SLR_GAMEPLAY\n");
-        out.push_str("    LDA #23          ; ROM object stride (stride-23, +21-22 = coll_mesh_ptr)\n");
-        out.push_str("    LDX >LEVEL_BG_ROM_PTR\n");
-        out.push_str("    JSR SLR_DRAW_OBJECTS\n");
+        out.push_str("    ; ── PER-SCREEN VISIBLE RANGE ─────────────────────────────────────\n");
+        out.push_str("    ; Compute top_screen, bot_screen — only iterate objects whose screen\n");
+        out.push_str("    ; band overlaps the camera's ±128 Y window. For SnowBros (1 screen\n");
+        out.push_str("    ; visible) this is normally 1 screen, occasionally 2 during scroll.\n");
+        out.push_str("    LDX >LEVEL_PTR\n");
+        out.push_str("    LDD 6,X          ; D = yMax\n");
+        out.push_str("    STD >TMPPTR      ; cache yMax\n");
+        out.push_str("    LDD >CAMERA_Y\n");
+        out.push_str("    ADDD #128        ; D = top_y (camera_y + 128, higher Y = top of screen)\n");
+        out.push_str("    PSHS D\n");
+        out.push_str("    LDD >TMPPTR      ; yMax\n");
+        out.push_str("    SUBD ,S++        ; D = yMax - top_y\n");
+        out.push_str("    TSTA             ; sign byte\n");
+        out.push_str("    BPL SLR_TOP_OK   ; positive → A is the screen idx (D / 256)\n");
+        out.push_str("    CLRA             ; negative → clamp top_screen to 0\n");
+        out.push_str("SLR_TOP_OK:\n");
+        out.push_str("    STA >TMPVAL      ; TMPVAL = top_screen\n");
+        out.push_str("    LDD >CAMERA_Y\n");
+        out.push_str("    SUBD #128        ; D = bot_y (camera_y - 128)\n");
+        out.push_str("    PSHS D\n");
+        out.push_str("    LDD >TMPPTR      ; yMax\n");
+        out.push_str("    SUBD ,S++        ; D = yMax - bot_y\n");
+        out.push_str("    TSTA\n");
+        out.push_str("    BPL SLR_BOT_OK\n");
+        out.push_str("    CLRA\n");
+        out.push_str("SLR_BOT_OK:\n");
+        out.push_str("    ; Clamp bot_screen to (LEVEL_SCREEN_COUNT - 1) max\n");
+        out.push_str("    LDB >LEVEL_SCREEN_COUNT\n");
+        out.push_str("    LBEQ SLR_DONE    ; no screens → nothing to draw\n");
+        out.push_str("    DECB             ; B = max_idx = screen_count - 1\n");
+        out.push_str("    STB >TMPVAL+1    ; stash max_idx for compare (no CBA in assembler)\n");
+        out.push_str("    CMPA >TMPVAL+1   ; A (bot_screen) vs max_idx\n");
+        out.push_str("    BLS SLR_BOT_NOCLAMP\n");
+        out.push_str("    LDA >TMPVAL+1    ; clamp bot_screen = max_idx\n");
+        out.push_str("SLR_BOT_NOCLAMP:\n");
+        out.push_str("    STA >TMPVAL+1    ; TMPVAL+1 = bot_screen\n");
         out.push_str("    \n");
-        out.push_str("    ; === Draw Gameplay Layer (ROM, stride=21) ===\n");
+        out.push_str("    ; === Draw Background Layer ===\n");
+        out.push_str("SLR_BG_LAYER:\n");
+        out.push_str("    LDD >LEVEL_BG_SCREENS_PTR\n");
+        out.push_str("    STD >TMPPTR      ; TMPPTR = table base for this layer\n");
+        out.push_str("    JSR SLR_DRAW_SCREEN_RANGE\n");
+        out.push_str("    \n");
+        out.push_str("    ; === Draw Gameplay Layer ===\n");
         out.push_str("SLR_GAMEPLAY:\n");
-        out.push_str("SLR_GP_COUNT:\n");
-        out.push_str("    CLRB\n");
-        out.push_str("    LDB >LEVEL_GP_COUNT\n");
-        out.push_str("    CMPB #0\n");
-        out.push_str("    BEQ SLR_FOREGROUND\n");
-        out.push_str("    LDA #23          ; GP objects read from ROM (stride-23, +21-22 = coll_mesh_ptr)\n");
-        out.push_str("    LDX >LEVEL_GP_PTR\n");
-        out.push_str("    JSR SLR_DRAW_OBJECTS\n");
+        out.push_str("    LDD >LEVEL_GP_SCREENS_PTR\n");
+        out.push_str("    STD >TMPPTR\n");
+        out.push_str("    JSR SLR_DRAW_SCREEN_RANGE\n");
         out.push_str("    \n");
-        out.push_str("    ; === Draw Foreground Layer (ROM, stride=21) ===\n");
+        out.push_str("    ; === Draw Foreground Layer ===\n");
         out.push_str("SLR_FOREGROUND:\n");
-        out.push_str("SLR_FG_COUNT:\n");
-        out.push_str("    CLRB\n");
-        out.push_str("    LDB >LEVEL_FG_COUNT\n");
-        out.push_str("    CMPB #0\n");
-        out.push_str("    BEQ SLR_DONE\n");
-        out.push_str("    LDA #23          ; ROM object stride (stride-23, +21-22 = coll_mesh_ptr)\n");
-        out.push_str("    LDX >LEVEL_FG_ROM_PTR\n");
-        out.push_str("    JSR SLR_DRAW_OBJECTS\n");
+        out.push_str("    LDD >LEVEL_FG_SCREENS_PTR\n");
+        out.push_str("    STD >TMPPTR\n");
+        out.push_str("    JSR SLR_DRAW_SCREEN_RANGE\n");
         out.push_str("    \n");
         out.push_str("SLR_DONE:\n");
         if crate::m6809::builtins::use_banked_assets() {
@@ -613,6 +647,37 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         // $F1AF restores DP=$C8 without touching D,X,Y,U (safe for PULS)
         out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
         out.push_str("    PULS D,X,Y,U,PC  ; Restore and return\n");
+        out.push_str("    \n");
+        // ---- SLR_DRAW_SCREEN_RANGE subroutine ----
+        // Walks the per-screen index for one layer, calling SLR_DRAW_OBJECTS
+        // for each screen in [top_screen, bot_screen]. Input: TMPPTR = screens_table_ptr.
+        // top_screen at TMPVAL, bot_screen at TMPVAL+1.
+        // Each screen entry is 3 bytes: FCB count, FDB ptr.
+        out.push_str("; === SLR_DRAW_SCREEN_RANGE — iterate screens in visible camera range ===\n");
+        out.push_str("SLR_DRAW_SCREEN_RANGE:\n");
+        out.push_str("    LDA >TMPVAL          ; A = current screen idx (start at top)\n");
+        out.push_str("SLR_SR_LOOP:\n");
+        out.push_str("    CMPA >TMPVAL+1\n");
+        out.push_str("    BHI SLR_SR_DONE      ; current > bot → finished\n");
+        out.push_str("    CMPA >LEVEL_SCREEN_COUNT\n");
+        out.push_str("    BHS SLR_SR_DONE      ; defensive: don't index past table\n");
+        out.push_str("    ; Compute &table[s] = TMPPTR + s*3\n");
+        out.push_str("    PSHS A               ; save loop var\n");
+        out.push_str("    LDB #3\n");
+        out.push_str("    MUL                  ; D = s*3 (A=0 since s < 256/3, B = offset)\n");
+        out.push_str("    LDX >TMPPTR          ; X = screens table base\n");
+        out.push_str("    LEAX D,X             ; X = &table[s]\n");
+        out.push_str("    LDB ,X               ; B = count for this screen\n");
+        out.push_str("    BEQ SLR_SR_NEXT      ; empty screen → skip\n");
+        out.push_str("    LDX 1,X              ; X = ptr to first object in this screen\n");
+        out.push_str("    LDA #23              ; ROM object stride\n");
+        out.push_str("    JSR SLR_DRAW_OBJECTS\n");
+        out.push_str("SLR_SR_NEXT:\n");
+        out.push_str("    PULS A\n");
+        out.push_str("    INCA\n");
+        out.push_str("    BRA SLR_SR_LOOP\n");
+        out.push_str("SLR_SR_DONE:\n");
+        out.push_str("    RTS\n");
         out.push_str("    \n");
         // ---- SLR_DRAW_OBJECTS subroutine ----
         out.push_str("; === SLR_DRAW_OBJECTS - Draw N objects from a layer ===\n");
@@ -722,12 +787,16 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDU ,X++         ; U = path pointer, X advances to next entry\n");
         out.push_str("    PSHS X           ; Save pointer table position\n");
         out.push_str("    TFR U,X          ; X = actual path data\n");
-        // SLR_DRAW_CLIPPED_PATH does its own per-path 16-bit clip: skips paths whose
-        // absolute X lands outside the signed-byte range, and uses beam-off moves
-        // for segments that would wrap. Calling DSWM here instead caused ghost copies
-        // on the opposite side of the screen when an object's center was just inside
-        // the edge but a path's x_start carried it past +127 / -128.
-        out.push_str("    JSR SLR_DRAW_CLIPPED_PATH ; per-path 16-bit X clip (no DSWM wrap)\n");
+        // Use the same DSWM path that DRAW_VECTOR_BANKED uses. SLR_DRAW_CLIPPED_PATH
+        // (custom direct-VIA implementation that aimed at 16-bit X clip) caused visible
+        // beam flicker on stable scenes — manually replacing SHOW_LEVEL with DRAW_VECTOR
+        // calls eliminated it. Draw_Sync_List_At_With_Mirrors reads DRAW_VEC_X (low byte
+        // of DRAW_VEC_X_HI, which is the next RAM byte and already populated by the
+        // 16-bit STD above) and DRAW_VEC_Y. The trade-off is the loss of per-path
+        // 16-bit X clipping, but per-object visibility culling already keeps objects
+        // whose centre is on-screen; paths that span >127 from the centre would ghost,
+        // which is rare in well-authored .vec data and acceptable vs flicker.
+        out.push_str("    JSR Draw_Sync_List_At_With_Mirrors  ; stable BIOS-style VIA drawing (no flicker)\n");
         out.push_str("    PULS X           ; Restore pointer table position\n");
         out.push_str("    PULS B           ; Restore count\n");
         out.push_str("    BRA SLR_PATH_LOOP\n");

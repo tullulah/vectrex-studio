@@ -98,6 +98,7 @@ function VecX()
     this.vector_hash = new Array(Globals.VECTOR_HASH);
     utils.initArray(this.vector_hash, 0);
     this.fcycles = 0;
+    this.idleCycles = 0;  // cycles spent inside Wait_Recal polling (vsync wait)
     this.snd_update = function()
     {
         switch( this.via_orb & 0x18 )
@@ -602,6 +603,7 @@ function VecX()
         this.fcycles = Globals.FCYCLES_INIT;
         this.totalCycles = 0; // Reset contadores
         this.instructionCount = 0;
+        this.idleCycles = 0;
         this.e6809.e6809_reset();
     }
     this.t2shift = 0;
@@ -727,6 +729,13 @@ function VecX()
             e6809.reg_pc = e6809.reg_pc & 0xFFFF;
             this.instructionCount++; // Contar instrucciones ejecutadas
             this.totalCycles += icycles; // Contar cycles totales
+            // Wait_Recal BIOS occupies $F192..$F1B9 (polling loop until vsync).
+            // Track these cycles as "idle" so we can compute Work % = (real game
+            // work cycles) / total. Without this, Wait_Recal padding makes the
+            // game look CPU-bound when it's actually idle waiting for vsync.
+            if (currentPC >= 0xF192 && currentPC < 0xF1BA) {
+                this.idleCycles += icycles;
+            }
             
             // CRITICAL: Check breakpoint AFTER instruction execution (PC may have changed)
             var newPC = e6809.reg_pc;
@@ -1293,7 +1302,8 @@ function VecX()
             instructionCount: self.instructionCount,
             frameCount: self.count || 0,
             running: self.running,
-            vectorCount: self.vector_erse_cnt || 0
+            vectorCount: self.vector_erse_cnt || 0,
+            idleCycles: self.idleCycles || 0
         };
     }
     

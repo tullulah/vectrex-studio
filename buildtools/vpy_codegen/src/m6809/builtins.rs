@@ -1034,10 +1034,23 @@ pub fn emit_builtin(
                 out.push_str(&format!("    ; ERROR: {} requires 2 arguments (idx, value)\n", name));
                 return true;
             }
+            // SET_ENEMY_STATE goes through SET_ENEMY_STATE_RUNTIME so pool.action
+            // and sm_decay_timer also get updated from the type's SM state record.
+            // SET_ENEMY_X/Y stay as direct writes.
+            if up == "SET_ENEMY_STATE" {
+                // arg1 (state_idx) evaluated first, low byte stashed
+                expressions::emit_simple_expr(&args[1], out, assets);
+                out.push_str("    STB >TMPVAL         ; stash state_idx\n");
+                expressions::emit_simple_expr(&args[0], out, assets);
+                out.push_str("    TFR B,A             ; A = enemy index\n");
+                out.push_str("    LDB >TMPVAL         ; B = state_idx\n");
+                out.push_str("    JSR SET_ENEMY_STATE_RUNTIME\n");
+                return true;
+            }
             // Compute pool entry pointer: X = &pool[i]
             expressions::emit_simple_expr(&args[0], out, assets);
             out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
-            out.push_str("    LDB #28             ; ENEMY_POOL_STRIDE (must match runtime POOL_DIR=17 + 1 byte)\n");
+            out.push_str("    LDB #28             ; ENEMY_POOL_STRIDE\n");
             out.push_str("    MUL                 ; D = A * stride\n");
             out.push_str("    LDX #ENEMY_POOL\n");
             out.push_str("    LEAX D,X            ; X = &pool[i]\n");
@@ -1051,9 +1064,6 @@ pub fn emit_builtin(
                 }
                 "SET_ENEMY_Y" => {
                     out.push_str("    STD 3,X             ; y hi @+3, y lo @+4\n");
-                }
-                "SET_ENEMY_STATE" => {
-                    out.push_str("    STB 13,X            ; sm_state byte @+13\n");
                 }
                 _ => {}
             }

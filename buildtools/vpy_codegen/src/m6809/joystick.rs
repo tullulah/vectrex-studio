@@ -13,70 +13,46 @@ use std::collections::HashSet;
 /// 
 /// COPIED EXACTLY from core/src/backend/m6809/emission.rs lines 77-102
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
-    // J1X_BUILTIN: Joystick 1 X axis (INCREMENTAL - with state preservation)
-    // Based on core emission.rs but with VIA restoration after Joy_Analog
+    // J{1,2}{X,Y}_BUILTIN — cheap cached-RAM reads. The actual BIOS Joy_Analog
+    // poll happens ONCE per frame, auto-injected at the top of LOOP_BODY (see
+    // m6809/functions.rs `has_joystick_analog_calls`). Joy_Analog populates all
+    // four axes ($C81B..$C81E) per call, so each per-axis builtin just sign-
+    // extends and offset-corrects the cached byte (~10 cycles vs ~750 cycles
+    // for the previous per-call BIOS poll).
     if needed.contains("J1X_BUILTIN") {
-        out.push_str("; === JOYSTICK BUILTIN SUBROUTINES ===\n");
-        out.push_str("; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)\n");
-        out.push_str("; Returns: D = raw value from $C81B after Joy_Analog call\n");
+        out.push_str("; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===\n");
+        out.push_str("; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B\n");
         out.push_str("J1X_BUILTIN:\n");
-        out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
-        out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
-        out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)\n");
-        out.push_str("    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators\n");
-        out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)\n");
-        out.push_str("    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)\n");
+        out.push_str("    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)\n");
         out.push_str("    SEX          ; Sign-extend B to D\n");
         out.push_str("    ADDD #2      ; Calibrate center offset\n");
-        out.push_str("    PULS X       ; Restore X\n");
         out.push_str("    RTS\n\n");
     }
-    
-    // J1Y_BUILTIN: Joystick 1 Y axis (INCREMENTAL - with state preservation)
-    // Based on core emission.rs but with VIA restoration after Joy_Analog
+
     if needed.contains("J1Y_BUILTIN") {
-        out.push_str("; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)\n");
-        out.push_str("; Returns: D = raw value from $C81C after Joy_Analog call\n");
+        out.push_str("; J1_Y() - Read Joystick 1 Y axis from cached BIOS value at $C81C\n");
         out.push_str("J1Y_BUILTIN:\n");
-        out.push_str("    PSHS X       ; Save X (Joy_Analog uses it)\n");
-        out.push_str("    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)\n");
-        out.push_str("    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)\n");
-        out.push_str("    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators\n");
-        out.push_str("    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)\n");
-        out.push_str("    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)\n");
-        out.push_str("    SEX          ; Sign-extend B to D\n");
-        out.push_str("    ADDD #2      ; Calibrate center offset\n");
-        out.push_str("    PULS X       ; Restore X\n");
+        out.push_str("    LDB >$C81C   ; Vec_Joy_1_Y\n");
+        out.push_str("    SEX\n");
+        out.push_str("    ADDD #2\n");
         out.push_str("    RTS\n\n");
     }
-    
-    // J2X_BUILTIN: Joystick 2 X axis (BIOS - hardware compatible)
+
     if needed.contains("J2X_BUILTIN") {
-        out.push_str("; J2_X() - Read Joystick 2 X axis (BIOS Joy_Analog)\n");
+        out.push_str("; J2_X() - Read Joystick 2 X axis from cached BIOS value at $C81D\n");
         out.push_str("J2X_BUILTIN:\n");
-        out.push_str("    PSHS X       ; Save X\n");
-        out.push_str("    JSR $F1AA    ; DP_to_D0\n");
-        out.push_str("    JSR $F1F5    ; Joy_Analog\n");
-        out.push_str("    JSR $F1AF    ; DP_to_C8\n");
-        out.push_str("    LDB $C81D    ; Vec_Joy_2_X\n");
-        out.push_str("    SEX          ; Sign-extend B to D\n");
-        out.push_str("    ADDD #2      ; Calibrate center offset\n");
-        out.push_str("    PULS X       ; Restore X\n");
+        out.push_str("    LDB >$C81D   ; Vec_Joy_2_X\n");
+        out.push_str("    SEX\n");
+        out.push_str("    ADDD #2\n");
         out.push_str("    RTS\n\n");
     }
-    
-    // J2Y_BUILTIN: Joystick 2 Y axis (BIOS - hardware compatible)
+
     if needed.contains("J2Y_BUILTIN") {
-        out.push_str("; J2_Y() - Read Joystick 2 Y axis (BIOS Joy_Analog)\n");
+        out.push_str("; J2_Y() - Read Joystick 2 Y axis from cached BIOS value at $C81E\n");
         out.push_str("J2Y_BUILTIN:\n");
-        out.push_str("    PSHS X       ; Save X\n");
-        out.push_str("    JSR $F1AA    ; DP_to_D0\n");
-        out.push_str("    JSR $F1F5    ; Joy_Analog\n");
-        out.push_str("    JSR $F1AF    ; DP_to_C8\n");
-        out.push_str("    LDB $C81E    ; Vec_Joy_2_Y\n");
-        out.push_str("    SEX          ; Sign-extend B to D\n");
-        out.push_str("    ADDD #2      ; Calibrate center offset\n");
-        out.push_str("    PULS X       ; Restore X\n");
+        out.push_str("    LDB >$C81E   ; Vec_Joy_2_Y\n");
+        out.push_str("    SEX\n");
+        out.push_str("    ADDD #2\n");
         out.push_str("    RTS\n\n");
     }
 }

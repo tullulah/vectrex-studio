@@ -168,6 +168,11 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("LEVEL_BANK", 1, "Bank ID for current level (for multibank)");
         ram.allocate("LEVEL_ENEMY_COUNT", 1, "Enemy count from current level header");
         ram.allocate("LEVEL_ENEMY_INSTANCES_PTR", 2, "Ptr to enemy instances table in level bank");
+        // Per-screen object index (SHOW_LEVEL perf): from level header +34..+40
+        ram.allocate("LEVEL_SCREEN_COUNT", 1, "Total Y screens partitioning the level");
+        ram.allocate("LEVEL_BG_SCREENS_PTR", 2, "Per-screen BG index ptr (3 bytes per screen)");
+        ram.allocate("LEVEL_GP_SCREENS_PTR", 2, "Per-screen GP index ptr");
+        ram.allocate("LEVEL_FG_SCREENS_PTR", 2, "Per-screen FG index ptr");
         // SHOW_LEVEL_RUNTIME draw temps (shared with DRAW_VECTOR if not already allocated)
         if !needed.contains("DRAW_VECTOR") && !needed.contains("DRAW_VECTOR_EX") {
             ram.allocate("DRAW_VEC_X_HI", 1, "SHOW_LEVEL: vector draw X high byte (16-bit)");
@@ -986,6 +991,17 @@ PMr_done:\n\
         \n\
         PSG_music_ended:\n\
         CLR >PSG_IS_PLAYING\n\
+        ; Silence all 3 PSG channels so the last note doesn't keep ringing\n\
+        ; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).\n\
+        LDA #8                  ; PSG reg 8 = Volume Channel A\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #9                  ; PSG reg 9 = Volume Channel B\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #10                 ; PSG reg 10 = Volume Channel C\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
         LBRA PSG_update_done\n\
         \n\
         PSG_music_loop:\n\
@@ -2743,6 +2759,18 @@ UPD_ENE_LOOP:\n\
     PSHS B              ; save loop counter\n\
     LDA ,Y              ; active?\n\
     LBEQ UPD_ENE_NEXT_POP\n\
+    ; ── SM auto-decay tick: walks states back through their declared decay_to\n\
+    ; chain at the cadence set by each state's decay_frames in the .venemy.\n\
+    ; Runs BEFORE the frozen-action guard so reaching state 0 (normal) can\n\
+    ; release the enemy in the same frame.\n\
+    JSR UPD_DECAY_CHECK\n\
+    ; ── Frozen-action guard: action 0=idle, 1=walk are 'live'.\n\
+    ; Any action >= 2 (snow1, snow2, ball, ...) means the SM has frozen the\n\
+    ; enemy in place (snowed/captured). Skip all movement so it stays put,\n\
+    ; drawn with its current snowed sprite by DRAW_ENEMIES.\n\
+    LDA 7,Y             ; pool.action\n\
+    CMPA #2\n\
+    LBHS UPD_ENE_NEXT_POP\n\
     LDA 8,Y             ; ai_type\n\
     CMPA #1\n\
     LBEQ UPD_PATROL\n\
@@ -3076,6 +3104,11 @@ UPD_ENE_LOOP:\n\
     PSHS B\n\
     LDA ,Y\n\
     LBEQ UPD_ENE_NEXT_POP\n\
+    JSR UPD_DECAY_CHECK   ; SM auto-decay (matches per-state decay_frames)\n\
+    ; Frozen-action guard: action >= 2 = SM-frozen (snow1/snow2/ball) → skip movement\n\
+    LDA 7,Y\n\
+    CMPA #2\n\
+    LBHS UPD_ENE_NEXT_POP\n\
     LDA 8,Y\n\
     CMPA #1\n\
     LBEQ UPD_PATROL\n\
@@ -3557,7 +3590,7 @@ DRW_ENE_DONE:\n\
 ; Effect: pool[A].active=0, ENEMY_COUNT--\n\
 ; Return: RESULT = new ENEMY_COUNT (D)\n\
 KILL_ENEMY_RUNTIME:\n\
-    LDB #17\n\
+    LDB #28             ; ENEMY_POOL_STRIDE\n\
     MUL\n\
     LDX #ENEMY_POOL\n\
     LEAX D,X\n\
@@ -3640,6 +3673,104 @@ FIRE_EVT_MATCH:\n\
     LDA >ENEMY_SCRATCH_Y+1\n\
     STA 15,X\n\
 FIRE_EVT_RTS:\n\
+    RTS\n\
+\n\
+; SET_ENEMY_STATE_RUNTIME\n\
+; Entry: A = enemy idx, B = target state_idx\n\
+; Thin wrapper: compute pool ptr from idx, then dispatch to SES_APPLY which\n\
+; does the actual state-record lookup and field writes. SES_APPLY is also\n\
+; called from UPD_DECAY_CHECK (auto-decay) using Y-derived pool ptr.\n\
+SET_ENEMY_STATE_RUNTIME:\n\
+    STB >ENEMY_SCRATCH_X    ; save target state_idx\n\
+    LDB #28                 ; ENEMY_POOL_STRIDE\n\
+    MUL\n\
+    LDX #ENEMY_POOL\n\
+    LEAX D,X                ; X = &pool[idx]\n\
+    STX >ENEMY_SCRATCH_PTR\n\
+    JMP SES_APPLY\n\
+\n\
+; SES_APPLY: apply a state transition to a pool entry.\n\
+; Entry: ENEMY_SCRATCH_PTR = pool entry ptr, ENEMY_SCRATCH_X = target_state_idx\n\
+; Updates pool.sm_state (+13), pool.action (+7) [unless action_idx=$FF=keep],\n\
+; and pool.sm_decay_timer (+14..15) from the type's SM state record.\n\
+; Falls back to plain STB 13,X if no SM exists. Preserves Y.\n\
+SES_APPLY:\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LDA 13,X                ; current sm_state\n\
+    CMPA #$FF\n\
+    BEQ SES_PLAIN           ; no SM → just store the byte\n\
+    LDA 5,X                 ; type_ptr hi\n\
+    LDB 6,X                 ; type_ptr lo\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X                 ; SM ptr hi\n\
+    LDB 6,X                 ; SM ptr lo\n\
+    CMPD #0\n\
+    BEQ SES_PLAIN\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX 2,X                ; X = &states[0]\n\
+    LDA >ENEMY_SCRATCH_X    ; target state_idx\n\
+    LDB #13\n\
+    MUL                     ; D = target * 13\n\
+    LEAX D,X                ; X = &states[target]\n\
+    LDA 1,X\n\
+    LDB 2,X\n\
+    STD >ENEMY_SCRATCH_Y    ; stash decay hi+lo\n\
+    LDA ,X                  ; action_idx ($FF = keep)\n\
+    PSHS A\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    LDB >ENEMY_SCRATCH_X    ; target state_idx\n\
+    STB 13,X                ; pool.sm_state = target\n\
+    PULS A\n\
+    CMPA #$FF\n\
+    BEQ SES_SKIP_ACTION\n\
+    STA 7,X                 ; pool.action = state.action\n\
+SES_SKIP_ACTION:\n\
+    LDA >ENEMY_SCRATCH_Y\n\
+    STA 14,X                ; sm_decay_timer hi\n\
+    LDA >ENEMY_SCRATCH_Y+1\n\
+    STA 15,X                ; sm_decay_timer lo\n\
+    RTS\n\
+SES_PLAIN:\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LDB >ENEMY_SCRATCH_X\n\
+    STB 13,X\n\
+    RTS\n\
+\n\
+; UPD_DECAY_CHECK: auto-decay tick for one pool entry.\n\
+; Entry: Y = &pool[i] (preserved on exit)\n\
+; If pool.sm_decay_timer > 0: decrement. On reaching 0, look up the current\n\
+; state's decay_to_idx (state record offset +3) and apply that transition\n\
+; via SES_APPLY. If decay_to is $FF (none) the state stays put.\n\
+; Honours the per-state decay_frames declared in the .venemy SM, so SnowBros\n\
+; thaw walks ball→snow2→snow1→normal automatically with their own timings.\n\
+UPD_DECAY_CHECK:\n\
+    LDD 14,Y                ; sm_decay_timer\n\
+    LBEQ UDC_DONE           ; not decaying\n\
+    SUBD #1\n\
+    STD 14,Y\n\
+    LBNE UDC_DONE           ; still counting\n\
+    ; Timer hit 0 → resolve current state's decay_to\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    CMPD #0\n\
+    BEQ UDC_DONE            ; no SM (defensive)\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX 2,X                ; X = &states[0]\n\
+    LDA 13,Y                ; current sm_state\n\
+    LDB #13\n\
+    MUL\n\
+    LEAX D,X                ; X = &states[current]\n\
+    LDA 3,X                 ; decay_to_idx\n\
+    CMPA #$FF\n\
+    BEQ UDC_DONE            ; no decay target\n\
+    ; Apply transition via SES_APPLY (preserves Y)\n\
+    STA >ENEMY_SCRATCH_X    ; target = decay_to_idx\n\
+    STY >ENEMY_SCRATCH_PTR  ; pool ptr = current Y\n\
+    JSR SES_APPLY\n\
+UDC_DONE:\n\
     RTS\n\
 \n\
 "

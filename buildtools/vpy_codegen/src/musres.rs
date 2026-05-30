@@ -398,11 +398,41 @@ impl MusicResource {
         // Loop or end marker
         let loop_start_frame = tick_to_frame(self.loop_start);
         let loop_end_frame = tick_to_frame(self.loop_end);
-        
+
         if loop_start_frame < loop_end_frame && loop_end_frame > 0 {
-            // Calculate delay until loop point (how many frames to wait after last change)
-            let frames_until_loop = loop_end_frame.saturating_sub(last_emitted_frame);
-            
+            // Force-silence all 3 channels before the loop padding. Without
+            // this, the main loop breaks while the last note's volume is
+            // still non-zero; the filler-chunk padding then repeats that
+            // state, so the last note rings for the entire tail-until-loop
+            // (often several seconds) instead of falling silent.
+            //
+            // SILENCE_TAIL_FRAMES delays the force-silence so the last note
+            // retains its natural release tail. At 50 Hz, 4 frames ≈ 80 ms
+            // (~4 ticks at 120 BPM / 24 ticks-per-beat). Without this delay
+            // the silence event cuts the last note's volume to 0 on the very
+            // next frame, which sounds like an abrupt chop.
+            const SILENCE_TAIL_FRAMES: u32 = 4;
+            let silence_writes: Vec<(u8, u8)> = vec![(8, 0), (9, 0), (10, 0), (7, 0x3F)];
+            let mut silence_consumed_frames = 0u32;
+            if last_reg_writes != silence_writes {
+                asm.push_str(&format!("    FCB     {}               ; Tail delay before force-silence (preserve last note release)\n", SILENCE_TAIL_FRAMES));
+                asm.push_str(&format!("    FCB     {}               ; silence event ({} regs)\n",
+                    silence_writes.len(), silence_writes.len()));
+                for (reg, val) in &silence_writes {
+                    asm.push_str(&format!("    FCB     {}               ; Reg {} number\n", reg, reg));
+                    asm.push_str(&format!("    FCB     ${:02X}             ; Reg {} value\n", val, reg));
+                }
+                last_reg_writes = silence_writes;
+                silence_consumed_frames = SILENCE_TAIL_FRAMES;
+            }
+
+            // Calculate delay until loop point. Subtract whatever the silence
+            // event itself already consumed so the song still loops at the
+            // configured loop_end (no overshoot).
+            let frames_until_loop = loop_end_frame
+                .saturating_sub(last_emitted_frame)
+                .saturating_sub(silence_consumed_frames);
+
             if frames_until_loop > 0 {
                 // Emit delay before loop marker to maintain last note duration
                 // Handle delays > 254 with filler repeat-state chunks
