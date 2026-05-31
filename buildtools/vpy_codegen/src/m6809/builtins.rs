@@ -1054,10 +1054,10 @@ pub fn emit_builtin(
             out.push_str("    MUL                 ; D = A * stride\n");
             out.push_str("    LDX #ENEMY_POOL\n");
             out.push_str("    LEAX D,X            ; X = &pool[i]\n");
-            out.push_str("    STX >TMPPTR         ; save pool entry ptr across value eval\n");
+            out.push_str("    PSHS X              ; save pool entry ptr on stack (safe across function calls)\n");
             // Evaluate value into D
             expressions::emit_simple_expr(&args[1], out, assets);
-            out.push_str("    LDX >TMPPTR         ; restore pool entry ptr\n");
+            out.push_str("    PULS X              ; restore pool entry ptr\n");
             match up.as_str() {
                 "SET_ENEMY_X" => {
                     out.push_str("    STD 1,X             ; x hi @+1, x lo @+2\n");

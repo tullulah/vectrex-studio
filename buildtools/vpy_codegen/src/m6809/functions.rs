@@ -620,13 +620,13 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
                     asm.push_str("    TFR D,X         ; X = array base pointer\n");
                     asm.push_str("    LDD TMPPTR      ; D = offset\n");
                     asm.push_str("    LEAX D,X        ; X = base + offset\n");
-                    asm.push_str("    STX TMPPTR2     ; Save computed address\n");
+                    asm.push_str("    PSHS X          ; Save computed address (stack-safe across function calls)\n");
 
                     // 4. Evaluate value to assign
                     expressions::emit_simple_expr(value, asm, assets);
 
                     // 5. Store value at computed address with correct width dispatch
-                    asm.push_str("    LDX TMPPTR2     ; Load computed address\n");
+                    asm.push_str("    PULS X          ; Restore computed address\n");
                     if element_size == 1 {
                         // 8-bit store: B holds low byte from emit_simple_expr (LDX doesn't modify D/B)
                         asm.push_str("    STB ,X          ; Store 8-bit value\n");
