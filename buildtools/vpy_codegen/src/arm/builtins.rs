@@ -699,7 +699,7 @@ fn emit_bezier_functions(s: &mut String) {
 /// font path. Returns (ascii, Vec<(cmd, glyph_x, glyph_y)>) where cmd=1=MOVE
 /// (beam off), cmd=2=DRAW (beam on); glyph_x in 0..4, glyph_y in 0..6 with
 /// y=0 bottom, y=6 top.
-pub fn font_glyphs() -> Vec<(u8, Vec<(u8, u8, u8)>)> {
+fn font_glyphs() -> Vec<(u8, Vec<(u8, u8, u8)>)> {
     // (ascii, [(cmd=1 move | 2 draw, glyph_x 0..4, glyph_y 0..6)])
     // y=0 bottom, y=6 top; glyph box width=4
     let mut g: Vec<(u8, Vec<(u8, u8, u8)>)> = vec![

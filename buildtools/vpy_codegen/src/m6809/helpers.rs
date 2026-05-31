@@ -277,13 +277,6 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
         ram.allocate("TEXT_SCALE_H", 1, "Character height for Print_Str_d (default $F8 = -8, normal)");
         ram.allocate("TEXT_SCALE_W", 1, "Character width for Print_Str_d (default $48 = 72, normal)");
-        // Custom font runtime state (VECTREX_PRINT_TEXT_FAST)
-        ram.allocate("PT_BASE_X", 1, "PRINT_TEXT: current char origin X (signed byte)");
-        ram.allocate("PT_BASE_Y", 1, "PRINT_TEXT: text baseline Y (signed byte)");
-        ram.allocate("PT_CUR_X", 1, "PRINT_TEXT: current beam X for delta computation");
-        ram.allocate("PT_CUR_Y", 1, "PRINT_TEXT: current beam Y for delta computation");
-        ram.allocate("PT_GX", 1, "PRINT_TEXT: current stroke glyph X (0..4)");
-        ram.allocate("PT_GY", 1, "PRINT_TEXT: current stroke glyph Y (0..6)");
     }
     // PRINT_NUMBER caching: last-rendered value + flag so repeated calls with
     // same value skip DIVMOD + Print_Str setup.
@@ -678,173 +671,36 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
     asm.push_str("; RUNTIME HELPERS\n");
     asm.push_str(";***************************************************************************\n\n");
     
-    // ── Custom vector font (ported from ARM/PiTrex) ─────────────────────
-    // Drop-in replacement for BIOS Print_Str_d. Visual consistency across
-    // M6809 / PiTrex / RP2350 targets and cheaper per-PRINT_TEXT setup
-    // (~30 cycles vs ~200 of BIOS). Per-stroke cost is still BIOS-bound
-    // (Moveto_d / Draw_Line_d) — Vectrex beam ramps physically — but glyphs
-    // average ~5 strokes vs ~7-9 in the BIOS font so net work per char drops.
-    // Format reused unchanged from arm/builtins.rs font_glyphs():
-    //   stroke triple: (cmd, gx 0..4, gy 0..6); cmd=1=MOVE, 2=DRAW; 0=end.
-    if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
-        asm.push_str("; === CUSTOM VECTOR FONT (M6809) ===\n");
-        asm.push_str("; _FONT_PTRS: 96 FDB entries for ASCII 32..127 → glyph_ptr or 0.\n");
-        asm.push_str("; Each glyph block: stream of (cmd, gx, gy) triples, terminated by FCB 0.\n");
-        let glyphs = crate::arm::builtins::font_glyphs();
-        // Build lookup: ASCII → label
-        use std::collections::HashMap;
-        let mut label_for_char: HashMap<u8, String> = HashMap::new();
-        for (ch, strokes) in &glyphs {
-            if strokes.is_empty() { continue; }
-            label_for_char.insert(*ch, format!("_FONT_G_{:02X}", ch));
-        }
-        asm.push_str("_FONT_PTRS:\n");
-        for code in 32u16..=127u16 {
-            let ch = code as u8;
-            if let Some(lbl) = label_for_char.get(&ch) {
-                asm.push_str(&format!("    FDB {}    ; '{}' (${:02X})\n", lbl, ch as char, ch));
-            } else {
-                asm.push_str(&format!("    FDB 0       ; '{}' (${:02X}) no glyph\n",
-                    if ch.is_ascii_graphic() || ch == b' ' { ch as char } else { '?' }, ch));
-            }
-        }
-        asm.push_str("\n; --- Glyph stroke data ---\n");
-        let mut sorted = glyphs.clone();
-        sorted.sort_by_key(|(c, _)| *c);
-        for (ch, strokes) in &sorted {
-            if strokes.is_empty() { continue; }
-            asm.push_str(&format!("{}:\n", label_for_char.get(ch).unwrap()));
-            for (cmd, gx, gy) in strokes {
-                asm.push_str(&format!("    FCB {},{},{}\n", cmd, gx, gy));
-            }
-            asm.push_str("    FCB 0    ; end of glyph\n");
-        }
-        asm.push_str("\n");
-    }
-
-    // VECTREX_PRINT_TEXT — drop-in replacement for the BIOS Print_Str_d path.
-    // Uses the custom font tables emitted above. Inputs (kept compatible with
-    // every existing caller): VAR_ARG0 = x (i16, low byte used), VAR_ARG1 = y,
-    // VAR_ARG2 = string ptr ($80- or NUL-terminated).
+    // VECTREX_PRINT_TEXT — BIOS Print_Str_d (bitmap scan-line rendering via
+    // VIA shift register; cannot be matched by vector-per-stroke approaches).
     if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
         asm.push_str("VECTREX_PRINT_TEXT:\n");
-        asm.push_str("    PSHS U,X,DP\n");
+        asm.push_str("    ; VPy signature: PRINT_TEXT(x, y, string)\n");
+        asm.push_str("    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n");
         asm.push_str("    LDA #$D0\n");
-        asm.push_str("    TFR A,DP            ; DP=$D0 for VIA / BIOS access\n");
-        asm.push_str("    JSR Intensity_5F    ; standard text brightness ($5F)\n");
-        asm.push_str("    JSR Reset0Ref       ; zero beam — cur = (0,0)\n");
-        // Init cursor state in RAM
-        asm.push_str("    LDA >VAR_ARG0+1\n");
-        asm.push_str("    STA >PT_BASE_X      ; base_x (advances per char)\n");
+        asm.push_str("    TFR A,DP\n");
+        asm.push_str("    JSR Intensity_5F\n");
+        asm.push_str("    JSR Reset0Ref\n");
+        asm.push_str("    LDU >VAR_ARG2\n");
+        asm.push_str("    LDA >TEXT_SCALE_H\n");
+        asm.push_str("    STA >$C82A          ; Vec_Text_Height\n");
+        asm.push_str("    LDA >TEXT_SCALE_W\n");
+        asm.push_str("    STA >$C82B          ; Vec_Text_Width\n");
         asm.push_str("    LDA >VAR_ARG1+1\n");
-        asm.push_str("    STA >PT_BASE_Y\n");
-        // Initial Moveto_d to base — this also primes cur = (base_x, base_y)
-        asm.push_str("    LDA >PT_BASE_Y\n");
-        asm.push_str("    LDB >PT_BASE_X\n");
-        asm.push_str("    JSR Moveto_d        ; A=Y B=X absolute from screen center\n");
-        asm.push_str("    LDA >PT_BASE_X\n");
-        asm.push_str("    STA >PT_CUR_X\n");
-        asm.push_str("    LDA >PT_BASE_Y\n");
-        asm.push_str("    STA >PT_CUR_Y\n");
-        asm.push_str("    LDU >VAR_ARG2       ; string pointer\n");
-        asm.push_str("PT_CHAR_LOOP:\n");
-        asm.push_str("    LDA ,U+\n");
-        asm.push_str("    LBEQ PT_DONE         ; NUL terminator\n");
-        asm.push_str("    CMPA #$80\n");
-        asm.push_str("    LBEQ PT_DONE         ; Vectrex $80 terminator\n");
-        // lowercase -> uppercase (assembler doesn't accept 'a char literals)
-        asm.push_str("    CMPA #$61            ; 'a'\n");
-        asm.push_str("    BLO PT_FOLD_DONE\n");
-        asm.push_str("    CMPA #$7A            ; 'z'\n");
-        asm.push_str("    BHI PT_FOLD_DONE\n");
-        asm.push_str("    SUBA #$20\n");
-        asm.push_str("PT_FOLD_DONE:\n");
-        // bounds check 32..127
-        asm.push_str("    CMPA #32\n");
-        asm.push_str("    LBLO PT_ADVANCE\n");
-        asm.push_str("    CMPA #127\n");
-        asm.push_str("    LBHI PT_ADVANCE\n");
-        // glyph_ptr = _FONT_PTRS[(char-32)*2]
-        asm.push_str("    SUBA #32            ; A = index 0..95\n");
-        asm.push_str("    LDB #2\n");
-        asm.push_str("    MUL                 ; D = idx*2\n");
-        asm.push_str("    LDX #_FONT_PTRS\n");
-        asm.push_str("    LEAX D,X\n");
-        asm.push_str("    LDX ,X              ; X = glyph_ptr\n");
-        asm.push_str("    CMPX #0\n");
-        asm.push_str("    LBEQ PT_ADVANCE     ; no strokes for this char (e.g. space)\n");
-        // Stroke loop: while (cmd = ,X+) != 0
-        asm.push_str("PT_STROKE_LOOP:\n");
-        asm.push_str("    LDA ,X+             ; A = cmd: 1=MOVE 2=DRAW 0=end\n");
-        asm.push_str("    LBEQ PT_CHAR_DONE\n");
-        asm.push_str("    LDB ,X+             ; B = gx (0..4)\n");
-        asm.push_str("    STB >PT_GX\n");
-        asm.push_str("    LDB ,X+             ; B = gy (0..6)\n");
-        asm.push_str("    STB >PT_GY\n");
-        // Compute target_x = base_x + gx*SCALE (right is +X)
-        // Compute target_y = base_y + (gy-6)*SCALE = base_y + gy*2 - 12
-        // → Vectrex Y+ is UP; anchor (x,y) is TOP-LEFT (matches BIOS Print_Str_d).
-        //   gy=6 (top of glyph)  → target_y = base_y
-        //   gy=0 (bottom of glyph) → target_y = base_y - 12 (12 pixels below anchor)
-        asm.push_str("    LDB >PT_GX\n");
-        asm.push_str("    LSLB                ; gx*2\n");
-        asm.push_str("    ADDB >PT_BASE_X     ; B = target_x\n");
-        asm.push_str("    PSHS B              ; stash target_x\n");
-        asm.push_str("    LDB >PT_GY\n");
-        asm.push_str("    LSLB                ; gy*2\n");
-        asm.push_str("    SUBB #12            ; gy*2 - 12\n");
-        asm.push_str("    ADDB >PT_BASE_Y     ; B = target_y (signed)\n");
-        asm.push_str("    PSHS B              ; stash target_y\n");
-        // Cmd dispatch (A still holds cmd from earlier, but we may have clobbered)
-        // We saved cmd before; reload it from stack? Cleaner: branch before stash.
-        // Re-read: at this point we PSHS B, PSHS B → stack [target_y, target_x].
-        // A is the cmd from `LDA ,X+` above; it survives MUL/LSL/LDB sequences
-        // only as long as we don't touch it explicitly. LDB/ADDB don't touch A.
-        // PSHS B also leaves A alone. So A still has cmd. ✓
-        asm.push_str("    CMPA #1\n");
-        asm.push_str("    LBEQ PT_DO_MOVE\n");
-        // DRAW: Draw_Line_d(target_y - cur_y, target_x - cur_x)
-        asm.push_str("    PULS B              ; B = target_y\n");
-        asm.push_str("    SUBB >PT_CUR_Y      ; B = delta_y\n");
-        asm.push_str("    TFR B,A             ; A = delta_y\n");
-        asm.push_str("    PULS B              ; B = target_x\n");
-        asm.push_str("    SUBB >PT_CUR_X      ; B = delta_x\n");
-        asm.push_str("    PSHS X,U            ; preserve glyph_ptr + string_ptr across BIOS\n");
-        asm.push_str("    JSR Draw_Line_d     ; BIOS: A=Y delta, B=X delta\n");
-        asm.push_str("    PULS X,U\n");
-        asm.push_str("    LBRA PT_STROKE_UPDATE_CUR\n");
-        asm.push_str("PT_DO_MOVE:\n");
-        // MOVE: Moveto_d(target_y, target_x) absolute
-        asm.push_str("    PULS A              ; A = target_y\n");
-        asm.push_str("    PULS B              ; B = target_x\n");
-        asm.push_str("    PSHS X,U\n");
-        asm.push_str("    JSR Moveto_d        ; BIOS: A=Y, B=X absolute\n");
-        asm.push_str("    PULS X,U\n");
-        asm.push_str("PT_STROKE_UPDATE_CUR:\n");
-        // After Move or Draw, beam is at target. Update cur_x/cur_y (same formulas).
-        asm.push_str("    LDB >PT_GX\n");
-        asm.push_str("    LSLB\n");
-        asm.push_str("    ADDB >PT_BASE_X\n");
-        asm.push_str("    STB >PT_CUR_X\n");
-        asm.push_str("    LDB >PT_GY\n");
-        asm.push_str("    LSLB\n");
-        asm.push_str("    SUBB #12\n");
-        asm.push_str("    ADDB >PT_BASE_Y\n");
-        asm.push_str("    STB >PT_CUR_Y\n");
-        asm.push_str("    LBRA PT_STROKE_LOOP\n");
-        asm.push_str("PT_CHAR_DONE:\n");
-        // Advance to next char: base_x += CHAR_WIDTH (5*scale = 10), reposition beam.
-        asm.push_str("PT_ADVANCE:\n");
-        asm.push_str("    LDB >PT_BASE_X\n");
-        asm.push_str("    ADDB #10            ; CHAR_WIDTH = 5 grid * 2 scale\n");
-        asm.push_str("    STB >PT_BASE_X\n");
-        // Optional: reposition beam to (base_y, base_x) so next char starts clean.
-        // Skipped — next char's first MOVE/DRAW handles its own position.
-        asm.push_str("    LBRA PT_CHAR_LOOP\n");
-        asm.push_str("PT_DONE:\n");
+        asm.push_str("    LDB >VAR_ARG0+1\n");
+        asm.push_str("    LDX >$C82C\n");
+        asm.push_str("    PSHS X\n");
+        asm.push_str("    JSR Print_Str_d\n");
+        asm.push_str("    PULS X\n");
+        asm.push_str("    STX >$C82C\n");
+        asm.push_str("    LDA #$F8\n");
+        asm.push_str("    STA >$C82A\n");
+        asm.push_str("    LDA #$48\n");
+        asm.push_str("    STA >$C82B\n");
         asm.push_str(&format!("    JSR {}\n", dp_to_c8));
-        asm.push_str("    PULS U,X,DP,PC\n\n");
+        asm.push_str("    RTS\n\n");
     }
+
     
     // VECTREX_PRINT_NUMBER: Print number at position (CONDITIONAL)
     // Only emit if PRINT_NUMBER is actually used in code
