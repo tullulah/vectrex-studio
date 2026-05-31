@@ -1,0 +1,80 @@
+{
+  "version": "1.0",
+  "name": "player_walk",
+  "loop": true,
+  "base_refs": [
+    "player"
+  ],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 12,
+      "vec_refs": [],
+      "paths": [
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "points": [
+            {
+              "x": -2,
+              "y": -8
+            },
+            {
+              "x": -2,
+              "y": -12
+            }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "points": [
+            {
+              "x": 2,
+              "y": -8
+            },
+            {
+              "x": 2,
+              "y": -12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "duration_ticks": 12,
+      "vec_refs": [],
+      "paths": [
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "points": [
+            {
+              "x": -2,
+              "y": -8
+            },
+            {
+              "x": -4,
+              "y": -11
+            }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "points": [
+            {
+              "x": 2,
+              "y": -8
+            },
+            {
+              "x": 4,
+              "y": -11
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

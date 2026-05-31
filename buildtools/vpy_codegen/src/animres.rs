@@ -117,13 +117,50 @@ fn fmt_byte(v: i8) -> String {
     format!("${:02X}", v as u8)
 }
 
+/// Generate the label name for a synthetic vec asset wrapping an inline path.
+/// Returns the lowercased name that backends will uppercase into `_NAME_VECTORS`.
+pub fn synthetic_inline_path_label(asset_name: &str, frame_idx: usize, path_idx: usize) -> String {
+    let sym = asset_name.to_lowercase().replace('-', "_").replace(' ', "_");
+    format!("anim_{}_f{}_p{}", sym, frame_idx, path_idx)
+}
+
+/// Transform a `VanimResource` so inline `paths` are converted into vec_refs
+/// that point to anonymous vec assets the caller will emit separately. This
+/// unifies inline-path rendering with the normal vec_refs code path that works
+/// on every backend (M6809, ARM, PiTrex) — no separate inline runtime needed.
+///
+/// Mutates `resource` in place:
+/// - for every frame with paths, appends `anim_NAME_F{i}_P{j}` to vec_refs
+/// - clears `frame.paths`
+///
+/// Returns a flat list of `(label, &original_path)` so the caller can emit
+/// synthetic `_LABEL_VECTORS` blocks in its backend-specific data format.
+pub fn extract_inline_paths_to_vec_refs<'a>(
+    resource: &mut VanimResource,
+    asset_name: &str,
+) -> Vec<(String, VanimPath)> {
+    let mut synthetic: Vec<(String, VanimPath)> = Vec::new();
+    for (fi, frame) in resource.frames.iter_mut().enumerate() {
+        if frame.paths.is_empty() {
+            continue;
+        }
+        let paths_to_synthesize: Vec<VanimPath> = std::mem::take(&mut frame.paths);
+        for (pi, path) in paths_to_synthesize.into_iter().enumerate() {
+            let label = synthetic_inline_path_label(asset_name, fi, pi);
+            frame.vec_refs.push(label.clone());
+            synthetic.push((label, path));
+        }
+    }
+    synthetic
+}
+
 /// Compile a single inline path to the Draw_Sync_List compact binary format.
 /// Format identical to what compile_to_asm() emits for .vec paths:
 ///   FCB intensity
 ///   FCB y_start, x_start, 0, 0       (move-to header — 4 bytes)
 ///   FCB $FF, dy, dx                   (draw segments, repeated)
 ///   FCB 2                             (end marker)
-fn compile_inline_path(path: &VanimPath) -> String {
+pub fn compile_inline_path(path: &VanimPath) -> String {
     let mut asm = String::new();
 
     if path.points.is_empty() {
@@ -180,6 +217,24 @@ fn emit_split_segment(asm: &mut String, dx: i16, dy: i16) {
 pub fn compile_vanim_to_asm(resource: &VanimResource, asset_name: &str) -> String {
     let mut asm = String::new();
     let sym = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+
+    // Convert any inline paths to synthetic vec assets so they render via the
+    // same vec_refs path as named .vec references. Emit the synthetic asset
+    // blocks BEFORE the vanim header so the symbols are defined when the
+    // header references them.
+    let mut resource_mut = resource.clone();
+    let synthetic = extract_inline_paths_to_vec_refs(&mut resource_mut, asset_name);
+    for (label, path) in &synthetic {
+        let lbl = label.to_uppercase().replace('-', "_").replace(' ', "_");
+        asm.push_str(&format!("; synthetic vec asset for inline path: {}\n", label));
+        asm.push_str(&format!("_{}_VECTORS:\n", lbl));
+        asm.push_str("    FDB 1                                  ; path_count\n");
+        asm.push_str(&format!("    FDB _{}_PATH0\n", lbl));
+        asm.push_str(&format!("_{}_PATH0:\n", lbl));
+        asm.push_str(&compile_inline_path(path));
+        asm.push_str("\n");
+    }
+    let resource = &resource_mut;
     let frame_count = resource.frames.len();
 
     let base_ref_count = resource.base_refs.len();

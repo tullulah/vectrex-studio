@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "name": "crawler",
+  "actions": [
+    {
+      "name": "idle",
+      "sprite": "assets/vectors/enemy.vec",
+      "loop": true
+    },
+    {
+      "name": "walk",
+      "sprite": "assets/vectors/enemy.vec",
+      "loop": true
+    }
+  ],
+  "stats": {
+    "hp": 1,
+    "speed": 1,
+    "action_duration": 60
+  },
+  "behavior": {
+    "type": "wander",
+    "patrol": {
+      "waypoints": [],
+      "loop": true,
+      "mirrorOnPatrol": true,
+      "defaultFacing": "right",
+      "patrolAction": "walk"
+    },
+    "chase_range": 80,
+    "respawn": false,
+    "wave": 0
+  }
+}

@@ -1352,6 +1352,42 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
     let sym = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
     let mut s = String::new();
 
+    // Convert inline paths to synthetic vec assets so they go through the
+    // standard vec_refs render path (same code as named .vec references).
+    let mut resource_mut = resource.clone();
+    let synthetic = crate::animres::extract_inline_paths_to_vec_refs(&mut resource_mut, asset_name);
+    for (label, path) in &synthetic {
+        let lsym = label.to_uppercase().replace('-', "_").replace(' ', "_");
+        s.push_str(&format!("@ synthetic vec asset for inline path: {}\n", label));
+        s.push_str(".balign 4\n");
+        s.push_str(&format!(".global _{lsym}_VECTORS\n"));
+        s.push_str(&format!("_{lsym}_VECTORS:\n"));
+        s.push_str("    .word   1               @ path_count\n");
+        s.push_str(&format!("    .word   _{lsym}_PATH0      @ ptr path 0\n"));
+        s.push_str(&format!("_{lsym}_PATH0:\n"));
+        if path.points.is_empty() {
+            s.push_str("    .byte   0x02            @ end marker (empty path)\n\n");
+        } else {
+            let p0 = &path.points[0];
+            let y0 = p0.y.clamp(-127, 127) as i8;
+            let x0 = p0.x.clamp(-127, 127) as i8;
+            s.push_str(&format!("    .byte   {}               @ intensity\n", path.intensity));
+            s.push_str(&format!(
+                "    .byte   0x{:02X}, 0x{:02X}, 0x00, 0x00  @ y={}, x={}, hdr\n",
+                y0 as u8, x0 as u8, y0, x0
+            ));
+            for j in 0..path.points.len() - 1 {
+                let pf = &path.points[j];
+                let pt = &path.points[j + 1];
+                let dx = pt.x - pf.x;
+                let dy = pt.y - pf.y;
+                emit_split_segment_arm(&mut s, dx, dy);
+            }
+            s.push_str("    .byte   0x02            @ end marker\n\n");
+        }
+    }
+    let resource = &resource_mut;
+
     let base_ref_count = resource.base_refs.len();
     let frame_count = resource.frames.len();
     let loop_flag: u8 = if resource.r#loop { 1 } else { 0 };
@@ -1392,8 +1428,7 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
             let vsym = vec_ref.to_uppercase().replace('-', "_").replace(' ', "_");
             s.push_str(&format!("    .word _{vsym}_VECTORS  @ vec_ref '{vec_ref}'\n"));
         }
-        // Inline paths not supported on pitrex (always 0)
-        s.push_str("    .byte 0  @ inline_path_count (not rendered on pitrex)\n");
+        s.push_str("    .byte 0  @ inline_path_count (paths converted to synthetic vec_refs)\n");
     }
     s.push('\n');
     s
