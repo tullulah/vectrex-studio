@@ -82,12 +82,20 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("DRAW_VEC_X_HI", 1, "Vector draw X high byte (16-bit screen_x)");
         ram.allocate("DRAW_VEC_X", 1, "Vector draw X offset");
         ram.allocate("DRAW_VEC_Y", 1, "Vector draw Y offset");
-        
+
         // CRITICAL FIX: Add padding to prevent collision with TEMP_YX (usually allocated at offset 6)
         ram.allocate("MIRROR_PAD", 16, "Safety padding to prevent MIRROR flag corruption");
 
         ram.allocate("MIRROR_X", 1, "X mirror flag (0=normal, 1=flip)");
         ram.allocate("MIRROR_Y", 1, "Y mirror flag (0=normal, 1=flip)");
+        // SLR_DRAW_CLIPPED_PATH state — used by both SHOW_LEVEL and DRAW_VECTOR_BANKED
+        // for 16-bit X clipping. Allocate here too in case SHOW_LEVEL isn't used.
+        if !needed.contains("SHOW_LEVEL_RUNTIME") {
+            ram.allocate("SLR_CUR_X", 1, "DRAW_VECTOR: clamped (visible) beam X for clipping");
+            ram.allocate("SLR_TRUE_X", 2, "DRAW_VECTOR: 16-bit unclamped abs_x for line clipping");
+            ram.allocate("DRAW_T1_SCALED", 1, "DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL)");
+            ram.allocate("SDCP_ABS_Y", 1, "DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers)");
+        }
     }
     
     // DRAW_VECTOR_3D rotation scratch variables
@@ -186,6 +194,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: clamped (visible) beam X — actually written to integrator");
         ram.allocate("SLR_TRUE_X", 2, "SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping");
         ram.allocate("DRAW_T1_SCALED", 1, "SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale)");
+        ram.allocate("SDCP_ABS_Y", 1, "SHOW_LEVEL: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt top_screen between layers)");
+        ram.allocate("SLR_TOP_SCREEN", 1, "SHOW_LEVEL: top Y screen idx (lives across all 3 layers — must not be in TMPVAL)");
+        ram.allocate("SLR_BOT_SCREEN", 1, "SHOW_LEVEL: bot Y screen idx (lives across all 3 layers)");
         // GP objects RAM buffer + GP-GP/GP-FG physics scratch — only used by
         // UPDATE_LEVEL_RUNTIME. Gated so games that don't call UPDATE_LEVEL don't
         // pay 480+ bytes of RAM (critical on the 1KB M6809 target).
@@ -3543,7 +3554,7 @@ DRW_ENE_LOOP:\n\
     CMPA >TMPPTR2       ; compare with actual high byte\n\
     LBNE DRW_ENE_NEXT_POP  ; out of 8-bit range — skip draw\n\
     STB >DRAW_VEC_X\n\
-    CLR >DRAW_VEC_X_HI\n\
+    STA >DRAW_VEC_X_HI  ; A holds sign-extension of B (set by SEX above) — needed for 16-bit clipping in SLR_DRAW_CLIPPED_PATH\n\
     LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
     STB >DRAW_VEC_Y\n\
     ; Mirror: 0 = facing right (no mirror), 1 = facing left (flip X).\n\
@@ -3623,6 +3634,7 @@ DRW_ENE_DONE:\n\
     CMPA TMPPTR2        ; compare with actual high byte\n\
     LBNE DRW_ENE_NEXT_POP  ; out of 8-bit range — skip draw\n\
     STB DRAW_VEC_X      ; screen_x lo byte\n\
+    STA DRAW_VEC_X_HI   ; A holds sign-extension of B (set by SEX above)\n\
     LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
     STB DRAW_VEC_Y\n\
     CLR DRAW_VEC_INTENSITY  ; use vector's own intensity\n\

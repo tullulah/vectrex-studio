@@ -1310,8 +1310,16 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             out.push_str("    STA TMPPTR+1     ; Save Y to temporary storage\n");
 
             // Set draw positions
-            out.push_str("    LDA TMPPTR       ; X position\n");
+            out.push_str("    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)\n");
             out.push_str("    STA DRAW_VEC_X\n");
+            // Sign-extend X to DRAW_VEC_X_HI for 16-bit clipping in SLR_DRAW_CLIPPED_PATH.
+            // SHA the high byte: if A is negative ($80-$FF), store $FF, else $00.
+            out.push_str("    LDB #0\n");
+            out.push_str("    TSTA\n");
+            out.push_str(&format!("    BPL .sx_pos_{}\n", label_id));
+            out.push_str("    LDB #$FF\n");
+            out.push_str(&format!(".sx_pos_{}:\n", label_id));
+            out.push_str("    STB DRAW_VEC_X_HI\n");
             out.push_str("    LDA TMPPTR+1     ; Y position\n");
             out.push_str("    STA DRAW_VEC_Y\n");
             

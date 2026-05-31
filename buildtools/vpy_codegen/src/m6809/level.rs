@@ -597,7 +597,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    BPL SLR_TOP_OK   ; positive → A is the screen idx (D / 256)\n");
         out.push_str("    CLRA             ; negative → clamp top_screen to 0\n");
         out.push_str("SLR_TOP_OK:\n");
-        out.push_str("    STA >TMPVAL      ; TMPVAL = top_screen\n");
+        out.push_str("    STA >SLR_TOP_SCREEN  ; top_screen (separate from TMPVAL — survives per-object cull)\n");
         out.push_str("    LDD >CAMERA_Y\n");
         out.push_str("    SUBD #128        ; D = bot_y (camera_y - 128)\n");
         out.push_str("    PSHS D\n");
@@ -611,12 +611,12 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB >LEVEL_SCREEN_COUNT\n");
         out.push_str("    LBEQ SLR_DONE    ; no screens → nothing to draw\n");
         out.push_str("    DECB             ; B = max_idx = screen_count - 1\n");
-        out.push_str("    STB >TMPVAL+1    ; stash max_idx for compare (no CBA in assembler)\n");
-        out.push_str("    CMPA >TMPVAL+1   ; A (bot_screen) vs max_idx\n");
+        out.push_str("    STB >SLR_BOT_SCREEN  ; stash max_idx for compare\n");
+        out.push_str("    CMPA >SLR_BOT_SCREEN ; A (bot_screen) vs max_idx\n");
         out.push_str("    BLS SLR_BOT_NOCLAMP\n");
-        out.push_str("    LDA >TMPVAL+1    ; clamp bot_screen = max_idx\n");
+        out.push_str("    LDA >SLR_BOT_SCREEN  ; clamp bot_screen = max_idx\n");
         out.push_str("SLR_BOT_NOCLAMP:\n");
-        out.push_str("    STA >TMPVAL+1    ; TMPVAL+1 = bot_screen\n");
+        out.push_str("    STA >SLR_BOT_SCREEN  ; bot_screen\n");
         out.push_str("    \n");
         out.push_str("    ; === Draw Background Layer ===\n");
         out.push_str("SLR_BG_LAYER:\n");
@@ -655,9 +655,9 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         // Each screen entry is 3 bytes: FCB count, FDB ptr.
         out.push_str("; === SLR_DRAW_SCREEN_RANGE — iterate screens in visible camera range ===\n");
         out.push_str("SLR_DRAW_SCREEN_RANGE:\n");
-        out.push_str("    LDA >TMPVAL          ; A = current screen idx (start at top)\n");
+        out.push_str("    LDA >SLR_TOP_SCREEN  ; A = current screen idx (start at top)\n");
         out.push_str("SLR_SR_LOOP:\n");
-        out.push_str("    CMPA >TMPVAL+1\n");
+        out.push_str("    CMPA >SLR_BOT_SCREEN\n");
         out.push_str("    BHI SLR_SR_DONE      ; current > bot → finished\n");
         out.push_str("    CMPA >LEVEL_SCREEN_COUNT\n");
         out.push_str("    BHS SLR_SR_DONE      ; defensive: don't index past table\n");
@@ -728,10 +728,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD 1,X          ; x FDB at ROM +1\n");
         out.push_str("    SUBD >CAMERA_X   ; screen_x = world_x - camera_x\n");
         out.push_str("    STD >TMPVAL\n");
-        out.push_str("    ; Wide cull at ±(127+hw): paths whose centre is just off-screen still\n");
-        out.push_str("    ; render partially via SLR_DRAW_CLIPPED_PATH, which does true 16-bit\n");
-        out.push_str("    ; abs_x checks per-path and skips off-screen ones. Eliminates pop-in\n");
-        out.push_str("    ; at scroll edges (the strict ±127 cull popped whole platforms).\n");
+        out.push_str("    ; Wide cull at ±(127+hw): partial-edge objects still render via SDCP.\n");
         out.push_str("    LDB 19,X         ; B = half_width (ROM+19)\n");
         out.push_str("    STB >TMPPTR2     ; save hw\n");
         out.push_str("    LDA #127\n");
@@ -788,14 +785,26 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDU ,X++         ; U = path pointer, X advances to next entry\n");
         out.push_str("    PSHS X           ; Save pointer table position\n");
         out.push_str("    TFR U,X          ; X = actual path data\n");
-        // SLR_DRAW_CLIPPED_PATH does true 16-bit abs_x check per path: if the
-        // path's start position (after camera offset) is outside ±127 the path
-        // is skipped entirely, otherwise drawn via direct-VIA writes that
-        // mirror DSWM exactly. This removes the wrap-around ghost at scroll
-        // edges AND the pop-in artefact from a strict ±127 cull, at the cost
-        // of more code per object. Earlier attempts to use this path caused
-        // visible flicker; if it recurs revert to Draw_Sync_List_At_With_Mirrors.
-        out.push_str("    JSR SLR_DRAW_CLIPPED_PATH  ; per-path 16-bit abs_x clip\n");
+        // Hybrid clip decision per path: deep-interior (|screen_x|≤80) → fast DSWM;
+        // near-edge → SLR_DRAW_CLIPPED_PATH (16-bit clip, partial-segment drawing).
+        out.push_str("    LDA >DRAW_VEC_X_HI\n");
+        out.push_str("    BEQ SLR_PATH_CHECK_POS\n");
+        out.push_str("    INCA\n");
+        out.push_str("    BNE SLR_PATH_USE_SDCP\n");
+        out.push_str("    LDA >DRAW_VEC_X\n");
+        out.push_str("    CMPA #$B0\n");
+        out.push_str("    BHS SLR_PATH_USE_DSWM\n");
+        out.push_str("    BRA SLR_PATH_USE_SDCP\n");
+        out.push_str("SLR_PATH_CHECK_POS:\n");
+        out.push_str("    LDA >DRAW_VEC_X\n");
+        out.push_str("    CMPA #80\n");
+        out.push_str("    BLS SLR_PATH_USE_DSWM\n");
+        out.push_str("SLR_PATH_USE_SDCP:\n");
+        out.push_str("    JSR SLR_DRAW_CLIPPED_PATH\n");
+        out.push_str("    BRA SLR_PATH_AFTER\n");
+        out.push_str("SLR_PATH_USE_DSWM:\n");
+        out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
+        out.push_str("SLR_PATH_AFTER:\n");
         out.push_str("    PULS X           ; Restore pointer table position\n");
         out.push_str("    PULS B           ; Restore count\n");
         out.push_str("    BRA SLR_PATH_LOOP\n");
@@ -826,25 +835,19 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    PULS A           ; Clean up stride from stack\n");
         out.push_str("    RTS\n");
         out.push_str("\n");
+    }
 
-        // ---- SLR_DRAW_CLIPPED_PATH ----
-        // Per-segment X-clip draw loop mirroring DSWM VIA register patterns exactly.
-        // Draw_Sync_List_At_With_Mirrors is NOT a BIOS call — it is our own custom
-        // function in drawing.rs that writes VIA registers directly. BIOS calls like
-        // JSR Intensity_a / Draw_Line_d / Moveto_d must NOT be used here: with DP=$D0,
-        // Intensity_a would corrupt DDRB ($D032), and Draw_Line_d / Moveto_d are
-        // undefined in the context of direct VIA drawing.
-        //
-        // Format: FCB intensity, y_start, x_start, 0, 0 (header, 5 bytes)
-        //         FCB $FF, dy, dx  ...  FCB 2  (segments)
-        // B = y, A = x throughout (matching DSWM convention).
-        // SLR_CUR_X tracks the absolute beam X for clipping.
+    // =========================================================================
+    // SLR_DRAW_CLIPPED_PATH (shared by SHOW_LEVEL and DRAW_VECTOR_BANKED)
+    // =========================================================================
+    // Per-segment 16-bit X clipping draw loop mirroring DSWM VIA register patterns.
+    // Eliminates ghost wrap at scroll edges and lets partially-visible vectors
+    // render their visible portion.
+    if needed.contains("SHOW_LEVEL_RUNTIME")
+        || needed.contains("DRAW_VECTOR")
+        || needed.contains("DRAW_VECTOR_EX")
+    {
         out.push_str("; === SLR_DRAW_CLIPPED_PATH ===\n");
-        out.push_str("; Per-segment X-axis clipping using direct VIA register writes.\n");
-        out.push_str("; Mirrors the DSWM VIA pattern — no BIOS calls (Intensity_a corrupts\n");
-        out.push_str("; DDRB with DP=$D0; Draw_Line_d / Moveto_d are BIOS-only).\n");
-        out.push_str("; Segments whose new_x = cur_x+dx overflows a signed byte are moved\n");
-        out.push_str("; with beam OFF, preventing screen-wrap at left/right edges.\n");
         out.push_str("SLR_DRAW_CLIPPED_PATH:\n");
         // --- Intensity (same as DSWM: STA >$C832, not JSR Intensity_a) ---
         out.push_str("    LDA >DRAW_VEC_INTENSITY ; check override\n");
@@ -861,7 +864,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDB ,X+                 ; B = y_start (relative to center)\n");
         out.push_str("    LDA ,X+                 ; A = x_start (relative to center)\n");
         out.push_str("    ADDB >DRAW_VEC_Y        ; B = abs_y\n");
-        out.push_str("    STB >TMPVAL             ; save abs_y for moveto\n");
+        out.push_str("    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)\n");
         // --- 16-bit abs_x computation: sign-extend x_start (in A) to D,
         //     then add DRAW_VEC_X_HI:DRAW_VEC_X (16-bit screen_x).
         //     Result D = abs_x_16. If high byte != sign extension of low byte,
@@ -908,7 +911,7 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDA #$01\n");
         out.push_str("    STA VIA_port_b\n");
         // --- VIA Moveto abs position (B=abs_y, A=abs_x) ---
-        out.push_str("    LDB >TMPVAL             ; B = abs_y\n");
+        out.push_str("    LDB >SDCP_ABS_Y         ; B = abs_y\n");
         out.push_str("    STB VIA_port_a          ; DY → DAC (PB=1: hold)\n");
         out.push_str("    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y\n");
         out.push_str("    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)\n");
