@@ -277,6 +277,21 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
         ram.allocate("TEXT_SCALE_H", 1, "Character height for Print_Str_d (default $F8 = -8, normal)");
         ram.allocate("TEXT_SCALE_W", 1, "Character width for Print_Str_d (default $48 = 72, normal)");
+        // Custom font runtime state (VECTREX_PRINT_TEXT_FAST)
+        ram.allocate("PT_BASE_X", 1, "PRINT_TEXT: current char origin X (signed byte)");
+        ram.allocate("PT_BASE_Y", 1, "PRINT_TEXT: text baseline Y (signed byte)");
+        ram.allocate("PT_CUR_X", 1, "PRINT_TEXT: current beam X for delta computation");
+        ram.allocate("PT_CUR_Y", 1, "PRINT_TEXT: current beam Y for delta computation");
+        ram.allocate("PT_GX", 1, "PRINT_TEXT: current stroke glyph X (0..4)");
+        ram.allocate("PT_GY", 1, "PRINT_TEXT: current stroke glyph Y (0..6)");
+    }
+    // PRINT_NUMBER caching: last-rendered value + flag so repeated calls with
+    // same value skip DIVMOD + Print_Str setup.
+    if needed.contains("PRINT_NUMBER") {
+        ram.allocate("PN_LAST_VAL", 2, "PRINT_NUMBER: last rendered numeric value (cache key)");
+        ram.allocate("PN_LAST_VALID", 1, "PRINT_NUMBER: 1 if PN_LAST_VAL holds a valid render");
+        ram.allocate("PN_LAST_X", 1, "PRINT_NUMBER: last rendered X (cache key)");
+        ram.allocate("PN_LAST_Y", 1, "PRINT_NUMBER: last rendered Y (cache key)");
     }
 
     // NOTE: VAR_ARG0-4 and CURRENT_ROM_BANK are now allocated AFTER user variables
@@ -663,37 +678,172 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
     asm.push_str("; RUNTIME HELPERS\n");
     asm.push_str(";***************************************************************************\n\n");
     
-    // VECTREX_PRINT_TEXT: Call Print_Str_d with proper setup (CONDITIONAL)
-    // Only emit if PRINT_TEXT is actually used in code
-    if needed.contains("PRINT_TEXT") {
+    // ── Custom vector font (ported from ARM/PiTrex) ─────────────────────
+    // Drop-in replacement for BIOS Print_Str_d. Visual consistency across
+    // M6809 / PiTrex / RP2350 targets and cheaper per-PRINT_TEXT setup
+    // (~30 cycles vs ~200 of BIOS). Per-stroke cost is still BIOS-bound
+    // (Moveto_d / Draw_Line_d) — Vectrex beam ramps physically — but glyphs
+    // average ~5 strokes vs ~7-9 in the BIOS font so net work per char drops.
+    // Format reused unchanged from arm/builtins.rs font_glyphs():
+    //   stroke triple: (cmd, gx 0..4, gy 0..6); cmd=1=MOVE, 2=DRAW; 0=end.
+    if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
+        asm.push_str("; === CUSTOM VECTOR FONT (M6809) ===\n");
+        asm.push_str("; _FONT_PTRS: 96 FDB entries for ASCII 32..127 → glyph_ptr or 0.\n");
+        asm.push_str("; Each glyph block: stream of (cmd, gx, gy) triples, terminated by FCB 0.\n");
+        let glyphs = crate::arm::builtins::font_glyphs();
+        // Build lookup: ASCII → label
+        use std::collections::HashMap;
+        let mut label_for_char: HashMap<u8, String> = HashMap::new();
+        for (ch, strokes) in &glyphs {
+            if strokes.is_empty() { continue; }
+            label_for_char.insert(*ch, format!("_FONT_G_{:02X}", ch));
+        }
+        asm.push_str("_FONT_PTRS:\n");
+        for code in 32u16..=127u16 {
+            let ch = code as u8;
+            if let Some(lbl) = label_for_char.get(&ch) {
+                asm.push_str(&format!("    FDB {}    ; '{}' (${:02X})\n", lbl, ch as char, ch));
+            } else {
+                asm.push_str(&format!("    FDB 0       ; '{}' (${:02X}) no glyph\n",
+                    if ch.is_ascii_graphic() || ch == b' ' { ch as char } else { '?' }, ch));
+            }
+        }
+        asm.push_str("\n; --- Glyph stroke data ---\n");
+        let mut sorted = glyphs.clone();
+        sorted.sort_by_key(|(c, _)| *c);
+        for (ch, strokes) in &sorted {
+            if strokes.is_empty() { continue; }
+            asm.push_str(&format!("{}:\n", label_for_char.get(ch).unwrap()));
+            for (cmd, gx, gy) in strokes {
+                asm.push_str(&format!("    FCB {},{},{}\n", cmd, gx, gy));
+            }
+            asm.push_str("    FCB 0    ; end of glyph\n");
+        }
+        asm.push_str("\n");
+    }
+
+    // VECTREX_PRINT_TEXT — drop-in replacement for the BIOS Print_Str_d path.
+    // Uses the custom font tables emitted above. Inputs (kept compatible with
+    // every existing caller): VAR_ARG0 = x (i16, low byte used), VAR_ARG1 = y,
+    // VAR_ARG2 = string ptr ($80- or NUL-terminated).
+    if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
         asm.push_str("VECTREX_PRINT_TEXT:\n");
-        asm.push_str("    ; VPy signature: PRINT_TEXT(x, y, string)\n");
-        asm.push_str("    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n");
-        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely\n");
-        asm.push_str("    ;       causing integrators to drift toward joystick DAC value.\n");
-        asm.push_str("    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.\n");
+        asm.push_str("    PSHS U,X,DP\n");
         asm.push_str("    LDA #$D0\n");
-        asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
-        asm.push_str("    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)\n");
-        asm.push_str("    JSR Reset0Ref   ; Reset beam to center before positioning text\n");
-        asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
-        asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)\n");
-        asm.push_str("    STA >$C82A      ; Vec_Text_Height: controls character Y scale\n");
-        asm.push_str("    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)\n");
-        asm.push_str("    STA >$C82B      ; Vec_Text_Width: controls character X spacing\n");
-        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
-        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
-        asm.push_str("    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)\n");
-        asm.push_str("    PSHS X\n");
-        asm.push_str("    JSR Print_Str_d\n");
-        asm.push_str("    PULS X\n");
-        asm.push_str("    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value\n");
-        asm.push_str("    LDA #$F8\n");
-        asm.push_str("    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)\n");
-        asm.push_str("    LDA #$48\n");
-        asm.push_str("    STA >$C82B      ; Restore Vec_Text_Width to normal (72)\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
-        asm.push_str("    RTS\n\n");
+        asm.push_str("    TFR A,DP            ; DP=$D0 for VIA / BIOS access\n");
+        asm.push_str("    JSR Intensity_5F    ; standard text brightness ($5F)\n");
+        asm.push_str("    JSR Reset0Ref       ; zero beam — cur = (0,0)\n");
+        // Init cursor state in RAM
+        asm.push_str("    LDA >VAR_ARG0+1\n");
+        asm.push_str("    STA >PT_BASE_X      ; base_x (advances per char)\n");
+        asm.push_str("    LDA >VAR_ARG1+1\n");
+        asm.push_str("    STA >PT_BASE_Y\n");
+        // Initial Moveto_d to base — this also primes cur = (base_x, base_y)
+        asm.push_str("    LDA >PT_BASE_Y\n");
+        asm.push_str("    LDB >PT_BASE_X\n");
+        asm.push_str("    JSR Moveto_d        ; A=Y B=X absolute from screen center\n");
+        asm.push_str("    LDA >PT_BASE_X\n");
+        asm.push_str("    STA >PT_CUR_X\n");
+        asm.push_str("    LDA >PT_BASE_Y\n");
+        asm.push_str("    STA >PT_CUR_Y\n");
+        asm.push_str("    LDU >VAR_ARG2       ; string pointer\n");
+        asm.push_str("PT_CHAR_LOOP:\n");
+        asm.push_str("    LDA ,U+\n");
+        asm.push_str("    LBEQ PT_DONE         ; NUL terminator\n");
+        asm.push_str("    CMPA #$80\n");
+        asm.push_str("    LBEQ PT_DONE         ; Vectrex $80 terminator\n");
+        // lowercase -> uppercase (assembler doesn't accept 'a char literals)
+        asm.push_str("    CMPA #$61            ; 'a'\n");
+        asm.push_str("    BLO PT_FOLD_DONE\n");
+        asm.push_str("    CMPA #$7A            ; 'z'\n");
+        asm.push_str("    BHI PT_FOLD_DONE\n");
+        asm.push_str("    SUBA #$20\n");
+        asm.push_str("PT_FOLD_DONE:\n");
+        // bounds check 32..127
+        asm.push_str("    CMPA #32\n");
+        asm.push_str("    LBLO PT_ADVANCE\n");
+        asm.push_str("    CMPA #127\n");
+        asm.push_str("    LBHI PT_ADVANCE\n");
+        // glyph_ptr = _FONT_PTRS[(char-32)*2]
+        asm.push_str("    SUBA #32            ; A = index 0..95\n");
+        asm.push_str("    LDB #2\n");
+        asm.push_str("    MUL                 ; D = idx*2\n");
+        asm.push_str("    LDX #_FONT_PTRS\n");
+        asm.push_str("    LEAX D,X\n");
+        asm.push_str("    LDX ,X              ; X = glyph_ptr\n");
+        asm.push_str("    CMPX #0\n");
+        asm.push_str("    LBEQ PT_ADVANCE     ; no strokes for this char (e.g. space)\n");
+        // Stroke loop: while (cmd = ,X+) != 0
+        asm.push_str("PT_STROKE_LOOP:\n");
+        asm.push_str("    LDA ,X+             ; A = cmd: 1=MOVE 2=DRAW 0=end\n");
+        asm.push_str("    LBEQ PT_CHAR_DONE\n");
+        asm.push_str("    LDB ,X+             ; B = gx (0..4)\n");
+        asm.push_str("    STB >PT_GX\n");
+        asm.push_str("    LDB ,X+             ; B = gy (0..6)\n");
+        asm.push_str("    STB >PT_GY\n");
+        // Compute target_x = base_x + gx*SCALE (right is +X)
+        // Compute target_y = base_y + (gy-6)*SCALE = base_y + gy*2 - 12
+        // → Vectrex Y+ is UP; anchor (x,y) is TOP-LEFT (matches BIOS Print_Str_d).
+        //   gy=6 (top of glyph)  → target_y = base_y
+        //   gy=0 (bottom of glyph) → target_y = base_y - 12 (12 pixels below anchor)
+        asm.push_str("    LDB >PT_GX\n");
+        asm.push_str("    LSLB                ; gx*2\n");
+        asm.push_str("    ADDB >PT_BASE_X     ; B = target_x\n");
+        asm.push_str("    PSHS B              ; stash target_x\n");
+        asm.push_str("    LDB >PT_GY\n");
+        asm.push_str("    LSLB                ; gy*2\n");
+        asm.push_str("    SUBB #12            ; gy*2 - 12\n");
+        asm.push_str("    ADDB >PT_BASE_Y     ; B = target_y (signed)\n");
+        asm.push_str("    PSHS B              ; stash target_y\n");
+        // Cmd dispatch (A still holds cmd from earlier, but we may have clobbered)
+        // We saved cmd before; reload it from stack? Cleaner: branch before stash.
+        // Re-read: at this point we PSHS B, PSHS B → stack [target_y, target_x].
+        // A is the cmd from `LDA ,X+` above; it survives MUL/LSL/LDB sequences
+        // only as long as we don't touch it explicitly. LDB/ADDB don't touch A.
+        // PSHS B also leaves A alone. So A still has cmd. ✓
+        asm.push_str("    CMPA #1\n");
+        asm.push_str("    LBEQ PT_DO_MOVE\n");
+        // DRAW: Draw_Line_d(target_y - cur_y, target_x - cur_x)
+        asm.push_str("    PULS B              ; B = target_y\n");
+        asm.push_str("    SUBB >PT_CUR_Y      ; B = delta_y\n");
+        asm.push_str("    TFR B,A             ; A = delta_y\n");
+        asm.push_str("    PULS B              ; B = target_x\n");
+        asm.push_str("    SUBB >PT_CUR_X      ; B = delta_x\n");
+        asm.push_str("    PSHS X,U            ; preserve glyph_ptr + string_ptr across BIOS\n");
+        asm.push_str("    JSR Draw_Line_d     ; BIOS: A=Y delta, B=X delta\n");
+        asm.push_str("    PULS X,U\n");
+        asm.push_str("    LBRA PT_STROKE_UPDATE_CUR\n");
+        asm.push_str("PT_DO_MOVE:\n");
+        // MOVE: Moveto_d(target_y, target_x) absolute
+        asm.push_str("    PULS A              ; A = target_y\n");
+        asm.push_str("    PULS B              ; B = target_x\n");
+        asm.push_str("    PSHS X,U\n");
+        asm.push_str("    JSR Moveto_d        ; BIOS: A=Y, B=X absolute\n");
+        asm.push_str("    PULS X,U\n");
+        asm.push_str("PT_STROKE_UPDATE_CUR:\n");
+        // After Move or Draw, beam is at target. Update cur_x/cur_y (same formulas).
+        asm.push_str("    LDB >PT_GX\n");
+        asm.push_str("    LSLB\n");
+        asm.push_str("    ADDB >PT_BASE_X\n");
+        asm.push_str("    STB >PT_CUR_X\n");
+        asm.push_str("    LDB >PT_GY\n");
+        asm.push_str("    LSLB\n");
+        asm.push_str("    SUBB #12\n");
+        asm.push_str("    ADDB >PT_BASE_Y\n");
+        asm.push_str("    STB >PT_CUR_Y\n");
+        asm.push_str("    LBRA PT_STROKE_LOOP\n");
+        asm.push_str("PT_CHAR_DONE:\n");
+        // Advance to next char: base_x += CHAR_WIDTH (5*scale = 10), reposition beam.
+        asm.push_str("PT_ADVANCE:\n");
+        asm.push_str("    LDB >PT_BASE_X\n");
+        asm.push_str("    ADDB #10            ; CHAR_WIDTH = 5 grid * 2 scale\n");
+        asm.push_str("    STB >PT_BASE_X\n");
+        // Optional: reposition beam to (base_y, base_x) so next char starts clean.
+        // Skipped — next char's first MOVE/DRAW handles its own position.
+        asm.push_str("    LBRA PT_CHAR_LOOP\n");
+        asm.push_str("PT_DONE:\n");
+        asm.push_str(&format!("    JSR {}\n", dp_to_c8));
+        asm.push_str("    PULS U,X,DP,PC\n\n");
     }
     
     // VECTREX_PRINT_NUMBER: Print number at position (CONDITIONAL)
@@ -702,6 +852,33 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         asm.push_str("VECTREX_PRINT_NUMBER:\n");
         asm.push_str("    ; Print signed decimal number (-9999 to 9999)\n");
         asm.push_str("    ; ARG0=x, ARG1=y, ARG2=value\n");
+        asm.push_str("    ;\n");
+        asm.push_str("    ; CACHE CHECK: if (value,x,y) matches the previous render, skip the\n");
+        asm.push_str("    ; entire DIVMOD pipeline (saves ~200 cycles) and reuse NUM_STR as-is.\n");
+        asm.push_str("    ; Drawing must still happen every frame (phosphor decay) so we go\n");
+        asm.push_str("    ; straight to PN_AFTER_CONVERT with NUM_STR already populated.\n");
+        asm.push_str("    LDA >PN_LAST_VALID\n");
+        asm.push_str("    BEQ .PN_NO_CACHE       ; first call → must convert\n");
+        asm.push_str("    LDD >VAR_ARG2\n");
+        asm.push_str("    CMPD >PN_LAST_VAL\n");
+        asm.push_str("    BNE .PN_NO_CACHE\n");
+        asm.push_str("    LDA >VAR_ARG0+1\n");
+        asm.push_str("    CMPA >PN_LAST_X\n");
+        asm.push_str("    BNE .PN_NO_CACHE\n");
+        asm.push_str("    LDA >VAR_ARG1+1\n");
+        asm.push_str("    CMPA >PN_LAST_Y\n");
+        asm.push_str("    BNE .PN_NO_CACHE\n");
+        asm.push_str("    LBRA .PN_AFTER_CONVERT  ; cache hit — NUM_STR still valid\n");
+        asm.push_str(".PN_NO_CACHE:\n");
+        asm.push_str("    ; Update cache key BEFORE conversion (value/x/y will be needed later)\n");
+        asm.push_str("    LDD >VAR_ARG2\n");
+        asm.push_str("    STD >PN_LAST_VAL\n");
+        asm.push_str("    LDA >VAR_ARG0+1\n");
+        asm.push_str("    STA >PN_LAST_X\n");
+        asm.push_str("    LDA >VAR_ARG1+1\n");
+        asm.push_str("    STA >PN_LAST_Y\n");
+        asm.push_str("    LDA #1\n");
+        asm.push_str("    STA >PN_LAST_VALID\n");
         asm.push_str("    ;\n");
         asm.push_str("    ; STEP 1: Convert number to decimal string (DP=$C8)\n");
         asm.push_str("    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n");
@@ -770,28 +947,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
         asm.push_str("    STA ,X\n");
         asm.push_str("    \n");
         asm.push_str(".PN_AFTER_CONVERT:\n");
-        asm.push_str("    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n");
-        asm.push_str("    LDA #$D0\n");
-        asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS\n");
-        asm.push_str("    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)\n");
-        asm.push_str("    JSR Reset0Ref    ; Reset beam to center before positioning text\n");
-        asm.push_str("    LDU #NUM_STR     ; String pointer\n");
-        asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte)\n");
-        asm.push_str("    STA >$C82A       ; Vec_Text_Height: character Y scale\n");
-        asm.push_str("    LDA >TEXT_SCALE_W ; width (unsigned byte)\n");
-        asm.push_str("    STA >$C82B       ; Vec_Text_Width: character X spacing\n");
-        asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
-        asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
-        asm.push_str("    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)\n");
-        asm.push_str("    PSHS X\n");
-        asm.push_str("    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n");
-        asm.push_str("    PULS X\n");
-        asm.push_str("    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)\n");
-        asm.push_str("    LDA #$F8\n");
-        asm.push_str("    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)\n");
-        asm.push_str("    LDA #$48\n");
-        asm.push_str("    STA >$C82B       ; Restore Vec_Text_Width to normal (72)\n");
-        asm.push_str(&format!("    JSR {}      ; Restore DP to $C8\n", dp_to_c8));
+        asm.push_str("    ; STEP 2: hand the rendered NUM_STR to VECTREX_PRINT_TEXT, which uses\n");
+        asm.push_str("    ; the custom vector font path (consistent visual with PiTrex/RP2350).\n");
+        asm.push_str("    LDX #NUM_STR\n");
+        asm.push_str("    STX >VAR_ARG2     ; PRINT_TEXT reads string ptr from VAR_ARG2\n");
+        asm.push_str("    JSR VECTREX_PRINT_TEXT\n");
         asm.push_str("    RTS\n\n");
     }
     
@@ -1131,19 +1291,36 @@ fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
         BRA AU_UPDATE_SFX       ; Skip reading data this frame\n\
         \n\
         AU_MUSIC_PROCESS_WRITES:\n\
-        PSHS B                  ; Save count\n\
-        \n\
+        ; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte\n\
+        ; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per\n\
+        ; register write). For theme-style music with 8-10 writes per event,\n\
+        ; saves ~500-600 cycles per event frame → frees enough budget that the\n\
+        ; music event no longer pushes the frame over vsync. Mirrors the BIOS\n\
+        ; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).\n\
+        PSHS B                  ; save register-write count on stack for in-place DEC\n\
         AU_MUSIC_WRITE_LOOP:\n\
-        LDA ,X+                 ; Load register number\n\
-        LDB ,X+                 ; Load register value\n\
-        PSHS X                  ; Save pointer\n\
-        JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)\n\
-        PULS X                  ; Restore pointer\n\
-        PULS B                  ; Get counter\n\
-        DECB                    ; Decrement\n\
-        BEQ AU_MUSIC_DONE       ; Done if count=0\n\
-        PSHS B                  ; Save counter\n\
-        BRA AU_MUSIC_WRITE_LOOP ; Continue\n\
+        LDA ,X+                 ; A = register number\n\
+        LDB ,X+                 ; B = register value\n\
+        STA VIA_port_a          ; data bus = reg num\n\
+        LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR\n\
+        STA VIA_port_b\n\
+        LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)\n\
+        STA VIA_port_b\n\
+        LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes\n\
+                                ; latching the register address before we drive\n\
+                                ; the value. Without this, the PSG occasionally\n\
+                                ; writes the new value into the PREVIOUS register\n\
+                                ; (audible as glitchy pitch / 'noisy' music,\n\
+                                ; especially when other CPU activity perturbs\n\
+                                ; the timing between this loop and adjacent code).\n\
+        STB VIA_port_a          ; data bus = value\n\
+        LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA\n\
+        STA VIA_port_b\n\
+        LDA #$01                ; back to INACTIVE\n\
+        STA VIA_port_b\n\
+        DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)\n\
+        BNE AU_MUSIC_WRITE_LOOP\n\
+        LEAS 1,S                ; discard saved count\n\
         \n\
         AU_MUSIC_DONE:\n\
         STX >PSG_MUSIC_PTR      ; Update music pointer\n\
