@@ -183,7 +183,8 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
             ram.allocate("DRAW_VEC_INTENSITY", 1, "SHOW_LEVEL: intensity override");
         }
         // Clipped-path draw loop tracker
-        ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: tracked beam X for per-segment clipping");
+        ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: clamped (visible) beam X — actually written to integrator");
+        ram.allocate("SLR_TRUE_X", 2, "SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping");
         ram.allocate("DRAW_T1_SCALED", 1, "SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale)");
         // GP objects RAM buffer + GP-GP/GP-FG physics scratch — only used by
         // UPDATE_LEVEL_RUNTIME. Gated so games that don't call UPDATE_LEVEL don't

@@ -728,22 +728,28 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDD 1,X          ; x FDB at ROM +1\n");
         out.push_str("    SUBD >CAMERA_X   ; screen_x = world_x - camera_x\n");
         out.push_str("    STD >TMPVAL\n");
-        out.push_str("    ; STRICT cull at ±127: Draw_Sync_List_At_With_Mirrors uses only the\n");
-        out.push_str("    ; LOW BYTE of screen_x (DRAW_VEC_X), so any object whose 16-bit screen_x\n");
-        out.push_str("    ; is outside ±127 wraps to the opposite edge (ghost vectors). The previous\n");
-        out.push_str("    ; cull widened by half_width to render partial edges but caused the wrap.\n");
+        out.push_str("    ; Wide cull at ±(127+hw): paths whose centre is just off-screen still\n");
+        out.push_str("    ; render partially via SLR_DRAW_CLIPPED_PATH, which does true 16-bit\n");
+        out.push_str("    ; abs_x checks per-path and skips off-screen ones. Eliminates pop-in\n");
+        out.push_str("    ; at scroll edges (the strict ±127 cull popped whole platforms).\n");
+        out.push_str("    LDB 19,X         ; B = half_width (ROM+19)\n");
+        out.push_str("    STB >TMPPTR2     ; save hw\n");
+        out.push_str("    LDA #127\n");
+        out.push_str("    ADDA >TMPPTR2    ; A = 127 + hw (right boundary)\n");
+        out.push_str("    STA >TMPPTR\n");
+        out.push_str("    LDA #128\n");
+        out.push_str("    SUBA >TMPPTR2    ; A = 128 - hw (left boundary)\n");
+        out.push_str("    STA >TMPPTR+1\n");
         out.push_str("    LDD >TMPVAL\n");
         out.push_str("    TSTA\n");
         out.push_str("    BEQ SLR_ROM_A_ZERO\n");
         out.push_str("    INCA\n");
-        out.push_str("    LBNE SLR_OBJ_NEXT  ; high byte ≠ $00/$FF → out of ±255 window, skip\n");
-        out.push_str("    ; A was $FF (now 0): screen_x in [-256..-1]; visible if B >= 128 (i.e. -128..-1)\n");
-        out.push_str("    CMPB #128\n");
+        out.push_str("    LBNE SLR_OBJ_NEXT\n");
+        out.push_str("    CMPB >TMPPTR+1\n");
         out.push_str("    BHS SLR_ROM_VISIBLE\n");
         out.push_str("    LBRA SLR_OBJ_NEXT\n");
         out.push_str("SLR_ROM_A_ZERO:\n");
-        out.push_str("    ; A=0: screen_x in [0..255]; visible if B <= 127\n");
-        out.push_str("    CMPB #127\n");
+        out.push_str("    CMPB >TMPPTR\n");
         out.push_str("    BLS SLR_ROM_VISIBLE\n");
         out.push_str("    LBRA SLR_OBJ_NEXT\n");
         out.push_str("SLR_ROM_VISIBLE:\n");
@@ -782,16 +788,14 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    LDU ,X++         ; U = path pointer, X advances to next entry\n");
         out.push_str("    PSHS X           ; Save pointer table position\n");
         out.push_str("    TFR U,X          ; X = actual path data\n");
-        // Use the same DSWM path that DRAW_VECTOR_BANKED uses. SLR_DRAW_CLIPPED_PATH
-        // (custom direct-VIA implementation that aimed at 16-bit X clip) caused visible
-        // beam flicker on stable scenes — manually replacing SHOW_LEVEL with DRAW_VECTOR
-        // calls eliminated it. Draw_Sync_List_At_With_Mirrors reads DRAW_VEC_X (low byte
-        // of DRAW_VEC_X_HI, which is the next RAM byte and already populated by the
-        // 16-bit STD above) and DRAW_VEC_Y. The trade-off is the loss of per-path
-        // 16-bit X clipping, but per-object visibility culling already keeps objects
-        // whose centre is on-screen; paths that span >127 from the centre would ghost,
-        // which is rare in well-authored .vec data and acceptable vs flicker.
-        out.push_str("    JSR Draw_Sync_List_At_With_Mirrors  ; stable BIOS-style VIA drawing (no flicker)\n");
+        // SLR_DRAW_CLIPPED_PATH does true 16-bit abs_x check per path: if the
+        // path's start position (after camera offset) is outside ±127 the path
+        // is skipped entirely, otherwise drawn via direct-VIA writes that
+        // mirror DSWM exactly. This removes the wrap-around ghost at scroll
+        // edges AND the pop-in artefact from a strict ±127 cull, at the cost
+        // of more code per object. Earlier attempts to use this path caused
+        // visible flicker; if it recurs revert to Draw_Sync_List_At_With_Mirrors.
+        out.push_str("    JSR SLR_DRAW_CLIPPED_PATH  ; per-path 16-bit abs_x clip\n");
         out.push_str("    PULS X           ; Restore pointer table position\n");
         out.push_str("    PULS B           ; Restore count\n");
         out.push_str("    BRA SLR_PATH_LOOP\n");
@@ -865,28 +869,31 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    TFR A,B                 ; B = x_start (SEX extends B, not A)\n");
         out.push_str("    SEX                      ; sign-extend B→D (A=sign, B=x_start)\n");
         out.push_str("    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16\n");
-        out.push_str("    ; Range check: abs_x must fit in signed byte [-128, +127]\n");
-        out.push_str("    ; If out of range, skip this path (can't position beam correctly).\n");
-        out.push_str("    ; Progressive clipping works because paths starting on-screen are\n");
-        out.push_str("    ; drawn normally, and their segments get clipped at the edge.\n");
+        out.push_str("    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).\n");
+        out.push_str("    STD >SLR_TRUE_X\n");
+        out.push_str("    ; Compute clamped beam position for hardware Moveto.\n");
         out.push_str("    TSTA\n");
-        out.push_str("    BEQ SDCP_CHECK_POS       ; A=$00 → check positive range\n");
-        out.push_str("    INCA                      ; was A=$FF?\n");
-        out.push_str("    BNE SDCP_SKIP_PATH        ; A was not $00 or $FF → way off\n");
-        out.push_str("    ; A was $FF: valid if B >= $80 (negative signed byte)\n");
+        out.push_str("    BEQ SDCP_INIT_POS\n");
+        out.push_str("    INCA\n");
+        out.push_str("    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)\n");
+        out.push_str("    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)\n");
+        out.push_str("    LDB #$80                ; default to left edge\n");
+        out.push_str("    LDA >SLR_TRUE_X         ; original hi byte\n");
+        out.push_str("    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)\n");
+        out.push_str("    LDB #$7F                ; positive way off → +127 (right)\n");
+        out.push_str("    BRA SDCP_USE_CLAMPED\n");
+        out.push_str("SDCP_INIT_NEG_OK:\n");
         out.push_str("    CMPB #$80\n");
-        out.push_str("    BHS SDCP_ABS_OK\n");
-        out.push_str("    BRA SDCP_SKIP_PATH\n");
-        out.push_str("SDCP_CHECK_POS:\n");
-        out.push_str("    ; A=$00: valid if B <= $7F\n");
+        out.push_str("    BHS SDCP_USE_CLAMPED    ; -128..-1, valid\n");
+        out.push_str("    LDB #$80                ; clamp\n");
+        out.push_str("    BRA SDCP_USE_CLAMPED\n");
+        out.push_str("SDCP_INIT_POS:\n");
         out.push_str("    CMPB #$7F\n");
-        out.push_str("    BLS SDCP_ABS_OK\n");
-        out.push_str("SDCP_SKIP_PATH:\n");
-        out.push_str("    RTS\n");
-        out.push_str("SDCP_ABS_OK:\n");
-        out.push_str("    ; B = abs_x (valid signed byte)\n");
-        out.push_str("    TFR B,A                  ; A = abs_x for moveto\n");
-        out.push_str("    STA >SLR_CUR_X          ; init beam-x tracker\n");
+        out.push_str("    BLS SDCP_USE_CLAMPED\n");
+        out.push_str("    LDB #$7F                ; clamp positive\n");
+        out.push_str("SDCP_USE_CLAMPED:\n");
+        out.push_str("    TFR B,A                  ; A = clamped beam x\n");
+        out.push_str("    STA >SLR_CUR_X          ; clamped value goes to integrator\n");
         // --- VIA Reset0Ref (inline, same as DSWM lines 964-976) ---
         out.push_str("    CLR VIA_shift_reg\n");
         out.push_str("    LDA #$CC\n");
@@ -921,23 +928,69 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ANDA #$40\n");
         out.push_str("    BEQ SDCP_MOVETO_W\n");
         out.push_str("    ; PB=1 on exit — draw loop ready\n");
-        // --- Segment loop ---
+        // --- Segment loop with per-segment 16-bit line clipping ---
+        // For each segment, compute true_new_x_16 = SLR_TRUE_X + sign_extend(dx).
+        // Clamp to ±127 → clamped_new_x. Compute beam_dx = clamped_new_x - SLR_CUR_X
+        // (the visible portion of the X motion). Beam ON unless the segment is fully
+        // off-screen (beam_dx==0 AND cur_x is clamped at an edge).
         out.push_str("SDCP_SEG_LOOP:\n");
         out.push_str("    LDA ,X+                 ; flags\n");
         out.push_str("    CMPA #2\n");
-        out.push_str("    BEQ SDCP_DONE\n");
-        out.push_str("    ; Read dy → B, dx → A (DSWM order)\n");
+        out.push_str("    LBEQ SDCP_DONE\n");
         out.push_str("    LDB ,X+                 ; B = dy\n");
-        out.push_str("    LDA ,X+                 ; A = dx\n");
-        out.push_str("    ; --- X-axis clip check: new_x = cur_x + dx ---\n");
         out.push_str("    STB >TMPPTR2            ; save dy\n");
-        out.push_str("    PSHS A                  ; push dx\n");
+        out.push_str("    LDA ,X+                 ; A = dx (8-bit signed)\n");
+        out.push_str("    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---\n");
+        out.push_str("    TFR A,B                 ; B = dx\n");
+        out.push_str("    SEX                      ; D = sign-extended dx (A=sign, B=dx)\n");
+        out.push_str("    ADDD >SLR_TRUE_X        ; D = new true_x_16\n");
+        out.push_str("    STD >SLR_TRUE_X         ; update 16-bit tracker\n");
+        out.push_str("    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---\n");
+        out.push_str("    TSTA\n");
+        out.push_str("    BEQ SDCP_SEG_POS\n");
+        out.push_str("    INCA\n");
+        out.push_str("    BEQ SDCP_SEG_NEG_OK     ; A was $FF\n");
+        out.push_str("    ; Way off — clamp by sign of original D\n");
+        out.push_str("    LDA >SLR_TRUE_X         ; reload hi byte\n");
+        out.push_str("    BMI SDCP_SEG_CLAMP_LEFT\n");
+        out.push_str("    LDB #$7F                ; positive way off → +127\n");
+        out.push_str("    BRA SDCP_SEG_CLAMPED\n");
+        out.push_str("SDCP_SEG_CLAMP_LEFT:\n");
+        out.push_str("    LDB #$80                ; negative way off → -128\n");
+        out.push_str("    BRA SDCP_SEG_CLAMPED\n");
+        out.push_str("SDCP_SEG_NEG_OK:\n");
+        out.push_str("    CMPB #$80\n");
+        out.push_str("    BHS SDCP_SEG_CLAMPED\n");
+        out.push_str("    LDB #$80\n");
+        out.push_str("    BRA SDCP_SEG_CLAMPED\n");
+        out.push_str("SDCP_SEG_POS:\n");
+        out.push_str("    CMPB #$7F\n");
+        out.push_str("    BLS SDCP_SEG_CLAMPED\n");
+        out.push_str("    LDB #$7F\n");
+        out.push_str("SDCP_SEG_CLAMPED:\n");
+        out.push_str("    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).\n");
         out.push_str("    LDA >SLR_CUR_X\n");
-        out.push_str("    ADDA ,S                 ; A = cur_x + dx; V set on overflow\n");
-        out.push_str("    BVS SDCP_CLIP           ; overflow → clip\n");
-        out.push_str("    STA >SLR_CUR_X          ; update tracker\n");
-        out.push_str("    PULS A                  ; restore dx\n");
+        out.push_str("    PSHS B                  ; save clamped_new_x\n");
+        out.push_str("    NEGA                    ; A = -cur_x\n");
+        out.push_str("    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx\n");
+        out.push_str("    PULS B                  ; B = clamped_new_x\n");
+        out.push_str("    ; Update SLR_CUR_X to new clamped position\n");
+        out.push_str("    STB >SLR_CUR_X\n");
+        out.push_str("    ; Decide beam ON/OFF/skip:\n");
+        out.push_str("    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)\n");
+        out.push_str("    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)\n");
+        out.push_str("    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)\n");
+        out.push_str("    ;   (Y must track logical position so subsequent segments draw at correct Y)\n");
+        out.push_str("    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical\n");
+        out.push_str("    TSTA\n");
+        out.push_str("    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw\n");
+        out.push_str("    CMPB #$80               ; at left edge?\n");
+        out.push_str("    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left\n");
+        out.push_str("    CMPB #$7F               ; at right edge?\n");
+        out.push_str("    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right\n");
+        out.push_str("SDCP_SEG_DRAW:\n");
         out.push_str("    LDB >TMPPTR2            ; restore dy\n");
+        out.push_str("    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.\n");
         // --- Draw segment (beam ON) — same as DSWM_LOOP ---
         out.push_str("    STB VIA_port_a          ; DY → DAC (PB=1: hold)\n");
         out.push_str("    CLR VIA_port_b          ; PB=0: mux for DY\n");
@@ -954,26 +1007,30 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         out.push_str("    ANDA #$40\n");
         out.push_str("    BEQ SDCP_W_DRAW\n");
         out.push_str("    CLR VIA_shift_reg       ; beam OFF\n");
-        out.push_str("    BRA SDCP_SEG_LOOP\n");
-        // --- Clip: beam OFF move (same ramp, no beam) ---
-        out.push_str("SDCP_CLIP:\n");
-        out.push_str("    STA >SLR_CUR_X          ; store wrapped x (approx)\n");
-        out.push_str("    PULS A                  ; restore dx\n");
-        out.push_str("    LDB >TMPPTR2            ; restore dy\n");
+        out.push_str("    LBRA SDCP_SEG_LOOP\n");
+        out.push_str("\n");
+        out.push_str("    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---\n");
+        out.push_str("SDCP_SEG_OFF_X:\n");
+        out.push_str("    LDB >TMPPTR2            ; B = dy\n");
+        out.push_str("    TSTB                     ; dy == 0?\n");
+        out.push_str("    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment\n");
+        out.push_str("    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).\n");
+        out.push_str("    CLRA                     ; defensive: ensure dx=0\n");
         out.push_str("    STB VIA_port_a          ; DY → DAC\n");
         out.push_str("    CLR VIA_port_b\n");
         out.push_str("    NOP\n");
         out.push_str("    NOP\n");
         out.push_str("    NOP\n");
         out.push_str("    INC VIA_port_b\n");
-        out.push_str("    STA VIA_port_a          ; DX → DAC\n");
+        out.push_str("    STA VIA_port_a          ; DX = 0\n");
         out.push_str("    ; beam stays OFF (no STA VIA_shift_reg)\n");
         out.push_str("    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)\n");
-        out.push_str("SDCP_W_MOVE:\n");
+        out.push_str("SDCP_W_OFF_X:\n");
         out.push_str("    LDA VIA_int_flags\n");
         out.push_str("    ANDA #$40\n");
-        out.push_str("    BEQ SDCP_W_MOVE\n");
-        out.push_str("    BRA SDCP_SEG_LOOP\n");
+        out.push_str("    BEQ SDCP_W_OFF_X\n");
+        out.push_str("    LBRA SDCP_SEG_LOOP\n");
+        out.push_str("\n");
         out.push_str("SDCP_DONE:\n");
         out.push_str("    RTS\n");
         out.push_str("\n");
