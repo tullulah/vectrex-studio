@@ -3698,7 +3698,7 @@ KILL_ENEMY_RUNTIME:\n\
 ; Uses ENEMY_SCRATCH_PTR (2 bytes) and ENEMY_SCRATCH_X (1 byte) as temporals.\n\
 ENEMY_FIRE_EVENT_RUNTIME:\n\
     STB >ENEMY_SCRATCH_X    ; save event hash (1 byte)\n\
-    LDB #17\n\
+    LDB #28                 ; ENEMY_POOL_STRIDE — was hard-coded 17 which is WRONG (real stride=28); idx>0 wrote to wrong pool entry\n\
     MUL                     ; D = A * stride\n\
     LDX #ENEMY_POOL\n\
     LEAX D,X                ; X = &pool[A]\n\
