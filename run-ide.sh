@@ -198,28 +198,29 @@ if [ "$NO_RUST_BUILD" = false ]; then
   else
     RESOURCES_DIR="$ROOT/ide/electron/resources"
 
-    # El workspace raíz incluye buildtools/* y core, por lo que ambos
-    # binarios se generan en $ROOT/target/release/
+    # Profile selection: --fast uses dev-fast (codegen-units=16, lto=false →
+    # 3-5× faster compile, binary ~20% bigger and a few % slower at runtime).
+    # Without --fast use full release (smaller/faster binary, slower build).
+    if [ "$FAST" = true ]; then
+      CARGO_PROFILE="dev-fast"
+      CARGO_TARGET_DIR_NAME="dev-fast"
+      echo '[INFO] cargo build --profile dev-fast (vpy_cli) — fast-iter profile'
+    else
+      CARGO_PROFILE="release"
+      CARGO_TARGET_DIR_NAME="release"
+      echo '[INFO] cargo build --release (vpy_cli)'
+    fi
 
-    # 1. Build buildtools compiler (vpy_cli) — compilador principal
-    echo '[INFO] cargo build --release (vpy_cli)'
-    (cd "$ROOT" && cargo build --release --bin vpy_cli)
+    # Only build vpy_cli. The legacy core compiler (vectrexc) is deprecated and
+    # the IDE defaults to buildtools. Anyone who still needs core can build it
+    # manually — the IDE error message already prompts that command.
+    (cd "$ROOT" && cargo build --profile "$CARGO_PROFILE" --bin vpy_cli)
     if [ $? -ne 0 ]; then
       echo '[ERR ] cargo build (vpy_cli) falló'
       exit 1
     fi
-    cp "$ROOT/target/release/vpy_cli" "$RESOURCES_DIR/vpy_cli"
+    cp "$ROOT/target/$CARGO_TARGET_DIR_NAME/vpy_cli" "$RESOURCES_DIR/vpy_cli"
     echo "[OK  ] vpy_cli copiado a $RESOURCES_DIR/"
-
-    # 2. Build core compiler (vectrexc) — compilador legacy usado por el IDE
-    echo '[INFO] cargo build --release (vectrexc)'
-    (cd "$ROOT" && cargo build --release --bin vectrexc)
-    if [ $? -ne 0 ]; then
-      echo '[ERR ] cargo build (vectrexc) falló'
-      exit 1
-    fi
-    cp "$ROOT/target/release/vectrexc" "$RESOURCES_DIR/vectrexc"
-    echo "[OK  ] vectrexc copiado a $RESOURCES_DIR/"
   fi
 fi
 

@@ -59,8 +59,10 @@ if(-not $NoRustBuild){
   if(-not (Get-Command cargo -ErrorAction SilentlyContinue)){
     Write-Host '[WARN] cargo no encontrado; se omite build Rust' -ForegroundColor Yellow
   } else {
-    Write-Host '[INFO] cargo build (LSP + compiler + core only, no emulator)' -ForegroundColor Cyan
-    cargo build -p vectrex_lang --bin vpy_lsp --bin vectrexc
+    Write-Host '[INFO] cargo build (vpy_lsp + vpy_cli)' -ForegroundColor Cyan
+    # Legacy vectrexc dropped — IDE defaults to buildtools (vpy_cli). Build it
+    # manually if you still need the deprecated core backend.
+    cargo build --bin vpy_lsp --bin vpy_cli
     if($LASTEXITCODE -ne 0){ Write-Host '[ERR ] cargo build falló' -ForegroundColor Red; exit 1 }
   }
 }

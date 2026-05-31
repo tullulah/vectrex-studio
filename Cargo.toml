@@ -23,3 +23,14 @@ opt-level = 3
 codegen-units = 1
 lto = true
 strip = true
+
+# Fast iteration profile for run-ide.sh --fast — uses all CPU cores and skips
+# LTO. Resulting binary is ~20% larger and a few percent slower than --release
+# but compiles 3-5× faster. Runtime difference is imperceptible for local dev
+# (compiling .vpy projects in the IDE). For shipping releases use --release.
+[profile.dev-fast]
+inherits = "release"
+opt-level = 2
+codegen-units = 16
+lto = false
+strip = false
