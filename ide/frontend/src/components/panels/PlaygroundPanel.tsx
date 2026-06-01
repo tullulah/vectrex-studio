@@ -1180,6 +1180,27 @@ export function PlaygroundPanel() {
     }
   };
 
+  // Ctrl+S / Cmd+S → save
+  const handleSaveSceneRef = useRef(handleSaveScene);
+  handleSaveSceneRef.current = handleSaveScene;
+  const sceneNameRef = useRef(sceneName);
+  sceneNameRef.current = sceneName;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (sceneNameRef.current.trim()) {
+          handleSaveSceneRef.current();
+        } else {
+          setModalMode('save');
+          setShowSaveLoadModal(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Handle drag and drop to add objects
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -2195,6 +2216,45 @@ export function PlaygroundPanel() {
         <div style={{ flex: 1 }} />
         <button
           onClick={() => {
+            if (objects.length > 0 || hotspots.length > 0) {
+              if (!confirm('Create a new level? Unsaved changes will be lost.')) return;
+            }
+            setObjects([]);
+            setSelectedId(null);
+            setSelectedIds(new Set());
+            setHotspots([]);
+            setSelectedHotspotId(null);
+            setScrollLimits({});
+            setSelectedLimit(null);
+            setScreenBackgrounds([]);
+            setLevelWalkableAreas([]);
+            setLevelTransitions([]);
+            setSceneName('');
+            setWidthScreens(1);
+            setHeightScreens(1);
+            setGroundBottomOffset(42);
+            setIsolateScreens(false);
+            setTransMinXOverlap(4);
+            setTransLateralY(8);
+            setTransLateralGap(60);
+            if (vpyProject?.rootDir) {
+              localStorage.removeItem('playground_last_scene');
+            }
+          }}
+          style={{
+            padding: '4px 12px',
+            backgroundColor: '#333',
+            border: '1px solid #555',
+            borderRadius: '4px',
+            color: '#d4d4d4',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+        >
+          ✨ New
+        </button>
+        <button
+          onClick={() => {
             // Quick save: if we already have a name, save directly
             if (sceneName.trim()) {
               handleSaveScene();
@@ -2346,7 +2406,7 @@ export function PlaygroundPanel() {
           <div style={{ padding: '0 12px 8px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
               <span style={{ fontSize: '10px', color: '#666', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                offset desde abajo
+                offset from bottom
               </span>
               <input
                 type="number"
@@ -2742,38 +2802,41 @@ export function PlaygroundPanel() {
                 renders draw on top of this, so own-overrides remain visible
                 in orange. Style: subtle blue dashed bars, always-labeled. */}
             {(() => {
-              // Resolve the level's effective areas for display: explicit
-              // level walkable_areas override; else the union collected from
-              // .vec-baked areas of placed objects.
-              const effectiveLevel = levelWalkableAreas.length > 0
-                ? levelWalkableAreas
-                : collectVecWalkableAreas(objects, loadedVectors);
-              const fromVec = levelWalkableAreas.length === 0 && effectiveLevel.length > 0;
+              // Effective areas = level-wide walkable_areas UNION vec-baked areas
+              // from placed objects. We previously replaced one with the other,
+              // which made adding a level area silently drop every vec-derived
+              // area (and the transitions auto-derived from them). Keep both so
+              // transitions stay visible regardless of what the designer adds.
+              const vecAreas = collectVecWalkableAreas(objects, loadedVectors);
+              const effectiveLevel = [...levelWalkableAreas, ...vecAreas];
               if (effectiveLevel.length === 0) return null;
-              // Vec-collected areas render in a subtle green so the designer
-              // can tell they came from the .vec assets, not from the level.
-              const color = fromVec ? '#88cc88' : '#88aacc';
+              // Visual cue: level-wide areas (indices 0..levelN-1) stay blue;
+              // vec-collected areas (indices ≥ levelN) render in green so the
+              // designer can tell at a glance which is which.
+              const levelN = levelWalkableAreas.length;
+              const colorFor = (ai: number) => ai < levelN ? '#88aacc' : '#88cc88';
               return (
                 <g key="level_walkable_areas">
                 <g style={{ pointerEvents: 'none' }}>
                   {effectiveLevel.map((area, ai) => {
                     const left  = vecToSvg(area.x_min, area.y);
                     const right = vecToSvg(area.x_max, area.y);
+                    const c = colorFor(ai);
                     return (
                       <g key={`lvl_area_${ai}`}>
                         <line x1={left.x} y1={left.y} x2={right.x} y2={right.y}
-                          stroke={color} strokeWidth={0.8} strokeDasharray="2 2" />
+                          stroke={c} strokeWidth={0.8} strokeDasharray="2 2" />
                         <line x1={left.x} y1={left.y - 4} x2={left.x} y2={left.y + 4}
-                          stroke={color} strokeWidth={1} />
+                          stroke={c} strokeWidth={1} />
                         <line x1={right.x} y1={right.y - 4} x2={right.x} y2={right.y + 4}
-                          stroke={color} strokeWidth={1} />
+                          stroke={c} strokeWidth={1} />
                         {/* Halo for legibility */}
                         <text x={(left.x + right.x) / 2} y={left.y - 3}
                           fontSize="7" fontFamily="monospace" fontWeight={600}
                           textAnchor="middle" stroke="#000" strokeWidth="2.5"
                           style={{ paintOrder: 'stroke' }}>{ai}</text>
                         <text x={(left.x + right.x) / 2} y={left.y - 3}
-                          fill={color} fontSize="7" fontFamily="monospace" fontWeight={600}
+                          fill={c} fontSize="7" fontFamily="monospace" fontWeight={600}
                           textAnchor="middle">{ai}</text>
                       </g>
                     );
@@ -3026,14 +3089,14 @@ export function PlaygroundPanel() {
                           borderRadius: '2px',
                         }}
                       >
-                        <option value="background">🏔️ Background (fondo, detrás)</option>
-                        <option value="gameplay">⚡ Gameplay (jugable, medio)</option>
-                        <option value="foreground">🌟 Foreground (frente, adelante)</option>
+                        <option value="background">🏔️ Background (draws first, behind)</option>
+                        <option value="gameplay">⚡ Gameplay (interactive layer)</option>
+                        <option value="foreground">🌟 Foreground (draws last, in front)</option>
                       </select>
                       <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
-                        {obj.layer === 'background' && '🏔️ Dibuja primero - fondo del nivel'}
-                        {obj.layer === 'foreground' && '🌟 Dibuja último - frente del nivel'}
-                        {(!obj.layer || obj.layer === 'gameplay') && '⚡ Capa principal - objetos jugables'}
+                        {obj.layer === 'background' && '🏔️ Draws first — behind all gameplay objects'}
+                        {obj.layer === 'foreground' && '🌟 Draws last — in front of all gameplay objects'}
+                        {(!obj.layer || obj.layer === 'gameplay') && '⚡ Main layer — interactive gameplay objects'}
                       </div>
                     </div>
                     <div>
@@ -3192,7 +3255,7 @@ export function PlaygroundPanel() {
                         })()}
                       </div>
                       <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
-                        💡 Activa "Set Velocity" y arrastra la flecha naranja
+                        💡 Enable "Set Velocity" and drag the orange arrow
                       </div>
                     </div>
                     {obj.physicsEnabled && (obj.physicsType === 'gravity' || !obj.physicsType) && (
@@ -3259,7 +3322,7 @@ export function PlaygroundPanel() {
                         Physics Enabled
                       </label>
                       <div style={{ fontSize: '10px', color: '#666', marginTop: '4px', marginLeft: '24px' }}>
-                        {obj.physicsEnabled ? '⚡ Aplica física' : '🔒 Estático'}
+                        {obj.physicsEnabled ? '⚡ Physics active' : '🔒 Static — no physics'}
                       </div>
                     </div>
                     {obj.physicsEnabled && (
@@ -3284,10 +3347,10 @@ export function PlaygroundPanel() {
                             borderRadius: '2px',
                           }}
                         >
-                          <option value="gravity">🌍 Gravity (cae, pierde energía)</option>
-                          <option value="bounce">⚡ Bounce (rebote perpetuo)</option>
-                          <option value="projectile">🎯 Projectile (parábola, no rebota)</option>
-                          <option value="static">🔒 Static (sin movimiento)</option>
+                          <option value="gravity">🌍 Gravity (falls, loses energy)</option>
+                          <option value="bounce">⚡ Bounce (perpetual elastic bounce)</option>
+                          <option value="projectile">🎯 Projectile (parabola, stops on impact)</option>
+                          <option value="static">🔒 Static (no movement)</option>
                         </select>
                       </div>
                     )}
@@ -3308,10 +3371,10 @@ export function PlaygroundPanel() {
                             cursor: 'pointer',
                           }}
                         />
-                        Collidable (rebota)
+                        Collidable
                       </label>
                       <div style={{ fontSize: '10px', color: '#666', marginTop: '4px', marginLeft: '24px' }}>
-                        {obj.collidable ? '🔷 Objeto sólido - los demás rebotan' : '⬜ Objeto atravesable - sin colisión'}
+                        {obj.collidable ? '🔷 Solid — other objects collide with this' : '⬜ Pass-through — no collision'}
                       </div>
                     </div>
 
@@ -3323,8 +3386,8 @@ export function PlaygroundPanel() {
                         </div>
                         <div style={{ fontSize: '10px', color: '#666', marginBottom: '6px' }}>
                           {obj.collision?.segments?.length
-                            ? `${obj.collision.segments.length} segmento(s) — ray-cast activo`
-                            : 'Sin segmentos — usa AABB automático'}
+                            ? `${obj.collision.segments.length} segment(s) — custom ray-cast active`
+                            : 'No segments — automatic AABB used'}
                         </div>
                         {(obj.collision?.segments || []).map((seg, si) => (
                           <div key={si} style={{ display: 'flex', gap: 2, alignItems: 'center', marginBottom: 3, background: '#1a1a1a', padding: '3px 4px', borderRadius: 3 }}>
@@ -3369,7 +3432,7 @@ export function PlaygroundPanel() {
                             ));
                           }}
                           style={{ width: '100%', marginTop: 2, padding: '3px 0', background: '#1a2a2a', border: '1px solid #00cccc44', borderRadius: 3, color: '#00cccc', cursor: 'pointer', fontSize: '10px' }}
-                        >+ Añadir segmento</button>
+                        >+ Add segment</button>
                       </div>
                     )}
 

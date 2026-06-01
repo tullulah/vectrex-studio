@@ -303,6 +303,10 @@ export const EmulatorPanel: React.FC = () => {
   const [currentOverlay, setCurrentOverlay] = useState<string | null>(null);
   const [showPitrexOverlay, setShowPitrexOverlay] = useState<boolean>(false);
   const [pitrexImgPath, setPitrexImgPath] = useState<string>('');
+  // Both `pitrex` and `uvm2` are hardware-only targets that share the same
+  // "no in-browser emulation" overlay; this discriminator keeps the text
+  // accurate (PiTrex Pi Zero vs UVM2 Cortex-M33).
+  const [hardwareOverlayKind, setHardwareOverlayKind] = useState<'pitrex' | 'uvm2'>('pitrex');
   // PiTrex-specific audio enabled state (separate from JSVecX's AY chip state)
   const [pitrexAudioEnabled, setPitrexAudioEnabled] = useState<boolean>(true);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -2712,6 +2716,7 @@ export const EmulatorPanel: React.FC = () => {
       // ── uvm2 path: hardware-only target, no in-browser emulation ──
       if (payload.target === 'uvm2') {
         console.log('[EmulatorPanel] uvm2 target — hardware only, no browser emulation');
+        setHardwareOverlayKind('uvm2');
         setPitrexImgPath(payload.binPath);
         setShowPitrexOverlay(true);
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
@@ -2749,6 +2754,7 @@ export const EmulatorPanel: React.FC = () => {
 
       // ── pitrex path: ARM32 interpreter + vector renderer ──
       if (payload.target === 'pitrex') {
+        setHardwareOverlayKind('pitrex');
         setShowPitrexOverlay(false);
         if (!payload.sFileText) {
           console.warn('[EmulatorPanel] pitrex: no .s file text in payload — cannot start emulator');
@@ -3111,13 +3117,25 @@ export const EmulatorPanel: React.FC = () => {
               pointerEvents: 'none',
               border: '1px solid #333',
             }}>
-              <span style={{ fontSize: '28px' }}>🥝</span>
-              <span style={{ color: '#ccc', fontFamily: 'monospace', fontSize: '13px', fontWeight: 'bold' }}>PiTrex (Pi Zero / ARMv6)</span>
-              <span style={{ color: '#777', fontFamily: 'monospace', fontSize: '11px' }}>.img compilado — copiar a SD</span>
+              <span style={{ fontSize: '28px' }}>{hardwareOverlayKind === 'uvm2' ? '🎮' : '🥝'}</span>
+              <span style={{ color: '#ccc', fontFamily: 'monospace', fontSize: '13px', fontWeight: 'bold' }}>
+                {hardwareOverlayKind === 'uvm2'
+                  ? 'UVM2 (Ultimate Vectrex Multicart 2)'
+                  : 'PiTrex (Pi Zero / ARMv6)'}
+              </span>
+              <span style={{ color: '#777', fontFamily: 'monospace', fontSize: '11px' }}>
+                {hardwareOverlayKind === 'uvm2'
+                  ? '.um2 image built — copy to SD card'
+                  : '.img image built — copy to SD card'}
+              </span>
               {pitrexImgPath && (
                 <span style={{ color: '#555', fontFamily: 'monospace', fontSize: '10px', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pitrexImgPath}</span>
               )}
-              <span style={{ color: '#444', fontFamily: 'monospace', fontSize: '10px', marginTop: '4px' }}>Sin emulación en navegador para Pi Zero</span>
+              <span style={{ color: '#444', fontFamily: 'monospace', fontSize: '10px', marginTop: '4px' }}>
+                {hardwareOverlayKind === 'uvm2'
+                  ? 'No in-browser emulation for UVM2'
+                  : 'No in-browser emulation for Pi Zero'}
+              </span>
             </div>
           )}
           <canvas 

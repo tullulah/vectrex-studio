@@ -524,7 +524,7 @@ export const JoystickConfigDialog: React.FC = () => {
                           const x = applyDeadzone(rawX, deadzone);
                           const y = applyDeadzone(rawY, deadzone);
                           const left = 50 + (x * 40); // 40% = max range from center
-                          const top = 50 + (y * 40);
+                          const top  = 50 - (y * 40); // negate: screen Y grows down, joystick Y grows up
                           const isInDeadzone = Math.abs(rawX) < deadzone && Math.abs(rawY) < deadzone;
                           
                           return (

@@ -27,7 +27,7 @@ export interface EnemyStats {
   action_duration: number;
 }
 
-export type EnemyBehaviorType = 'patrol' | 'chase' | 'flee' | 'static';
+export type EnemyBehaviorType = 'patrol' | 'wander' | 'chase' | 'flee' | 'static';
 
 export interface EnemyPatrol {
   waypoints: { x: number; y: number }[];
@@ -573,6 +573,7 @@ export const EnemyEditor: React.FC<EnemyEditorProps> = ({ resource, onChange }) 
 
   const BEHAVIOR_COLORS: Record<EnemyBehaviorType, string> = {
     patrol: '#4488ff',
+    wander: '#aa88ff',
     chase: '#ff4444',
     flee: '#44ff88',
     static: '#888888',
@@ -731,6 +732,7 @@ export const EnemyEditor: React.FC<EnemyEditorProps> = ({ resource, onChange }) 
               style={{ ...selectStyle, color: BEHAVIOR_COLORS[res.behavior.type] }}
             >
               <option value="patrol">patrol — follows waypoints</option>
+              <option value="wander">wander — auto-patrols walkable area</option>
               <option value="chase">chase — pursues player</option>
               <option value="flee">flee — runs from player</option>
               <option value="static">static — stays in place</option>
@@ -748,7 +750,7 @@ export const EnemyEditor: React.FC<EnemyEditorProps> = ({ resource, onChange }) 
             />
           )}
 
-          {res.behavior.type === 'patrol' && (
+          {(res.behavior.type === 'patrol' || res.behavior.type === 'wander') && (
             <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{
                 ...labelStyle,

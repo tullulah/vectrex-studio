@@ -1105,17 +1105,17 @@ export const InstrumentEditor: React.FC<InstrumentEditorProps> = ({ resource, on
           <AnalyzeTab onApply={handleAnalyzeApply} instr={instr} />
         ) : (
           <>
-            {/* Three-column section */}
-            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1e2a3a' }}>
+            {/* Two-column layout */}
+            <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
-              {/* Column 1 — Basic */}
-              <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #1e2a3a' }}>
+              {/* Left column — Basic + Presets + Piano */}
+              <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #1e2a3a', display: 'flex', flexDirection: 'column', gap: 0 }}>
                 {sectionHeader('Basic')}
                 <Slider label="Duration" value={instr.duration_frames} min={1} max={255} unit=" fr" onChange={v => update({ duration_frames: v })} />
                 <Slider label="Volume" value={instr.volume} min={0} max={15} onChange={v => update({ volume: v })} />
 
                 {sectionHeader('Presets')}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 20 }}>
                   {(Object.keys(PRESETS) as PresetName[]).map(name => (
                     <button
                       key={name}
@@ -1135,16 +1135,26 @@ export const InstrumentEditor: React.FC<InstrumentEditorProps> = ({ resource, on
                     </button>
                   ))}
                 </div>
+
+                {sectionHeader('Preview — click a key to play')}
+                <div style={{ overflowX: 'auto' }}>
+                  <PianoKeyboard activeNote={previewNote} onNotePlay={handleKeyPlay} />
+                </div>
+                {previewNote !== null && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
+                    Playing: {midiToName(previewNote)}
+                  </div>
+                )}
               </div>
 
-              {/* Column 2 — Arpeggio */}
-              <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #1e2a3a' }}>
+              {/* Right column — Arpeggio + Effects + Pitch Sweep */}
+              <div style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column' }}>
                 {sectionHeader('Arpeggio')}
                 <Slider label="Count" value={instr.arpeggio_count} min={0} max={4} onChange={v => update({ arpeggio_count: v })} />
                 <Slider label="Speed" value={instr.arpeggio_speed_frames} min={1} max={16} unit=" fr" onChange={v => update({ arpeggio_speed_frames: v })} />
 
                 {instr.arpeggio_count > 0 && (
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ marginTop: 4, marginBottom: 8 }}>
                     <div style={{ fontSize: 10, color: '#556', marginBottom: 6 }}>
                       INTERVALS (semitones, -12..+12)
                     </div>
@@ -1180,12 +1190,8 @@ export const InstrumentEditor: React.FC<InstrumentEditorProps> = ({ resource, on
                     ))}
                   </div>
                 )}
-              </div>
 
-              {/* Column 3 — Effects */}
-              <div style={{ flex: 1, padding: '12px 16px' }}>
                 {sectionHeader('Effects')}
-
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <label style={{ fontSize: 12, color: '#aaa' }}>Noise</label>
                   <button
@@ -1200,43 +1206,14 @@ export const InstrumentEditor: React.FC<InstrumentEditorProps> = ({ resource, on
                     {instr.noise_enabled ? 'ON' : 'off'}
                   </button>
                 </div>
-
                 {instr.noise_enabled && (
                   <Slider label="Noise period" value={instr.noise_period} min={0} max={31} onChange={v => update({ noise_period: v })} />
                 )}
 
                 {sectionHeader('Pitch Sweep')}
-                <Slider
-                  label="Delta"
-                  value={instr.pitch_sweep_delta}
-                  min={-127}
-                  max={127}
-                  onChange={v => update({ pitch_sweep_delta: v })}
-                />
-                <Slider
-                  label="Duration"
-                  value={instr.pitch_sweep_duration_frames}
-                  min={0}
-                  max={255}
-                  unit=" fr"
-                  onChange={v => update({ pitch_sweep_duration_frames: v })}
-                />
+                <Slider label="Delta"    value={instr.pitch_sweep_delta}           min={-127} max={127} onChange={v => update({ pitch_sweep_delta: v })} />
+                <Slider label="Duration" value={instr.pitch_sweep_duration_frames} min={0}    max={255} unit=" fr" onChange={v => update({ pitch_sweep_duration_frames: v })} />
               </div>
-            </div>
-
-            {/* Piano keyboard preview */}
-            <div style={{ padding: '12px 16px', borderTop: '1px solid #1e2a3a' }}>
-              <div style={{ fontSize: 10, color: '#556', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-                Preview — click a key to play
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <PianoKeyboard activeNote={previewNote} onNotePlay={handleKeyPlay} />
-              </div>
-              {previewNote !== null && (
-                <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
-                  Playing: {midiToName(previewNote)}
-                </div>
-              )}
             </div>
           </>
         )}
