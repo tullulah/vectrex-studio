@@ -71,7 +71,10 @@ VAR_ARG1             EQU $C880+$3B   ; Function argument 1 (16-bit) (2 bytes)
 VAR_ARG2             EQU $C880+$3D   ; Function argument 2 (16-bit) (2 bytes)
 VAR_ARG3             EQU $C880+$3F   ; Function argument 3 (16-bit) (2 bytes)
 VAR_ARG4             EQU $C880+$41   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$43   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG5             EQU $C880+$43   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$45   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$47   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$49   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -900,7 +903,7 @@ _TEST_CENTER_X EQU 0
 _TEST_CENTER_Y EQU 4
 
 _TEST_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _TEST_PATH0        ; pointer to path 0
 
 _TEST_PATH0:    ; Path 0

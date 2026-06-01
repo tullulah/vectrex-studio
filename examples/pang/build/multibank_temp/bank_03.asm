@@ -19,150 +19,143 @@ DRAW_VEC_Y           EQU $C880+$11   ; Vector draw Y offset (1 bytes)
 MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
 MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
 MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$24   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$2E   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$30   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$32   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$33   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$36   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-LEVEL_PTR            EQU $C880+$38   ; Pointer to currently loaded level header (2 bytes)
-LEVEL_LOADED         EQU $C880+$3A   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
-LEVEL_WIDTH          EQU $C880+$3B   ; Level width (legacy tile API) (1 bytes)
-LEVEL_HEIGHT         EQU $C880+$3C   ; Level height (legacy tile API) (1 bytes)
-LEVEL_TILE_SIZE      EQU $C880+$3D   ; Tile size (legacy tile API) (1 bytes)
-LEVEL_Y_IDX          EQU $C880+$3E   ; SHOW_LEVEL row counter (legacy) (1 bytes)
-LEVEL_X_IDX          EQU $C880+$3F   ; SHOW_LEVEL column counter (legacy) (1 bytes)
-LEVEL_TEMP           EQU $C880+$40   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
-LEVEL_BG_COUNT       EQU $C880+$41   ; BG object count (1 bytes)
-LEVEL_GP_COUNT       EQU $C880+$42   ; GP object count (1 bytes)
-LEVEL_FG_COUNT       EQU $C880+$43   ; FG object count (1 bytes)
-CAMERA_X             EQU $C880+$44   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
-CAMERA_Y             EQU $C880+$46   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
-SCROLL_LIMIT_LEFT    EQU $C880+$48   ; Camera scroll limit: left world X (2 bytes)
-SCROLL_LIMIT_RIGHT   EQU $C880+$4A   ; Camera scroll limit: right world X (2 bytes)
-SCROLL_LIMIT_TOP     EQU $C880+$4C   ; Camera scroll limit: top world Y (2 bytes)
-SCROLL_LIMIT_BOTTOM  EQU $C880+$4E   ; Camera scroll limit: bottom world Y (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$50   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$52   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$54   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$56   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$58   ; Bank ID for current level (for multibank) (1 bytes)
-LEVEL_ENEMY_COUNT    EQU $C880+$59   ; Enemy count from current level header (1 bytes)
-LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5A   ; Ptr to enemy instances table in level bank (2 bytes)
-SLR_CUR_X            EQU $C880+$5C   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-DRAW_T1_SCALED       EQU $C880+$5D   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$5E   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
-LCOL_PX              EQU $C880+$23E   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$240   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
-LCOL_PY              EQU $C880+$242   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
-LCOL_PHH             EQU $C880+$244   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$245   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$246   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$247   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$248   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$249   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$24A   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$24C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$24E   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$24F   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$250   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$251   ; GP-FG |dy| (1 bytes)
-TEXT_SCALE_H         EQU $C880+$252   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$253   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$254   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$255   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_MAP        EQU $C880+$257   ; User variable: STATE_MAP (2 bytes)
-VAR_STATE_GAME       EQU $C880+$259   ; User variable: STATE_GAME (2 bytes)
-VAR_SCREEN           EQU $C880+$25B   ; User variable: SCREEN (2 bytes)
-VAR_TITLE_INTENSITY  EQU $C880+$25D   ; User variable: TITLE_INTENSITY (2 bytes)
-VAR_TITLE_STATE      EQU $C880+$25F   ; User variable: TITLE_STATE (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$261   ; User variable: CURRENT_MUSIC (2 bytes)
-VAR_LOCATION_X_COORDS EQU $C880+$263   ; User variable: LOCATION_X_COORDS (2 bytes)
-VAR_LOCATION_Y_COORDS EQU $C880+$265   ; User variable: LOCATION_Y_COORDS (2 bytes)
-VAR_LOCATION_NAMES   EQU $C880+$267   ; User variable: LOCATION_NAMES (2 bytes)
-VAR_LEVEL_BACKGROUNDS EQU $C880+$269   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
-VAR_LEVEL_ENEMY_COUNT EQU $C880+$26B   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
-VAR_LEVEL_ENEMY_SPEED EQU $C880+$26D   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$26F   ; User variable: PREV_BTN1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$271   ; User variable: PREV_BTN2 (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$273   ; User variable: PREV_BTN3 (2 bytes)
-VAR_PREV_BTN4        EQU $C880+$275   ; User variable: PREV_BTN4 (2 bytes)
-VAR_NUM_LOCATIONS    EQU $C880+$277   ; User variable: NUM_LOCATIONS (2 bytes)
-VAR_CURRENT_LOCATION EQU $C880+$279   ; User variable: CURRENT_LOCATION (2 bytes)
-VAR_LOCATION_GLOW_INTENSITY EQU $C880+$27B   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
-VAR_LOCATION_GLOW_DIRECTION EQU $C880+$27D   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
-VAR_JOY_X            EQU $C880+$27F   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$281   ; User variable: JOY_Y (2 bytes)
-VAR_PREV_JOY_X       EQU $C880+$283   ; User variable: PREV_JOY_X (2 bytes)
-VAR_PREV_JOY_Y       EQU $C880+$285   ; User variable: PREV_JOY_Y (2 bytes)
-VAR_COUNTDOWN_TIMER  EQU $C880+$287   ; User variable: COUNTDOWN_TIMER (2 bytes)
-VAR_COUNTDOWN_ACTIVE EQU $C880+$289   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
-VAR_JOYSTICK_POLL_COUNTER EQU $C880+$28B   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
-VAR_HOOK_ACTIVE      EQU $C880+$28D   ; User variable: HOOK_ACTIVE (2 bytes)
-VAR_HOOK_X           EQU $C880+$28F   ; User variable: HOOK_X (2 bytes)
-VAR_HOOK_Y           EQU $C880+$291   ; User variable: HOOK_Y (2 bytes)
-VAR_HOOK_MAX_Y       EQU $C880+$293   ; User variable: HOOK_MAX_Y (2 bytes)
-VAR_HOOK_GUN_X       EQU $C880+$295   ; User variable: HOOK_GUN_X (2 bytes)
-VAR_HOOK_GUN_Y       EQU $C880+$297   ; User variable: HOOK_GUN_Y (2 bytes)
-VAR_HOOK_INIT_Y      EQU $C880+$299   ; User variable: HOOK_INIT_Y (2 bytes)
-VAR_PLAYER_X         EQU $C880+$29B   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$29D   ; User variable: PLAYER_Y (2 bytes)
-VAR_MOVE_SPEED       EQU $C880+$29F   ; User variable: MOVE_SPEED (2 bytes)
-VAR_ABS_JOY          EQU $C880+$2A1   ; User variable: ABS_JOY (2 bytes)
-VAR_PLAYER_ANIM_FRAME EQU $C880+$2A3   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
-VAR_PLAYER_ANIM_COUNTER EQU $C880+$2A5   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
-VAR_PLAYER_ANIM_SPEED EQU $C880+$2A7   ; User variable: PLAYER_ANIM_SPEED (2 bytes)
-VAR_PLAYER_FACING    EQU $C880+$2A9   ; User variable: PLAYER_FACING (2 bytes)
-VAR_MAX_ENEMIES      EQU $C880+$2AB   ; User variable: MAX_ENEMIES (2 bytes)
-VAR_GRAVITY          EQU $C880+$2AD   ; User variable: GRAVITY (2 bytes)
-VAR_BOUNCE_DAMPING   EQU $C880+$2AF   ; User variable: BOUNCE_DAMPING (2 bytes)
-VAR_MIN_BOUNCE_VY    EQU $C880+$2B1   ; User variable: MIN_BOUNCE_VY (2 bytes)
-VAR_GROUND_Y         EQU $C880+$2B3   ; User variable: GROUND_Y (2 bytes)
-VAR_JOYSTICK1_STATE  EQU $C880+$2B5   ; User variable: JOYSTICK1_STATE (2 bytes)
-VAR_LOC_X            EQU $C880+$2B7   ; User variable: LOC_X (2 bytes)
-VAR_LOC_Y            EQU $C880+$2B9   ; User variable: LOC_Y (2 bytes)
-VAR_ANIM_THRESHOLD   EQU $C880+$2BB   ; User variable: ANIM_THRESHOLD (2 bytes)
-VAR_MIRROR_MODE      EQU $C880+$2BD   ; User variable: MIRROR_MODE (2 bytes)
-VAR_COUNT            EQU $C880+$2BF   ; User variable: COUNT (2 bytes)
-VAR_SPEED            EQU $C880+$2C1   ; User variable: SPEED (2 bytes)
-VAR_I                EQU $C880+$2C3   ; User variable: I (2 bytes)
-VAR_ENEMY_ACTIVE     EQU $C880+$2C5   ; User variable: ENEMY_ACTIVE (2 bytes)
-VAR_ENEMY_SIZE       EQU $C880+$2C7   ; User variable: ENEMY_SIZE (2 bytes)
-VAR_ENEMY_X          EQU $C880+$2C9   ; User variable: ENEMY_X (2 bytes)
-VAR_ENEMY_Y          EQU $C880+$2CB   ; User variable: ENEMY_Y (2 bytes)
-VAR_ENEMY_VX         EQU $C880+$2CD   ; User variable: ENEMY_VX (2 bytes)
-VAR_ENEMY_VY         EQU $C880+$2CF   ; User variable: ENEMY_VY (2 bytes)
-VAR_START_X          EQU $C880+$2D9   ; User variable: start_x (2 bytes)
-VAR_START_Y          EQU $C880+$2DB   ; User variable: start_y (2 bytes)
-VAR_END_X            EQU $C880+$2DD   ; User variable: end_x (2 bytes)
-VAR_END_Y            EQU $C880+$2DF   ; User variable: end_y (2 bytes)
-VAR_START_X          EQU $C880+$2D9   ; User variable: START_X (2 bytes)
-VAR_START_Y          EQU $C880+$2DB   ; User variable: START_Y (2 bytes)
-VAR_END_X            EQU $C880+$2DD   ; User variable: END_X (2 bytes)
-VAR_END_Y            EQU $C880+$2DF   ; User variable: END_Y (2 bytes)
-VAR_JOYSTICK1_STATE_DATA EQU $C880+$2E1   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
-VAR_ENEMY_ACTIVE_DATA EQU $C880+$2ED   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_X_DATA     EQU $C880+$2FD   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_Y_DATA     EQU $C880+$30D   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VX_DATA    EQU $C880+$31D   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_VY_DATA    EQU $C880+$32D   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
-VAR_ENEMY_SIZE_DATA  EQU $C880+$33D   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
-PSG_MUSIC_PTR        EQU $C880+$34D   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$34F   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$351   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$352   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$353   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$354   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$355   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$357   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$358   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$359   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$35B   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$35D   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$35F   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$361   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$363   ; Current ROM bank ID (multibank tracking) (1 bytes)
+SLR_CUR_X            EQU $C880+$68   ; DRAW_VECTOR: clamped (visible) beam X for clipping (1 bytes)
+SLR_TRUE_X           EQU $C880+$69   ; DRAW_VECTOR: 16-bit unclamped abs_x for line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$6B   ; DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$6C   ; DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$29   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$33   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$35   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$37   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$38   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$39   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$3B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+LEVEL_PTR            EQU $C880+$3D   ; Pointer to currently loaded level header (2 bytes)
+LEVEL_LOADED         EQU $C880+$3F   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
+LEVEL_WIDTH          EQU $C880+$40   ; Level width (legacy tile API) (1 bytes)
+LEVEL_HEIGHT         EQU $C880+$41   ; Level height (legacy tile API) (1 bytes)
+LEVEL_TILE_SIZE      EQU $C880+$42   ; Tile size (legacy tile API) (1 bytes)
+LEVEL_Y_IDX          EQU $C880+$43   ; SHOW_LEVEL row counter (legacy) (1 bytes)
+LEVEL_X_IDX          EQU $C880+$44   ; SHOW_LEVEL column counter (legacy) (1 bytes)
+LEVEL_TEMP           EQU $C880+$45   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
+LEVEL_BG_COUNT       EQU $C880+$46   ; BG object count (1 bytes)
+LEVEL_GP_COUNT       EQU $C880+$47   ; GP object count (1 bytes)
+LEVEL_FG_COUNT       EQU $C880+$48   ; FG object count (1 bytes)
+CAMERA_X             EQU $C880+$49   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
+CAMERA_Y             EQU $C880+$4B   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
+SCROLL_LIMIT_LEFT    EQU $C880+$4D   ; Camera scroll limit: left world X (2 bytes)
+SCROLL_LIMIT_RIGHT   EQU $C880+$4F   ; Camera scroll limit: right world X (2 bytes)
+SCROLL_LIMIT_TOP     EQU $C880+$51   ; Camera scroll limit: top world Y (2 bytes)
+SCROLL_LIMIT_BOTTOM  EQU $C880+$53   ; Camera scroll limit: bottom world Y (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$55   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$57   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$59   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$5B   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$5D   ; Bank ID for current level (for multibank) (1 bytes)
+LEVEL_ENEMY_COUNT    EQU $C880+$5E   ; Enemy count from current level header (1 bytes)
+LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5F   ; Ptr to enemy instances table in level bank (2 bytes)
+LEVEL_SCREEN_COUNT   EQU $C880+$61   ; Total Y screens partitioning the level (1 bytes)
+LEVEL_BG_SCREENS_PTR EQU $C880+$62   ; Per-screen BG index ptr (3 bytes per screen) (2 bytes)
+LEVEL_GP_SCREENS_PTR EQU $C880+$64   ; Per-screen GP index ptr (2 bytes)
+LEVEL_FG_SCREENS_PTR EQU $C880+$66   ; Per-screen FG index ptr (2 bytes)
+SLR_CUR_X            EQU $C880+$68   ; SHOW_LEVEL: clamped (visible) beam X — actually written to integrator (1 bytes)
+SLR_TRUE_X           EQU $C880+$69   ; SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$6B   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$6C   ; SHOW_LEVEL: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt top_screen between layers) (1 bytes)
+SLR_TOP_SCREEN       EQU $C880+$6D   ; SHOW_LEVEL: top Y screen idx (lives across all 3 layers — must not be in TMPVAL) (1 bytes)
+SLR_BOT_SCREEN       EQU $C880+$6E   ; SHOW_LEVEL: bot Y screen idx (lives across all 3 layers) (1 bytes)
+LCOL_PX              EQU $C880+$6F   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$71   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$73   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$75   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$76   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$77   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+LCOL_OBJ_Y           EQU $C880+$78   ; LEVEL_COLLISION_Y current object world_y (16-bit) (2 bytes)
+LCOL_LOCAL_PX        EQU $C880+$7A   ; LEVEL_COLLISION_Y player_x in object-local coords (16-bit) (2 bytes)
+LCOL_OBJ_CNT         EQU $C880+$7C   ; LEVEL_COLLISION_Y GP objects remaining (1 bytes)
+LCOL_SEG_CNT         EQU $C880+$7D   ; LEVEL_COLLISION_Y mesh floor segments remaining (1 bytes)
+TEXT_SCALE_H         EQU $C880+$7E   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$7F   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$80   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$81   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$83   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$85   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$87   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$89   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$8B   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$8D   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$8F   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$91   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_SCREEN           EQU $C880+$92   ; User variable: SCREEN (2 bytes)
+VAR_TITLE_INTENSITY  EQU $C880+$94   ; User variable: TITLE_INTENSITY (2 bytes)
+VAR_TITLE_STATE      EQU $C880+$96   ; User variable: TITLE_STATE (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$98   ; User variable: CURRENT_MUSIC (2 bytes)
+VAR_LOCATION_X_COORDS EQU $C880+$9A   ; User variable: LOCATION_X_COORDS (2 bytes)
+VAR_LOCATION_Y_COORDS EQU $C880+$9C   ; User variable: LOCATION_Y_COORDS (2 bytes)
+VAR_LOCATION_NAMES   EQU $C880+$9E   ; User variable: LOCATION_NAMES (2 bytes)
+VAR_LEVEL_BACKGROUNDS EQU $C880+$A0   ; User variable: LEVEL_BACKGROUNDS (2 bytes)
+VAR_LEVEL_ENEMY_COUNT EQU $C880+$A2   ; User variable: LEVEL_ENEMY_COUNT (2 bytes)
+VAR_LEVEL_ENEMY_SPEED EQU $C880+$A4   ; User variable: LEVEL_ENEMY_SPEED (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$A6   ; User variable: PREV_BTN1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$A8   ; User variable: PREV_BTN2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$AA   ; User variable: PREV_BTN3 (2 bytes)
+VAR_PREV_BTN4        EQU $C880+$AC   ; User variable: PREV_BTN4 (2 bytes)
+VAR_CURRENT_LOCATION EQU $C880+$AE   ; User variable: CURRENT_LOCATION (2 bytes)
+VAR_LOCATION_GLOW_INTENSITY EQU $C880+$B0   ; User variable: LOCATION_GLOW_INTENSITY (2 bytes)
+VAR_LOCATION_GLOW_DIRECTION EQU $C880+$B2   ; User variable: LOCATION_GLOW_DIRECTION (2 bytes)
+VAR_JOY_X            EQU $C880+$B4   ; User variable: JOY_X (2 bytes)
+VAR_JOY_Y            EQU $C880+$B6   ; User variable: JOY_Y (2 bytes)
+VAR_PREV_JOY_X       EQU $C880+$B8   ; User variable: PREV_JOY_X (2 bytes)
+VAR_PREV_JOY_Y       EQU $C880+$BA   ; User variable: PREV_JOY_Y (2 bytes)
+VAR_COUNTDOWN_TIMER  EQU $C880+$BC   ; User variable: COUNTDOWN_TIMER (2 bytes)
+VAR_COUNTDOWN_ACTIVE EQU $C880+$BE   ; User variable: COUNTDOWN_ACTIVE (2 bytes)
+VAR_JOYSTICK_POLL_COUNTER EQU $C880+$C0   ; User variable: JOYSTICK_POLL_COUNTER (2 bytes)
+VAR_HOOK_ACTIVE      EQU $C880+$C2   ; User variable: HOOK_ACTIVE (2 bytes)
+VAR_HOOK_X           EQU $C880+$C4   ; User variable: HOOK_X (2 bytes)
+VAR_HOOK_Y           EQU $C880+$C6   ; User variable: HOOK_Y (2 bytes)
+VAR_HOOK_GUN_X       EQU $C880+$C8   ; User variable: HOOK_GUN_X (2 bytes)
+VAR_HOOK_GUN_Y       EQU $C880+$CA   ; User variable: HOOK_GUN_Y (2 bytes)
+VAR_HOOK_INIT_Y      EQU $C880+$CC   ; User variable: HOOK_INIT_Y (2 bytes)
+VAR_PLAYER_X         EQU $C880+$CE   ; User variable: PLAYER_X (2 bytes)
+VAR_MOVE_SPEED       EQU $C880+$D0   ; User variable: MOVE_SPEED (2 bytes)
+VAR_ABS_JOY          EQU $C880+$D2   ; User variable: ABS_JOY (2 bytes)
+VAR_PLAYER_ANIM_FRAME EQU $C880+$D4   ; User variable: PLAYER_ANIM_FRAME (2 bytes)
+VAR_PLAYER_ANIM_COUNTER EQU $C880+$D6   ; User variable: PLAYER_ANIM_COUNTER (2 bytes)
+VAR_PLAYER_FACING    EQU $C880+$D8   ; User variable: PLAYER_FACING (2 bytes)
+VAR_JOYSTICK1_STATE  EQU $C880+$DA   ; User variable: JOYSTICK1_STATE (2 bytes)
+VAR_LOC_X            EQU $C880+$DC   ; User variable: LOC_X (2 bytes)
+VAR_LOC_Y            EQU $C880+$DE   ; User variable: LOC_Y (2 bytes)
+VAR_ANIM_THRESHOLD   EQU $C880+$E0   ; User variable: ANIM_THRESHOLD (2 bytes)
+VAR_MIRROR_MODE      EQU $C880+$E2   ; User variable: MIRROR_MODE (2 bytes)
+VAR_COUNT            EQU $C880+$E4   ; User variable: COUNT (2 bytes)
+VAR_SPEED            EQU $C880+$E6   ; User variable: SPEED (2 bytes)
+VAR_I                EQU $C880+$E8   ; User variable: I (2 bytes)
+VAR_ENEMY_ACTIVE     EQU $C880+$EA   ; User variable: ENEMY_ACTIVE (2 bytes)
+VAR_ENEMY_SIZE       EQU $C880+$EC   ; User variable: ENEMY_SIZE (2 bytes)
+VAR_ENEMY_X          EQU $C880+$EE   ; User variable: ENEMY_X (2 bytes)
+VAR_ENEMY_Y          EQU $C880+$F0   ; User variable: ENEMY_Y (2 bytes)
+VAR_ENEMY_VX         EQU $C880+$F2   ; User variable: ENEMY_VX (2 bytes)
+VAR_ENEMY_VY         EQU $C880+$F4   ; User variable: ENEMY_VY (2 bytes)
+VAR_START_X          EQU $C880+$F6   ; User variable: start_x (2 bytes)
+VAR_START_Y          EQU $C880+$F8   ; User variable: start_y (2 bytes)
+VAR_END_X            EQU $C880+$FA   ; User variable: end_x (2 bytes)
+VAR_END_Y            EQU $C880+$FC   ; User variable: end_y (2 bytes)
+VAR_JOYSTICK1_STATE_DATA EQU $C880+$FE   ; Mutable array 'JOYSTICK1_STATE' data (6 elements x 2 bytes) (12 bytes)
+VAR_ENEMY_ACTIVE_DATA EQU $C880+$10A   ; Mutable array 'ENEMY_ACTIVE' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_X_DATA     EQU $C880+$11A   ; Mutable array 'ENEMY_X' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_Y_DATA     EQU $C880+$12A   ; Mutable array 'ENEMY_Y' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VX_DATA    EQU $C880+$13A   ; Mutable array 'ENEMY_VX' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_VY_DATA    EQU $C880+$14A   ; Mutable array 'ENEMY_VY' data (8 elements x 2 bytes) (16 bytes)
+VAR_ENEMY_SIZE_DATA  EQU $C880+$15A   ; Mutable array 'ENEMY_SIZE' data (8 elements x 2 bytes) (16 bytes)
+PSG_MUSIC_PTR        EQU $C880+$16A   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$16C   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$16E   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$16F   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$170   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$171   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$172   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$174   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$175   ; SFX bank ID (for multibank) (1 bytes)
 ; Array length constants
 ARRAY_LOCATION_X_COORDS_LEN         EQU 17   ; 17 elements
 ARRAY_LOCATION_Y_COORDS_LEN         EQU 17   ; 17 elements
@@ -344,8 +337,8 @@ ASSET_BANK_TABLE:
 ASSET_ADDR_TABLE:
     FDB _ANGKOR_BG_VECTORS    ; angkor_bg
     FDB _BARCELONA_BG_VECTORS    ; barcelona_bg
-    FDB _ATHENS_BG_VECTORS    ; athens_bg
     FDB _MAP_VECTORS    ; map
+    FDB _ATHENS_BG_VECTORS    ; athens_bg
     FDB _MAP_THEME_MUSIC    ; map_theme
     FDB _AYERS_BG_VECTORS    ; ayers_bg
     FDB _ANTARCTICA_BG_VECTORS    ; antarctica_bg
@@ -357,6 +350,7 @@ ASSET_ADDR_TABLE:
     FDB _PLAYER_WALK_5_VECTORS    ; player_walk_5
     FDB _LOGO_VECTORS    ; logo
     FDB _FUJI_BG_VECTORS    ; fuji_bg
+    FDB _FUJI_LEVEL1_V2_LEVEL    ; fuji_level1_v2
     FDB _NEWYORK_BG_VECTORS    ; newyork_bg
     FDB _BUBBLE_LARGE_VECTORS    ; bubble_large
     FDB _BUBBLE_MEDIUM_VECTORS    ; bubble_medium
@@ -364,7 +358,6 @@ ASSET_ADDR_TABLE:
     FDB _MAYAN_BG_VECTORS    ; mayan_bg
     FDB _LENINGRAD_BG_VECTORS    ; leningrad_bg
     FDB _EASTER_BG_VECTORS    ; easter_bg
-    FDB _FUJI_LEVEL1_V2_LEVEL    ; fuji_level1_v2
     FDB _LONDON_BG_VECTORS    ; london_bg
     FDB _PARIS_BG_VECTORS    ; paris_bg
     FDB _KILIMANJARO_BG_VECTORS    ; kilimanjaro_bg
@@ -409,6 +402,10 @@ DRAW_VECTOR_BANKED:
     ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)
     JSR $F1AA            ; DP_to_D0
 
+    ; Set DRAW_T1_SCALED to BIOS default ($7F) — SLR_DRAW_CLIPPED_PATH reads it
+    ; when the fallback path is taken.
+    LDA #$7F
+    STA >DRAW_T1_SCALED
     ; Loop over all paths (header: FDB path_count, then FDB table)
     LDD ,X               ; D = path_count (16-bit FDB at header start)
     CMPD #0
@@ -417,7 +414,25 @@ DRAW_VECTOR_BANKED:
 DVB_PATH_LOOP:
     PSHS D               ; Save remaining path count (2 bytes)
     LDX ,Y               ; X = path data address (FDB entry)
+    ; Hybrid clip decision: fast DSWM if screen_x deep inside, slow SDCP near edges.
+    LDA >DRAW_VEC_X_HI
+    BEQ DVB_CHECK_POS
+    INCA
+    BNE DVB_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0            ; -80
+    BHS DVB_USE_DSWM
+    BRA DVB_USE_SDCP
+DVB_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS DVB_USE_DSWM
+DVB_USE_SDCP:
+    JSR SLR_DRAW_CLIPPED_PATH
+    BRA DVB_PATH_AFTER
+DVB_USE_DSWM:
     JSR Draw_Sync_List_At_With_Mirrors
+DVB_PATH_AFTER:
     LEAY 2,Y             ; Advance to next FDB entry
     PULS D               ; Restore count
     SUBD #1
@@ -533,30 +548,27 @@ LOAD_LEVEL_BANKED:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
-    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
     PSHS X
     JSR Print_Str_d
     PULS X
-    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MUL16:
@@ -680,33 +692,19 @@ MOD16:
 .M16_DONE:
     RTS
 
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
+; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===
+; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B
 J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
+    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)
     SEX          ; Sign-extend B to D
     ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
     RTS
 
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
+; J1_Y() - Read Joystick 1 Y axis from cached BIOS value at $C81C
 J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
+    LDB >$C81C   ; Vec_Joy_1_Y
+    SEX
+    ADDD #2
     RTS
 
 ; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
@@ -1019,10 +1017,9 @@ LOAD_LEVEL_RUNTIME:
     LDA #1
     STA >LEVEL_LOADED    ; Mark level as loaded
     
-    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized
-    LDD #0
-    STD >CAMERA_X
-    STD >CAMERA_Y
+    ; Camera is NOT reset here (matches pitrex/rp2350). It is initialised once
+    ; at boot in MAIN; the game sets it via SET_CAMERA_Y before LOAD_LEVEL, and
+    ; GET_LEVEL_FLOOR_Y / the SPAWN_ENEMIES Y-filter read it after this call.
     
     ; Skip world bounds (8 bytes) + time/score (4 bytes)
     LEAX 12,X        ; X now points to object counts (+12)
@@ -1057,11 +1054,22 @@ LOAD_LEVEL_RUNTIME:
     ; Read enemy data from header (+29: count, +30,+31: instances_ptr)
     LDB ,X+         ; B = enemy_count
     STB >LEVEL_ENEMY_COUNT
-    LDD ,X          ; D = enemy_instances_ptr
+    LDD ,X++        ; D = enemy_instances_ptr (advance past +30..+31)
     STD >LEVEL_ENEMY_INSTANCES_PTR
+    LEAX 2,X        ; skip groundBottomOffset (+32..+33)
+    
+    ; Per-screen object index (+34..+40)
+    LDB ,X+         ; B = screen_count
+    STB >LEVEL_SCREEN_COUNT
+    LDD ,X++        ; D = bg_screens_ptr
+    STD >LEVEL_BG_SCREENS_PTR
+    LDD ,X++        ; D = gp_screens_ptr
+    STD >LEVEL_GP_SCREENS_PTR
+    LDD ,X          ; D = fg_screens_ptr
+    STD >LEVEL_FG_SCREENS_PTR
     
     ; === Setup GP pointer: point directly to ROM (matches core) ===
-    ; GP objects are read from ROM with stride=20, same as BG/FG
+    ; GP objects are read from ROM with stride=21 (stride-21 format), same as BG/FG
     LDB >LEVEL_GP_COUNT
     BEQ LLR_SKIP_GP  ; Skip if no GP objects
     LDD >LEVEL_GP_ROM_PTR ; Just point to ROM
@@ -1076,13 +1084,14 @@ LLR_SKIP_GP:
     
     PULS D,X,Y,U,PC  ; Restore and return
     
-; === LLR_COPY_OBJECTS - Copy N ROM objects to RAM buffer ===
-; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 15 bytes/obj)
-; ROM object layout (20 bytes):
+; === LLR_COPY_OBJECTS - LEGACY (not called; GP objects read from ROM directly)
+; Input:  B = count, X = source (ROM, 21 bytes/obj stride-21), U = dest (RAM)
+; ROM object layout (21 bytes, stride-21):
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height
+;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB), +17-18: vector_ptr(FDB),
+;   +19: half_width, +20: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
@@ -1131,26 +1140,200 @@ LLR_COPY_LOOP:
     ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)
     LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB
     STA ,U+
-    LEAX 2,X         ; Skip spawn_delay FDB (2 bytes), X now at ROM +16
-    ; RAM +11-12: vector_ptr FDB (ROM +16-17)
-    LDD ,X++         ; ROM +16-17
+    LEAX 3,X         ; Skip spawn_delay FDB (2 bytes) + vector_bank (1), X now at ROM+17
+    ; RAM +11-12: vector_ptr FDB (ROM +17-18, stride-21)
+    LDD ,X++         ; ROM +17-18 = vector_ptr FDB
     STD ,U++
-    ; RAM +13-14: properties_ptr FDB (ROM +18-19)
-    LDD ,X++         ; ROM +18-19
+    ; RAM +13-14: half_width + half_height (ROM +19-20, stride-21)
+    LDD ,X++         ; ROM +19-20
     STD ,U++
-    ; X is now past end of this ROM object (ROM +1 + 8 + 5 + 2 + 2 + 2 = +20 total)
+    ; X is now past end of this ROM object (ROM+1 + 8 + 5 + 3 + 2 + 2 = +21 total)
     ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:
     ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged
     ;   then LEAX 8,X (X now at ROM+9)
     ;   then 5 post-increment ,X+ → X at ROM+14
-    ;   then LEAX 2,X (X at ROM+16)
-    ;   then 2x LDD ,X++ → X at ROM+20
-    ;   ROM+20 from original ROM+0 = next object start
+    ;   then LEAX 3,X (X at ROM+17)
+    ;   then 2x LDD ,X++ → X at ROM+21
+    ;   ROM+21 from original ROM+0 = next object start (stride-21)
     
     PULS B           ; Restore counter
     DECB
     BRA LLR_COPY_LOOP
 LLR_COPY_DONE:
+    RTS
+
+; === SLR_DRAW_CLIPPED_PATH ===
+SLR_DRAW_CLIPPED_PATH:
+    LDA >DRAW_VEC_INTENSITY ; check override
+    BNE SDCP_USE_OVERRIDE
+    LDA ,X+                 ; read intensity from path data
+    BRA SDCP_SET_INTENS
+SDCP_USE_OVERRIDE:
+    LEAX 1,X                ; skip intensity byte
+SDCP_SET_INTENS:
+    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
+    LDB ,X+                 ; B = y_start (relative to center)
+    LDA ,X+                 ; A = x_start (relative to center)
+    ADDB >DRAW_VEC_Y        ; B = abs_y
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
+    TFR A,B                 ; B = x_start (SEX extends B, not A)
+    SEX                      ; sign-extend B→D (A=sign, B=x_start)
+    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
+    TSTA
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
+    CMPB #$80
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
+    CMPB #$7F
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDB >SDCP_ABS_Y         ; B = abs_y
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
+    PSHS A                  ; ~4 more settling cycles
+    LDA #$CE
+    STA VIA_cntl            ; PCR=$CE: /ZERO high
+    CLR VIA_shift_reg       ; SR=0: beam off
+    INC VIA_port_b          ; PB=1: lock Y direction
+    PULS A                  ; restore abs_x
+    STA VIA_port_a          ; DX → DAC
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
+    STA VIA_t1_cnt_lo       ; load T1 latch
+    LEAX 2,X                ; skip next_y, next_x (the 0,0)
+    CLR VIA_t1_cnt_hi       ; start T1 → ramp
+SDCP_MOVETO_W:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_MOVETO_W
+    ; PB=1 on exit — draw loop ready
+SDCP_SEG_LOOP:
+    LDA ,X+                 ; flags
+    CMPA #2
+    LBEQ SDCP_DONE
+    LDB ,X+                 ; B = dy
+    STB >TMPPTR2            ; save dy
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
+    LDA >SLR_CUR_X
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
+    LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: mux for DY
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b          ; PB=1: lock DY
+    STA VIA_port_a          ; DX → DAC
+    LDA #$FF
+    STA VIA_shift_reg       ; beam ON
+    CLR VIA_t1_cnt_hi       ; start T1
+SDCP_W_DRAW:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_DRAW
+    CLR VIA_shift_reg       ; beam OFF
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
+    STB VIA_port_a          ; DY → DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a          ; DX = 0
+    ; beam stays OFF (no STA VIA_shift_reg)
+    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
+SDCP_W_OFF_X:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
+SDCP_DONE:
     RTS
 
 ; ============================================================================
@@ -1286,6 +1469,17 @@ LBRA PSG_update_done
 
 PSG_music_ended:
 CLR >PSG_IS_PLAYING
+; Silence all 3 PSG channels so the last note doesn't keep ringing
+; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
 LBRA PSG_update_done
 
 PSG_music_loop:
@@ -1394,19 +1588,36 @@ STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
 
 AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
+; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
+; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
+; register write). For theme-style music with 8-10 writes per event,
+; saves ~500-600 cycles per event frame → frees enough budget that the
+; music event no longer pushes the frame over vsync. Mirrors the BIOS
+; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
+PSHS B                  ; save register-write count on stack for in-place DEC
 AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
+LDA ,X+                 ; A = register number
+LDB ,X+                 ; B = register value
+STA VIA_port_a          ; data bus = reg num
+LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
+STA VIA_port_b
+LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
+; latching the register address before we drive
+; the value. Without this, the PSG occasionally
+; writes the new value into the PREVIOUS register
+; (audible as glitchy pitch / 'noisy' music,
+; especially when other CPU activity perturbs
+; the timing between this loop and adjacent code).
+STB VIA_port_a          ; data bus = value
+LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE
+STA VIA_port_b
+DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
+BNE AU_MUSIC_WRITE_LOOP
+LEAS 1,S                ; discard saved count
 
 AU_MUSIC_DONE:
 STX >PSG_MUSIC_PTR      ; Update music pointer

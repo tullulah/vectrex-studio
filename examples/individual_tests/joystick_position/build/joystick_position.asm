@@ -68,20 +68,23 @@ VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_X                EQU $C880+$38   ; User variable: X (2 bytes)
-VAR_Y                EQU $C880+$3A   ; User variable: Y (2 bytes)
-VAR_CIRCLE_X         EQU $C880+$3C   ; User variable: CIRCLE_X (2 bytes)
-VAR_CIRCLE_Y         EQU $C880+$3E   ; User variable: CIRCLE_Y (2 bytes)
-VAR_BTN1             EQU $C880+$40   ; User variable: BTN1 (2 bytes)
-VAR_BTN2             EQU $C880+$42   ; User variable: BTN2 (2 bytes)
-VAR_BTN3             EQU $C880+$44   ; User variable: BTN3 (2 bytes)
-VAR_BTN4             EQU $C880+$46   ; User variable: BTN4 (2 bytes)
-VAR_ARG0             EQU $C880+$48   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$4A   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$4C   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$4E   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$50   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$52   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$38   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$3A   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$3C   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3E   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$40   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$42   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$44   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$46   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$48   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_X                EQU $C880+$49   ; User variable: X (2 bytes)
+VAR_Y                EQU $C880+$4B   ; User variable: Y (2 bytes)
+VAR_CIRCLE_X         EQU $C880+$4D   ; User variable: CIRCLE_X (2 bytes)
+VAR_CIRCLE_Y         EQU $C880+$4F   ; User variable: CIRCLE_Y (2 bytes)
+VAR_BTN1             EQU $C880+$51   ; User variable: BTN1 (2 bytes)
+VAR_BTN2             EQU $C880+$53   ; User variable: BTN2 (2 bytes)
+VAR_BTN3             EQU $C880+$55   ; User variable: BTN3 (2 bytes)
+VAR_BTN4             EQU $C880+$57   ; User variable: BTN4 (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -138,55 +141,61 @@ LOOP_BODY:
     STD VAR_Y
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #80
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_76316012      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #10
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #80
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_X
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #60
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_76316013      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #10
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #60
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_Y
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     LDD >VAR_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS D              ; save LEFT on stack while RIGHT is evaluated
     LDD #2
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_CIRCLE_X
     LDD >VAR_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS D              ; save LEFT on stack while RIGHT is evaluated
     LDD #2
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_CIRCLE_Y
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_CIRCLE_X
@@ -246,81 +255,81 @@ LOOP_BODY:
     STD VAR_BTN4
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #40
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2049397      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #40
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_BTN1
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #20
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2049398      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #20
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_BTN2
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #0
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2049399      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #0
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_BTN3
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-20
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2049400      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #-20
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_BTN4
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
@@ -347,7 +356,11 @@ VECTREX_PRINT_TEXT:
     STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
     LDA #$F8
     STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
     LDA #$48
@@ -427,9 +440,9 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
     LDU #NUM_STR     ; String pointer
     LDA >TEXT_SCALE_H ; height (signed byte)
@@ -438,7 +451,11 @@ VECTREX_PRINT_NUMBER:
     STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
+    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    PULS X
+    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)
     LDA #$F8
     STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
     LDA #$48

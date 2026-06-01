@@ -79,29 +79,31 @@ VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_NUM_ITEMS        EQU $C880+$38   ; User variable: NUM_ITEMS (2 bytes)
-VAR_ROW_Y            EQU $C880+$3A   ; User variable: ROW_Y (2 bytes)
-VAR_SELECTED         EQU $C880+$3C   ; User variable: SELECTED (2 bytes)
-VAR_COOLDOWN         EQU $C880+$3E   ; User variable: COOLDOWN (2 bytes)
-VAR_JOY_Y            EQU $C880+$40   ; User variable: JOY_Y (2 bytes)
-VAR_CUR_SCORE        EQU $C880+$42   ; User variable: CUR_SCORE (2 bytes)
-VAR_ITEM_SCORE       EQU $C880+$44   ; User variable: ITEM_SCORE (2 bytes)
-VAR_ITEM_SCORE_DATA  EQU $C880+$46   ; Mutable array 'ITEM_SCORE' data (4 elements x 2 bytes) (8 bytes)
-PSG_MUSIC_PTR        EQU $C880+$4E   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$50   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$52   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$53   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$54   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$55   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$56   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$58   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$59   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$5A   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$5C   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$5E   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$60   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$62   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$64   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$38   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$3A   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$3C   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3E   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$40   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$42   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$44   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$46   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$48   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ROW_Y            EQU $C880+$49   ; User variable: row_y (2 bytes)
+VAR_SELECTED         EQU $C880+$4B   ; User variable: selected (2 bytes)
+VAR_COOLDOWN         EQU $C880+$4D   ; User variable: cooldown (2 bytes)
+VAR_JOY_Y            EQU $C880+$4F   ; User variable: joy_y (2 bytes)
+VAR_CUR_SCORE        EQU $C880+$51   ; User variable: cur_score (2 bytes)
+VAR_ITEM_SCORE       EQU $C880+$53   ; User variable: item_score (2 bytes)
+VAR_ITEM_SCORE_DATA  EQU $C880+$55   ; Mutable array 'item_score' data (4 elements x 2 bytes) (8 bytes)
+PSG_MUSIC_PTR        EQU $C880+$5D   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$5F   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$61   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$62   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$63   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$64   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$65   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$67   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$68   ; SFX bank ID (for multibank) (1 bytes)
 ; Array length constants
 ARRAY_ROW_Y_LEN         EQU 4   ; 4 elements
 ARRAY_ITEM_SCORE_LEN         EQU 4   ; 4 elements
@@ -112,14 +114,14 @@ ARRAY_ITEM_SCORE_LEN         EQU 4   ; 4 elements
 ; Arrays are stored in ROM and accessed via pointers
 ; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
 
-; Array literal for variable 'ROW_Y' (4 elements, 2 bytes each)
+; Array literal for variable 'row_y' (4 elements, 2 bytes each)
 ARRAY_ROW_Y_DATA:
     FDB 70   ; Element 0
     FDB 40   ; Element 1
     FDB 10   ; Element 2
     FDB -20   ; Element 3
 
-; Array literal for variable 'ITEM_SCORE' (4 elements, 2 bytes each)
+; Array literal for variable 'item_score' (4 elements, 2 bytes each)
 ARRAY_ITEM_SCORE_DATA:
     FDB 0   ; Element 0
     FDB 0   ; Element 1
@@ -139,7 +141,7 @@ MAIN:
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    ; Copy array 'ITEM_SCORE' from ROM to RAM (4 elements)
+    ; Copy array 'item_score' from ROM to RAM (4 elements)
     LDX #ARRAY_ITEM_SCORE_DATA       ; Source: ROM array data
     LDU #VAR_ITEM_SCORE_DATA       ; Dest: RAM array space
     LDD #4        ; Number of elements
@@ -175,15 +177,20 @@ MAIN:
     ; Prime BIOS button state at startup
     JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
+; VPy_LINE:25
+; NATIVE_CALL: PLAY_MUSIC at line 25
     ; PLAY_MUSIC("music1") - play music asset (index=0)
     LDX #_MUSIC1_MUSIC  ; Load music data pointer
     JSR PLAY_MUSIC_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:26
     LDD #0
     STD VAR_SELECTED
+; VPy_LINE:27
     LDD #0
     STD VAR_COOLDOWN
+; VPy_LINE:28
     LDD #0
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -196,6 +203,7 @@ MAIN:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:29
     LDD #1
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -208,6 +216,7 @@ MAIN:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:30
     LDD #2
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -220,6 +229,7 @@ MAIN:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:31
     LDD #3
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -241,39 +251,48 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:34
+; NATIVE_CALL: PRINT_TEXT at line 34
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #120
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1939131706      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:35
+; NATIVE_CALL: PRINT_TEXT at line 35
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #106
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_68021067281      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:36
+; NATIVE_CALL: PRINT_TEXT at line 36
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #92
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_57694326909443      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:39
+; NATIVE_CALL: J1_Y at line 39
     JSR J1Y_BUILTIN
     STD RESULT
     STD VAR_JOY_Y
+; VPy_LINE:42
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_COOLDOWN
@@ -285,48 +304,65 @@ LOOP_BODY:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_1
-    LDD >VAR_COOLDOWN
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:43
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_COOLDOWN
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_COOLDOWN
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:45
     LDD >VAR_COOLDOWN
+    CMPD #0
+    LBNE IF_NEXT_3
+; VPy_LINE:47
+    LDD #60
+    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+    LDD >VAR_JOY_Y
     CMPD TMPVAL
-    LBEQ .CMP_1_TRUE
+    LBGT .CMP_1_TRUE
     LDD #0
     LBRA .CMP_1_END
 .CMP_1_TRUE:
     LDD #1
 .CMP_1_END:
-    LBEQ IF_NEXT_3
-    LDD #60
+    LBEQ IF_NEXT_5
+; VPy_LINE:48
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_SELECTED
+    SUBD TMPVAL         ; D = LEFT - RIGHT
+    STD VAR_SELECTED
+; VPy_LINE:49
+    LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_JOY_Y
+    LDD >VAR_SELECTED
     CMPD TMPVAL
-    LBGT .CMP_2_TRUE
+    LBLT .CMP_2_TRUE
     LDD #0
     LBRA .CMP_2_END
 .CMP_2_TRUE:
     LDD #1
 .CMP_2_END:
-    LBEQ IF_NEXT_5
-    LDD >VAR_SELECTED
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_SELECTED
+    LBEQ IF_NEXT_7
+; VPy_LINE:50
     LDD #0
+    STD VAR_SELECTED
+    LBRA IF_END_6
+IF_NEXT_7:
+IF_END_6:
+; VPy_LINE:51
+    LDD #15
+    STD VAR_COOLDOWN
+    LBRA IF_END_4
+IF_NEXT_5:
+IF_END_4:
+; VPy_LINE:54
+    LDD #-60
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SELECTED
+    LDD >VAR_JOY_Y
     CMPD TMPVAL
     LBLT .CMP_3_TRUE
     LDD #0
@@ -334,59 +370,41 @@ IF_END_0:
 .CMP_3_TRUE:
     LDD #1
 .CMP_3_END:
-    LBEQ IF_NEXT_7
-    LDD #0
+    LBEQ IF_NEXT_9
+; VPy_LINE:55
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_SELECTED
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_SELECTED
-    LBRA IF_END_6
-IF_NEXT_7:
-IF_END_6:
-    LDD #15
-    STD VAR_COOLDOWN
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
-    LDD #-60
+; VPy_LINE:56
+    LDD #3
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_JOY_Y
+    LDD >VAR_SELECTED
     CMPD TMPVAL
-    LBLT .CMP_4_TRUE
+    LBGT .CMP_4_TRUE
     LDD #0
     LBRA .CMP_4_END
 .CMP_4_TRUE:
     LDD #1
 .CMP_4_END:
-    LBEQ IF_NEXT_9
-    LDD >VAR_SELECTED
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_SELECTED
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SELECTED
-    CMPD TMPVAL
-    LBGT .CMP_5_TRUE
-    LDD #0
-    LBRA .CMP_5_END
-.CMP_5_TRUE:
-    LDD #1
-.CMP_5_END:
     LBEQ IF_NEXT_11
-    LDD #4  ; const NUM_ITEMS
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:57
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #4  ; const NUM_ITEMS
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_SELECTED
     LBRA IF_END_10
 IF_NEXT_11:
 IF_END_10:
+; VPy_LINE:58
     LDD #15
     STD VAR_COOLDOWN
     LBRA IF_END_8
 IF_NEXT_9:
 IF_END_8:
+; VPy_LINE:61
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -397,6 +415,7 @@ IF_END_8:
 .J1B1_0_END:
     STD RESULT
     LBEQ IF_NEXT_13
+; VPy_LINE:62
     LDX #VAR_ITEM_SCORE_DATA  ; Array base
     LDD >VAR_SELECTED
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -405,26 +424,29 @@ IF_END_8:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    STD TMPVAL          ; LEFT → TMPVAL (RIGHT simple, commutative)
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_CUR_SCORE
+; VPy_LINE:63
     LDD #99
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CUR_SCORE
     CMPD TMPVAL
-    LBGT .CMP_6_TRUE
+    LBGT .CMP_5_TRUE
     LDD #0
-    LBRA .CMP_6_END
-.CMP_6_TRUE:
+    LBRA .CMP_5_END
+.CMP_5_TRUE:
     LDD #1
-.CMP_6_END:
+.CMP_5_END:
     LBEQ IF_NEXT_15
+; VPy_LINE:64
     LDD #99
     STD VAR_CUR_SCORE
     LBRA IF_END_14
 IF_NEXT_15:
 IF_END_14:
+; VPy_LINE:65
     LDD >VAR_SELECTED
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -437,11 +459,13 @@ IF_END_14:
     LDD >VAR_CUR_SCORE
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:66
     LDD #8
     STD VAR_COOLDOWN
     LBRA IF_END_12
 IF_NEXT_13:
 IF_END_12:
+; VPy_LINE:69
     LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
     BITA #$02
     BNE .J1B2_1_ON
@@ -452,6 +476,7 @@ IF_END_12:
 .J1B2_1_END:
     STD RESULT
     LBEQ IF_NEXT_17
+; VPy_LINE:70
     LDX #VAR_ITEM_SCORE_DATA  ; Array base
     LDD >VAR_SELECTED
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -460,28 +485,31 @@ IF_END_12:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_CUR_SCORE
+; VPy_LINE:71
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_CUR_SCORE
     CMPD TMPVAL
-    LBLT .CMP_7_TRUE
+    LBLT .CMP_6_TRUE
     LDD #0
-    LBRA .CMP_7_END
-.CMP_7_TRUE:
+    LBRA .CMP_6_END
+.CMP_6_TRUE:
     LDD #1
-.CMP_7_END:
+.CMP_6_END:
     LBEQ IF_NEXT_19
+; VPy_LINE:72
     LDD #0
     STD VAR_CUR_SCORE
     LBRA IF_END_18
 IF_NEXT_19:
 IF_END_18:
+; VPy_LINE:73
     LDD >VAR_SELECTED
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -494,11 +522,13 @@ IF_END_18:
     LDD >VAR_CUR_SCORE
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:74
     LDD #8
     STD VAR_COOLDOWN
     LBRA IF_END_16
 IF_NEXT_17:
 IF_END_16:
+; VPy_LINE:77
     LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed
     BITA #$04
     BNE .J1B3_2_ON
@@ -509,6 +539,7 @@ IF_END_16:
 .J1B3_2_END:
     STD RESULT
     LBEQ IF_NEXT_21
+; VPy_LINE:78
     LDD #0
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -521,6 +552,7 @@ IF_END_16:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:79
     LDD #1
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -533,6 +565,7 @@ IF_END_16:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:80
     LDD #2
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -545,6 +578,7 @@ IF_END_16:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:81
     LDD #3
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
@@ -557,6 +591,7 @@ IF_END_16:
     LDD #0
     LDX TMPPTR2     ; Load computed address
     STD ,X          ; Store 16-bit value
+; VPy_LINE:82
     LDD #15
     STD VAR_COOLDOWN
     LBRA IF_END_20
@@ -565,9 +600,11 @@ IF_END_20:
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:85
+; NATIVE_CALL: PRINT_TEXT at line 85
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -576,15 +613,17 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2047      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:86
+; NATIVE_CALL: PRINT_NUMBER at line 86
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -593,7 +632,7 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_ITEM_SCORE_DATA  ; Array base
     LDD #0
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -602,13 +641,15 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
+; VPy_LINE:88
+; NATIVE_CALL: PRINT_TEXT at line 88
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -617,15 +658,17 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2078      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:89
+; NATIVE_CALL: PRINT_NUMBER at line 89
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -634,7 +677,7 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_ITEM_SCORE_DATA  ; Array base
     LDD #1
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -643,13 +686,15 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
+; VPy_LINE:91
+; NATIVE_CALL: PRINT_TEXT at line 91
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -658,15 +703,17 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2109      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:92
+; NATIVE_CALL: PRINT_NUMBER at line 92
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -675,7 +722,7 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_ITEM_SCORE_DATA  ; Array base
     LDD #2
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -684,13 +731,15 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
+; VPy_LINE:94
+; NATIVE_CALL: PRINT_TEXT at line 94
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -699,15 +748,17 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2140      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:95
+; NATIVE_CALL: PRINT_NUMBER at line 95
     ; PRINT_NUMBER(x, y, num)
     LDD #0
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -716,7 +767,7 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_ITEM_SCORE_DATA  ; Array base
     LDD #3
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
@@ -725,10 +776,11 @@ IF_END_2:
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
+; VPy_LINE:98
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD #-70
     TFR B,A
@@ -1437,7 +1489,17 @@ _MUSIC1_MUSIC:
     FCB     $09             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $3A             ; Reg 7 value
-    FCB     8              ; Delay 8 frames before loop
+    FCB     4               ; Tail delay before force-silence (preserve last note release)
+    FCB     4               ; silence event (4 regs)
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     4              ; Delay 4 frames before loop
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _MUSIC1_MUSIC       ; Jump to start (absolute address)
 
@@ -1462,7 +1524,11 @@ VECTREX_PRINT_TEXT:
     STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
     LDA #$F8
     STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
     LDA #$48
@@ -1542,9 +1608,9 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
     LDU #NUM_STR     ; String pointer
     LDA >TEXT_SCALE_H ; height (signed byte)
@@ -1553,7 +1619,11 @@ VECTREX_PRINT_NUMBER:
     STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
+    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    PULS X
+    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)
     LDA #$F8
     STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
     LDA #$48
@@ -1624,11 +1694,11 @@ J1Y_BUILTIN:
 ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
 ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions
 ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):
-;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2
-;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3
-;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4
-;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5
-; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
+;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at >DRAW_CIRCLE_TEMP+2
+;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at >DRAW_CIRCLE_TEMP+3
+;   c = 0.2168*r via MUL #56 /256, stored at >DRAW_CIRCLE_TEMP+4
+;   d = 0.0761*r via MUL #19 /256, stored at >DRAW_CIRCLE_TEMP+5
+; >DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
 DRAW_CIRCLE_RUNTIME:
 ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
 ; (These are byte variables, use LDB not LDD)
@@ -1639,17 +1709,17 @@ LDB DRAW_CIRCLE_DIAM
 SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
 LSRA                   ; Divide by 2 to get radius
 RORB
-STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)
+STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)
 
 LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
+STD >DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
 
 LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
+STD >DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
 
-; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
+; NOW safe to setup BIOS (all params are in >DRAW_CIRCLE_TEMP+stack)
 LDA #$D0
 TFR A,DP
 JSR Reset0Ref
@@ -1667,36 +1737,40 @@ JSR Intensity_5F
 DCR_after_intensity:
 
 ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]
-; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
-LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
-ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
+; radius = >DRAW_CIRCLE_TEMP, xc = >DRAW_CIRCLE_TEMP+2, yc = >DRAW_CIRCLE_TEMP+4
+LDD >DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
+ADDD >DRAW_CIRCLE_TEMP+2 ; D = xc + radius
 TFR B,B                ; Keep X in B (low byte)
 PSHS B                 ; Save X on stack
-LDD DRAW_CIRCLE_TEMP+4 ; Load yc
+LDD >DRAW_CIRCLE_TEMP+4 ; Load yc
 TFR B,A                ; Y to A
 PULS B                 ; X to B
 JSR Moveto_d
 
 ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)
-; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
-; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
-; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+; radius is at >DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
+; >DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
+; MUL: A * B -> D (unsigned); ADDD #128 then A = round(frac * r) (avoids floor-to-0 for small radii)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827
-MUL                    ; A = floor(0.3828 * r) = a
-STA DRAW_CIRCLE_TEMP+2 ; Store a
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 98 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+2 ; Store a = round(0.3828 * r)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #83                ; 83/256 = 0.3242 ~ 0.3244
-MUL                    ; A = b
-STA DRAW_CIRCLE_TEMP+3 ; Store b
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 83 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+3 ; Store b
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #56                ; 56/256 = 0.2188 ~ 0.2168
-MUL                    ; A = c
-STA DRAW_CIRCLE_TEMP+4 ; Store c
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 56 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+4 ; Store c
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #19                ; 19/256 = 0.0742 ~ 0.0761
-MUL                    ; A = d
-STA DRAW_CIRCLE_TEMP+5 ; Store d
+MUL                    ; D = 19 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+5 ; Store d
 
 ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)
 ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:
@@ -1708,105 +1782,105 @@ STA DRAW_CIRCLE_TEMP+5 ; Store d
 ; --- Q1 ---
 ; Seg 0: dy=+a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 ; Seg 1: dy=+b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 2: dy=+c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 3: dy=+d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 
 ; --- Q2 ---
 ; Seg 4: dy=-d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 ; Seg 5: dy=-c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 6: dy=-b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 7: dy=-a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 
 ; --- Q3 ---
 ; Seg 8: dy=-a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 ; Seg 9: dy=-b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 10: dy=-c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 11: dy=-d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 
 ; --- Q4 ---
 ; Seg 12: dy=+d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d (positive)
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDA >DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 ; Seg 13: dy=+c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c (positive)
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDA >DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 14: dy=+b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b (positive)
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDA >DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 15: dy=+a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a (positive)
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDA >DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 
 LDA #$C8
@@ -1946,6 +2020,17 @@ LBRA PSG_update_done
 
 PSG_music_ended:
 CLR >PSG_IS_PLAYING
+; Silence all 3 PSG channels so the last note doesn't keep ringing
+; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
 LBRA PSG_update_done
 
 PSG_music_loop:

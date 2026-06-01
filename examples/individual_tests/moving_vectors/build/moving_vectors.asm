@@ -80,29 +80,32 @@ VLINE_DX_REMAINING   EQU $C880+$3C   ; DRAW_LINE remaining dx for segment 2 (16-
 TEXT_SCALE_H         EQU $C880+$3E   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$3F   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
 DRAW_SCALE           EQU $C880+$40   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_BALL_X           EQU $C880+$41   ; User variable: BALL_X (2 bytes)
-VAR_BALL_Y           EQU $C880+$43   ; User variable: BALL_Y (2 bytes)
-VAR_BALL_VX          EQU $C880+$45   ; User variable: BALL_VX (2 bytes)
-VAR_BALL_VY          EQU $C880+$47   ; User variable: BALL_VY (2 bytes)
-VAR_BUB_X            EQU $C880+$49   ; User variable: BUB_X (2 bytes)
-VAR_BUB_Y            EQU $C880+$4B   ; User variable: BUB_Y (2 bytes)
-VAR_BUB_VX           EQU $C880+$4D   ; User variable: BUB_VX (2 bytes)
-VAR_BUB_VY           EQU $C880+$4F   ; User variable: BUB_VY (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$51   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$53   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$55   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$56   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$57   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$58   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$59   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$5B   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$5C   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$5D   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$5F   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$61   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$63   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$65   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$67   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ARG0             EQU $C880+$41   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$43   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$45   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$47   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$49   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$4B   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$4D   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$4F   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$51   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_BALL_X           EQU $C880+$52   ; User variable: BALL_X (2 bytes)
+VAR_BALL_Y           EQU $C880+$54   ; User variable: BALL_Y (2 bytes)
+VAR_BALL_VX          EQU $C880+$56   ; User variable: BALL_VX (2 bytes)
+VAR_BALL_VY          EQU $C880+$58   ; User variable: BALL_VY (2 bytes)
+VAR_BUB_X            EQU $C880+$5A   ; User variable: BUB_X (2 bytes)
+VAR_BUB_Y            EQU $C880+$5C   ; User variable: BUB_Y (2 bytes)
+VAR_BUB_VX           EQU $C880+$5E   ; User variable: BUB_VX (2 bytes)
+VAR_BUB_VY           EQU $C880+$60   ; User variable: BUB_VY (2 bytes)
+PSG_MUSIC_PTR        EQU $C880+$62   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$64   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$66   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$67   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$68   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$69   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$6A   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$6C   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$6D   ; SFX bank ID (for multibank) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -183,43 +186,43 @@ LOOP_BODY:
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #110
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2105662470593698      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-60
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #90
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_BALL_X
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-60
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #70
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_BALL_VX
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
-    LDD >VAR_BALL_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BALL_VX
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_BALL_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_BALL_X
-    LDD >VAR_BALL_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BALL_VY
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_BALL_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_BALL_Y
     LDD #97
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -232,12 +235,10 @@ LOOP_BODY:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_1
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BALL_VX
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BALL_VX
     LDD #97
     STD VAR_BALL_X
@@ -255,12 +256,10 @@ IF_END_0:
     LDD #1
 .CMP_1_END:
     LBEQ IF_NEXT_3
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BALL_VX
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BALL_VX
     LDD #-97
     STD VAR_BALL_X
@@ -278,12 +277,10 @@ IF_END_2:
     LDD #1
 .CMP_2_END:
     LBEQ IF_NEXT_5
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BALL_VY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BALL_VY
     LDD #77
     STD VAR_BALL_Y
@@ -301,27 +298,25 @@ IF_END_4:
     LDD #1
 .CMP_3_END:
     LBEQ IF_NEXT_7
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BALL_VY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BALL_VY
     LDD #-77
     STD VAR_BALL_Y
     LBRA IF_END_6
 IF_NEXT_7:
 IF_END_6:
-    LDD >VAR_BUB_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BUB_VX
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_BUB_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_BUB_X
-    LDD >VAR_BUB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BUB_VY
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_BUB_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_BUB_Y
     LDD #90
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
@@ -334,12 +329,10 @@ IF_END_6:
     LDD #1
 .CMP_4_END:
     LBEQ IF_NEXT_9
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BUB_VX
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BUB_VX
     LDD #90
     STD VAR_BUB_X
@@ -357,12 +350,10 @@ IF_END_8:
     LDD #1
 .CMP_5_END:
     LBEQ IF_NEXT_11
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BUB_VX
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BUB_VX
     LDD #-90
     STD VAR_BUB_X
@@ -380,12 +371,10 @@ IF_END_10:
     LDD #1
 .CMP_6_END:
     LBEQ IF_NEXT_13
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BUB_VY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BUB_VY
     LDD #70
     STD VAR_BUB_Y
@@ -403,12 +392,10 @@ IF_END_12:
     LDD #1
 .CMP_7_END:
     LBEQ IF_NEXT_15
-    LDD #0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD >VAR_BUB_VY
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #0
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BUB_VY
     LDD #-70
     STD VAR_BUB_Y
@@ -533,7 +520,7 @@ _BALL_CENTER_X EQU 0
 _BALL_CENTER_Y EQU 0
 
 _BALL_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _BALL_PATH0        ; pointer to path 0
 
 _BALL_PATH0:    ; Path 0
@@ -561,7 +548,7 @@ _BUBBLE_SMALL_CENTER_X EQU 0
 _BUBBLE_SMALL_CENTER_Y EQU 0
 
 _BUBBLE_SMALL_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _BUBBLE_SMALL_PATH0        ; pointer to path 0
 
 _BUBBLE_SMALL_PATH0:    ; Path 0
@@ -1295,7 +1282,11 @@ VECTREX_PRINT_TEXT:
     STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
     LDA #$F8
     STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
     LDA #$48
@@ -1375,9 +1366,9 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
     LDU #NUM_STR     ; String pointer
     LDA >TEXT_SCALE_H ; height (signed byte)
@@ -1386,7 +1377,11 @@ VECTREX_PRINT_NUMBER:
     STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
+    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    PULS X
+    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)
     LDA #$F8
     STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
     LDA #$48
