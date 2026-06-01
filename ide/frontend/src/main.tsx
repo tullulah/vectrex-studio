@@ -55,46 +55,6 @@ function App() {
 
   const initializedRef = useRef(false);
 
-  // Listen for file changes from FileWatcher (reload documents when externally modified)
-  useEffect(() => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI?.ipcRenderer) return;
-
-    const handler = async (_event: any, payload: { type: string; path: string; isDir: boolean }) => {
-      console.log('[FileWatcher] Event received:', payload);
-      
-      if (payload.type !== 'changed' || payload.isDir) {
-        console.log('[FileWatcher] Ignored (not a file change)');
-        return;
-      }
-
-      const editorState = useEditorStore.getState();
-      console.log('[FileWatcher] Open documents:', editorState.documents.map(d => ({ uri: d.uri, diskPath: d.diskPath, dirty: d.dirty })));
-      
-      const changedDoc = editorState.documents.find(d => d.diskPath?.endsWith(payload.path));
-      console.log('[FileWatcher] Found changed doc:', changedDoc ? changedDoc.uri : 'NOT FOUND');
-      
-      if (changedDoc && !changedDoc.dirty) {
-        logger.info('App', `📄 Reloading externally modified file: ${payload.path}`);
-        try {
-          const result = await electronAPI.readFile(changedDoc.diskPath);
-          console.log('[FileWatcher] Read result:', { hasError: !!result.error, hasContent: result.content !== undefined });
-          
-          if (!result.error && result.content !== undefined) {
-            updateContent(changedDoc.uri, result.content);
-            logger.debug('App', `✓ Reloaded ${changedDoc.uri}`);
-          }
-        } catch (error) {
-          logger.error('App', `Failed to reload ${payload.path}:`, error);
-        }
-      } else if (changedDoc && changedDoc.dirty) {
-        console.log('[FileWatcher] Document is dirty, not reloading');
-      }
-    };
-
-    electronAPI.ipcRenderer.on('file://changed', handler);
-    return () => electronAPI.ipcRenderer.removeListener('file://changed', handler);
-  }, [updateContent]);
 
   // Optional auto-open demo disabled: show Welcome when no docs. Uncomment block below if you want the sample on fresh start.
   /*useEffect(() => {
@@ -230,6 +190,23 @@ function App() {
   const restoreLastWorkspace = useProjectStore(s => s.restoreLastWorkspace);
   const hasWorkspace = useProjectStore(s => s.hasWorkspace);
   const vpyProject = useProjectStore(s => s.vpyProject);
+
+  // Start/stop the filesystem watcher whenever the project changes
+  useEffect(() => {
+    const apiFiles = (window as any).files;
+    if (!apiFiles?.watchDirectory || !apiFiles?.unwatchDirectory) return;
+    if (!vpyProject?.rootDir) return;
+
+    const dir = vpyProject.rootDir;
+    apiFiles.watchDirectory(dir);
+    console.log('[FileWatcher] watchDirectory called for:', dir);
+
+    return () => {
+      apiFiles.unwatchDirectory(dir);
+      logger.debug('App', `[FileWatcher] Unwatching: ${dir}`);
+    };
+  }, [vpyProject?.rootDir]);
+
   const recentWorkspaces = useProjectStore(s => s.recentWorkspaces);
   const openVpyProject = useProjectStore(s => s.openVpyProject);
   const closeVpyProject = useProjectStore(s => s.closeVpyProject);

@@ -61,9 +61,16 @@ if(-not $NoRustBuild){
   } else {
     Write-Host '[INFO] cargo build (vpy_lsp + vpy_cli)' -ForegroundColor Cyan
     # Legacy vectrexc dropped — IDE defaults to buildtools (vpy_cli). Build it
-    # manually if you still need the deprecated core backend.
+    # manually if you still need the deprecated core backend. The LSP still
+    # lives in core/ and powers diagnostics inside the editor, so always build
+    # it alongside vpy_cli and copy both to ide/electron/resources/ so dev-mode
+    # finds them.
     cargo build --bin vpy_lsp --bin vpy_cli
     if($LASTEXITCODE -ne 0){ Write-Host '[ERR ] cargo build falló' -ForegroundColor Red; exit 1 }
+    $resDir = Join-Path $root 'ide/electron/resources'
+    Copy-Item -Force (Join-Path $root 'target/debug/vpy_cli.exe') (Join-Path $resDir 'vpy_cli.exe')
+    Copy-Item -Force (Join-Path $root 'target/debug/vpy_lsp.exe') (Join-Path $resDir 'vpy_lsp.exe')
+    Write-Host "[OK  ] vpy_cli + vpy_lsp copied to $resDir/" -ForegroundColor Green
   }
 }
 

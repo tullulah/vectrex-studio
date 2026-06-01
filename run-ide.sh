@@ -211,16 +211,18 @@ if [ "$NO_RUST_BUILD" = false ]; then
       echo '[INFO] cargo build --release (vpy_cli)'
     fi
 
-    # Only build vpy_cli. The legacy core compiler (vectrexc) is deprecated and
-    # the IDE defaults to buildtools. Anyone who still needs core can build it
-    # manually — the IDE error message already prompts that command.
-    (cd "$ROOT" && cargo build --profile "$CARGO_PROFILE" --bin vpy_cli)
+    # Build vpy_cli (buildtools compiler) and vpy_lsp (legacy core LSP). The
+    # legacy core compiler binary (vectrexc) is deprecated and the IDE defaults
+    # to buildtools, but the LSP still lives in core/ and powers diagnostics
+    # inside the editor — without it, the IDE silently runs yesterday's LSP.
+    (cd "$ROOT" && cargo build --profile "$CARGO_PROFILE" --bin vpy_cli --bin vpy_lsp)
     if [ $? -ne 0 ]; then
-      echo '[ERR ] cargo build (vpy_cli) falló'
+      echo '[ERR ] cargo build (vpy_cli + vpy_lsp) falló'
       exit 1
     fi
     cp "$ROOT/target/$CARGO_TARGET_DIR_NAME/vpy_cli" "$RESOURCES_DIR/vpy_cli"
-    echo "[OK  ] vpy_cli copiado a $RESOURCES_DIR/"
+    cp "$ROOT/target/$CARGO_TARGET_DIR_NAME/vpy_lsp" "$RESOURCES_DIR/vpy_lsp"
+    echo "[OK  ] vpy_cli + vpy_lsp copied to $RESOURCES_DIR/"
   fi
 fi
 

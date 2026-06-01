@@ -9,6 +9,7 @@ import { join, basename, dirname } from 'path';
 import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import { watch } from 'fs';
+import chokidar from 'chokidar';
 import * as crypto from 'crypto';
 import * as net from 'net';
 import { getMCPServer } from './mcp/server.js';
@@ -34,6 +35,51 @@ import {
   getFileBreakpoints,
   clearBreakpoints
 } from './pypilotDb.js';
+
+// macOS GUI apps launched from Finder/installer inherit a minimal PATH from
+// launchd (typically /usr/bin:/bin:/usr/sbin:/sbin) and do NOT pick up the
+// user's shell PATH. That means Homebrew binaries at /opt/homebrew/bin
+// (Apple Silicon) or /usr/local/bin (Intel) are invisible — so the packaged
+// build fails to find tools like arm-none-eabi-as even when the user has
+// them installed. Augment PATH at module load so every subsequent spawn
+// inherits the broadened search list.
+(function augmentPathForGuiLaunch() {
+  if (process.platform === 'win32') return;
+  const extras: string[] = [];
+  if (process.platform === 'darwin') {
+    extras.push(
+      '/opt/homebrew/bin',
+      '/opt/homebrew/sbin',
+      '/usr/local/bin',
+      '/usr/local/sbin',
+    );
+    // Official ARM GNU toolchain .pkg installer puts the toolchain under
+    // /Applications/ArmGNUToolchain/<ver>/arm-none-eabi/bin. Version varies,
+    // so list whatever subdirectories exist.
+    try {
+      const fsSync = require('fs') as typeof import('fs');
+      const root = '/Applications/ArmGNUToolchain';
+      if (fsSync.existsSync(root)) {
+        for (const v of fsSync.readdirSync(root)) {
+          const bin = `${root}/${v}/arm-none-eabi/bin`;
+          if (fsSync.existsSync(bin)) extras.push(bin);
+        }
+      }
+    } catch { /* readdir failures are non-fatal — Homebrew path still works */ }
+  } else if (process.platform === 'linux') {
+    extras.push('/usr/local/bin', '/snap/bin');
+  }
+  if (process.env.HOME) {
+    extras.push(`${process.env.HOME}/.cargo/bin`);
+    extras.push(`${process.env.HOME}/.local/bin`);
+  }
+  const current = (process.env.PATH || '').split(':').filter(Boolean);
+  const merged: string[] = [];
+  for (const p of [...current, ...extras]) {
+    if (p && !merged.includes(p)) merged.push(p);
+  }
+  process.env.PATH = merged.join(':');
+})();
 
 let mainWindow: BrowserWindow | null = null;
 let mcpIpcServer: net.Server | null = null;
@@ -512,7 +558,14 @@ function resolveLspPath(): string | null {
   const candidates = [
     // Packaged app: resources directory
     join(process.resourcesPath, exeName),
-    // Ejecución desde root (run-ide.ps1 hace Set-Location root antes de lanzar)
+    // Dev mode: run-ide.sh / .ps1 copies the binary here after `cargo build`,
+    // so this is the source of truth when launching via `npm run dev`.
+    // Without this entry the IDE used to fall back to target/debug/ — which
+    // run-ide.sh no longer touches (it builds with --profile dev-fast).
+    join(cwd, 'ide', 'electron', 'resources', exeName),
+    join(cwd, '..', '..', 'ide', 'electron', 'resources', exeName),
+    // Manual `cargo build` without run-ide.sh
+    join(cwd, 'target', 'dev-fast', exeName),
     join(cwd, 'target', 'debug', exeName),
     join(cwd, 'target', 'release', exeName),
     // Bin copiado manualmente
@@ -2188,80 +2241,47 @@ const recentChanges = new Map<string, { timestamp: number; type: string }>(); //
 ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
   try {
     if (watchers.has(dirPath)) {
-      // Already watching this directory
       return { ok: true };
     }
 
-    const watcher = watch(dirPath, { recursive: true }, (eventType, filename) => {
-      if (!filename) return;
-      
-      const fullPath = join(dirPath, filename);
-      
-      // Skip temporary files, hidden files, and generated build files
-      if (filename.startsWith('.') || filename.includes('~') || filename.endsWith('.tmp')) {
-        return;
-      }
-      
-      // Skip generated files that trigger recompilation loops
-      if (filename.endsWith('.asm') || filename.endsWith('.bin') || filename.endsWith('.pdb') || 
-          filename.endsWith('.map') || filename.includes('build/')) {
-        console.log(`[FileWatcher] Ignoring generated file: ${filename}`);
-        return;
-      }
-      
-      // Debounce: Skip if same file changed within last 500ms
+    const ignored = [
+      /(^|[/\\])\../, // hidden files
+      /~$/,
+      /\.tmp$/,
+      /\.asm$/,
+      /\.bin$/,
+      /\.pdb$/,
+      /\.map$/,
+      /[/\\]build[/\\]/,
+    ];
+
+    const watcher = chokidar.watch(dirPath, {
+      ignored,
+      persistent: true,
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 },
+      usePolling: false,
+    });
+
+    const sendChange = (type: 'added' | 'removed' | 'changed', fullPath: string) => {
+      // Debounce per file
       const now = Date.now();
       const recent = recentChanges.get(fullPath);
-      if (recent && (now - recent.timestamp) < 500) {
-        console.log(`[FileWatcher] DEBOUNCED (too soon): ${filename}`);
-        return;
-      }
-      
-      // Determine if it's a directory by trying to stat it
-      let isDir = false;
-      try {
-        const stat = require('fs').statSync(fullPath);
-        isDir = stat.isDirectory();
-      } catch {
-        // File might have been deleted, assume it's a file
-        isDir = false;
-      }
-      
-      let changeType: 'added' | 'removed' | 'changed' = 'changed';
-      
-      // Try to determine if file was added or removed
-      try {
-        require('fs').accessSync(fullPath);
-        changeType = eventType === 'rename' ? 'added' : 'changed';
-      } catch {
-        changeType = 'removed';
-      }
-      
-      // Record this change
-      recentChanges.set(fullPath, { timestamp: now, type: changeType });
-      
-      console.log(`[FileWatcher] ${changeType}: ${filename} (dir: ${isDir})`);
-      
-      // Notify renderer
-      mainWindow?.webContents.send('file://changed', {
-        type: changeType,
-        path: filename,
-        isDir
-      });
-      
-      // Cleanup old entries from debounce map (keep only last 100)
-      if (recentChanges.size > 100) {
-        const sorted = Array.from(recentChanges.entries())
-          .sort((a, b) => b[1].timestamp - a[1].timestamp)
-          .slice(100);
-        for (const [key] of sorted) {
-          recentChanges.delete(key);
-        }
-      }
-    });
-    
-    watchers.set(dirPath, watcher);
-    console.log(`[FileWatcher] Started watching: ${dirPath}`);
+      if (recent && (now - recent.timestamp) < 300) return;
+      recentChanges.set(fullPath, { timestamp: now, type });
+
+      // Send the full absolute path so the renderer can match reliably
+      console.log(`[FileWatcher] ${type}: ${fullPath}`);
+      mainWindow?.webContents.send('file://changed', { type, path: fullPath, isDir: false });
+    };
+
+    watcher
+      .on('change', (p) => sendChange('changed', p))
+      .on('add',    (p) => sendChange('added',   p))
+      .on('unlink', (p) => sendChange('removed',  p));
+
+    watchers.set(dirPath, watcher as any);
+    console.log(`[FileWatcher] Started watching (chokidar): ${dirPath}`);
     return { ok: true };
   } catch (error) {
     console.error(`[FileWatcher] Error watching directory ${dirPath}:`, error);
@@ -2272,7 +2292,7 @@ ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
 ipcMain.handle('file:unwatchDirectory', async (_e, dirPath: string) => {
   const watcher = watchers.get(dirPath);
   if (watcher) {
-    watcher.close();
+    (watcher as any).close();
     watchers.delete(dirPath);
     console.log(`[FileWatcher] Stopped watching: ${dirPath}`);
   }
@@ -2761,17 +2781,30 @@ ipcMain.handle('git:log', async (_e, args: { projectDir: string; limit?: number 
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(projectDir);
-    const log = await git.log({ maxCount: limit });
+    const rawOutput = await git.raw([
+      'log',
+      `--max-count=${limit}`,
+      '--format=%H\x1f%an\x1f%ae\x1f%ai\x1f%s\x1f%b\x1e',
+    ]);
 
-    const commits = log.all.map((commit: any) => ({
-      hash: commit.hash?.substring(0, 7) || '',
-      fullHash: commit.hash || '',
-      message: commit.message || '',
-      author: commit.author_name || 'Unknown',
-      email: commit.author_email || '',
-      date: commit.author_date || '',
-      body: commit.body || '',
-    }));
+    const commits = rawOutput.split('\x1e').flatMap(block => {
+      const line = block.trim();
+      if (!line) return [];
+      const parts = line.split('\x1f');
+      if (parts.length < 5) return [];
+      const [hash, author, email, date, message, body] = parts;
+      if (!hash || hash.length < 7) return [];
+      const parsed = new Date(date.trim());
+      return [{
+        hash: hash.trim().substring(0, 7),
+        fullHash: hash.trim(),
+        message: (message || '').trim(),
+        author: (author || 'Unknown').trim(),
+        email: (email || '').trim(),
+        date: !isNaN(parsed.getTime()) ? parsed.toISOString() : date.trim(),
+        body: (body || '').trim(),
+      }];
+    });
 
     return { ok: true, commits };
   } catch (error: any) {
@@ -2803,9 +2836,20 @@ ipcMain.handle('git:pull', async (_e, args: { projectDir: string; remote?: strin
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(projectDir);
-    await git.pull(remote, branch);
-
-    return { ok: true };
+    try {
+      await git.pull(remote, branch, ['--no-rebase']);
+      return { ok: true };
+    } catch (error: any) {
+      const msg: string = error.message || '';
+      const hasConflicts =
+        msg.includes('CONFLICT') ||
+        msg.includes('Automatic merge failed') ||
+        msg.includes('fix conflicts');
+      if (hasConflicts) {
+        return { ok: false, hasConflicts: true, error: msg };
+      }
+      throw error;
+    }
   } catch (error: any) {
     console.error('[GIT:pull]', error);
     return { ok: false, error: error.message || 'Failed to pull changes' };
@@ -2914,20 +2958,19 @@ ipcMain.handle('git:searchCommits', async (_e, args: { projectDir: string; query
     const rawOutput = await git.raw([
       'log',
       `--max-count=${limit}`,
-      '--format=%H:%an:%ae:%ai:%s'
+      '--format=%H\x1f%an\x1f%ae\x1f%ai\x1f%s'
     ]);
 
     // Parse output
     const commits: Array<{hash: string; message: string; author: string; date: string; shortHash: string}> = [];
-    
+
     rawOutput.split('\n').forEach(line => {
       if (!line.trim()) return;
-      
-      const parts = line.split(':');
+
+      const parts = line.split('\x1f');
       if (parts.length < 5) return;
-      
-      const [hash, author, email, date, ...msgParts] = parts;
-      const message = msgParts.join(':');
+
+      const [hash, author, email, date, message] = parts;
       
       const searchableText = `${message} ${author} ${email}`.toLowerCase();
       if (searchableText.includes(query.toLowerCase())) {
@@ -2935,7 +2978,7 @@ ipcMain.handle('git:searchCommits', async (_e, args: { projectDir: string; query
           hash: hash.trim(),
           message: message.trim(),
           author: author.trim(),
-          date: date.trim(),
+          date: new Date(date.trim()).toISOString(),
           shortHash: hash.substring(0, 7)
         });
       }
@@ -2994,40 +3037,40 @@ ipcMain.handle('git:fileHistory', async (_e, args: { projectDir: string; filePat
     const rawOutput = await git.raw([
       'log',
       `--max-count=${limit + offset}`,
-      '--format=%H:%an:%ae:%ai:%s:%b',
+      '--format=%H\x1f%an\x1f%ae\x1f%ai\x1f%s',
       '--',
       filePath
     ]);
 
     // Parse output and apply pagination
     const commits: Array<{hash: string; shortHash: string; message: string; author: string; date: string; email: string; body: string}> = [];
-    
+
     const lines = rawOutput.split('\n');
-    let currentCommit: any = null;
     let lineCount = 0;
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (!line.trim()) continue;
-      
-      // Check if this is a commit header (contains multiple colons with hash format)
-      const parts = line.split(':');
-      if (parts[0].length === 40) {  // SHA1 hash is 40 chars
-        lineCount++;
-        if (lineCount <= offset) continue;  // Skip offset entries
-        if (lineCount > offset + limit) break;  // Stop after limit
-        
-        const [hash, author, email, date, message] = parts;
-        commits.push({
-          hash: hash.trim(),
-          shortHash: hash.substring(0, 7),
-          message: (message || '').trim(),
-          author: author.trim(),
-          date: date.trim(),
-          email: email.trim(),
-          body: ''
-        });
-      }
+
+      const parts = line.split('\x1f');
+      if (parts.length < 5) continue;
+
+      const [hash, author, email, date, message] = parts;
+      if (hash.length < 7) continue;
+
+      lineCount++;
+      if (lineCount <= offset) continue;
+      if (lineCount > offset + limit) break;
+
+      commits.push({
+        hash: hash.trim(),
+        shortHash: hash.substring(0, 7),
+        message: (message || '').trim(),
+        author: author.trim(),
+        date: new Date(date.trim()).toISOString(),
+        email: email.trim(),
+        body: ''
+      });
     }
 
     return { ok: true, commits, filePath };
@@ -3091,8 +3134,7 @@ ipcMain.handle('git:stash', async (_e, args: { projectDir: string; message?: str
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(projectDir);
 
-    const stashMessage = message ? `stash save "${message}"` : 'stash';
-    await git.stash([stashMessage.split(' ')[0], ...(message ? ['save', message] : [])]);
+    await git.stash(message ? ['push', '-m', message] : ['push']);
 
     return { ok: true };
   } catch (error: any) {
