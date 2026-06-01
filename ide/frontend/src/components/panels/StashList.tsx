@@ -81,34 +81,49 @@ export const StashList: React.FC<StashListProps> = ({ projectDir, onStashPopped 
     }
   };
 
+  const btnStyle: React.CSSProperties = {
+    background: '#2d2d30',
+    border: '1px solid #3e3e42',
+    color: '#cccccc',
+    padding: '3px 8px',
+    borderRadius: 3,
+    fontSize: 11,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  };
+
   return (
-    <div>
-      <div className="git-history-list" style={{ maxHeight: '400px', overflow: 'auto' }}>
-        {loading && <div className="git-history-loading">Loading stashes...</div>}
-        {error && <div className="git-history-error">Error: {error}</div>}
+    <div style={{ fontSize: 12, color: '#cccccc' }}>
+      <div style={{ maxHeight: 400, overflow: 'auto' }}>
+        {loading && <div style={{ padding: '8px', color: '#6a6a6a' }}>Loading stashes...</div>}
+        {error && <div style={{ padding: '8px', color: '#f44' }}>Error: {error}</div>}
 
         {!loading && !error && stashes.length === 0 && (
-          <div className="git-history-empty">No stashes found</div>
+          <div style={{ padding: '8px', color: '#6a6a6a', fontStyle: 'italic' }}>No stashes found</div>
         )}
 
         {!loading && !error && stashes.map((stash) => (
           <div
             key={stash.index}
-            className="git-history-item"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: '#2a2d2e',
+              border: '1px solid #3e3e42',
+              borderRadius: 2,
+              padding: '6px 8px',
+              marginBottom: 4,
+              gap: 8,
+            }}
           >
-            <div style={{ flex: 1 }}>
-              <div className="git-history-hash">{stash.hash}</div>
-              <div className="git-history-message">{stash.message}</div>
-              <div className="git-history-meta">
-                <span className="git-history-date">{formatDate(stash.date)}</span>
-              </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'monospace', color: '#0098ff', fontWeight: 600, fontSize: 11 }}>{stash.hash}</div>
+              <div style={{ color: '#cccccc', fontSize: 11, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stash.message}</div>
+              <div style={{ color: '#6a6a6a', fontSize: 10, marginTop: 1 }}>{formatDate(stash.date)}</div>
             </div>
-            <button
-              className="git-panel-action-btn"
-              onClick={() => handlePopStash(stash.index)}
-              style={{ marginLeft: '8px', whiteSpace: 'nowrap' }}
-            >
+            <button style={btnStyle} onClick={() => handlePopStash(stash.index)}>
               Apply
             </button>
           </div>

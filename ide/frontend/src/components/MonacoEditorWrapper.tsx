@@ -25,7 +25,7 @@ import { lspClient } from '../lspClient';
 // TODO(i18n): Adapt Monaco UI strings (context menu, messages) when supporting dynamic locale changes.
 
 // Simple language placeholder registration for 'vpy'
-function ensureLanguage(monaco: Monaco) {
+export function ensureLanguage(monaco: Monaco) {
   const already = (monaco.languages.getLanguages() || []).some(l => l.id === 'vpy');
   if (!already) {
     monaco.languages.register({ id: 'vpy' });

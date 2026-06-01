@@ -229,28 +229,31 @@ export const GitPanel: React.FC = () => {
     loadGitData();
   }, [vpyProject?.rootDir, currentProjectDir]);
 
-  // Listen for file changes and auto-refresh git status
+  // Auto-refresh git status on file changes + polling fallback
   useEffect(() => {
     if (!currentProjectDir) return;
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        refreshGitStatus(currentProjectDir);
+      }, 600);
+    };
+
+    // File watcher — any file change triggers a refresh
     const files = (window as any).files;
-    
-    if (!files?.onFileChanged) return;
+    const unsubscribe = files?.onFileChanged ? files.onFileChanged(scheduleRefresh) : null;
 
-    // Subscribe to file changes
-    const unsubscribe = files.onFileChanged((event: any) => {
-      // Only refresh if it's a .vpy file change
-      if (event.path.endsWith('.vpy') || event.path.endsWith('.asm')) {
-        // Debounce: wait a bit for rapid file changes
-        const timer = setTimeout(() => {
-          refreshGitStatus(currentProjectDir);
-        }, 500);
-        
-        return () => clearTimeout(timer);
-      }
-    });
+    // Polling fallback every 5 s (covers external edits, terminal changes, etc.)
+    const poll = setInterval(() => refreshGitStatus(currentProjectDir), 5000);
 
-    return unsubscribe;
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (unsubscribe) unsubscribe();
+      clearInterval(poll);
+    };
   }, [currentProjectDir]);
 
   const stagedChanges = changes.filter(c => c.staged);
@@ -288,8 +291,11 @@ export const GitPanel: React.FC = () => {
       const result = await git.checkout({ projectDir: currentProjectDir, branch: branchName });
       
       if (result.ok) {
+        setIsBranchProtected(false);
+        setProtectionWarning(null);
         await refreshBranches(currentProjectDir);
         await refreshGitStatus(currentProjectDir);
+        await checkBranchProtection(currentProjectDir, branchName);
       } else {
         alert(`Failed to checkout branch: ${result.error}`);
       }
@@ -406,7 +412,31 @@ export const GitPanel: React.FC = () => {
         alert('Changes pushed successfully');
         await refreshGitStatus(currentProjectDir);
       } else {
-        alert(`Failed to push: ${result.error}`);
+        const isBehind = result.error && (
+          result.error.includes('fetch first') ||
+          result.error.includes('Updates were rejected') ||
+          result.error.includes('tip of your current branch is behind')
+        );
+        if (isBehind) {
+          const doPull = window.confirm(
+            'Push rejected: the remote has commits you do not have locally.\n\nPull now to integrate the remote changes, then push again?'
+          );
+          if (doPull) {
+            const pullResult = await git.pull({ projectDir: currentProjectDir, branch: currentBranch });
+            if (pullResult.ok) {
+              await refreshGitStatus(currentProjectDir);
+              await refreshBranches(currentProjectDir);
+            } else if (pullResult.hasConflicts) {
+              await refreshGitStatus(currentProjectDir);
+              setHasConflicts(true);
+              setShowConflictResolver(true);
+            } else {
+              alert(`Pull failed: ${pullResult.error}`);
+            }
+          }
+        } else {
+          alert(`Failed to push: ${result.error}`);
+        }
       }
     } catch (error) {
       console.error('Failed to push:', error);
@@ -430,6 +460,10 @@ export const GitPanel: React.FC = () => {
         alert('Changes pulled successfully');
         await refreshGitStatus(currentProjectDir);
         await refreshBranches(currentProjectDir);
+      } else if (result.hasConflicts) {
+        await refreshGitStatus(currentProjectDir);
+        setHasConflicts(true);
+        setShowConflictResolver(true);
       } else {
         alert(`Failed to pull: ${result.error}`);
       }
@@ -654,6 +688,27 @@ export const GitPanel: React.FC = () => {
       
       if (result.ok) {
         await refreshGitStatus(currentProjectDir);
+        // Force-reload the file in the editor even if dirty — the disk is now the truth
+        const fullPath = `${currentProjectDir}/${path}`.replace(/\/\//g, '/');
+        const editorStore = (window as any).__editorStore__;
+        const apiFiles = (window as any).files;
+        if (editorStore && apiFiles?.readFile) {
+          const state = editorStore.getState();
+          const doc = state.documents.find((d: any) => d.diskPath === fullPath);
+          if (doc) {
+            const fileResult = await apiFiles.readFile(fullPath);
+            if (!fileResult.error && fileResult.content !== undefined) {
+              state.updateContent(doc.uri, fileResult.content);
+              editorStore.setState((s: any) => ({
+                documents: s.documents.map((d: any) =>
+                  d.uri === doc.uri
+                    ? { ...d, dirty: false, lastSavedContent: fileResult.content }
+                    : d
+                ),
+              }));
+            }
+          }
+        }
       } else {
         alert(`Failed to discard changes: ${result.error}`);
       }
@@ -697,8 +752,8 @@ export const GitPanel: React.FC = () => {
         <button
           className="git-panel-action-btn"
           onClick={handlePush}
-          disabled={!currentBranch || loading}
-          title="Push changes to remote"
+          disabled={!currentBranch || loading || isBranchProtected}
+          title={isBranchProtected ? '🔒 Protected branch — push disabled' : 'Push changes to remote'}
         >
           ⬆️
         </button>
@@ -715,7 +770,7 @@ export const GitPanel: React.FC = () => {
           onClick={() => setShowCommitHistory(!showCommitHistory)}
           title="View commit history"
         >
-          📜
+          🕐
         </button>
         <button
           className="git-panel-action-btn"
@@ -995,7 +1050,7 @@ export const GitPanel: React.FC = () => {
                       onClick={() => handleGetFileHistory(file.path)}
                       title="File history"
                     >
-                      📜
+                      🕐
                     </button>
                     <button
                       className="git-change-action git-stage-btn"
@@ -1210,23 +1265,33 @@ export const GitPanel: React.FC = () => {
       {/* Conflict Resolver Modal */}
       {showConflictResolver && currentProjectDir && (
         <div className="git-modal-overlay" onClick={() => setShowConflictResolver(false)}>
-          <div className="git-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e1e1e',
+              border: '1px solid #3e3e42',
+              borderRadius: 4,
+              display: 'flex',
+              flexDirection: 'column',
+              width: '92vw',
+              height: '88vh',
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            }}
+          >
             <div className="git-modal-header">
               <span>Resolve Merge Conflicts</span>
-              <button 
-                className="git-modal-close"
-                onClick={() => setShowConflictResolver(false)}
-              >
-                ✕
-              </button>
+              <button className="git-modal-close" onClick={() => setShowConflictResolver(false)}>✕</button>
             </div>
-            <ConflictResolver
-              projectDir={currentProjectDir}
-              onMergeComplete={() => {
-                setShowConflictResolver(false);
-                refreshGitStatus(currentProjectDir);
-              }}
-            />
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+              <ConflictResolver
+                projectDir={currentProjectDir}
+                onMergeComplete={() => {
+                  setShowConflictResolver(false);
+                  refreshGitStatus(currentProjectDir);
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
