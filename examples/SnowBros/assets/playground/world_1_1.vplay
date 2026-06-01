@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-28"
+    "description": "Created in Playground - 2026-05-30"
   },
   "worldBounds": {
     "xMin": -96,
@@ -15,13 +15,6 @@
     "yMin": -2432,
     "yMax": 127
   },
-  "walkable_areas": [
-    {
-      "y": -829,
-      "x_min": -24,
-      "x_max": 47
-    }
-  ],
   "isolateScreens": true,
   "layers": {
     "background": [],
@@ -489,35 +482,6 @@
         "enemyType": "titchi",
         "aiType": "patrol",
         "patrolWaypoints": [],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "_facingRight": true
-      },
-      {
-        "id": "enemy_1779084908393",
-        "type": "enemy",
-        "vectorName": "titchi_idle",
-        "layer": "gameplay",
-        "x": -86,
-        "y": -1084,
-        "rotation": 0,
-        "scale": 1,
-        "enemyType": "titchi",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -88,
-            "y": -1084
-          },
-          {
-            "x": -45,
-            "y": -1083
-          }
-        ],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -1483,6 +1447,63 @@
         "gravity": 1,
         "bounceDamping": 0.85,
         "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1780132603317",
+        "type": "background",
+        "vectorName": "platform1",
+        "layer": "gameplay",
+        "x": 55,
+        "y": -1102,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1780132747103",
+        "type": "background",
+        "vectorName": "platform2",
+        "layer": "gameplay",
+        "x": 5,
+        "y": -1057,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "enemy_1780176885173",
+        "type": "enemy",
+        "vectorName": "titchi_idle",
+        "layer": "gameplay",
+        "x": -43,
+        "y": -1036,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       }
     ],
     "foreground": []

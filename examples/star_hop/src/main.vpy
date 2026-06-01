@@ -46,8 +46,8 @@ hud_frame: i8 = 0          # alternador para skip-frame del HUD (50→25 Hz solo
 
 def main():
     SET_INTENSITY(85)
-    LOAD_LEVEL("world_1")
-    SPAWN_ENEMIES("world_1")
+    LOAD_LEVEL("world_2")
+    SPAWN_ENEMIES("world_2")
     PLAY_MUSIC("theme")
     spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH
     player_y      = spawn_floor_y
@@ -238,8 +238,8 @@ def reset_game():
     camera_x  = 0
     for i in range(STAR_COUNT):
         star_taken[i] = 0
-    LOAD_LEVEL("world_1")
-    SPAWN_ENEMIES("world_1")
+    LOAD_LEVEL("world_2")
+    SPAWN_ENEMIES("world_2")
     spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH
     player_x      = 0
     player_y      = spawn_floor_y
