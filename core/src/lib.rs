@@ -1,3 +1,18 @@
+// ---------------------------------------------------------------------------
+// `core/` is the legacy monolithic compiler — active development moved to
+// `buildtools/`. The dead/unused-* warnings below are *expected* (lots of
+// retired code paths still compiled because the LSP lives in this crate).
+// Suppressing them at crate root keeps the warning budget at zero so the
+// workspace can flip on `deny(warnings)` for the live crates without core
+// dragging it down.
+// ---------------------------------------------------------------------------
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_assignments)]
+#![allow(unused_mut)]
+#![allow(unused_macros)]
+#![allow(unreachable_patterns)]
+
 pub mod lexer;
 pub mod ast;
 pub mod parser;

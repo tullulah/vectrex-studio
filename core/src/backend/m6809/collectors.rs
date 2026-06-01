@@ -1,7 +1,6 @@
 // Collectors - Symbol and variable collection functions for M6809 backend
 use crate::ast::{Expr, Item, Module};
 use super::{collect_expr_syms, collect_stmt_syms, collect_locals};
-use std::collections::BTreeSet;
 
 pub fn collect_all_vars(module: &Module) -> Vec<String> {
     use std::collections::BTreeSet;

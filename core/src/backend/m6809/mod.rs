@@ -20,7 +20,6 @@ pub use builtins::*;
 pub use statements::*;
 pub use expressions::*;
 pub use analysis::*;
-pub use emission::*;
 pub use collectors::*;
 pub use ram_layout::*;
 pub use address_tracker::*;
@@ -29,14 +28,13 @@ pub use address_tracker::*;
 use emission::{emit_function, emit_builtin_helpers};
 
 // Original imports
-use crate::ast::{BinOp, CmpOp, Expr, Function, Item, LogicOp, Module, Stmt};
+use crate::ast::{BinOp, Expr, Function, Item, Module, Stmt};
 use super::string_literals::collect_string_literals;
 use super::debug_info::{DebugInfo, LineTracker, parse_native_call_comments, parse_asm_variables};
 use crate::codegen::CodegenOptions;
 use crate::backend::trig::emit_trig_tables;
 use crate::target::{Target, TargetInfo};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::collections::BTreeMap;
+use std::sync::atomic::AtomicBool;
 
 static LAST_END_SET: AtomicBool = AtomicBool::new(false);
 

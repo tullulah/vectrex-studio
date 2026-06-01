@@ -1,7 +1,7 @@
 // Statements - Statement code generation for M6809 backend
-use crate::ast::{AssignTarget, Expr, Stmt};
+use crate::ast::{Expr, Stmt};
 use crate::codegen::CodegenOptions;
-use super::{LoopCtx, FuncCtx, emit_expr, emit_builtin_call, fresh_label, LineTracker};
+use super::{LoopCtx, FuncCtx, emit_expr, fresh_label, LineTracker};
 
 pub fn emit_stmt(stmt: &Stmt, out: &mut String, loop_ctx: &LoopCtx, fctx: &FuncCtx, string_map: &std::collections::BTreeMap<String,String>, opts: &CodegenOptions, tracker: &mut LineTracker, depth: usize) {
     // Safety: Prevent stack overflow with deep recursion

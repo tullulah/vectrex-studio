@@ -1,7 +1,7 @@
 // Emission - High-level code emission functions for M6809 backend
-use crate::ast::{Function, Stmt, Module, Expr};
+use crate::ast::{Function, Stmt, Module};
 use crate::codegen::CodegenOptions;
-use super::{LoopCtx, FuncCtx, emit_stmt, collect_locals, collect_locals_with_params, RuntimeUsage, LineTracker, DebugInfo};
+use super::{LoopCtx, FuncCtx, emit_stmt, collect_locals_with_params, RuntimeUsage, LineTracker, DebugInfo};
 use super::analyze_var_types; // Import the new function
 use std::sync::atomic::{AtomicBool, Ordering};
 

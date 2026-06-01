@@ -99,7 +99,6 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "DRAW_BEZIER_QUAD" => Some(AritySpec::Exact(8)),
         "DRAW_RECT" => Some(AritySpec::Exact(5)),
         "DRAW_FILLED_RECT" => Some(AritySpec::Exact(5)),
-        "DRAW_CIRCLE_SEG" => Some(AritySpec::Exact(5)),
         "DRAW_ARC" => Some(AritySpec::Exact(5)),
         "DRAW_ELLIPSE" => Some(AritySpec::Exact(5)),
         "PLAY_MUSIC" => Some(AritySpec::Exact(1)),             // music asset (background, loops)
@@ -988,7 +987,7 @@ impl Backend {
 // Variable Usage Analysis Implementation
 // ============================================================================
 
-use crate::ast::{Module, Item, Function, Stmt, Expr, AssignTarget, IdentInfo, CallInfo};
+use crate::ast::{Module, Item, Stmt, Expr, AssignTarget, IdentInfo, CallInfo};
 
 /// Analyze variable usage patterns in a module
 fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
@@ -998,7 +997,7 @@ fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
     for item in &module.items {
         match item {
             Item::GlobalLet { name, value, source_line, .. } => {
-                let mut usage = VariableUsage {
+                let usage = VariableUsage {
                     declared: true,
                     initialized: value != &Expr::Number(0), // Simplified check
                     write_count: 1,
@@ -1123,7 +1122,7 @@ fn analyze_statements(stmts: &[Stmt], analysis: &mut UsageAnalysis) {
                 analyze_expr(cond, analysis);
                 analyze_statements(body, analysis);
             },
-            Stmt::For { var, start, end, step, body, .. } => {
+            Stmt::For {  start, end, step, body, .. } => {
                 // Loop variable (treat as local declaration + writes)
                 analyze_expr(start, analysis);
                 analyze_expr(end, analysis);
