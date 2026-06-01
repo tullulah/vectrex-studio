@@ -8,7 +8,19 @@
 //! The only helper we need is bus_write / bus_read — GPIO bit-bang to
 //! drive the Vectrex bus. These are called by every builtin.
 
+/// Full bundle: debug-cart bus helpers + pinout-agnostic runtime helpers.
+/// Called by the standalone `arm` target (which expects the debug-cart pinout).
+/// UVM2 supplies its own bus_write/bus_read shims (see uvm2/mod.rs) and only
+/// needs `emit_runtime_helpers()`.
 pub fn emit_helpers() -> String {
+    let mut s = emit_bus_helpers();
+    s.push_str(&emit_runtime_helpers());
+    s
+}
+
+/// Debug-cart pinout: bus_write + bus_read (RP2350 SIO GPIO bit-bang).
+/// UVM2 does NOT use this — it has its own CLK-synced GPIO protocol.
+pub fn emit_bus_helpers() -> String {
     let mut s = String::new();
 
     s.push_str("@ ============================================================\n");
@@ -113,6 +125,15 @@ pub fn emit_helpers() -> String {
 
     s.push_str("    pop     {r4, pc}\n");
     s.push_str("    .ltorg\n\n");
+
+    s
+}
+
+/// Pinout-agnostic runtime: enemy pool/state, anim/draw helpers, math, etc.
+/// Used by both the debug-cart `arm` target and `uvm2` (which supplies its
+/// own bus shims). Anything here only touches RAM/ROM symbols, never GPIO.
+pub fn emit_runtime_helpers() -> String {
+    let mut s = String::new();
 
     // ================================================================
     // Enemy system runtime for rp2350

@@ -87,9 +87,11 @@ pub fn generate_uvm2_asm(
 
     asm.push_str(&header::emit_image_def());
     asm.push_str(&bus::emit_uvm2_bus_helpers());
-    // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO).
-    // We do NOT emit helpers::emit_helpers() here — that uses the debug-cart pinout.
+    // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO),
+    // so we skip helpers::emit_bus_helpers() — that uses the debug-cart pinout.
+    // The pinout-agnostic runtime (enemy pool, anim, math) is still needed.
     asm.push_str(&emit_uvm2_bus_shims());
+    asm.push_str(&crate::arm::helpers::emit_runtime_helpers());
     asm.push_str(&drawing::emit_drawing());
 
     let msg_entries = builtins::collect_msg_entries(module);
