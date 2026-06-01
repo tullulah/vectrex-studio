@@ -91,8 +91,17 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "DEBUG_PRINT_LABELED" => Some(AritySpec::Exact(2)),     // label, value - debug output with label
         
         // Asset system functions
-        "DRAW_VECTOR" => Some(AritySpec::Exact(3)),            // asset_name, x, y
-        "DRAW_VECTOR_EX" => Some(AritySpec::Exact(5)),         // asset_name, x, y, mirror, intensity
+        "DRAW_VECTOR" => Some(AritySpec::Variable(3)),         // name, x, y [, mirror]
+        "DRAW_VECTOR_EX" => Some(AritySpec::Variable(4)),      // name, x, y, mirror [, intensity]
+        "DRAW_VECTOR_3D" => Some(AritySpec::Exact(6)),         // name, ax, ay, az, x, y
+        "DRAW_ANIM" => Some(AritySpec::Variable(1)),           // name [, x, y [, mirror [, scale [, speed]]]]
+        "DRAW_BEZIER" => Some(AritySpec::Exact(10)),
+        "DRAW_BEZIER_QUAD" => Some(AritySpec::Exact(8)),
+        "DRAW_RECT" => Some(AritySpec::Exact(5)),
+        "DRAW_FILLED_RECT" => Some(AritySpec::Exact(5)),
+        "DRAW_CIRCLE_SEG" => Some(AritySpec::Exact(5)),
+        "DRAW_ARC" => Some(AritySpec::Exact(5)),
+        "DRAW_ELLIPSE" => Some(AritySpec::Exact(5)),
         "PLAY_MUSIC" => Some(AritySpec::Exact(1)),             // music asset (background, loops)
         "PLAY_SFX" => Some(AritySpec::Exact(1)),               // sound effect (one-shot)
         "STOP_MUSIC" => Some(AritySpec::Exact(0)),             // stop background music
@@ -146,6 +155,45 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
 
         // Camera / scroll
         "SET_CAMERA_X" => Some(AritySpec::Exact(1)),          // offset (16-bit horizontal scroll)
+        "SET_CAMERA_Y" => Some(AritySpec::Exact(1)),          // offset (16-bit vertical scroll)
+        "GET_SCROLL_LIMIT_LEFT" | "GET_SCROLL_LIMIT_RIGHT"
+        | "GET_SCROLL_LIMIT_TOP" | "GET_SCROLL_LIMIT_BOTTOM"
+        | "GET_LEVEL_FLOOR_Y" | "GET_FRAME_US" => Some(AritySpec::Exact(0)),
+
+        // Level collision
+        "LEVEL_COLLISION_Y" => Some(AritySpec::Exact(3)),     // x, y, half_height
+        "LEVEL_COLLISION_X" => Some(AritySpec::Exact(4)),     // x, y, half_width, half_height
+
+        // Joystick 1 (digital/analog explicit)
+        "J1_X" | "J1_Y" | "J1_X_DIGITAL" | "J1_Y_DIGITAL"
+        | "J1_X_ANALOG" | "J1_Y_ANALOG"
+        | "J1_BUTTON_1" | "J1_BUTTON_2" | "J1_BUTTON_3" | "J1_BUTTON_4" => Some(AritySpec::Exact(0)),
+        // Joystick 2
+        "J2_X" | "J2_Y" | "J2_X_DIGITAL" | "J2_Y_DIGITAL"
+        | "J2_X_ANALOG" | "J2_Y_ANALOG"
+        | "J2_BUTTON_1" | "J2_BUTTON_2" | "J2_BUTTON_3" | "J2_BUTTON_4" => Some(AritySpec::Exact(0)),
+
+        // Debug
+        "DEBUG_PRINT_STR" => Some(AritySpec::Exact(1)),
+
+        // Misc
+        "RESET0REF" => Some(AritySpec::Exact(0)),
+        "LEN" | "ASM" => Some(AritySpec::Variable(1)),
+
+        // Enemy system (pool management)
+        "SPAWN_ENEMIES"  => Some(AritySpec::Exact(1)),
+        "UPDATE_ENEMIES" => Some(AritySpec::Exact(0)),
+        "DRAW_ENEMIES"   => Some(AritySpec::Exact(0)),
+        "KILL_ENEMY"     => Some(AritySpec::Exact(1)),
+        "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y"
+        | "GET_ENEMY_HP" | "GET_ENEMY_STATE"
+        | "GET_ENEMY_AREA_IDX" => Some(AritySpec::Exact(1)),
+        "SET_ENEMY_X" | "SET_ENEMY_Y" | "SET_ENEMY_STATE"
+        | "SET_ENEMY_DIR" => Some(AritySpec::Exact(2)),
+        "ENEMY_FIRE_EVENT" => Some(AritySpec::Exact(2)),
+
+        // Pitched instrument
+        "PLAY_NOTE" => Some(AritySpec::Exact(3)),
 
         _ => None,
     }
@@ -684,7 +732,7 @@ fn validate_function_arity(original_line: &str, line_num: u32, locale: &str, dia
     }
 }
 
-fn compute_diagnostics(uri: &Url, text: &str, locale: &str) -> Vec<Diagnostic> {
+pub fn compute_diagnostics(uri: &Url, text: &str, locale: &str) -> Vec<Diagnostic> {
     eprintln!("[LSP] compute_diagnostics called for URI: {}", uri);
     eprintln!("[LSP] Text length: {} lines", text.lines().count());
     let mut diags = Vec::new();
@@ -694,7 +742,23 @@ fn compute_diagnostics(uri: &Url, text: &str, locale: &str) -> Vec<Diagnostic> {
             // Collect user-defined function names
             let mut defined_functions = std::collections::HashSet::new();
             let mut parsed_module: Option<Module> = None;
-            
+
+            // Always collect `def name(` matches from raw text first. The core
+            // parser doesn't support all newer VPy syntax (e.g. `for ... in
+            // range(...)`); if it fails, defined_functions would otherwise be
+            // empty and every user-defined call would be flagged as unknown.
+            for line in text.lines() {
+                let t = line.trim_start();
+                if let Some(rest) = t.strip_prefix("def ") {
+                    if let Some(paren) = rest.find('(') {
+                        let name = rest[..paren].trim();
+                        if !name.is_empty() {
+                            defined_functions.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+
             if let Ok(module) = parse_with_filename(&tokens, uri.path()) {
                 for item in &module.items {
                     if let crate::ast::Item::Function(func) = item {
@@ -1166,7 +1230,8 @@ fn generate_usage_diagnostics(analysis: &UsageAnalysis, locale: &str, diags: &mu
         }
         
         // Case 1: Variable declared but never read
-        if usage.declared && usage.read_count == 0 && !usage.is_const {
+        // Skip names starting with '_' (Python convention for intentionally unused)
+        if usage.declared && usage.read_count == 0 && !usage.is_const && !name.starts_with('_') {
             if let Some(range) = &usage.declaration_range {
                 let msg = if locale.starts_with("es") {
                     format!("Variable '{}' se declara pero nunca se usa", name)
