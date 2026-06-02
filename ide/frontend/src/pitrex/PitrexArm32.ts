@@ -338,13 +338,23 @@ function parseMemOp(
   return { addr: 0, postIncReg: -1, postIncVal: 0 };
 }
 
-/** Parse a register list "{r4, r5, r6, lr, pc}" → sorted list of register indices. */
+/** Parse a register list "{r4, r5, r6, lr, pc}" or with ranges "{r4-r11, lr}"
+ *  → sorted list of register indices. */
 function parseRegList(tok: string): number[] {
-  // Remove braces
   const inner = tok.replace(/[{}]/g, '').trim();
   const parts = inner.split(',').map(p => p.trim()).filter(Boolean);
   const list: number[] = [];
   for (const p of parts) {
+    // Range form: "r4-r11" — expand to r4, r5, ..., r11
+    const rangeMatch = p.match(/^([rR]\d+|sp|lr|pc|ip)\s*-\s*([rR]\d+|sp|lr|pc|ip)$/);
+    if (rangeMatch) {
+      const lo = regIdx(rangeMatch[1]);
+      const hi = regIdx(rangeMatch[2]);
+      if (lo >= 0 && hi >= 0 && lo <= hi) {
+        for (let r = lo; r <= hi; r++) list.push(r);
+        continue;
+      }
+    }
     const r = regIdx(p);
     if (r >= 0) list.push(r);
   }

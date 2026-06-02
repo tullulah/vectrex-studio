@@ -340,6 +340,23 @@ export function parseAsm(src: string): ParsedAsm {
         continue;
       }
 
+      // .byte N [, N, ...] — store one or more bytes
+      // Needed for tables emitted in rodata (e.g. _PITREX_SIN_TABLE, the 3D
+      // vertex table). Without this they end up as zeros and any sin/cos or
+      // rotation lookup silently returns 0.
+      if (line.startsWith('.byte')) {
+        const rest = line.replace(/^\.byte\s*/, '');
+        const vals = rest.split(',').map(s => s.trim()).filter(Boolean);
+        for (const vs of vals) {
+          const v = parseNumber(vs);
+          if (v !== null) {
+            writeMemByte(rodataNext, v & 0xFF);
+            rodataNext++;
+          }
+        }
+        continue;
+      }
+
       // .asciz "..." — null-terminated string bytes stored in initMemory
       const ascizMatch = line.match(/^\.asciz\s+"((?:[^"\\]|\\.)*)"/);
       if (ascizMatch) {
@@ -362,6 +379,13 @@ export function parseAsm(src: string): ParsedAsm {
         const n = parseInt(line.split(/\s+/)[1] ?? '2', 10);
         const align = 1 << n;
         rodataNext = (rodataNext + align - 1) & ~(align - 1);
+      }
+      // .balign N — align to N-byte boundary (N is the literal byte count, not log2)
+      if (line.startsWith('.balign')) {
+        const align = parseInt(line.split(/\s+/)[1] ?? '4', 10);
+        if (align > 0) {
+          rodataNext = (rodataNext + align - 1) & ~(align - 1);
+        }
       }
       continue;
     }
@@ -461,6 +485,16 @@ export function parseAsm(src: string): ParsedAsm {
             writeMemByte(textDataNext, (num ?? 0) & 0xFF);
             textDataNext += 1;
           }
+        }
+        continue;
+      }
+
+      // .balign N inside text-data — keep textDataNext aligned to N bytes so
+      // subsequent .word loads from the runtime hit the right offsets.
+      if (line.startsWith('.balign')) {
+        const align = parseInt(line.split(/\s+/)[1] ?? '4', 10);
+        if (align > 0) {
+          textDataNext = (textDataNext + align - 1) & ~(align - 1);
         }
         continue;
       }
