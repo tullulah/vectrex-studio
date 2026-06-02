@@ -824,9 +824,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     }
     if (initialResource) {
       const normalized = normalizeResource(initialResource);
-      const pointsCount = normalized.layers[0].paths.reduce((sum, p) => sum + p.points.length, 0);
-      console.log('[VectorEditor] LOAD: Initializing from resource with', pointsCount, 'points');
-      console.log('[VectorEditor] LOAD: Setting history to:', [normalized]);
       setResource(normalized);
       // Initialize history with the loaded resource - THIS MUST PERSIST
       setHistory([normalized]);
@@ -848,10 +845,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const newPointsCount = withCenter.layers[0].paths.reduce((sum, p) => sum + p.points.length, 0);
     
     // IMPORTANT: Save the PREVIOUS resource to history, not the new state
+    const MAX_HISTORY = 100;
     setHistory(prev => {
-      // Properly handle redo history: if we're not at the end of history, truncate
       const truncatedHistory = prev.slice(0, historyIndex + 1);
-      // Save the PREVIOUS resource with its center
       const { centerX, centerY } = calculateCenter(previousResource);
       const previousWithCenter = {
         ...previousResource,
@@ -859,10 +855,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         center_y: Math.round(centerY),
       };
       const newHistory = [...truncatedHistory, previousWithCenter];
-      console.log('[VectorEditor] UPDATE_RESOURCE: Saving', previousPointsCount, 'points', 
-                  '| New state has', newPointsCount, 'points',
-                  '| History:', prev.length, '→', newHistory.length);
-      return newHistory;
+      // Cap history to avoid unbounded memory growth
+      return newHistory.length > MAX_HISTORY ? newHistory.slice(newHistory.length - MAX_HISTORY) : newHistory;
     });
     
     setHistoryIndex(prev => prev + 1);
@@ -877,18 +871,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
       const previousState = history[newIndex];
-      const pointsBefore = resource.layers[0].paths.reduce((sum, p) => sum + p.points.length, 0);
-      const pointsInHistory = previousState.layers[0].paths.reduce((sum, p) => sum + p.points.length, 0);
-      
-      // Log entire history state
-      const historyPointsPerIndex = history.map((h, idx) => {
-        const pts = h.layers[0].paths.reduce((sum, p) => sum + p.points.length, 0);
-        return `[${idx}]:${pts}`;
-      }).join(' ');
-      
-      console.log('[VectorEditor] UNDO: From index', historyIndex, 'to', newIndex);
-      console.log('[VectorEditor] UNDO: Current points:', pointsBefore, '→ Will restore:', pointsInHistory);
-      console.log('[VectorEditor] UNDO: Full history:', historyPointsPerIndex);
       setHistoryIndex(newIndex);
       setResource(previousState);
       // Don't call onChange - undo is local only, no need to notify parent
