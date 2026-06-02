@@ -185,10 +185,9 @@ fn main() -> ! {
     // 6. Bus master status
     //
     if bus::BUS_MASTER_AVAILABLE {
-        usb_print(&mut serial, b"Bus master: available (PCB v2)\r\n");
+        usb_print(&mut serial, b"Bus master: available (CART_RW via U8/R13)\r\n");
     } else {
-        usb_print(&mut serial, b"Bus master: NOT available (PCB v1 - DIR pins fixed)\r\n");
-        usb_print(&mut serial, b"ROM emulation mode only.\r\n");
+        usb_print(&mut serial, b"Bus master: NOT available\r\n");
     }
 
     usb_print(&mut serial, b"\r\nReady. Commands: [r]om-mode  [H]alt  [U]nhalt  [F]lash  [?]help\r\n> ");

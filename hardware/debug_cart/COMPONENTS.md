@@ -312,6 +312,31 @@ R5 (10kΩ): +5V → nHALT (pullup).
 
 ---
 
+## U8 — 74LVC1G07 (CART_RW open-drain driver)
+
+Buffer single-gate non-inverting open-drain. Permite que el RP2350 conduzca
+CART_RW en modo bus master sin un GPIO dedicado (señal derivada de GP29).
+
+| Field | Value |
+|---|---|
+| Symbol | `74xx:74LVC1G07` |
+| Footprint | `Package_TO_SOT_SMD:SOT-353_SC-70-5` |
+| Value | `74LVC1G07` |
+
+| Pad | Pin | Net |
+|---|---|---|
+| 1 | A (input) | GP29 (DIR_CTRL) |
+| 2 | GND | GND |
+| 3 | Y (output, open-drain) | CART_RW |
+| 4 | VCC | +3V3 |
+
+R13 (10 kΩ) pullup de CART_RW a +5V. Cuando GP29=LOW (lectura), salida high-Z
+→ pullup pone CART_RW=HIGH. Cuando GP29=HIGH (escritura), salida pull-down →
+CART_RW=LOW. Con el 6809 corriendo (sin HALT), GP29 se mantiene LOW → salida
+high-Z → el 6809 conduce CART_RW normalmente sin conflicto.
+
+---
+
 ## Q3 — BSS138 (RST open-drain)
 
 | Pad | Pin | Net |
@@ -444,11 +469,12 @@ Para entrar en modo bootloader USB (unbrick):
 | R10 | 18kΩ | GP25 | GND | Divisor /OE (bottom) |
 | R11 | 5.1kΩ | GND | CC1 | USB-C CC pull-down |
 | R12 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
+| R13 | 10kΩ | +5V | CART_RW | Pullup CART_RW (open-drain via U8) |
 
 > R7/R8 eliminados (eran el divisor para sensar CART_RW). GP24 ahora drives
-> ABUS_DIR (U2/U3 pin 1). Bus master writes requieren PCB v2 con un inverter
-> 74LVC1G04 entre GP29 (DIR_CTRL) y CART_RW — sin ese inverter, v1 solo soporta
-> reads en modo bus master.
+> ABUS_DIR (U2/U3 pin 1). CART_RW se conduce vía U8 (74LVC1G07 open-drain)
+> con pullup R13 — GP29 LOW = CART_RW HIGH (read), GP29 HIGH = CART_RW LOW
+> (write). Esto da capacidad completa de bus master en v1.
 
 Todas en footprint `Resistor_SMD:R_0402_1005Metric`.
 
@@ -505,6 +531,7 @@ U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 | 74LVC245A TSSOP-20 | 3 | ~0.90€ |
 | AMS1117-3.3 SOT-223 | 1 | ~0.15€ |
 | BSS138 SOT-23 | 3 | ~0.15€ |
+| 74LVC1G07 SOT-353 | 1 | ~0.15€ |
 | Crystal 12MHz 3225 | 1 | ~0.30€ |
 | USB-C receptáculo | 1 | ~0.40€ |
 | Resistencias 0402 | 9 | ~0.10€ |

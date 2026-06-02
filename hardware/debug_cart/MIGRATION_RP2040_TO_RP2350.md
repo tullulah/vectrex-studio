@@ -117,6 +117,35 @@ allocates this; verify with `grep PSRAM_CS debug_cart.kicad_sch`).
 
 ---
 
+## 5.5. Add U8 + R13 for bus master R/W drive (required for native RP2350 games)
+
+The board needs to drive CART_RW so the RP2350 can write to the VIA 6522 in
+bus master mode. A single open-drain buffer + pullup turns GP29 (data
+DIR_CTRL) into a dual-purpose signal that drives both U4 direction and
+CART_RW polarity.
+
+1. Place a new symbol:
+   - Symbol: `74xx:74LVC1G07`
+   - Footprint: `Package_TO_SOT_SMD:SOT-353_SC-70-5`
+   - Reference: **U8**
+   - Connect: pin 1 (A) → `DIR_CTRL` (same net as GP29 + U4 pin 1);
+              pin 2 (GND) → `GND`;
+              pin 3 (Y) → `CART_RW`;
+              pin 4 (VCC) → `+3V3`.
+2. Place a new resistor:
+   - Symbol: `Device:R`, footprint `Resistor_SMD:R_0402_1005Metric`
+   - Reference: **R13**, value **10k**
+   - Connect: pin 1 → `+5V`, pin 2 → `CART_RW`.
+
+This makes `CART_RW` an open-drain net pulled high by R13 and pulled low by
+U8 when GP29 goes high. Outside bus master mode (6809 running, GP29 LOW), U8
+is high-Z and the 6809 drives CART_RW normally — no contention.
+
+After placing, **re-annotate** so U8 and R13 get unique references and **sync
+PCB from schematic** again.
+
+---
+
 ## 6. PCB layout adjustments
 
 - The QFN-60 footprint (7×7 mm with 3.4×3.4 mm EP) is slightly larger than
@@ -162,8 +191,7 @@ Ready. Commands: [r]om-mode  [H]alt  [U]nhalt  [F]lash  [?]help
 >
 ```
 
-The `Bus master: NOT available` line will stay even on v1 because v1 has no
-R/W drive to the Vectrex (we removed R7/R8). Bus master writes need a v2 with
-an inverter on `CART_RW` driven from `GP29`/`DIR_CTRL` — see §6 of
-`FIRMWARE_PLAN.md`. Bus master *reads* would work on v1 but the firmware
-guard is conservative until v2.
+Once U8 + R13 are populated, the firmware already has
+`bus::BUS_MASTER_AVAILABLE = true` so the banner shows "Bus master: available
+(CART_RW via U8/R13)". You can then proceed to Phase 3+ work: drive the VIA
+directly from the RP2350 and render vectors / sound from native code.
