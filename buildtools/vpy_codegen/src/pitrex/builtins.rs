@@ -2427,130 +2427,227 @@ fn emit_pitrex_misc_stubs() -> String {
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n");
     s.push_str("    .ltorg\n\n");
 
-    // pitrex_draw_vector_3d: Y-axis rotation using static BSS buffer _DV3D_BUF
-    // Args: r0=asset_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp]=oy, [sp+4]=ox
-    // After push {r4-r11, lr} (36 bytes): [sp+36]=oy, [sp+40]=ox
-    // Register allocation (callee-saved r4-r11):
-    //   r4=asset_ptr  r5=loop_idx  r6=buf_ptr  r7=cos_y
-    //   r8=sin_y  r9=vtx_count  r10=ox  r11=oy
-    s.push_str("@ pitrex_draw_vector_3d(r0=asset,r1=rot_x,r2=rot_y,r3=rot_z,[sp]=oy,[sp+4]=ox)\n");
+    // pitrex_draw_vector_3d: full X+Y+Z rotation, _3D_DATA format
+    // Args: r0=asset_3D_DATA, r1=ax, r2=ay, r3=az, [sp]=ox, [sp+4]=oy
+    // After push {r4-r11, lr} (36 bytes): [sp+36]=ox, [sp+40]=oy
+    //
+    // _3D_DATA layout (pitrex/assets.rs):
+    //   .word  vertex_count
+    //   .byte  vx, vy, vz × N            (clamped ±63)
+    //   .word  path_count
+    //   .byte  pt_count, closed, idx0, idx1, ...
+    //
+    // Rotation order: X then Y then Z. Sin/cos cached in _DV3D_TRIG (8 bytes):
+    //   [0]=sin_x [1]=cos_x [2]=sin_y [3]=cos_y [4]=sin_z [5]=cos_z
+    // Rotated screen coords (sx, sy) stored in _DV3D_BUF as i8 pairs.
+    s.push_str("@ pitrex_draw_vector_3d(r0=asset_3D_DATA,r1=ax,r2=ay,r3=az,[sp]=ox,[sp+4]=oy)\n");
     s.push_str(".global pitrex_draw_vector_3d\n.type pitrex_draw_vector_3d, %function\npitrex_draw_vector_3d:\n");
-    s.push_str("    push    {r4-r11, lr}\n");          // 36 bytes; caller args now at [sp+36]=oy [sp+40]=ox
-    s.push_str("    mov     r4, r0\n");                // r4 = asset_ptr
-    s.push_str("    ldr     r10, [sp, #40]\n");        // r10 = ox
-    s.push_str("    ldr     r11, [sp, #36]\n");        // r11 = oy
-    s.push_str("    ldrb    r9, [r4]\n");              // r9 = vertex_count
+    s.push_str("    push    {r4-r11, lr}\n");
+    s.push_str("    mov     r4, r0\n");                // r4 = _3D_DATA ptr
+    // Read ox/oy as 32-bit words (callers push them as i32, not i16). Using
+    // ldrsh would truncate large negative values; ldr matches the i32 push.
+    s.push_str("    ldr     r10, [sp, #36]\n");        // r10 = ox (i32)
+    s.push_str("    ldr     r11, [sp, #40]\n");        // r11 = oy (i32)
+    s.push_str("    ldr     r9, [r4]\n");              // r9 = vertex_count (.word)
+    s.push_str("    add     r4, r4, #4\n");
     s.push_str("    cmp     r9, #0\n");
-    s.push_str("    beq     .Ldv3d_draw_orig\n");      // no vertices → draw original
+    s.push_str("    beq     .Ldv3d_done\n");
 
-    // Compute sin_y → r8, cos_y → r7 (pitrex_get_sin/cos only clobber r0,r1)
-    s.push_str("    mov     r0, r2\n");
-    s.push_str("    bl      pitrex_get_sin\n");
-    s.push_str("    mov     r8, r0\n");                // r8 = sin_y
-    s.push_str("    mov     r0, r2\n");
-    s.push_str("    bl      pitrex_get_cos\n");
-    s.push_str("    mov     r7, r0\n");                // r7 = cos_y
+    // Precompute sin/cos for X, Y, Z axes → _DV3D_TRIG[0..5].
+    // pitrex_get_sin/cos preserve r2-r11 (only touch r0, r1). We use r5 as a
+    // permanent pointer to the trig cache so we don't need to reload it.
+    s.push_str("    ldr     r5, =_DV3D_TRIG\n");
+    s.push_str("    push    {r1, r2, r3}\n");          // save ax, ay, az
+    // sin/cos x
+    s.push_str("    mov     r0, r1\n    bl pitrex_get_sin\n    strb r0, [r5, #0]\n");
+    s.push_str("    ldr     r0, [sp, #0]\n    bl pitrex_get_cos\n    strb r0, [r5, #1]\n");
+    // sin/cos y
+    s.push_str("    ldr     r0, [sp, #4]\n    bl pitrex_get_sin\n    strb r0, [r5, #2]\n");
+    s.push_str("    ldr     r0, [sp, #4]\n    bl pitrex_get_cos\n    strb r0, [r5, #3]\n");
+    // sin/cos z
+    s.push_str("    ldr     r0, [sp, #8]\n    bl pitrex_get_sin\n    strb r0, [r5, #4]\n");
+    s.push_str("    ldr     r0, [sp, #8]\n    bl pitrex_get_cos\n    strb r0, [r5, #5]\n");
+    s.push_str("    add     sp, sp, #12\n");           // discard saved ax/ay/az
 
-    // Point r6 at static BSS buffer; write vertex count
-    s.push_str("    ldr     r6, =_DV3D_BUF\n");
-    s.push_str("    strb    r9, [r6]\n");              // buf[0] = vertex_count
+    s.push_str("    ldr     r6, =_DV3D_BUF\n");        // r6 = vbuf base
+    s.push_str("    mov     r8, #0\n");                // r8 = loop idx
 
-    // Vertex rotation loop: r5 = index 0..vtx_count
-    s.push_str("    mov     r5, #0\n");
+    // Vertex loop. Per iteration, transform (x,y,z) through X→Y→Z rotation
+    // and store rotated (sx, sy) into vbuf[r8*2].
+    //
+    // For each axis with sin S, cos C:
+    //   X-axis: y1 = y*C - z*S;  z1 = y*S + z*C
+    //   Y-axis: x2 = x*C + z1*S; z2 = -x*S + z1*C  (we drop z2 — not used)
+    //   Z-axis: sx = x2*C - y1*S; sy = x2*S + y1*C
+    //
+    // Each intermediate fits in i16 (val ≤63 × sin ≤127 / 128 ≤ 63), so we
+    // use simple `mul; asr #7` per multiplication.
     s.push_str(".Lv3d_loop:\n");
-    s.push_str("    cmp     r5, r9\n");
-    s.push_str("    beq     .Lv3d_loop_done\n");
+    s.push_str("    cmp     r8, r9\n");
+    s.push_str("    beq     .Lv3d_done_rotate\n");
 
-    // r0 = &asset.verts[r5]  (asset + 1 + r5*3)
-    s.push_str("    mov     r0, r5\n");
-    s.push_str("    add     r0, r0, r0, lsl #1\n");   // r0 = r5*3
-    s.push_str("    add     r0, r0, #1\n");            // +1 skip count byte
-    s.push_str("    add     r0, r0, r4\n");
-    // Read x→r1, y→r2, z→r3
-    s.push_str("    ldrsb   r1, [r0]\n");
-    s.push_str("    ldrsb   r2, [r0, #1]\n");
-    s.push_str("    ldrsb   r3, [r0, #2]\n");
+    s.push_str("    ldrsb   r0, [r4]\n");              // r0 = x
+    s.push_str("    ldrsb   r1, [r4, #1]\n");          // r1 = y
+    s.push_str("    ldrsb   r2, [r4, #2]\n");          // r2 = z
+    s.push_str("    add     r4, r4, #3\n");
 
-    // x' = (x*cos_y - z*sin_y) >> 7   [r12 = x']
-    s.push_str("    mul     r12, r1, r7\n");           // r12 = x*cos_y  (r12≠r1, r12≠r7)
-    s.push_str("    asr     r12, r12, #7\n");
-    s.push_str("    mul     r0, r3, r8\n");            // r0  = z*sin_y  (r0≠r3, r0≠r8)
-    s.push_str("    asr     r0, r0, #7\n");
-    s.push_str("    sub     r12, r12, r0\n");          // r12 = x'
+    // --- X-axis rotation: y1 = y*cos_x - z*sin_x ;  z1 = y*sin_x + z*cos_x
+    s.push_str("    ldrsb   r3, [r5, #1]\n");          // cos_x
+    s.push_str("    mul     r7, r1, r3\n    asr r7, r7, #7\n"); // y*cos_x
+    s.push_str("    ldrsb   r3, [r5, #0]\n");          // sin_x
+    s.push_str("    mul     r12, r2, r3\n    asr r12, r12, #7\n"); // z*sin_x
+    s.push_str("    sub     r7, r7, r12\n");           // r7 = y1
+    s.push_str("    ldrsb   r3, [r5, #0]\n");          // sin_x
+    s.push_str("    mul     r12, r1, r3\n    asr r12, r12, #7\n"); // y*sin_x
+    s.push_str("    ldrsb   r3, [r5, #1]\n");          // cos_x
+    s.push_str("    mul     r1, r2, r3\n    asr r1, r1, #7\n");    // z*cos_x  (reuse r1)
+    s.push_str("    add     r1, r1, r12\n");           // r1 = z1  (now x, y1, z1 live in r0, r7, r1)
 
-    // z' = (x*sin_y + z*cos_y) >> 7   [r3 = z'; r1=x and r3=z still intact here]
-    s.push_str("    mul     r0, r1, r8\n");            // r0 = x*sin_y   (r0≠r1, r0≠r8)
-    s.push_str("    asr     r0, r0, #7\n");            // r0 = x_sin
-    s.push_str("    mul     r1, r3, r7\n");            // r1 = z*cos_y   (r1≠r3, r1≠r7)
-    s.push_str("    asr     r1, r1, #7\n");            // r1 = z_cos
-    s.push_str("    add     r3, r0, r1\n");            // r3 = z'  [r2=y untouched]
+    // --- Y-axis rotation: x2 = x*cos_y + z1*sin_y
+    s.push_str("    ldrsb   r3, [r5, #3]\n");          // cos_y
+    s.push_str("    mul     r12, r0, r3\n    asr r12, r12, #7\n"); // x*cos_y
+    s.push_str("    ldrsb   r3, [r5, #2]\n");          // sin_y
+    s.push_str("    mul     r0, r1, r3\n    asr r0, r0, #7\n");    // z1*sin_y
+    s.push_str("    add     r0, r0, r12\n");           // r0 = x2  (x2, y1 live in r0, r7)
 
-    // Clamp x' (r12) to [-127, 127]
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    cmp     r12, r0\n");
-    s.push_str("    movgt   r12, r0\n");
-    s.push_str("    mvn     r0, #127\n");              // r0 = -128
-    s.push_str("    cmp     r12, r0\n");
-    s.push_str("    movlt   r12, r0\n");
-    // Clamp z' (r3) to [-127, 127]
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    cmp     r3, r0\n");
-    s.push_str("    movgt   r3, r0\n");
-    s.push_str("    mvn     r0, #127\n");
-    s.push_str("    cmp     r3, r0\n");
-    s.push_str("    movlt   r3, r0\n");
+    // --- Z-axis rotation: sx = x2*cos_z - y1*sin_z ;  sy = x2*sin_z + y1*cos_z
+    s.push_str("    ldrsb   r3, [r5, #5]\n");          // cos_z
+    s.push_str("    mul     r12, r0, r3\n    asr r12, r12, #7\n"); // x2*cos_z
+    s.push_str("    ldrsb   r3, [r5, #4]\n");          // sin_z
+    s.push_str("    mul     r2, r7, r3\n    asr r2, r2, #7\n");    // y1*sin_z
+    s.push_str("    sub     r12, r12, r2\n");          // r12 = sx
 
-    // r0 = &buf.verts[r5]  (buf + 1 + r5*3)
-    s.push_str("    mov     r0, r5\n");
-    s.push_str("    add     r0, r0, r0, lsl #1\n");
-    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    ldrsb   r3, [r5, #4]\n");          // sin_z
+    s.push_str("    mul     r1, r0, r3\n    asr r1, r1, #7\n");    // x2*sin_z
+    s.push_str("    ldrsb   r3, [r5, #5]\n");          // cos_z
+    s.push_str("    mul     r2, r7, r3\n    asr r2, r2, #7\n");    // y1*cos_z
+    s.push_str("    add     r2, r2, r1\n");            // r2 = sy
+
+    // Clamp sx (r12) and sy (r2) to ±127. IT-prefixed conditional MOVs
+    // (Thumb-2 requires them).
+    s.push_str("    mov     r0, #127\n    cmp r12, r0\n    it gt\n    movgt r12, r0\n");
+    s.push_str("    mvn     r0, #127\n    cmp r12, r0\n    it lt\n    movlt r12, r0\n");
+    s.push_str("    mov     r0, #127\n    cmp r2, r0\n    it gt\n    movgt r2, r0\n");
+    s.push_str("    mvn     r0, #127\n    cmp r2, r0\n    it lt\n    movlt r2, r0\n");
+
+    // vbuf[r8*2 + 0] = sx, vbuf[r8*2 + 1] = sy
+    s.push_str("    lsl     r0, r8, #1\n");
     s.push_str("    add     r0, r0, r6\n");
-    s.push_str("    strb    r12, [r0]\n");             // x'
-    s.push_str("    strb    r2, [r0, #1]\n");          // y (unchanged, r2 never clobbered)
-    s.push_str("    strb    r3, [r0, #2]\n");          // z'
+    s.push_str("    strb    r12, [r0]\n");
+    s.push_str("    strb    r2, [r0, #1]\n");
 
-    s.push_str("    add     r5, r5, #1\n");
+    s.push_str("    add     r8, r8, #1\n");
     s.push_str("    b       .Lv3d_loop\n");
+    s.push_str(".Lv3d_done_rotate:\n");
 
-    s.push_str(".Lv3d_loop_done:\n");
-    // Copy path section: asset[path_off..] → buf[path_off..]
-    // path_off = 1 + vtx_count*3;  r5 = vtx_count after loop (equals r9)
-    s.push_str("    mov     r5, r9\n");
-    s.push_str("    add     r5, r5, r5, lsl #1\n");   // r5 = count*3
-    s.push_str("    add     r5, r5, #1\n");            // r5 = path section offset
-    s.push_str("    mov     r0, #0\n");                // r0 = byte index within path section
-    s.push_str(".Lpath_copy:\n");
-    s.push_str("    cmp     r0, #200\n");
-    s.push_str("    bge     .Ldv3d_draw\n");
-    s.push_str("    add     r1, r4, r5\n");
-    s.push_str("    ldrb    r2, [r1, r0]\n");          // r2 = asset_path[r0]
-    s.push_str("    add     r1, r6, r5\n");
-    s.push_str("    strb    r2, [r1, r0]\n");          // buf_path[r0] = r2
-    s.push_str("    cmp     r2, #0x02\n");             // end marker?
-    s.push_str("    beq     .Ldv3d_draw\n");
-    s.push_str("    add     r0, r0, #1\n");
-    s.push_str("    b       .Lpath_copy\n");
+    // r4 now points just past the vertex section. Align to 4 bytes to match
+    // the `.balign 4` the asset emitter inserts before .word path_count.
+    s.push_str("    add     r4, r4, #3\n    bic r4, r4, #3\n");
+    s.push_str("    ldr     r9, [r4]\n");              // r9 = path_count
+    s.push_str("    add     r4, r4, #4\n");            // skip path_count word
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     .Ldv3d_done\n");
 
-    s.push_str(".Ldv3d_draw:\n");
-    s.push_str("    mov     r0, r6\n");                // r0 = buf_ptr (rotated asset)
-    s.push_str("    mov     r1, r10\n");               // r1 = ox
-    s.push_str("    mov     r2, r11\n");               // r2 = oy
-    s.push_str("    mov     r3, #0\n");                // r3 = mirror=0
-    s.push_str("    mov     r12, #127\n");
-    s.push_str("    push    {r12}\n");                 // intensity=127
-    s.push_str("    bl      pitrex_draw_vector_ex\n");
-    s.push_str("    add     sp, sp, #4\n");
-    s.push_str("    b       .Ldv3d_done\n");
+    // Path loop. r4 walks the index stream, r5 = path index counter.
+    s.push_str("    mov     r5, #0\n");
+    s.push_str(".Lpath_loop:\n");
+    s.push_str("    cmp     r5, r9\n");
+    s.push_str("    bge     .Ldv3d_done\n");
 
-    s.push_str(".Ldv3d_draw_orig:\n");
-    s.push_str("    mov     r0, r4\n");                // original asset, no rotation
-    s.push_str("    mov     r1, r10\n");
-    s.push_str("    mov     r2, r11\n");
-    s.push_str("    mov     r3, #0\n");
-    s.push_str("    mov     r12, #127\n");
-    s.push_str("    push    {r12}\n");
-    s.push_str("    bl      pitrex_draw_vector_ex\n");
-    s.push_str("    add     sp, sp, #4\n");
+    // Each path header: byte pt_count, byte closed, then pt_count index bytes
+    s.push_str("    ldrb    r7, [r4]\n");              // r7 = pt_count
+    s.push_str("    ldrb    r8, [r4, #1]\n");          // r8 = closed
+    s.push_str("    add     r4, r4, #2\n");
+    s.push_str("    cmp     r7, #0\n");
+    s.push_str("    beq     .Lpath_next\n");
+
+    // First vertex: absolute move (no draw)
+    s.push_str("    ldrb    r0, [r4]\n");              // r0 = idx
+    s.push_str("    lsl     r0, r0, #1\n");
+    s.push_str("    add     r0, r0, r6\n");            // &vbuf[idx*2]
+    s.push_str("    ldrsb   r1, [r0]\n");              // sx
+    s.push_str("    ldrsb   r2, [r0, #1]\n");          // sy
+    s.push_str("    add     r1, r1, r10\n");           // sx + ox  (absX in VPy)
+    s.push_str("    add     r2, r2, r11\n");           // sy + oy  (absY in VPy)
+    // PiTrex SDK takes coords scaled to VPy*127 (its internal beam units).
+    // Thumb-2 `MUL Rd, Rn, Rm` requires Rd != Rm (UNPREDICTABLE otherwise),
+    // so use r0 to hold the multiplier and write the products into r3 / r12.
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    mul     r3, r1, r0\n");            // r3 = absX*127
+    s.push_str("    mul     r12, r2, r0\n");           // r12 = absY*127
+    s.push_str("    ldr     r0, =PITREX_CUR_X\n");
+    s.push_str("    str     r3, [r0]\n");              // CUR_X = absX*127
+    s.push_str("    str     r12, [r0, #4]\n");         // CUR_Y = absY*127
+    s.push_str("    push    {r3, r12}\n");             // [sp+0]=firstX*127 [sp+4]=firstY*127
+    // v_directMove32(r0=x*127, r1=y*127)
+    s.push_str("    mov     r0, r3\n");                // r0 = absX*127
+    s.push_str("    mov     r1, r12\n");               // r1 = absY*127
+    s.push_str("    bl      v_directMove32\n");
+    s.push_str("    mov     r0, #80\n");
+    s.push_str("    bl      v_setScale\n");
+
+    s.push_str("    add     r4, r4, #1\n");            // consumed first idx
+    s.push_str("    sub     r7, r7, #1\n");            // pt_count--
+
+    // Draw remaining vertices: pitrex_draw_line_rel(dx, dy, intensity)
+    s.push_str(".Lseg_loop:\n");
+    s.push_str("    cmp     r7, #0\n");
+    s.push_str("    beq     .Lseg_done\n");
+    s.push_str("    ldrb    r0, [r4]\n");
+    s.push_str("    lsl     r0, r0, #1\n");
+    s.push_str("    add     r0, r0, r6\n");
+    s.push_str("    ldrsb   r1, [r0]\n");              // next sx
+    s.push_str("    ldrsb   r2, [r0, #1]\n");          // next sy
+    s.push_str("    add     r1, r1, r10\n");           // +ox
+    s.push_str("    add     r2, r2, r11\n");           // +oy
+    // pitrex_draw_line_rel takes deltas in VPy units (not *127).
+    // Current beam pos is in CUR_X/Y * 127, so derive delta as
+    //   dx = (absX - prevAbsX_in_VPy)
+    // and rely on pitrex_draw_line_rel updating CUR_*. We track prev in
+    // r3,r12 (last absolute VPy coords) instead of doing the *127 math twice.
+    // r3, r12 are clobbered below — use stack-resident prev. For simplicity:
+    // recompute dx,dy by reading CUR_X/Y, dividing by 127.
+    s.push_str("    ldr     r3, =PITREX_CUR_X\n");
+    s.push_str("    ldr     r12, [r3]\n");             // prevX*127
+    s.push_str("    ldr     r3, [r3, #4]\n");          // prevY*127 (overwrites ptr — OK)
+    // Compute dx*127 / dy*127 using multiplier in a third register to keep
+    // Rd != Rm on every mul (Thumb-2 32-bit MUL: Rd==Rm is UNPREDICTABLE).
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    push    {r0}\n");                  // stash multiplier
+    s.push_str("    mul     r1, r1, r0\n");            // r1 = absX*127 (Rd!=Rm: r0!=r1)
+    s.push_str("    pop     {r0}\n");
+    s.push_str("    sub     r1, r1, r12\n");           // dx*127
+    s.push_str("    asr     r1, r1, #7\n");            // r1 = dx
+    s.push_str("    mul     r2, r2, r0\n");            // r2 = absY*127 (Rd!=Rm: r0!=r2)
+    s.push_str("    sub     r2, r2, r3\n");
+    s.push_str("    asr     r2, r2, #7\n");            // r2 = dy
+    s.push_str("    mov     r0, r1\n");                // r0 = dx
+    s.push_str("    mov     r1, r2\n");                // r1 = dy
+    s.push_str("    mov     r2, #127\n");              // intensity
+    s.push_str("    bl      pitrex_draw_line_rel\n");
+
+    s.push_str("    add     r4, r4, #1\n");
+    s.push_str("    sub     r7, r7, #1\n");
+    s.push_str("    b       .Lseg_loop\n");
+
+    s.push_str(".Lseg_done:\n");
+    s.push_str("    pop     {r3, r12}\n");             // recover first-vertex *127 coords
+    // If closed: draw back to first vertex
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     .Lpath_next\n");
+    s.push_str("    ldr     r0, =PITREX_CUR_X\n");
+    s.push_str("    ldr     r1, [r0]\n");              // prevX*127
+    s.push_str("    ldr     r2, [r0, #4]\n");          // prevY*127
+    s.push_str("    sub     r0, r3, r1\n");
+    s.push_str("    asr     r0, r0, #7\n");            // dx
+    s.push_str("    sub     r1, r12, r2\n");
+    s.push_str("    asr     r1, r1, #7\n");            // dy
+    s.push_str("    mov     r2, #127\n");
+    s.push_str("    bl      pitrex_draw_line_rel\n");
+
+    s.push_str(".Lpath_next:\n");
+    s.push_str("    add     r5, r5, #1\n");
+    s.push_str("    b       .Lpath_loop\n");
 
     s.push_str(".Ldv3d_done:\n");
     s.push_str("    pop     {r4-r11, pc}\n");

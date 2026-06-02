@@ -806,60 +806,41 @@ pub fn emit_call(
     }
 
     // Special case: DRAW_VECTOR_3D("name", rot_x, rot_y, rot_z, pos_x, pos_y)
-    // Stub: For now, just draw 2D version at offset, ignore rotation
-    // TODO: Implement full 3D rotation with matrix + perspective
+    // pitrex_draw_vector_3d(r0=_NAME_3D_DATA, r1=ax, r2=ay, r3=az,
+    //                       [sp]=ox, [sp+4]=oy) — Y-axis rotation only for now.
     if info.name == "DRAW_VECTOR_3D" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
-            let symbol = format!("_{sym_base}_VECTORS");  // TODO: Use _3D_DATA when 3D rotation is complete
+            let symbol = format!("_{sym_base}_3D_DATA");
 
-            // pitrex_draw_vector_3d(r0=asset_ptr, r1=rot_x, r2=rot_y, r3=rot_z, [sp]=ox, [sp+4]=oy)
-            // r0 = asset_ptr
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+            let emit_or_zero = |idx: usize, s: &mut String| -> Result<(), String> {
+                if let Some(a) = args.get(idx) {
+                    s.push_str(&emit_arg(a, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                Ok(())
+            };
 
-            // r1 = rot_x
-            if args.len() >= 2 {
-                s.push_str(&emit_arg(&args[1], var_addrs)?);
-                s.push_str("    mov     r1, r0\n");
-            } else {
-                s.push_str("    mov     r1, #0\n");
-            }
-
-            // r2 = rot_y
-            if args.len() >= 3 {
-                s.push_str(&emit_arg(&args[2], var_addrs)?);
-                s.push_str("    mov     r2, r0\n");
-            } else {
-                s.push_str("    mov     r2, #0\n");
-            }
-
-            // r3 = rot_z
-            if args.len() >= 4 {
-                s.push_str(&emit_arg(&args[3], var_addrs)?);
-                s.push_str("    mov     r3, r0\n");
-            } else {
-                s.push_str("    mov     r3, #0\n");
-            }
-
-            // Push ox, oy (overflow arguments for pitrex_draw_vector_3d)
-            // ox = pos_x
-            if args.len() >= 5 {
-                s.push_str(&emit_arg(&args[4], var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
+            // Push order: oy, ox, az, ay, ax, asset.
+            // After popping r0..r3 the stack still holds [ox, oy] with ox on
+            // top, matching the runtime's expected [sp]=ox, [sp+4]=oy frame.
+            emit_or_zero(5, &mut s)?; // oy → [sp+4]
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(4, &mut s)?; // ox → [sp]
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(3, &mut s)?; // az
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(2, &mut s)?; // ay
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(1, &mut s)?; // ax
+            s.push_str("    push    {r0}\n");
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ 3D data for '{asset_name}'\n"));
             s.push_str("    push    {r0}\n");
 
-            // oy = pos_y
-            if args.len() >= 6 {
-                s.push_str(&emit_arg(&args[5], var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
-            s.push_str("    push    {r0}\n");
-
+            s.push_str("    pop     {r0}\n    pop     {r1}\n    pop     {r2}\n    pop     {r3}\n");
             s.push_str("    bl      pitrex_draw_vector_3d\n");
-            s.push_str("    add     sp, sp, #8          @ pop ox, oy\n");
+            s.push_str("    add     sp, sp, #8          @ discard ox, oy\n");
             return Ok(s);
         }
     }

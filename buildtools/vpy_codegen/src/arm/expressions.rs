@@ -572,47 +572,42 @@ pub fn emit_call(
     }
 
     // Special case: DRAW_VECTOR_3D("name", rot_x, rot_y, rot_z, pos_x, pos_y)
-    // Stub: For now, just draw 2D version at offset (pos_x, pos_y), ignore rotation
-    // TODO: Implement full 3D rotation with matrix + vertex transform + perspective
+    // vpy_draw_vector_3d(r0=_NAME_3D_DATA, r1=ax, r2=ay, r3=az, [sp]=ox, [sp+4]=oy).
+    // Takes the vertex-indexed _3D_DATA asset (not _VECTORS — that's the 2D
+    // path-list format).
     if info.name == "DRAW_VECTOR_3D" {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
-            let symbol = format!("_{sym_base}_VECTORS");  // Use 2D vectors for now (TODO: _3D_DATA)
-            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            let symbol = format!("_{sym_base}_3D_DATA");
 
-            // Just call DRAW_VECTOR_EX at the offset position, ignoring rotations
-            // r0 = asset_ptr
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}' (3D stub: using 2D)\n"));
+            let emit_or_zero = |idx: usize, s: &mut String| -> Result<(), String> {
+                if let Some(a) = args.get(idx) {
+                    s.push_str(&emit_arg(a, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                Ok(())
+            };
+
+            // Push order: oy, ox, az, ay, ax, asset.
+            // After popping r0..r3, the stack still has [ox, oy] with ox on
+            // top, matching the function's expected [sp]=ox, [sp+4]=oy frame.
+            emit_or_zero(5, &mut s)?; // oy → [sp+4]
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(4, &mut s)?; // ox → [sp]
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(3, &mut s)?; // az
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(2, &mut s)?; // ay
+            s.push_str("    push    {r0}\n");
+            emit_or_zero(1, &mut s)?; // ax
+            s.push_str("    push    {r0}\n");
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ 3D data for '{asset_name}'\n"));
             s.push_str("    push    {r0}\n");
 
-            // r1 = pos_x (skip rotations)
-            if let Some(pos_x) = runtime.get(3) {
-                s.push_str(&emit_arg(pos_x, var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
-            s.push_str("    push    {r0}\n");
-
-            // r2 = pos_y
-            if let Some(pos_y) = runtime.get(4) {
-                s.push_str(&emit_arg(pos_y, var_addrs)?);
-            } else {
-                s.push_str("    mov     r0, #0\n");
-            }
-            s.push_str("    push    {r0}\n");
-
-            // r3 = mirror = 0
-            s.push_str("    mov     r0, #0\n");
-            s.push_str("    push    {r0}\n");
-
-            // intensity = 127 on stack first (will be at [sp] when function expects it after its push)
-            s.push_str("    mov     r0, #127\n");
-            s.push_str("    push    {r0}\n");
-
-            // pop r3=mirror, r2=pos_y, r1=pos_x, r0=asset; intensity stays on stack
-            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
-            s.push_str("    bl      vpy_draw_vector_ex\n");
-            s.push_str("    add     sp, sp, #4\n"); // discard intensity
+            s.push_str("    pop     {r0}\n    pop     {r1}\n    pop     {r2}\n    pop     {r3}\n");
+            s.push_str("    bl      vpy_draw_vector_3d\n");
+            s.push_str("    add     sp, sp, #8          @ discard ox, oy\n");
             return Ok(s);
         }
     }

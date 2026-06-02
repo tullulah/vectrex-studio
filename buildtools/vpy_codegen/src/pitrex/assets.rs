@@ -1253,6 +1253,11 @@ fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
 
     let visible = res.visible_paths();
     s.push_str(&format!("@ --- {sym}_3D_DATA ({} path(s)) ---\n", visible.len()));
+    // The runtime reads vertex_count and path_count with `ldr` (4-byte load),
+    // so the symbol must be 4-byte aligned. Without this the symbol lands at
+    // whatever offset the previous .byte stream finished at — unaligned ldr
+    // on ARMv6 (Pi Zero) traps or returns rotated bytes.
+    s.push_str("    .balign 4\n");
     s.push_str(&format!(".global _{sym}_3D_DATA\n_{sym}_3D_DATA:\n"));
 
     if visible.is_empty() {
@@ -1296,6 +1301,8 @@ fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
         ));
     }
 
+    // Align before .word path_count — see arm/assets.rs for the same rationale.
+    s.push_str("    .balign 4\n");
     s.push_str(&format!("    .word   {}               @ path_count\n", paths.len()));
     for (pi, pd) in paths.iter().enumerate() {
         s.push_str(&format!("    .byte   {}               @ path {}: pt_count\n", pd.indices.len(), pi));

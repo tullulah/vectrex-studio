@@ -271,7 +271,7 @@ fn emit_draw_vector_3d() -> String {
     // Z-axis: sx = x2*cos_az - y1*sin_az + ox
     smul_call_sm_az(&mut s, 3, "r7");                       // r0 = x2*cos_az
     s.push_str("    ldr     r2,=_dv3d_sm\n    strb r0,[r2]\n");
-    smul_call_sm_az(&mut s, 1, "r7");                       // r0 = y1*sin_az
+    smul_call_sm_az_r(&mut s, 1, "r7");                     // r0 = y1*sin_az (was sm_az → cos bug)
     s.push_str("    ldr     r2,=_dv3d_sm\n    ldrsb r3,[r2]\n    sub r0,r3,r0\n    add r0,r0,r8\n"); // +ox
     s.push_str("    strb    r0,[r11]\n");                   // vbuf[i].sx
 
@@ -284,9 +284,19 @@ fn emit_draw_vector_3d() -> String {
     s.push_str("    add     r11,r11,#2\n    b dv3_vl\n");
 
     s.push_str("dv3_vd:\n"); // vertices done
+    // The vertex section is vertex_count*3 bytes and may leave r4 off a 4-byte
+    // boundary; align r4 to match the `.balign 4` the asset emitter inserts
+    // before the path_count word.
+    s.push_str("    add     r4, r4, #3\n    bic r4, r4, #3\n");
 
     // Phase 2: draw paths
     s.push_str("    bl      dv_reset\n");
+    // dv_reset writes PORT_A = 0 mid-sequence, which leaves the Z-axis DAC
+    // (intensity) at zero — the beam would draw invisibly. Restore a sensible
+    // default. Per-path intensity is not yet supported for 3D assets (the
+    // _3D_DATA format has no per-path intensity byte).
+    s.push_str("    mov     r0, #127\n");
+    s.push_str("    bl      vpy_set_intensity\n");
     s.push_str("    ldr     r10,[r4]\n    add r4,r4,#4\n"); // path_count
     s.push_str("    ldr     r11,=_dv3d_vbuf\n");           // vbuf base for lookup
 
