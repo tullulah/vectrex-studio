@@ -1,4 +1,4 @@
-META TITLE = "Vectrex 3D Logo"
+META TITLE = "VECTREX 3D LOGO"
 
 # Rotation angles (0-255 for full circle, like angle units)
 rot_x: i16 = 0
@@ -41,5 +41,8 @@ def loop():
     if J1_BUTTON_4():
         rot_speed_y = clamp(rot_speed_y - 1, 0, 10)
 
-    # Draw logo with 3D rotation (currently: stub that ignores rotation, draws 2D)
-    DRAW_VECTOR_3D("logo", rot_x, rot_y, rot_z, 0, 0)
+    #Draw logo with 3D rotation (currently: stub that ignores rotation, draws 2D)
+    DRAW_VECTOR_3D("logo", rot_x, rot_y, rot_z, 0, 60)
+    DRAW_VECTOR("text", -0,-44)
+    SET_TEXT_SIZE(8)
+    print_text(-35, -58, "STUDIO")
