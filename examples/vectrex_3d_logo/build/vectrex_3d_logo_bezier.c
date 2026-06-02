@@ -16,6 +16,12 @@
 
 #include "vectrex/vectrexInterface.h"
 
+/* pb[] is not exposed in all SDK header versions; declare explicitly. */
+#ifndef MAX_PIPELINE
+#define MAX_PIPELINE 3000
+#endif
+extern VectorPipelineBase pb[MAX_PIPELINE];
+
 /* beamOffBetweenConsecutiveDraws is declared as extern uint8_t in vectrexInterface.h */
 
 /* ---- de Casteljau helpers ---- */
@@ -113,4 +119,39 @@ void v_directDrawPolyline(const int32_t *xs, const int32_t *ys, int n, uint8_t b
     for (int i = 1; i < n; i++) {
         v_directDraw32(xs[i-1], ys[i-1], xs[i], ys[i], brightness);
     }
+}
+
+/*
+ * v_addVectorFast — fast pipeline add for VPy segment drawing.
+ *
+ * Bypasses all checks that are always false in default VPy SDK state:
+ *   - float sizeX/sizeY scale (always 1.0 → identity multiply)
+ *   - customClippingEnabled (always 0)
+ *   - orientation (always 0)
+ *   - usePipeline check (always 1)
+ *   - optimizationON check (always 1)
+ *   - commonHints OR (always 0)
+ *   - PL_BASE_FORCE_USE_DOT_DWELL / FIX_SIZE checks (always false)
+ *
+ * x0/y0/x1/y1 must be pre-scaled to VPy * 127 (same as v_directDraw32 input).
+ * Saves ~35 ARM32 instructions per call vs v_directDraw32.
+ *
+ * Compiled from pitrex_bezier.c (source supplement) and linked with
+ * --allow-multiple-definition so it precedes the precompiled libvectrexInterface.a.
+ */
+void v_addVectorFast(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t brightness)
+{
+    if (brightness == 0)
+        return;
+    cpb->y0 = y0;
+    cpb->x0 = x0;
+    cpb->y1 = y1;
+    cpb->x1 = x1;
+    cpb->intensity = (int)brightness;
+    cpb->force = 0;
+    cpb->sms = (int)MAX_USED_STRENGTH;
+    cpb = &pb[++pipelineCounter];
+    cpb->pattern = 0;
+    cpb->force = 0;
+    cpb->debug[0] = 0;
 }

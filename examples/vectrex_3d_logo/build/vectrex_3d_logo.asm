@@ -16,7 +16,7 @@
     FCB $80                 ; String terminator
     FDB music1              ; Music pointer
     FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
-    FCC "Vectrex 3D Logo"
+    FCC "VECTREX 3D LOGO"
     FCB $80                 ; String terminator
     FCB 0                   ; End of header
 
@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -56,54 +58,63 @@ DRAW_VEC_Y           EQU $C880+$11   ; Vector draw Y offset (1 bytes)
 MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
 MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
 MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-ROT3D_AX             EQU $C880+$24   ; 3D raw angle X (0-127) (1 bytes)
-ROT3D_AY             EQU $C880+$25   ; 3D raw angle Y (0-127) (1 bytes)
-ROT3D_AZ             EQU $C880+$26   ; 3D raw angle Z (0-127) (1 bytes)
-ROT3D_COS_X          EQU $C880+$27   ; 3D cos angle offset for X axis: (AX+32)&0x7F (1 bytes)
-ROT3D_COS_Y          EQU $C880+$28   ; 3D cos angle offset for Y axis: (AY+32)&0x7F (1 bytes)
-ROT3D_COS_Z          EQU $C880+$29   ; 3D cos angle offset for Z axis: (AZ+32)&0x7F (1 bytes)
-ROT3D_OX             EQU $C880+$2A   ; 3D draw X offset (1 bytes)
-ROT3D_OY             EQU $C880+$2B   ; 3D draw Y offset (1 bytes)
-ROT3D_PC             EQU $C880+$2C   ; 3D path/vertex count remaining (1 bytes)
-ROT3D_PT_REM         EQU $C880+$2D   ; 3D remaining points in current path (1 bytes)
-ROT3D_CLOSED         EQU $C880+$2E   ; 3D path closed flag (1 bytes)
-ROT3D_RX             EQU $C880+$2F   ; 3D raw x (1 bytes)
-ROT3D_RY             EQU $C880+$30   ; 3D raw y (1 bytes)
-ROT3D_RZ             EQU $C880+$31   ; 3D raw z (1 bytes)
-ROT3D_Y1             EQU $C880+$32   ; 3D intermediate y after X-axis rotation (1 bytes)
-ROT3D_Z1             EQU $C880+$33   ; 3D intermediate z after X-axis rotation (1 bytes)
-ROT3D_X2             EQU $C880+$34   ; 3D intermediate x after Y-axis rotation (1 bytes)
-ROT3D_SCR_X          EQU $C880+$35   ; 3D final screen x (1 bytes)
-ROT3D_SCR_Y          EQU $C880+$36   ; 3D final screen y (1 bytes)
-ROT3D_PREV_X         EQU $C880+$37   ; 3D previous screen x (1 bytes)
-ROT3D_PREV_Y         EQU $C880+$38   ; 3D previous screen y (1 bytes)
-ROT3D_FIRST_X        EQU $C880+$39   ; 3D first screen x (for closed path) (1 bytes)
-ROT3D_FIRST_Y        EQU $C880+$3A   ; 3D first screen y (for closed path) (1 bytes)
-ROT3D_TEMP           EQU $C880+$3B   ; 3D rotation temp 1 (1 bytes)
-ROT3D_TEMP2          EQU $C880+$3C   ; 3D rotation temp 2 (1 bytes)
-ROT3D_VBUF           EQU $C880+$3D   ; 3D rotated vertex cache (127 verts × 2 bytes: x',y') (254 bytes)
-DRAW_LINE_ARGS       EQU $C880+$13B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$145   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$147   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$149   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$14A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$14B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$14D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-DRAW_SCALE           EQU $C880+$14F   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_ROT_X            EQU $C880+$150   ; User variable: rot_x (2 bytes)
-VAR_ROT_Y            EQU $C880+$152   ; User variable: rot_y (2 bytes)
-VAR_ROT_Z            EQU $C880+$154   ; User variable: rot_z (2 bytes)
-VAR_ROT_SPEED_X      EQU $C880+$156   ; User variable: rot_speed_x (2 bytes)
-VAR_ROT_SPEED_Y      EQU $C880+$158   ; User variable: rot_speed_y (2 bytes)
-VAR_ROT_SPEED_Z      EQU $C880+$15A   ; User variable: rot_speed_z (2 bytes)
-VAR_JOY_X            EQU $C880+$15C   ; User variable: joy_x (2 bytes)
-VAR_JOY_Y            EQU $C880+$15E   ; User variable: joy_y (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+SLR_CUR_X            EQU $C880+$24   ; DRAW_VECTOR: clamped (visible) beam X for clipping (1 bytes)
+SLR_TRUE_X           EQU $C880+$25   ; DRAW_VECTOR: 16-bit unclamped abs_x for line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$27   ; DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$28   ; DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers) (1 bytes)
+ROT3D_AX             EQU $C880+$29   ; 3D raw angle X (0-127) (1 bytes)
+ROT3D_AY             EQU $C880+$2A   ; 3D raw angle Y (0-127) (1 bytes)
+ROT3D_AZ             EQU $C880+$2B   ; 3D raw angle Z (0-127) (1 bytes)
+ROT3D_COS_X          EQU $C880+$2C   ; 3D cos angle offset for X axis: (AX+32)&0x7F (1 bytes)
+ROT3D_COS_Y          EQU $C880+$2D   ; 3D cos angle offset for Y axis: (AY+32)&0x7F (1 bytes)
+ROT3D_COS_Z          EQU $C880+$2E   ; 3D cos angle offset for Z axis: (AZ+32)&0x7F (1 bytes)
+ROT3D_OX             EQU $C880+$2F   ; 3D draw X offset (1 bytes)
+ROT3D_OY             EQU $C880+$30   ; 3D draw Y offset (1 bytes)
+ROT3D_PC             EQU $C880+$31   ; 3D path/vertex count remaining (1 bytes)
+ROT3D_PT_REM         EQU $C880+$32   ; 3D remaining points in current path (1 bytes)
+ROT3D_CLOSED         EQU $C880+$33   ; 3D path closed flag (1 bytes)
+ROT3D_RX             EQU $C880+$34   ; 3D raw x (1 bytes)
+ROT3D_RY             EQU $C880+$35   ; 3D raw y (1 bytes)
+ROT3D_RZ             EQU $C880+$36   ; 3D raw z (1 bytes)
+ROT3D_Y1             EQU $C880+$37   ; 3D intermediate y after X-axis rotation (1 bytes)
+ROT3D_Z1             EQU $C880+$38   ; 3D intermediate z after X-axis rotation (1 bytes)
+ROT3D_X2             EQU $C880+$39   ; 3D intermediate x after Y-axis rotation (1 bytes)
+ROT3D_SCR_X          EQU $C880+$3A   ; 3D final screen x (1 bytes)
+ROT3D_SCR_Y          EQU $C880+$3B   ; 3D final screen y (1 bytes)
+ROT3D_PREV_X         EQU $C880+$3C   ; 3D previous screen x (1 bytes)
+ROT3D_PREV_Y         EQU $C880+$3D   ; 3D previous screen y (1 bytes)
+ROT3D_FIRST_X        EQU $C880+$3E   ; 3D first screen x (for closed path) (1 bytes)
+ROT3D_FIRST_Y        EQU $C880+$3F   ; 3D first screen y (for closed path) (1 bytes)
+ROT3D_TEMP           EQU $C880+$40   ; 3D rotation temp 1 (1 bytes)
+ROT3D_TEMP2          EQU $C880+$41   ; 3D rotation temp 2 (1 bytes)
+ROT3D_VBUF           EQU $C880+$42   ; 3D rotated vertex cache (127 verts × 2 bytes: x',y') (254 bytes)
+DRAW_LINE_ARGS       EQU $C880+$140   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$14A   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$14C   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$14E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$14F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$150   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$152   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$154   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$155   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$156   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$157   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$159   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$15B   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$15D   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$15F   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$161   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$163   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$165   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$167   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ROT_X            EQU $C880+$168   ; User variable: ROT_X (2 bytes)
+VAR_ROT_Y            EQU $C880+$16A   ; User variable: ROT_Y (2 bytes)
+VAR_ROT_Z            EQU $C880+$16C   ; User variable: ROT_Z (2 bytes)
+VAR_ROT_SPEED_X      EQU $C880+$16E   ; User variable: ROT_SPEED_X (2 bytes)
+VAR_ROT_SPEED_Y      EQU $C880+$170   ; User variable: ROT_SPEED_Y (2 bytes)
+VAR_ROT_SPEED_Z      EQU $C880+$172   ; User variable: ROT_SPEED_Z (2 bytes)
+VAR_JOY_X            EQU $C880+$174   ; User variable: JOY_X (2 bytes)
+VAR_JOY_Y            EQU $C880+$176   ; User variable: JOY_Y (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -113,6 +124,12 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     LDD #0
     STD VAR_ROT_X
     LDD #0
@@ -142,6 +159,7 @@ MAIN:
     ; Prime BIOS button state at startup
     JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
+; VPy_LINE:14
     ; TODO: Statement Pass { source_line: 14 }
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
@@ -152,21 +170,29 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    LDD >VAR_ROT_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)
+    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E
+    JSR Reset0Ref ; Restore beam state after Joy_Analog
+    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)
+; VPy_LINE:18
     LDD >VAR_ROT_SPEED_X
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ROT_X
-    LDD >VAR_ROT_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:19
     LDD >VAR_ROT_SPEED_Y
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ROT_Y
-    LDD >VAR_ROT_Z
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:20
     LDD >VAR_ROT_SPEED_Z
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_Z
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ROT_Z
+; VPy_LINE:23
     LDD #256
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ROT_X
@@ -178,16 +204,16 @@ LOOP_BODY:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_1
-    LDD >VAR_ROT_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:24
     LDD #256
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_X
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_ROT_X
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
+; VPy_LINE:25
     LDD #256
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ROT_Y
@@ -199,16 +225,16 @@ IF_END_0:
     LDD #1
 .CMP_1_END:
     LBEQ IF_NEXT_3
-    LDD >VAR_ROT_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:26
     LDD #256
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_ROT_Y
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:27
     LDD #256
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_ROT_Z
@@ -220,22 +246,26 @@ IF_END_2:
     LDD #1
 .CMP_2_END:
     LBEQ IF_NEXT_5
-    LDD >VAR_ROT_Z
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:28
     LDD #256
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_Z
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_ROT_Z
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
+; VPy_LINE:31
+; NATIVE_CALL: J1_X at line 31
     JSR J1X_BUILTIN
     STD RESULT
     STD VAR_JOY_X
+; VPy_LINE:32
+; NATIVE_CALL: J1_Y at line 32
     JSR J1Y_BUILTIN
     STD RESULT
     STD VAR_JOY_Y
+; VPy_LINE:35
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -246,14 +276,16 @@ IF_END_4:
 .J1B1_0_END:
     STD RESULT
     LBEQ IF_NEXT_7
-    LDD >VAR_ROT_SPEED_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:36
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_SPEED_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ROT_SPEED_X
     LBRA IF_END_6
 IF_NEXT_7:
 IF_END_6:
+; VPy_LINE:37
     LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
     BITA #$02
     BNE .J1B2_1_ON
@@ -264,13 +296,12 @@ IF_END_6:
 .J1B2_1_END:
     STD RESULT
     LBEQ IF_NEXT_9
+; VPy_LINE:38
     ; CLAMP: Clamp value to range [min, max]
-    LDD >VAR_ROT_SPEED_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_SPEED_X
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD TMPPTR     ; Save value
     LDD #0
     STD TMPPTR+2   ; Save min
@@ -297,6 +328,7 @@ IF_END_6:
     LBRA IF_END_8
 IF_NEXT_9:
 IF_END_8:
+; VPy_LINE:39
     LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed
     BITA #$04
     BNE .J1B3_2_ON
@@ -307,14 +339,16 @@ IF_END_8:
 .J1B3_2_END:
     STD RESULT
     LBEQ IF_NEXT_11
-    LDD >VAR_ROT_SPEED_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:40
     LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_SPEED_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_ROT_SPEED_Y
     LBRA IF_END_10
 IF_NEXT_11:
 IF_END_10:
+; VPy_LINE:41
     LDA >$C80F   ; Vec_Btns_1: bit3=1 means btn4 pressed
     BITA #$08
     BNE .J1B4_3_ON
@@ -325,13 +359,12 @@ IF_END_10:
 .J1B4_3_END:
     STD RESULT
     LBEQ IF_NEXT_13
+; VPy_LINE:42
     ; CLAMP: Clamp value to range [min, max]
-    LDD >VAR_ROT_SPEED_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_ROT_SPEED_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD TMPPTR     ; Save value
     LDD #0
     STD TMPPTR+2   ; Save min
@@ -358,6 +391,8 @@ IF_END_10:
     LBRA IF_END_12
 IF_NEXT_13:
 IF_END_12:
+; VPy_LINE:45
+; NATIVE_CALL: DRAW_VECTOR_3D at line 45
     ; DRAW_VECTOR_3D: Draw vector asset with 3D rotation
     ; Asset: logo (3D rotation)
     LDD >VAR_ROT_X
@@ -368,10 +403,93 @@ IF_END_12:
     STB >ROT3D_AZ       ; angle Z (0-127)
     LDD #0
     STB >ROT3D_OX       ; screen X offset
-    LDD #0
+    LDD #60
     STB >ROT3D_OY       ; screen Y offset
     LDX #_LOGO_3D_DATA  ; pointer to 3D data table
     JSR DRAW_VECTOR_3D_RUNTIME
+    LDD #0
+    STD RESULT
+; VPy_LINE:48
+; NATIVE_CALL: DRAW_VECTOR at line 48
+    ; DRAW_VECTOR: Draw vector asset at position
+    ; Asset: text (index=1, 13 paths)
+    LDD #0
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_4          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
+    LDD #-44
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
+    STA DRAW_VEC_X
+    LDB #0
+    TSTA
+    BPL .sx_pos_4
+    LDB #$FF
+.sx_pos_4:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
+    STA DRAW_VEC_Y
+    CLR MIRROR_X
+    CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
+    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
+    LDX #_TEXT_PATH0  ; Load path 0
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH1  ; Load path 1
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH2  ; Load path 2
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH3  ; Load path 3
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH4  ; Load path 4
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH5  ; Load path 5
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH6  ; Load path 6
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH7  ; Load path 7
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH8  ; Load path 8
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH9  ; Load path 9
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH10  ; Load path 10
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH11  ; Load path 11
+    JSR Draw_Sync_List_At_With_Mirrors
+    LDX #_TEXT_PATH12  ; Load path 12
+    JSR Draw_Sync_List_At_With_Mirrors
+    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
+DRVEC_SKIP_4:
+    LDD #0
+    STD RESULT
+; VPy_LINE:49
+; NATIVE_CALL: SET_TEXT_SIZE at line 49
+    LDD #8
+    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
+    NEGB            ; B = -n -> TEXT_SCALE_H
+    STB >TEXT_SCALE_H
+    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
+    ASLB            ; n*2
+    ASLB            ; n*4
+    ASLB            ; n*8
+    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
+    STB >TEXT_SCALE_W
+; VPy_LINE:50
+; NATIVE_CALL: PRINT_TEXT at line 50
+    ; PRINT_TEXT: Print text at position
+    LDD #-35
+    STD >VAR_ARG0
+    LDD #-58
+    STD >VAR_ARG1
+    LDX #PRINT_TEXT_STR_2456395222      ; Pointer to string in helpers bank
+    STX >VAR_ARG2
+    JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     RTS
@@ -381,40 +499,281 @@ IF_END_12:
 ;***************************************************************************
 
 ; Generated from logo.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 13
-; X bounds: min=-34, max=12, width=46
-; Center: (-11, 40)
+; Total paths: 4, points: 36
+; X bounds: min=-34, max=33, width=67
+; Center: (0, 0)
 
-_LOGO_WIDTH EQU 46
-_LOGO_HALF_WIDTH EQU 23
-_LOGO_HEIGHT EQU 50
-_LOGO_HALF_HEIGHT EQU 25
-_LOGO_CENTER_X EQU -11
-_LOGO_CENTER_Y EQU 40
+_LOGO_WIDTH EQU 67
+_LOGO_HALF_WIDTH EQU 33
+_LOGO_HEIGHT EQU 99
+_LOGO_HALF_HEIGHT EQU 49
+_LOGO_CENTER_X EQU 0
+_LOGO_CENTER_Y EQU 0
 
-_LOGO_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (runtime metadata, 2 bytes)
+_LOGO_VECTORS:  ; Main entry (header + 4 path(s))
+    FDB 4               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _LOGO_PATH0        ; pointer to path 0
+    FDB _LOGO_PATH1        ; pointer to path 1
+    FDB _LOGO_PATH2        ; pointer to path 2
+    FDB _LOGO_PATH3        ; pointer to path 3
 
 _LOGO_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $41,$E9,0,0        ; path0: header (y=65, x=-23)
-    FCB $FF,$F1,$00          ; flag=-1, dy=-15, dx=0
-    FCB $FF,$00,$F5          ; flag=-1, dy=0, dx=-11
-    FCB $FF,$E5,$00          ; flag=-1, dy=-27, dx=0
-    FCB $FF,$00,$0B          ; flag=-1, dy=0, dx=11
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
-    FCB $FF,$07,$00          ; flag=-1, dy=7, dx=0
-    FCB $FF,$00,$09          ; flag=-1, dy=0, dx=9
-    FCB $FF,$1C,$00          ; flag=-1, dy=28, dx=0
-    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
-    FCB $FF,$0F,$00          ; flag=-1, dy=15, dx=0
+    FCB 85              ; path0: intensity
+    FCB $D6,$11,0,0        ; path0: header (y=-42, x=17)
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
+    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
+    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
+    FCB 2                ; End marker (path complete)
+
+_LOGO_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $CE,$17,0,0        ; path1: header (y=-50, x=23)
+    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$24,$00          ; flag=-1, dy=36, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
     FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
+    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$DC,$00          ; flag=-1, dy=-36, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
+    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
+    FCB 2                ; End marker (path complete)
+
+_LOGO_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $2B,$F0,0,0        ; path2: header (y=43, x=-16)
+    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB 2                ; End marker (path complete)
+
+_LOGO_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $31,$E8,0,0        ; path3: header (y=49, x=-24)
+    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$DB,$00          ; flag=-1, dy=-37, dx=0
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB $FF,$F5,$00          ; flag=-1, dy=-11, dx=0
+    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
+    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$27,$00          ; flag=-1, dy=39, dx=0
+    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
+    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
+    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
+    FCB 2                ; End marker (path complete)
+; Generated from text.vec (Malban Draw_Sync_List format)
+; Total paths: 13, points: 98
+; X bounds: min=-85, max=83, width=168
+; Center: (-1, 0)
+
+_TEXT_WIDTH EQU 168
+_TEXT_HALF_WIDTH EQU 84
+_TEXT_HEIGHT EQU 36
+_TEXT_HALF_HEIGHT EQU 18
+_TEXT_CENTER_X EQU -1
+_TEXT_CENTER_Y EQU 0
+
+_TEXT_VECTORS:  ; Main entry (header + 13 path(s))
+    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _TEXT_PATH0        ; pointer to path 0
+    FDB _TEXT_PATH1        ; pointer to path 1
+    FDB _TEXT_PATH2        ; pointer to path 2
+    FDB _TEXT_PATH3        ; pointer to path 3
+    FDB _TEXT_PATH4        ; pointer to path 4
+    FDB _TEXT_PATH5        ; pointer to path 5
+    FDB _TEXT_PATH6        ; pointer to path 6
+    FDB _TEXT_PATH7        ; pointer to path 7
+    FDB _TEXT_PATH8        ; pointer to path 8
+    FDB _TEXT_PATH9        ; pointer to path 9
+    FDB _TEXT_PATH10        ; pointer to path 10
+    FDB _TEXT_PATH11        ; pointer to path 11
+    FDB _TEXT_PATH12        ; pointer to path 12
+
+_TEXT_PATH0:    ; Path 0
+    FCB 85              ; path0: intensity
+    FCB $12,$FA,0,0        ; path0: header (y=18, x=-6)
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$EF,$00          ; flag=-1, dy=-17, dx=0
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$11,$00          ; flag=-1, dy=17, dx=0
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
+    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH1:    ; Path 1
+    FCB 85              ; path1: intensity
+    FCB $12,$F4,0,0        ; path1: header (y=18, x=-12)
+    FCB $FF,$00,$F1          ; flag=-1, dy=0, dx=-15
+    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
+    FCB $FF,$FA,$FD          ; flag=-1, dy=-6, dx=-3
+    FCB $FF,$F8,$03          ; flag=-1, dy=-8, dx=3
+    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
+    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
+    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
+    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
+    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
+    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
+    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
+    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH2:    ; Path 2
+    FCB 85              ; path2: intensity
+    FCB $0E,$12,0,0        ; path2: header (y=14, x=18)
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$0F          ; flag=-1, dy=0, dx=15
+    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
+    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
+    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
+    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
+    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
+    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
+    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH3:    ; Path 3
+    FCB 85              ; path3: intensity
+    FCB $0B,$2A,0,0        ; path3: header (y=11, x=42)
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH4:    ; Path 4
+    FCB 85              ; path4: intensity
+    FCB $12,$2A,0,0        ; path4: header (y=18, x=42)
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH5:    ; Path 5
+    FCB 85              ; path5: intensity
+    FCB $00,$2A,0,0        ; path5: header (y=0, x=42)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH6:    ; Path 6
+    FCB 85              ; path6: intensity
+    FCB $EE,$37,0,0        ; path6: header (y=-18, x=55)
+    FCB $FF,$00,$12          ; flag=-1, dy=0, dx=18
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH7:    ; Path 7
+    FCB 85              ; path7: intensity
+    FCB $12,$3D,0,0        ; path7: header (y=18, x=61)
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
+    FCB $FF,$08,$05          ; flag=-1, dy=8, dx=5
+    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
+    FCB $FF,$F5,$F7          ; flag=-1, dy=-11, dx=-9
+    FCB $FF,$F6,$08          ; flag=-1, dy=-10, dx=8
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$07,$FC          ; flag=-1, dy=7, dx=-4
+    FCB $FF,$F9,$FB          ; flag=-1, dy=-7, dx=-5
+    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
+    FCB $FF,$0A,$09          ; flag=-1, dy=10, dx=9
+    FCB $FF,$0B,$F6          ; flag=-1, dy=11, dx=-10
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH8:    ; Path 8
+    FCB 85              ; path8: intensity
+    FCB $12,$C8,0,0        ; path8: header (y=18, x=-56)
+    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
+    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
+    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
+    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH9:    ; Path 9
+    FCB 85              ; path9: intensity
+    FCB $0B,$C8,0,0        ; path9: header (y=11, x=-56)
+    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
+    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
+    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
+    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH10:    ; Path 10
+    FCB 85              ; path10: intensity
+    FCB $00,$C8,0,0        ; path10: header (y=0, x=-56)
+    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
+    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
+    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
+    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH11:    ; Path 11
+    FCB 85              ; path11: intensity
+    FCB $EE,$CB,0,0        ; path11: header (y=-18, x=-53)
+    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
+    FCB 2                ; End marker (path complete)
+
+_TEXT_PATH12:    ; Path 12
+    FCB 85              ; path12: intensity
+    FCB $12,$AC,0,0        ; path12: header (y=18, x=-84)
+    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
+    FCB $FF,$F0,$08          ; flag=-1, dy=-16, dx=8
+    FCB $FF,$10,$07          ; flag=-1, dy=16, dx=7
+    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
+    FCB $FF,$EB,$F7          ; flag=-1, dy=-21, dx=-9
+    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
+    FCB $FF,$15,$F6          ; flag=-1, dy=21, dx=-10
     FCB 2                ; End marker (path complete)
 ;***************************************************************************
 ; RUNTIME HELPERS
 ;***************************************************************************
+
+VECTREX_PRINT_TEXT:
+    ; VPy signature: PRINT_TEXT(x, y, string)
+    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
+    LDA #$D0
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
+    JSR Print_Str_d
+    PULS X
+    STX >$C82C
+    LDA #$F8
+    STA >$C82A
+    LDA #$48
+    STA >$C82B
+    JSR $F1AF
+    RTS
 
 MOD16:
     ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
@@ -458,59 +817,33 @@ MOD16:
 .M16_DONE:
     RTS
 
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
+; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===
+; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B
 J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
+    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)
     SEX          ; Sign-extend B to D
     ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
     RTS
 
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
+; J1_Y() - Read Joystick 1 Y axis from cached BIOS value at $C81C
 J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
+    LDB >$C81C   ; Vec_Joy_1_Y
+    SEX
+    ADDD #2
     RTS
 
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
-; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
-LDA ,X+                 ; Read per-path intensity from vector data
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
-BEQ DSWM_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
-DSWM_USE_FCB_INT:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
-LDA #$00
-STA >$D000              ; PB=$00: deselect all channels
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -550,8 +883,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
+; Timing setup (match core: hardcoded $7F)
+LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X                ; Skip next_y, next_x
@@ -597,23 +930,22 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
-CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)
-CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)
-INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)
-CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)
+CLR VIA_port_a          ; stop X integrator drift between segments
+CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
-LDA ,X+                 ; Read FCB intensity from vector data
+; Check intensity override (same logic as start)
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
-BEQ DSWM_NEXT_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override
-DSWM_NEXT_USE_FCB_INT:
-PSHS A                  ; save intensity for later
+PSHS A
 LDB ,X+                 ; y_start
 TST >MIRROR_Y
 BEQ DSWM_NEXT_NO_NEGATE_Y
@@ -627,19 +959,8 @@ NEGA
 DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
-PULS A                  ; restore intensity
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness for Z-axis write
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected
-LDA #$00
-STA >$D000              ; PB=$00: deselect
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
+PULS A                  ; Get intensity back
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -667,8 +988,8 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
+; Timing setup (match core: hardcoded $7F)
+LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
 LEAX 2,X
@@ -681,6 +1002,180 @@ BEQ DSWM_W3
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
+; === SLR_DRAW_CLIPPED_PATH ===
+SLR_DRAW_CLIPPED_PATH:
+    LDA >DRAW_VEC_INTENSITY ; check override
+    BNE SDCP_USE_OVERRIDE
+    LDA ,X+                 ; read intensity from path data
+    BRA SDCP_SET_INTENS
+SDCP_USE_OVERRIDE:
+    LEAX 1,X                ; skip intensity byte
+SDCP_SET_INTENS:
+    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
+    LDB ,X+                 ; B = y_start (relative to center)
+    LDA ,X+                 ; A = x_start (relative to center)
+    ADDB >DRAW_VEC_Y        ; B = abs_y
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
+    TFR A,B                 ; B = x_start (SEX extends B, not A)
+    SEX                      ; sign-extend B→D (A=sign, B=x_start)
+    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
+    TSTA
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
+    CMPB #$80
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
+    CMPB #$7F
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDB >SDCP_ABS_Y         ; B = abs_y
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
+    PSHS A                  ; ~4 more settling cycles
+    LDA #$CE
+    STA VIA_cntl            ; PCR=$CE: /ZERO high
+    CLR VIA_shift_reg       ; SR=0: beam off
+    INC VIA_port_b          ; PB=1: lock Y direction
+    PULS A                  ; restore abs_x
+    STA VIA_port_a          ; DX → DAC
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
+    STA VIA_t1_cnt_lo       ; load T1 latch
+    LEAX 2,X                ; skip next_y, next_x (the 0,0)
+    CLR VIA_t1_cnt_hi       ; start T1 → ramp
+SDCP_MOVETO_W:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_MOVETO_W
+    ; PB=1 on exit — draw loop ready
+SDCP_SEG_LOOP:
+    LDA ,X+                 ; flags
+    CMPA #2
+    LBEQ SDCP_DONE
+    LDB ,X+                 ; B = dy
+    STB >TMPPTR2            ; save dy
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
+    LDA >SLR_CUR_X
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
+    LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: mux for DY
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b          ; PB=1: lock DY
+    STA VIA_port_a          ; DX → DAC
+    LDA #$FF
+    STA VIA_shift_reg       ; beam ON
+    CLR VIA_t1_cnt_hi       ; start T1
+SDCP_W_DRAW:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_DRAW
+    CLR VIA_shift_reg       ; beam OFF
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
+    STB VIA_port_a          ; DY → DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a          ; DX = 0
+    ; beam stays OFF (no STA VIA_shift_reg)
+    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
+SDCP_W_OFF_X:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
+SDCP_DONE:
+    RTS
+
 ; ============================================================================
 ; SMUL_PROD - Product lookup table for SMUL_LUT
 ; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)
@@ -1682,27 +2177,55 @@ PRINT_TEXT_STR_3327403:
     FCC "logo"
     FCB $80          ; Vectrex string terminator
 
+PRINT_TEXT_STR_3556653:
+    FCC "text"
+    FCB $80          ; Vectrex string terminator
+
+PRINT_TEXT_STR_2456395222:
+    FCC "STUDIO"
+    FCB $80          ; Vectrex string terminator
+
 ;***************************************************************************
 ; 3D COMPACT DATA TABLES (for DRAW_VECTOR_3D)
 ;***************************************************************************
 
 
-; 3D vertex-indexed data for DRAW_VECTOR_3D (12 unique verts, 1 paths, 13 total point refs)
+; 3D vertex-indexed data for DRAW_VECTOR_3D (32 unique verts, 4 paths, 36 total point refs)
 _LOGO_3D_DATA:
-    FDB 12               ; vertex count (unique)
-    FCB $E9,$3F,$00          ; vert 0: x=-23,y=63,z=0
-    FCB $E9,$32,$00          ; vert 1: x=-23,y=50,z=0
-    FCB $DE,$32,$00          ; vert 2: x=-34,y=50,z=0
-    FCB $DE,$17,$00          ; vert 3: x=-34,y=23,z=0
-    FCB $E9,$17,$00          ; vert 4: x=-23,y=23,z=0
-    FCB $E9,$0F,$00          ; vert 5: x=-23,y=15,z=0
-    FCB $03,$0F,$00          ; vert 6: x=3,y=15,z=0
-    FCB $03,$16,$00          ; vert 7: x=3,y=22,z=0
-    FCB $0C,$16,$00          ; vert 8: x=12,y=22,z=0
-    FCB $0C,$32,$00          ; vert 9: x=12,y=50,z=0
-    FCB $03,$32,$00          ; vert 10: x=3,y=50,z=0
-    FCB $03,$3F,$00          ; vert 11: x=3,y=63,z=0
-    FDB 1               ; path count
+    FDB 32               ; vertex count (unique)
+    FCB $E8,$31,$00          ; vert 0: x=-24,y=49,z=0
+    FCB $E8,$1F,$00          ; vert 1: x=-24,y=31,z=0
+    FCB $DE,$1F,$00          ; vert 2: x=-34,y=31,z=0
+    FCB $DE,$FA,$00          ; vert 3: x=-34,y=-6,z=0
+    FCB $EA,$FA,$00          ; vert 4: x=-22,y=-6,z=0
+    FCB $EA,$EF,$00          ; vert 5: x=-22,y=-17,z=0
+    FCB $02,$EF,$00          ; vert 6: x=2,y=-17,z=0
+    FCB $02,$F8,$00          ; vert 7: x=2,y=-8,z=0
+    FCB $0C,$F8,$00          ; vert 8: x=12,y=-8,z=0
+    FCB $0C,$1F,$00          ; vert 9: x=12,y=31,z=0
+    FCB $02,$1F,$00          ; vert 10: x=2,y=31,z=0
+    FCB $02,$31,$00          ; vert 11: x=2,y=49,z=0
+    FCB $F0,$2B,$00          ; vert 12: x=-16,y=43,z=0
+    FCB $F0,$1F,$00          ; vert 13: x=-16,y=31,z=0
+    FCB $F6,$1F,$00          ; vert 14: x=-10,y=31,z=0
+    FCB $F6,$2B,$00          ; vert 15: x=-10,y=43,z=0
+    FCB $17,$CE,$00          ; vert 16: x=23,y=-50,z=0
+    FCB $17,$E2,$00          ; vert 17: x=23,y=-30,z=0
+    FCB $21,$E2,$00          ; vert 18: x=33,y=-30,z=0
+    FCB $21,$06,$00          ; vert 19: x=33,y=6,z=0
+    FCB $17,$06,$00          ; vert 20: x=23,y=6,z=0
+    FCB $17,$10,$00          ; vert 21: x=23,y=16,z=0
+    FCB $FD,$10,$00          ; vert 22: x=-3,y=16,z=0
+    FCB $FD,$06,$00          ; vert 23: x=-3,y=6,z=0
+    FCB $F3,$06,$00          ; vert 24: x=-13,y=6,z=0
+    FCB $F3,$E2,$00          ; vert 25: x=-13,y=-30,z=0
+    FCB $FD,$E2,$00          ; vert 26: x=-3,y=-30,z=0
+    FCB $FD,$CE,$00          ; vert 27: x=-3,y=-50,z=0
+    FCB $11,$D6,$00          ; vert 28: x=17,y=-42,z=0
+    FCB $11,$DF,$00          ; vert 29: x=17,y=-33,z=0
+    FCB $09,$DF,$00          ; vert 30: x=9,y=-33,z=0
+    FCB $09,$D6,$00          ; vert 31: x=9,y=-42,z=0
+    FDB 4               ; path count
     FCB 13               ; path 0: point count
     FCB 0               ; path 0: closed flag
     FCB 0               ; vertex index
@@ -1718,4 +2241,241 @@ _LOGO_3D_DATA:
     FCB 10               ; vertex index
     FCB 11               ; vertex index
     FCB 0               ; vertex index
+    FCB 5               ; path 1: point count
+    FCB 0               ; path 1: closed flag
+    FCB 12               ; vertex index
+    FCB 13               ; vertex index
+    FCB 14               ; vertex index
+    FCB 15               ; vertex index
+    FCB 12               ; vertex index
+    FCB 13               ; path 2: point count
+    FCB 0               ; path 2: closed flag
+    FCB 16               ; vertex index
+    FCB 17               ; vertex index
+    FCB 18               ; vertex index
+    FCB 19               ; vertex index
+    FCB 20               ; vertex index
+    FCB 21               ; vertex index
+    FCB 22               ; vertex index
+    FCB 23               ; vertex index
+    FCB 24               ; vertex index
+    FCB 25               ; vertex index
+    FCB 26               ; vertex index
+    FCB 27               ; vertex index
+    FCB 16               ; vertex index
+    FCB 5               ; path 3: point count
+    FCB 0               ; path 3: closed flag
+    FCB 28               ; vertex index
+    FCB 29               ; vertex index
+    FCB 30               ; vertex index
+    FCB 31               ; vertex index
+    FCB 28               ; vertex index
+
+
+; 3D vertex-indexed data for DRAW_VECTOR_3D (78 unique verts, 13 paths, 98 total point refs)
+_TEXT_3D_DATA:
+    FDB 78               ; vertex count (unique)
+    FCB $C1,$12,$00          ; vert 0: x=-63,y=18,z=0
+    FCB $C1,$02,$00          ; vert 1: x=-63,y=2,z=0
+    FCB $C1,$FD,$00          ; vert 2: x=-63,y=-3,z=0
+    FCB $C7,$12,$00          ; vert 3: x=-57,y=18,z=0
+    FCB $C7,$0E,$00          ; vert 4: x=-57,y=14,z=0
+    FCB $D8,$0E,$00          ; vert 5: x=-40,y=14,z=0
+    FCB $D8,$12,$00          ; vert 6: x=-40,y=18,z=0
+    FCB $C7,$0B,$00          ; vert 7: x=-57,y=11,z=0
+    FCB $C7,$05,$00          ; vert 8: x=-57,y=5,z=0
+    FCB $D8,$05,$00          ; vert 9: x=-40,y=5,z=0
+    FCB $D8,$0B,$00          ; vert 10: x=-40,y=11,z=0
+    FCB $C7,$00,$00          ; vert 11: x=-57,y=0,z=0
+    FCB $C7,$FD,$00          ; vert 12: x=-57,y=-3,z=0
+    FCB $D8,$FD,$00          ; vert 13: x=-40,y=-3,z=0
+    FCB $D8,$00,$00          ; vert 14: x=-40,y=0,z=0
+    FCB $F3,$12,$00          ; vert 15: x=-13,y=18,z=0
+    FCB $E4,$12,$00          ; vert 16: x=-28,y=18,z=0
+    FCB $E1,$0E,$00          ; vert 17: x=-31,y=14,z=0
+    FCB $DE,$08,$00          ; vert 18: x=-34,y=8,z=0
+    FCB $E1,$00,$00          ; vert 19: x=-31,y=0,z=0
+    FCB $E5,$FD,$00          ; vert 20: x=-27,y=-3,z=0
+    FCB $F3,$FD,$00          ; vert 21: x=-13,y=-3,z=0
+    FCB $F0,$00,$00          ; vert 22: x=-16,y=0,z=0
+    FCB $E7,$00,$00          ; vert 23: x=-25,y=0,z=0
+    FCB $E4,$02,$00          ; vert 24: x=-28,y=2,z=0
+    FCB $E2,$08,$00          ; vert 25: x=-30,y=8,z=0
+    FCB $E4,$0C,$00          ; vert 26: x=-28,y=12,z=0
+    FCB $E7,$0E,$00          ; vert 27: x=-25,y=14,z=0
+    FCB $F1,$0E,$00          ; vert 28: x=-15,y=14,z=0
+    FCB $F9,$12,$00          ; vert 29: x=-7,y=18,z=0
+    FCB $F9,$0E,$00          ; vert 30: x=-7,y=14,z=0
+    FCB $FF,$0E,$00          ; vert 31: x=-1,y=14,z=0
+    FCB $FF,$FD,$00          ; vert 32: x=-1,y=-3,z=0
+    FCB $02,$FD,$00          ; vert 33: x=2,y=-3,z=0
+    FCB $02,$0E,$00          ; vert 34: x=2,y=14,z=0
+    FCB $09,$0E,$00          ; vert 35: x=9,y=14,z=0
+    FCB $0B,$12,$00          ; vert 36: x=11,y=18,z=0
+    FCB $11,$0E,$00          ; vert 37: x=17,y=14,z=0
+    FCB $11,$12,$00          ; vert 38: x=17,y=18,z=0
+    FCB $20,$12,$00          ; vert 39: x=32,y=18,z=0
+    FCB $23,$0F,$00          ; vert 40: x=35,y=15,z=0
+    FCB $23,$0B,$00          ; vert 41: x=35,y=11,z=0
+    FCB $21,$06,$00          ; vert 42: x=33,y=6,z=0
+    FCB $1E,$05,$00          ; vert 43: x=30,y=5,z=0
+    FCB $23,$FD,$00          ; vert 44: x=35,y=-3,z=0
+    FCB $1E,$FD,$00          ; vert 45: x=30,y=-3,z=0
+    FCB $1A,$05,$00          ; vert 46: x=26,y=5,z=0
+    FCB $14,$05,$00          ; vert 47: x=20,y=5,z=0
+    FCB $14,$FD,$00          ; vert 48: x=20,y=-3,z=0
+    FCB $11,$FD,$00          ; vert 49: x=17,y=-3,z=0
+    FCB $11,$09,$00          ; vert 50: x=17,y=9,z=0
+    FCB $1D,$09,$00          ; vert 51: x=29,y=9,z=0
+    FCB $20,$0B,$00          ; vert 52: x=32,y=11,z=0
+    FCB $20,$0E,$00          ; vert 53: x=32,y=14,z=0
+    FCB $1D,$0E,$00          ; vert 54: x=29,y=14,z=0
+    FCB $29,$12,$00          ; vert 55: x=41,y=18,z=0
+    FCB $29,$0E,$00          ; vert 56: x=41,y=14,z=0
+    FCB $39,$0E,$00          ; vert 57: x=57,y=14,z=0
+    FCB $39,$12,$00          ; vert 58: x=57,y=18,z=0
+    FCB $29,$0B,$00          ; vert 59: x=41,y=11,z=0
+    FCB $29,$05,$00          ; vert 60: x=41,y=5,z=0
+    FCB $39,$05,$00          ; vert 61: x=57,y=5,z=0
+    FCB $39,$0B,$00          ; vert 62: x=57,y=11,z=0
+    FCB $29,$00,$00          ; vert 63: x=41,y=0,z=0
+    FCB $29,$FD,$00          ; vert 64: x=41,y=-3,z=0
+    FCB $39,$FD,$00          ; vert 65: x=57,y=-3,z=0
+    FCB $39,$00,$00          ; vert 66: x=57,y=0,z=0
+    FCB $C1,$EE,$00          ; vert 67: x=-63,y=-18,z=0
+    FCB $CA,$EE,$00          ; vert 68: x=-54,y=-18,z=0
+    FCB $36,$EE,$00          ; vert 69: x=54,y=-18,z=0
+    FCB $3F,$EE,$00          ; vert 70: x=63,y=-18,z=0
+    FCB $3C,$12,$00          ; vert 71: x=60,y=18,z=0
+    FCB $3F,$12,$00          ; vert 72: x=63,y=18,z=0
+    FCB $3F,$0A,$00          ; vert 73: x=63,y=10,z=0
+    FCB $3F,$07,$00          ; vert 74: x=63,y=7,z=0
+    FCB $3F,$FD,$00          ; vert 75: x=63,y=-3,z=0
+    FCB $3F,$04,$00          ; vert 76: x=63,y=4,z=0
+    FCB $3D,$FD,$00          ; vert 77: x=61,y=-3,z=0
+    FDB 13               ; path count
+    FCB 8               ; path 0: point count
+    FCB 0               ; path 0: closed flag
+    FCB 0               ; vertex index
+    FCB 0               ; vertex index
+    FCB 1               ; vertex index
+    FCB 0               ; vertex index
+    FCB 0               ; vertex index
+    FCB 2               ; vertex index
+    FCB 2               ; vertex index
+    FCB 0               ; vertex index
+    FCB 5               ; path 1: point count
+    FCB 0               ; path 1: closed flag
+    FCB 3               ; vertex index
+    FCB 4               ; vertex index
+    FCB 5               ; vertex index
+    FCB 6               ; vertex index
+    FCB 3               ; vertex index
+    FCB 5               ; path 2: point count
+    FCB 0               ; path 2: closed flag
+    FCB 7               ; vertex index
+    FCB 8               ; vertex index
+    FCB 9               ; vertex index
+    FCB 10               ; vertex index
+    FCB 7               ; vertex index
+    FCB 5               ; path 3: point count
+    FCB 0               ; path 3: closed flag
+    FCB 11               ; vertex index
+    FCB 12               ; vertex index
+    FCB 13               ; vertex index
+    FCB 14               ; vertex index
+    FCB 11               ; vertex index
+    FCB 15               ; path 4: point count
+    FCB 0               ; path 4: closed flag
+    FCB 15               ; vertex index
+    FCB 16               ; vertex index
+    FCB 17               ; vertex index
+    FCB 18               ; vertex index
+    FCB 19               ; vertex index
+    FCB 20               ; vertex index
+    FCB 21               ; vertex index
+    FCB 22               ; vertex index
+    FCB 23               ; vertex index
+    FCB 24               ; vertex index
+    FCB 25               ; vertex index
+    FCB 26               ; vertex index
+    FCB 27               ; vertex index
+    FCB 28               ; vertex index
+    FCB 15               ; vertex index
+    FCB 9               ; path 5: point count
+    FCB 0               ; path 5: closed flag
+    FCB 29               ; vertex index
+    FCB 30               ; vertex index
+    FCB 31               ; vertex index
+    FCB 32               ; vertex index
+    FCB 33               ; vertex index
+    FCB 34               ; vertex index
+    FCB 35               ; vertex index
+    FCB 36               ; vertex index
+    FCB 29               ; vertex index
+    FCB 19               ; path 6: point count
+    FCB 0               ; path 6: closed flag
+    FCB 37               ; vertex index
+    FCB 38               ; vertex index
+    FCB 39               ; vertex index
+    FCB 40               ; vertex index
+    FCB 41               ; vertex index
+    FCB 42               ; vertex index
+    FCB 43               ; vertex index
+    FCB 44               ; vertex index
+    FCB 45               ; vertex index
+    FCB 46               ; vertex index
+    FCB 47               ; vertex index
+    FCB 48               ; vertex index
+    FCB 49               ; vertex index
+    FCB 50               ; vertex index
+    FCB 51               ; vertex index
+    FCB 52               ; vertex index
+    FCB 53               ; vertex index
+    FCB 54               ; vertex index
+    FCB 37               ; vertex index
+    FCB 5               ; path 7: point count
+    FCB 0               ; path 7: closed flag
+    FCB 55               ; vertex index
+    FCB 56               ; vertex index
+    FCB 57               ; vertex index
+    FCB 58               ; vertex index
+    FCB 55               ; vertex index
+    FCB 5               ; path 8: point count
+    FCB 0               ; path 8: closed flag
+    FCB 59               ; vertex index
+    FCB 60               ; vertex index
+    FCB 61               ; vertex index
+    FCB 62               ; vertex index
+    FCB 59               ; vertex index
+    FCB 5               ; path 9: point count
+    FCB 0               ; path 9: closed flag
+    FCB 63               ; vertex index
+    FCB 64               ; vertex index
+    FCB 65               ; vertex index
+    FCB 66               ; vertex index
+    FCB 63               ; vertex index
+    FCB 2               ; path 10: point count
+    FCB 0               ; path 10: closed flag
+    FCB 67               ; vertex index
+    FCB 68               ; vertex index
+    FCB 2               ; path 11: point count
+    FCB 0               ; path 11: closed flag
+    FCB 69               ; vertex index
+    FCB 70               ; vertex index
+    FCB 13               ; path 12: point count
+    FCB 0               ; path 12: closed flag
+    FCB 71               ; vertex index
+    FCB 72               ; vertex index
+    FCB 73               ; vertex index
+    FCB 72               ; vertex index
+    FCB 72               ; vertex index
+    FCB 74               ; vertex index
+    FCB 75               ; vertex index
+    FCB 75               ; vertex index
+    FCB 76               ; vertex index
+    FCB 75               ; vertex index
+    FCB 77               ; vertex index
+    FCB 74               ; vertex index
+    FCB 71               ; vertex index
 
